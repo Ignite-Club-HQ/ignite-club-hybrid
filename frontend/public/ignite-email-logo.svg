@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Ignite Club HQ</title>
+  <!-- BIMI compliant Tiny PS SVG - Flame icon -->
+  <rect width="512" height="512" fill="#10b981"/>
+  <path fill="#ffffff" d="M256 56c0 0-80 100-80 180c0 44.2 35.8 80 80 80s80-35.8 80-80c0-80-80-180-80-180zm0 220c-22.1 0-40-17.9-40-40c0-35 30-75 40-90c10 15 40 55 40 90c0 22.1-17.9 40-40 40z"/>
+  <path fill="#ffffff" d="M256 380c-79.5 0-144 64.5-144 144h288c0-79.5-64.5-144-144-144z" opacity="0.6"/>
+</svg>

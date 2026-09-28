@@ -1,0 +1,62 @@
+type Competition = record {
+  id : text;
+  club_id : text;
+  name : text;
+  season : text;
+  status : text;
+  revision : nat64;
+};
+type Match = record { id : text; competition_id : text; home_team : text; away_team : text; status : text; home_score : nat16; away_score : nat16; revision : nat64 };
+type Season = record { competition_id : text; name : text; status : text; revision : nat64 };
+type Init = record { governor : principal };
+type JoinToken = record {
+  id : text;
+  competition_id : text;
+  team_id : text;
+  issued_by : principal;
+  expires_at_ms : nat64;
+  used : bool;
+};
+type Result = variant { Ok : Competition; Err : text };
+type Result_1 = variant { Ok : JoinToken; Err : text };
+type Result_2 = variant { Ok : State; Err : text };
+type Result_3 = variant { Ok : TeamEntry; Err : text };
+type Result_4 = variant { Ok; Err : text };
+type Result_5 = variant { Ok : text; Err : text };
+type Result_6 = variant { Ok : Match; Err : text };
+type Result_7 = variant { Ok : Season; Err : text };
+type RoleGrant = record {
+  user : principal;
+  role : text;
+  competition_id : text;
+  team_id : opt text;
+};
+type State = record {
+  schema : nat32;
+  governor : principal;
+  roles : vec RoleGrant;
+  competitions : vec Competition;
+  entries : vec TeamEntry;
+  tokens : vec JoinToken;
+  seasons : vec Season;
+  matches : vec Match;
+};
+type TeamEntry = record {
+  competition_id : text;
+  team_id : text;
+  club_id : text;
+  status : text;
+};
+service : {
+  initialize : () -> (Result_4);
+  claim_join_token : (text) -> (Result_5);
+  create_season : (text, text) -> (Result_7);
+  create_competition : (text, text, text) -> (Result);
+  export_state : () -> (Result_2) query;
+  grant_role : (principal, text, text, opt text) -> (Result_4);
+  issue_join_token : (text, text, nat64) -> (Result_1);
+  register_team : (text, text, text) -> (Result_3);
+  record_match : (text, text, text) -> (Result_6);
+  set_match_result : (text, nat16, nat16, nat64) -> (Result_6);
+  set_season_status : (text, text, nat64) -> (Result_7);
+};

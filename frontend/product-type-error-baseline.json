@@ -1,0 +1,1227 @@
+{
+  "generatedBy": "scripts/check-product-type-errors.mjs",
+  "policy": "No new diagnostics may be introduced. Existing diagnostics remain explicitly inventoried until their source or dependency boundary is repaired.",
+  "diagnostics": [
+    {
+      "file": "src/components/AdminEnrolmentManager.tsx",
+      "line": 236,
+      "column": 23,
+      "code": "TS2322",
+      "message": "Type 'unknown' is not assignable to type 'Key'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/AdminEnrolmentManager.tsx",
+      "line": 240,
+      "column": 51,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown' is not assignable to parameter of type 'SetStateAction<string>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/AdminEnrolmentManager.tsx",
+      "line": 242,
+      "column": 23,
+      "code": "TS2322",
+      "message": "Type 'unknown' is not assignable to type 'ReactNode'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/ClubAdminInboxList.tsx",
+      "line": 69,
+      "column": 28,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown[]' is not assignable to parameter of type 'readonly string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/MentionInput.tsx",
+      "line": 553,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/MentionInput.tsx",
+      "line": 561,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/MentionInput.tsx",
+      "line": 569,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/MentionInput.tsx",
+      "line": 576,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/MentionInput.tsx",
+      "line": 582,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/ReadReceiptSheet.tsx",
+      "line": 77,
+      "column": 13,
+      "code": "TS2322",
+      "message": "Type 'Promise<unknown[] | string[]>' is not assignable to type 'Promise<string[]>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/ReadReceiptSheet.tsx",
+      "line": 81,
+      "column": 13,
+      "code": "TS2322",
+      "message": "Type 'Promise<unknown[] | string[]>' is not assignable to type 'Promise<string[]>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/StartDMDialog.tsx",
+      "line": 395,
+      "column": 55,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown' is not assignable to parameter of type 'string'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/chat/StartDMDialog.tsx",
+      "line": 397,
+      "column": 42,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown' is not assignable to parameter of type 'string'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/events/EventCard.tsx",
+      "line": 516,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/mini-league/ManageMiniLeagueAdminsSheet.tsx",
+      "line": 122,
+      "column": 66,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown[]' is not assignable to parameter of type 'readonly string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/mini-league/ManagePlayersDialog.tsx",
+      "line": 218,
+      "column": 63,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown[]' is not assignable to parameter of type 'readonly string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/MiniLeagueGameWidgets.tsx",
+      "line": 205,
+      "column": 64,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/MiniLeagueGameWidgets.tsx",
+      "line": 250,
+      "column": 28,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/MiniLeagueGameWidgets.tsx",
+      "line": 251,
+      "column": 30,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/MiniLeagueGameWidgets.tsx",
+      "line": 252,
+      "column": 26,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/MiniLeagueGameWidgets.tsx",
+      "line": 262,
+      "column": 34,
+      "code": "TS2339",
+      "message": "Property 'minutes_per_half' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/PendingInvitesList.tsx",
+      "line": 105,
+      "column": 20,
+      "code": "TS2339",
+      "message": "Property 'invite_token' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/PendingInvitesList.tsx",
+      "line": 111,
+      "column": 79,
+      "code": "TS2339",
+      "message": "Property 'invite_token' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/PendingInvitesList.tsx",
+      "line": 113,
+      "column": 29,
+      "code": "TS2339",
+      "message": "Property 'metadata' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/PendingInvitesList.tsx",
+      "line": 120,
+      "column": 33,
+      "code": "TS2339",
+      "message": "Property 'team_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/PendingInvitesList.tsx",
+      "line": 121,
+      "column": 91,
+      "code": "TS2339",
+      "message": "Property 'team_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/seasons/DraftTeamBuilder.tsx",
+      "line": 115,
+      "column": 27,
+      "code": "TS2339",
+      "message": "Property 'display_name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/components/seasons/DraftTeamBuilder.tsx",
+      "line": 116,
+      "column": 28,
+      "code": "TS2339",
+      "message": "Property 'date_of_birth' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/edge-functions/engagementReminderDispatch.test.ts",
+      "line": 15,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/send-engagement-reminders/dispatch.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/highRiskEdgeFunctions.security.test.ts",
+      "line": 17,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/_shared/storageUrlAuth.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/highRiskEdgeFunctions.security.test.ts",
+      "line": 18,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/_shared/signedUrlBatch.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/processEventNotifications.characterization.test.ts",
+      "line": 19,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/process-event-notifications/recipients.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/processEventNotifications.characterization.test.ts",
+      "line": 20,
+      "column": 30,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/process-event-notifications/testFakeSupabase.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/processEventNotifications.pagination.test.ts",
+      "line": 16,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/process-event-notifications/recipients.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/processEventNotifications.pagination.test.ts",
+      "line": 17,
+      "column": 30,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/process-event-notifications/testFakeSupabase.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/renewalReminderPromo.test.ts",
+      "line": 6,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/send-renewal-reminders/classify' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/sharedGuards.test.ts",
+      "line": 24,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/_shared/proGuard.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/stripeWebhook.security.test.ts",
+      "line": 23,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/_shared/stripeSignature.ts' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/edge-functions/vaultMutationSafety.security.test.ts",
+      "line": 10,
+      "column": 8,
+      "code": "TS2307",
+      "message": "Cannot find module '../../supabase/functions/_shared/vaultDeleteRequest' or its corresponding type declarations.",
+      "category": "inert-edge-function-reference"
+    },
+    {
+      "file": "src/features/media/mediaAccessRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/media/mediaAccessRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/media/mediaAccessRepository.ts",
+      "line": 60,
+      "column": 92,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown' is not assignable to parameter of type 'string'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/media/mediaEngagementRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/media/mediaEngagementRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/media/mediaReadRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/media/mediaReadRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/membership/membershipInvitationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/membership/membershipInvitationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/membership/membershipInvitationRepository.ts",
+      "line": 164,
+      "column": 48,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown[]' is not assignable to parameter of type 'readonly string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/messaging/inbox/inboxDirectMessageSources.test.ts",
+      "line": 26,
+      "column": 34,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'transient' does not exist in type 'DirectMessageCacheConversationSource'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/messaging/inbox/inboxRepositories.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/messaging/inbox/inboxRepositories.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/gameNotificationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/gameNotificationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/mediaNotificationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/mediaNotificationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/membershipNotificationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/membershipNotificationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/notificationNavigationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/notificationNavigationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/notificationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/notificationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/roleRequestService.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/notifications/roleRequestService.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultAccessRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultAccessRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultBulkMutationService.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultBulkMutationService.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultDriveService.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultDriveService.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultLargeFileRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultLargeFileRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultMutationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultMutationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultNavigationRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultNavigationRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultQueryKeys.test.ts",
+      "line": 15,
+      "column": 35,
+      "code": "TS2345",
+      "message": "Argument of type '{ readonly type: \"team\"; readonly clubId: \"club-1\"; readonly teamId: \"team-1\"; readonly teamName: \"U10 Blue\"; }' is not assignable to parameter of type 'VaultFolderView'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 348,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 358,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 367,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultStorageRepository.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultStorageRepository.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultUploadService.test.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/features/vault/vaultUploadService.ts",
+      "line": 1,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/hooks/useAuth.tsx",
+      "line": 2,
+      "column": 31,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/hooks/useAutoSubNotify.test.tsx",
+      "line": 101,
+      "column": 65,
+      "code": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '1'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useAutoSubNotify.test.tsx",
+      "line": 231,
+      "column": 37,
+      "code": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '1'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useChatOnlineCount.ts",
+      "line": 94,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useEventGroupSync.ts",
+      "line": 4,
+      "column": 38,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/hooks/useForwardMessage.ts",
+      "line": 129,
+      "column": 86,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useForwardMessage.ts",
+      "line": 131,
+      "column": 27,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/usePhotoMentionSuggestions.ts",
+      "line": 47,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/usePhotoMentionSuggestions.ts",
+      "line": 80,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'unknown[]' is not assignable to type 'string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/usePinnedMessages.ts",
+      "line": 80,
+      "column": 43,
+      "code": "TS2345",
+      "message": "Argument of type 'unknown[]' is not assignable to parameter of type 'readonly string[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useRemoteFillInSync.test.tsx",
+      "line": 52,
+      "column": 36,
+      "code": "TS2345",
+      "message": "Argument of type '(row: { updated_at: string; pitch_state: { players: { id: string; name: string; isFillIn: boolean; }[]; }; timer_state: { lastUpdateTime: number; }; is_active: boolean; } | { timer_state: { is_game_finished: boolean; lastUpdateTime: number; }; pitch_state: { ...; }; updated_at: string; is_active: boolean; } | { ...;...' is not assignable to parameter of type '(...args: [{ updated_at: string; pitch_state: { players: { id: string; name: string; isFillIn: boolean; }[]; }; timer_state: { lastUpdateTime: number; }; is_active: boolean; }, string] | [{ timer_state: { ...; }; pitch_state: { ...; }; updated_at: string; is_active: boolean; }, string] | [...]) => Awaitable<...>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useTypingIndicator.ts",
+      "line": 3,
+      "column": 33,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 107,
+      "column": 36,
+      "code": "TS2339",
+      "message": "Property 'claim_notifications' does not exist on type '_SERVICE'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 140,
+      "column": 36,
+      "code": "TS2339",
+      "message": "Property 'acknowledge_notification' does not exist on type '_SERVICE'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 180,
+      "column": 5,
+      "code": "TS2741",
+      "message": "Property 'grantWorkerScope' is missing in type 'RealQueueClient' but required in type 'NotificationQueueClient'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 69,
+      "column": 32,
+      "code": "TS2339",
+      "message": "Property 'approved' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 70,
+      "column": 30,
+      "code": "TS2339",
+      "message": "Property 'reason' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/externalWorkerIntegration.ts",
+      "line": 71,
+      "column": 33,
+      "code": "TS2339",
+      "message": "Property 'timestamp' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/hybridClubScopeLookup.ts",
+      "line": 44,
+      "column": 12,
+      "code": "TS2322",
+      "message": "Type 'unknown' is not assignable to type 'string'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/hybridClubScopeLookup.ts",
+      "line": 44,
+      "column": 36,
+      "code": "TS2322",
+      "message": "Type 'unknown' is not assignable to type 'string'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/membership/membershipMutationService.local.ts",
+      "line": 1077,
+      "column": 38,
+      "code": "TS2554",
+      "message": "Expected 2 arguments, but got 1.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/piiAccessClient.ts",
+      "line": 21,
+      "column": 55,
+      "code": "TS2345",
+      "message": "Argument of type 'number[]' is not assignable to parameter of type 'Uint8Array<ArrayBufferLike>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lab/useHybridQuery.ts",
+      "line": 14,
+      "column": 32,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lib/eventSeriesDeletion.ts",
+      "line": 13,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lib/mediaPhotoDeletion.ts",
+      "line": 16,
+      "column": 37,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lib/proShareGate.test.ts",
+      "line": 3,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property 'from' does not exist on type '{ maybeSingle: Mock<Procedure>; eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; select: Mock<() => { eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; }>; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lib/proShareGate.test.ts",
+      "line": 3,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'rpc' does not exist on type '{ maybeSingle: Mock<Procedure>; eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; select: Mock<() => { eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; }>; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lib/realtimeChannelRegistry.test.ts",
+      "line": 16,
+      "column": 38,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lib/realtimeChannelRegistry.ts",
+      "line": 22,
+      "column": 38,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/lib/refreshSessionOnce.ts",
+      "line": 2,
+      "column": 30,
+      "code": "TS2307",
+      "message": "Cannot find module '@supabase/supabase-js' or its corresponding type declarations.",
+      "category": "missing-reference"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 217,
+      "column": 28,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 217,
+      "column": 41,
+      "code": "TS2339",
+      "message": "Property 'clubs' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 218,
+      "column": 26,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 218,
+      "column": 43,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 218,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'clubs' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 405,
+      "column": 66,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 408,
+      "column": 35,
+      "code": "TS2339",
+      "message": "Property 'club_id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 546,
+      "column": 109,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 730,
+      "column": 70,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 733,
+      "column": 35,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 738,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 739,
+      "column": 48,
+      "code": "TS2339",
+      "message": "Property 'id' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 750,
+      "column": 71,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ChildrenPage.tsx",
+      "line": 752,
+      "column": 37,
+      "code": "TS2339",
+      "message": "Property 'clubs' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 238,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 238,
+      "column": 84,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 268,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 269,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'type' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 270,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'pending' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 271,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'fulfilled' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 272,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 273,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'totalPoints' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 617,
+      "column": 40,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 618,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 619,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'pending' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 620,
+      "column": 80,
+      "code": "TS2339",
+      "message": "Property 'fulfilled' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 621,
+      "column": 77,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 622,
+      "column": 83,
+      "code": "TS2339",
+      "message": "Property 'totalPoints' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubsPage.tsx",
+      "line": 130,
+      "column": 16,
+      "code": "TS2352",
+      "message": "Conversion of type 'FixtureClub[]' to type 'Club[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/DirectMessagePage.tsx",
+      "line": 388,
+      "column": 21,
+      "code": "TS2339",
+      "message": "Property 'participant_1' does not exist on type '{ id: string; user1_id: string; user2_id: string; club_id: string; created_at: string; } | DirectConversation'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/DirectMessagePage.tsx",
+      "line": 388,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'participant_2' does not exist on type '{ id: string; user1_id: string; user2_id: string; club_id: string; created_at: string; } | DirectConversation'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/DirectMessagePage.tsx",
+      "line": 388,
+      "column": 92,
+      "code": "TS2339",
+      "message": "Property 'participant_1' does not exist on type '{ id: string; user1_id: string; user2_id: string; club_id: string; created_at: string; } | DirectConversation'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/HomePage.tsx",
+      "line": 373,
+      "column": 9,
+      "code": "TS2347",
+      "message": "Untyped function calls may not accept type arguments.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/HomePage.tsx",
+      "line": 585,
+      "column": 7,
+      "code": "TS2345",
+      "message": "Argument of type '{ type: \"game\"; title: string; club_id: string; team_id: string; event_date: string; teams: { name: string; default_match_arrival_minutes: number; }; clubs: { name: string; sport: string; }; is_cancelled: boolean; ... 15 more ...; status: \"active\" | ... 2 more ... | \"cancelled\"; }[] | Event[]' is not assignable to parameter of type 'Event[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/test/reactRouterUpgradeSafety.test.tsx",
+      "line": 196,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; initialEntries: string[]; future: { v7_relativeSplatPath: boolean; v7_startTransition: boolean; }; }' is not assignable to type 'IntrinsicAttributes & MemoryRouterProps'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/test/reactRouterUpgradeSafety.test.tsx",
+      "line": 230,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; initialEntries: string[]; future: { v7_relativeSplatPath: boolean; v7_startTransition: boolean; }; }' is not assignable to type 'IntrinsicAttributes & MemoryRouterProps'.",
+      "category": "source-backed"
+    }
+  ],
+  "counts": {
+    "source-backed": 92,
+    "inert-edge-function-reference": 11,
+    "missing-reference": 49
+  }
+}

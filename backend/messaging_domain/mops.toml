@@ -1,0 +1,16 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = ["--default-persistent-actors"]
+
+[dependencies]
+core = "2.6.1"
+
+[canisters.messaging_domain]
+main = "src/main.mo"
+candid = "messaging_domain.did"
+
+[canisters.messaging_domain.migrations]
+chain = "src/backend/migrations"
+check-limit = 1

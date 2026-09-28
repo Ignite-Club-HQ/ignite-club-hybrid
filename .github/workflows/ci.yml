@@ -1,0 +1,44 @@
+name: Hybrid source checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, "migration/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts --no-fund --no-audit
+      - run: npm run check:step1
+      - run: npm run lint
+      - run: npm run typecheck:product
+      - run: npx vitest run --config vitest.legacy.config.mjs src/live/localRuntimeMode.test.ts src/live/disabledLabRuntime.test.ts
+      - run: npm run build
+        env:
+          IGNITE_LIVE_SUPABASE_ALIAS: dev-ci
+          IGNITE_LIVE_SUPABASE_URL: https://example.invalid
+          IGNITE_LIVE_SUPABASE_ANON_KEY: synthetic-public-anon-key
+          IGNITE_LIVE_ICP_HOST: https://icp-api.io
+          IGNITE_LIVE_ICP_CANISTER_IDS_JSON: "{}"
+      - run: npm run check:prod-secrets
+
+  rust-canisters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --locked

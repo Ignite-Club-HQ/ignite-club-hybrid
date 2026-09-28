@@ -1,0 +1,15 @@
+import { Actor, HttpAgent } from '../node_modules/@icp-sdk/core/lib/esm/agent/index.js';
+import { idlFactory as registryIdl } from '../src/lab/bindings/placement_registry/declarations/placement_registry.did.js';
+import { idlFactory as queueIdl } from '../src/lab/bindings/notification_queue/declarations/notification_queue.did.js';
+import { createPlacementRegistryClient } from '../src/lab/placementRegistryClient.ts';
+import { createNotificationQueueClient } from '../src/lab/notificationQueueClient.ts';
+import { createHybridNotificationDispatcher } from '../src/lab/hybridNotificationDispatcher.ts';
+import { syntheticIdentity } from '../src/lab/syntheticIdentities.mjs';
+const host=process.env.HYBRID_HOST||'http://127.0.0.1:4997',registryId=process.env.PLACEMENT_ID,queueId=process.env.NOTIFY_ID,club=process.env.HYBRID_CLUB;
+if(!registryId||!queueId||!club)throw Error('Set PLACEMENT_ID, NOTIFY_ID and HYBRID_CLUB');
+const agent=await HttpAgent.create({host,identity:syntheticIdentity('governor'),shouldFetchRootKey:true,shouldSyncTime:false,useQueryNonces:true,retryTimes:1});
+const registryActor=Actor.createActor(registryIdl,{agent,canisterId:registryId}); const queueActor=Actor.createActor(queueIdl,{agent,canisterId:queueId});
+const registry=createPlacementRegistryClient(registryActor); const icp=createNotificationQueueClient(queueActor);
+const dispatcher=createHybridNotificationDispatcher(registry,{icp:async()=>icp,supabase:async()=>{throw Error('Synthetic Supabase slot intentionally not used')}});
+const n=await dispatcher.enqueue({id:`live-${Date.now()}`,user:'synthetic-user',club,kind:'probe',body:'synthetic',idempotencyKey:`probe-${Date.now()}`});
+console.log(JSON.stringify({host,registryId,queueId,club,id:n.id,status:n.status}));

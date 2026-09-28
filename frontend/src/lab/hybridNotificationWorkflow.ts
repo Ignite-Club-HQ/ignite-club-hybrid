@@ -1,0 +1,4 @@
+import type { Notification } from './notificationQueueClient';
+import type { createHybridNotificationDispatcher } from './hybridNotificationDispatcher';
+type Dispatcher=ReturnType<typeof createHybridNotificationDispatcher>;
+export async function deliverHybridNotifications(dispatcher:Dispatcher,clubId:string,nowMs:number,limit:number,deliver:(n:Notification)=>Promise<void>|void,retryAtMs=nowMs+60000){const claimed=await dispatcher.claim(clubId,nowMs,limit);const delivered:string[]=[];const retried:string[]=[];for(const n of claimed){try{await deliver(n);await dispatcher.acknowledge(clubId,n.id,n.idempotencyKey);delivered.push(n.id)}catch(e){await dispatcher.fail(clubId,n.id,e instanceof Error?e.message:'delivery failed',retryAtMs);retried.push(n.id)}}return{claimed:claimed.map(n=>n.id),delivered,retried}}

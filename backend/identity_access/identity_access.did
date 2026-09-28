@@ -1,0 +1,81 @@
+type Access = record {
+  account_id : text;
+  app_admin : bool;
+  club_admin : bool;
+  guardian : bool;
+  team_member : bool;
+};
+type Account = record { id : text; version : nat64; principals : vec principal; };
+type Exclusion = record { account_id : text; site_id : opt text; club : text; team : opt text };
+type FamilyLink = record { account_id : text; child_id : text };
+type ExternalSiteBinding = record {
+  account_id : text;
+  site_id : text;
+  external_user_id : text;
+  linked_at_ns : nat64;
+};
+type PrivacyConsent = record {
+  account_id : text;
+  purpose : text;
+  granted : bool;
+  updated_at_ns : nat64;
+};
+type Init = record { governor : principal };
+type LinkChallenge = record {
+  id : nat64;
+  account_id : text;
+  issuer : principal;
+  target : principal;
+  accepted : bool;
+  expires_at_ns : nat64;
+  expected_version : nat64;
+};
+type Result = variant { Ok : Account; Err : text };
+type Result_1 = variant { Ok : Access; Err : text };
+type Result_2 = variant { Ok : LinkChallenge; Err : text };
+type Result_3 = variant { Ok : State; Err : text };
+type Result_4 = variant { Ok; Err : text };
+type Result_5 = variant { Ok : ExternalSiteBinding; Err : text };
+type Result_6 = variant { Ok : vec ExternalSiteBinding; Err : text };
+type Result_7 = variant { Ok : PrivacyConsent; Err : text };
+type Result_8 = variant { Ok : bool; Err : text };
+type RoleGrant = record {
+  account_id : text;
+  site_id : opt text;
+  club : opt text;
+  role : text;
+  team : opt text;
+};
+type State = record {
+  schema : nat32;
+  accounts : vec Account;
+  governor : principal;
+  exclusions : vec Exclusion;
+  families : vec FamilyLink;
+  challenges : vec LinkChallenge;
+  roles : vec RoleGrant;
+  external_bindings : vec ExternalSiteBinding;
+  privacy_consents : vec PrivacyConsent;
+  next_challenge : nat64;
+};
+service : (Init) -> {
+  accept_link : (nat64) -> (Result);
+  access : (opt text, opt text, opt text) -> (Result_1) query;
+  access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
+  begin_link : (principal) -> (Result_2);
+  bind_external_site : (text, text, text) -> (Result_5);
+  check_field_access : (text, text) -> (Result_8) query;
+  export_state : () -> (Result_3) query;
+  erase_account : (text) -> (Result_4);
+  get_external_bindings : (text) -> (Result_6) query;
+  get_privacy_consent : (text, text) -> (Result_8) query;
+  grant_role : (text, text, opt text, opt text) -> (Result_4);
+  grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_4);
+  revoke : (principal, nat64) -> (Result);
+  register_account : () -> (Result);
+  set_exclusion : (text, text, opt text) -> (Result_4);
+  set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_4);
+  set_family : (text, text) -> (Result_4);
+  set_privacy_consent : (text, text, bool) -> (Result_7);
+  whoami : () -> (Result) query;
+}

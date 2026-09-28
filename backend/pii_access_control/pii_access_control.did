@@ -1,0 +1,107 @@
+type PiiDeleteResult = 
+ record {
+   key_destroyed: bool;
+   shredded_at: nat64;
+ };
+type KeyRotationResult = 
+ record {
+   new_key_id: text;
+   old_key_id: text;
+   rotated_at: nat64;
+ };
+type KeyMetadata = 
+ record {
+   created_at: nat64;
+   key_id: text;
+   rotation_due_at: nat64;
+   status: variant {
+             Active;
+             Revoked;
+             RotationPending;
+             Shredded;
+           };
+ };
+type EncryptedPii = 
+ record {
+   ciphertext: vec nat8;
+   field_id: text;
+   master_key_id: text;
+   nonce: vec nat8;
+   pii_id: text;
+ };
+type DecryptedPii = 
+ record {
+   field_id: text;
+   pii_id: text;
+   plaintext: vec nat8;
+ };
+type AuditRecord = 
+ record {
+   allowed: bool;
+   field_id: text;
+   operation: text;
+   pii_id: text;
+   purpose: text;
+   requesting_principal: principal;
+   timestamp: nat64;
+ };
+type AuditFilter = 
+ record {
+   opt_field_id: opt text;
+   opt_from_ts: opt nat64;
+   opt_pii_id: opt text;
+   opt_principal: opt principal;
+   opt_to_ts: opt nat64;
+ };
+/// PII Access Control Canister
+/// Encrypts and mediates access to personally identifiable information (PII)
+/// Enforces field-level access policies and maintains audit trail
+/// 
+/// Production note: This uses synthetic encryption for lab testing.
+/// Production deployment should integrate with:
+/// - Hardware Security Module (HSM) or KMS for master key storage
+/// - vetKeys for child media key derivation
+/// - External vault for secret workload identity
+service : {
+  audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
+  delete_pii: (pii_id: text, field_id: text) ->
+   (variant {
+      Err: text;
+      Ok: PiiDeleteResult;
+    });
+  derive_media_key: (child_id: text, authorizer: principal, purpose: 
+   text, expiry_seconds: nat64) -> (variant {
+                                      Err: text;
+                                      Ok: vec nat8;
+                                    });
+  emergency_shutdown: () -> (variant {
+                               Err: text;
+                               Ok;
+                             });
+  get_decrypted_pii: (pii_id: text, field_id: text, operation: text, purpose:
+   text) -> (variant {
+               Err: text;
+               Ok: DecryptedPii;
+             });
+  get_encrypted_pii: (pii_id: text, field_id: text) ->
+   (variant {
+      Err: text;
+      Ok: EncryptedPii;
+    }) query;
+  get_key_metadata: () -> (vec KeyMetadata) query;
+  initialize_master_key: (initial_key_id: text) ->
+   (variant {
+      Err: text;
+      Ok: text;
+    });
+  register_pii: (pii_id: text, field_id: text, plaintext: vec nat8,
+   domain_owner: principal) -> (variant {
+                                  Err: text;
+                                  Ok: EncryptedPii;
+                                });
+  rotate_key: (new_key_id: text) ->
+   (variant {
+      Err: text;
+      Ok: KeyRotationResult;
+    });
+}

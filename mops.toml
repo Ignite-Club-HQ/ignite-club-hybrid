@@ -1,0 +1,72 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = ["--default-persistent-actors"]
+
+[dependencies]
+core = "2.6.1"
+
+[canisters.migration_coordinator]
+main = "backend/migration_coordinator/src/main.mo"
+candid = "backend/migration_coordinator/migration_coordinator.did"
+
+[canisters.migration_coordinator.migrations]
+chain = "backend/migration_coordinator/src/backend/migrations"
+check-limit = 1
+
+[canisters.notification_queue]
+main = "backend/notification_queue/src/main.mo"
+candid = "backend/notification_queue/notification_queue.did"
+
+[canisters.notification_queue.migrations]
+chain = "backend/notification_queue/src/backend/migrations"
+check-limit = 1
+
+[canisters.events_domain]
+main = "backend/events_domain/src/main.mo"
+candid = "backend/events_domain/events_domain.did"
+
+[canisters.events_domain.migrations]
+chain = "backend/events_domain/src/backend/migrations"
+check-limit = 1
+
+[canisters.competition_domain]
+main = "backend/competition_domain/src/main.mo"
+candid = "backend/competition_domain/competition_domain.did"
+
+[canisters.competition_domain.migrations]
+chain = "backend/competition_domain/src/backend/migrations"
+check-limit = 1
+
+[canisters.messaging_domain]
+main = "backend/messaging_domain/src/main.mo"
+candid = "backend/messaging_domain/messaging_domain.did"
+
+[canisters.messaging_domain.migrations]
+chain = "backend/messaging_domain/src/backend/migrations"
+check-limit = 1
+
+[canisters.media_metadata]
+main = "backend/media_metadata/src/main.mo"
+candid = "backend/media_metadata/media_metadata.did"
+
+[canisters.media_metadata.migrations]
+chain = "backend/media_metadata/src/backend/migrations"
+check-limit = 1
+
+[canisters.club_domain]
+main = "backend/club_domain/src/main.mo"
+candid = "backend/club_domain/club_domain.did"
+
+[canisters.club_domain.migrations]
+chain = "backend/club_domain/src/backend/migrations"
+check-limit = 1
+
+[canisters.pii_access_control]
+main = "backend/pii_access_control/src/main.mo"
+candid = "backend/pii_access_control/pii_access_control.did"
+
+[canisters.secret_workload_identity]
+main = "backend/secret_workload_identity/src/main.mo"
+candid = "backend/secret_workload_identity/secret_workload_identity.did"

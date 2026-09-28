@@ -1,0 +1,105 @@
+type Unread =
+ record {
+   conversation_id: text;
+   count: nat64;
+   last_read_sequence: nat64;
+   user: principal;
+ };
+type State =
+ record {
+   conversations: vec Conversation;
+   governor: principal;
+   messages: vec Message;
+   receipts: vec Receipt;
+   roles: vec RoleGrant;
+   schema: nat32;
+   unread: vec Unread;
+ };
+type RoleGrant =
+ record {
+   club_id: opt text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Receipt =
+ record {
+   conversation_id: text;
+   message_id: text;
+   read: bool;
+   user: principal;
+ };
+type MessagePage =
+ record {
+   latest_sequence: nat64;
+   messages: vec Message;
+   next_sequence: opt nat64;
+ };
+type Message =
+ record {
+   body: text;
+   conversation_id: text;
+   id: text;
+   idempotency_key: text;
+   sender: principal;
+   sequence: nat64;
+ };
+type Conversation =
+ record {
+   club_id: text;
+   id: text;
+   next_sequence: nat64;
+   participants: vec principal;
+   team_id: opt text;
+ };
+service : {
+  create_conversation: (club_id: text, team_id: opt text, participants:
+   vec principal) -> (variant {
+                        Err: text;
+                        Ok: Conversation;
+                      });
+  delete_message: (message_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Message;
+                                         });
+  export_state: () -> (variant {
+                         Err: text;
+                         Ok: State;
+                       }) query;
+  grant_role: ("principal": principal, role: text, club_id: opt text,
+   team_id: opt text) -> (variant {
+                            Err: text;
+                            Ok;
+                          });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  list_messages: (conversation_id: text, after: opt nat64) ->
+   (vec Message) query;
+  list_messages_page: (conversation_id: text, after: opt nat64, limit:
+   nat16) -> (variant {
+                Err: text;
+                Ok: MessagePage;
+              }) query;
+  mark_read: (conversation_id: text, message_id: text) ->
+   (variant {
+      Err: text;
+      Ok: Receipt;
+    });
+  send_message: (conversation_id: text, body: text, idempotency_key:
+   text) -> (variant {
+               Err: text;
+               Ok: Message;
+             });
+  unread_count: (conversation_id: text) ->
+   (variant {
+      Err: text;
+      Ok: Unread;
+    }) query;
+  update_message: (message_id: text, body: text) ->
+   (variant {
+      Err: text;
+      Ok: Message;
+    });
+}

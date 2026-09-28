@@ -1,0 +1,11 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = [ "--default-persistent-actors" ]
+
+[canisters.pii_access_control]
+main = "src/main.mo"
+
+[dependencies]
+core = "2.6.1"

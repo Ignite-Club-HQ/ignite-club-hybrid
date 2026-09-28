@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "Bundler", "jsx": "react-jsx",
+    "strict": true, "noEmit": true, "allowJs": true, "skipLibCheck": true,
+    "esModuleInterop": true, "baseUrl": ".", "paths": { "@/*": ["src/*"] }
+  },
+    "files": ["src/lab/LabApp.tsx", "src/lab/forcedBackend.ts", "src/lab/localActor.ts", "src/lab/identityAccessClient.ts", "src/lab/localIdentityAccess.ts", "src/lab/localEventsService.ts", "src/lab/localCompetitionService.ts", "src/lab/localMessagingService.ts", "src/lab/icpClubLinksService.ts", "src/lab/routedClubLinksService.ts", "src/lab/hybridClubLinksService.ts", "src/lab/hybridInviteDedupe.ts", "src/lab/hybridEventDeletion.ts", "src/lab/hybridClubScopeLookup.ts", "src/lab/eventAudience.ts", "src/lab/competitionScheduler.ts", "src/lab/hybridClubTeamCache.ts", "src/lab/syntheticSupabaseProvider.ts", "src/lab/localSupabaseAdapter.ts", "src/lab/syntheticPlacementRegistry.ts", "src/lab/placementRegistryClient.ts", "src/lab/syntheticAccountLinking.ts", "src/lab/syntheticTimerQueue.ts", "src/lab/fixtureDataLayer.ts", "src/lab/localRuntimeMode.ts", "src/lab/eventQueryKeys.ts", "src/lab/scheduleCache.ts", "src/lab/nextUpEventsCache.ts", "src/lab/eventCacheRefresh.ts", "src/lab/hybridEventRsvpRepository.ts", "src/lab/hybridEventSupportingReadsRepository.ts", "src/lab/chatMessageOrdering.ts", "src/lab/chatThreadCacheHydration.ts", "src/lab/notificationQueryKeys.ts", "src/lab/notificationCachePolicy.ts", "src/lab/hybridHomeRsvpRepository.ts", "src/lab/membershipQueryKeys.ts", "src/lab/teamMembershipCacheCompletion.ts", "src/lab/vaultAccess.ts", "src/lab/hybridHomeRewardsRepository.ts", "src/lab/hybridHomeEntitlementRepository.ts", "src/lab/hybridTargetedAttendanceRepository.ts", "src/lab/mediaMetadataClient.ts", "src/lab/localMediaMetadata.ts", "src/lab/hybridMediaFeedRepository.ts"]
+}

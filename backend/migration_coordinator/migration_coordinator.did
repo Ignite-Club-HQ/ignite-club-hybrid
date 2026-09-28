@@ -1,0 +1,29 @@
+type Init = record {};
+type Phase = variant {
+  aborted;
+  committed;
+  exported;
+  imported;
+  started;
+  verified;
+};
+type Migration = record {
+  id : nat;
+  domain : text;
+  source : principal;
+  destination : principal;
+  schemaVersion : nat;
+  recordCount : nat;
+  checksum : text;
+  phase : Phase;
+};
+service : {
+  abort : (nat) -> (Migration);
+  begin : (text, principal, principal, nat, text) -> (Migration);
+  commit : (nat) -> (Migration);
+  initialize : () -> ();
+  markExported : (nat, nat, text) -> (Migration);
+  markImported : (nat, nat, text) -> (Migration);
+  status : () -> (opt Migration, vec Migration) query;
+  verify : (nat, nat, text) -> (Migration);
+};

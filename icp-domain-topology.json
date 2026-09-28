@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "mode": "coexistence-only",
+  "logical_canister_count": 13,
+  "roles": [
+    { "name": "placement_registry", "kind": "control_plane", "shard_key": "global", "path": "backend/placement_registry", "status": "poc", "rls_gate": "placement_registry" },
+    { "name": "shard_router", "kind": "control_plane", "shard_key": "global", "path": "backend/shard_router", "status": "poc", "rls_gate": "shard_router" },
+    { "name": "identity_access", "kind": "domain", "shard_key": "account_or_region", "path": "backend/identity_access", "status": "implemented_poc", "rls_gate": "identity_access" },
+    { "name": "club_domain", "kind": "domain", "shard_key": "club", "path": "backend/club_domain", "status": "implemented_poc", "rls_gate": "club_domain" },
+    { "name": "events_domain", "kind": "domain", "shard_key": "club_or_event", "path": "backend/events_domain", "status": "implemented_poc", "rls_gate": "events_domain" },
+    { "name": "competition_domain", "kind": "domain", "shard_key": "competition_or_league", "path": "backend/competition_domain", "status": "implemented_poc", "rls_gate": "competition_domain" },
+    { "name": "messaging_domain", "kind": "domain", "shard_key": "conversation_or_team", "path": "backend/messaging_domain", "status": "implemented_poc", "rls_gate": "messaging_domain" },
+    { "name": "media_metadata", "kind": "domain", "shard_key": "asset_or_club", "path": "backend/media_metadata", "status": "implemented_poc", "rls_gate": "media_metadata" },
+    { "name": "migration_coordinator", "kind": "control_plane", "shard_key": "migration_or_domain", "path": "backend/migration_coordinator", "status": "implemented_poc", "rls_gate": "migration_coordinator" },
+    { "name": "notification_queue", "kind": "worker", "shard_key": "recipient_or_region", "path": "backend/notification_queue", "status": "implemented_poc", "rls_gate": "notification_queue" },
+    { "name": "timer_jobs", "kind": "worker", "shard_key": "workflow_or_region", "path": "backend/timer_jobs", "status": "poc", "rls_gate": "timer_jobs" },
+    { "name": "pii_access_control", "kind": "domain", "shard_key": "account_or_region", "path": "backend/pii_access_control", "status": "implemented_poc", "rls_gate": "pii_access_control" },
+    { "name": "secret_workload_identity", "kind": "worker", "shard_key": "workflow_or_region", "path": "backend/secret_workload_identity", "status": "implemented_poc", "rls_gate": "secret_workload_identity" }
+  ],
+  "external_boundaries": [
+    "payments",
+    "secrets",
+    "email_delivery",
+    "push_delivery",
+    "vault_secret_management",
+    "vetkeys_or_protected_pii_boundary",
+    "federated_external_supabase_and_hybrid_sites",
+    "drive_playhq_google_integrations",
+    "llm_calls",
+    "existing_supabase_workloads"
+  ]
+}
