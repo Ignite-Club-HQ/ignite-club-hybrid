@@ -50,6 +50,7 @@ import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import VarArray "mo:core/VarArray";
 
 persistent actor {
 
