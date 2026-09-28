@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Plus, Trash2, Network, Save } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Network, Save, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
+import {
+  BACKEND_ROUTING_CONFIG_KEY,
+  applyBackendRoutingConfig,
+  parseBackendRoutingConfig,
+  DEFAULT_BACKEND_ROUTING_CONFIG,
+  type BackendProvider,
+  type BackendEligibility,
+} from "@/live/backendRouting";
+import { getEffectiveBackend } from "@/live/loadBackendRouting";
+import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
@@ -22,6 +34,13 @@ import {
 } from "@/live/icpAdminOverrides";
 
 type CanisterRow = { key: string; id: string };
+type CountryRuleRow = { country: string; eligibility: BackendEligibility };
+
+const ELIGIBILITY_LABELS: Record<BackendEligibility, string> = {
+  supabase: "Supabase only",
+  icp: "ICP only",
+  both: "Both",
+};
 
 const KNOWN_CANISTER_KEYS = ["identity_access", "internet_identity_frontend"];
 
