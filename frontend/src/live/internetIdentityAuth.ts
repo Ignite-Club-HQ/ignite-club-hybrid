@@ -165,6 +165,7 @@ export async function signOutInternetIdentity(): Promise<void> {
   const client = activeClient;
   activeClient = undefined;
   activeTarget = undefined;
+  clearLiveAgentCache();
   await client?.signOut();
   client?.dispose?.();
 }
