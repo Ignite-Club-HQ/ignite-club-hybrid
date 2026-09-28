@@ -5,6 +5,8 @@ import {
   getBackendRoutingConfig,
   parseBackendRoutingConfig,
   resolveBackendForCountry,
+  resolveTargetForCountry,
+  type ApprovedBackendTarget,
   type BackendProvider,
 } from "./backendRouting";
 import { getActiveIcpTarget } from "./targetRegistry";
@@ -52,4 +54,14 @@ function isIcpAvailable(): boolean {
 export function getEffectiveBackend(): BackendProvider {
   const { country } = getCurrentCountry();
   return resolveBackendForCountry(getBackendRoutingConfig(), country, isIcpAvailable());
+}
+
+/**
+ * The approved deployment target that should serve the current user, or
+ * undefined when no enabled target exists for the effective backend (callers
+ * then use the backend's built-in default).
+ */
+export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
+  const { country } = getCurrentCountry();
+  return resolveTargetForCountry(getBackendRoutingConfig(), country, isIcpAvailable());
 }

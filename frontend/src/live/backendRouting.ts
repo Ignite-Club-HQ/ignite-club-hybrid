@@ -2,12 +2,13 @@ import { isValidCountryCode } from "@/lib/countries";
 
 /**
  * App-admin backend routing configuration: a global default backend
- * (Supabase or ICP) plus per-country eligibility rules.
+ * (Supabase or ICP), per-country eligibility rules, and the approved
+ * deployment targets each backend may use.
  *
  * Stored in the `backend_routing_config` row of `public.app_settings` and
- * managed from /admin/icp-canisters. Enforcement is feature routing only:
- * the resolver decides which backend should serve data for a user, it never
- * blocks sign-in or app access.
+ * managed from /admin/placement-settings. Enforcement is feature routing
+ * only: the resolver decides which backend (and which approved target)
+ * should serve data for a user, it never blocks sign-in or app access.
  *
  * Like `icpAdminOverrides.ts`, this module is deliberately free of Supabase
  * imports so it can sit on the live-config import path without a module
@@ -19,19 +20,83 @@ export const BACKEND_ROUTING_CONFIG_KEY = "backend_routing_config";
 
 export type BackendProvider = "supabase" | "icp";
 export type BackendEligibility = "supabase" | "icp" | "both";
+export type BackendTargetKind = "supabase-region" | "icp-cloud-engine" | "icp-mainnet";
+
+/**
+ * An approved deployment target for a backend: which region/cloud-engine
+ * and which version is sanctioned to serve data. A target only takes effect
+ * while `enabled` is true.
+ */
+export type ApprovedBackendTarget = {
+  /** Stable identifier: `${backend}/${alias}/${version}`. */
+  id: string;
+  backend: BackendProvider;
+  kind: BackendTargetKind;
+  alias: string;
+  version: string;
+  region?: string;
+  enabled: boolean;
+};
 
 export type BackendRoutingConfig = {
   defaultBackend: BackendProvider;
   /** ISO 3166-1 alpha-2 code -> which backend(s) that country may use. */
   countryRules: Record<string, BackendEligibility>;
+  /** Approved deployment targets per backend. */
+  targets: ApprovedBackendTarget[];
+  /** ISO alpha-2 code -> approved target id pinned for that country. */
+  countryTargets: Record<string, string>;
 };
 
 export const DEFAULT_BACKEND_ROUTING_CONFIG: BackendRoutingConfig = {
   defaultBackend: "supabase",
   countryRules: {},
+  targets: [],
+  countryTargets: {},
 };
 
 const ELIGIBILITIES: BackendEligibility[] = ["supabase", "icp", "both"];
+const TARGET_KINDS: BackendTargetKind[] = ["supabase-region", "icp-cloud-engine", "icp-mainnet"];
+
+export function targetId(backend: BackendProvider, alias: string, version: string): string {
+  return `${backend}/${alias}/${version}`;
+}
+
+/** Validates one approved target, mirroring the lab placement rules. */
+export function validateApprovedTarget(target: Omit<ApprovedBackendTarget, "id">): void {
+  if (target.backend === "supabase" && target.kind !== "supabase-region") {
+    throw new Error("Supabase targets must use the Supabase region target type.");
+  }
+  if (target.backend === "icp" && target.kind === "supabase-region") {
+    throw new Error("ICP targets must use an ICP target type (cloud engine or mainnet).");
+  }
+  const alias = target.alias.trim();
+  if (!/^[a-z0-9][a-z0-9._-]{1,62}$/i.test(alias)) {
+    throw new Error(`Target alias "${alias || "(empty)"}" must be 2-63 URL-safe characters.`);
+  }
+  if (alias.includes("://") || /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(alias)) {
+    throw new Error(`Target alias "${alias}" must not contain URLs or credential-shaped values.`);
+  }
+  const version = target.version.trim();
+  if (!/^[a-z0-9][a-z0-9._-]{0,31}$/i.test(version)) {
+    throw new Error(`Target version for "${alias}" must be 1-32 URL-safe characters.`);
+  }
+}
+
+export function normalizeApprovedTarget(
+  raw: Omit<ApprovedBackendTarget, "id"> & { id?: string },
+): ApprovedBackendTarget {
+  const target = {
+    backend: raw.backend,
+    kind: raw.kind,
+    alias: raw.alias.trim(),
+    version: raw.version.trim(),
+    region: raw.region?.trim() || undefined,
+    enabled: raw.enabled,
+  };
+  validateApprovedTarget(target);
+  return { id: targetId(target.backend, target.alias, target.version), ...target };
+}
 
 /**
  * Parses the `value` jsonb of the `backend_routing_config` app_settings row.
@@ -68,21 +133,80 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
     }
   }
 
-  return { defaultBackend: rawDefault, countryRules };
+  const targets: ApprovedBackendTarget[] = [];
+  const rawTargets = record.targets;
+  if (rawTargets !== null && rawTargets !== undefined) {
+    if (!Array.isArray(rawTargets)) {
+      throw new Error(`${BACKEND_ROUTING_CONFIG_KEY}.targets must be an array.`);
+    }
+    for (const raw of rawTargets) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        throw new Error(`${BACKEND_ROUTING_CONFIG_KEY}.targets entries must be objects.`);
+      }
+      const entry = raw as Record<string, unknown>;
+      if (entry.backend !== "supabase" && entry.backend !== "icp") {
+        throw new Error('Target backend must be "supabase" or "icp".');
+      }
+      if (!TARGET_KINDS.includes(entry.kind as BackendTargetKind)) {
+        throw new Error(`Target kind must be one of: ${TARGET_KINDS.join(", ")}.`);
+      }
+      if (typeof entry.alias !== "string" || typeof entry.version !== "string") {
+        throw new Error("Target alias and version are required.");
+      }
+      if (typeof entry.enabled !== "boolean") {
+        throw new Error("Target enabled must be true or false.");
+      }
+      targets.push(
+        normalizeApprovedTarget({
+          backend: entry.backend,
+          kind: entry.kind as BackendTargetKind,
+          alias: entry.alias,
+          version: entry.version,
+          region: typeof entry.region === "string" ? entry.region : undefined,
+          enabled: entry.enabled,
+        }),
+      );
+    }
+  }
+
+  const countryTargets: Record<string, string> = {};
+  const rawCountryTargets = record.countryTargets;
+  if (rawCountryTargets !== null && rawCountryTargets !== undefined) {
+    if (typeof rawCountryTargets !== "object" || Array.isArray(rawCountryTargets)) {
+      throw new Error(`${BACKEND_ROUTING_CONFIG_KEY}.countryTargets must be a JSON object.`);
+    }
+    for (const [code, id] of Object.entries(rawCountryTargets as Record<string, unknown>)) {
+      const normalized = code.trim().toUpperCase();
+      if (!isValidCountryCode(normalized)) {
+        throw new Error(`"${code}" is not a valid ISO country code.`);
+      }
+      if (typeof id !== "string" || !targets.some(t => t.id === id)) {
+        throw new Error(`Pinned target for ${normalized} must reference an approved target.`);
+      }
+      countryTargets[normalized] = id;
+    }
+  }
+
+  return { defaultBackend: rawDefault, countryRules, targets, countryTargets };
 }
 
 let activeConfig: BackendRoutingConfig | null = null;
 
+function copyConfig(config: BackendRoutingConfig): BackendRoutingConfig {
+  return {
+    defaultBackend: config.defaultBackend,
+    countryRules: { ...config.countryRules },
+    targets: config.targets.map(t => ({ ...t })),
+    countryTargets: { ...config.countryTargets },
+  };
+}
+
 export function applyBackendRoutingConfig(config: BackendRoutingConfig | null): void {
-  activeConfig = config
-    ? { defaultBackend: config.defaultBackend, countryRules: { ...config.countryRules } }
-    : null;
+  activeConfig = config ? copyConfig(config) : null;
 }
 
 export function getBackendRoutingConfig(): BackendRoutingConfig {
-  return activeConfig
-    ? { defaultBackend: activeConfig.defaultBackend, countryRules: { ...activeConfig.countryRules } }
-    : { ...DEFAULT_BACKEND_ROUTING_CONFIG, countryRules: {} };
+  return activeConfig ? copyConfig(activeConfig) : copyConfig(DEFAULT_BACKEND_ROUTING_CONFIG);
 }
 
 /**
@@ -105,4 +229,30 @@ export function resolveBackendForCountry(
   if (eligibility === "icp") return icpAvailable ? "icp" : "supabase";
   if (config.defaultBackend === "icp" && !icpAvailable) return "supabase";
   return config.defaultBackend;
+}
+
+/**
+ * Pure resolver: which approved target should serve a user in `country`.
+ *
+ * - Resolves the backend first (same rules as resolveBackendForCountry).
+ * - A country pinned to an approved target uses that target when it is
+ *   enabled and belongs to the resolved backend.
+ * - Otherwise the first enabled target for the resolved backend wins.
+ * - Returns undefined when no enabled target exists for the backend; callers
+ *   then use the backend's built-in default.
+ */
+export function resolveTargetForCountry(
+  config: BackendRoutingConfig,
+  country: string | null,
+  icpAvailable: boolean,
+): ApprovedBackendTarget | undefined {
+  const backend = resolveBackendForCountry(config, country, icpAvailable);
+  const code = country?.trim().toUpperCase();
+  const enabledForBackend = config.targets.filter(t => t.enabled && t.backend === backend);
+  const pinnedId = code ? config.countryTargets[code] : undefined;
+  if (pinnedId) {
+    const pinned = enabledForBackend.find(t => t.id === pinnedId);
+    if (pinned) return pinned;
+  }
+  return enabledForBackend[0];
 }
