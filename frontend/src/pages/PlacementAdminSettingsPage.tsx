@@ -62,7 +62,28 @@ const ELIGIBILITY_LABELS: Record<BackendEligibility, string> = {
   both: "Both",
 };
 
-const KNOWN_CANISTER_KEYS = ["identity_access", "internet_identity_frontend"];
+// The 13 backend canisters from backend/ + icp-domain-topology.json, plus the
+// Internet Identity frontend asset canister. Used as suggestions in the mapping UI.
+const KNOWN_CANISTER_KEYS = [
+  // Control plane (global infrastructure)
+  "placement_registry",
+  "shard_router",
+  "migration_coordinator",
+  // Domain canisters (one per feature area)
+  "identity_access",
+  "pii_access_control",
+  "club_domain",
+  "events_domain",
+  "competition_domain",
+  "messaging_domain",
+  "media_metadata",
+  // Workers (background jobs)
+  "notification_queue",
+  "timer_jobs",
+  "secret_workload_identity",
+  // Frontend asset canister
+  "internet_identity_frontend",
+];
 
 function envBaselineCanisterIds(): Record<string, string> {
   try {
@@ -417,6 +438,11 @@ export default function PlacementAdminSettingsPage() {
                 No canisters configured yet. Add one below once you have deployed a canister.
               </p>
             )}
+            <datalist id="known-canister-keys">
+              {KNOWN_CANISTER_KEYS.map((key) => (
+                <option key={key} value={key} />
+              ))}
+            </datalist>
             {rows.map((row, index) => (
               <div key={index} className="flex items-end gap-2">
                 <div className="space-y-1 w-2/5">
@@ -426,6 +452,7 @@ export default function PlacementAdminSettingsPage() {
                     value={row.key}
                     onChange={(e) => updateRow(index, { key: e.target.value })}
                     placeholder="identity_access"
+                    list="known-canister-keys"
                   />
                 </div>
                 <div className="space-y-1 flex-1">
