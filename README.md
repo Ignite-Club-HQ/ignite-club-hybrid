@@ -11,11 +11,11 @@ isolated Ignite ICP Lab.
 - `docs/PRODUCTION_HANDOFF_EXPORT_GUIDE.md`: configuration, validation,
   deployment boundaries and outstanding parity work.
 
-The default `dev` and `build` scripts in `frontend/` now use the guarded
-live configuration. Lab commands remain explicitly named `dev:lab`,
-`build:lab`, and `preview:lab`; they are retained only for migration
-verification and must not be deployed. Copy `.env.example` into private
-CI/hosting configuration; do not commit credentials or service-role keys.
+The default `dev` and `build` scripts in `frontend/` use the guarded live
+configuration. Lab-only runtime modules, fixture test suites, local ICP
+orchestration, and lab build entry points are not included in this
+repository. Copy `.env.example` into private CI/hosting configuration only
+when ready; do not commit credentials or service-role keys.
 
 ## DEV Supabase
 
@@ -29,17 +29,18 @@ project. Configure these values in the private build/deployment environment:
 
 The Supabase URL is pinned in the root `netlify.toml` only for CSP
 allowlisting; the anon key is deliberately not committed. The removed
-Lovable starter `.env` remains in the pre-migration `main` history and must
-not be restored into this branch. Review the project's RLS, Edge Functions,
+Lovable starter `.env` is removed from this migration branch; do not restore
+or transfer it. Review the project's RLS, Edge Functions,
 OAuth redirects and allowed origins before treating a successful build as
 a working application.
 
 ## Current migration status
 
-This branch carries all checked-in frontend and ICP canister source from
-Ignite ICP Lab commit `fe266f1a8`. The canister topology is local-only:
-remote canisters, controllers, init arguments and IDs are not provisioned
-by this migration. Read `docs/PRODUCTION_LAUNCH_PLAN.md` before deployment.
+This branch carries the product frontend and ICP canister source from
+Ignite ICP Lab commit `fe266f1a8`, excluding lab-only runtime and test
+components. The canister topology is local-only: remote canisters,
+controllers, init arguments and IDs are not provisioned by this migration.
+Read `docs/PRODUCTION_LAUNCH_PLAN.md` before deployment.
 
 The live frontend currently uses Supabase for application data. The old
 `?backend=icp` switch entered fixture/local-actor code rather than the
@@ -51,4 +52,6 @@ only on the presence of backend source.
 
 The live build aliases fixture data, local actor services and synthetic
 identities to a fail-closed module. CI verifies that those markers do not
-enter `dist-live/`.
+enter `dist-live/`. The remaining `frontend/src/lab/` directory contains
+shared hybrid repositories, query keys, and contract bindings; its name
+does not mean the removed local fixtures or synthetic runtime were migrated.

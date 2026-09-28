@@ -3,14 +3,18 @@
 ## Provenance
 
 - Destination repository: `Ignite-Club-HQ/ignite-club-hybrid`
-- Destination base: `main` at `620667d8f693`
+- Original destination base: `main` at `620667d8f693`
+- Destination main reconciled through `7c9cb68` (`Added ICP connection layer`)
 - Migration branch: `migration/hybrid-source-2026-09-28`
 - ICP Lab source snapshot: `fe266f1a8`
 
-The destination's existing Lovable/TanStack starter remains unchanged on
-`main`. This branch replaces that starter with the reviewed source
-handoff. Its tracked `.env` is deleted on this branch and no value from it
-is committed elsewhere.
+This branch replaces the destination's Lovable/TanStack starter with the
+reviewed hybrid source. It incorporates destination `main` through the
+latest ICP connection-layer commit. That starter's root ICP prototype is
+superseded by the guarded application integration under `frontend/src/live/`;
+the useful repository guidance and an updated roadmap are retained. The
+starter's tracked `.env` is deleted on this branch, and no value from it is
+committed elsewhere.
 
 ## Implemented
 
@@ -36,8 +40,8 @@ is committed elsewhere.
 - Rust workspace: `cargo check --workspace` passes.
 - Frontend lint and product type-diagnostic baseline pass.
 - Live runtime tests pass and URL parameters cannot enable fixture mode.
-- The default `npm run build` succeeds using the existing destination
-  repository's DEV Supabase public configuration in process memory.
+- The default `npm run build` succeeds using synthetic public build
+  configuration; no Supabase request was made during validation.
 - The generated bundle contains no `localActor`, `fixtureDataLayer`,
   `syntheticIdentities`, public test seed or known secret markers.
 

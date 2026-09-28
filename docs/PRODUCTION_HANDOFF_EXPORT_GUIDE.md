@@ -1,5 +1,10 @@
 # Hybrid app source handoff
 
+> This guide documents the export from the isolated source lab. The export
+> has already been migrated into this repository; the exporter script and
+> lab-only runtime/test components are intentionally not present here.
+> Do not follow the export commands below from this destination checkout.
+
 This is a **reviewable source copy**, not a certified production release.
 It includes the hybrid frontend **and** this lab's ICP canister backend.
 It does not connect to any database, deploy canisters, export data, or
@@ -41,13 +46,16 @@ Supabase server backend. The sanitized `reference/backend/` contains
 inert historic SQL and Edge Function text; it is deliberately not
 executable migration/deployment material.
 
-**Do not remove `frontend/src/lab/` or the fail-closed lab client.**
-Shared UI modules still import lab adapters. The live Vite aliases swap
+The remaining `frontend/src/lab/` directory contains shared hybrid
+repositories, query keys, bindings, and types; it does not contain the
+removed fixture data, synthetic identities, or local actor services.
+The live Vite aliases swap
 `@/integrations/supabase/client`, Internet Identity auth, and runtime
-mode for their `frontend/src/live/` equivalents. The intended live
+mode for their `frontend/src/live/` equivalents, and alias any remaining
+local-only service import to a fail-closed module. The intended live
 build is `npm run build` (or `npm run build:live`) from `frontend/`;
-`dev` also uses the guarded live configuration. Explicit `*:lab`
-commands are retained only for migration validation. Preserve
+`dev` also uses the guarded live configuration. Lab build and local ICP
+orchestration commands are not part of this destination. Preserve
 `frontend/live-index.html`,
 `frontend/vite.live.config.ts` and
 `frontend/scripts/check-live-config.mjs`.
