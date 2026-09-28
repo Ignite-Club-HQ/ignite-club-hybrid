@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, Plus, Trash2, Globe2, Save, Globe } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Globe2, Save, Globe, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,20 @@ import {
   applyBackendRoutingConfig,
   parseBackendRoutingConfig,
   DEFAULT_BACKEND_ROUTING_CONFIG,
+  getBackendRoutingConfig,
   normalizeApprovedTarget,
   type ApprovedBackendTarget,
   type BackendProvider,
   type BackendEligibility,
+  type BackendRoutingConfig,
   type BackendTargetKind,
 } from "@/live/backendRouting";
+import {
+  FEATURE_AREAS,
+  FEATURE_CANISTER_KEYS,
+  isFeatureCanisterConfigured,
+  resolveFeatureBackend,
+} from "@/live/featureBackend";
 import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
 import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLiveBackendTargetRegistry } from "@/live/targetRegistry";
+import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
 import {
   ICP_CANISTER_CONFIG_KEY,
   applyIcpAdminOverrides,
@@ -114,6 +122,43 @@ function validateRows(rows: CanisterRow[]): Record<string, string> {
     canisterIds[key] = validateCanisterId(key, id);
   }
   return canisterIds;
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  events: "Events",
+  messaging: "Messaging",
+  media: "Media",
+  news: "Club news",
+  home: "Home schedule",
+  membership: "Membership",
+  competitions: "Competitions",
+  notifications: "Notifications",
+  vault: "Vault",
+};
+
+/**
+ * Synthetic target used by the dry-run preview: pretends every feature
+ * canister is deployed so the admin can see how routing WOULD resolve once
+ * real canister IDs are in place. Simulation only — it is never written to
+ * the routing store and never used for real traffic.
+ */
+const SIMULATED_TARGET: IcpTargetConfig = {
+  provider: "icp",
+  alias: "simulated",
+  networkKind: "public_mainnet",
+  host: "https://icp0.io",
+  deploymentClass: "public_subnet",
+  canisterIds: Object.fromEntries(
+    FEATURE_AREAS.map(feature => [FEATURE_CANISTER_KEYS[feature], "aaaaa-aa"]),
+  ),
+};
+
+function tryActiveIcpTarget(): IcpTargetConfig | null {
+  try {
+    return getActiveIcpTarget();
+  } catch {
+    return null;
+  }
 }
 
 export default function PlacementAdminSettingsPage() {
