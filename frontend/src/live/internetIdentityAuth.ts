@@ -177,5 +177,6 @@ export function resetInternetIdentityAuthForTests(): void {
   activeTarget = undefined;
   warmupPromise = undefined;
   accountProvisionerOverride = undefined;
+  clearLiveAgentCache();
 }
 
