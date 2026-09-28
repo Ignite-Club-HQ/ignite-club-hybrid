@@ -8,16 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
 import {
   BACKEND_ROUTING_CONFIG_KEY,
   applyBackendRoutingConfig,
   parseBackendRoutingConfig,
   DEFAULT_BACKEND_ROUTING_CONFIG,
+  normalizeApprovedTarget,
+  type ApprovedBackendTarget,
   type BackendProvider,
   type BackendEligibility,
+  type BackendTargetKind,
 } from "@/live/backendRouting";
-import { getEffectiveBackend } from "@/live/loadBackendRouting";
+import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
 import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +40,21 @@ import {
 } from "@/live/icpAdminOverrides";
 
 type CanisterRow = { key: string; id: string };
-type CountryRuleRow = { country: string; eligibility: BackendEligibility };
+type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
+type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean };
+
+const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
+  "supabase-region": "Supabase region",
+  "icp-cloud-engine": "ICP Cloud Engine",
+  "icp-mainnet": "ICP mainnet",
+};
+
+const KINDS_FOR_BACKEND: Record<BackendProvider, BackendTargetKind[]> = {
+  supabase: ["supabase-region"],
+  icp: ["icp-cloud-engine", "icp-mainnet"],
+};
+
+const NO_TARGET_PIN = "__none__";
 
 const ELIGIBILITY_LABELS: Record<BackendEligibility, string> = {
   supabase: "Supabase only",
