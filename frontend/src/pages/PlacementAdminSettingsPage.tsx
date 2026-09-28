@@ -173,7 +173,12 @@ export default function PlacementAdminSettingsPage() {
   }, [savedRouting, routingTouched]);
 
   const routingMutation = useMutation({
-    mutationFn: async (config: { defaultBackend: BackendProvider; countryRules: Record<string, BackendEligibility> }) => {
+    mutationFn: async (config: {
+      defaultBackend: BackendProvider;
+      countryRules: Record<string, BackendEligibility>;
+      targets: ApprovedBackendTarget[];
+      countryTargets: Record<string, string>;
+    }) => {
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
         .select("id")
@@ -189,7 +194,7 @@ export default function PlacementAdminSettingsPage() {
       } else {
         const { error } = await supabase
           .from("app_settings")
-          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend and per-country eligibility" } as never);
+          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend, per-country eligibility, and approved targets" } as never);
         if (error) throw error;
       }
       return config;
@@ -218,7 +223,35 @@ export default function PlacementAdminSettingsPage() {
   const addCountryRow = () => {
     setRoutingTouched(true);
     const suggestion = ISO_COUNTRY_CODES.find(code => !countryRows.some(r => r.country === code)) ?? "AU";
-    setCountryRows(current => [...current, { country: suggestion, eligibility: "both" }]);
+    setCountryRows(current => [...current, { country: suggestion, eligibility: "both", targetId: NO_TARGET_PIN }]);
+  };
+
+  const updateTargetRow = (index: number, patch: Partial<TargetRow>) => {
+    setRoutingTouched(true);
+    setTargetRows(current =>
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const next = { ...row, ...patch };
+        // Keep the target kind valid when the backend changes.
+        if (patch.backend && !KINDS_FOR_BACKEND[next.backend].includes(next.kind)) {
+          next.kind = KINDS_FOR_BACKEND[next.backend][0];
+        }
+        return next;
+      }),
+    );
+  };
+
+  const removeTargetRow = (index: number) => {
+    setRoutingTouched(true);
+    setTargetRows(current => current.filter((_, i) => i !== index));
+  };
+
+  const addTargetRow = () => {
+    setRoutingTouched(true);
+    setTargetRows(current => [
+      ...current,
+      { backend: "supabase", kind: "supabase-region", alias: "", version: "v1", region: "", enabled: true },
+    ]);
   };
 
   const handleSaveRouting = () => {
@@ -230,7 +263,36 @@ export default function PlacementAdminSettingsPage() {
       }
       countryRules[row.country] = row.eligibility;
     }
-    routingMutation.mutate({ defaultBackend, countryRules });
+    try {
+      const targets = targetRows
+        .filter(row => row.alias.trim() || row.version.trim())
+        .map(row => normalizeApprovedTarget({ ...row }));
+      const seen = new Set<string>();
+      for (const target of targets) {
+        if (seen.has(target.id)) {
+          throw new Error(`Target "${target.id}" is listed twice.`);
+        }
+        seen.add(target.id);
+      }
+      const countryTargets: Record<string, string> = {};
+      for (const row of countryRows) {
+        if (row.targetId === NO_TARGET_PIN) continue;
+        const target = targets.find(t => t.id === row.targetId);
+        if (!target) {
+          throw new Error(`${countryName(row.country)} is pinned to a target that no longer exists.`);
+        }
+        const eligibility = countryRules[row.country];
+        if (eligibility !== "both" && eligibility !== target.backend) {
+          throw new Error(
+            `${countryName(row.country)} is ${ELIGIBILITY_LABELS[eligibility].toLowerCase()} but is pinned to a ${target.backend === "icp" ? "ICP" : "Supabase"} target.`,
+          );
+        }
+        countryTargets[row.country] = target.id;
+      }
+      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets });
+    } catch (error) {
+      toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    }
   };
 
   const saveMutation = useMutation({
