@@ -1,5 +1,5 @@
 {
   "//": "Root no-op config: the app's real typecheck config lives in frontend/. This silences the root-level tsc step.",
-  "files": [],
-  "include": []
+  "files": ["scripts/typecheck-noop.ts"],
+  "compilerOptions": { "noEmit": true }
 }
