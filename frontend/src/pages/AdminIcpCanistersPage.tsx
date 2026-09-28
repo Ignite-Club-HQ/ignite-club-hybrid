@@ -113,6 +113,90 @@ export default function AdminIcpCanistersPage() {
     }
   }, [savedOverrides, touched]);
 
+  const { data: savedRouting, isLoading: isLoadingRouting } = useQuery({
+    queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", BACKEND_ROUTING_CONFIG_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? parseBackendRoutingConfig(data.value) : null;
+    },
+    enabled: !!user && isAppAdmin,
+  });
+
+  useEffect(() => {
+    if (routingTouched || savedRouting === undefined) return;
+    const config = savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG;
+    setDefaultBackend(config.defaultBackend);
+    setCountryRows(
+      Object.entries(config.countryRules).map(([country, eligibility]) => ({ country, eligibility })),
+    );
+  }, [savedRouting, routingTouched]);
+
+  const routingMutation = useMutation({
+    mutationFn: async (config: { defaultBackend: BackendProvider; countryRules: Record<string, BackendEligibility> }) => {
+      const { data: existing, error: readError } = await supabase
+        .from("app_settings")
+        .select("id")
+        .eq("key", BACKEND_ROUTING_CONFIG_KEY)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (existing) {
+        const { error } = await supabase
+          .from("app_settings")
+          .update({ value: config as never })
+          .eq("key", BACKEND_ROUTING_CONFIG_KEY);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("app_settings")
+          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend and per-country eligibility" } as never);
+        if (error) throw error;
+      }
+      return config;
+    },
+    onSuccess: (config) => {
+      applyBackendRoutingConfig(config);
+      queryClient.invalidateQueries({ queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY] });
+      setRoutingTouched(false);
+      toast({ title: "Backend routing saved", description: "The routing configuration is active for this session and all future sessions." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to save routing", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateCountryRow = (index: number, patch: Partial<CountryRuleRow>) => {
+    setRoutingTouched(true);
+    setCountryRows(current => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const removeCountryRow = (index: number) => {
+    setRoutingTouched(true);
+    setCountryRows(current => current.filter((_, i) => i !== index));
+  };
+
+  const addCountryRow = () => {
+    setRoutingTouched(true);
+    const suggestion = ISO_COUNTRY_CODES.find(code => !countryRows.some(r => r.country === code)) ?? "AU";
+    setCountryRows(current => [...current, { country: suggestion, eligibility: "both" }]);
+  };
+
+  const handleSaveRouting = () => {
+    const countryRules: Record<string, BackendEligibility> = {};
+    for (const row of countryRows) {
+      if (countryRules[row.country]) {
+        toast({ title: "Cannot save", description: `${countryName(row.country)} is listed twice.`, variant: "destructive" });
+        return;
+      }
+      countryRules[row.country] = row.eligibility;
+    }
+    routingMutation.mutate({ defaultBackend, countryRules });
+  };
+
   const saveMutation = useMutation({
     mutationFn: async (canisterIds: Record<string, string>) => {
       const value = { canisterIds };
