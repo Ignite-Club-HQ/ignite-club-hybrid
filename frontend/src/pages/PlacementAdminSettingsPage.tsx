@@ -435,7 +435,8 @@ export default function PlacementAdminSettingsPage() {
           <CardContent className="space-y-4">
             {rows.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No canisters configured yet. Add one below once you have deployed a canister.
+                No canisters configured yet. Add one below once you have deployed a canister —
+                the Key field suggests the 13 canisters your backend defines.
               </p>
             )}
             <datalist id="known-canister-keys">
