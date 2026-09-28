@@ -163,6 +163,7 @@ export default function EditProfilePage() {
         display_name: displayName.trim(),
         avatar_url: avatarUrl.trim() || null,
         leaderboard_opt_out: leaderboardOptOut,
+        country: country || null,
       } as any)
       .eq("id", user!.id);
 
@@ -183,6 +184,7 @@ export default function EditProfilePage() {
       avatar_url: avatarUrl.trim() || null,
     });
 
+    setProfileCountry(country || null);
     await refreshProfile();
     toast({ title: "Profile updated!" });
     navigate("/profile");
