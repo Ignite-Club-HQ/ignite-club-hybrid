@@ -107,6 +107,7 @@ export default function PlacementAdminSettingsPage() {
   const [touched, setTouched] = useState(false);
   const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
+  const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
   const [routingTouched, setRoutingTouched] = useState(false);
 
   const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
@@ -153,7 +154,21 @@ export default function PlacementAdminSettingsPage() {
     const config = savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG;
     setDefaultBackend(config.defaultBackend);
     setCountryRows(
-      Object.entries(config.countryRules).map(([country, eligibility]) => ({ country, eligibility })),
+      Object.entries(config.countryRules).map(([country, eligibility]) => ({
+        country,
+        eligibility,
+        targetId: config.countryTargets[country] ?? NO_TARGET_PIN,
+      })),
+    );
+    setTargetRows(
+      config.targets.map(t => ({
+        backend: t.backend,
+        kind: t.kind,
+        alias: t.alias,
+        version: t.version,
+        region: t.region ?? "",
+        enabled: t.enabled,
+      })),
     );
   }, [savedRouting, routingTouched]);
 
