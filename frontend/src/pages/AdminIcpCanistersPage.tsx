@@ -256,7 +256,7 @@ export default function AdminIcpCanistersPage() {
     }
   };
 
-  if (isLoadingAuth || (isAppAdmin && isLoadingSettings)) {
+  if (isLoadingAuth || (isAppAdmin && (isLoadingSettings || isLoadingRouting))) {
     return <PageLoading />;
   }
 
@@ -371,6 +371,124 @@ export default function AdminIcpCanistersPage() {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              Backend routing
+            </CardTitle>
+            <CardDescription>
+              Choose the default backend for the whole app. Countries eligible for both
+              backends use this default; countries restricted to one backend always use
+              that one. Routing picks which backend serves data — it never blocks
+              anyone from signing in or using the app.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Label htmlFor="default-backend">Default backend</Label>
+            <Select value={defaultBackend} onValueChange={(v) => { setRoutingTouched(true); setDefaultBackend(v as BackendProvider); }}>
+              <SelectTrigger id="default-backend" className="w-full sm:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="supabase">Supabase</SelectItem>
+                <SelectItem value="icp">Internet Computer (ICP)</SelectItem>
+              </SelectContent>
+            </Select>
+            {defaultBackend === "icp" && envEntries.length === 0 && rows.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No canisters are configured yet, so the app will keep using Supabase
+                until you add canister IDs above.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Country eligibility</CardTitle>
+            <CardDescription>
+              Restrict which backend(s) each country may use. Countries not listed here
+              are eligible for both. A member's country comes from their profile if set,
+              otherwise from their internet connection.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {countryRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No country rules — every country is eligible for both backends.
+              </p>
+            )}
+            {countryRows.map((row, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <div className="space-y-1 flex-1">
+                  <Label htmlFor={`country-${index}`}>Country</Label>
+                  <Select value={row.country} onValueChange={(v) => updateCountryRow(index, { country: v })}>
+                    <SelectTrigger id={`country-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ISO_COUNTRY_CODES.map(code => (
+                        <SelectItem key={code} value={code}>{countryName(code)} ({code})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1 w-44">
+                  <Label htmlFor={`eligibility-${index}`}>Eligible for</Label>
+                  <Select value={row.eligibility} onValueChange={(v) => updateCountryRow(index, { eligibility: v as BackendEligibility })}>
+                    <SelectTrigger id={`eligibility-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(ELIGIBILITY_LABELS) as BackendEligibility[]).map(value => (
+                        <SelectItem key={value} value={value}>{ELIGIBILITY_LABELS[value]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => removeCountryRow(index)} aria-label="Remove country rule">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={addCountryRow}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add country
+              </Button>
+              <Button onClick={handleSaveRouting} disabled={routingMutation.isPending}>
+                {routingMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save routing
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Status</CardTitle>
+            <CardDescription>How the routing rules apply to you right now.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {(() => {
+              const current = getCurrentCountry();
+              return (
+                <>
+                  <Badge variant="secondary">
+                    Your country: {current.country ? `${countryName(current.country)} (${current.country})` : "unknown"}
+                    {current.source === "profile" ? " — from profile" : current.source === "ip" ? " — from connection" : ""}
+                  </Badge>
+                  <Badge variant="secondary">
+                    Effective backend: {getEffectiveBackend() === "icp" ? "Internet Computer (ICP)" : "Supabase"}
+                  </Badge>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
