@@ -142,6 +142,7 @@ const EventGroupPitchPage = lazyWithRetry(() => import("./pages/EventGroupPitchP
 const AppSettingsPage = lazyWithRetry(() => import("./pages/AppSettingsPage"));
 const AdminAICatchUpPage = lazyWithRetry(() => import("./pages/AdminAICatchUpPage"));
 const AdminIcpLlmTestPage = lazyWithRetry(() => import("./pages/AdminIcpLlmTestPage"));
+const AdminIcpCanistersPage = lazyWithRetry(() => import("./pages/AdminIcpCanistersPage"));
 const PlacementAdminSettingsPage = lazyWithRetry(() => import("./pages/PlacementAdminSettingsPage"));
 const AdMobSettingsPage = lazyWithRetry(() => import("./pages/AdMobSettingsPage"));
 const ClassEnrolmentPage = lazyWithRetry(() => import("./pages/ClassEnrolmentPage"));
@@ -310,6 +311,13 @@ const App = () => {
     };
     window.addEventListener("unhandledrejection", handler);
     return () => window.removeEventListener("unhandledrejection", handler);
+  }, []);
+
+  // Load app-admin ICP canister overrides (stored in public.app_settings) so
+  // canister connections use the admin-configured IDs from the first session
+  // interaction, not only after visiting /admin/icp-canisters.
+  useEffect(() => {
+    void import("./live/loadIcpAdminOverrides").then((m) => m.loadIcpAdminOverrides());
   }, []);
 
   // Handle Android hardware back button
@@ -510,6 +518,7 @@ const App = () => {
                   <Route path="/admin/placement-settings" element={<PlacementAdminSettingsPage />} />
                   <Route path="/admin/ai-catch-up" element={<AdminAICatchUpPage />} />
                   <Route path="/admin/icp-llm-test" element={<AdminIcpLlmTestPage />} />
+                  <Route path="/admin/icp-canisters" element={<AdminIcpCanistersPage />} />
                   <Route path="/admin/admob" element={<AdMobSettingsPage />} />
                  <Route path="/admin/send-update-reminder" element={<SendUpdateReminderPage />} />
                 <Route path="/admin/dm-attachments" element={<AdminDmAttachmentsPage />} />

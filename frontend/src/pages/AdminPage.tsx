@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Ticket, CreditCard, MessageSquare, UserCog, FileArchive, BarChart3, Megaphone, Bell, Settings, FileText, Smartphone, Send, Activity, KeyRound, Sparkles, Paperclip, TrendingUp, Image as ImageIcon, Bug, RotateCcw, Globe2 } from "lucide-react";
+import { ArrowLeft, Ticket, CreditCard, MessageSquare, UserCog, FileArchive, BarChart3, Megaphone, Bell, Settings, FileText, Smartphone, Send, Activity, KeyRound, Sparkles, Paperclip, TrendingUp, Image as ImageIcon, Bug, RotateCcw, Globe2, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChevronRight } from "lucide-react";
@@ -325,6 +325,12 @@ function SupabaseAdminPage() {
               label="ICP LLM Test"
               description="Test LLM inference via the Internet Computer"
               onClick={() => navigate("/admin/icp-llm-test")}
+            />
+            <AdminMenuItem
+              icon={Network}
+              label="ICP Canisters"
+              description="Configure the canister IDs the app connects to"
+              onClick={() => navigate("/admin/icp-canisters")}
             />
           </CardContent>
         </Card>
