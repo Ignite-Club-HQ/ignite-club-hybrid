@@ -1,0 +1,268 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Loader2, Plus, Trash2, Network, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { useToast } from "@/hooks/use-toast";
+import { PageLoading } from "@/components/ui/page-loading";
+import { getLiveBackendTargetRegistry } from "@/live/targetRegistry";
+import {
+  ICP_CANISTER_CONFIG_KEY,
+  applyIcpAdminOverrides,
+  parseIcpAdminOverrides,
+  validateCanisterId,
+  type IcpAdminOverrides,
+} from "@/live/icpAdminOverrides";
+
+type CanisterRow = { key: string; id: string };
+
+const KNOWN_CANISTER_KEYS = ["identity_access", "internet_identity_frontend"];
+
+function envBaselineCanisterIds(): Record<string, string> {
+  try {
+    const registry = getLiveBackendTargetRegistry();
+    const target = registry.icpTargets.find(t => t.alias === registry.activeIcpAlias);
+    return target?.canisterIds ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function rowsFromOverrides(overrides: IcpAdminOverrides | null): CanisterRow[] {
+  if (!overrides) return [];
+  return Object.entries(overrides.canisterIds).map(([key, id]) => ({ key, id }));
+}
+
+function validateRows(rows: CanisterRow[]): Record<string, string> {
+  const canisterIds: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    const id = row.id.trim();
+    if (!key && !id) continue;
+    if (!/^[a-z][a-z0-9_]{0,62}$/.test(key)) {
+      throw new Error(`Canister key "${key || "(empty)"}" must be lowercase letters, digits and underscores, starting with a letter.`);
+    }
+    if (!id) throw new Error(`Canister "${key}" is missing its canister ID.`);
+    if (canisterIds[key]) throw new Error(`Canister key "${key}" is listed twice.`);
+    canisterIds[key] = validateCanisterId(key, id);
+  }
+  return canisterIds;
+}
+
+export default function AdminIcpCanistersPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { isAppAdmin, isLoading: isLoadingAuth } = useIsAppAdmin();
+
+  const [rows, setRows] = useState<CanisterRow[]>([]);
+  const [touched, setTouched] = useState(false);
+
+  const { data: savedOverrides, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", ICP_CANISTER_CONFIG_KEY)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? parseIcpAdminOverrides(data.value) : null;
+    },
+    enabled: !!user && isAppAdmin,
+  });
+
+  useEffect(() => {
+    if (!touched && savedOverrides !== undefined) {
+      setRows(rowsFromOverrides(savedOverrides));
+    }
+  }, [savedOverrides, touched]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (canisterIds: Record<string, string>) => {
+      const value = { canisterIds };
+      const { data: existing, error: readError } = await supabase
+        .from("app_settings")
+        .select("id")
+        .eq("key", ICP_CANISTER_CONFIG_KEY)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (existing) {
+        const { error } = await supabase
+          .from("app_settings")
+          .update({ value: value as never })
+          .eq("key", ICP_CANISTER_CONFIG_KEY);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("app_settings")
+          .insert({ key: ICP_CANISTER_CONFIG_KEY, value: value as never, description: "App-admin ICP canister ID overrides" } as never);
+        if (error) throw error;
+      }
+      return canisterIds;
+    },
+    onSuccess: (canisterIds) => {
+      const overrides = Object.keys(canisterIds).length > 0 ? { canisterIds } : null;
+      applyIcpAdminOverrides(overrides);
+      queryClient.invalidateQueries({ queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY] });
+      setTouched(false);
+      toast({ title: "ICP canisters saved", description: "The new canister configuration is active for this session and all future sessions." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to save canisters", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateRow = (index: number, patch: Partial<CanisterRow>) => {
+    setTouched(true);
+    setRows(current => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const removeRow = (index: number) => {
+    setTouched(true);
+    setRows(current => current.filter((_, i) => i !== index));
+  };
+
+  const addRow = () => {
+    setTouched(true);
+    const suggestion = KNOWN_CANISTER_KEYS.find(k => !rows.some(r => r.key.trim() === k));
+    setRows(current => [...current, { key: suggestion ?? "", id: "" }]);
+  };
+
+  const handleSave = () => {
+    try {
+      saveMutation.mutate(validateRows(rows));
+    } catch (error) {
+      toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    }
+  };
+
+  if (isLoadingAuth || (isAppAdmin && isLoadingSettings)) {
+    return <PageLoading />;
+  }
+
+  if (!isAppAdmin) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col bg-background">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-lg font-semibold">ICP Canisters</h1>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-muted-foreground">Access denied. App admin role required.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const envIds = envBaselineCanisterIds();
+  const envEntries = Object.entries(envIds);
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col bg-background">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <Network className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">ICP Canisters</h1>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Canister configuration</CardTitle>
+            <CardDescription>
+              Map each app canister key (e.g. <code className="text-xs">identity_access</code>) to the
+              canister ID you deployed on the Internet Computer. Values saved here take effect
+              immediately and for every signed-in session, and override the build-time defaults
+              key-by-key.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {rows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No canisters configured yet. Add one below once you have deployed a canister.
+              </p>
+            )}
+            {rows.map((row, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <div className="space-y-1 w-2/5">
+                  <Label htmlFor={`canister-key-${index}`}>Key</Label>
+                  <Input
+                    id={`canister-key-${index}`}
+                    value={row.key}
+                    onChange={(e) => updateRow(index, { key: e.target.value })}
+                    placeholder="identity_access"
+                  />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <Label htmlFor={`canister-id-${index}`}>Canister ID</Label>
+                  <Input
+                    id={`canister-id-${index}`}
+                    value={row.id}
+                    onChange={(e) => updateRow(index, { id: e.target.value })}
+                    placeholder="aaaaa-bbbbb-ccccc-ddddd-cai"
+                  />
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => removeRow(index)} aria-label="Remove canister">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={addRow}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add canister
+              </Button>
+              <Button onClick={handleSave} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Build-time defaults</CardTitle>
+            <CardDescription>
+              Canister IDs baked into this build via <code className="text-xs">IGNITE_LIVE_ICP_CANISTER_IDS_JSON</code>.
+              Any key you configure above replaces the matching value here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {envEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No build-time canister IDs are set.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {envEntries.map(([key, id]) => (
+                  <Badge key={key} variant="secondary" className="font-mono text-xs">
+                    {key}: {id}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

@@ -1,3 +1,5 @@
+import { mergeIcpTargetWithAdminOverrides } from "./icpAdminOverrides";
+
 type BackendProvider = "supabase" | "icp";
 
 export type SupabaseTargetConfig = {
@@ -183,5 +185,9 @@ export function getActiveSupabaseTarget(): SupabaseTargetConfig {
 
 export function getActiveIcpTarget(): IcpTargetConfig {
   const registry = getLiveBackendTargetRegistry();
-  return registry.icpTargets.find(target => target.alias === registry.activeIcpAlias)!;
+  const target = registry.icpTargets.find(candidate => candidate.alias === registry.activeIcpAlias)!;
+  // App-admin canister overrides (stored in the `icp_canister_config` app_settings
+  // row) take precedence over the build-time env values; re-validate the merged
+  // target so a bad stored value can never produce an unapproved target.
+  return validateIcpTarget(mergeIcpTargetWithAdminOverrides(target));
 }
