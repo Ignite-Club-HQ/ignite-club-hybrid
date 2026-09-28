@@ -13,6 +13,10 @@
 - [x] Validate frontend build, lab-runtime exclusion, canister topology,
   Candid drift, and Rust workspace compilation.
 
+- [x] Make the Lovable preview run the merged `frontend/` app: root
+  `lovable.toml` + `scripts/dev-preview.mjs` (maps platform Supabase env vars
+  to `IGNITE_LIVE_*`, serves `live-index.html` at `/` on port 8080).
+
 ## Remaining
 
 - [ ] Validate login, profile, and RLS behavior against the approved DEV

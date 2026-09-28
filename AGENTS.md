@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - The migrated application lives under `frontend/`; its guarded live target is configured in `frontend/src/live/targetRegistry.ts`, with the shared live ICP agent in `frontend/src/live/icpAgent.ts`. Canister IDs are read from `IGNITE_LIVE_ICP_CANISTER_IDS_JSON`; do not add local fixtures or production credentials to the browser bundle.
+- The Lovable preview/dev server runs the `frontend/` app via root `lovable.toml` (`install` = `npm --prefix frontend ci`, `dev` = `node scripts/dev-preview.mjs`); the wrapper maps the platform-provided `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` onto `IGNITE_LIVE_SUPABASE_URL`/`IGNITE_LIVE_SUPABASE_ANON_KEY` and serves `live-index.html` at `/` on port 8080. Why: the merged repo has no root package.json, so without this the preview has nothing to run.

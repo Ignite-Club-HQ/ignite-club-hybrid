@@ -45,6 +45,19 @@ export default defineConfig({
     ],
   },
   plugins: [
+    {
+      // The live entry point is live-index.html (not the default index.html),
+      // so rewrite the root URL in dev — otherwise the dev server 404s on "/".
+      name: "ignite-live-index-rewrite",
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url === "/" || req.url === "/index.html") {
+            req.url = "/live-index.html";
+          }
+          next();
+        });
+      },
+    },
     visualizer({
       filename: "dist-live/bundle-analysis.html",
       template: "treemap",
