@@ -1,3 +1,4 @@
 [run]
 install = "npm --prefix frontend ci --no-fund --no-audit"
 dev = "node scripts/dev-preview.mjs"
+"build:dev" = "node scripts/build-preview.mjs"
