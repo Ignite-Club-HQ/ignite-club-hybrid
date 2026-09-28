@@ -318,6 +318,8 @@ const App = () => {
   // interaction, not only after visiting /admin/icp-canisters.
   useEffect(() => {
     void import("./live/loadIcpAdminOverrides").then((m) => m.loadIcpAdminOverrides());
+    void import("./live/loadBackendRouting").then((m) => m.loadBackendRoutingConfig());
+    void import("./live/userCountry").then((m) => m.detectCountryByIp());
   }, []);
 
   // Handle Android hardware back button
