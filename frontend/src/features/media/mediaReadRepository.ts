@@ -197,7 +197,7 @@ export async function fetchMediaComments(
           content: comment.body,
           created_at: new Date(Number(comment.created_at_ms)).toISOString(),
           profiles: null,
-        }));
+        })) as any[];
     },
   });
 }

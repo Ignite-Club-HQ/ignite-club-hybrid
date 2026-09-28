@@ -6,6 +6,8 @@ import { getCachedMessages, cacheMessages } from "@/lib/messageCache";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import * as fixtureData from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveMessagesPage } from "@/live/features/messaging";
 import {
   attachReactionsToMessages,
   getCachedGroupMessages,

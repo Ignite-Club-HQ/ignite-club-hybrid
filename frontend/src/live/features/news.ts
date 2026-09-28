@@ -1,4 +1,5 @@
 import type { FeatureBackendContext } from "../featureRouter";
+import { candidOpt, unwrapCandidOpt } from "./candid";
 import { getLiveClubSettings, saveLiveClubSettings } from "./club";
 
 /**
@@ -16,7 +17,8 @@ export async function getLiveClubAnnouncement(
   clubId: string,
 ): Promise<string> {
   const settings = await getLiveClubSettings(ctx, clubId);
-  return settings.announcement;
+  if (settings.length === 0) return "";
+  return settings[0].announcement[0] ?? "";
 }
 
 export async function saveLiveClubAnnouncement(
@@ -24,6 +26,12 @@ export async function saveLiveClubAnnouncement(
   clubId: string,
   announcement: string,
 ) {
-  const settings = await getLiveClubSettings(ctx, clubId);
-  return saveLiveClubSettings(ctx, { ...settings, announcement });
+  const settings = unwrapCandidOpt(
+    await getLiveClubSettings(ctx, clubId),
+    "Load club settings",
+  );
+  return saveLiveClubSettings(ctx, {
+    ...settings,
+    announcement: candidOpt(announcement),
+  });
 }
