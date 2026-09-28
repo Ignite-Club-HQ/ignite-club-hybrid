@@ -139,3 +139,13 @@ export async function setLiveEventRecurrence(
     "Set recurrence",
   );
 }
+
+/**
+ * Full events-domain snapshot (events, RSVPs, attendance, roster, duties,
+ * lineups, recurrences). The canister exposes no per-event RSVP/attendance
+ * query, so reads that need them filter this snapshot client-side.
+ */
+export async function getLiveEventsSnapshot(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.export_state(), "Load events snapshot");
+}
