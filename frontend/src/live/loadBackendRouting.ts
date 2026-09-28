@@ -9,7 +9,8 @@ import {
   type ApprovedBackendTarget,
   type BackendProvider,
 } from "./backendRouting";
-import { getActiveIcpTarget } from "./targetRegistry";
+import { resolveFeatureBackend, type FeatureArea } from "./featureBackend";
+import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
 
 /**

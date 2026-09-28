@@ -143,6 +143,24 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
   return { principal: principalText, provider: "internet-identity" };
 }
 
+/**
+ * The identity of the currently signed-in Internet Identity session, or null
+ * when signed out (or when the auth client has not been constructed yet).
+ * Feature repositories routed to ICP use this to authenticate canister calls.
+ */
+export async function getCurrentInternetIdentity(): Promise<Identity | null> {
+  if (!activeClient) return null;
+  try {
+    if (!activeClient.isAuthenticated()) return null;
+    const identity = await activeClient.getIdentity();
+    const principal = identity.getPrincipal();
+    if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") return null;
+    return identity;
+  } catch {
+    return null;
+  }
+}
+
 export async function signOutInternetIdentity(): Promise<void> {
   const client = activeClient;
   activeClient = undefined;
