@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveAssets,
+  listLiveComments,
+  listLiveReactions,
+} from "@/live/features/media";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -37,26 +43,66 @@ export async function fetchMediaFeedPage(
     return { photos: [], nextCursor: undefined };
   }
 
-  let query: any = client
-    .from("photos")
-    .select(MEDIA_PHOTO_SELECT)
-    .eq("show_in_feed", true)
-    .is("deleted_at", null);
-  if (options.cardId && options.cardPhotoIds?.length) query = query.in("id", [...options.cardPhotoIds]);
-  if (options.clubId) query = query.eq("club_id", options.clubId);
-  if (options.teamId) query = query.eq("team_id", options.teamId);
-  if (options.eventId) query = query.eq("event_id", options.eventId);
-  if (options.dateFrom) query = query.gte("created_at", options.dateFrom);
-  if (options.dateTo) query = query.lte("created_at", options.dateTo);
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      let query: any = client
+        .from("photos")
+        .select(MEDIA_PHOTO_SELECT)
+        .eq("show_in_feed", true)
+        .is("deleted_at", null);
+      if (options.cardId && options.cardPhotoIds?.length) query = query.in("id", [...options.cardPhotoIds]);
+      if (options.clubId) query = query.eq("club_id", options.clubId);
+      if (options.teamId) query = query.eq("team_id", options.teamId);
+      if (options.eventId) query = query.eq("event_id", options.eventId);
+      if (options.dateFrom) query = query.gte("created_at", options.dateFrom);
+      if (options.dateTo) query = query.lte("created_at", options.dateTo);
 
-  const { data, error } = await query
-    .order("created_at", { ascending: false })
-    .range(options.offset, options.offset + options.pageSize - 1);
-  if (error) throw error;
-  return {
-    photos: data ?? [],
-    nextCursor: data?.length === options.pageSize ? options.offset + options.pageSize : undefined,
-  };
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .range(options.offset, options.offset + options.pageSize - 1);
+      if (error) throw error;
+      return {
+        photos: data ?? [],
+        nextCursor: data?.length === options.pageSize ? options.offset + options.pageSize : undefined,
+      };
+    },
+    icp: async (ctx) => {
+      // The media_metadata canister lists assets per club only; feeds without
+      // a club scope (cross-club views, gallery-card subsets, team/event
+      // filters) have no canister query yet and return empty until parity
+      // lands. Provisional until verified against a deployed canister.
+      if (!options.clubId || options.cardId) {
+        return { photos: [] as any[], nextCursor: undefined };
+      }
+      const assets = await listLiveAssets(ctx, options.clubId);
+      const photos = assets
+        .filter((asset) => !asset.deleted)
+        .map((asset) => ({
+          id: asset.id,
+          file_url: asset.storage_path,
+          image_url: asset.storage_path,
+          title: asset.kind,
+          caption: null,
+          // The canister asset carries retention/expiry timestamps but no
+          // creation timestamp — date display and ordering are provisional.
+          created_at: null,
+          club_id: asset.club_id,
+          team_id: null,
+          event_id: null,
+          mini_league_id: null,
+          uploader_id: asset.owner.toText(),
+          album_id: null,
+          clubs: null,
+          teams: null,
+          mini_leagues: null,
+        }));
+      const page = photos.slice(options.offset, options.offset + options.pageSize);
+      return {
+        photos: page,
+        nextCursor: page.length === options.pageSize ? options.offset + options.pageSize : undefined,
+      };
+    },
+  });
 }
 
 export async function fetchHighlightedMediaPhoto(
@@ -85,15 +131,34 @@ export async function fetchMediaReactions(
   client: IgniteSupabaseClient = supabase,
 ) {
   if (photoIds.length === 0) return [];
-  const { data, error } = await client
-    .from("photo_reactions")
-    .select("photo_id, user_id, reaction_type, profiles:user_id(display_name, avatar_url)")
-    .in("photo_id", [...photoIds]);
-  if (error) {
-    console.error("Error fetching reactions:", error);
-    return [];
-  }
-  return data ?? [];
+
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { data, error } = await client
+        .from("photo_reactions")
+        .select("photo_id, user_id, reaction_type, profiles:user_id(display_name, avatar_url)")
+        .in("photo_id", [...photoIds]);
+      if (error) {
+        console.error("Error fetching reactions:", error);
+        return [];
+      }
+      return data ?? [];
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: canister reaction (asset_id, user, kind) onto the
+      // photo_reactions row shape; profile enrichment stays Supabase-side and
+      // resolves to null for principal ids.
+      const results = await Promise.all(
+        photoIds.map((photoId) => listLiveReactions(ctx, photoId).catch(() => [])),
+      );
+      return results.flat().map((reaction: any) => ({
+        photo_id: reaction.asset_id,
+        user_id: reaction.user.toText(),
+        reaction_type: reaction.kind,
+        profiles: null,
+      }));
+    },
+  });
 }
 
 export async function fetchMediaComments(
@@ -101,14 +166,38 @@ export async function fetchMediaComments(
   client: IgniteSupabaseClient = supabase,
 ) {
   if (photoIds.length === 0) return [];
-  const { data, error } = await client
-    .from("photo_comments")
-    .select("*, profiles:user_id(display_name, avatar_url)")
-    .in("photo_id", [...photoIds])
-    .order("created_at", { ascending: true });
-  if (error) {
-    console.error("Error fetching comments:", error);
-    return [];
-  }
-  return data ?? [];
+
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { data, error } = await client
+        .from("photo_comments")
+        .select("*, profiles:user_id(display_name, avatar_url)")
+        .in("photo_id", [...photoIds])
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("Error fetching comments:", error);
+        return [];
+      }
+      return data ?? [];
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: canister comment (asset_id, author, body) onto
+      // the photo_comments row shape.
+      const results = await Promise.all(
+        photoIds.map((photoId) => listLiveComments(ctx, photoId).catch(() => [])),
+      );
+      return results
+        .flat()
+        .filter((comment: any) => !comment.deleted)
+        .sort((a: any, b: any) => Number(a.created_at_ms - b.created_at_ms))
+        .map((comment: any) => ({
+          id: comment.id,
+          photo_id: comment.asset_id,
+          user_id: comment.author.toText(),
+          content: comment.body,
+          created_at: new Date(Number(comment.created_at_ms)).toISOString(),
+          profiles: null,
+        }));
+    },
+  });
 }

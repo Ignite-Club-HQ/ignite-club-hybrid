@@ -4,6 +4,27 @@ import { useAuth } from "@/hooks/useAuth";
 import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSectionSnapshot";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubAnnouncement } from "@/live/features/news";
+
+/**
+ * Provisional mapping of the club_domain announcement onto the club_news row
+ * shape: the canister currently stores a single announcement string per club,
+ * not a multi-post news feed. Used while the news feature is routed to ICP.
+ */
+function announcementToNewsRow(clubId: string, announcement: string): ClubNewsRow {
+  return {
+    id: `club-announcement-${clubId}`,
+    club_id: clubId,
+    title: "Club announcement",
+    content: announcement,
+    image_url: null,
+    author_id: null,
+    target_team_ids: null,
+    is_important: false,
+    published_at: new Date().toISOString(),
+  };
+}
 
 /**
  * Club News data access.
@@ -40,20 +61,34 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
       if (useIcpLab) {
         return getLocalLabNewsPosts(clubId ?? "club-icp-001").slice(0, limit) as ClubNewsRow[];
       }
-      let query = supabase
-        .from("club_news")
-        .select(NEWS_COLUMNS)
-        .eq("is_published", true)
-        .order("published_at", { ascending: false })
-        .limit(limit);
+      return withFeatureBackend("news", {
+        supabase: async () => {
+          let query = supabase
+            .from("club_news")
+            .select(NEWS_COLUMNS)
+            .eq("is_published", true)
+            .order("published_at", { ascending: false })
+            .limit(limit);
 
-      if (clubId) query = query.eq("club_id", clubId);
+          if (clubId) query = query.eq("club_id", clubId);
 
-      const { data, error } = await query;
-      if (error) throw error;
-      const rows = (data || []) as ClubNewsRow[];
-      writeHomeSectionSnapshot("club-news", snapshotScope, rows);
-      return rows;
+          const { data, error } = await query;
+          if (error) throw error;
+          const rows = (data || []) as ClubNewsRow[];
+          writeHomeSectionSnapshot("club-news", snapshotScope, rows);
+          return rows;
+        },
+        icp: async (ctx) => {
+          // The club_domain canister stores a single announcement per club, so
+          // a cross-club feed has no canister query yet.
+          if (!clubId) return [];
+          const announcement = await getLiveClubAnnouncement(ctx, clubId);
+          if (!announcement) return [];
+          const rows = [announcementToNewsRow(clubId, announcement)];
+          writeHomeSectionSnapshot("club-news", snapshotScope, rows);
+          return rows;
+        },
+      });
     },
     // Paint the last known posts immediately on cold open so the Home section
     // doesn't pop in after everything else.
@@ -76,13 +111,25 @@ export function useClubNewsPost(newsId?: string | null) {
     queryKey: ["club-news-post", newsId],
     queryFn: async () => {
       if (useIcpLab) return getLocalLabNewsPost(newsId!) as ClubNewsRow | null;
-      const { data, error } = await supabase
-        .from("club_news")
-        .select(NEWS_COLUMNS)
-        .eq("id", newsId!)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as ClubNewsRow | null) ?? null;
+      return withFeatureBackend("news", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_news")
+            .select(NEWS_COLUMNS)
+            .eq("id", newsId!)
+            .maybeSingle();
+          if (error) throw error;
+          return (data as ClubNewsRow | null) ?? null;
+        },
+        icp: async (ctx) => {
+          // Only the synthetic announcement row (id `club-announcement-<club>`)
+          // is resolvable from the canister.
+          const match = /^club-announcement-(.+)$/.exec(newsId!);
+          if (!match) return null;
+          const announcement = await getLiveClubAnnouncement(ctx, match[1]);
+          return announcement ? announcementToNewsRow(match[1], announcement) : null;
+        },
+      });
     },
     enabled: !!newsId,
   });
