@@ -17,7 +17,7 @@ import { InviteFlowProgress, getInviteFlowContext, clearInviteFlowContext } from
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { useIcpAuthScreen } from "@/live/authBackendMode";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -135,7 +135,10 @@ function sanitizeRedirectAfterAuth(raw: string | null): string | null {
 }
 
 export default function AuthPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  // Auth screen follows Admin → Infrastructure / Placement Settings:
+  // Internet Identity when ICP is the effective backend for this visitor,
+  // Supabase email/password + Google otherwise.
+  const useIcpLab = useIcpAuthScreen();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

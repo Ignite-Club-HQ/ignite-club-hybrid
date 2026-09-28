@@ -9,7 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { AuthProvider, IcpAuthProvider } from "@/hooks/useAuth";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { useIcpAuthScreen } from "@/live/authBackendMode";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ThemeProvider } from "next-themes";
 import { ClubThemeProvider } from "@/hooks/useClubTheme";
@@ -312,13 +312,32 @@ const App = () => {
     return () => window.removeEventListener("unhandledrejection", handler);
   }, []);
 
-  // Load app-admin ICP canister overrides (stored in public.app_settings) so
-  // canister connections use the admin-configured IDs from the first session
-  // interaction, not only after visiting /admin/placement-settings.
+  // Load app-admin ICP canister overrides and backend routing config (stored
+  // in public.app_settings) plus the visitor's country BEFORE first render:
+  // the auth boundary below (Supabase vs Internet Identity) is chosen from
+  // these settings, and the provider must not be swapped after mount.
+  const [placementReady, setPlacementReady] = useState(false);
   useEffect(() => {
-    void import("./live/loadIcpAdminOverrides").then((m) => m.loadIcpAdminOverrides());
-    void import("./live/loadBackendRouting").then((m) => m.loadBackendRoutingConfig());
-    void import("./live/userCountry").then((m) => m.detectCountryByIp());
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [overrides, routing, country] = await Promise.all([
+          import("./live/loadIcpAdminOverrides"),
+          import("./live/loadBackendRouting"),
+          import("./live/userCountry"),
+        ]);
+        // Each loader is failure-tolerant internally (falls back to
+        // build-time/unknown values), so all three settle even offline.
+        await Promise.all([
+          overrides.loadIcpAdminOverrides(),
+          routing.loadBackendRoutingConfig(),
+          country.detectCountryByIp(),
+        ]);
+      } finally {
+        if (!cancelled) setPlacementReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // Handle Android hardware back button
@@ -389,7 +408,14 @@ const App = () => {
   }, []);
 
 
-  const useIcpAuth = resolveLocalAuthMode(window.location.search, true);
+  // Hold first paint until the placement settings are loaded so the auth
+  // screen matches Admin → Infrastructure / Placement Settings from the
+  // start (loading UI is handled by the root suspense fallback).
+  if (!placementReady) {
+    return null;
+  }
+
+  const useIcpAuth = useIcpAuthScreen();
   const AuthBoundary = useIcpAuth ? IcpAuthProvider : AuthProvider;
 
   return (
