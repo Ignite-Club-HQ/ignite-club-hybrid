@@ -514,6 +514,100 @@ export default function PlacementAdminSettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Approved targets</CardTitle>
+            <CardDescription>
+              The deployment targets each backend is approved to use — a Supabase region,
+              or an ICP Cloud Engine / mainnet deployment, with a version. Only enabled
+              targets can serve data; a disabled target is never routed to. You can pin a
+              country to a specific target in the Country eligibility section below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {targetRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No approved targets — each backend uses its built-in default deployment.
+              </p>
+            )}
+            {targetRows.map((row, index) => (
+              <div key={index} className="space-y-2 rounded-md border p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1 w-40">
+                    <Label htmlFor={`target-backend-${index}`}>Backend</Label>
+                    <Select value={row.backend} onValueChange={(v) => updateTargetRow(index, { backend: v as BackendProvider })}>
+                      <SelectTrigger id={`target-backend-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="supabase">Supabase</SelectItem>
+                        <SelectItem value="icp">Internet Computer (ICP)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 w-44">
+                    <Label htmlFor={`target-kind-${index}`}>Target type</Label>
+                    <Select value={row.kind} onValueChange={(v) => updateTargetRow(index, { kind: v as BackendTargetKind })}>
+                      <SelectTrigger id={`target-kind-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {KINDS_FOR_BACKEND[row.backend].map(kind => (
+                          <SelectItem key={kind} value={kind}>{TARGET_KIND_LABELS[kind]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 pb-1">
+                    <Switch
+                      id={`target-enabled-${index}`}
+                      checked={row.enabled}
+                      onCheckedChange={(checked) => updateTargetRow(index, { enabled: checked })}
+                    />
+                    <Label htmlFor={`target-enabled-${index}`}>Enabled</Label>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeTargetRow(index)} aria-label="Remove target">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1 flex-1 min-w-32">
+                    <Label htmlFor={`target-alias-${index}`}>Alias</Label>
+                    <Input
+                      id={`target-alias-${index}`}
+                      value={row.alias}
+                      onChange={(e) => updateTargetRow(index, { alias: e.target.value })}
+                      placeholder={row.backend === "supabase" ? "ap-southeast-2" : "cloud-engine-1"}
+                    />
+                  </div>
+                  <div className="space-y-1 w-28">
+                    <Label htmlFor={`target-version-${index}`}>Version</Label>
+                    <Input
+                      id={`target-version-${index}`}
+                      value={row.version}
+                      onChange={(e) => updateTargetRow(index, { version: e.target.value })}
+                      placeholder="v1"
+                    />
+                  </div>
+                  <div className="space-y-1 w-40">
+                    <Label htmlFor={`target-region-${index}`}>Region (optional)</Label>
+                    <Input
+                      id={`target-region-${index}`}
+                      value={row.region}
+                      onChange={(e) => updateTargetRow(index, { region: e.target.value })}
+                      placeholder="ap-southeast-2"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" onClick={addTargetRow}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add target
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">Country eligibility</CardTitle>
             <CardDescription>
               Restrict which backend(s) each country may use. Countries not listed here
