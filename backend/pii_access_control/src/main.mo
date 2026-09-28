@@ -138,8 +138,8 @@ persistent actor {
   // first call to derive_media_key using raw_rand.
   var media_root_secret : ?[Nat8] = null;
 
-  const TAG_LEN : Nat = 32; // SHA-256 output size
-  const NONCE_LEN : Nat = 12;
+  let TAG_LEN : Nat = 32; // SHA-256 output size
+  let NONCE_LEN : Nat = 12;
 
   // ==================== Helper Functions ====================
 
