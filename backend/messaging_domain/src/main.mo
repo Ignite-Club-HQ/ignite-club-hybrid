@@ -13,6 +13,7 @@ persistent actor {
   var messages : [Types.Message];
   var receipts : [Types.Receipt];
   var unread : [Types.Unread];
+  var bulkAccessPrincipals : [Principal];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -29,6 +30,10 @@ persistent actor {
 
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+
+  func hasBulkAccess(caller : Principal) : Bool {
+    not caller.equal(Principal.anonymous()) and bulkAccessPrincipals.any(func(p) = p.equal(caller))
   };
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : ?Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -302,8 +307,28 @@ persistent actor {
     }
   };
 
-  public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
+  public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
+    if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
+    if (not bulkAccessPrincipals.any(func(p) = p.equal(principal))) { bulkAccessPrincipals := bulkAccessPrincipals.concat([principal]) };
+    #Ok
+  };
+
+  public shared ({ caller }) func removeBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(principal));
+    #Ok
+  };
+
+  public query ({ caller }) func listBulkAccessPrincipals() : async { #Ok : [Principal]; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor only");
+    #Ok(bulkAccessPrincipals)
+  };
+
+  public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
+    if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
     #Ok({ schema = 1; governor; roles; conversations; messages; receipts; unread })
   };
 };

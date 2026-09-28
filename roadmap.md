@@ -9,6 +9,10 @@
 - [x] Wire read consumers: events (event detail + RSVPs), home (RSVP reads), media (feed, reactions, comments), messaging (group messages), news (feed + post). ICP branches are provisional mappings — canister shapes lack timestamps/joins; verify against deployed canisters
 - [x] Dry-run preview in Placement Settings: "Simulate all canisters configured" toggle shows per-feature backend now vs after deploy, plus the sign-in screen result — pure client-side projection, no writes or canister traffic
 - [x] ICP deployment runbook at docs/icp-deployment-runbook.md (deploy, register IDs, routing, verification, rollback)
+- [ ] Pre-mainnet fix 1: canister-driven migration orchestration (coordinator makes inter-canister export/import/reconcile calls; domain canisters accept the coordinator principal for bulk operations) — in progress
+- [x] Pre-mainnet fix 2: real PII encryption in pii_access_control — raw_rand master secrets per key id, SHA-256 CTR keystream + encrypt-then-MAC tags, random 12-byte nonces, keyed derive_media_key. CAVEAT: not yet compiled (no moc here) — before mainnet, compile with moc 1.14.0 and run the SHA-256 test vectors + encrypt/decrypt round-trip + tag-tamper tests. Longer-term: vetKeys/HSM custody.
+- [ ] Pre-mainnet fix 3: timer_jobs incremental stable storage (StableBTreeMap for jobs instead of rewriting whole state per change) — in progress
+- [x] Pre-mainnet fix 4: migration coordinator README language claims corrected + canister-driven orchestration sketch added
 - [ ] Wire remaining features once their canister APIs cover browser paths: membership (club_domain teams/ACL), competitions (no round/match-list queries), notifications (worker-facing queue), vault (pii_access_control records not yet used by vault UI)
 - [ ] Verify ICP branches end-to-end after canisters are deployed (Internet Identity sign-in + live canister calls)
 - [ ] User deploys canisters; enter IDs via /admin/placement-settings or IGNITE_LIVE_ICP_CANISTER_IDS_JSON

@@ -25,6 +25,8 @@ type Result_4 = variant { Ok; Err : text };
 type Result_5 = variant { Ok : text; Err : text };
 type Result_6 = variant { Ok : Match; Err : text };
 type Result_7 = variant { Ok : Season; Err : text };
+type Result_8 = variant { Ok; Err : text };
+type Result_9 = variant { Ok : vec principal; Err : text };
 type RoleGrant = record {
   user : principal;
   role : text;
@@ -49,6 +51,9 @@ type TeamEntry = record {
 };
 service : {
   initialize : () -> (Result_4);
+  addBulkAccessPrincipal : (principal) -> (Result_8);
+  removeBulkAccessPrincipal : (principal) -> (Result_8);
+  listBulkAccessPrincipals : () -> (Result_9) query;
   claim_join_token : (text) -> (Result_5);
   create_season : (text, text) -> (Result_7);
   create_competition : (text, text, text) -> (Result);

@@ -15,11 +15,15 @@ persistent actor {
   var duties : [Types.Duty];
   var roster : [Types.RosterEntry];
   var recurrences : [Types.Recurrence];
+  var bulkAccessPrincipals : [Principal];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+  func hasBulkAccess(caller : Principal) : Bool {
+    not caller.equal(Principal.anonymous()) and bulkAccessPrincipals.any(func(p) = p.equal(caller))
   };
   func hasRole(caller : Principal, role : Text, club : Text, team : ?Text) : Bool {
     roles.any(func(grant) {
@@ -140,8 +144,26 @@ persistent actor {
         and (team_id == null or team_id == item.team_id)
     )
   };
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence] }; #Err : Text } {
+  public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
+    if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
+    if (not bulkAccessPrincipals.any(func(p) = p.equal(principal))) { bulkAccessPrincipals := bulkAccessPrincipals.concat([principal]) };
+    #Ok
+  };
+
+  public shared ({ caller }) func removeBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(principal));
+    #Ok
+  };
+
+  public query ({ caller }) func listBulkAccessPrincipals() : async { #Ok : [Principal]; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    #Ok(bulkAccessPrincipals)
+  };
+
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence] }; #Err : Text } {
+    if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 1; governor; roles; events; rsvps; attendance; lineups; duties; roster; recurrences })
   };
 };

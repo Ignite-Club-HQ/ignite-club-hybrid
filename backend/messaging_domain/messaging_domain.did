@@ -53,6 +53,9 @@ type Conversation =
    team_id: opt text;
  };
 service : {
+  addBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
+  removeBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
+  listBulkAccessPrincipals: () -> (variant { Err: text; Ok: vec principal; }) query;
   create_conversation: (club_id: text, team_id: opt text, participants:
    vec principal) -> (variant {
                         Err: text;

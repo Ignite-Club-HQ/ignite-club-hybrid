@@ -15,8 +15,9 @@ module {
     var tokens : [JoinToken];
     var seasons : [Season];
     var matches : [Match];
+    var bulkAccessPrincipals : [Principal];
   };
   public func migration(_old : OldActor) : NewActor {
-    { var governor = Principal.anonymous(); var roles = []; var competitions = []; var entries = []; var tokens = []; var seasons = []; var matches = [] }
+    { var governor = Principal.anonymous(); var roles = []; var competitions = []; var entries = []; var tokens = []; var seasons = []; var matches = []; var bulkAccessPrincipals = [] }
   };
 };

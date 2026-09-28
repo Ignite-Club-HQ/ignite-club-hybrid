@@ -20,6 +20,7 @@ module {
     var messages : [Message];
     var receipts : [Receipt];
     var unread : [Unread];
+    var bulkAccessPrincipals : [Principal];
   };
 
   public func migration(old : OldActor) : NewActor {
@@ -30,6 +31,7 @@ module {
       var messages = old.messages;
       var receipts = old.receipts;
       var unread = old.unread;
+      var bulkAccessPrincipals = [];
     }
   };
 };
