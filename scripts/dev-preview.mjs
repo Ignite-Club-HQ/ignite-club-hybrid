@@ -69,8 +69,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const result = spawnSync(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["vite", "--config", "vite.live.config.ts", "--mode", "live", "--host", "0.0.0.0", "--port", "8080", "--strictPort"],
+  process.execPath,
+  [
+    viteBin,
+    "--config",
+    "vite.live.config.ts",
+    "--mode",
+    "live",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8080",
+    "--strictPort",
+  ],
   {
     cwd: frontendDir,
     env: {
