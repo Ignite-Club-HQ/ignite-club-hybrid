@@ -175,6 +175,7 @@ export default function PlacementAdminSettingsPage() {
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
   const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
   const [routingTouched, setRoutingTouched] = useState(false);
+  const [simulateCanisters, setSimulateCanisters] = useState(false);
 
   const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
   useEffect(() => {
@@ -760,6 +761,76 @@ export default function PlacementAdminSettingsPage() {
                 Save routing
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <FlaskConical className="h-4 w-4" />
+              Dry run: preview ICP routing
+            </CardTitle>
+            <CardDescription>
+              Simulate every feature canister being deployed, and see which backend each
+              feature area would use under the rules on this page — before you have real
+              canister IDs. Nothing here is saved and no traffic is sent to canisters.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="simulate-canisters"
+                checked={simulateCanisters}
+                onCheckedChange={setSimulateCanisters}
+              />
+              <Label htmlFor="simulate-canisters">Simulate all canisters configured</Label>
+            </div>
+            {simulateCanisters && (() => {
+              const { country } = getCurrentCountry();
+              const previewConfig: BackendRoutingConfig = {
+                defaultBackend,
+                countryRules: Object.fromEntries(countryRows.map(r => [r.country, r.eligibility])),
+                targets: [],
+                countryTargets: [],
+              };
+              const currentTarget = tryActiveIcpTarget();
+              return (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      Sign-in screen would show: {resolveFeatureBackend(previewConfig, country, SIMULATED_TARGET, "events") === "icp" ? "Internet Identity" : "Supabase"}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {FEATURE_AREAS.map(feature => {
+                      const configured = isFeatureCanisterConfigured(currentTarget, feature);
+                      const currentBackend = resolveFeatureBackend(previewConfig, country, currentTarget, feature);
+                      const simulatedBackend = resolveFeatureBackend(previewConfig, country, SIMULATED_TARGET, feature);
+                      return (
+                        <div key={feature} className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+                          <span className="font-medium w-32">{FEATURE_LABELS[feature]}</span>
+                          <code className="text-xs text-muted-foreground flex-1 min-w-32">{FEATURE_CANISTER_KEYS[feature]}</code>
+                          <Badge variant={configured ? "secondary" : "outline"} className="text-xs">
+                            {configured ? "ID configured" : "no ID yet"}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            now: {currentBackend === "icp" ? "ICP" : "Supabase"}
+                          </Badge>
+                          <Badge variant={simulatedBackend === "icp" ? "default" : "secondary"} className="text-xs">
+                            after deploy: {simulatedBackend === "icp" ? "ICP" : "Supabase"}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    A feature only moves to ICP when its country is eligible for ICP (or the default
+                    backend is ICP). Features that stay on Supabase above would keep using Supabase
+                    even after deployment — check the default backend and country rules.
+                  </p>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
