@@ -8,38 +8,8 @@ import Nat32 "mo:core/Nat32";
 import Nat "mo:core/Nat";
 import Types "types";
 
-// Local, loosely-typed interfaces for domain canisters' export_state. Array
-// element types are declared as `Any` because the coordinator only reads
-// collection sizes (never element contents) to compute recordCount/checksum.
-// This is Candid-subtyping compatible: `Any` maps to Candid's reserved/top
-// type, so a domain's real vec<Record> response decodes fine as vec<Any>.
-type EventsExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; events : [Any]; rsvps : [Any]; attendance : [Any]; lineups : [Any]; duties : [Any]; roster : [Any]; recurrences : [Any] };
-  #Err : Text;
-};
-type EventsDomainActor = actor { export_state : shared query () -> async EventsExport };
-
-type CompetitionExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; competitions : [Any]; entries : [Any]; tokens : [Any]; seasons : [Any]; matches : [Any] };
-  #Err : Text;
-};
-type CompetitionDomainActor = actor { export_state : shared query () -> async CompetitionExport };
-
-type MediaExport = {
-  #Ok : { schema : Nat32; governor : Principal; assets : [Any]; capabilities : [Any]; reactions : [Any]; comments : [Any]; roles : [Any] };
-  #Err : Text;
-};
-type MediaMetadataActor = actor { export_state : shared query () -> async MediaExport };
-
-type MessagingExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; conversations : [Any]; messages : [Any]; receipts : [Any]; unread : [Any] };
-  #Err : Text;
-};
-type MessagingDomainActor = actor { export_state : shared query () -> async MessagingExport };
-
-// Uniform view of any domain's export evidence, extracted from whichever
-// export shape matched the migration's recorded domain.
-type Evidence = { schema : Nat32; governor : Principal; sizes : [(Text, Nat)] };
+// Loosely-typed domain export interfaces live in Types (types.mo) so the
+// actor remains the only non-imported declaration in this program.
 
 persistent actor {
   var governor : ?Principal;
@@ -112,10 +82,10 @@ persistent actor {
   // canister call failure or an explicit trap) if the domain is unsupported
   // or the domain canister rejects the caller (only governor / bulk-access
   // allowlisted principals may call export_state on the domain canisters).
-  func fetchEvidence(domain : Text, principal : Principal) : async* Evidence {
+  func fetchEvidence(domain : Text, principal : Principal) : async* Types.Evidence {
     switch (domain) {
       case ("events_domain") {
-        let target : EventsDomainActor = actor (Principal.toText(principal));
+        let target : Types.EventsDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("events_domain export_state failed: " # message) };
           case (#Ok(state)) {
@@ -137,7 +107,7 @@ persistent actor {
         };
       };
       case ("competition_domain") {
-        let target : CompetitionDomainActor = actor (Principal.toText(principal));
+        let target : Types.CompetitionDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("competition_domain export_state failed: " # message) };
           case (#Ok(state)) {
@@ -157,7 +127,7 @@ persistent actor {
         };
       };
       case ("media_metadata") {
-        let target : MediaMetadataActor = actor (Principal.toText(principal));
+        let target : Types.MediaMetadataActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("media_metadata export_state failed: " # message) };
           case (#Ok(state)) {
@@ -176,7 +146,7 @@ persistent actor {
         };
       };
       case ("messaging_domain") {
-        let target : MessagingDomainActor = actor (Principal.toText(principal));
+        let target : Types.MessagingDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("messaging_domain export_state failed: " # message) };
           case (#Ok(state)) {

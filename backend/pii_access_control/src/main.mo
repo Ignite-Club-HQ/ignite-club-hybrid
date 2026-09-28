@@ -50,6 +50,7 @@ import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import VarArray "mo:core/VarArray";
 
 persistent actor {
 
@@ -138,8 +139,8 @@ persistent actor {
   // first call to derive_media_key using raw_rand.
   var media_root_secret : ?[Nat8] = null;
 
-  const TAG_LEN : Nat = 32; // SHA-256 output size
-  const NONCE_LEN : Nat = 12;
+  let TAG_LEN : Nat = 32; // SHA-256 output size
+  let NONCE_LEN : Nat = 12;
 
   // ==================== Helper Functions ====================
 
@@ -231,7 +232,7 @@ persistent actor {
     var block_idx = 0;
     while (block_idx < num_blocks) {
       let base = block_idx * 64;
-      var w = Array.tabulateVar<Nat32>(64, func(i) {
+      var w = VarArray.tabulate<Nat32>(64, func(i) {
         if (i < 16) {
           let o = base + i * 4;
           (Nat32.fromNat(Nat8.toNat(padded[o])) << 24)
