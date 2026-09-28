@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "dist-product/**", "node_modules/**", ".lab-cache*/**"],
+    ignores: ["dist/**", "dist-live/**", "node_modules/**", ".vitest-cache/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -27,10 +27,14 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+      ],
     },
   },
   {
-    files: ["scripts/**/*.mjs", "*.config.ts"],
+    files: ["scripts/**/*.mjs", "*.config.ts", "*.config.mjs"],
     languageOptions: {
       globals: globals.node,
     },

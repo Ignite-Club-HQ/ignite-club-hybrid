@@ -94,8 +94,8 @@ describe("transitive security upgrade safety", () => {
       });
 
       it("keeps the checked-in service worker independent from Workbox generation", () => {
-        const viteConfig = readText("vite.config.ts");
-        const main = readText("src/main.tsx");
+        const viteConfig = readText("vite.live.config.ts");
+        const main = readText("src/product-main.tsx");
         expect(viteConfig).not.toContain("vite-plugin-pwa");
         expect(viteConfig).not.toContain("VitePWA");
         expect(main).not.toContain("navigator.serviceWorker.register");
@@ -174,8 +174,8 @@ describe("transitive security upgrade safety", () => {
       });
 
       it("keeps the checked-in service worker independent from Workbox generation", () => {
-        const viteConfig = readText("vite.config.ts");
-        const main = readText("src/main.tsx");
+        const viteConfig = readText("vite.live.config.ts");
+        const main = readText("src/product-main.tsx");
 
         expect(viteConfig).not.toContain("vite-plugin-pwa");
         expect(viteConfig).not.toContain("VitePWA");
@@ -267,8 +267,8 @@ describe("security-sensitive transitive dependency boundaries", () => {
   });
 
   it("keeps the checked-in service worker independent from Workbox generation", () => {
-    const viteConfig = readText("vite.config.ts");
-    const main = readText("src/main.tsx");
+    const viteConfig = readText("vite.live.config.ts");
+    const main = readText("src/product-main.tsx");
     expect(viteConfig).not.toContain("vite-plugin-pwa");
     expect(viteConfig).not.toContain("VitePWA");
     expect(main).not.toContain("navigator.serviceWorker.register");

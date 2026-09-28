@@ -1,10 +1,43 @@
-const disabled = (): never => {
+import type {
+  JoinToken,
+  Match,
+  Season,
+  TeamEntry,
+} from "@/lab/bindings/competition_domain/declarations/competition_domain.did.js";
+
+export interface LocalCompetitionSummary {
+  id: string;
+  name: string;
+  sport: string | null;
+  season: string;
+  status: string;
+  visibility: string;
+  organizer_club_id: string;
+  source: string;
+  last_synced_at: string | null;
+  clubs: { name: string } | null;
+  competition_entries: unknown[];
+  revision: bigint;
+}
+
+export interface LocalCompetitionState {
+  competition: LocalCompetitionSummary;
+  entries: TeamEntry[];
+  seasons: Season[];
+  matches: Match[];
+  joinTokens: JoinToken[];
+}
+
+// Callers only reach these in fixture/lab branches that the live runtime never
+// selects, so the loose signature keeps their existing call sites type-valid.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const disabled = (..._args: unknown[]): any => {
   throw new Error("Local fixture and synthetic-identity services are disabled in the live application.");
 };
 
 export const personas: string[] = [];
-export const isLocalEventsCanisterUnavailable = () => true;
-export const isLocalCompetitionCanisterUnavailable = () => true;
+export const isLocalEventsCanisterUnavailable = (_error?: unknown) => true;
+export const isLocalCompetitionCanisterUnavailable = (_error?: unknown) => true;
 export const resetLocalIdentityAccessClient = () => undefined;
 export const resetLocalMediaMetadataClient = () => undefined;
 

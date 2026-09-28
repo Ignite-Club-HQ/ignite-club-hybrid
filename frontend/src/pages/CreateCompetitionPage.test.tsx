@@ -92,16 +92,6 @@ afterEach(cleanup);
 // ---- Tests --------------------------------------------------------------
 
 describe("CreateCompetitionPage — personal organiser (atomic RPC)", () => {
-  it("does not mount the Supabase workflow in ICP mode", async () => {
-    window.history.replaceState({}, "", "/?backend=icp");
-    await renderPage();
-
-    expect(await screen.findByText(/new local ICP competition/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /create local ICP competition/i })).toBeTruthy();
-    expect(rpcMock).not.toHaveBeenCalled();
-    expect(fromInsertMock).not.toHaveBeenCalled();
-  });
-
   it("calls the transactional RPC once and never inserts shell/role/competition from the client", async () => {
     rpcMock.mockResolvedValueOnce({
       data: [{ competition_id: "comp-1", club_id: "club-1" }],
