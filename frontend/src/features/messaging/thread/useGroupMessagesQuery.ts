@@ -88,91 +88,128 @@ const fetchGroupMessages = async ({
   }
 
   // Fetch messages WITHOUT profile join to avoid timeout from large avatar_url
-  const { data: rawMessages, error } = await supabaseClient
-    .from("group_messages")
-    .select("id, text, image_url, created_at, edited_at, author_id, group_id, reply_to_id, deleted_at, is_system_message, forwarded_from_user_id, forwarded_at, forwarded_source_label")
-    .eq("group_id", groupId)
-    .is("deleted_at", null) // Only fetch non-deleted messages
-    .order("created_at", { ascending: false })
-    .limit(pageSize + 1);
-  if (error) throw error;
+  const fetchFromSupabase = async (): Promise<GroupMessagesQueryData> => {
+    const { data: rawMessages, error } = await supabaseClient
+      .from("group_messages")
+      .select("id, text, image_url, created_at, edited_at, author_id, group_id, reply_to_id, deleted_at, is_system_message, forwarded_from_user_id, forwarded_at, forwarded_source_label")
+      .eq("group_id", groupId)
+      .is("deleted_at", null) // Only fetch non-deleted messages
+      .order("created_at", { ascending: false })
+      .limit(pageSize + 1);
+    if (error) throw error;
 
-  if (!rawMessages?.length) {
-    return { messages: [] as GroupMessage[], hasOlderMessages: false, reactions: [] as MessageReaction[] };
-  }
+    if (!rawMessages?.length) {
+      return { messages: [] as GroupMessage[], hasOlderMessages: false, reactions: [] as MessageReaction[] };
+    }
 
-  const { items: dataToDisplay, hasMore } = splitPageWindow(rawMessages, pageSize);
+    const { items: dataToDisplay, hasMore } = splitPageWindow(rawMessages, pageSize);
 
-  const messageIds = dataToDisplay.map((m) => m.id);
-  const replyToIds = dataToDisplay
-    .filter((m) => m.reply_to_id)
-    .map((m) => m.reply_to_id as string);
-  const authorIds = [...new Set(dataToDisplay.map((m) => m.author_id))];
+    const messageIds = dataToDisplay.map((m) => m.id);
+    const replyToIds = dataToDisplay
+      .filter((m) => m.reply_to_id)
+      .map((m) => m.reply_to_id as string);
+    const authorIds = [...new Set(dataToDisplay.map((m) => m.author_id))];
 
-  // Preserve cached reactions when the reactions query fails transiently
-  const cachedQueryData = queryClient.getQueryData(["group-messages", groupId]) as GroupMessagesQueryData | undefined;
-  const cachedReactions: MessageReaction[] = cachedQueryData?.reactions || [];
+    // Preserve cached reactions when the reactions query fails transiently
+    const cachedQueryData = queryClient.getQueryData(["group-messages", groupId]) as GroupMessagesQueryData | undefined;
+    const cachedReactions: MessageReaction[] = cachedQueryData?.reactions || [];
 
-  const [reactionsResult, replyToResult, profilesMap] = await Promise.all([
-    supabaseClient
-      .from("message_reactions")
-      .select("id, user_id, reaction_type, group_message_id")
-      .in("group_message_id", messageIds),
-    replyToIds.length > 0
-      ? supabaseClient
-          .from("group_messages")
-          .select("id, text, author_id")
-          .in("id", replyToIds)
-      : Promise.resolve({ data: [] as any[] }),
-    fetchProfilesWithCache(authorIds),
-  ]);
+    const [reactionsResult, replyToResult, profilesMap] = await Promise.all([
+      supabaseClient
+        .from("message_reactions")
+        .select("id, user_id, reaction_type, group_message_id")
+        .in("group_message_id", messageIds),
+      replyToIds.length > 0
+        ? supabaseClient
+            .from("group_messages")
+            .select("id, text, author_id")
+            .in("id", replyToIds)
+        : Promise.resolve({ data: [] as any[] }),
+      fetchProfilesWithCache(authorIds),
+    ]);
 
-  if (reactionsResult.error) {
-    console.warn("[GroupChat] Failed to fetch reactions, keeping cached reactions", reactionsResult.error);
-  }
+    if (reactionsResult.error) {
+      console.warn("[GroupChat] Failed to fetch reactions, keeping cached reactions", reactionsResult.error);
+    }
 
-  const replyToMap = new Map(
-    (replyToResult.data || []).map((r: any) => [r.id, {
-      ...r,
-      author: profilesMap.get(r.author_id) ? { display_name: profilesMap.get(r.author_id)?.display_name } : null,
-    }])
-  );
+    const replyToMap = new Map(
+      (replyToResult.data || []).map((r: any) => [r.id, {
+        ...r,
+        author: profilesMap.get(r.author_id) ? { display_name: profilesMap.get(r.author_id)?.display_name } : null,
+      }])
+    );
 
-  // Map to expected format - use fetched profiles
-  const messages = dataToDisplay.map((msg: any) => {
-    const replyTo = msg.reply_to_id ? replyToMap.get(msg.reply_to_id) || null : null;
-    const profile = profilesMap.get(msg.author_id);
+    // Map to expected format - use fetched profiles
+    const messages = dataToDisplay.map((msg: any) => {
+      const replyTo = msg.reply_to_id ? replyToMap.get(msg.reply_to_id) || null : null;
+      const profile = profilesMap.get(msg.author_id);
+      return {
+        ...msg,
+        author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+        reply_to: replyTo,
+      };
+    }) as GroupMessage[];
+
+    // Cache messages for offline access
+    cacheMessages("group", groupId, messages.map(m => ({
+      id: m.id,
+      text: m.text,
+      author_id: m.author_id,
+      created_at: m.created_at,
+      image_url: m.image_url,
+      reply_to_id: m.reply_to_id,
+      profiles: m.author ? { display_name: m.author.display_name, avatar_url: m.author.avatar_url } : null,
+      reactions: (reactionsResult.data || []).filter((r: any) => r.group_message_id === m.id),
+      reply_to: m.reply_to,
+    })));
+
+    const resolvedReactions = (
+      reactionsResult.error ? cachedReactions : (reactionsResult.data || [])
+    ) as MessageReaction[];
+
     return {
-      ...msg,
-      author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-      reply_to: replyTo,
+      // Reactions are embedded on the rows as well as returned flat, so any
+      // render that seeds straight from this payload shows them immediately.
+      messages: attachReactionsToMessages(messages, resolvedReactions),
+      hasOlderMessages: hasMore,
+      reactions: resolvedReactions,
     };
-  }) as GroupMessage[];
-
-  // Cache messages for offline access
-  cacheMessages("group", groupId, messages.map(m => ({
-    id: m.id,
-    text: m.text,
-    author_id: m.author_id,
-    created_at: m.created_at,
-    image_url: m.image_url,
-    reply_to_id: m.reply_to_id,
-    profiles: m.author ? { display_name: m.author.display_name, avatar_url: m.author.avatar_url } : null,
-    reactions: (reactionsResult.data || []).filter((r: any) => r.group_message_id === m.id),
-    reply_to: m.reply_to,
-  })));
-
-  const resolvedReactions = (
-    reactionsResult.error ? cachedReactions : (reactionsResult.data || [])
-  ) as MessageReaction[];
-
-  return {
-    // Reactions are embedded on the rows as well as returned flat, so any
-    // render that seeds straight from this payload shows them immediately.
-    messages: attachReactionsToMessages(messages, resolvedReactions),
-    hasOlderMessages: hasMore,
-    reactions: resolvedReactions,
   };
+
+  return withFeatureBackend("messaging", {
+    supabase: fetchFromSupabase,
+    icp: async (ctx): Promise<GroupMessagesQueryData> => {
+      // Provisional mapping until verified against a deployed canister:
+      // canister Message carries a sequence number but no timestamp, no
+      // reactions/replies/images. Group id doubles as the conversation id.
+      const page = await listLiveMessagesPage(ctx, groupId, null, pageSize + 1);
+      const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
+      const profilesMap = await fetchProfilesWithCache(authorIds);
+      const messages = page.messages
+        .slice()
+        .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+        .slice(0, pageSize)
+        .map((m: any) => {
+          const profile = profilesMap.get(m.sender.toText());
+          return {
+            id: m.id,
+            text: m.body,
+            image_url: null,
+            created_at: "",
+            author_id: m.sender.toText(),
+            group_id: m.conversation_id,
+            reply_to_id: null,
+            author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+            reply_to: null,
+          };
+        }) as GroupMessage[];
+      return {
+        messages,
+        hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+        reactions: [] as MessageReaction[],
+      };
+    },
+  });
 };
 
 const getGroupMessagesPlaceholderData = (

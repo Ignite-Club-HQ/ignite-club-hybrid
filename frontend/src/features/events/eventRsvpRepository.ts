@@ -1,3 +1,6 @@
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveEventsSnapshot } from "@/live/features/events";
+
 export type EventRsvpProfile = {
   id: string;
   display_name: string | null;
@@ -9,23 +12,15 @@ export type EventRsvpProfileLoader = (
 ) => Promise<{ data: EventRsvpProfile[] | null; error?: unknown }>;
 
 /**
- * Read the authoritative RSVP rows for one event, then enrich display-only
- * profile and child information. The RSVP read fails closed; enrichment stays
- * best effort so valid attendance never disappears because an avatar/name
- * lookup is temporarily unavailable.
+ * Enrich authoritative RSVP rows with display-only profile and child
+ * information. Enrichment stays best effort so valid attendance never
+ * disappears because an avatar/name lookup is temporarily unavailable.
  */
-export async function fetchEventRsvps(
+async function enrichRsvpRows(
   client: any,
-  eventId: string,
+  rows: any[],
   loadProfiles: EventRsvpProfileLoader,
 ) {
-  const { data: rsvpData, error: rsvpError } = await client
-    .from("rsvps")
-    .select("*, mini_league_players (id, name, child_id)")
-    .eq("event_id", eventId);
-  if (rsvpError) throw rsvpError;
-
-  const rows = rsvpData ?? [];
   const userIds = rows.filter((row: any) => row.user_id).map((row: any) => row.user_id);
   const childIds = rows.filter((row: any) => row.child_id).map((row: any) => row.child_id);
 
@@ -61,4 +56,46 @@ export async function fetchEventRsvps(
     profiles: row.user_id ? profilesMap[row.user_id] || null : null,
     children: row.child_id ? childrenMap[row.child_id] || null : null,
   }));
+}
+
+/**
+ * Read the authoritative RSVP rows for one event, then enrich display-only
+ * profile and child information. The RSVP read fails closed.
+ *
+ * Hybrid routing: when the events feature is routed to ICP, authoritative
+ * rows come from the events_domain snapshot (account_id -> user_id,
+ * state -> status). Profile/child enrichment still reads Supabase, so
+ * canister account ids that are not Supabase profile ids simply enrich to
+ * null. Provisional until verified against a deployed canister.
+ */
+export async function fetchEventRsvps(
+  client: any,
+  eventId: string,
+  loadProfiles: EventRsvpProfileLoader,
+) {
+  return withFeatureBackend("events", {
+    supabase: async () => {
+      const { data: rsvpData, error: rsvpError } = await client
+        .from("rsvps")
+        .select("*, mini_league_players (id, name, child_id)")
+        .eq("event_id", eventId);
+      if (rsvpError) throw rsvpError;
+      return enrichRsvpRows(client, rsvpData ?? [], loadProfiles);
+    },
+    icp: async (ctx) => {
+      const snapshot = await getLiveEventsSnapshot(ctx);
+      const rows = snapshot.rsvps
+        .filter((rsvp) => rsvp.event_id === eventId)
+        .map((rsvp) => ({
+          id: `${rsvp.event_id}:${rsvp.account_id}`,
+          event_id: rsvp.event_id,
+          user_id: rsvp.account_id,
+          child_id: null,
+          status: rsvp.state,
+          mini_league_players: null,
+          updated_at: new Date(Number(rsvp.updated_at_ms)).toISOString(),
+        }));
+      return enrichRsvpRows(client, rows, loadProfiles);
+    },
+  });
 }
