@@ -51,8 +51,11 @@ export default defineConfig({
       name: "ignite-live-index-rewrite",
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
-          if (req.url === "/" || req.url === "/index.html") {
-            req.url = "/live-index.html";
+          const path = (req.url || "/").split("?")[0];
+          // SPA fallback: every page route (no file extension) must serve
+          // live-index.html, otherwise deep links like /auth 404.
+          if (!path.includes(".")) {
+            req.url = "/live-index.html" + (req.url!.includes("?") ? req.url!.slice(req.url!.indexOf("?")) : "");
           }
           next();
         });
