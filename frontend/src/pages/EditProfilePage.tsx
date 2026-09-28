@@ -290,6 +290,26 @@ export default function EditProfilePage() {
             </p>
           </div>
 
+          {/* Country */}
+          <div className="space-y-2">
+            <Label htmlFor="country">Country</Label>
+            <Select value={country || "unset"} onValueChange={(v) => setCountry(v === "unset" ? "" : v)}>
+              <SelectTrigger id="country">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">Not set</SelectItem>
+                {ISO_COUNTRY_CODES.map(code => (
+                  <SelectItem key={code} value={code}>{countryName(code)} ({code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Used to decide which backend serves app features for you. If not set, your
+              country is estimated from your internet connection.
+            </p>
+          </div>
+
           {/* Leaderboard privacy */}
           <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
             <div className="flex-1 min-w-0">
