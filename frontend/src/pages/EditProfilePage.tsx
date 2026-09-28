@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
+import { setProfileCountry } from "@/live/userCountry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,12 +30,14 @@ export default function EditProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
+  const [country, setCountry] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name || "");
       setAvatarUrl(profile.avatar_url || "");
       setLeaderboardOptOut(((profile as any).leaderboard_opt_out as boolean) ?? false);
+      setCountry(((profile as any).country as string | null) ?? "");
     }
   }, [profile]);
 
@@ -158,6 +163,7 @@ export default function EditProfilePage() {
         display_name: displayName.trim(),
         avatar_url: avatarUrl.trim() || null,
         leaderboard_opt_out: leaderboardOptOut,
+        country: country || null,
       } as any)
       .eq("id", user!.id);
 
@@ -178,6 +184,7 @@ export default function EditProfilePage() {
       avatar_url: avatarUrl.trim() || null,
     });
 
+    setProfileCountry(country || null);
     await refreshProfile();
     toast({ title: "Profile updated!" });
     navigate("/profile");
@@ -280,6 +287,26 @@ export default function EditProfilePage() {
             <Input value={user?.email || ""} disabled className="bg-muted" />
             <p className="text-xs text-muted-foreground">
               Email cannot be changed
+            </p>
+          </div>
+
+          {/* Country */}
+          <div className="space-y-2">
+            <Label htmlFor="country">Country</Label>
+            <Select value={country || "unset"} onValueChange={(v) => setCountry(v === "unset" ? "" : v)}>
+              <SelectTrigger id="country">
+                <SelectValue placeholder="Not set" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unset">Not set</SelectItem>
+                {ISO_COUNTRY_CODES.map(code => (
+                  <SelectItem key={code} value={code}>{countryName(code)} ({code})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Used to decide which backend serves app features for you. If not set, your
+              country is estimated from your internet connection.
             </p>
           </div>
 
