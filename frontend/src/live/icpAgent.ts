@@ -38,14 +38,40 @@ export function resolveLiveCanisterId(target: IcpTargetConfig, domainKey: string
   return principal;
 }
 
+/**
+ * Per-session agent cache. Creating an `HttpAgent` performs a time-sync
+ * handshake with the network; multi-canister pages (home feed hitting events
+ * + news + media + messages) would otherwise pay that handshake once per
+ * domain actor. Agents are keyed by target alias + host + identity principal,
+ * so a different signed-in principal or a different network never reuses a
+ * stale agent. Cleared on Internet Identity sign-out via `clearLiveAgentCache`.
+ */
+const liveAgentCache = new Map<string, Promise<HttpAgent>>();
+
 export async function createLiveAgent(target: IcpTargetConfig, identity: Identity): Promise<HttpAgent> {
-  return HttpAgent.create({
-    host: resolveTargetHost(target),
+  const host = resolveTargetHost(target);
+  const cacheKey = `${target.alias}|${host}|${identity.getPrincipal().toText()}`;
+  const cached = liveAgentCache.get(cacheKey);
+  if (cached) return cached;
+  const created = HttpAgent.create({
+    host,
     identity,
     shouldSyncTime: true,
     useQueryNonces: true,
     retryTimes: 2,
   });
+  liveAgentCache.set(cacheKey, created);
+  // A failed handshake must not poison the cache: drop the entry so the next
+  // call retries instead of reusing a rejected agent forever.
+  created.catch(() => {
+    if (liveAgentCache.get(cacheKey) === created) liveAgentCache.delete(cacheKey);
+  });
+  return created;
+}
+
+/** Drops every cached agent; called on Internet Identity sign-out. */
+export function clearLiveAgentCache(): void {
+  liveAgentCache.clear();
 }
 
 export async function createLiveActor<T>(
