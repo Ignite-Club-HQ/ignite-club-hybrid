@@ -791,7 +791,7 @@ export default function PlacementAdminSettingsPage() {
                 defaultBackend,
                 countryRules: Object.fromEntries(countryRows.map(r => [r.country, r.eligibility])),
                 targets: [],
-                countryTargets: [],
+                countryTargets: {},
               };
               const currentTarget = tryActiveIcpTarget();
               return (
