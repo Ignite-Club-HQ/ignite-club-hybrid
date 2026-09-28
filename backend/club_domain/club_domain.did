@@ -1,0 +1,173 @@
+type Account = record {
+  id : text;
+  legacy_subject : principal;
+  version : nat64;
+  principals : vec principal;
+};
+type AccountExclusion = record { account_id : text; club : text };
+type AccountRole = record {
+  account_id : text;
+  club : opt text;
+  role : text;
+  team : opt text;
+};
+type Acl = record {
+  teams : vec Team;
+  guardians : vec Guardian;
+  clubs : vec text;
+  children : vec Child;
+  exclusions : vec Exclusion;
+  roles : vec RoleGrant;
+};
+type Challenge = record {
+  id : nat64;
+  account_id : text;
+  issuer : principal;
+  target : principal;
+  accepted : bool;
+  expires_at_ns : nat64;
+  expected_version : nat64;
+};
+type Child = record { id : text; teams : vec text; parent : opt principal };
+type ClubProfile = record {
+  id : text;
+  secondary_color : opt text;
+  name : text;
+  slug : text;
+  description : opt text;
+  created_at_ms : nat64;
+  logo_url : opt text;
+  is_active : bool;
+  primary_color : opt text;
+};
+type ClubSettings = record {
+  contact_email : opt text;
+  membership_open : bool;
+  announcement : opt text;
+  public_directory : bool;
+  club_id : text;
+};
+type ClubSponsor = record {
+  id : text;
+  website_url : opt text;
+  name : text;
+  tier : text;
+  sort_order : nat32;
+  logo_url : opt text;
+  is_active : bool;
+  club_id : text;
+};
+type ClubTeam = record {
+  id : text;
+  name : text;
+  division : opt text;
+  gender : opt text;
+  is_active : bool;
+  club_id : text;
+  age_group : opt text;
+};
+type Config = record {
+  acl : Acl;
+  schema : nat32;
+  governor : principal;
+  acl_version : nat64;
+};
+type Draft = record {
+  url : text;
+  title : text;
+  icon : text;
+  is_active : bool;
+  open_mode : text;
+  subtitle : opt text;
+};
+type Exclusion = record { club : text; user : principal };
+type Family = record { account_id : text; child_id : text };
+type Guardian = record { child : text; user : principal };
+type Link = record {
+  id : text;
+  sort_order : nat32;
+  created_at_ms : nat64;
+  draft : Draft;
+  club_id : text;
+};
+type Listing = record { links : vec Link; revision : nat64 };
+type Mutation = record { link : opt Link; revision : nat64 };
+type Operation = variant {
+  SetActive : record { id : text; active : bool };
+  Save : record { id : opt text; draft : Draft };
+  Remove : record { id : text };
+  Reorder : record { first : text; second : text };
+};
+type Request = record {
+  request_id : text;
+  club : text;
+  operation : Operation;
+  expected_revision : nat64;
+};
+type Result = variant { Ok : Account; Err : text };
+type Result_1 = variant { Ok : Challenge; Err : text };
+type Result_10 = variant { Ok : opt ClubTeam; Err : text };
+type Result_11 = variant { Ok; Err : text };
+type Result_12 = variant { Ok : vec ClubProfile; Err : text };
+type Result_13 = variant { Ok : vec ClubSponsor; Err : text };
+type Result_14 = variant { Ok : vec ClubTeam; Err : text };
+type Result_15 = variant { Ok : Mutation; Err : text };
+type Result_16 = variant { Ok : ClubProfile; Err : text };
+type Result_17 = variant { Ok : ClubSettings; Err : text };
+type Result_18 = variant { Ok : ClubSponsor; Err : text };
+type Result_19 = variant { Ok : ClubTeam; Err : text };
+type Result_2 = variant { Ok : Config; Err : text };
+type Result_3 = variant { Ok : Listing; Err : text };
+type Result_4 = variant { Ok : State; Err : text };
+type Result_5 = variant { Ok : Snapshot; Err : text };
+type Result_6 = variant { Ok : nat64; Err : text };
+type Result_7 = variant { Ok : opt ClubProfile; Err : text };
+type Result_8 = variant { Ok : opt ClubSettings; Err : text };
+type Result_9 = variant { Ok : opt ClubSponsor; Err : text };
+type RoleGrant = record {
+  club : opt text;
+  role : text;
+  team : opt text;
+  user : principal;
+};
+type Snapshot = record { schema : nat32; clubs : vec record { text; Listing } };
+type State = record {
+  schema : nat32;
+  accounts : vec Account;
+  exclusions : vec AccountExclusion;
+  families : vec Family;
+  challenges : vec Challenge;
+  roles : vec AccountRole;
+  next_challenge : nat64;
+};
+type Team = record { id : text; club : text };
+service : {
+  initialize : () -> (variant { Ok; Err : text });
+    accept_identity_link : (nat64) -> (Result);
+  begin_identity_link : (principal) -> (Result_1);
+  export_acl : () -> (Result_2) query;
+  export_frozen_club : (text) -> (Result_3) query;
+  export_identity_state : () -> (Result_4) query;
+  export_links : () -> (Result_5) query;
+  freeze_club : (text, nat64) -> (Result_6);
+  get_club_profile : (text) -> (Result_7) query;
+  get_club_settings : (text) -> (Result_8) query;
+  get_link : (text) -> (Result_3) query;
+  get_sponsor : (text) -> (Result_9) query;
+  get_team : (text) -> (Result_10) query;
+  import_frozen_club : (text, Listing) -> (Result_11);
+  import_links : (Snapshot) -> (Result_11);
+  list_clubs : (opt text, nat16) -> (Result_12) query;
+  list_links : (text, bool) -> (Result_3) query;
+  list_sponsors : (text) -> (Result_13) query;
+  list_teams : (text) -> (Result_14) query;
+  mutate : (Request) -> (Result_15);
+  replace_acl : (nat64, Acl) -> (Result_6);
+  revoke_identity : (principal, nat64) -> (Result);
+  save_club_profile : (ClubProfile) -> (Result_16);
+  save_club_settings : (ClubSettings) -> (Result_17);
+  save_sponsor : (ClubSponsor) -> (Result_18);
+  save_team : (ClubTeam) -> (Result_19);
+  unfreeze_club : (text, nat64) -> (Result_11);
+  whoami : () -> (Result) query;
+}

@@ -1,0 +1,105 @@
+# Local synthetic lab only. Run through scripts/local-icp.mjs, never target mainnet.
+canisters:
+  - name: club_domain
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/club_domain/src/main.mo
+        candid: backend/club_domain/club_domain.did
+  - name: competition_domain
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/competition_domain/src/main.mo
+        candid: backend/competition_domain/competition_domain.did
+  - name: events_domain
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/events_domain/src/main.mo
+        candid: backend/events_domain/events_domain.did
+  - name: identity_access
+    recipe:
+      type: "@dfinity/rust@v3.3.0"
+      configuration:
+        candid: backend/identity_access/identity_access.did
+        locked: false
+    init_args:
+      path: .local-icp/identity-init.bin
+      format: bin
+  - name: media_metadata
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/media_metadata/src/main.mo
+        candid: backend/media_metadata/media_metadata.did
+  - name: migration_coordinator
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/migration_coordinator/src/main.mo
+        candid: backend/migration_coordinator/migration_coordinator.did
+  - name: pii_access_control
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/pii_access_control/src/main.mo
+        candid: backend/pii_access_control/pii_access_control.did
+  - name: secret_workload_identity
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/secret_workload_identity/src/main.mo
+        candid: backend/secret_workload_identity/secret_workload_identity.did
+  - name: messaging_domain
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/messaging_domain/src/main.mo
+        candid: backend/messaging_domain/messaging_domain.did
+  - name: notification_queue
+    recipe:
+      type: "@dfinity/motoko@v5.1.0"
+      configuration:
+        main: backend/notification_queue/src/main.mo
+        candid: backend/notification_queue/notification_queue.did
+  - name: placement_registry
+    recipe:
+      type: "@dfinity/rust@v3.3.0"
+      configuration:
+        candid: backend/placement_registry/placement_registry.did
+        locked: false
+    init_args:
+      path: .local-icp/placement-registry-init.bin
+      format: bin
+  - name: shard_router
+    recipe:
+      type: "@dfinity/rust@v3.3.0"
+      configuration:
+        candid: backend/shard_router/shard_router.did
+        locked: false
+    init_args:
+      path: .local-icp/shard-router-init.bin
+      format: bin
+  - name: timer_jobs
+    recipe:
+      type: "@dfinity/rust@v3.3.0"
+      configuration:
+        candid: backend/timer_jobs/timer_jobs.did
+        locked: false
+networks:
+  - name: local
+    mode: managed
+    ii: true
+    gateway:
+      bind: 127.0.0.1
+      port: 4943
+  - name: identity-bootstrap
+    mode: managed
+    gateway:
+      bind: 127.0.0.1
+      port: 5021
+environments:
+  - name: local
+    network: local
+    canisters: [club_domain, identity_access, events_domain, competition_domain, messaging_domain, media_metadata, migration_coordinator, notification_queue, pii_access_control, secret_workload_identity, placement_registry, shard_router, timer_jobs]

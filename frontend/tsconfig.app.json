@@ -1,0 +1,65 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "@/integrations/supabase/client": [
+        "./src/integrations/supabase/liveClient.ts"
+      ],
+      "@/lab/internetIdentityAuth": [
+        "./src/live/internetIdentityAuth.ts"
+      ],
+      "@/lab/localRuntimeMode": [
+        "./src/live/localRuntimeMode.ts"
+      ],
+      "@/lab/fixtureDataLayer": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localActor": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localCompetitionService": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localEventsService": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localIdentityAccess": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localMediaMetadata": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/localMessagingService": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/lab/syntheticIdentities.mjs": [
+        "./src/live/disabledLabRuntime.ts"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "skipLibCheck": true,
+    "strict": false,
+    "target": "ES2020",
+    "useDefineForClassFields": true
+  },
+  "include": [
+    "src"
+  ]
+}

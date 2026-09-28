@@ -1,0 +1,2 @@
+import { Link as LinkIcon, Shield, ShieldCheck, ShoppingBag, ClipboardList, CreditCard, Calendar, Info, Users, Trophy, HeartHandshake, FileText } from 'lucide-react';
+export const CLUB_LINK_ICONS = {link:LinkIcon, policy:Shield, safety:ShieldCheck, clothing:ShoppingBag, registration:ClipboardList, payment:CreditCard, calendar:Calendar, info:Info, members:Users, results:Trophy, volunteer:HeartHandshake, document:FileText};

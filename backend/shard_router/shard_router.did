@@ -1,0 +1,77 @@
+type assign_request = record {
+  club_id : text;
+  shard : principal;
+  expected_revision : nat64;
+};
+type assign_result = record {
+  revision : nat64;
+  route : route;
+};
+type assign_domain_request = record {
+  club_id : text;
+  domain : text;
+  shard : principal;
+  expected_revision : nat64;
+};
+type assign_domain_result = record {
+  revision : nat64;
+  route : domain_route;
+};
+type init = record { governor : principal };
+type migration = record {
+  club_id : text;
+  destination : principal;
+  migration_revision : nat64;
+  route_revision : nat64;
+  source : principal;
+};
+type domain_migration = record {
+  club_id : text;
+  domain : text;
+  destination : principal;
+  migration_revision : nat64;
+  route_revision : nat64;
+  source : principal;
+};
+type page = record {
+  next : opt text;
+  revision : nat64;
+  routes : vec route;
+};
+type route = record {
+  club_id : text;
+  revision : nat64;
+  shard : principal;
+};
+type domain_route = record {
+  club_id : text;
+  domain : text;
+  revision : nat64;
+  shard : principal;
+};
+type result_assign = variant { Ok : assign_result; Err : text };
+type result_assign_domain = variant { Ok : assign_domain_result; Err : text };
+type result_migration = variant { Ok : migration; Err : text };
+type result_domain_migration = variant { Ok : domain_migration; Err : text };
+type result_opt_migration = variant { Ok : opt migration; Err : text };
+type result_opt_domain_migration = variant { Ok : opt domain_migration; Err : text };
+type result_opt_route = variant { Ok : opt route; Err : text };
+type result_opt_domain_route = variant { Ok : opt domain_route; Err : text };
+type result_page = variant { Ok : page; Err : text };
+type result_nat64 = variant { Ok : nat64; Err : text };
+service : (init) -> {
+  abort_migration : (text, nat64) -> (result_nat64);
+  abort_domain_migration : (text, text, nat64) -> (result_nat64);
+  assign : (assign_request) -> (result_assign);
+  assign_domain : (assign_domain_request) -> (result_assign_domain);
+  begin_migration : (text, principal, nat64) -> (result_migration);
+  begin_domain_migration : (text, text, principal, nat64) -> (result_domain_migration);
+  commit_migration : (text, nat64) -> (result_assign);
+  commit_domain_migration : (text, text, nat64) -> (result_assign_domain);
+  get_migration : (text) -> (result_opt_migration) query;
+  get_domain_migration : (text, text) -> (result_opt_domain_migration) query;
+  get_route : (text) -> (result_opt_route) query;
+  get_domain_route : (text, text) -> (result_opt_domain_route) query;
+  list_routes : (opt text, nat16) -> (result_page) query;
+  version : () -> (nat64) query;
+};

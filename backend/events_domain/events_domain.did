@@ -1,0 +1,72 @@
+type Rsvp = 
+ record {
+   account_id: text;
+   event_id: text;
+   state: text;
+   updated_at_ms: nat64;
+ };
+type RosterEntry = 
+ record {
+   account_id: text;
+   child_id: opt text;
+   event_id: text;
+ };
+type RoleGrant = 
+ record {
+   club_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Recurrence = 
+ record {
+   event_id: text;
+   frequency: text;
+   until_ms: nat64;
+ };
+type LineupEntry = 
+ record {
+   event_id: text;
+   member: text;
+   slot: text;
+   team_id: opt text;
+ };
+type Event = 
+ record {
+   club_id: text;
+   creator: principal;
+   description: text;
+   ends_at_ms: nat64;
+   id: text;
+   revision: nat64;
+   starts_at_ms: nat64;
+   team_id: opt text;
+   title: text;
+ };
+type Duty = 
+ record {
+   account_id: text;
+   duty: text;
+   event_id: text;
+ };
+type Attendance = 
+ record {
+   account_id: text;
+   event_id: text;
+   note: text;
+   present: bool;
+ };
+service : {
+  initialize: () -> (variant { Err: text; Ok; });
+  add_lineup: (event_id: text, member: text, slot: text, team_id: opt text) -> (variant { Err: text; Ok: LineupEntry; });
+  create_event: (club_id: text, team_id: opt text, title: text, description: text, starts_at_ms: nat64, ends_at_ms: nat64) -> (variant { Err: text; Ok: Event; });
+  export_state: () -> (variant { Err: text; Ok: record { attendance: vec Attendance; duties: vec Duty; events: vec Event; governor: principal; lineups: vec LineupEntry; recurrences: vec Recurrence; roles: vec RoleGrant; roster: vec RosterEntry; rsvps: vec Rsvp; schema: nat32; }; }) query;
+  grant_role: ("principal": principal, role: text, club_id: text, team_id: opt text) -> (variant { Err: text; Ok; });
+  list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+  set_attendance: (event_id: text, account_id: text, present: bool, note: text) -> (variant { Err: text; Ok: Attendance; });
+  set_duty: (event_id: text, account_id: text, duty: text) -> (variant { Err: text; Ok: Duty; });
+  set_recurrence: (event_id: text, frequency: text, until_ms: nat64) -> (variant { Err: text; Ok: Recurrence; });
+  set_roster: (event_id: text, account_id: text, child_id: opt text) -> (variant { Err: text; Ok: RosterEntry; });
+  set_rsvp: (event_id: text, account_id: text, state: text) -> (variant { Err: text; Ok: Rsvp; });
+  update_event: (id: text, title: text, description: text, starts_at_ms: nat64, ends_at_ms: nat64) -> (variant { Err: text; Ok: Event; });
+}

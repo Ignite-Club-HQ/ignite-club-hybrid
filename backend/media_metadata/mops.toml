@@ -1,0 +1,16 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = ["--default-persistent-actors"]
+
+[dependencies]
+core = "2.6.1"
+
+[canisters.media_metadata]
+main = "src/main.mo"
+candid = "media_metadata.did"
+
+[canisters.media_metadata.migrations]
+chain = "src/backend/migrations"
+check-limit = 1

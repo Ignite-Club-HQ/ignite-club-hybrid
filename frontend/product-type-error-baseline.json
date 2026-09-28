@@ -1,0 +1,393 @@
+{
+  "generatedBy": "scripts/check-product-type-errors.mjs",
+  "policy": "No new diagnostics may be introduced. Existing diagnostics remain explicitly inventoried until their source or dependency boundary is repaired.",
+  "diagnostics": [
+    {
+      "file": "src/components/pitch/PitchBoard.tsx",
+      "line": 703,
+      "column": 5,
+      "code": "TS2322",
+      "message": "Type '{ child_id: string; created_at: string; id: string; jersey_number: number; position: string; preferred_positions: string[]; team_id: string; updated_at: string; user_id: string; }[]' is not assignable to type 'TeamPlayerPosition[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/messaging/inbox/inboxDirectMessageSources.test.ts",
+      "line": 26,
+      "column": 34,
+      "code": "TS2353",
+      "message": "Object literal may only specify known properties, and 'transient' does not exist in type 'DirectMessageCacheConversationSource'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultQueryKeys.test.ts",
+      "line": 15,
+      "column": 35,
+      "code": "TS2345",
+      "message": "Argument of type '{ readonly type: \"team\"; readonly clubId: \"club-1\"; readonly teamId: \"team-1\"; readonly teamName: \"U10 Blue\"; }' is not assignable to parameter of type 'VaultFolderView'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 348,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 358,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/features/vault/vaultReadRepository.test.ts",
+      "line": 367,
+      "column": 39,
+      "code": "TS2345",
+      "message": "Argument of type '({ id: string; name: string; parent_id: string; restricted_roles: any; } | { id: string; name: string; parent_id: any; restricted_roles: string[]; })[]' is not assignable to parameter of type 'readonly VaultFolderTreeRow[]'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useAutoSubNotify.test.tsx",
+      "line": 101,
+      "column": 65,
+      "code": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '1'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useAutoSubNotify.test.tsx",
+      "line": 231,
+      "column": 37,
+      "code": "TS2493",
+      "message": "Tuple type '[]' of length '0' has no element at index '1'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useChatVirtualizationEnabled.ts",
+      "line": 74,
+      "column": 32,
+      "code": "TS2345",
+      "message": "Argument of type '{ unsubscribe?: () => void; }' is not assignable to parameter of type 'RealtimeChannel'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/hooks/useRemoteFillInSync.test.tsx",
+      "line": 52,
+      "column": 36,
+      "code": "TS2345",
+      "message": "Argument of type '(row: { updated_at: string; pitch_state: { players: { id: string; name: string; isFillIn: boolean; }[]; }; timer_state: { lastUpdateTime: number; }; is_active: boolean; } | { timer_state: { is_game_finished: boolean; lastUpdateTime: number; }; pitch_state: { ...; }; updated_at: string; is_active: boolean; } | { ...;...' is not assignable to parameter of type '(...args: [{ updated_at: string; pitch_state: { players: { id: string; name: string; isFillIn: boolean; }[]; }; timer_state: { lastUpdateTime: number; }; is_active: boolean; }, string] | [{ timer_state: { ...; }; pitch_state: { ...; }; updated_at: string; is_active: boolean; }, string] | [...]) => Awaitable<...>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lib/proShareGate.test.ts",
+      "line": 3,
+      "column": 39,
+      "code": "TS2339",
+      "message": "Property 'from' does not exist on type '{ maybeSingle: Mock<Procedure>; eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; select: Mock<() => { eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; }>; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/lib/proShareGate.test.ts",
+      "line": 3,
+      "column": 9,
+      "code": "TS2339",
+      "message": "Property 'rpc' does not exist on type '{ maybeSingle: Mock<Procedure>; eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; select: Mock<() => { eq: Mock<() => { maybeSingle: Mock<Procedure>; }>; }>; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsPage.tsx",
+      "line": 67,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'is_pro_football' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsPage.tsx",
+      "line": 68,
+      "column": 36,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsPage.tsx",
+      "line": 68,
+      "column": 76,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_football_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 108,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'is_pro_football' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 109,
+      "column": 36,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 109,
+      "column": 76,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_football_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 238,
+      "column": 74,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 238,
+      "column": 84,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 268,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 269,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'type' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 270,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'pending' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 271,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'fulfilled' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 272,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 273,
+      "column": 11,
+      "code": "TS2339",
+      "message": "Property 'totalPoints' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 617,
+      "column": 40,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 618,
+      "column": 63,
+      "code": "TS2339",
+      "message": "Property 'name' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 619,
+      "column": 78,
+      "code": "TS2339",
+      "message": "Property 'pending' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 620,
+      "column": 80,
+      "code": "TS2339",
+      "message": "Property 'fulfilled' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 621,
+      "column": 77,
+      "code": "TS2339",
+      "message": "Property 'total' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/ClubRewardsReportPage.tsx",
+      "line": 622,
+      "column": 83,
+      "code": "TS2339",
+      "message": "Property 'totalPoints' does not exist on type 'unknown'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/MessagesPage.tsx",
+      "line": 335,
+      "column": 49,
+      "code": "TS2345",
+      "message": "Argument of type 'SupabaseClient<Database, \"public\", \"public\", { Tables: { active_games: { Row: { board_session_id: string; created_at: string; id: string; is_active: boolean; last_sub_check_time: number; pitch_state: Json; team_id: string; timer_state: Json; updated_at: string; user_id: string; }; Insert: { ...; }; Update: { ...; };...' is not assignable to parameter of type 'InboxDataClient'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/MessagesPage.tsx",
+      "line": 405,
+      "column": 43,
+      "code": "TS2345",
+      "message": "Argument of type 'SupabaseClient<Database, \"public\", \"public\", { Tables: { active_games: { Row: { board_session_id: string; created_at: string; id: string; is_active: boolean; last_sub_check_time: number; pitch_state: Json; team_id: string; timer_state: Json; updated_at: string; user_id: string; }; Insert: { ...; }; Update: { ...; };...' is not assignable to parameter of type 'InboxDataClient'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/MessagesPage.tsx",
+      "line": 448,
+      "column": 48,
+      "code": "TS2345",
+      "message": "Argument of type 'SupabaseClient<Database, \"public\", \"public\", { Tables: { active_games: { Row: { board_session_id: string; created_at: string; id: string; is_active: boolean; last_sub_check_time: number; pitch_state: Json; team_id: string; timer_state: Json; updated_at: string; user_id: string; }; Insert: { ...; }; Update: { ...; };...' is not assignable to parameter of type 'InboxDataClient'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/MessagesPage.tsx",
+      "line": 532,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type 'SupabaseClient<Database, \"public\", \"public\", { Tables: { active_games: { Row: { board_session_id: string; created_at: string; id: string; is_active: boolean; last_sub_check_time: number; pitch_state: Json; team_id: string; timer_state: Json; updated_at: string; user_id: string; }; Insert: { ...; }; Update: { ...; };...' is not assignable to type 'InboxDataClient'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/MessagesPage.tsx",
+      "line": 632,
+      "column": 7,
+      "code": "TS2322",
+      "message": "Type 'Record<string, InboxPreviewLike>' is not assignable to type 'Record<string, LatestMessage>'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/SettingsPage.tsx",
+      "line": 176,
+      "column": 32,
+      "code": "TS2352",
+      "message": "Conversion of type '{ admin_enabled: boolean; created_at: string; email_admin_enabled: boolean; email_events_enabled: boolean; email_media_enabled: boolean; email_membership_enabled: boolean; email_messages_enabled: boolean; ... 13 more ...; user_id: string; }' to type 'Record<string, boolean>' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 1402,
+      "column": 33,
+      "code": "TS2339",
+      "message": "Property 'trial_ends_at' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 1558,
+      "column": 11,
+      "code": "TS2322",
+      "message": "Type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }' is not assignable to type 'ClubSubscription'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 1612,
+      "column": 58,
+      "code": "TS2551",
+      "message": "Property 'disable_batch_subs' does not exist on type '{ admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; court_minutes_per_quarter: number; court_period_type: string; court_rotation_interval_minutes: number; ... 28 more ...; updated_at: string; } | { ...; }'. Did you mean 'disable_auto_subs'?",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 1613,
+      "column": 60,
+      "code": "TS2339",
+      "message": "Property 'rotate_gk_at_halftime' does not exist on type '{ admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; court_minutes_per_quarter: number; court_period_type: string; court_rotation_interval_minutes: number; ... 28 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 1625,
+      "column": 58,
+      "code": "TS2339",
+      "message": "Property 'show_lineup_picker' does not exist on type '{ admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; court_minutes_per_quarter: number; court_period_type: string; court_rotation_interval_minutes: number; ... 28 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 394,
+      "column": 40,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 394,
+      "column": 80,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_football_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/pages/TeamDetailPage.tsx",
+      "line": 404,
+      "column": 85,
+      "code": "TS2339",
+      "message": "Property 'admin_pro_football_override' does not exist on type '{ activated_at: string; admin_pro_football_override: boolean; admin_pro_override: boolean; cancelled_at: string; club_id: string; created_at: string; disable_points_system: boolean; ... 21 more ...; updated_at: string; } | { ...; }'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/test/reactRouterUpgradeSafety.test.tsx",
+      "line": 196,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; initialEntries: string[]; future: { v7_relativeSplatPath: boolean; v7_startTransition: boolean; }; }' is not assignable to type 'IntrinsicAttributes & MemoryRouterProps'.",
+      "category": "source-backed"
+    },
+    {
+      "file": "src/test/reactRouterUpgradeSafety.test.tsx",
+      "line": 230,
+      "column": 9,
+      "code": "TS2322",
+      "message": "Type '{ children: Element; initialEntries: string[]; future: { v7_relativeSplatPath: boolean; v7_startTransition: boolean; }; }' is not assignable to type 'IntrinsicAttributes & MemoryRouterProps'.",
+      "category": "source-backed"
+    }
+  ],
+  "counts": {
+    "source-backed": 48
+  }
+}

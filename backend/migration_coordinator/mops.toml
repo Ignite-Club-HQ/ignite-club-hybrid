@@ -1,0 +1,15 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = [ "--default-persistent-actors" ]
+
+[canisters.migration_coordinator]
+main = "src/main.mo"
+
+[canisters.migration_coordinator.migrations]
+chain = "src/backend/migrations"
+check-limit = 1
+
+[dependencies]
+core = "2.6.1"

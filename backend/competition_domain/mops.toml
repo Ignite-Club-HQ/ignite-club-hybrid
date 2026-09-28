@@ -1,0 +1,16 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = ["--default-persistent-actors"]
+
+[dependencies]
+core = "2.6.1"
+
+[canisters.competition_domain]
+main = "src/main.mo"
+candid = "competition_domain.did"
+
+[canisters.competition_domain.migrations]
+chain = "src/backend/migrations"
+check-limit = 1

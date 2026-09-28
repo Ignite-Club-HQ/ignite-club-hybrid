@@ -1,0 +1,16 @@
+[toolchain]
+moc = "1.14.0"
+
+[moc]
+args = ["--default-persistent-actors"]
+
+[dependencies]
+core = "2.6.1"
+
+[canisters.notification_queue]
+main = "src/main.mo"
+candid = "notification_queue.did"
+
+[canisters.notification_queue.migrations]
+chain = "src/backend/migrations"
+check-limit = 1

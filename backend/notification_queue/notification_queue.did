@@ -1,0 +1,15 @@
+type status = variant { Pending; Processing; Delivered; Failed };
+type notification = record { id : text; user : text; club : text; kind : text; body : text; idempotency_key : text; status : status; attempts : nat32; next_attempt_ms : nat64 };
+type result = variant { Ok : notification; Err : text };
+type results = variant { Ok : vec notification; Err : text };
+type result_nat16 = variant { Ok : nat16; Err : text };
+service : {
+  acknowledge : (text, text) -> (result);
+  claim : (nat64, nat16) -> (results);
+  enqueue : (text, text, text, text, text, text) -> (result);
+  fail : (text, text, opt nat64) -> (result);
+  get_notification : (text) -> (opt notification) query;
+  grant_worker : (principal) -> (variant { Ok; Err : text });
+  initialize : () -> (variant { Ok; Err : text });
+  recover : () -> (result_nat16);
+};

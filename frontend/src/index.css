@@ -1,0 +1,463 @@
+/* Font loaded via index.html for non-render-blocking */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ignite Sports Club Management - Dark theme with emerald accents */
+
+html, body {
+  position: fixed;
+  overflow: hidden;
+  overscroll-behavior: none;
+  width: 100%;
+  height: 100%;
+}
+
+html[data-media-comments-open="true"] body,
+html[data-media-comments-open="true"] #root {
+  overflow: hidden !important;
+}
+
+html[data-media-comments-open="true"] #root {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html[data-media-comments-open="true"] .media-comment-screen {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: auto !important;
+  left: 0 !important;
+  z-index: 2147483647 !important;
+}
+
+/* Ensure Radix popovers (emoji picker, mention list) render above the
+   fullscreen comment screen which uses the max int z-index. */
+html[data-media-comments-open="true"] [data-radix-popper-content-wrapper] {
+  z-index: 2147483647 !important;
+}
+
+#root {
+  overflow-y: auto;
+  overscroll-behavior-y: none;
+  height: 100%;
+  width: 100%;
+}
+
+@layer base {
+  :root {
+    /* Pitch green - never changes with club theme */
+    --pitch-green: 130 60% 28%;
+    --safe-area-top: env(safe-area-inset-top, 0px);
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    
+    /* Warmer, slightly off-white with a hint of green undertone for richer light-mode depth */
+    --background: 150 18% 97%;
+    /* Chat scroller surface — a touch cooler/darker than --background so
+       --card bubbles (white) read as elevated and the thread no longer feels flat. */
+    --chat-surface: 160 14% 94%;
+    --foreground: 160 14% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 160 14% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 14% 12%;
+
+    /* Outgoing chat bubble — calmer, deeper teal-ink (less corporate than raw primary) */
+    --chat-bubble-own: 175 55% 30%;
+    --chat-bubble-own-foreground: 0 0% 100%;
+
+    /* Darkened from 39% → 32% lightness for 4.5:1 on white */
+    --primary: 160 84% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 160 20% 90%;
+    --secondary-foreground: 160 40% 20%;
+
+    --muted: 160 10% 90%;
+    /* Darkened from 40% → 35% lightness for 4.5:1 on light backgrounds */
+    --muted-foreground: 160 10% 35%;
+
+    --accent: 160 60% 90%;
+    /* Darkened from 30% → 26% for stronger contrast on accent bg */
+    --accent-foreground: 160 84% 26%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 15% 85%;
+    --input: 160 15% 85%;
+    --ring: 160 84% 32%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 160 10% 98%;
+    --sidebar-foreground: 160 10% 10%;
+    --sidebar-primary: 160 84% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 160 60% 90%;
+    --sidebar-accent-foreground: 160 84% 26%;
+    --sidebar-border: 160 15% 85%;
+    --sidebar-ring: 160 84% 32%;
+
+    --chart-1: 160 84% 32%;
+    --chart-2: 160 70% 42%;
+    --chart-3: 160 60% 52%;
+    --chart-4: 45 90% 42%;
+    --chart-5: 200 70% 42%;
+
+    --success: 160 84% 32%;
+    --warning: 45 93% 38%;
+    --info: 200 80% 42%;
+    --rsvp-selected: 217 76% 44%;
+    --rsvp-selected-foreground: 0 0% 100%;
+
+    /* Event type accents — premium, semantic, theme-aware */
+    --event-game: 32 95% 44%;       /* amber for matches */
+    --event-training: 200 80% 42%;  /* sky for training */
+    --event-social: 270 70% 55%;    /* violet for social */
+
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  .dark {
+    /* Pitch green - never changes with club theme */
+    --pitch-green: 130 55% 22%;
+    
+    --background: 160 15% 6%;
+    /* Chat scroller surface — slightly deeper than --background so --card
+       bubbles (10% L) sit a touch above and the thread reads as layered. */
+    --chat-surface: 160 15% 4%;
+    --foreground: 160 5% 95%;
+
+    --card: 160 15% 10%;
+    --card-foreground: 160 5% 95%;
+
+    --popover: 160 15% 12%;
+    --popover-foreground: 160 5% 95%;
+
+    /* Outgoing chat bubble — slightly brighter teal for dark mode */
+    --chat-bubble-own: 175 60% 38%;
+    --chat-bubble-own-foreground: 0 0% 100%;
+
+    --primary: 160 84% 45%;
+    --primary-foreground: 160 15% 6%;
+
+    --secondary: 160 20% 18%;
+    --secondary-foreground: 160 5% 90%;
+
+    --muted: 160 15% 20%;
+    /* Brightened from 60% → 65% for 4.5:1 on dark card/bg */
+    --muted-foreground: 160 10% 65%;
+
+    --accent: 160 40% 20%;
+    /* Brightened from 60% → 65% for stronger contrast on accent bg */
+    --accent-foreground: 160 84% 65%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 160 15% 20%;
+    --input: 160 15% 20%;
+    --ring: 160 84% 45%;
+
+    --sidebar-background: 160 15% 8%;
+    --sidebar-foreground: 160 5% 95%;
+    --sidebar-primary: 160 84% 45%;
+    --sidebar-primary-foreground: 160 15% 6%;
+    --sidebar-accent: 160 40% 20%;
+    --sidebar-accent-foreground: 160 84% 65%;
+    --sidebar-border: 160 15% 20%;
+    --sidebar-ring: 160 84% 45%;
+
+    --chart-1: 160 84% 50%;
+    --chart-2: 160 70% 60%;
+    --chart-3: 160 60% 70%;
+    --chart-4: 45 90% 55%;
+    --chart-5: 200 70% 55%;
+
+    --success: 160 84% 45%;
+    --warning: 45 93% 50%;
+    --info: 200 80% 55%;
+    --rsvp-selected: 217 70% 52%;
+    --rsvp-selected-foreground: 0 0% 100%;
+
+    /* Event type accents — brightened for dark surfaces */
+    --event-game: 32 95% 56%;
+    --event-training: 200 85% 58%;
+    --event-social: 270 80% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Respect system font scaling on all platforms */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  /* M3 perf: skip layout/paint for off-screen media cards. Reserves
+     ~640px of vertical space so scroll position stays stable. Remove
+     this class from MediaPage cards to revert. */
+  .cv-auto-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 640px;
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 20px hsl(160 84% 45% / 0.3);
+  }
+
+  .gradient-emerald {
+    background: linear-gradient(135deg, hsl(160 84% 45%) 0%, hsl(160 70% 35%) 100%);
+  }
+
+  /* Themed gradient - uses primary color when club theme is active, falls back to emerald */
+  .gradient-themed {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%);
+  }
+
+  /* Keep chat bubbles on the normal document layer during virtualized scroll.
+     Android WebView flickers when dozens of newly mounted rows each create
+     paint/compositor layers while Virtuoso is correcting measurements. */
+  .chat-bubble-stable {
+    background-clip: padding-box;
+  }
+
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, hsl(160 84% 50%) 0%, hsl(160 70% 60%) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .pb-safe {
+    padding-bottom: var(--safe-area-bottom, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pt-safe {
+    padding-top: var(--safe-area-top, env(safe-area-inset-top, 0px));
+  }
+
+  .pl-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+
+  .pr-safe {
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .px-safe {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .safe-area-top {
+    padding-top: var(--safe-area-top, env(safe-area-inset-top, 0px));
+  }
+
+  .safe-area-bottom {
+    padding-bottom: var(--safe-area-bottom, env(safe-area-inset-bottom, 0px));
+  }
+
+  .overscroll-contain {
+    overscroll-behavior-y: contain;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+  /* Respect prefers-reduced-motion: disable all transitions and animations */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+/* Remove react-day-picker default today indicator dot */
+.rdp-day_today::after,
+.rdp-day_today::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* Prevent Android WebView's native text-selection toolbar from hijacking
+   the long-press reaction gesture on chat bubbles. Tailwind's `select-none`
+   sets `user-select: none` but Android also needs `-webkit-touch-callout`
+   and the rules to cascade to every descendant. */
+.select-none,
+.select-none * {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Chat search match highlight — override any parent text/bg color so the
+   yellow swatch and dark text are always legible inside chat bubbles
+   (including dark mode + own-message primary bubbles). */
+.search-highlight,
+.search-highlight * {
+  background-color: #fde047 !important;
+  color: #1f2937 !important;
+  border-radius: 3px;
+}
+
+/* Chat scroll viewports own their anchoring. Do not GPU-promote them here:
+   Android WebView can flicker when a promoted overflow scroller contains
+   virtualized rows that mount/unmount during upward momentum scroll. */
+[data-chat-scroll-lock="true"] {
+  /* Disable browser scroll-anchoring on the entire chat thread. Our
+     useChatOlderMessagesAnchor / useInitialChatBottomPin hooks own every
+     scrollTop write; the browser picking its own anchor element fights
+     those writes and produces the visible "viewport jumps then settles"
+     effect during pagination, image hydration and reaction edits. */
+  overflow-anchor: none;
+}
+[data-chat-scroll-lock="true"] * {
+  overflow-anchor: none;
+}
+
+/* Virtualized rows mount/unmount while Android WebView is momentum-scrolling.
+   Per-row shimmer/fade animations repaint those newly mounted rows every
+   frame and show up as flicker, so rows inside the scroller stay static. */
+[data-chat-scroll-lock="true"] .animate-pulse,
+[data-chat-scroll-lock="true"] .animate-fade-in {
+  animation: none !important;
+}
+
+/* Subtle tinted backdrop on the chat thread so bubbles (--card, white in
+   light / 10% L in dark) read as elevated above the scroller. Pure color
+   only — no gradients/blur — to stay safe on Android WebView per the
+   compositor-freeze rule. */
+[data-chat-scroll-lock="true"] {
+  background-color: hsl(var(--chat-surface));
+}
+
+/* Subtle entrance for newly inserted chat messages — iMessage/WhatsApp
+   style: gentle fade + tiny rise, ~350ms ease-out. No horizontal motion. */
+@keyframes chat-message-enter {
+  from { opacity: 0; transform: translate3d(0, 3px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.chat-message-enter {
+  animation: chat-message-enter 420ms cubic-bezier(0.25, 0.6, 0.2, 1) both;
+  will-change: opacity, transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-message-enter { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+ * Sonner toaster: bulletproof z-index pin.
+ * Toasts (download success, errors, etc.) must NEVER paint behind the
+ * PhotoLightbox Radix Dialog (z-[1000001]) or any other overlay. The
+ * `<Toaster />` component is also portaled to document.body so its stacking
+ * context lives at the topmost level, but we belt-and-brace it with CSS:
+ *   - max signed int32 z-index
+ *   - isolation: isolate so child toasts can't escape the pin
+ *   - pointer-events: none on the wrapper so it never blocks clicks; the
+ *     individual toasts already opt back in via pointer-events:auto.
+ * ------------------------------------------------------------------------- */
+[data-sonner-toaster] {
+  z-index: 2147483647 !important;
+  isolation: isolate;
+  pointer-events: none;
+}
+[data-sonner-toaster] [data-sonner-toast] {
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------------------
+ * Accessibility user preferences
+ * Applied via classes on <html> from useAccessibilityPrefs:
+ *   .hc — high contrast: stronger text + borders
+ *   .bt — bold text: thicker body weight
+ *   .rm — reduce motion: kill non-essential animations/transitions
+ * Text size scaling is applied as html { font-size: <scale>% } directly.
+ * ------------------------------------------------------------------------- */
+
+/* High contrast: darken muted text + strengthen borders in light mode,
+ * lighten in dark mode. Uses existing semantic tokens so all components
+ * pick it up without per-component changes. */
+html.hc {
+  --muted-foreground: 160 18% 22%;
+  --border: 160 14% 55%;
+  --input: 160 14% 55%;
+  --ring: 160 84% 28%;
+}
+html.hc.dark,
+.dark html.hc {
+  --muted-foreground: 160 12% 82%;
+  --border: 160 10% 70%;
+  --input: 160 10% 70%;
+}
+
+/* Bold text: bump default and medium weights one notch. */
+html.bt body {
+  font-weight: 500;
+}
+html.bt .font-medium {
+  font-weight: 600;
+}
+html.bt .font-semibold {
+  font-weight: 700;
+}
+
+/* Reduce motion: respect user choice, mirroring OS prefers-reduced-motion. */
+html.rm *,
+html.rm *::before,
+html.rm *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Desktop shell (lg+): the bottom nav is replaced by the fixed left rail, so
+   the --bottom-nav-offset that chat pages use for composer placement must
+   collapse to zero. Stylesheet !important beats the inline var BottomNav sets. */
+@media (min-width: 1024px) {
+  :root {
+    --bottom-nav-offset: 0px !important;
+  }
+}
+
+/* Cold-start reveal: content should ease in, not snap/shake into place.
+   Pure opacity (no translate) so nothing appears to jump vertically, and
+   scroll-anchoring is disabled on the revealing containers so late-arriving
+   async sections cannot yank the viewport. */
+@keyframes soft-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.soft-reveal {
+  animation: soft-reveal 260ms ease-out both;
+  overflow-anchor: none;
+}
+.soft-reveal * {
+  overflow-anchor: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .soft-reveal { animation: none; }
+}
