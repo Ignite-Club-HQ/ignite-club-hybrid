@@ -58,6 +58,9 @@ type Attendance =
  };
 service : {
   initialize: () -> (variant { Err: text; Ok; });
+  addBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
+  removeBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
+  listBulkAccessPrincipals: () -> (variant { Err: text; Ok: vec principal; }) query;
   add_lineup: (event_id: text, member: text, slot: text, team_id: opt text) -> (variant { Err: text; Ok: LineupEntry; });
   create_event: (club_id: text, team_id: opt text, title: text, description: text, starts_at_ms: nat64, ends_at_ms: nat64) -> (variant { Err: text; Ok: Event; });
   export_state: () -> (variant { Err: text; Ok: record { attendance: vec Attendance; duties: vec Duty; events: vec Event; governor: principal; lineups: vec LineupEntry; recurrences: vec Recurrence; roles: vec RoleGrant; roster: vec RosterEntry; rsvps: vec Rsvp; schema: nat32; }; }) query;

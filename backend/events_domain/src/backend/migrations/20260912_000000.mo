@@ -19,8 +19,9 @@ module {
     var duties : [Duty];
     var roster : [RosterEntry];
     var recurrences : [Recurrence];
+    var bulkAccessPrincipals : [Principal];
   };
   public func migration(_old : OldActor) : NewActor {
-    { var governor = Principal.anonymous(); var roles = []; var events = []; var rsvps = []; var attendance = []; var lineups = []; var duties = []; var roster = []; var recurrences = [] }
+    { var governor = Principal.anonymous(); var roles = []; var events = []; var rsvps = []; var attendance = []; var lineups = []; var duties = []; var roster = []; var recurrences = []; var bulkAccessPrincipals = [] }
   };
 };

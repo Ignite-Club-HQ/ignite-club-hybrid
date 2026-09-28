@@ -50,6 +50,8 @@ type Result_3 = variant { Ok : Asset; Err : text };
 type Result_4 = variant { Ok; Err : text };
 type Result_5 = variant { Ok : Reaction; Err : text };
 type Result_6 = variant { Ok : Comment; Err : text };
+type Result_7 = variant { Ok; Err : text };
+type Result_8 = variant { Ok : vec principal; Err : text };
 type State = record {
   schema : nat32;
   governor : principal;
@@ -61,6 +63,9 @@ type State = record {
 };
 service : {
   initialize : () -> (variant { Ok; Err : text });
+  addBulkAccessPrincipal : (principal) -> (Result_7);
+  removeBulkAccessPrincipal : (principal) -> (Result_7);
+  listBulkAccessPrincipals : () -> (Result_8) query;
   export_state : () -> (Result_2) query;
   get_asset : (text) -> (opt Asset) query;
   issue_capability : (text, text, text, nat64) -> (Result_1);

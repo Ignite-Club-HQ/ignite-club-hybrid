@@ -4,7 +4,7 @@
 // IGNITE_LIVE_* names the live target registry requires.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,6 +42,20 @@ if (!existsSync(viteBin)) {
   if (!existsSync(viteBin)) {
     console.error("frontend dependencies are still missing after npm ci; cannot start the preview.");
     process.exit(1);
+  }
+}
+
+// Drop Vite's pre-bundled dependency cache when the lockfile is newer than
+// it. A stale cache makes Vite answer module requests with
+// "504 Outdated Optimize Dep", which surfaces in the browser as
+// "Failed to fetch dynamically imported module" and a blank screen.
+const viteCacheDir = path.join(frontendDir, "node_modules", ".vite");
+const cacheMeta = path.join(viteCacheDir, "deps", "_metadata.json");
+const lockfile = path.join(frontendDir, "package-lock.json");
+if (existsSync(cacheMeta) && existsSync(lockfile)) {
+  if (statSync(lockfile).mtimeMs > statSync(cacheMeta).mtimeMs) {
+    console.log("frontend dependency cache is older than package-lock.json; clearing it...");
+    rmSync(viteCacheDir, { recursive: true, force: true });
   }
 }
 

@@ -24,6 +24,8 @@ service : {
   initialize : () -> ();
   markExported : (nat, nat, text) -> (Migration);
   markImported : (nat, nat, text) -> (Migration);
+  orchestrateExport : (nat) -> (Migration);
+  orchestrateVerify : (nat) -> (Migration);
   status : () -> (opt Migration, vec Migration) query;
   verify : (nat, nat, text) -> (Migration);
 };

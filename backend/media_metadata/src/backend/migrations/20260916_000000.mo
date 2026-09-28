@@ -56,6 +56,7 @@ module {
     var reactions : [Reaction];
     var comments : [Comment];
     var roles : [RoleGrant];
+    var bulkAccessPrincipals : [Principal];
   };
   // Adds reactions/comments/role-grants for the club media feed while
   // preserving every asset and capability already committed.
@@ -67,6 +68,7 @@ module {
       var reactions = [];
       var comments = [];
       var roles = [];
+      var bulkAccessPrincipals = [];
     }
   };
 };
