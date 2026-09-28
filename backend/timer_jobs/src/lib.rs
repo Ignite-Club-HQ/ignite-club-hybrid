@@ -587,11 +587,11 @@ fn put_job_entry(job: Job) {
 }
 
 fn all_job_entries() -> Vec<Job> {
-    JOBS.with(|jobs| jobs.borrow().iter().map(|(_, job)| job).collect())
+    JOBS.with(|jobs| jobs.borrow().iter().map(|entry| entry.value()).collect())
 }
 
 fn job_ids() -> Vec<String> {
-    JOBS.with(|jobs| jobs.borrow().iter().map(|(id, _)| id).collect())
+    JOBS.with(|jobs| jobs.borrow().iter().map(|entry| entry.key()).collect())
 }
 
 fn jobs_is_empty() -> bool {
