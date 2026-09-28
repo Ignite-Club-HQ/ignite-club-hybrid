@@ -4,7 +4,7 @@
 // IGNITE_LIVE_* names the live target registry requires.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, rmSync, cpSync } from "node:fs";
 import path from "node:path";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -84,4 +84,13 @@ const result = spawnSync(
 );
 
 if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
+
+// Lovable deploys the static output from <projectRoot>/dist, but the live
+// frontend build writes to frontend/dist-live. Copy it into place so the
+// platform dist-check and deploy step find it.
+const distLive = path.join(frontendDir, "dist-live");
+const distRoot = path.join(projectRoot, "dist");
+rmSync(distRoot, { recursive: true, force: true });
+cpSync(distLive, distRoot, { recursive: true });
+console.log("copied frontend/dist-live -> dist/");
