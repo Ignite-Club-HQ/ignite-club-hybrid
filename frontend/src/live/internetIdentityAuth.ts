@@ -1,5 +1,6 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
+import { clearLiveAgentCache } from "./icpAgent";
 
 /**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/internetIdentityAuth.ts`.
