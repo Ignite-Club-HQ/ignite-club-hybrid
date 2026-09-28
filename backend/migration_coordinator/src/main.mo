@@ -82,10 +82,10 @@ persistent actor {
   // canister call failure or an explicit trap) if the domain is unsupported
   // or the domain canister rejects the caller (only governor / bulk-access
   // allowlisted principals may call export_state on the domain canisters).
-  func fetchEvidence(domain : Text, principal : Principal) : async* Evidence {
+  func fetchEvidence(domain : Text, principal : Principal) : async* Types.Evidence {
     switch (domain) {
       case ("events_domain") {
-        let target : EventsDomainActor = actor (Principal.toText(principal));
+        let target : Types.EventsDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("events_domain export_state failed: " # message) };
           case (#Ok(state)) {
@@ -107,7 +107,7 @@ persistent actor {
         };
       };
       case ("competition_domain") {
-        let target : CompetitionDomainActor = actor (Principal.toText(principal));
+        let target : Types.CompetitionDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("competition_domain export_state failed: " # message) };
           case (#Ok(state)) {
@@ -127,7 +127,7 @@ persistent actor {
         };
       };
       case ("media_metadata") {
-        let target : MediaMetadataActor = actor (Principal.toText(principal));
+        let target : Types.MediaMetadataActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("media_metadata export_state failed: " # message) };
           case (#Ok(state)) {
@@ -146,7 +146,7 @@ persistent actor {
         };
       };
       case ("messaging_domain") {
-        let target : MessagingDomainActor = actor (Principal.toText(principal));
+        let target : Types.MessagingDomainActor = actor (Principal.toText(principal));
         switch (await target.export_state()) {
           case (#Err(message)) { Runtime.trap("messaging_domain export_state failed: " # message) };
           case (#Ok(state)) {
