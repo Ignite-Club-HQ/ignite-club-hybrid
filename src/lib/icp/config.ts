@@ -10,11 +10,11 @@ const env = import.meta.env;
 
 export const icpConfig = {
   /** "ic" for mainnet, "local" for a local replica (dfx start). */
-  network: (env.VITE_ICP_NETWORK ?? "ic") as string,
+  network: (env["VITE_ICP_NETWORK"] ?? "ic") as string,
   /** Replica host. Defaults to the IC mainnet boundary node. */
-  host: (env.VITE_ICP_HOST ?? "https://icp0.io") as string,
+  host: (env["VITE_ICP_HOST"] ?? "https://icp0.io") as string,
   /** Internet Identity provider URL used for login. */
-  identityProviderUrl: (env.VITE_II_URL ??
+  identityProviderUrl: (env["VITE_II_URL"] ??
     "https://identity.internetcomputer.org") as string,
 };
 
@@ -29,7 +29,7 @@ export interface CanisterRef {
  * Empty until the canisters are deployed and their IDs are added to .env.
  */
 export const configuredCanisters: CanisterRef[] = (
-  (env.VITE_ICP_CANISTER_IDS ?? "") as string
+  (env["VITE_ICP_CANISTER_IDS"] ?? "") as string
 )
   .split(",")
   .map((entry) => entry.trim())

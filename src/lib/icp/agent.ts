@@ -9,7 +9,10 @@ import { icpConfig } from "./config";
  * required for local development, and never done on mainnet.
  */
 export function createAgent(identity?: Identity): HttpAgent {
-  const agent = new HttpAgent({ host: icpConfig.host, identity });
+  const agent = new HttpAgent({
+    host: icpConfig.host,
+    ...(identity ? { identity } : {}),
+  });
 
   if (icpConfig.network !== "ic") {
     void agent
