@@ -1,6 +1,7 @@
 node_modules/
 frontend/dist*/
 frontend/.lab-cache*/
+frontend/.vitest-cache/
 .mops/
 .env*
 **/.env*
