@@ -30,12 +30,14 @@ export default function EditProfilePage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
+  const [country, setCountry] = useState<string>("");
 
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name || "");
       setAvatarUrl(profile.avatar_url || "");
       setLeaderboardOptOut(((profile as any).leaderboard_opt_out as boolean) ?? false);
+      setCountry(((profile as any).country as string | null) ?? "");
     }
   }, [profile]);
 
