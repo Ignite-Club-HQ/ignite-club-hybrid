@@ -8,16 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
 import {
   BACKEND_ROUTING_CONFIG_KEY,
   applyBackendRoutingConfig,
   parseBackendRoutingConfig,
   DEFAULT_BACKEND_ROUTING_CONFIG,
+  normalizeApprovedTarget,
+  type ApprovedBackendTarget,
   type BackendProvider,
   type BackendEligibility,
+  type BackendTargetKind,
 } from "@/live/backendRouting";
-import { getEffectiveBackend } from "@/live/loadBackendRouting";
+import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
 import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +40,21 @@ import {
 } from "@/live/icpAdminOverrides";
 
 type CanisterRow = { key: string; id: string };
-type CountryRuleRow = { country: string; eligibility: BackendEligibility };
+type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
+type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean };
+
+const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
+  "supabase-region": "Supabase region",
+  "icp-cloud-engine": "ICP Cloud Engine",
+  "icp-mainnet": "ICP mainnet",
+};
+
+const KINDS_FOR_BACKEND: Record<BackendProvider, BackendTargetKind[]> = {
+  supabase: ["supabase-region"],
+  icp: ["icp-cloud-engine", "icp-mainnet"],
+};
+
+const NO_TARGET_PIN = "__none__";
 
 const ELIGIBILITY_LABELS: Record<BackendEligibility, string> = {
   supabase: "Supabase only",
@@ -89,6 +107,7 @@ export default function PlacementAdminSettingsPage() {
   const [touched, setTouched] = useState(false);
   const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
+  const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
   const [routingTouched, setRoutingTouched] = useState(false);
 
   const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
@@ -135,12 +154,31 @@ export default function PlacementAdminSettingsPage() {
     const config = savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG;
     setDefaultBackend(config.defaultBackend);
     setCountryRows(
-      Object.entries(config.countryRules).map(([country, eligibility]) => ({ country, eligibility })),
+      Object.entries(config.countryRules).map(([country, eligibility]) => ({
+        country,
+        eligibility,
+        targetId: config.countryTargets[country] ?? NO_TARGET_PIN,
+      })),
+    );
+    setTargetRows(
+      config.targets.map(t => ({
+        backend: t.backend,
+        kind: t.kind,
+        alias: t.alias,
+        version: t.version,
+        region: t.region ?? "",
+        enabled: t.enabled,
+      })),
     );
   }, [savedRouting, routingTouched]);
 
   const routingMutation = useMutation({
-    mutationFn: async (config: { defaultBackend: BackendProvider; countryRules: Record<string, BackendEligibility> }) => {
+    mutationFn: async (config: {
+      defaultBackend: BackendProvider;
+      countryRules: Record<string, BackendEligibility>;
+      targets: ApprovedBackendTarget[];
+      countryTargets: Record<string, string>;
+    }) => {
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
         .select("id")
@@ -156,7 +194,7 @@ export default function PlacementAdminSettingsPage() {
       } else {
         const { error } = await supabase
           .from("app_settings")
-          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend and per-country eligibility" } as never);
+          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend, per-country eligibility, and approved targets" } as never);
         if (error) throw error;
       }
       return config;
@@ -185,7 +223,35 @@ export default function PlacementAdminSettingsPage() {
   const addCountryRow = () => {
     setRoutingTouched(true);
     const suggestion = ISO_COUNTRY_CODES.find(code => !countryRows.some(r => r.country === code)) ?? "AU";
-    setCountryRows(current => [...current, { country: suggestion, eligibility: "both" }]);
+    setCountryRows(current => [...current, { country: suggestion, eligibility: "both", targetId: NO_TARGET_PIN }]);
+  };
+
+  const updateTargetRow = (index: number, patch: Partial<TargetRow>) => {
+    setRoutingTouched(true);
+    setTargetRows(current =>
+      current.map((row, i) => {
+        if (i !== index) return row;
+        const next = { ...row, ...patch };
+        // Keep the target kind valid when the backend changes.
+        if (patch.backend && !KINDS_FOR_BACKEND[next.backend].includes(next.kind)) {
+          next.kind = KINDS_FOR_BACKEND[next.backend][0];
+        }
+        return next;
+      }),
+    );
+  };
+
+  const removeTargetRow = (index: number) => {
+    setRoutingTouched(true);
+    setTargetRows(current => current.filter((_, i) => i !== index));
+  };
+
+  const addTargetRow = () => {
+    setRoutingTouched(true);
+    setTargetRows(current => [
+      ...current,
+      { backend: "supabase", kind: "supabase-region", alias: "", version: "v1", region: "", enabled: true },
+    ]);
   };
 
   const handleSaveRouting = () => {
@@ -197,7 +263,36 @@ export default function PlacementAdminSettingsPage() {
       }
       countryRules[row.country] = row.eligibility;
     }
-    routingMutation.mutate({ defaultBackend, countryRules });
+    try {
+      const targets = targetRows
+        .filter(row => row.alias.trim() || row.version.trim())
+        .map(row => normalizeApprovedTarget({ ...row }));
+      const seen = new Set<string>();
+      for (const target of targets) {
+        if (seen.has(target.id)) {
+          throw new Error(`Target "${target.id}" is listed twice.`);
+        }
+        seen.add(target.id);
+      }
+      const countryTargets: Record<string, string> = {};
+      for (const row of countryRows) {
+        if (row.targetId === NO_TARGET_PIN) continue;
+        const target = targets.find(t => t.id === row.targetId);
+        if (!target) {
+          throw new Error(`${countryName(row.country)} is pinned to a target that no longer exists.`);
+        }
+        const eligibility = countryRules[row.country];
+        if (eligibility !== "both" && eligibility !== target.backend) {
+          throw new Error(
+            `${countryName(row.country)} is ${ELIGIBILITY_LABELS[eligibility].toLowerCase()} but is pinned to a ${target.backend === "icp" ? "ICP" : "Supabase"} target.`,
+          );
+        }
+        countryTargets[row.country] = target.id;
+      }
+      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets });
+    } catch (error) {
+      toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+    }
   };
 
   const saveMutation = useMutation({
@@ -419,6 +514,100 @@ export default function PlacementAdminSettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Approved targets</CardTitle>
+            <CardDescription>
+              The deployment targets each backend is approved to use — a Supabase region,
+              or an ICP Cloud Engine / mainnet deployment, with a version. Only enabled
+              targets can serve data; a disabled target is never routed to. You can pin a
+              country to a specific target in the Country eligibility section below.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {targetRows.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No approved targets — each backend uses its built-in default deployment.
+              </p>
+            )}
+            {targetRows.map((row, index) => (
+              <div key={index} className="space-y-2 rounded-md border p-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1 w-40">
+                    <Label htmlFor={`target-backend-${index}`}>Backend</Label>
+                    <Select value={row.backend} onValueChange={(v) => updateTargetRow(index, { backend: v as BackendProvider })}>
+                      <SelectTrigger id={`target-backend-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="supabase">Supabase</SelectItem>
+                        <SelectItem value="icp">Internet Computer (ICP)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 w-44">
+                    <Label htmlFor={`target-kind-${index}`}>Target type</Label>
+                    <Select value={row.kind} onValueChange={(v) => updateTargetRow(index, { kind: v as BackendTargetKind })}>
+                      <SelectTrigger id={`target-kind-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {KINDS_FOR_BACKEND[row.backend].map(kind => (
+                          <SelectItem key={kind} value={kind}>{TARGET_KIND_LABELS[kind]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2 pb-1">
+                    <Switch
+                      id={`target-enabled-${index}`}
+                      checked={row.enabled}
+                      onCheckedChange={(checked) => updateTargetRow(index, { enabled: checked })}
+                    />
+                    <Label htmlFor={`target-enabled-${index}`}>Enabled</Label>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeTargetRow(index)} aria-label="Remove target">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1 flex-1 min-w-32">
+                    <Label htmlFor={`target-alias-${index}`}>Alias</Label>
+                    <Input
+                      id={`target-alias-${index}`}
+                      value={row.alias}
+                      onChange={(e) => updateTargetRow(index, { alias: e.target.value })}
+                      placeholder={row.backend === "supabase" ? "ap-southeast-2" : "cloud-engine-1"}
+                    />
+                  </div>
+                  <div className="space-y-1 w-28">
+                    <Label htmlFor={`target-version-${index}`}>Version</Label>
+                    <Input
+                      id={`target-version-${index}`}
+                      value={row.version}
+                      onChange={(e) => updateTargetRow(index, { version: e.target.value })}
+                      placeholder="v1"
+                    />
+                  </div>
+                  <div className="space-y-1 w-40">
+                    <Label htmlFor={`target-region-${index}`}>Region (optional)</Label>
+                    <Input
+                      id={`target-region-${index}`}
+                      value={row.region}
+                      onChange={(e) => updateTargetRow(index, { region: e.target.value })}
+                      placeholder="ap-southeast-2"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button variant="outline" onClick={addTargetRow}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add target
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base">Country eligibility</CardTitle>
             <CardDescription>
               Restrict which backend(s) each country may use. Countries not listed here
@@ -460,6 +649,28 @@ export default function PlacementAdminSettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1 w-56">
+                  <Label htmlFor={`pin-${index}`}>Pinned target</Label>
+                  <Select value={row.targetId} onValueChange={(v) => updateCountryRow(index, { targetId: v })}>
+                    <SelectTrigger id={`pin-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_TARGET_PIN}>No pin (first enabled target)</SelectItem>
+                      {targetRows
+                        .filter(t => t.alias.trim())
+                        .filter(t => row.eligibility === "both" || t.backend === row.eligibility)
+                        .map(t => {
+                          const id = `${t.backend}/${t.alias.trim()}/${t.version.trim() || "v1"}`;
+                          return (
+                            <SelectItem key={id} value={id}>
+                              {t.alias.trim()} · {t.version.trim() || "v1"} ({t.backend === "icp" ? "ICP" : "Supabase"})
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button variant="ghost" size="icon" onClick={() => removeCountryRow(index)} aria-label="Remove country rule">
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -495,6 +706,12 @@ export default function PlacementAdminSettingsPage() {
                   </Badge>
                   <Badge variant="secondary">
                     Effective backend: {getEffectiveBackend() === "icp" ? "Internet Computer (ICP)" : "Supabase"}
+                  </Badge>
+                  <Badge variant="secondary">
+                    Effective target: {(() => {
+                      const target = getEffectiveTarget();
+                      return target ? `${target.alias} · ${target.version}` : "backend default (no approved targets)";
+                    })()}
                   </Badge>
                 </>
               );
