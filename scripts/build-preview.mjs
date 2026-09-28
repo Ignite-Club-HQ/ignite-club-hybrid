@@ -10,6 +10,25 @@ import path from "node:path";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
 
+// The platform install step does not always run (or its node_modules are not
+// visible to the build step), so make sure the frontend's pinned dependencies
+// are present before building. Without this, npx silently fetches a wrong
+// vite version and the config bundle fails with ERR_MODULE_NOT_FOUND.
+const viteCli = path.join(frontendDir, "node_modules", "vite", "bin", "vite.js");
+if (!existsSync(viteCli)) {
+  console.log("frontend dependencies missing; running npm ci in frontend/...");
+  const install = spawnSync(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["ci", "--no-fund", "--no-audit"],
+    { cwd: frontendDir, stdio: "inherit" },
+  );
+  if (install.status !== 0) process.exit(install.status ?? 1);
+  if (!existsSync(viteCli)) {
+    console.error("frontend dependencies are still missing after npm ci; cannot build.");
+    process.exit(1);
+  }
+}
+
 // The platform build step does not always inject the Supabase connection
 // variables, so fall back to the project-root .env file (and the VITE_*
 // aliases) when they are absent from the environment.
@@ -50,8 +69,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 const result = spawnSync(
-  process.platform === "win32" ? "npx.cmd" : "npx",
-  ["vite", "build", "--config", "vite.live.config.ts", "--mode", "live"],
+  process.execPath,
+  [viteCli, "build", "--config", "vite.live.config.ts", "--mode", "live"],
   {
     cwd: frontendDir,
     env: {
