@@ -410,9 +410,13 @@ const App = () => {
 
   // Hold first paint until the placement settings are loaded so the auth
   // screen matches Admin → Infrastructure / Placement Settings from the
-  // start (loading UI is handled by the root suspense fallback).
+  // start, instead of flashing the Supabase form and then swapping.
   if (!placementReady) {
-    return null;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-pulse text-2xl font-bold text-gradient-emerald">Ignite</div>
+      </div>
+    );
   }
 
   const useIcpAuth = useIcpAuthScreen();
