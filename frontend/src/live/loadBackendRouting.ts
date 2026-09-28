@@ -66,3 +66,23 @@ export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
   const { country } = getCurrentCountry();
   return resolveTargetForCountry(getBackendRoutingConfig(), country, isIcpAvailable());
 }
+
+function tryGetActiveIcpTarget(): IcpTargetConfig | null {
+  try {
+    return getActiveIcpTarget();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which backend should serve one feature area right now. Per-feature variant
+ * of getEffectiveBackend(): ICP is only returned when the routing config
+ * resolves ICP for the user's country AND that feature's canister ID is
+ * configured on the active ICP target — so a feature whose canister is not
+ * deployed yet transparently keeps using Supabase.
+ */
+export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProvider {
+  const { country } = getCurrentCountry();
+  return resolveFeatureBackend(getBackendRoutingConfig(), country, tryGetActiveIcpTarget(), feature);
+}
