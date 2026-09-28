@@ -76,7 +76,7 @@ function validateRows(rows: CanisterRow[]): Record<string, string> {
 }
 
 export default function AdminIcpCanistersPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
