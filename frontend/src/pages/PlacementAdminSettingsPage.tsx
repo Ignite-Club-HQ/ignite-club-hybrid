@@ -649,6 +649,28 @@ export default function PlacementAdminSettingsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1 w-56">
+                  <Label htmlFor={`pin-${index}`}>Pinned target</Label>
+                  <Select value={row.targetId} onValueChange={(v) => updateCountryRow(index, { targetId: v })}>
+                    <SelectTrigger id={`pin-${index}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_TARGET_PIN}>No pin (first enabled target)</SelectItem>
+                      {targetRows
+                        .filter(t => t.alias.trim())
+                        .filter(t => row.eligibility === "both" || t.backend === row.eligibility)
+                        .map(t => {
+                          const id = `${t.backend}/${t.alias.trim()}/${t.version.trim() || "v1"}`;
+                          return (
+                            <SelectItem key={id} value={id}>
+                              {t.alias.trim()} · {t.version.trim() || "v1"} ({t.backend === "icp" ? "ICP" : "Supabase"})
+                            </SelectItem>
+                          );
+                        })}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button variant="ghost" size="icon" onClick={() => removeCountryRow(index)} aria-label="Remove country rule">
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -684,6 +706,12 @@ export default function PlacementAdminSettingsPage() {
                   </Badge>
                   <Badge variant="secondary">
                     Effective backend: {getEffectiveBackend() === "icp" ? "Internet Computer (ICP)" : "Supabase"}
+                  </Badge>
+                  <Badge variant="secondary">
+                    Effective target: {(() => {
+                      const target = getEffectiveTarget();
+                      return target ? `${target.alias} · ${target.version}` : "backend default (no approved targets)";
+                    })()}
                   </Badge>
                 </>
               );
