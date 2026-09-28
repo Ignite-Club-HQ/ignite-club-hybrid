@@ -26,6 +26,25 @@ function loadRootEnvFile() {
 }
 loadRootEnvFile();
 
+// The platform install step does not always run (or its node_modules end up
+// incomplete, e.g. vite present in name only). Install before starting, then
+// call the installed Vite binary directly so we never fall back to npx
+// downloading a mismatched version.
+const viteBin = path.join(frontendDir, "node_modules", "vite", "bin", "vite.js");
+if (!existsSync(viteBin)) {
+  console.log("frontend dependencies missing; running npm ci in frontend/...");
+  const install = spawnSync(
+    process.platform === "win32" ? "npm.cmd" : "npm",
+    ["ci", "--no-fund", "--no-audit"],
+    { cwd: frontendDir, stdio: "inherit" },
+  );
+  if (install.status !== 0) process.exit(install.status ?? 1);
+  if (!existsSync(viteBin)) {
+    console.error("frontend dependencies are still missing after npm ci; cannot start the preview.");
+    process.exit(1);
+  }
+}
+
 // Last-resort fallback: the connected project's public URL and anon key.
 // Both are browser-safe (the anon key ships in the client bundle anyway) and
 // are only used when neither the environment nor .env provides the values.
