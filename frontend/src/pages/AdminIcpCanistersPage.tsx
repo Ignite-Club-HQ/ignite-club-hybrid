@@ -84,6 +84,14 @@ export default function AdminIcpCanistersPage() {
 
   const [rows, setRows] = useState<CanisterRow[]>([]);
   const [touched, setTouched] = useState(false);
+  const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
+  const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
+  const [routingTouched, setRoutingTouched] = useState(false);
+
+  const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
+  useEffect(() => {
+    setProfileCountry(profileCountry);
+  }, [profileCountry]);
 
   const { data: savedOverrides, isLoading: isLoadingSettings } = useQuery({
     queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY],
