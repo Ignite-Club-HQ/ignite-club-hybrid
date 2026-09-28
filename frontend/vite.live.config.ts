@@ -51,8 +51,18 @@ export default defineConfig({
       name: "ignite-live-index-rewrite",
       configureServer(server) {
         server.middlewares.use((req, _res, next) => {
-          if (req.url === "/" || req.url === "/index.html") {
-            req.url = "/live-index.html";
+          const path = (req.url || "/").split("?")[0];
+          // SPA fallback: every page route (no file extension) must serve
+          // live-index.html, otherwise deep links like /auth 404. Vite
+          // internals (/@vite/client, /@id/...), source modules and other
+          // assets must pass through untouched.
+          const isInternal =
+            path.startsWith("/@") ||
+            path.startsWith("/src/") ||
+            path.startsWith("/node_modules/");
+          if (!isInternal && !path.includes(".")) {
+            const query = req.url!.includes("?") ? req.url!.slice(req.url!.indexOf("?")) : "";
+            req.url = "/live-index.html" + query;
           }
           next();
         });
