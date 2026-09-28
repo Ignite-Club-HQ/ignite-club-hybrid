@@ -591,7 +591,7 @@ fn all_job_entries() -> Vec<Job> {
 }
 
 fn job_ids() -> Vec<String> {
-    JOBS.with(|jobs| jobs.borrow().iter().map(|entry| entry.key()).collect())
+    JOBS.with(|jobs| jobs.borrow().iter().map(|entry| entry.key().clone()).collect())
 }
 
 fn jobs_is_empty() -> bool {
