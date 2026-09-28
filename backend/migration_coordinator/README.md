@@ -42,3 +42,37 @@ Key properties: the coordinator is the only principal the domain canisters
 accept bulk export/import from; phase transitions are computed, not asserted
 by callers; and the Rust control plane remains the sole writer of routing
 changes, preserving the trust boundary above.
+
+## Implemented orchestration (current state)
+
+The first two steps of the target design are now live:
+
+- `orchestrateExport(id)` — the coordinator calls `export_state()` on the
+  source and destination domain canisters itself (inter-canister call, using
+  structurally-typed actor interfaces declared locally). Domain canisters
+  answer `export_state` only for their governor or a principal on their
+  `bulkAccessPrincipals` allowlist — register the coordinator there via the
+  governor-only `addBulkAccessPrincipal` / `removeBulkAccessPrincipal` /
+  `listBulkAccessPrincipals` methods on events_domain, competition_domain,
+  media_metadata, and messaging_domain. On success the migration advances to
+  `exported` with the computed evidence; a failed call traps and leaves the
+  phase unchanged.
+- `orchestrateVerify(id)` — the coordinator re-reads both canisters and
+  compares record counts and checksums. Matching evidence advances the
+  migration to `verified`; a mismatch aborts it.
+
+Checksum tradeoff: because each domain canister's `export_state` returns a
+different record shape, the checksum is a hand-rolled FNV-1a hash over a
+deterministic text built from the schema version, governor, and per-collection
+sizes. It covers shape and counts, not full byte content — sufficient to catch
+divergent exports, not a cryptographic content proof.
+
+Known gaps, still operator-driven or missing:
+
+- Domain canisters do not yet expose `import_state` or `reconcile`, so the
+  actual data copy (step 2) and on-chain reconcile (step 3) remain external;
+  `markExported` / `markImported` / `verify` / `commit` stay available for
+  that operator-driven path.
+- club_domain has no `export_state` at all and cannot be orchestrated yet.
+- identity_access (Rust) has `export_state` only and is not yet wired into
+  orchestration.
