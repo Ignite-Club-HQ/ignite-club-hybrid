@@ -7769,6 +7769,7 @@ export type Database = {
           ai_catch_up_enabled: boolean
           avatar_url: string | null
           club_switcher_hint_seen_at: string | null
+          country: string | null
           created_at: string
           display_name: string | null
           email_hash: string | null
@@ -7794,6 +7795,7 @@ export type Database = {
           ai_catch_up_enabled?: boolean
           avatar_url?: string | null
           club_switcher_hint_seen_at?: string | null
+          country?: string | null
           created_at?: string
           display_name?: string | null
           email_hash?: string | null
@@ -7819,6 +7821,7 @@ export type Database = {
           ai_catch_up_enabled?: boolean
           avatar_url?: string | null
           club_switcher_hint_seen_at?: string | null
+          country?: string | null
           created_at?: string
           display_name?: string | null
           email_hash?: string | null
