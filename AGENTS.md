@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- ICP integration lives in `src/lib/icp/` (config, agent, actor factory) with generated dfx declarations going in `src/lib/icp/declarations/`; canister IDs come from `VITE_ICP_CANISTER_IDS` env so no code changes are needed when canisters are deployed.
