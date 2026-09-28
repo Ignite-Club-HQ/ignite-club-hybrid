@@ -8,38 +8,8 @@ import Nat32 "mo:core/Nat32";
 import Nat "mo:core/Nat";
 import Types "types";
 
-// Local, loosely-typed interfaces for domain canisters' export_state. Array
-// element types are declared as `Any` because the coordinator only reads
-// collection sizes (never element contents) to compute recordCount/checksum.
-// This is Candid-subtyping compatible: `Any` maps to Candid's reserved/top
-// type, so a domain's real vec<Record> response decodes fine as vec<Any>.
-type EventsExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; events : [Any]; rsvps : [Any]; attendance : [Any]; lineups : [Any]; duties : [Any]; roster : [Any]; recurrences : [Any] };
-  #Err : Text;
-};
-type EventsDomainActor = actor { export_state : shared query () -> async EventsExport };
-
-type CompetitionExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; competitions : [Any]; entries : [Any]; tokens : [Any]; seasons : [Any]; matches : [Any] };
-  #Err : Text;
-};
-type CompetitionDomainActor = actor { export_state : shared query () -> async CompetitionExport };
-
-type MediaExport = {
-  #Ok : { schema : Nat32; governor : Principal; assets : [Any]; capabilities : [Any]; reactions : [Any]; comments : [Any]; roles : [Any] };
-  #Err : Text;
-};
-type MediaMetadataActor = actor { export_state : shared query () -> async MediaExport };
-
-type MessagingExport = {
-  #Ok : { schema : Nat32; governor : Principal; roles : [Any]; conversations : [Any]; messages : [Any]; receipts : [Any]; unread : [Any] };
-  #Err : Text;
-};
-type MessagingDomainActor = actor { export_state : shared query () -> async MessagingExport };
-
-// Uniform view of any domain's export evidence, extracted from whichever
-// export shape matched the migration's recorded domain.
-type Evidence = { schema : Nat32; governor : Principal; sizes : [(Text, Nat)] };
+// Loosely-typed domain export interfaces live in Types (types.mo) so the
+// actor remains the only non-imported declaration in this program.
 
 persistent actor {
   var governor : ?Principal;
