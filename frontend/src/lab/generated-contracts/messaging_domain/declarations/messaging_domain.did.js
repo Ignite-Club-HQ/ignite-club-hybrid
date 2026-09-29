@@ -20,11 +20,18 @@ export const idlFactory = ({ IDL }) => {
     'next_sequence' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
+  const Attachment = IDL.Record({
+    'url' : IDL.Opt(IDL.Text),
+    'kind' : IDL.Text,
+    'ref_id' : IDL.Text,
+  });
   const Message = IDL.Record({
     'id' : IDL.Text,
     'conversation_id' : IDL.Text,
     'body' : IDL.Text,
     'sender' : IDL.Principal,
+    'edited_at_ms' : IDL.Opt(IDL.Nat64),
+    'attachment' : IDL.Opt(Attachment),
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
   });
@@ -123,7 +130,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'send_message' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment)],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),

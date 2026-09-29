@@ -53,6 +53,7 @@ function record_opt_to_undefined<T>(arg: T | null): T | undefined {
 }
 export interface VaultFolder {
     id: string;
+    mini_league_id?: string;
     club: string;
     name: string;
     team?: string;
@@ -60,10 +61,12 @@ export interface VaultFolder {
     created_by: Principal;
     created_at_ms: bigint;
     parent_id?: string;
+    deleted_by?: Principal;
     deleted_at_ms?: bigint;
 }
 export interface VaultFile {
     id: string;
+    mini_league_id?: string;
     club: string;
     mime: string;
     name: string;
@@ -72,6 +75,7 @@ export interface VaultFile {
     file_url: string;
     created_at_ms: bigint;
     blob_ref?: BlobRef;
+    deleted_by?: Principal;
     folder_id: string;
     is_external_link: boolean;
     deleted_at_ms?: bigint;
@@ -83,7 +87,7 @@ export interface BlobRef {
     canister: string;
 }
 export interface vault_domainInterface {
-    create_folder(id: string, club: string, team: string | null, parent_id: string | null, name: string, restricted_roles: Array<string>): Promise<{
+    create_folder(id: string, club: string, team: string | null, parent_id: string | null, name: string, restricted_roles: Array<string>, mini_league_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFolder;
     } | {
@@ -118,7 +122,7 @@ export interface vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    list_club_files(club: string, team: string | null): Promise<{
+    list_club_files(club: string, team: string | null, mini_league_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: Array<VaultFile>;
     } | {
@@ -132,7 +136,7 @@ export interface vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    list_folders(club: string, team: string | null): Promise<{
+    list_folders(club: string, team: string | null, mini_league_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: Array<VaultFolder>;
     } | {
@@ -153,7 +157,7 @@ export interface vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    register_file(id: string, folder_id: string, club: string, team: string | null, name: string, file_url: string, size: bigint, mime: string, is_external_link: boolean, blob_ref: BlobRef | null): Promise<{
+    register_file(id: string, folder_id: string, club: string, team: string | null, name: string, file_url: string, size: bigint, mime: string, is_external_link: boolean, blob_ref: BlobRef | null, mini_league_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
     } | {
@@ -192,14 +196,14 @@ export interface vault_domainInterface {
 import type { BlobRef as _BlobRef, VaultFile as _VaultFile, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
-    async create_folder(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string, arg5: Array<string>): Promise<{
+    async create_folder(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string, arg5: Array<string>, arg6: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFolder;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.create_folder(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3), arg4, arg5);
+        const result = await this.actor.create_folder(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3), arg4, arg5, to_candid_opt_n1(arg6));
         return from_candid_variant_n2(result);
     }
     async delete_file_permanent(arg0: string): Promise<{
@@ -210,7 +214,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_file_permanent(arg0);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async delete_folder(arg0: string): Promise<{
         __kind__: "Ok";
@@ -230,7 +234,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3));
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async initialize(): Promise<{
         __kind__: "Ok";
@@ -240,17 +244,17 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.initialize();
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
-    async list_club_files(arg0: string, arg1: string | null): Promise<{
+    async list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
         Ok: Array<VaultFile>;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_club_files(arg0, to_candid_opt_n1(arg1));
-        return from_candid_variant_n8(result);
+        const result = await this.actor.list_club_files(arg0, to_candid_opt_n1(arg1), to_candid_opt_n1(arg2));
+        return from_candid_variant_n9(result);
     }
     async list_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -260,17 +264,17 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_files(arg0);
-        return from_candid_variant_n8(result);
+        return from_candid_variant_n9(result);
     }
-    async list_folders(arg0: string, arg1: string | null): Promise<{
+    async list_folders(arg0: string, arg1: string | null, arg2: string | null): Promise<{
         __kind__: "Ok";
         Ok: Array<VaultFolder>;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_folders(arg0, to_candid_opt_n1(arg1));
-        return from_candid_variant_n13(result);
+        const result = await this.actor.list_folders(arg0, to_candid_opt_n1(arg1), to_candid_opt_n1(arg2));
+        return from_candid_variant_n14(result);
     }
     async list_trashed_files(arg0: string): Promise<{
         __kind__: "Ok";
@@ -280,7 +284,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_trashed_files(arg0);
-        return from_candid_variant_n8(result);
+        return from_candid_variant_n9(result);
     }
     async move_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -290,17 +294,17 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.move_file(arg0, arg1);
-        return from_candid_variant_n15(result);
+        return from_candid_variant_n16(result);
     }
-    async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null): Promise<{
+    async register_file(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string, arg6: bigint, arg7: string, arg8: boolean, arg9: BlobRef | null, arg10: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n1(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n16(arg9));
-        return from_candid_variant_n15(result);
+        const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n1(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n17(arg9), to_candid_opt_n1(arg10));
+        return from_candid_variant_n16(result);
     }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -310,7 +314,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.rename_file(arg0, arg1);
-        return from_candid_variant_n15(result);
+        return from_candid_variant_n16(result);
     }
     async restore_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -320,7 +324,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.restore_file(arg0);
-        return from_candid_variant_n15(result);
+        return from_candid_variant_n16(result);
     }
     async trash_file(arg0: string): Promise<{
         __kind__: "Ok";
@@ -330,7 +334,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trash_file(arg0);
-        return from_candid_variant_n15(result);
+        return from_candid_variant_n16(result);
     }
     async update_folder(arg0: string, arg1: string, arg2: Array<string>): Promise<{
         __kind__: "Ok";
@@ -343,23 +347,27 @@ export class Vault_domain implements vault_domainInterface {
         return from_candid_variant_n2(result);
     }
 }
-function from_candid_VaultFile_n10(value: _VaultFile): VaultFile {
-    return from_candid_record_n11(value);
+function from_candid_VaultFile_n11(value: _VaultFile): VaultFile {
+    return from_candid_record_n12(value);
 }
 function from_candid_VaultFolder_n3(value: _VaultFolder): VaultFolder {
     return from_candid_record_n4(value);
 }
-function from_candid_opt_n12(value: [] | [_BlobRef]): BlobRef | null {
+function from_candid_opt_n13(value: [] | [_BlobRef]): BlobRef | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n5(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n6(value: [] | [bigint]): bigint | null {
+function from_candid_opt_n6(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n11(value: {
+function from_candid_opt_n7(value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n12(value: {
     id: string;
+    mini_league_id: [] | [string];
     club: string;
     mime: string;
     name: string;
@@ -368,12 +376,14 @@ function from_candid_record_n11(value: {
     file_url: string;
     created_at_ms: bigint;
     blob_ref: [] | [_BlobRef];
+    deleted_by: [] | [Principal];
     folder_id: string;
     is_external_link: boolean;
     deleted_at_ms: [] | [bigint];
     uploaded_by: Principal;
 }): {
     id: string;
+    mini_league_id?: string;
     club: string;
     mime: string;
     name: string;
@@ -382,6 +392,7 @@ function from_candid_record_n11(value: {
     file_url: string;
     created_at_ms: bigint;
     blob_ref?: BlobRef;
+    deleted_by?: Principal;
     folder_id: string;
     is_external_link: boolean;
     deleted_at_ms?: bigint;
@@ -389,6 +400,7 @@ function from_candid_record_n11(value: {
 } {
     return {
         id: value.id,
+        mini_league_id: record_opt_to_undefined(from_candid_opt_n5(value.mini_league_id)),
         club: value.club,
         mime: value.mime,
         name: value.name,
@@ -396,15 +408,17 @@ function from_candid_record_n11(value: {
         team: record_opt_to_undefined(from_candid_opt_n5(value.team)),
         file_url: value.file_url,
         created_at_ms: value.created_at_ms,
-        blob_ref: record_opt_to_undefined(from_candid_opt_n12(value.blob_ref)),
+        blob_ref: record_opt_to_undefined(from_candid_opt_n13(value.blob_ref)),
+        deleted_by: record_opt_to_undefined(from_candid_opt_n6(value.deleted_by)),
         folder_id: value.folder_id,
         is_external_link: value.is_external_link,
-        deleted_at_ms: record_opt_to_undefined(from_candid_opt_n6(value.deleted_at_ms)),
+        deleted_at_ms: record_opt_to_undefined(from_candid_opt_n7(value.deleted_at_ms)),
         uploaded_by: value.uploaded_by
     };
 }
 function from_candid_record_n4(value: {
     id: string;
+    mini_league_id: [] | [string];
     club: string;
     name: string;
     team: [] | [string];
@@ -412,9 +426,11 @@ function from_candid_record_n4(value: {
     created_by: Principal;
     created_at_ms: bigint;
     parent_id: [] | [string];
+    deleted_by: [] | [Principal];
     deleted_at_ms: [] | [bigint];
 }): {
     id: string;
+    mini_league_id?: string;
     club: string;
     name: string;
     team?: string;
@@ -422,10 +438,12 @@ function from_candid_record_n4(value: {
     created_by: Principal;
     created_at_ms: bigint;
     parent_id?: string;
+    deleted_by?: Principal;
     deleted_at_ms?: bigint;
 } {
     return {
         id: value.id,
+        mini_league_id: record_opt_to_undefined(from_candid_opt_n5(value.mini_league_id)),
         club: value.club,
         name: value.name,
         team: record_opt_to_undefined(from_candid_opt_n5(value.team)),
@@ -433,10 +451,11 @@ function from_candid_record_n4(value: {
         created_by: value.created_by,
         created_at_ms: value.created_at_ms,
         parent_id: record_opt_to_undefined(from_candid_opt_n5(value.parent_id)),
-        deleted_at_ms: record_opt_to_undefined(from_candid_opt_n6(value.deleted_at_ms))
+        deleted_by: record_opt_to_undefined(from_candid_opt_n6(value.deleted_by)),
+        deleted_at_ms: record_opt_to_undefined(from_candid_opt_n7(value.deleted_at_ms))
     };
 }
-function from_candid_variant_n13(value: {
+function from_candid_variant_n14(value: {
     Ok: Array<_VaultFolder>;
 } | {
     Err: string;
@@ -449,13 +468,13 @@ function from_candid_variant_n13(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n14(value.Ok)
+        Ok: from_candid_vec_n15(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n15(value: {
+function from_candid_variant_n16(value: {
     Ok: _VaultFile;
 } | {
     Err: string;
@@ -468,7 +487,7 @@ function from_candid_variant_n15(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_VaultFile_n10(value.Ok)
+        Ok: from_candid_VaultFile_n11(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -493,7 +512,7 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n7(value: {
+function from_candid_variant_n8(value: {
     Ok: null;
 } | {
     Err: string;
@@ -512,7 +531,7 @@ function from_candid_variant_n7(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n8(value: {
+function from_candid_variant_n9(value: {
     Ok: Array<_VaultFile>;
 } | {
     Err: string;
@@ -525,22 +544,22 @@ function from_candid_variant_n8(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n9(value.Ok)
+        Ok: from_candid_vec_n10(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n14(value: Array<_VaultFolder>): Array<VaultFolder> {
-    return value.map((x)=>from_candid_VaultFolder_n3(x));
+function from_candid_vec_n10(value: Array<_VaultFile>): Array<VaultFile> {
+    return value.map((x)=>from_candid_VaultFile_n11(x));
 }
-function from_candid_vec_n9(value: Array<_VaultFile>): Array<VaultFile> {
-    return value.map((x)=>from_candid_VaultFile_n10(x));
+function from_candid_vec_n15(value: Array<_VaultFolder>): Array<VaultFolder> {
+    return value.map((x)=>from_candid_VaultFolder_n3(x));
 }
 function to_candid_opt_n1(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n16(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n17(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

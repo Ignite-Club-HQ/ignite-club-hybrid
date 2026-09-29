@@ -15,6 +15,16 @@ export const idlFactory = ({ IDL }) => {
     'version' : IDL.Nat64,
     'principals' : IDL.Vec(IDL.Principal),
   });
+  const ParentInvite = IDL.Record({
+    'id' : IDL.Text,
+    'accepted_by' : IDL.Opt(IDL.Principal),
+    'team_id' : IDL.Opt(IDL.Text),
+    'child_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'invited_by' : IDL.Principal,
+    'club_id' : IDL.Text,
+    'expires_at_ms' : IDL.Nat64,
+  });
   const Challenge = IDL.Record({
     'id' : IDL.Nat64,
     'account_id' : IDL.Text,
@@ -23,6 +33,17 @@ export const idlFactory = ({ IDL }) => {
     'accepted' : IDL.Bool,
     'expires_at_ns' : IDL.Nat64,
     'expected_version' : IDL.Nat64,
+  });
+  const NewsPost = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'title' : IDL.Text,
+    'body' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'revision' : IDL.Nat64,
+    'club_id' : IDL.Text,
   });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
@@ -119,9 +140,12 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'tier' : IDL.Text,
     'sort_order' : IDL.Nat32,
+    'description' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
+    'is_team_only' : IDL.Bool,
     'is_active' : IDL.Bool,
     'club_id' : IDL.Text,
+    'exposure_percentage' : IDL.Opt(IDL.Nat8),
   });
   const ClubTeam = IDL.Record({
     'id' : IDL.Text,
@@ -158,9 +182,34 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
         [],
       ),
+    'accept_parent_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
     'begin_identity_link' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : Challenge, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_news_post' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_parent_invite' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_news_post' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_sponsor' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'export_acl' : IDL.Func(
@@ -203,6 +252,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_parent_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_sponsor' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSponsor), 'Err' : IDL.Text })],
@@ -241,6 +295,16 @@ export const idlFactory = ({ IDL }) => {
     'list_links' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_news' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_news_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_role_grants' : IDL.Func(
@@ -296,6 +360,11 @@ export const idlFactory = ({ IDL }) => {
     'unfreeze_club' : IDL.Func(
         [IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_news_post' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),
     'whoami' : IDL.Func(

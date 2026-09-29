@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Attachment {
+  'url' : [] | [string],
+  'kind' : string,
+  'ref_id' : string,
+}
 export interface BroadcastResult {
   'skipped' : Array<string>,
   'delivered' : number,
@@ -26,6 +31,8 @@ export interface Message {
   'conversation_id' : string,
   'body' : string,
   'sender' : Principal,
+  'edited_at_ms' : [] | [bigint],
+  'attachment' : [] | [Attachment],
   'sequence' : bigint,
   'idempotency_key' : string,
 }
@@ -111,7 +118,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'send_message' : ActorMethod<
-    [string, string, string],
+    [string, string, string, [] | [Attachment]],
     { 'Ok' : Message } |
       { 'Err' : string }
   >,

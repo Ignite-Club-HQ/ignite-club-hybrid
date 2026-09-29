@@ -17,6 +17,7 @@ export interface BlobRef {
 }
 export interface VaultFile {
   'id' : string,
+  'mini_league_id' : [] | [string],
   'club' : string,
   'mime' : string,
   'name' : string,
@@ -25,6 +26,7 @@ export interface VaultFile {
   'file_url' : string,
   'created_at_ms' : bigint,
   'blob_ref' : [] | [BlobRef],
+  'deleted_by' : [] | [Principal],
   'folder_id' : string,
   'is_external_link' : boolean,
   'deleted_at_ms' : [] | [bigint],
@@ -32,6 +34,7 @@ export interface VaultFile {
 }
 export interface VaultFolder {
   'id' : string,
+  'mini_league_id' : [] | [string],
   'club' : string,
   'name' : string,
   'team' : [] | [string],
@@ -39,11 +42,20 @@ export interface VaultFolder {
   'created_by' : Principal,
   'created_at_ms' : bigint,
   'parent_id' : [] | [string],
+  'deleted_by' : [] | [Principal],
   'deleted_at_ms' : [] | [bigint],
 }
 export interface _SERVICE {
   'create_folder' : ActorMethod<
-    [string, string, [] | [string], [] | [string], string, Array<string>],
+    [
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      string,
+      Array<string>,
+      [] | [string],
+    ],
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
@@ -64,7 +76,7 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'list_club_files' : ActorMethod<
-    [string, [] | [string]],
+    [string, [] | [string], [] | [string]],
     { 'Ok' : Array<VaultFile> } |
       { 'Err' : string }
   >,
@@ -74,7 +86,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'list_folders' : ActorMethod<
-    [string, [] | [string]],
+    [string, [] | [string], [] | [string]],
     { 'Ok' : Array<VaultFolder> } |
       { 'Err' : string }
   >,
@@ -100,6 +112,7 @@ export interface _SERVICE {
       string,
       boolean,
       [] | [BlobRef],
+      [] | [string],
     ],
     { 'Ok' : VaultFile } |
       { 'Err' : string }
