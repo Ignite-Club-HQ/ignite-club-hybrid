@@ -28,6 +28,8 @@ import {
   Loader2
 } from "lucide-react";
 import { compressImage } from "@/lib/imageCompression";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
 
 interface Sponsor {
   id: string;
@@ -136,22 +138,43 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       tier: SponsorTier | null;
       exposure_percentage: number | null;
     }) => {
-      const { error } = await supabase
-        .from("sponsors")
-        .insert({
-          club_id: clubId,
-          name: sponsorData.name,
-          description: sponsorData.description,
-          website_url: sponsorData.website_url,
-          logo_url: sponsorData.logo_url,
-          is_team_only: sponsorData.is_team_only,
-          is_active: sponsorData.is_active,
-          tier: sponsorData.tier,
-          exposure_percentage: sponsorData.exposure_percentage,
-          display_order: (sponsors?.length || 0) + 1,
-        });
-      
-      if (error) throw error;
+      // Routes to club_domain's save_sponsor when placement settings resolve
+      // ICP for membership. description, is_team_only and
+      // exposure_percentage stay Supabase: no canister shape.
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("sponsors")
+            .insert({
+              club_id: clubId,
+              name: sponsorData.name,
+              description: sponsorData.description,
+              website_url: sponsorData.website_url,
+              logo_url: sponsorData.logo_url,
+              is_team_only: sponsorData.is_team_only,
+              is_active: sponsorData.is_active,
+              tier: sponsorData.tier,
+              exposure_percentage: sponsorData.exposure_percentage,
+              display_order: (sponsors?.length || 0) + 1,
+            });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existing = await listLiveSponsors(ctx, clubId);
+          const sponsor: LiveClubSponsor = {
+            // provisional mapping — verify against deployed canister
+            id: crypto.randomUUID(),
+            club_id: clubId,
+            name: sponsorData.name,
+            website_url: sponsorData.website_url ? [sponsorData.website_url] : [],
+            logo_url: sponsorData.logo_url ? [sponsorData.logo_url] : [],
+            is_active: sponsorData.is_active,
+            tier: sponsorData.tier ?? "none",
+            sort_order: existing.length,
+          };
+          await saveLiveSponsor(ctx, sponsor);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
@@ -175,21 +198,53 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       tier: SponsorTier | null;
       exposure_percentage: number | null;
     }) => {
-      const { error } = await supabase
-        .from("sponsors")
-        .update({
-          name: data.name,
-          description: data.description,
-          website_url: data.website_url,
-          logo_url: data.logo_url,
-          is_active: data.is_active,
-          is_team_only: data.is_team_only,
-          tier: data.tier,
-          exposure_percentage: data.exposure_percentage,
-        })
-        .eq("id", id);
-      
-      if (error) throw error;
+      // Routes to club_domain's save_sponsor when placement settings resolve
+      // ICP for membership; fetch-modify-save preserves sort_order.
+      // description, is_team_only and exposure_percentage stay Supabase: no
+      // canister shape.
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("sponsors")
+            .update({
+              name: data.name,
+              description: data.description,
+              website_url: data.website_url,
+              logo_url: data.logo_url,
+              is_active: data.is_active,
+              is_team_only: data.is_team_only,
+              tier: data.tier,
+              exposure_percentage: data.exposure_percentage,
+            })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existing = await listLiveSponsors(ctx, clubId);
+          const current = existing.find((s) => s.id === id);
+          const sponsor: LiveClubSponsor = current
+            ? {
+                ...current,
+                name: data.name,
+                website_url: data.website_url ? [data.website_url] : [],
+                logo_url: data.logo_url ? [data.logo_url] : [],
+                is_active: data.is_active,
+                tier: data.tier ?? "none",
+              }
+            : {
+                // provisional mapping — verify against deployed canister
+                id,
+                club_id: clubId,
+                name: data.name,
+                website_url: data.website_url ? [data.website_url] : [],
+                logo_url: data.logo_url ? [data.logo_url] : [],
+                is_active: data.is_active,
+                tier: data.tier ?? "none",
+                sort_order: existing.length,
+              };
+          await saveLiveSponsor(ctx, sponsor);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
@@ -201,6 +256,8 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     },
   });
 
+  // Hard delete stays Supabase: no canister shape (club_domain sponsors are
+  // deactivated via is_active, not removed).
   const deleteSponsorMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
