@@ -27,6 +27,10 @@ type Result_6 = variant { Ok : Match; Err : text };
 type Result_7 = variant { Ok : Season; Err : text };
 type Result_8 = variant { Ok; Err : text };
 type Result_9 = variant { Ok : vec principal; Err : text };
+type Result_10 = variant { Ok : vec Competition; Err : text };
+type Result_11 = variant { Ok : vec TeamEntry; Err : text };
+type Result_12 = variant { Ok : vec Season; Err : text };
+type Result_13 = variant { Ok : vec Match; Err : text };
 type RoleGrant = record {
   user : principal;
   role : text;
@@ -64,4 +68,8 @@ service : {
   record_match : (text, text, text) -> (Result_6);
   set_match_result : (text, nat16, nat16, nat64) -> (Result_6);
   set_season_status : (text, text, nat64) -> (Result_7);
+  list_competitions : (text) -> (Result_10) query;
+  list_entries : (text) -> (Result_11) query;
+  list_seasons : (text) -> (Result_12) query;
+  list_matches : (text) -> (Result_13) query;
 };

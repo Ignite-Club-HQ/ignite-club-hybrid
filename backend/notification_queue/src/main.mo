@@ -1,7 +1,9 @@
 import Array "mo:core/Array";
 import Nat16 "mo:core/Nat16";
+import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
 import Types "types";
 
 persistent actor {
@@ -142,11 +144,91 @@ persistent actor {
           status = #Pending;
           attempts = 0;
           next_attempt_ms = 0;
+          read = false;
+          related_id = null;
+          created_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000);
         };
         items := items.concat([notification]);
         #Ok(notification)
       };
     }
+  };
+
+  // ---- Browser inbox surface ----
+  // NOTE: the `user` field carries the app's account id (a Text), not the
+  // caller's II principal, so the canister cannot verify inbox ownership.
+  // Provisional until account ids are bound to principals (identity_access).
+
+  public query ({ caller }) func list_inbox(user : Text, club : ?Text, limit : Nat16) : async Types.Results {
+    authenticated(caller);
+    if (limit == 0 or limit > 500) { return #Err("Invalid page size") };
+    var res : [Types.Notification] = [];
+    for (item in items.values()) {
+      let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
+      if (res.size() < Nat16.toNat(limit) and item.user == user and clubOk) {
+        res := res.concat([item]);
+      };
+    };
+    #Ok(res)
+  };
+
+  public shared ({ caller }) func mark_read(id : Text) : async Types.Result {
+    authenticated(caller);
+    switch (findIndex(id)) {
+      case null { #Err("Unknown notification") };
+      case (?index) {
+        let updated : Types.Notification = { items[index] with read = true };
+        replace(index, updated);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func mark_all_read(user : Text, club : ?Text) : async Types.ResultNat16 {
+    authenticated(caller);
+    var marked : Nat16 = 0;
+    var index = 0;
+    for (item in items.values()) {
+      let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
+      if (item.user == user and clubOk and not item.read) {
+        replace(index, { item with read = true });
+        marked += 1;
+      };
+      index += 1;
+    };
+    #Ok(marked)
+  };
+
+  public shared ({ caller }) func delete_notification(id : Text) : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    switch (findIndex(id)) {
+      case null { #Err("Unknown notification") };
+      case (?index) {
+        items := Array.tabulate<Types.Notification>(items.size() - 1, func(position) {
+          if (position < index) { items[position] } else { items[position + 1] }
+        });
+        clearLease(id);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func clear_inbox(user : Text, club : ?Text) : async Types.ResultNat16 {
+    authenticated(caller);
+    var kept : [Types.Notification] = [];
+    var removed : Nat16 = 0;
+    for (item in items.values()) {
+      let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
+      if (item.user == user and clubOk) {
+        if (removed == 65535) { return #Err("Inbox too large to clear in one call") };
+        clearLease(item.id);
+        removed += 1;
+      } else {
+        kept := kept.concat([item]);
+      };
+    };
+    items := kept;
+    #Ok(removed)
   };
 
   public shared ({ caller }) func claim(now_ms : Nat64, limit : Nat16) : async Types.Results {

@@ -10,27 +10,27 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface BlobRef {
-  'canister' : string,
-  'path' : string,
-  'content_hash' : string,
-}
 export interface Asset {
   'id' : string,
   'storage_path' : string,
-  'blob_ref' : [] | [BlobRef],
   'retention_until_ms' : bigint,
   'deleted' : boolean,
   'owner' : Principal,
   'kind' : string,
   'mime' : string,
   'encrypted' : boolean,
+  'blob_ref' : [] | [BlobRef],
   'content_length' : bigint,
   'checksum' : string,
   'child_sensitive' : boolean,
   'visibility' : string,
   'club_id' : string,
   'expires_at_ms' : bigint,
+}
+export interface BlobRef {
+  'path' : string,
+  'content_hash' : string,
+  'canister' : string,
 }
 export interface Capability {
   'action' : string,
@@ -69,6 +69,10 @@ export type Result_5 = { 'Ok' : Reaction } |
   { 'Err' : string };
 export type Result_6 = { 'Ok' : Comment } |
   { 'Err' : string };
+export type Result_7 = { 'Ok' : null } |
+  { 'Err' : string };
+export type Result_8 = { 'Ok' : Array<Principal> } |
+  { 'Err' : string };
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
@@ -85,6 +89,7 @@ export interface State {
   'roles' : Array<RoleGrant>,
 }
 export interface _SERVICE {
+  'addBulkAccessPrincipal' : ActorMethod<[Principal], Result_7>,
   'add_comment' : ActorMethod<[string, string, bigint], Result_6>,
   'add_reaction' : ActorMethod<[string, string, bigint], Result_5>,
   'delete_asset' : ActorMethod<[string], Result_3>,
@@ -97,6 +102,7 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'issue_capability' : ActorMethod<[string, string, string, bigint], Result_1>,
+  'listBulkAccessPrincipals' : ActorMethod<[], Result_8>,
   'list_assets' : ActorMethod<[string], Array<Asset>>,
   'list_comments' : ActorMethod<[string], Array<Comment>>,
   'list_reactions' : ActorMethod<[string], Array<Reaction>>,
@@ -104,6 +110,7 @@ export interface _SERVICE {
     [string, string, string, string, string, string, bigint],
     Result
   >,
+  'removeBulkAccessPrincipal' : ActorMethod<[Principal], Result_7>,
   'remove_reaction' : ActorMethod<[string], Result_4>,
   'set_blob_ref' : ActorMethod<[string, [] | [BlobRef]], Result>,
 }

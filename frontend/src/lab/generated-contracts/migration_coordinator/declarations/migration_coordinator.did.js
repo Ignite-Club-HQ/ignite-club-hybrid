@@ -39,6 +39,8 @@ export const idlFactory = ({ IDL }) => {
     'initialize' : IDL.Func([], [], []),
     'markExported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'markImported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
+    'orchestrateExport' : IDL.Func([IDL.Nat], [Migration], []),
+    'orchestrateVerify' : IDL.Func([IDL.Nat], [Migration], []),
     'status' : IDL.Func(
         [],
         [IDL.Opt(Migration), IDL.Vec(Migration)],

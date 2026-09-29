@@ -41,6 +41,14 @@ export type Result = { 'Ok' : Competition } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : JoinToken } |
   { 'Err' : string };
+export type Result_10 = { 'Ok' : Array<Competition> } |
+  { 'Err' : string };
+export type Result_11 = { 'Ok' : Array<TeamEntry> } |
+  { 'Err' : string };
+export type Result_12 = { 'Ok' : Array<Season> } |
+  { 'Err' : string };
+export type Result_13 = { 'Ok' : Array<Match> } |
+  { 'Err' : string };
 export type Result_2 = { 'Ok' : State } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : TeamEntry } |
@@ -52,6 +60,10 @@ export type Result_5 = { 'Ok' : string } |
 export type Result_6 = { 'Ok' : Match } |
   { 'Err' : string };
 export type Result_7 = { 'Ok' : Season } |
+  { 'Err' : string };
+export type Result_8 = { 'Ok' : null } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : Array<Principal> } |
   { 'Err' : string };
 export interface RoleGrant {
   'role' : string,
@@ -82,6 +94,7 @@ export interface TeamEntry {
   'club_id' : string,
 }
 export interface _SERVICE {
+  'addBulkAccessPrincipal' : ActorMethod<[Principal], Result_8>,
   'claim_join_token' : ActorMethod<[string], Result_5>,
   'create_competition' : ActorMethod<[string, string, string], Result>,
   'create_season' : ActorMethod<[string, string], Result_7>,
@@ -92,8 +105,14 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], Result_4>,
   'issue_join_token' : ActorMethod<[string, string, bigint], Result_1>,
+  'listBulkAccessPrincipals' : ActorMethod<[], Result_9>,
+  'list_competitions' : ActorMethod<[string], Result_10>,
+  'list_entries' : ActorMethod<[string], Result_11>,
+  'list_matches' : ActorMethod<[string], Result_13>,
+  'list_seasons' : ActorMethod<[string], Result_12>,
   'record_match' : ActorMethod<[string, string, string], Result_6>,
   'register_team' : ActorMethod<[string, string, string], Result_3>,
+  'removeBulkAccessPrincipal' : ActorMethod<[Principal], Result_8>,
   'set_match_result' : ActorMethod<[string, number, number, bigint], Result_6>,
   'set_season_status' : ActorMethod<[string, string, bigint], Result_7>,
 }

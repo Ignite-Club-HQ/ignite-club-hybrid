@@ -426,6 +426,28 @@ persistent actor {
     }
   };
 
+  // Browser roster surface for the membership feature. Reads only; role
+  // mutations stay behind `mutate`/`replace_acl` governance. Roster reads
+  // require club admin — the roster includes every member's role grants.
+  public query ({ caller }) func list_role_grants(club : Text) : async { #Ok : [Types.AccountRole]; #Err : Text } {
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
+  };
+
+  // Caller-scoped: returns only the children linked to the caller's own
+  // account via family links. Children without a matching record in
+  // acl.children are skipped.
+  public query ({ caller }) func list_children() : async { #Ok : [Types.Child]; #Err : Text } {
+    auth(caller);
+    switch (accountFor(caller)) {
+      case null { #Err("Unlinked identity") };
+      case (?account) {
+        let childIds = accountFamilies.filter(func(link) = link.account_id == account.id).map(func(link) = link.child_id);
+        #Ok(acl.children.filter(func(child) = childIds.any(func(id) = id == child.id)))
+      };
+    }
+  };
+
   public shared ({ caller }) func begin_identity_link(target : Principal) : async { #Ok : Types.Challenge; #Err : Text } {
     auth(caller);
     if (target.equal(Principal.anonymous())) return #Err("Invalid target identity");

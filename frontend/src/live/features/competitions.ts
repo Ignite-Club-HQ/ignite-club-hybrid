@@ -96,6 +96,26 @@ export async function issueLiveJoinToken(
   );
 }
 
+export async function listLiveCompetitions(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_competitions(clubId), "List competitions");
+}
+
+export async function listLiveCompetitionEntries(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_entries(competitionId), "List competition entries");
+}
+
+export async function listLiveCompetitionSeasons(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_seasons(competitionId), "List competition seasons");
+}
+
+export async function listLiveCompetitionMatches(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_matches(competitionId), "List competition matches");
+}
+
 export async function claimLiveJoinToken(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.claim_join_token(token), "Claim join token");

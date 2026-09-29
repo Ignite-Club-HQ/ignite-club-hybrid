@@ -22,8 +22,11 @@ export const idlFactory = ({ IDL }) => {
     'club' : IDL.Text,
     'next_attempt_ms' : IDL.Nat64,
     'kind' : IDL.Text,
+    'read' : IDL.Bool,
     'user' : IDL.Text,
     'attempts' : IDL.Nat32,
+    'created_at_ms' : IDL.Nat64,
+    'related_id' : IDL.Opt(IDL.Text),
     'idempotency_key' : IDL.Text,
   });
   const result = IDL.Variant({ 'Ok' : notification, 'Err' : IDL.Text });
@@ -36,6 +39,12 @@ export const idlFactory = ({ IDL }) => {
   return IDL.Service({
     'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [result], []),
     'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [results], []),
+    'clear_inbox' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [result_nat16], []),
+    'delete_notification' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'enqueue' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [result],
@@ -57,6 +66,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'list_inbox' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat16],
+        [results],
+        ['query'],
+      ),
+    'mark_all_read' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [result_nat16],
+        [],
+      ),
+    'mark_read' : IDL.Func([IDL.Text], [result], []),
     'recover' : IDL.Func([], [result_nat16], []),
   });
 };

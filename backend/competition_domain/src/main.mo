@@ -208,6 +208,26 @@ persistent actor {
     }
   };
 
+  public query ({ caller }) func list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    #Ok(competitions.filter(func(item) = item.club_id == club_id))
+  };
+
+  public query ({ caller }) func list_entries(competition_id : Text) : async { #Ok : [Types.TeamEntry]; #Err : Text } {
+    auth(caller);
+    #Ok(entries.filter(func(item) = item.competition_id == competition_id))
+  };
+
+  public query ({ caller }) func list_seasons(competition_id : Text) : async { #Ok : [Types.Season]; #Err : Text } {
+    auth(caller);
+    #Ok(seasons.filter(func(item) = item.competition_id == competition_id))
+  };
+
+  public query ({ caller }) func list_matches(competition_id : Text) : async { #Ok : [Types.Match]; #Err : Text } {
+    auth(caller);
+    #Ok(matches.filter(func(item) = item.competition_id == competition_id))
+  };
+
   public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");

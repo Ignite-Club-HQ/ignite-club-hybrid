@@ -38,3 +38,56 @@ export async function getLiveNotification(ctx: FeatureBackendContext, notificati
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandidOpt(await actor.get_notification(notificationId), "Get notification");
 }
+
+/**
+ * Browser inbox surface. The canister stores the app account id as plain
+ * text and cannot verify it against the caller's principal — inbox reads and
+ * mutations are provisional until account ids are bound to principals
+ * (identity_access), matching the rest of the live feature layer.
+ */
+export async function listLiveInbox(
+  ctx: FeatureBackendContext,
+  userId: string,
+  clubId: string | null,
+  limit = 500,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_inbox(userId, clubId ? [clubId] : [], limit),
+    "List inbox",
+  );
+}
+
+export async function markLiveNotificationRead(ctx: FeatureBackendContext, notificationId: string) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(actor.mark_read(notificationId), "Mark notification read");
+}
+
+export async function markAllLiveNotificationsRead(
+  ctx: FeatureBackendContext,
+  userId: string,
+  clubId: string | null,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.mark_all_read(userId, clubId ? [clubId] : []),
+    "Mark all notifications read",
+  );
+}
+
+export async function deleteLiveNotification(ctx: FeatureBackendContext, notificationId: string) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_notification(notificationId), "Delete notification");
+}
+
+export async function clearLiveInbox(
+  ctx: FeatureBackendContext,
+  userId: string,
+  clubId: string | null,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.clear_inbox(userId, clubId ? [clubId] : []),
+    "Clear inbox",
+  );
+}

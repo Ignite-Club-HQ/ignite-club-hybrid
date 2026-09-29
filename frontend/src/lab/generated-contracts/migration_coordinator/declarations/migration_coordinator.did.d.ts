@@ -37,6 +37,8 @@ export interface _SERVICE {
   'initialize' : ActorMethod<[], undefined>,
   'markExported' : ActorMethod<[bigint, bigint, string], Migration>,
   'markImported' : ActorMethod<[bigint, bigint, string], Migration>,
+  'orchestrateExport' : ActorMethod<[bigint], Migration>,
+  'orchestrateVerify' : ActorMethod<[bigint], Migration>,
   'status' : ActorMethod<[], [[] | [Migration], Array<Migration>]>,
   'verify' : ActorMethod<[bigint, bigint, string], Migration>,
 }
