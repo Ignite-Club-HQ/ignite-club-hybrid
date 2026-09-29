@@ -198,56 +198,15 @@ persistent actor {
 
   /// Derives the per-field key for a given master secret, pii_id and field_id.
   func derive_field_key(master_secret : [Nat8], pii_id : Text, field_id : Text) : [Nat8] {
-    let bytes = Array.concat<Nat8>(
-      master_secret,
-      Array.concat<Nat8>(Blob.toArray(Text.encodeUtf8(pii_id)), Blob.toArray(Text.encodeUtf8(field_id)))
-    );
-    sha256(bytes)
+    Crypto.derive_field_key(master_secret, pii_id, field_id)
   };
 
-  /// SHA-256-CTR keystream generation: block i = SHA256(key || nonce || be32(i)).
-  func ctr_keystream(key : [Nat8], nonce : [Nat8], length : Nat) : [Nat8] {
-    let num_blocks = (length + 31) / 32;
-    var out : [Nat8] = [];
-    var i : Nat32 = 0;
-    var produced = 0;
-    while (produced < num_blocks) {
-      let block_input = Array.concat<Nat8>(key, Array.concat<Nat8>(nonce, nat32_be(i)));
-      out := Array.concat<Nat8>(out, sha256(block_input));
-      i += 1;
-      produced += 1;
-    };
-    Array.tabulate<Nat8>(length, func(idx) = out[idx])
-  };
-
-  func xor_bytes(a : [Nat8], b : [Nat8]) : [Nat8] {
-    Array.tabulate<Nat8>(a.size(), func(i) = a[i] ^ b[i])
-  };
-
-  func mac_tag(key : [Nat8], nonce : [Nat8], ciphertext : [Nat8]) : [Nat8] {
-    sha256(Array.concat<Nat8>(key, Array.concat<Nat8>(nonce, ciphertext)))
-  };
-
-  /// Encrypts plaintext with SHA-256-CTR under the per-field key, then appends
-  /// a SHA-256-based MAC tag over (key, nonce, ciphertext) to the output.
   func aead_encrypt(key : [Nat8], nonce : [Nat8], plaintext : [Nat8]) : [Nat8] {
-    let keystream = ctr_keystream(key, nonce, plaintext.size());
-    let ciphertext = xor_bytes(plaintext, keystream);
-    let tag = mac_tag(key, nonce, ciphertext);
-    Array.concat<Nat8>(ciphertext, tag)
+    Crypto.aead_encrypt(key, nonce, plaintext)
   };
 
-  /// Verifies the MAC tag and, on success, decrypts. Fails closed on any
-  /// mismatch or malformed (too-short) input.
   func aead_decrypt(key : [Nat8], nonce : [Nat8], stored : [Nat8]) : ?[Nat8] {
-    if (stored.size() < TAG_LEN) { return null };
-    let ct_len = stored.size() - TAG_LEN;
-    let ciphertext = Array.tabulate<Nat8>(ct_len, func(i) = stored[i]);
-    let tag = Array.tabulate<Nat8>(TAG_LEN, func(i) = stored[ct_len + i]);
-    let expected_tag = mac_tag(key, nonce, ciphertext);
-    if (expected_tag != tag) { return null };
-    let keystream = ctr_keystream(key, nonce, ct_len);
-    ?xor_bytes(ciphertext, keystream)
+    Crypto.aead_decrypt(key, nonce, stored)
   };
 
   /// Draws fresh randomness from the management canister via raw_rand
@@ -316,7 +275,7 @@ persistent actor {
       case null { return #Err("Master key not initialized") };
     };
 
-    let nonce = await* random_bytes(NONCE_LEN);
+    let nonce = await* random_bytes(Crypto.NONCE_LEN);
     let field_key = derive_field_key(master_secret, pii_id, field_id);
     let ciphertext = aead_encrypt(field_key, nonce, plaintext);
     let now = now_ns();
@@ -532,7 +491,7 @@ persistent actor {
         )
       )
     );
-    let key = sha256(material); // 32 bytes
+    let key = Crypto.sha256(material); // 32 bytes
     #Ok(key)
   };
 
