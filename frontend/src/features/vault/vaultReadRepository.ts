@@ -181,24 +181,45 @@ export async function fetchVaultSubfolders(
   }
 
   const scope = getVaultScope(view);
-  let query = client.from("vault_folders").select("*").is("deleted_at", null);
-
-  if (view.type === "club") {
-    query = query.eq("club_id", view.clubId).is("team_id", null);
-  } else {
-    query = query.eq("team_id", view.teamId);
-  }
-
-  query = scope.folderId
-    ? query.eq("parent_id", scope.folderId)
-    : query.is("parent_id", null);
-
-  const { data } = await query.order("name");
-  return filterVisibleVaultFolders(data ?? [], {
+  const visibility = {
     isPrivilegedViewer: options.isAppAdmin || options.isClubAdmin,
     restrictClubRootToChatFolders:
       view.type === "club" && !options.isClubAdmin && options.isCoachOrTeamAdmin,
     clubRoles: options.clubRoles,
+  };
+
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client.from("vault_folders").select("*").is("deleted_at", null);
+
+      if (view.type === "club") {
+        query = query.eq("club_id", view.clubId).is("team_id", null);
+      } else {
+        query = query.eq("team_id", view.teamId);
+      }
+
+      query = scope.folderId
+        ? query.eq("parent_id", scope.folderId)
+        : query.is("parent_id", null);
+
+      const { data } = await query.order("name");
+      return filterVisibleVaultFolders(data ?? [], visibility);
+    },
+    // Provisional: mini-league scoping has no canister shape (handled by the
+    // early return above); verify folder semantics against vault_domain.
+    icp: async (ctx) => {
+      const folders = await listLiveVaultFolders(
+        ctx,
+        view.clubId,
+        view.type === "team" ? view.teamId : null,
+      );
+      const children = (folders as any[])
+        .map(mapLiveVaultFolder)
+        .filter((folder) =>
+          scope.folderId ? folder.parent_id === scope.folderId : folder.parent_id === null,
+        );
+      return filterVisibleVaultFolders(children, visibility);
+    },
   });
 }
 
@@ -213,26 +234,49 @@ export async function fetchVaultItems(
   const { view } = options;
   if (view.type === "root") return [];
   const scope = getVaultScope(view);
-  let query = client.from("vault_files").select("*").is("deleted_at", null);
 
-  if (view.type === "club") {
-    if (!options.isClubAdmin && !options.isCoachOrTeamAdmin) return [];
-    query = query
-      .eq("club_id", view.clubId)
-      .is("team_id", null)
-      .is("mini_league_id", null);
-    if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
-  } else if (view.type === "team") {
-    query = query.eq("team_id", view.teamId);
-  } else {
-    query = query.eq("mini_league_id", view.miniLeagueId);
-  }
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      let query = client.from("vault_files").select("*").is("deleted_at", null);
 
-  query = scope.folderId
-    ? query.eq("folder_id", scope.folderId)
-    : query.is("folder_id", null);
-  const { data } = await query.order("created_at", { ascending: false });
-  return data ?? [];
+      if (view.type === "club") {
+        if (!options.isClubAdmin && !options.isCoachOrTeamAdmin) return [];
+        query = query
+          .eq("club_id", view.clubId)
+          .is("team_id", null)
+          .is("mini_league_id", null);
+        if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
+      } else if (view.type === "team") {
+        query = query.eq("team_id", view.teamId);
+      } else {
+        query = query.eq("mini_league_id", view.miniLeagueId);
+      }
+
+      query = scope.folderId
+        ? query.eq("folder_id", scope.folderId)
+        : query.is("folder_id", null);
+      const { data } = await query.order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    // Provisional: mini-league scoping has no canister shape — returns empty
+    // under ICP; verify folder semantics against vault_domain.
+    icp: async (ctx) => {
+      if (view.type === "mini-league") return [];
+      if (view.type === "club") {
+        if (!options.isClubAdmin && !options.isCoachOrTeamAdmin) return [];
+        if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
+      }
+      const files = scope.folderId
+        ? await listLiveVaultFiles(ctx, scope.folderId)
+        : await listLiveVaultClubFiles(
+            ctx,
+            view.clubId,
+            view.type === "team" ? view.teamId : null,
+          );
+      const rows = (files as any[]).map(mapLiveVaultFile);
+      return scope.folderId ? rows : rows.filter((row) => !row.folder_id);
+    },
+  });
 }
 
 export async function fetchVaultFolderTree(
@@ -334,16 +378,25 @@ export async function fetchVaultTrash(
 ): Promise<{ photos: VaultPhotoItem[]; files: VaultFileRow[] }> {
   if (view.type === "root") return { photos: [], files: [] };
 
-  const { data } = await client
-    .from("vault_files")
-    .select(`
-      *,
-      folder:vault_folders(id, name),
-      team:teams(id, name)
-    `)
-    .eq("club_id", view.clubId)
-    .not("deleted_at", "is", null)
-    .order("deleted_at", { ascending: false });
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { data } = await client
+        .from("vault_files")
+        .select(`
+          *,
+          folder:vault_folders(id, name),
+          team:teams(id, name)
+        `)
+        .eq("club_id", view.clubId)
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false });
 
-  return partitionVaultItems(data as unknown as VaultFileRow[] | null);
+      return partitionVaultItems(data as unknown as VaultFileRow[] | null);
+    },
+    // Provisional: no folder/team name joins on the canister.
+    icp: async (ctx) => {
+      const trashed = await listLiveVaultTrash(ctx, view.clubId);
+      return partitionVaultItems((trashed as any[]).map(mapLiveVaultFile));
+    },
+  });
 }
