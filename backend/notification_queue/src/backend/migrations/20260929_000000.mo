@@ -52,7 +52,7 @@ module {
 
   public func migration(old : OldActor) : NewActor {
     {
-      var items = old.items.map(func(item : OldNotification) : Notification {
+      var items = Array.map<OldNotification, Notification>(old.items, func(item) {
         { item with read = false; related_id = null; created_at_ms = 0 }
       });
       var leases = old.leases;
