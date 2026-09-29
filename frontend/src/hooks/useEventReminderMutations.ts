@@ -6,6 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { resolveEventRecipients, eventRecipientContext } from "@/features/events/eventRecipientPolicy";
 import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds } from "@/features/events/reminderRecipients";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
@@ -29,6 +31,47 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
   const { supabase, id, event, gateEventShare, setRecentlyReminded, setResendDialogOpen } = params;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // Routed through the notifications feature: Supabase insert (the
+  // on_notification_created DB trigger dispatches push) or the
+  // notification_queue fan-out in ICP mode. Push delivery in ICP mode stays
+  // with the Supabase edge function — the canister inbox has no push concept.
+  const notifyUsers = async (
+    recipientIds: string[],
+    type: string,
+    message: string,
+    keyPrefix: string,
+    extraFields?: Record<string, unknown>,
+  ) => {
+    if (!id || !event?.club_id) throw new Error("Missing event or club");
+    await withFeatureBackend("notifications", {
+      supabase: async () => {
+        const { error } = await supabase.from("notifications").insert(
+          recipientIds.map((userId) => ({
+            user_id: userId,
+            type,
+            message,
+            related_id: id,
+            ...extraFields,
+          })),
+        );
+        if (error) throw error;
+      },
+      icp: async (ctx) => {
+        // Fresh key prefix per send so re-reminding after the cooldown window
+        // re-notifies; a retried call with the same prefix is idempotent per
+        // recipient.
+        await fanOutLiveNotifications(ctx, {
+          userIds: recipientIds,
+          clubId: event.club_id,
+          kind: type,
+          body: message,
+          idempotencyKeyPrefix: keyPrefix,
+          relatedId: id,
+        });
+      },
+    });
+  };
 
   const remindMutation = useMutation({
     mutationFn: async () => {
@@ -76,16 +119,12 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
         throw new Error("All non-responders were already reminded in the last 24 hours");
       }
       
-      // Create notifications - the DB trigger (on_notification_created) handles push dispatch
-      const notifications = membersToNotify.map(userId => ({
-        user_id: userId,
-        type: "event_reminder",
-        message: `Reminder: Please RSVP for "${event?.title}"`,
-        related_id: id,
-      }));
-      
-      const { error } = await supabase.from("notifications").insert(notifications);
-      if (error) throw error;
+      await notifyUsers(
+        membersToNotify,
+        "event_reminder",
+        `Reminder: Please RSVP for "${event?.title}"`,
+        `event-reminder-${id}-${crypto.randomUUID()}`,
+      );
       
       return membersToNotify.length;
     },
@@ -161,15 +200,12 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
         throw new Error(`${displayName}${recipientIds.length > 1 ? "'s parents have" : " has"} been reminded in the last 24 hours`);
       }
 
-      const { error } = await supabase.from("notifications").insert(
-        toRemind.map((uid) => ({
-          user_id: uid,
-          type: "event_reminder",
-          message: `Reminder: Please RSVP for "${event?.title}"`,
-          related_id: id,
-        }))
+      await notifyUsers(
+        toRemind,
+        "event_reminder",
+        `Reminder: Please RSVP for "${event?.title}"`,
+        `event-reminder-${id}-${crypto.randomUUID()}`,
       );
-      if (error) throw error;
 
       return { displayName, count: toRemind.length, isChild: !!childId, recipientKey: userId || childId || displayName };
     },
@@ -256,19 +292,15 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
         throw new Error("All members have already been notified about this event!");
       }
 
-      // Insert notifications with skip_push
-      const notificationRows = newMembers.map(userId => ({
-        user_id: userId,
-        type: "event_invite",
-        message: `You've been invited to: ${event.title}`,
-        related_id: id,
-        skip_push: true,
-      }));
-
-      const { error: insertError } = await supabase
-        .from("notifications")
-        .insert(notificationRows);
-      if (insertError) throw insertError;
+      // skip_push is Supabase-only (the canister inbox has no push concept);
+      // push is sent explicitly below for both backends.
+      await notifyUsers(
+        newMembers,
+        "event_invite",
+        `You've been invited to: ${event.title}`,
+        `event-invite-${id}-${crypto.randomUUID()}`,
+        { skip_push: true },
+      );
 
       // Send push notifications
       for (const userId of newMembers) {

@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { broadcastLiveAnnouncement } from "@/live/features/messaging";
 
 
 interface Team {
@@ -114,62 +116,85 @@ export function ClubAnnouncementDialog({
       }
 
 
-      // Make sure we send a live access token: a stale/expired session is the
-      // most common cause of a 401 from the announcement function.
-      let { data: sessionData } = await supabase.auth.getSession();
-      let accessToken = sessionData.session?.access_token ?? null;
-      const expiresAt = sessionData.session?.expires_at ?? 0;
-      if (!accessToken || expiresAt * 1000 - Date.now() < 60_000) {
-        const { session: refreshed } = await refreshSessionOnce(10000);
-        accessToken = refreshed?.access_token ?? accessToken;
-      }
-      if (!accessToken) {
-        throw new Error("Your session expired. Please sign in again.");
-      }
+      // Routed through the messaging feature: the send-club-announcement
+      // edge function on Supabase, or the messaging_domain broadcast in ICP
+      // mode (teams without a canister conversation are skipped, not fatal).
+      return await withFeatureBackend("messaging", {
+        supabase: async () => {
+          // Make sure we send a live access token: a stale/expired session is the
+          // most common cause of a 401 from the announcement function.
+          let { data: sessionData } = await supabase.auth.getSession();
+          let accessToken = sessionData.session?.access_token ?? null;
+          const expiresAt = sessionData.session?.expires_at ?? 0;
+          if (!accessToken || expiresAt * 1000 - Date.now() < 60_000) {
+            const { session: refreshed } = await refreshSessionOnce(10000);
+            accessToken = refreshed?.access_token ?? accessToken;
+          }
+          if (!accessToken) {
+            throw new Error("Your session expired. Please sign in again.");
+          }
 
-      // Send via edge function which creates/uses bot profile as author
-      // This makes announcements backwards-compatible with old app builds
-      const { data, error } = await supabase.functions.invoke("send-club-announcement", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: {
-          club_id: parsed.data.club_id,
-          team_ids: parsed.data.team_ids,
-          include_club_chat: sendToClubChat,
-          message: parsed.data.message,
-          club_name: clubName,
+          // Send via edge function which creates/uses bot profile as author
+          // This makes announcements backwards-compatible with old app builds
+          const { data, error } = await supabase.functions.invoke("send-club-announcement", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: {
+              club_id: parsed.data.club_id,
+              team_ids: parsed.data.team_ids,
+              include_club_chat: sendToClubChat,
+              message: parsed.data.message,
+              club_name: clubName,
+            },
+          });
+
+          if (error) {
+            // Surface the function's JSON error body instead of a generic message.
+            // NOTE: the body read must not throw inside the try — otherwise the
+            // catch swallows the real reason and we fall back to the generic error.
+            const ctx = (error as { context?: Response }).context;
+            let serverMessage: string | null = null;
+            if (ctx && typeof ctx.json === "function") {
+              try {
+                const body = await ctx.json();
+                if (body?.error) serverMessage = String(body.error);
+              } catch {
+                try {
+                  const text = await ctx.text?.();
+                  if (text) serverMessage = text.slice(0, 300);
+                } catch {
+                  /* body already consumed or empty */
+                }
+              }
+            }
+            throw new Error(serverMessage || (error as Error).message || "Request failed");
+          }
+          if (data?.error) throw new Error(data.error);
+          return { skipped: [] as string[] };
+        },
+        icp: async (ctx) => {
+          const result = await broadcastLiveAnnouncement(ctx, {
+            clubId: parsed.data.club_id,
+            teamIds: parsed.data.team_ids,
+            includeClubChat: sendToClubChat,
+            body: parsed.data.message,
+            idempotencyKey: crypto.randomUUID(),
+          });
+          return { skipped: result.skipped ?? [] };
         },
       });
-
-      if (error) {
-        // Surface the function's JSON error body instead of a generic message.
-        // NOTE: the body read must not throw inside the try — otherwise the
-        // catch swallows the real reason and we fall back to the generic error.
-        const ctx = (error as { context?: Response }).context;
-        let serverMessage: string | null = null;
-        if (ctx && typeof ctx.json === "function") {
-          try {
-            const body = await ctx.json();
-            if (body?.error) serverMessage = String(body.error);
-          } catch {
-            try {
-              const text = await ctx.text?.();
-              if (text) serverMessage = text.slice(0, 300);
-            } catch {
-              /* body already consumed or empty */
-            }
-          }
-        }
-        throw new Error(serverMessage || (error as Error).message || "Request failed");
-      }
-      if (data?.error) throw new Error(data.error);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       const parts: string[] = [];
       if (resolvedTeamIds.length > 0) {
         parts.push(`${resolvedTeamIds.length} team${resolvedTeamIds.length > 1 ? "s" : ""}`);
       }
       if (sendToClubChat) parts.push("club chat");
       toast.success(`Announcement sent to ${parts.join(" and ")}`);
+      if (result?.skipped?.length) {
+        toast.warning(
+          `No chat found for ${result.skipped.length} team${result.skipped.length > 1 ? "s" : ""} — the announcement wasn't posted there.`,
+        );
+      }
       setMessage("");
       setSelectedTeamIds(new Set());
       setSendToClubChat(false);

@@ -5,7 +5,13 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { getMatchArrivalDate } from "@/lib/matchArrivalTime";
 import { setLocalEventDuty } from "@/lab/localEventsService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventDuty } from "@/live/features/events";
+import {
+  completeLiveEventDuty,
+  removeLiveEventDuty,
+  setLiveEventDuty,
+  uncompleteLiveEventDuty,
+} from "@/live/features/events";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 type DutyStatus = "open" | "completed";
 
@@ -158,6 +164,93 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     },
   });
 
+  // Notify team/club admins and coaches about duty completion. Routed through
+  // the notifications feature: Supabase inserts (push via DB trigger) or the
+  // notification_queue fan-out. Provisional: recipients come from Supabase
+  // user_roles until membership data lives on ICP.
+  const notifyDutyCompleted = async (duty: any) => {
+    if (!event || !duty) return;
+    const memberName = profile?.display_name || "A member";
+
+    const roleQuery = event.team_id
+      ? supabase.from("user_roles").select("user_id").eq("team_id", event.team_id).in("role", ["team_admin", "coach", "club_admin", "committee_member"])
+      : supabase.from("user_roles").select("user_id").eq("club_id", event.club_id).in("role", ["club_admin", "committee_member"]);
+
+    const { data: admins, error: adminsError } = await roleQuery;
+    if (adminsError) throw new DutyNotificationPartialError(adminsError.message);
+    if (!admins || admins.length === 0) return;
+
+    const recipientIds = Array.from(
+      new Set(admins.map(a => a.user_id).filter((userId): userId is string => !!userId && userId !== user?.id))
+    );
+    if (recipientIds.length === 0) return;
+    const message = `${memberName} completed ${duty.name} for ${event.title}`;
+
+    await withFeatureBackend("notifications", {
+      supabase: async () => {
+        const { error: notificationError } = await supabase.from("notifications").insert(
+          recipientIds.map((userId) => ({
+            user_id: userId,
+            type: "duty_completed",
+            message,
+            related_id: id,
+          })),
+        );
+        // 23505 = duplicate/idempotency conflict, intentionally tolerated.
+        if (notificationError && notificationError.code !== "23505") {
+          throw new DutyNotificationPartialError(notificationError.message);
+        }
+      },
+      icp: async (ctx) => {
+        // Push delivery stays Supabase-only; the canister records the inbox
+        // entries. Fresh key prefix per completion so an uncomplete and
+        // re-complete cycle re-notifies.
+        if (!id || !event.club_id) return;
+        try {
+          await fanOutLiveNotifications(ctx, {
+            userIds: recipientIds,
+            clubId: event.club_id,
+            kind: "duty_completed",
+            body: message,
+            idempotencyKeyPrefix: `duty-completed-${id}-${crypto.randomUUID()}`,
+            relatedId: id,
+          });
+        } catch (notifyError) {
+          throw new DutyNotificationPartialError(
+            notifyError instanceof Error ? notifyError.message : String(notifyError),
+          );
+        }
+      },
+    });
+  };
+
+  // Notify the assignee about a duty assignment through the notifications
+  // feature routing. Points stay Supabase-only (no canister shape).
+  const notifyDutyAssigned = async (userId: string) => {
+    const message = "You've been assigned a duty. Points will be awarded 24 hours after the game! 🔥";
+    await withFeatureBackend("notifications", {
+      supabase: async () => {
+        await supabase.from("notifications").insert({
+          user_id: userId,
+          type: "duty_assigned",
+          message,
+          related_id: id,
+        });
+      },
+      icp: async (ctx) => {
+        if (!id || !event?.club_id) return;
+        await fanOutLiveNotifications(ctx, {
+          userIds: [userId],
+          clubId: event.club_id,
+          kind: "duty_assigned",
+          body: message,
+          idempotencyKeyPrefix: `duty-assigned-${id}-${crypto.randomUUID()}`,
+          relatedId: id,
+        });
+      },
+    });
+  };
+
   // Complete duty mutation
   const completeDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
@@ -181,6 +274,24 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         }
       }
 
+      // Hybrid routing: assigned duties have a canister shape (complete_duty
+      // keyed by event + account). Open duties with no assignee stay
+      // Supabase-only.
+      if (duty?.assigned_to) {
+        const completedOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            if (!id) throw new Error("Missing event ID");
+            await completeLiveEventDuty(ctx, id, duty.assigned_to as string);
+            return true;
+          },
+        });
+        if (completedOnIcp) {
+          await notifyDutyCompleted(duty);
+          return { outcome: "completed" as const };
+        }
+      }
+
       const { data: updatedDuty, error } = await supabase
         .from("duties")
         .update({ status: "completed" as DutyStatus, completed_at: new Date().toISOString() })
@@ -194,42 +305,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       // outcome). Do not notify; just refresh so current state is displayed.
       if (!updatedDuty) return { outcome: "noop" as const };
 
-      // Notify team/club admins and coaches about duty completion
-      if (event && duty) {
-        const memberName = profile?.display_name || "A member";
-        
-        // Get admins/coaches for this team/event
-        const roleQuery = event.team_id 
-          ? supabase.from("user_roles").select("user_id").eq("team_id", event.team_id).in("role", ["team_admin", "coach", "club_admin", "committee_member"])
-          : supabase.from("user_roles").select("user_id").eq("club_id", event.club_id).in("role", ["club_admin", "committee_member"]);
-        
-        const { data: admins, error: adminsError } = await roleQuery;
-
-        if (adminsError) {
-          throw new DutyNotificationPartialError(adminsError.message);
-        }
-
-        if (admins && admins.length > 0) {
-          const recipientIds = Array.from(
-            new Set(admins.map(a => a.user_id).filter((userId): userId is string => !!userId && userId !== user?.id))
-          );
-          const message = `${memberName} completed ${duty.name} for ${event.title}`;
-          const notifications = recipientIds.map(userId => ({
-              user_id: userId,
-              type: "duty_completed",
-              message,
-              related_id: id,
-            }));
-          
-          if (notifications.length > 0) {
-            const { error: notificationError } = await supabase.from("notifications").insert(notifications);
-            // 23505 = duplicate/idempotency conflict, intentionally tolerated.
-            if (notificationError && notificationError.code !== "23505") {
-              throw new DutyNotificationPartialError(notificationError.message);
-            }
-          }
-        }
-      }
+      await notifyDutyCompleted(duty);
       return { outcome: "completed" as const };
     },
     onSuccess: (result) => {
@@ -272,6 +348,22 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         throw new Error("Duty reopening is not connected to the local events canister yet.");
       }
 
+      const duty = duties?.find((d) => d.id === dutyId);
+      // Hybrid routing: reopening an assigned duty has a canister shape
+      // (uncomplete_duty keyed by event + account); open duties stay
+      // Supabase-only.
+      if (duty?.assigned_to) {
+        const reopenedOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            if (!id) throw new Error("Missing event ID");
+            await uncompleteLiveEventDuty(ctx, id, duty.assigned_to as string);
+            return true;
+          },
+        });
+        if (reopenedOnIcp) return;
+      }
+
       const { error } = await supabase
         .from("duties")
         .update({ status: "open" as DutyStatus, completed_at: null })
@@ -300,6 +392,22 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     mutationFn: async (dutyId: string) => {
       if (useIcpLab) {
         throw new Error("Duty deletion is not connected to the local events canister yet.");
+      }
+
+      const duty = duties?.find((d) => d.id === dutyId);
+      // Hybrid routing: removing an assigned duty has a canister shape
+      // (remove_duty keyed by event + account); open duties stay
+      // Supabase-only.
+      if (duty?.assigned_to) {
+        const removedOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            if (!id) throw new Error("Missing event ID");
+            await removeLiveEventDuty(ctx, id, duty.assigned_to as string);
+            return true;
+          },
+        });
+        if (removedOnIcp) return;
       }
 
       const { error } = await supabase.from("duties").delete().eq("id", dutyId);
@@ -353,7 +461,9 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           })
         : false;
       if (assignedOnIcp) {
-        // Points/notification side effects stay Supabase-only.
+        // Notify the assignee through the notifications feature routing;
+        // points stay Supabase-only (no canister shape).
+        await notifyDutyAssigned(userId);
         return;
       }
 
@@ -373,12 +483,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       // Points are now awarded 24 hours after the game via scheduled job
       // Just notify the assigned user about the duty assignment
       if (userId && (!dutyBefore?.assigned_to || dutyBefore.assigned_to !== userId)) {
-        await supabase.from("notifications").insert({
-          user_id: userId,
-          type: "duty_assigned",
-          message: "You've been assigned a duty. Points will be awarded 24 hours after the game! 🔥",
-          related_id: id,
-        });
+        await notifyDutyAssigned(userId);
       }
     },
     onSuccess: () => {
