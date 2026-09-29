@@ -122,39 +122,56 @@ function SupabaseManageRolesPage() {
 
   const { data: roles, isLoading: loadingRoles } = useQuery({
     queryKey: ["club-members-roles", clubId],
-    queryFn: async () => {
-      // First get team IDs for this club
-      const { data: teamsData } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("club_id", clubId!);
-      const teamIds = teamsData?.map(t => t.id) || [];
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          // First get team IDs for this club
+          const { data: teamsData } = await supabase
+            .from("teams")
+            .select("id")
+            .eq("club_id", clubId!);
+          const teamIds = teamsData?.map(t => t.id) || [];
 
-      // Fetch club-level roles
-      const { data: clubRoles, error: clubError } = await supabase
-        .from("user_roles")
-        .select("*, profiles (id, display_name, avatar_url), teams (id, name)")
-        .eq("club_id", clubId!);
-      if (clubError) throw clubError;
+          // Fetch club-level roles
+          const { data: clubRoles, error: clubError } = await supabase
+            .from("user_roles")
+            .select("*, profiles (id, display_name, avatar_url), teams (id, name)")
+            .eq("club_id", clubId!);
+          if (clubError) throw clubError;
 
-      // Fetch team-level roles for teams in this club
-      let teamRoles: typeof clubRoles = [];
-      if (teamIds.length > 0) {
-        const { data: teamRolesData, error: teamError } = await supabase
-          .from("user_roles")
-          .select("*, profiles (id, display_name, avatar_url), teams (id, name)")
-          .in("team_id", teamIds);
-        if (teamError) throw teamError;
-        teamRoles = teamRolesData || [];
-      }
+          // Fetch team-level roles for teams in this club
+          let teamRoles: typeof clubRoles = [];
+          if (teamIds.length > 0) {
+            const { data: teamRolesData, error: teamError } = await supabase
+              .from("user_roles")
+              .select("*, profiles (id, display_name, avatar_url), teams (id, name)")
+              .in("team_id", teamIds);
+            if (teamError) throw teamError;
+            teamRoles = teamRolesData || [];
+          }
 
-      // Combine and deduplicate by role id
-      const allRoles = [...(clubRoles || []), ...(teamRoles || [])];
-      const uniqueRoles = allRoles.filter((role, index, self) => 
-        index === self.findIndex(r => r.id === role.id)
-      );
-      return uniqueRoles;
-    },
+          // Combine and deduplicate by role id
+          const allRoles = [...(clubRoles || []), ...(teamRoles || [])];
+          const uniqueRoles = allRoles.filter((role, index, self) =>
+            index === self.findIndex(r => r.id === role.id)
+          );
+          return uniqueRoles;
+        },
+        // Provisional: account_id = Supabase user id; no profile/team joins on
+        // the canister — verify against the deployed club_domain.
+        icp: async (ctx) => {
+          const grants = await listLiveRoleGrants(ctx, clubId!);
+          return (grants as any[]).map((g) => ({
+            id: `${g.account_id}-${g.role}-${g.team[0] ?? "club"}`,
+            role: g.role,
+            user_id: g.account_id,
+            club_id: g.club[0] ?? null,
+            team_id: g.team[0] ?? null,
+            profiles: null,
+            teams: null,
+          }));
+        },
+      }),
     enabled: !!clubId,
     refetchOnMount: true,
   });
