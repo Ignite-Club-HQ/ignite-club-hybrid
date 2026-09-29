@@ -229,6 +229,14 @@ persistent actor {
       status = "scheduled";
       home_score = 0;
       away_score = 0;
+      division_id = null;
+      scheduled_at_ms = null;
+      venue = null;
+      pitch_number = null;
+      round_number = null;
+      duration_minutes = null;
+      arrival_minutes_before = null;
+      notes = null;
       revision = 1;
     };
     matches := matches.concat([game]);
@@ -258,9 +266,43 @@ persistent actor {
     }
   };
 
+  // Edits fixture details (teams, schedule, venue, division, notes) without
+  // touching the score — scores stay under set_match_result so result
+  // recording keeps its own optimistic lock. Mirrors the Supabase
+  // competition_matches columns the edit-match dialog writes.
+  public shared ({ caller }) func update_match_details(match_id : Text, home_team : Text, away_team : Text, division_id : ?Text, scheduled_at_ms : ?Nat64, venue : ?Text, pitch_number : ?Text, round_number : ?Nat16, duration_minutes : ?Nat16, arrival_minutes_before : ?Nat16, notes : ?Text, expected_revision : Nat64) : async { #Ok : Types.Match; #Err : Text } {
+    auth(caller);
+    func optValid(value : ?Text, max : Nat) : Bool {
+      switch (value) { case null true; case (?text) text.size() <= max }
+    };
+    if (home_team == away_team or not valid(home_team) or not valid(away_team) or not optValid(venue, 256) or not optValid(pitch_number, 64) or not optValid(notes, 2000)) return #Err("Invalid match details");
+    switch (division_id) { case (?d) { if (d.size() > 128) return #Err("Invalid division") }; case null {} };
+    switch (matches.find(func(item) = item.id == match_id)) {
+      case null { #Err("Match not found") };
+      case (?current) {
+        if (not canManageCompetition(caller, current.competition_id)) return #Err("Competition management forbidden");
+        if (current.revision != expected_revision) return #Err("Match revision conflict");
+        let home_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == home_team);
+        let away_ok = entries.any(func(entry) = entry.competition_id == current.competition_id and entry.team_id == away_team);
+        if (not home_ok or not away_ok) return #Err("Both teams must be registered");
+        let updated : Types.Match = { current with home_team; away_team; division_id; scheduled_at_ms; venue; pitch_number; round_number; duration_minutes; arrival_minutes_before; notes; revision = current.revision + 1 };
+        matches := matches.map(func(item) = if (item.id == match_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
   public query ({ caller }) func list_competitions(club_id : Text) : async { #Ok : [Types.Competition]; #Err : Text } {
     auth(caller);
     #Ok(competitions.filter(func(item) = item.club_id == club_id))
+  };
+
+  // Cross-club listing for the competitions page when no single club is
+  // selected. Authenticated callers only; mirrors the Supabase query which
+  // lists every visible competition.
+  public query ({ caller }) func list_competitions_multi(club_ids : [Text]) : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    #Ok(competitions.filter(func(item) = club_ids.any(func(id) = id == item.club_id)))
   };
 
   public query ({ caller }) func list_entries(competition_id : Text) : async { #Ok : [Types.TeamEntry]; #Err : Text } {
