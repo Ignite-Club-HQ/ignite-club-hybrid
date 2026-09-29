@@ -62,7 +62,9 @@ module {
 
     // Padding: 0x80, then zeros, then 8-byte big-endian bit length, to a
     // multiple of 64 bytes.
-    var pad_len = (56 - ((msg_len + 1) % 64) + 64) % 64;
+    // Use Int arithmetic: (56 - ((msg_len + 1) % 64)) can be negative as an
+    // intermediate, which would trap with Nat.
+    let pad_len = Nat.fromNat(((56 - Int.abs((msg_len + 1) % 64)) + 64) % 64);
     let total_len = msg_len + 1 + pad_len + 8;
 
     let padded = Array.tabulate<Nat8>(total_len, func(i) {
