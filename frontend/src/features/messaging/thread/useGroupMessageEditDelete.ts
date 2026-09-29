@@ -38,11 +38,19 @@ export const useGroupMessageEditDelete = ({
       if (useIcpLab) {
         throw new Error("Editing group messages is not available in the local ICP contract.");
       }
-      const { error } = await supabaseClient
-        .from("group_messages")
-        .update({ text: message.trim() })
-        .eq("id", editingMessage.id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabaseClient
+            .from("group_messages")
+            .update({ text: message.trim() })
+            .eq("id", editingMessage.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional: message id is shared across both backends.
+          await updateLiveMessage(ctx, editingMessage.id, message.trim());
+        },
+      });
     },
     onSuccess: () => {
       setMessage("");
@@ -62,11 +70,18 @@ export const useGroupMessageEditDelete = ({
       if (useIcpLab) {
         throw new Error("Deleting group messages is not available in the local ICP contract.");
       }
-      const { error } = await supabaseClient
-        .from("group_messages")
-        .delete()
-        .eq("id", messageId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabaseClient
+            .from("group_messages")
+            .delete()
+            .eq("id", messageId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveMessage(ctx, messageId);
+        },
+      });
     },
     onMutate: async (messageId: string) => {
       // Optimistically hide the message
