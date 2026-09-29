@@ -144,9 +144,31 @@ working from Supabase storage.
 
 ## Known gaps at time of writing
 
-- Not yet wired to live reads: membership, competitions, notifications,
-  vault — their canisters expose governance/worker-facing operations that
-  don't yet match the app's browser read paths. Service modules are ready
-  in `frontend/src/live/features/`.
 - End-to-end verification requires deployed canisters and an Internet
   Identity sign-in; the dry-run preview is the pre-deployment check.
+
+## Realtime, presence and push under ICP
+
+Canisters are request/response — there is no realtime channel. When a
+feature is routed to ICP the app behaves as follows
+(`isFeatureRoutedToIcp(feature)` in `frontend/src/live/loadBackendRouting.ts`
+is the single check):
+
+- **Chat (club, team, group):** Supabase Realtime subscriptions are skipped;
+  messages refresh via 30s polling (the existing `useClubRealtimeMode`
+  polling branches, which the backend routing now forces on under ICP).
+  Polling pauses while the tab is hidden.
+- **DM, broadcast and club-admin chats:** the shared channel lifecycle
+  (`startChatRealtimeChannel`) skips the subscription under ICP and instead
+  invalidates the screen's message queries every 30s while visible.
+- **Notifications:** the global realtime channel is not opened; the
+  notifications screen and the bell badge poll every 30s while visible.
+  The cross-club unread nudge is Supabase-only and hidden under ICP.
+- **Media:** photo/comment/reaction realtime channels are skipped; the
+  media screens refetch via their normal query flows.
+- **Presence (typing indicators, online counts):** degraded gracefully —
+  hidden under ICP rather than showing stale data. There is no canister
+  presence channel.
+- **Push notifications: stay Supabase-only.** Under an ICP-only deployment
+  push is out of scope; the UI must not assume it. A future HTTP-outcall
+  push worker canister is possible but not built.

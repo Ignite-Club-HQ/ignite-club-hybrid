@@ -320,7 +320,9 @@ export default function NotificationsPage() {
   // "All clubs" (nothing is hidden then).
   const { data: otherClubUnread } = useQuery({
     queryKey: ["notifications-other-clubs-unread", user?.id, activeClubFilter],
-    enabled: !!user?.id && !!activeClubFilter && !useIcpLab,
+    // Supabase-only nudge: hidden on ICP (the cross-club unread row is a
+    // display nicety, not data the canister inbox exposes).
+    enabled: !!user?.id && !!activeClubFilter && !useIcpLab && !isFeatureRoutedToIcp("notifications"),
     staleTime: 30000,
     queryFn: async () => {
       const { data, error } = await supabase

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Global Realtime presence tracker.
@@ -301,7 +302,9 @@ async function teardown() {
  */
 export function useTrackPresence(userId: string | null | undefined) {
   useEffect(() => {
-    if (!userId) {
+    // Presence degrades to hidden when messaging is routed to ICP — there is
+    // no canister presence channel, so don't open the Supabase one.
+    if (!userId || isFeatureRoutedToIcp("messaging")) {
       teardown();
       return;
     }

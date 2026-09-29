@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode, useC
 import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { prefetchUserData } from "@/lib/prefetchData";
 import { clearProfileCache } from "@/lib/profileCache";
@@ -330,17 +332,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // MESSAGE_NOTIFICATION_TYPES imported from @/lib/notificationTypes
 
   const fetchUnreadCount = useCallback(async (userId: string) => {
-    const [allResult, messageCounts] = await Promise.all([
-      supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("is_read", false),
-      fetchUnreadMessageCounts(userId),
+    // Notification count is feature-routed so the bell badge keeps working
+    // when notifications are served by the canister. Message unread counts
+    // stay Supabase (message unread tracking has no canister shape).
+    const [allCount, messageCounts] = await Promise.all([
+      withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { count, error } = await supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .eq("is_read", false);
+          if (error) throw error;
+          return count || 0;
+        },
+        icp: async (ctx) => {
+          const { listLiveInbox } = await import("@/live/features/notifications");
+          const inbox = await listLiveInbox(ctx, userId, null, 500);
+          return (inbox as any[]).filter((n) => !n.read).length;
+        },
+      }),
+      isFeatureRoutedToIcp("notifications")
+        ? Promise.resolve(null)
+        : fetchUnreadMessageCounts(userId),
     ]);
 
-    setUnreadCount(allResult.count || 0);
-    setUnreadMessagesCount(getTotalUnreadMessageCount(messageCounts));
+    setUnreadCount(allCount);
+    if (messageCounts) setUnreadMessagesCount(getTotalUnreadMessageCount(messageCounts));
   }, []);
 
   useEffect(() => {
@@ -884,9 +902,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [queryClient]);
 
-  // Real-time notifications subscription and push registration
+  // Real-time notifications subscription and push registration.
+  // When notifications are routed to ICP there is no realtime channel —
+  // the visibility/focus resync and the notifications screens' own polling
+  // keep the badge fresh instead.
   useEffect(() => {
     if (!user) return;
+    const notificationsOnIcp = isFeatureRoutedToIcp("notifications");
 
     // Silently enable push notifications if permission already granted
     const setupPushNotifications = async () => {
@@ -920,7 +942,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    const channel = supabase
+    // When notifications are routed to ICP there is no realtime channel —
+    // canisters are request/response, so the resync below plus the
+    // notifications screens' own polling keep the badge fresh instead.
+    const channel = notificationsOnIcp ? null : supabase
       .channel(`notifications-global:${user.id}`)
       .on(
         'postgres_changes',
@@ -1012,6 +1037,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       .subscribe();
 
+    // Poll the canister inbox while the tab is visible so badge counts stay
+    // fresh without a realtime channel.
+    const icpPoll = notificationsOnIcp
+      ? window.setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          fetchUnreadCount(user.id).catch(() => {});
+        }, 30000)
+      : null;
+
     // Re-sync unread count from server when app becomes visible or focused.
     // visibility + focus often both fire on native resume, so debounce them
     // into a single invalidation window (~500 ms) to avoid duplicate RPCs.
@@ -1035,7 +1069,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
+      if (icpPoll) window.clearInterval(icpPoll);
       Object.keys(inboxRefreshState).forEach((k) => {
         if (inboxRefreshState[k]) cancelAnimationFrame(inboxRefreshState[k]);
       });

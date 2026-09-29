@@ -1355,6 +1355,8 @@ export default function DirectMessagePage() {
       channelKey: `dm-${conversationId}`,
       userId: user?.id,
       scope: { kind: "dm", id: conversationId },
+      cacheKeys: [["dm-messages", conversationId]],
+      queryClient,
     });
   }, [conversationId, queryClient, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
 

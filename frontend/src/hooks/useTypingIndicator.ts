@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { RealtimeChannel } from "@supabase/supabase-js";
 
 interface TypingUser {
@@ -18,7 +19,9 @@ export function useTypingIndicator(
   const isTypingRef = useRef(false);
 
   useEffect(() => {
-    if (!userId || !channelName) return;
+    // Presence has no canister equivalent — on ICP typing indicators are
+    // simply hidden rather than opening a dead Supabase channel.
+    if (!userId || !channelName || isFeatureRoutedToIcp("messaging")) return;
 
     const channel = supabase.channel(`typing:${channelName}`);
     channelRef.current = channel;
