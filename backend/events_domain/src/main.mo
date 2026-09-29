@@ -19,6 +19,14 @@ persistent actor {
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
+  // Mirrors the Supabase event_type enum so canister events round-trip with
+  // the app's existing type handling.
+  func validEventType(value : Text) : Bool {
+    value == "game" or value == "training" or value == "social" or value == "mini_league"
+  };
+  func validLocation(value : ?Text) : Bool {
+    switch (value) { case null true; case (?text) text.size() <= 256 }
+  };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };
@@ -70,22 +78,37 @@ persistent actor {
     #Ok
   };
 
-  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); if (not valid(club_id) or not valid(title) or not valid(description) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; creator = caller; starts_at_ms; ends_at_ms; revision = 1 };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; revision = 1 };
     events := events.concat([created]); #Ok(created)
   };
 
-  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        if (not valid(title) or not valid(description) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
-        let updated : Types.Event = { current with title; description; starts_at_ms; ends_at_ms; revision = current.revision + 1 };
+        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
+        let updated : Types.Event = { current with title; description; event_type; location; starts_at_ms; ends_at_ms; revision = current.revision + 1 };
+        var index = 0;
+        for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
+        #Err("Event not found")
+      };
+    }
+  };
+
+  // Cancellation is separate from update_event so cancelling cannot
+  // accidentally clobber other fields with stale browser state.
+  public shared ({ caller }) func set_event_cancelled(id : Text, cancelled : Bool) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        let updated : Types.Event = { current with cancelled; revision = current.revision + 1 };
         var index = 0;
         for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
         #Err("Event not found")
