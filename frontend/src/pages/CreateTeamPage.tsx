@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam } from "@/live/features/membership";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
@@ -357,8 +358,15 @@ export default function CreateTeamPage() {
       return;
     }
 
+    // When membership is ICP-routed the team row lives on the canister: the
+    // Supabase-only side effects below (logo URL update, role rows, pending
+    // invites, invite email) would target rows that do not exist, so they
+    // are gated off. Role assignment and email invites need canister
+    // equivalents — provisional until then.
+    const membershipOnIcp = isFeatureRoutedToIcp("membership");
+
     // Upload logo to storage if one was selected
-    if (logoFile) {
+    if (logoFile && !membershipOnIcp) {
       try {
         const fileExt = logoFile.name.split('.').pop();
         const fileName = `${clubId}/${team.id}/${Date.now()}.${fileExt}`;
@@ -383,7 +391,7 @@ export default function CreateTeamPage() {
     }
 
     // Handle admin assignment
-    if (adminAssignment?.type === 'existing_user' && adminAssignment.userId) {
+    if (adminAssignment?.type === 'existing_user' && adminAssignment.userId && !membershipOnIcp) {
       // Assign the selected user as team admin
       const { error: roleError } = await supabase.from("user_roles").insert({
         user_id: adminAssignment.userId,
@@ -402,7 +410,7 @@ export default function CreateTeamPage() {
       }
       await invalidateTeamLists(queryClient, user?.id);
       navigate(`/teams/${team.id}`);
-    } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName) {
+    } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName && !membershipOnIcp) {
       // Create pending invite with email
       const inviteToken = crypto.randomUUID();
       const link = `${window.location.origin}/join/p/${inviteToken}`;
@@ -473,7 +481,7 @@ export default function CreateTeamPage() {
           teamName: team.name 
         } 
       });
-    } else {
+    } else if (!membershipOnIcp) {
       // Default: Assign creator as team_admin
       const { error: roleError } = await supabase.from("user_roles").insert({
         user_id: user!.id,
