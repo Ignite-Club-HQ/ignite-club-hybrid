@@ -120,3 +120,96 @@ export async function claimLiveJoinToken(ctx: FeatureBackendContext, token: stri
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.claim_join_token(token), "Claim join token");
 }
+
+export interface LiveMatchDetailsInput {
+  homeTeamId: string;
+  awayTeamId: string;
+  divisionId?: string | null;
+  scheduledAtMs?: number | Date | null;
+  venue?: string | null;
+  pitchNumber?: string | null;
+  roundNumber?: number | null;
+  durationMinutes?: number | null;
+  arrivalMinutesBefore?: number | null;
+  notes?: string | null;
+  expectedRevision: number;
+}
+
+/**
+ * Fixture detail edit (teams, schedule, venue, division, notes) — the
+ * counterpart of the edit-match dialog's Supabase update. Scores stay under
+ * set_match_result.
+ */
+export async function updateLiveMatchDetails(
+  ctx: FeatureBackendContext,
+  matchId: string,
+  input: LiveMatchDetailsInput,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_match_details(
+      matchId,
+      input.homeTeamId,
+      input.awayTeamId,
+      candidOpt(input.divisionId),
+      candidOpt(input.scheduledAtMs == null ? null : toNat64(input.scheduledAtMs)),
+      candidOpt(input.venue),
+      candidOpt(input.pitchNumber),
+      candidOpt(input.roundNumber),
+      candidOpt(input.durationMinutes),
+      candidOpt(input.arrivalMinutesBefore),
+      candidOpt(input.notes),
+      BigInt(input.expectedRevision),
+    ),
+    "Update match details",
+  );
+}
+
+export async function assignLiveDivision(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  teamId: string,
+  divisionId: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.assign_division(competitionId, teamId, candidOpt(divisionId)),
+    "Assign division",
+  );
+}
+
+/** Counterpart of the Supabase duplicate_season_structure RPC. */
+export async function duplicateLiveSeason(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  sourceName: string,
+  newName: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.duplicate_season(competitionId, sourceName, newName),
+    "Duplicate season",
+  );
+}
+
+export async function setLiveSeasonDivisions(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  seasonName: string,
+  divisions: string[],
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_season_divisions(competitionId, seasonName, divisions),
+    "Set season divisions",
+  );
+}
+
+/** Cross-club listing for the competitions overview when no club is selected. */
+export async function listLiveCompetitionsMulti(
+  ctx: FeatureBackendContext,
+  clubIds: string[],
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_competitions_multi(clubIds), "List competitions");
+}

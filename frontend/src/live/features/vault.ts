@@ -111,10 +111,11 @@ export async function listLiveVaultFolders(
   ctx: FeatureBackendContext,
   clubId: string,
   teamId: string | null,
+  miniLeagueId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.list_folders(clubId, teamId ? [teamId] : []),
+    actor.list_folders(clubId, teamId ? [teamId] : [], miniLeagueId ? [miniLeagueId] : []),
     "List vault folders",
   );
 }
@@ -128,10 +129,11 @@ export async function listLiveVaultClubFiles(
   ctx: FeatureBackendContext,
   clubId: string,
   teamId: string | null,
+  miniLeagueId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.list_club_files(clubId, teamId ? [teamId] : []),
+    actor.list_club_files(clubId, teamId ? [teamId] : [], miniLeagueId ? [miniLeagueId] : []),
     "List vault club files",
   );
 }
@@ -163,6 +165,7 @@ export async function createLiveVaultFolder(
   parentId: string | null,
   name: string,
   restrictedRoles: string[],
+  miniLeagueId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -173,6 +176,7 @@ export async function createLiveVaultFolder(
       candidOpt(parentId),
       name,
       restrictedRoles,
+      candidOpt(miniLeagueId),
     ),
     "Create vault folder",
   );
@@ -208,6 +212,7 @@ export async function registerLiveVaultFile(
   mime: string,
   isExternalLink: boolean,
   blobRef: LiveVaultBlobRef | null,
+  miniLeagueId: string | null = null,
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -222,6 +227,7 @@ export async function registerLiveVaultFile(
       mime,
       isExternalLink,
       candidOpt(blobRef),
+      candidOpt(miniLeagueId),
     ),
     "Register vault file",
   );

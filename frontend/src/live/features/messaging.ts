@@ -57,15 +57,32 @@ export async function listLiveMessagesPage(
   );
 }
 
+export interface LiveMessageAttachment {
+  /** "poll" | "news" | "image" — matches the group chat composer payloads. */
+  kind: string;
+  refId: string;
+  url?: string | null;
+}
+
 export async function sendLiveMessage(
   ctx: FeatureBackendContext,
   conversationId: string,
   body: string,
   idempotencyKey: string,
+  attachment?: LiveMessageAttachment | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.send_message(conversationId, body, idempotencyKey),
+    actor.send_message(
+      conversationId,
+      body,
+      idempotencyKey,
+      candidOpt(
+        attachment
+          ? { kind: attachment.kind, ref_id: attachment.refId, url: candidOpt(attachment.url) }
+          : null,
+      ),
+    ),
     "Send message",
   );
 }
