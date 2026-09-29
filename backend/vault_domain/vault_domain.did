@@ -1,0 +1,21 @@
+type BlobRef = record { canister : text; content_hash : text; path : text };
+type VaultFolder = record { id : text; club : text; team : opt text; parent_id : opt text; name : text; restricted_roles : vec text; created_by : principal; created_at_ms : nat64; deleted_at_ms : opt nat64 };
+type VaultFile = record { id : text; folder_id : text; club : text; team : opt text; name : text; file_url : text; size : nat64; mime : text; uploaded_by : principal; created_at_ms : nat64; deleted_at_ms : opt nat64; is_external_link : bool; blob_ref : opt BlobRef };
+type FolderResult = variant { Ok : VaultFolder; Err : text };
+type FileResult = variant { Ok : VaultFile; Err : text };
+type FoldersResult = variant { Ok : vec VaultFolder; Err : text };
+type FilesResult = variant { Ok : vec VaultFile; Err : text };
+service : {
+  create_folder : (text, text, opt text, opt text, text, vec text) -> (FolderResult);
+  delete_folder : (text) -> (FolderResult);
+  grant_role : (principal, text, opt text, opt text) -> (variant { Ok; Err : text });
+  initialize : () -> (variant { Ok; Err : text });
+  list_club_files : (text, opt text) -> (FilesResult) query;
+  list_files : (text) -> (FilesResult) query;
+  list_folders : (text, opt text) -> (FoldersResult) query;
+  list_trashed_files : (text) -> (FilesResult) query;
+  register_file : (text, text, text, opt text, text, text, nat64, text, bool, opt BlobRef) -> (FileResult);
+  restore_file : (text) -> (FileResult);
+  trash_file : (text) -> (FileResult);
+  update_folder : (text, text, vec text) -> (FolderResult);
+};
