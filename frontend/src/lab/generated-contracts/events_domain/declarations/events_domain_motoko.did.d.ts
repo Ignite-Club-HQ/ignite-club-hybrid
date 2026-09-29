@@ -61,6 +61,11 @@ export interface Rsvp {
   'event_id' : string,
 }
 export interface _SERVICE {
+  'addBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_lineup' : ActorMethod<
     [string, string, string, [] | [string]],
     { 'Ok' : LineupEntry } |
@@ -95,7 +100,17 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'listBulkAccessPrincipals' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'removeBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
