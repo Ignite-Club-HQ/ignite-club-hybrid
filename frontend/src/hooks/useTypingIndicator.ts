@@ -19,7 +19,9 @@ export function useTypingIndicator(
   const isTypingRef = useRef(false);
 
   useEffect(() => {
-    if (!userId || !channelName) return;
+    // Presence has no canister equivalent — on ICP typing indicators are
+    // simply hidden rather than opening a dead Supabase channel.
+    if (!userId || !channelName || isFeatureRoutedToIcp("messaging")) return;
 
     const channel = supabase.channel(`typing:${channelName}`);
     channelRef.current = channel;

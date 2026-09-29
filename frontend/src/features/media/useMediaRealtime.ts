@@ -37,7 +37,7 @@ export function useMediaRealtime(userId: string | undefined, photoIds: readonly 
   }, [userId, queryClient]);
 
   useEffect(() => {
-    if (!userId || visiblePhotoIds.size === 0) return;
+    if (!userId || visiblePhotoIds.size === 0 || mediaOnIcp) return;
     const channel = supabase
       .channel(`media-comments-${userId}`)
       .on(
