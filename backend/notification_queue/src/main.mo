@@ -154,6 +154,41 @@ persistent actor {
     }
   };
 
+  // Browser fan-out: one update call enqueues the same notification for many
+  // recipients (bulk reminders, duty-completion notices, invites). Ids are
+  // derived as key_prefix # "-" # user so a retried fan-out is idempotent
+  // per recipient. NOTE: recipients are browser-supplied account ids —
+  // provisional until account ids are bound to principals (identity_access).
+  public shared ({ caller }) func fan_out(users : [Text], club : Text, kind : Text, body : Text, key_prefix : Text, related_id : ?Text) : async Types.ResultNat16 {
+    authenticated(caller);
+    if (users.size() == 0 or users.size() > 500) { return #Err("Invalid recipient count") };
+    if (not valid(club) or not valid(kind) or not valid(key_prefix)) { return #Err("Invalid fan-out fields") };
+    if (users.any(func(u) = not valid(u))) { return #Err("Invalid recipient") };
+    let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var created : Nat16 = 0;
+    for (user in users.values()) {
+      let id = key_prefix # "-" # user;
+      switch (get(id)) {
+        case (?_) {};
+        case null {
+          let notification : Types.Notification = {
+            id; user; club; kind; body;
+            idempotency_key = key_prefix;
+            status = #Pending;
+            attempts = 0;
+            next_attempt_ms = 0;
+            read = false;
+            related_id;
+            created_at_ms = stamp;
+          };
+          items := items.concat([notification]);
+          created += 1;
+        };
+      };
+    };
+    #Ok(created)
+  };
+
   // ---- Browser inbox surface ----
   // NOTE: the `user` field carries the app's account id (a Text), not the
   // caller's II principal, so the canister cannot verify inbox ownership.
