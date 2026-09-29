@@ -39,7 +39,6 @@ export function EditMatchDetailsDialog({
   competitionId,
   entries,
   divisions,
-  supabaseClient,
 }: EditMatchDetailsDialogProps) {
   const qc = useQueryClient();
   const { toast } = useToast();
