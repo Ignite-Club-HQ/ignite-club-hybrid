@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "mode": "coexistence-only",
-  "logical_canister_count": 13,
+  "logical_canister_count": 14,
   "roles": [
     { "name": "placement_registry", "kind": "control_plane", "shard_key": "global", "path": "backend/placement_registry", "status": "poc", "rls_gate": "placement_registry" },
     { "name": "shard_router", "kind": "control_plane", "shard_key": "global", "path": "backend/shard_router", "status": "poc", "rls_gate": "shard_router" },
@@ -15,6 +15,7 @@
     { "name": "notification_queue", "kind": "worker", "shard_key": "recipient_or_region", "path": "backend/notification_queue", "status": "implemented_poc", "rls_gate": "notification_queue" },
     { "name": "timer_jobs", "kind": "worker", "shard_key": "workflow_or_region", "path": "backend/timer_jobs", "status": "poc", "rls_gate": "timer_jobs" },
     { "name": "pii_access_control", "kind": "domain", "shard_key": "account_or_region", "path": "backend/pii_access_control", "status": "implemented_poc", "rls_gate": "pii_access_control" },
+    { "name": "vault_domain", "kind": "domain", "shard_key": "club", "path": "backend/vault_domain", "status": "implemented_poc", "rls_gate": "vault_domain" },
     { "name": "secret_workload_identity", "kind": "worker", "shard_key": "workflow_or_region", "path": "backend/secret_workload_identity", "status": "implemented_poc", "rls_gate": "secret_workload_identity" }
   ],
   "external_boundaries": [
