@@ -56,6 +56,9 @@ describe("mapLiveHomeEvent", () => {
     id: "evt-1",
     title: "Saturday training",
     description: "",
+    event_type: "training",
+    location: [] as [] | [string],
+    cancelled: false,
     club_id: "club-1",
     team_id: ["team-1"] as [] | [string],
     creator: { toText: () => "aaaaa-aa" } as never,
@@ -72,6 +75,21 @@ describe("mapLiveHomeEvent", () => {
     expect(mapped.team_id).toBe("team-1");
     expect(mapped.clubs).toEqual({ name: "Ignite FC", sport: null });
     expect(mapped.event_date).toBe(new Date(1_800_000_000_000).toISOString());
+  });
+
+  it("maps canister type, location, and cancellation through", () => {
+    const mapped = mapLiveHomeEvent(
+      { ...canisterEvent, event_type: "game", location: ["Riverside Oval"], cancelled: true },
+      new Map(),
+    );
+    expect(mapped.type).toBe("game");
+    expect(mapped.location_name).toBe("Riverside Oval");
+    expect(mapped.is_cancelled).toBe(true);
+  });
+
+  it("maps the mini_league type to social (HomePage union has no mini_league)", () => {
+    const mapped = mapLiveHomeEvent({ ...canisterEvent, event_type: "mini_league" }, new Map());
+    expect(mapped.type).toBe("training");
   });
 
   it("handles missing team, club profile, and provisional fields", () => {
