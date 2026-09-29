@@ -27,6 +27,8 @@ import { idlFactory as shardRouterIdl } from "../lab/bindings/shard_router/decla
 import type { _SERVICE as ShardRouterActor } from "../lab/bindings/shard_router/declarations/shard_router.did.js";
 import { idlFactory as timerJobsIdl } from "../lab/bindings/timer_jobs/declarations/timer_jobs.did.js";
 import type { _SERVICE as TimerJobsActor } from "../lab/bindings/timer_jobs/declarations/timer_jobs.did.js";
+import { idlFactory as vaultDomainIdl } from "../lab/bindings/vault_domain/declarations/vault_domain.did.js";
+import type { _SERVICE as VaultDomainActor } from "../lab/bindings/vault_domain/declarations/vault_domain.did.js";
 
 /**
  * Typed live (mainnet / Cloud Engine) connectors for every backend canister,
@@ -55,6 +57,7 @@ export const DOMAIN_LABELS: Record<string, string> = {
   secret_workload_identity: "Secret workload identity",
   shard_router: "Shard router",
   timer_jobs: "Timer jobs",
+  vault_domain: "Vault domain",
 };
 
 export function isDomainConfigured(target: IcpTargetConfig, domainKey: string): boolean {
@@ -111,3 +114,6 @@ export const connectLiveShardRouter = (target: IcpTargetConfig, identity: Identi
 
 export const connectLiveTimerJobs = (target: IcpTargetConfig, identity: Identity) =>
   connect<TimerJobsActor>(target, identity, "timer_jobs", timerJobsIdl);
+
+export const connectLiveVaultDomain = (target: IcpTargetConfig, identity: Identity) =>
+  connect<VaultDomainActor>(target, identity, "vault_domain", vaultDomainIdl);
