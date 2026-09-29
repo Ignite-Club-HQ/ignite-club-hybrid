@@ -1,5 +1,11 @@
 import { connectLiveMediaMetadata } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
+import {
+  resolveMediaSource,
+  type LiveAssetLocation,
+  type LiveBlobRef,
+  type LiveMediaSource,
+} from "../mediaStorage";
 import { toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
 
 /**
@@ -7,8 +13,10 @@ import { toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
  *
  * Canister-side counterpart of the Supabase media repositories in
  * `features/media/`. The canister stores asset *metadata* (checksum, storage
- * path, visibility) plus reactions and comments; the bytes themselves stay in
- * object storage, referenced by `storage_path`.
+ * path, visibility) plus reactions and comments; the bytes themselves live
+ * wherever `resolveMediaSource` points — Supabase object storage via
+ * `storage_path` today, an ICP blob-store canister via `blob_ref` once one
+ * is deployed.
  *
  * NOTE: untested against a live canister until deployment.
  */
@@ -21,6 +29,8 @@ export interface LiveAssetRegistration {
   storagePath: string;
   visibility: string;
   contentLength: number;
+  /** Set when the bytes were uploaded to an ICP blob-store canister. */
+  blobRef?: LiveBlobRef;
 }
 
 export async function registerLiveAsset(
@@ -28,8 +38,8 @@ export async function registerLiveAsset(
   input: LiveAssetRegistration,
 ) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.register_asset(
+  const asset = unwrapCandid(
+    await actor.register_asset(
       input.clubId,
       input.kind,
       input.mime,
@@ -40,6 +50,16 @@ export async function registerLiveAsset(
     ),
     "Register asset",
   );
+  if (!input.blobRef) return asset;
+  return unwrapCandid(
+    await actor.set_blob_ref(asset.id, [input.blobRef]),
+    "Set blob reference",
+  );
+}
+
+/** Where an asset's bytes are served from (Supabase storage or ICP blob store). */
+export function liveAssetSource(asset: LiveAssetLocation): LiveMediaSource {
+  return resolveMediaSource(asset);
 }
 
 export async function listLiveAssets(ctx: FeatureBackendContext, clubId: string) {
