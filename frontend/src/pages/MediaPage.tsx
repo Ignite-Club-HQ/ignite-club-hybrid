@@ -31,6 +31,9 @@ import {
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchMediaComments, fetchMediaReactions } from "@/features/media/mediaReadRepository";
+import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "@/features/media/mediaEngagementRepository";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
@@ -912,15 +915,7 @@ function SupabaseMediaPage() {
     queryKey: reactionsQueryKey,
     queryFn: async () => {
       if (allPhotoIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("photo_reactions")
-        .select("photo_id, user_id, reaction_type, profiles:user_id(display_name, avatar_url)")
-        .in("photo_id", allPhotoIds);
-      if (error) {
-        console.error("Error fetching reactions:", error);
-        return [];
-      }
-      return data || [];
+      return fetchMediaReactions(allPhotoIds);
     },
     enabled: !!user && allPhotoIds.length > 0,
     staleTime: 120000,
@@ -938,16 +933,7 @@ function SupabaseMediaPage() {
     queryKey: commentsQueryKey,
     queryFn: async () => {
       if (allPhotoIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("photo_comments")
-        .select("*, profiles:user_id(display_name, avatar_url)")
-        .in("photo_id", allPhotoIds)
-        .order("created_at", { ascending: true });
-      if (error) {
-        console.error("Error fetching comments:", error);
-        return [];
-      }
-      return data || [];
+      return fetchMediaComments(allPhotoIds);
     },
     enabled: !!user && allPhotoIds.length > 0,
     staleTime: 120000,
@@ -958,6 +944,16 @@ function SupabaseMediaPage() {
   // appear without waiting for the 2-minute staleTime to expire.
   useEffect(() => {
     if (!user?.id || allPhotoIds.length === 0) return;
+    // ICP-routed media has no realtime channel (canisters are request/response)
+    // — poll instead of subscribing to Supabase postgres_changes.
+    if (isFeatureRoutedToIcp("media")) {
+      const interval = window.setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+        queryClient.invalidateQueries({ queryKey: ["photo-comments", user.id] });
+        queryClient.invalidateQueries({ queryKey: ["photo-reactions", user.id] });
+      }, 30000);
+      return () => window.clearInterval(interval);
+    }
     const channel = supabase
       .channel(`media-comments-${user.id}`)
       .on(
@@ -1004,21 +1000,7 @@ function SupabaseMediaPage() {
 
   const reactMutation = useMutation({
     mutationFn: async ({ photoId, reactionType }: { photoId: string; reactionType: string }) => {
-      // First remove any existing reaction
-      const { error: deleteError } = await supabase.from("photo_reactions").delete()
-        .eq("photo_id", photoId)
-        .eq("user_id", user!.id);
-      
-      if (deleteError) throw deleteError;
-      
-      // Then add the new reaction
-      const { error: insertError } = await supabase.from("photo_reactions").insert({
-        photo_id: photoId,
-        user_id: user!.id,
-        reaction_type: reactionType,
-      });
-      
-      if (insertError) throw insertError;
+      await replaceMediaReaction({ photoId, userId: user!.id, reactionType });
     },
     onMutate: async ({ photoId, reactionType }) => {
       await queryClient.cancelQueries({ queryKey: reactionsQueryKey });
@@ -1053,10 +1035,7 @@ function SupabaseMediaPage() {
 
   const removeReactionMutation = useMutation({
     mutationFn: async (photoId: string) => {
-      const { error } = await supabase.from("photo_reactions").delete()
-        .eq("photo_id", photoId)
-        .eq("user_id", user!.id);
-      if (error) throw error;
+      await removeMediaReaction({ photoId, userId: user!.id });
     },
     onMutate: async (photoId: string) => {
       await queryClient.cancelQueries({ queryKey: reactionsQueryKey });
@@ -1085,14 +1064,7 @@ function SupabaseMediaPage() {
       if (!user?.id) {
         throw new Error("User not authenticated");
       }
-      const { error } = await supabase.from("photo_comments").insert({
-        photo_id: photoId,
-        user_id: user.id,
-        text,
-        reply_to_id: replyToId || null,
-      });
-      
-      if (error) throw error;
+      await createMediaComment({ photoId, userId: user.id, text, replyToId });
     },
     onMutate: async ({ photoId, text, replyToId }) => {
       if (!user?.id) return { previousComments: undefined };

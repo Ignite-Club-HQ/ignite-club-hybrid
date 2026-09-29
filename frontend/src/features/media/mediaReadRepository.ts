@@ -194,7 +194,9 @@ export async function fetchMediaComments(
           id: comment.id,
           photo_id: comment.asset_id,
           user_id: comment.author.toText(),
-          content: comment.body,
+          text: comment.body,
+          reply_to_id: null,
+          reply_to: null,
           created_at: new Date(Number(comment.created_at_ms)).toISOString(),
           profiles: null,
         })) as any[];
