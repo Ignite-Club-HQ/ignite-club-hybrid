@@ -116,6 +116,10 @@ persistent actor {
     last_accessed : Nat64;
     access_count : Nat64;
     domain_owner : Principal;
+    // Principals (beyond the domain owner and governor) allowed to read this
+    // record — e.g. both parents/guardians of a child. Managed via
+    // grant_pii_read/revoke_pii_read by the domain owner or governor.
+    readers : [Principal];
   };
 
   type MasterSecretEntry = {
@@ -156,6 +160,13 @@ persistent actor {
 
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+
+  // Governor, the record's domain owner, or an explicitly granted reader
+  // may read. Readers are per-record so e.g. a parent can read their own
+  // children's PII without domain-owner rights over the whole id space.
+  func can_read(caller : Principal, r : PiiRecord) : Bool {
+    isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller))
   };
 
   func log_audit(requesting_principal : Principal, pii_id : Text, field_id : Text, operation : Text, allowed : Bool, purpose : Text) {
@@ -440,6 +451,7 @@ persistent actor {
       last_accessed = now;
       access_count = 0;
       domain_owner = domain_owner;
+      readers = [];
     };
 
     // Remove existing if any, then append
@@ -466,7 +478,7 @@ persistent actor {
 
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case (?r) {
-        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) {
+        if (not can_read(caller, r)) {
           return #Err("Access denied to PII field");
         };
         #Ok({
@@ -491,8 +503,8 @@ persistent actor {
 
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case (?r) {
-        // Access control: caller must be governor or domain owner
-        let allowed = isGovernor(caller) or caller.equal(r.domain_owner);
+        // Access control: governor, domain owner or a granted reader
+        let allowed = can_read(caller, r);
 
         log_audit(caller, pii_id, field_id, operation, allowed, purpose);
 
@@ -531,6 +543,77 @@ persistent actor {
       case null {
         log_audit(caller, pii_id, field_id, operation, false, purpose);
         #Err("PII not found")
+      };
+    }
+  };
+
+  // Batch variant of get_decrypted_pii for member-facing surfaces (e.g. the
+  // home feed resolving child names). One update call instead of N. Records
+  // the caller cannot read (or that fail integrity) are omitted from the
+  // result rather than failing the whole batch; every attempt is audited.
+  // Does not bump access_count/last_accessed (bulk read path).
+  public shared ({ caller }) func get_decrypted_pii_batch(
+    pii_ids : [Text],
+    field_id : Text,
+    operation : Text,
+    purpose : Text
+  ) : async { #Ok : [DecryptedPii]; #Err : Text } {
+    auth(caller);
+    if (pii_ids.size() > 100) return #Err("Batch too large");
+    var out : [DecryptedPii] = [];
+    for (pii_id in pii_ids.values()) {
+      switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+        case (?r) {
+          let allowed = can_read(caller, r);
+          log_audit(caller, pii_id, field_id, operation, allowed, purpose);
+          if (allowed) {
+            switch (find_master_secret(r.master_key_id)) {
+              case (?master_secret) {
+                let field_key = derive_field_key(master_secret, pii_id, field_id);
+                switch (aead_decrypt(field_key, r.nonce, r.ciphertext)) {
+                  case (?plaintext) { out := out.concat([{ pii_id; field_id; plaintext }]) };
+                  case null {};
+                };
+              };
+              case null {};
+            };
+          };
+        };
+        case null {
+          log_audit(caller, pii_id, field_id, operation, false, purpose);
+        };
+      };
+    };
+    #Ok(out)
+  };
+
+  // Grant another principal read access to one record (e.g. a second
+  // guardian of the same child). Domain owner or governor only.
+  public shared ({ caller }) func grant_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (reader.equal(Principal.anonymous())) return #Err("Invalid reader");
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?r) {
+        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        if (not r.readers.any(func(p) = p.equal(reader))) {
+          pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.concat([reader]) } } else { rec });
+        };
+        log_audit(caller, pii_id, field_id, "grant_read", true, "Reader access granted");
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?r) {
+        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.filter(func(p) = not p.equal(reader)) } } else { rec });
+        log_audit(caller, pii_id, field_id, "revoke_read", true, "Reader access revoked");
+        #Ok
       };
     }
   };
