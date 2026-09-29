@@ -31,7 +31,16 @@ export function startChatRealtimeChannel({
   // instead (30s refetchInterval / useClubRealtimeMode polling), so skip the
   // subscription entirely rather than opening a dead Supabase socket.
   if (isFeatureRoutedToIcp("messaging")) {
-    return () => {};
+    // When messaging is routed to ICP, canisters are request/response — there
+    // is no realtime channel to subscribe to. Poll the screen's message
+    // queries instead (paused while the tab is hidden), so DMs, broadcast
+    // and club-admin chats still refresh on canister backends.
+    if (!cacheKeys || cacheKeys.length === 0) return () => {};
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      for (const key of cacheKeys) queryClient.invalidateQueries({ queryKey: key });
+    }, 30000);
+    return () => clearInterval(poll);
   }
   channel.subscribe();
   noteChannelSubscribed(channelKey);
