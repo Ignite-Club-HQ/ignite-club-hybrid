@@ -217,6 +217,64 @@ persistent actor {
     }
   };
 
+  public shared ({ caller }) func rename_file(id : Text, name : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    auth(caller);
+    if (not validLong(name, 160)) return #Err("Invalid file name");
+    switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Err("File not found") };
+      case (?file) {
+        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        let updated : Types.VaultFile = { file with name = name };
+        files := files.map(func(item) = if (item.id == id) { updated } else { item });
+        #Ok(updated)
+      };
+    }
+  };
+
+  // Moves a file into another folder of the same club and adopts that
+  // folder's team scope. An empty folder_id moves the file to the vault
+  // root (no folder) and leaves its team scope unchanged — provisional
+  // until the vault scope model is verified post-deploy.
+  public shared ({ caller }) func move_file(id : Text, folder_id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
+    auth(caller);
+    switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Err("File not found") };
+      case (?file) {
+        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (folder_id == "") {
+          let updated : Types.VaultFile = { file with folder_id = "" };
+          files := files.map(func(item) = if (item.id == id) { updated } else { item });
+          return #Ok(updated);
+        };
+        if (not valid(folder_id)) return #Err("Invalid folder");
+        switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+          case null { #Err("Target folder not found") };
+          case (?folder) {
+            if (folder.club != file.club) return #Err("Target folder belongs to another club");
+            let updated : Types.VaultFile = { file with folder_id = folder_id; team = folder.team };
+            files := files.map(func(item) = if (item.id == id) { updated } else { item });
+            #Ok(updated)
+          };
+        }
+      };
+    }
+  };
+
+  // Hard delete — removes the metadata row outright. File bytes live outside
+  // this canister (Supabase storage today, the blob store later), so byte
+  // cleanup stays with the storage layer.
+  public shared ({ caller }) func delete_file_permanent(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (files.find(func(item) = item.id == id)) {
+      case null { #Err("File not found") };
+      case (?file) {
+        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        files := files.filter(func(item) = item.id != id);
+        #Ok
+      };
+    }
+  };
+
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null))
