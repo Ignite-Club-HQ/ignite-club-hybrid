@@ -7,6 +7,7 @@ module {
   public type Acl = {
     teams : [Team];
     guardians : [Guardian];
+    clubs : [Text];
     children : [Child];
     exclusions : [Exclusion];
     roles : [RoleGrant];
