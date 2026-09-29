@@ -26,6 +26,9 @@ type Pending = {
 export function useRealtimePerfSampler(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
+    // ICP mode: no Supabase realtime for this user — skip the channels and
+    // the sampling inserts entirely.
+    if (resolveAuthBackend() === "icp") return;
     // Stable per-session sampling decision
     if (Math.random() > SAMPLE_RATE) return;
 

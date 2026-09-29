@@ -16,6 +16,7 @@ import { suppressChatScope } from "@/lib/pushTapSuppression";
 import { mark as coldMark } from "@/lib/coldStartMarks";
 import { requestClubSwitchForNotification } from "@/lib/notificationClubSwitch";
 import { useNotificationClubSwitch } from "@/hooks/useNotificationClubSwitch";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 
 const APP_STORE_URL = "https://reference.invalid";

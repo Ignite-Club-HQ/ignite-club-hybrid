@@ -84,7 +84,10 @@ if (typeof window !== "undefined") {
 
 export function useMessagesPageBootstrap(userId: string | undefined, initialized: boolean) {
   const queryClient = useQueryClient();
-  const enabled = !!userId && initialized && isMessagesBootstrapEnabled();
+  // ICP sessions authenticate against canisters — the bootstrap RPC keys off
+  // Supabase auth UUIDs, so it would only fail noisily for a principal id.
+  const enabled =
+    !!userId && initialized && isMessagesBootstrapEnabled() && resolveAuthBackend() !== "icp";
 
   const query = useQuery({
     queryKey: ["messages-page-bootstrap", userId],
