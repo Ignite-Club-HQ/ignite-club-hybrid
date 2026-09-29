@@ -14,6 +14,10 @@ export function createIdentityAccessClient(actor: _SERVICE) {
   };
   return {
     whoami: () => call(() => actor.whoami()),
+    getProfile: () => call(() => actor.get_profile()),
+    setProfile: (displayName: string, avatarRef?: string) =>
+      call(() => actor.set_profile(displayName, avatarRef ? [avatarRef] : [])),
+    myRoles: () => call(() => actor.my_roles()),
     exportState: () => call<State>(() => actor.export_state()),
     registerAccount: () => call(() => actor.register_account()),
     access: (club?: string, team?: string, child?: string) => call(() => actor.access(club ? [club] : [], team ? [team] : [], child ? [child] : [])),

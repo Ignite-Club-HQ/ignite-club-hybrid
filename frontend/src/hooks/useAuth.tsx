@@ -26,6 +26,7 @@ import { notificationKeys } from "@/lab/notificationQueryKeys";
 // agent/candid SDK and its crypto dependencies (~480KB), which must not enter
 // every page's initial chunk — only IcpAuthProvider (ICP lab auth mode) needs it.
 import type { InternetIdentitySession } from "@/lab/internetIdentityAuth";
+import { getCachedIcpIdentityProfile, type IcpIdentityProfile } from "@/live/identityProfileCache";
 
 
 interface Profile {
@@ -1223,21 +1224,71 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
   });
   const principal = session?.principal ?? null;
+  // Real identity profile resolved from the identity_access canister
+  // (Stage B of the ICP-only cutover). Starts from the per-principal
+  // localStorage cache for instant render, then refreshes from the canister.
+  // Null means "not resolved yet"; a resolved profile with displayName=null
+  // means the canister has no profile and the user must complete one.
+  const [icpProfile, setIcpProfile] = useState<IcpIdentityProfile | null>(() =>
+    principal ? getCachedIcpIdentityProfile(principal) : null,
+  );
+  const [icpProfileResolved, setIcpProfileResolved] = useState(() =>
+    Boolean(principal && getCachedIcpIdentityProfile(principal)),
+  );
+  const icpProfileRequestRef = useRef(0);
+  useEffect(() => {
+    if (!principal) {
+      setIcpProfile(null);
+      setIcpProfileResolved(false);
+      return;
+    }
+    const cached = getCachedIcpIdentityProfile(principal);
+    setIcpProfile(cached);
+    setIcpProfileResolved(Boolean(cached));
+    const requestId = ++icpProfileRequestRef.current;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
+          import("@/lab/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        const fetched = await fetchIcpIdentityProfile(identity, principal);
+        if (!cancelled && icpProfileRequestRef.current === requestId) {
+          setIcpProfile(fetched);
+          setIcpProfileResolved(true);
+        }
+      } catch (error) {
+        console.warn("[Auth] ICP identity profile fetch failed:", error);
+        // Keep rendering from cache (or an unresolved profile) rather than
+        // fabricating identity details. A retry happens on the next mount or
+        // manual refreshProfile().
+        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)) {
+          setIcpProfileResolved(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [principal]);
   const user = principal ? {
     id: principal,
     aud: "authenticated",
     role: "authenticated",
     email: `${principal}@internet-identity.ignite-icp.test`,
     app_metadata: { provider: "icp" },
-    user_metadata: { display_name: "Internet Identity" },
+    user_metadata: { display_name: icpProfile?.displayName ?? null },
     identities: [],
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
   } as unknown as User : null;
   const profile = principal ? {
     id: principal,
-    display_name: "Internet Identity",
-    avatar_url: null,
+    display_name: icpProfile?.displayName ?? null,
+    avatar_url: icpProfile?.avatarRef ?? null,
     ignite_points: 0,
     theme_preference: null,
   } : null;
@@ -1286,11 +1337,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     session: null as Session | null,
     profile,
     loading: false,
-    profileLoading: false,
+    profileLoading: Boolean(principal) && !icpProfileResolved,
     profileError: false,
     initialized: true,
     sessionRestoration: principal ? "authenticated" as const : "signed_out" as const,
-    profileResolved: true,
+    profileResolved: !principal || icpProfileResolved,
     unreadCount: 0,
     unreadMessagesCount: 0,
     signUp: async () => ({ error: (await signInWithIcp()).error, needsEmailConfirmation: false }),
@@ -1299,10 +1350,23 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signOut: async () => {
       localStorage.removeItem("ignite_icp_internet_identity_session");
       setSession(null);
+      const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
+      clearIcpIdentityProfileCache();
       const { signOutInternetIdentity } = await import("@/lab/internetIdentityAuth");
       await signOutInternetIdentity();
     },
-    refreshProfile: async () => {},
+    refreshProfile: async () => {
+      if (!principal) return;
+      const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
+        import("@/lab/internetIdentityAuth"),
+        import("@/live/identityProfile"),
+      ]);
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return;
+      const fetched = await fetchIcpIdentityProfile(identity, principal);
+      setIcpProfile(fetched);
+      setIcpProfileResolved(true);
+    },
     refreshUnreadCount: async () => {},
     clearUnreadCount: () => {},
     decrementUnreadCount: () => {},

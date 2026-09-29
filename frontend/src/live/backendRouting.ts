@@ -190,6 +190,42 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
   return { defaultBackend: rawDefault, countryRules, targets, countryTargets };
 }
 
+/** localStorage key holding the last successfully loaded routing config. */
+export const BACKEND_ROUTING_CACHE_KEY = "ignite.backendRoutingConfig";
+
+/**
+ * Build-time routing config from `IGNITE_LIVE_BACKEND_ROUTING_JSON` (same
+ * schema as the `backend_routing_config` app_settings row). This is the boot
+ * path that lets an ICP-routed deployment start up without Supabase: the
+ * stored row still overrides it when reachable. Returns null when unset.
+ * Throws on malformed content, mirroring the target registry's env handling.
+ */
+export function getBuildTimeBackendRoutingConfig(): BackendRoutingConfig | null {
+  const raw = import.meta.env["IGNITE_LIVE_BACKEND_ROUTING_JSON"];
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  return parseBackendRoutingConfig(JSON.parse(raw));
+}
+
+/** Persists the last good config so a transient Supabase outage cannot flip a configured deployment back to defaults. */
+export function cacheBackendRoutingConfig(config: BackendRoutingConfig): void {
+  try {
+    globalThis.localStorage?.setItem(BACKEND_ROUTING_CACHE_KEY, JSON.stringify(config));
+  } catch {
+    // Storage unavailable (private mode, quota) — caching is best-effort.
+  }
+}
+
+/** Reads the cached config, returning null when absent or no longer parseable. */
+export function readCachedBackendRoutingConfig(): BackendRoutingConfig | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(BACKEND_ROUTING_CACHE_KEY);
+    if (!raw) return null;
+    return parseBackendRoutingConfig(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 let activeConfig: BackendRoutingConfig | null = null;
 
 function copyConfig(config: BackendRoutingConfig): BackendRoutingConfig {

@@ -51,9 +51,17 @@ export interface PrivacyConsent {
   'granted' : boolean,
   'purpose' : string,
 }
+export interface Profile {
+  'account_id' : string,
+  'avatar_ref' : [] | [string],
+  'updated_at_ns' : bigint,
+  'display_name' : string,
+}
 export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
+  { 'Err' : string };
+export type Result_10 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : LinkChallenge } |
   { 'Err' : string };
@@ -68,6 +76,8 @@ export type Result_6 = { 'Ok' : Array<ExternalSiteBinding> } |
 export type Result_7 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
 export type Result_8 = { 'Ok' : boolean } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : Profile } |
   { 'Err' : string };
 export interface RoleGrant {
   'account_id' : string,
@@ -85,6 +95,7 @@ export interface State {
   'external_bindings' : Array<ExternalSiteBinding>,
   'families' : Array<FamilyLink>,
   'challenges' : Array<LinkChallenge>,
+  'profiles' : Array<Profile>,
   'roles' : Array<RoleGrant>,
   'next_challenge' : bigint,
 }
@@ -105,6 +116,7 @@ export interface _SERVICE {
   'export_state' : ActorMethod<[], Result_3>,
   'get_external_bindings' : ActorMethod<[string], Result_6>,
   'get_privacy_consent' : ActorMethod<[string, string], Result_8>,
+  'get_profile' : ActorMethod<[], Result_9>,
   'grant_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     Result_4
@@ -113,6 +125,7 @@ export interface _SERVICE {
     [string, string, [] | [string], [] | [string], [] | [string]],
     Result_4
   >,
+  'my_roles' : ActorMethod<[], Result_10>,
   'register_account' : ActorMethod<[], Result>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_4>,
@@ -122,6 +135,7 @@ export interface _SERVICE {
   >,
   'set_family' : ActorMethod<[string, string], Result_4>,
   'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_7>,
+  'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

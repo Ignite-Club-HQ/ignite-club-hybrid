@@ -20,6 +20,12 @@ type PrivacyConsent = record {
   granted : bool;
   updated_at_ns : nat64;
 };
+type Profile = record {
+  account_id : text;
+  display_name : text;
+  avatar_ref : opt text;
+  updated_at_ns : nat64;
+};
 type Init = record { governor : principal };
 type LinkChallenge = record {
   id : nat64;
@@ -39,6 +45,8 @@ type Result_5 = variant { Ok : ExternalSiteBinding; Err : text };
 type Result_6 = variant { Ok : vec ExternalSiteBinding; Err : text };
 type Result_7 = variant { Ok : PrivacyConsent; Err : text };
 type Result_8 = variant { Ok : bool; Err : text };
+type Result_9 = variant { Ok : Profile; Err : text };
+type Result_10 = variant { Ok : vec RoleGrant; Err : text };
 type RoleGrant = record {
   account_id : text;
   site_id : opt text;
@@ -56,6 +64,7 @@ type State = record {
   roles : vec RoleGrant;
   external_bindings : vec ExternalSiteBinding;
   privacy_consents : vec PrivacyConsent;
+  profiles : vec Profile;
   next_challenge : nat64;
 };
 service : (Init) -> {
@@ -69,6 +78,9 @@ service : (Init) -> {
   erase_account : (text) -> (Result_4);
   get_external_bindings : (text) -> (Result_6) query;
   get_privacy_consent : (text, text) -> (Result_8) query;
+  get_profile : () -> (Result_9) query;
+  my_roles : () -> (Result_10) query;
+  set_profile : (text, opt text) -> (Result_9);
   grant_role : (text, text, opt text, opt text) -> (Result_4);
   grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_4);
   revoke : (principal, nat64) -> (Result);

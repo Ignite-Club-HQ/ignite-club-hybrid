@@ -12,7 +12,7 @@ use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
-const SCHEMA: u32 = 1;
+const SCHEMA: u32 = 2;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -72,10 +72,22 @@ pub struct PrivacyConsent {
     pub updated_at_ns: u64,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Profile {
+    pub account_id: String,
+    pub display_name: String,
+    pub avatar_ref: Option<String>,
+    pub updated_at_ns: u64,
+}
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct State {
     pub schema: u32,
     pub governor: Principal,
     pub accounts: Vec<Account>,
+    /// One profile per account. `#[serde(default)]` keeps schema-1 stable
+    /// blobs (written before profiles existed) decodable; post_upgrade bumps
+    /// the schema marker once decoded.
+    #[serde(default)]
+    pub profiles: Vec<Profile>,
     pub roles: Vec<RoleGrant>,
     pub families: Vec<FamilyLink>,
     pub exclusions: Vec<Exclusion>,
@@ -279,13 +291,21 @@ fn init(init: Init) {
         challenges: vec![],
         external_bindings: vec![],
         privacy_consents: vec![],
+        profiles: vec![],
         next_challenge: 0,
     };
     store(&state);
 }
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
-    assert_eq!(state().schema, SCHEMA, "unsupported identity schema");
+    let mut state = state();
+    assert!(state.schema <= SCHEMA, "unsupported identity schema");
+    // Schema 1 -> 2: profiles were added; the serde default already decoded
+    // them as empty, so the migration is just the marker bump.
+    if state.schema != SCHEMA {
+        state.schema = SCHEMA;
+        store(&state);
+    }
 }
 
 #[ic_cdk::query]
@@ -306,6 +326,63 @@ fn register_account() -> Outcome<Account> {
         .ok_or("Account unavailable")?;
     store(&state);
     Ok(account)
+}
+
+fn valid_display_name(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty() && trimmed.len() <= 80
+}
+
+/// Sets (or replaces) the caller's profile. The account must already exist —
+/// sign-in provisioning calls register_account first.
+#[ic_cdk::update]
+fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
+    let caller = ic_cdk::api::msg_caller();
+    let state = state();
+    let account_id = account_for(&state, caller)?.id;
+    if !valid_display_name(&display_name) {
+        return Err("Display name must be 1-80 characters".into());
+    }
+    if avatar_ref.as_deref().is_some_and(|a| a.len() > 512) {
+        return Err("Avatar reference must be at most 512 characters".into());
+    }
+    let profile = Profile {
+        account_id: account_id.clone(),
+        display_name: display_name.trim().to_string(),
+        avatar_ref,
+        updated_at_ns: ic_cdk::api::time(),
+    };
+    let mut state = state;
+    state.profiles.retain(|p| p.account_id != account_id);
+    state.profiles.push(profile.clone());
+    store(&state);
+    Ok(profile)
+}
+
+/// The caller's own profile, or an error when none has been set yet.
+#[ic_cdk::query]
+fn get_profile() -> Outcome<Profile> {
+    let state = state();
+    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    state
+        .profiles
+        .iter()
+        .find(|p| p.account_id == account_id)
+        .cloned()
+        .ok_or("Profile not set".into())
+}
+
+/// Every role grant held by the caller, across all clubs/teams.
+#[ic_cdk::query]
+fn my_roles() -> Outcome<Vec<RoleGrant>> {
+    let state = state();
+    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    Ok(state
+        .roles
+        .iter()
+        .filter(|grant| grant.account_id == account_id)
+        .cloned()
+        .collect())
 }
 
 #[ic_cdk::query]
@@ -622,6 +699,9 @@ fn erase_account(account_id: String) -> Outcome<()> {
         .external_bindings
         .retain(|binding| binding.account_id != account_id);
     state
+        .profiles
+        .retain(|profile| profile.account_id != account_id);
+    state
         .privacy_consents
         .retain(|consent| consent.account_id != account_id);
     state.challenges.retain(|challenge| {
@@ -814,6 +894,7 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            profiles: vec![],
             next_challenge: 0,
         };
         state.roles.push(RoleGrant {
@@ -866,6 +947,7 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            profiles: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(&state, "a", "app_admin", None, None, None));
@@ -899,6 +981,7 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            profiles: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(
@@ -958,6 +1041,7 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            profiles: vec![],
             next_challenge: 0,
         };
 
@@ -1007,6 +1091,7 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            profiles: vec![],
             next_challenge: 0,
         };
 
@@ -1067,6 +1152,7 @@ mod tests {
                 granted: true,
                 updated_at_ns: 0,
             }],
+            profiles: vec![],
             next_challenge: 0,
         };
 
@@ -1107,6 +1193,7 @@ mod tests {
                 team: None,
             }],
             challenges: vec![],
+            profiles: vec![],
             external_bindings: vec![ExternalSiteBinding {
                 account_id: "user-1".into(),
                 site_id: "site-a".into(),
@@ -1138,6 +1225,115 @@ mod tests {
         assert!(erased.exclusions.is_empty());
         assert!(erased.external_bindings.is_empty());
         assert!(erased.privacy_consents.is_empty());
+    }
+
+    #[test]
+    fn profile_validation_is_bounded() {
+        assert!(valid_display_name("Paul"));
+        assert!(!valid_display_name(""));
+        assert!(!valid_display_name("   "));
+        assert!(!valid_display_name(&"x".repeat(81)));
+        assert!(valid_display_name(&"x".repeat(80)));
+    }
+
+    #[test]
+    fn profile_replacement_keeps_one_entry_per_account() {
+        let mut profiles: Vec<Profile> = vec![Profile {
+            account_id: "a".into(),
+            display_name: "Old".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        }];
+        let account_id = "a".to_string();
+        let replacement = Profile {
+            account_id: account_id.clone(),
+            display_name: "New".into(),
+            avatar_ref: Some("blob:avatar-1".into()),
+            updated_at_ns: 2,
+        };
+        // Mirror set_profile's replace-in-place logic.
+        profiles.retain(|p| p.account_id != account_id);
+        profiles.push(replacement.clone());
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0], replacement);
+    }
+
+    #[test]
+    fn erase_removes_profiles() {
+        let mut profiles = vec![
+            Profile {
+                account_id: "user-1".into(),
+                display_name: "Gone".into(),
+                avatar_ref: None,
+                updated_at_ns: 0,
+            },
+            Profile {
+                account_id: "user-2".into(),
+                display_name: "Stays".into(),
+                avatar_ref: None,
+                updated_at_ns: 0,
+            },
+        ];
+        profiles.retain(|profile| profile.account_id != "user-1");
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].account_id, "user-2");
+    }
+
+    #[test]
+    fn schema1_blob_without_profiles_decodes_via_serde_default() {
+        // A stable blob written by schema 1 has no `profiles` key; the serde
+        // default must decode it as empty so post_upgrade can bump the marker.
+        #[derive(Serialize)]
+        struct StateV1 {
+            schema: u32,
+            governor: Principal,
+            accounts: Vec<Account>,
+            roles: Vec<RoleGrant>,
+            families: Vec<FamilyLink>,
+            exclusions: Vec<Exclusion>,
+            challenges: Vec<LinkChallenge>,
+            external_bindings: Vec<ExternalSiteBinding>,
+            privacy_consents: Vec<PrivacyConsent>,
+            next_challenge: u64,
+        }
+        let legacy = StateV1 {
+            schema: 1,
+            governor: principal(1),
+            accounts: vec![],
+            roles: vec![],
+            families: vec![],
+            exclusions: vec![],
+            challenges: vec![],
+            external_bindings: vec![],
+            privacy_consents: vec![],
+            next_challenge: 0,
+        };
+        let bytes = encode(&legacy);
+        let decoded: State = decode(&bytes);
+        assert_eq!(decoded.schema, 1);
+        assert!(decoded.profiles.is_empty());
+    }
+
+    #[test]
+    fn exported_candid_matches_the_checked_in_contract() {
+        fn methods(candid: &str) -> std::collections::BTreeSet<String> {
+            let service_start = candid.find("service").expect("service block");
+            candid[service_start..]
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim();
+                    let (name, rest) = line.split_once(':')?;
+                    rest.trim_start().starts_with('(').then(|| name.trim().to_string())
+                })
+                .collect()
+        }
+        let checked_in = include_str!("../identity_access.did");
+        let exported = candid_interface();
+        assert_eq!(
+            methods(checked_in),
+            methods(&exported),
+            "identity_access.did drifted from the exported candid interface"
+        );
     }
 }
 
