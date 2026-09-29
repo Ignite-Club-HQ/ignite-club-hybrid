@@ -1,5 +1,6 @@
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useFreeClubPollingEnabled } from "@/hooks/useFreeClubPollingEnabled";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type ClubRealtimeMode = "realtime" | "polling";
 

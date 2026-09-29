@@ -119,3 +119,13 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
   const { country } = getCurrentCountry();
   return resolveFeatureBackend(getBackendRoutingConfig(), country, tryGetActiveIcpTarget(), feature);
 }
+
+/**
+ * True when a feature is currently served by an ICP canister. Realtime
+ * surfaces use this to skip Supabase Realtime subscriptions and poll via
+ * query calls instead — canisters are request/response and have no push
+ * channel.
+ */
+export function isFeatureRoutedToIcp(feature: FeatureArea): boolean {
+  return getEffectiveBackendForFeature(feature) === "icp";
+}
