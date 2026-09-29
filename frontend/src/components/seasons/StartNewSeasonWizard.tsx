@@ -18,6 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Season } from "@/hooks/useClubSeasons";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveSeason, setLiveSeasonStatus } from "@/live/features/competitions";
 import { ReturningMembersStep } from "./ReturningMembersStep";
 import { SeasonInviteStep } from "./SeasonInviteStep";
 
@@ -63,14 +65,28 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const archiveMut = useMutation({
     mutationFn: async () => {
       if (!currentSeason || !archiveCurrent) return;
-      const { error } = await supabase.rpc("archive_season", { _season_id: currentSeason.id });
-      if (error) throw error;
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.rpc("archive_season", { _season_id: currentSeason.id });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: the competition_domain canister models one
+          // season per competition (no separate season id) and tracks a
+          // revision counter this club-based flow has no equivalent for —
+          // using 0 here is unverified; confirm against the live schema
+          // post-deploy.
+          await setLiveSeasonStatus(ctx, currentSeason.id, "archived", 0);
+        },
+      });
     },
   });
 
   const createMut = useMutation({
     mutationFn: async (): Promise<string> => {
       if (duplicateStructure && currentSeason) {
+        // stays Supabase: no canister shape for duplicate_season_structure
+        // (structure/staff cloning across seasons).
         const { data, error } = await supabase.rpc("duplicate_season_structure", {
           _source_season_id: currentSeason.id,
           _new_season_name: seasonName.trim(),
@@ -79,21 +95,42 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         if (error) throw error;
         return data as string;
       }
-      const { data, error } = await supabase
-        .from("seasons")
-        .insert({ club_id: clubId, name: seasonName.trim(), status: "draft" })
-        .select("id")
-        .single();
-      if (error) throw error;
-      return data.id;
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("seasons")
+            .insert({ club_id: clubId, name: seasonName.trim(), status: "draft" })
+            .select("id")
+            .single();
+          if (error) throw error;
+          return data.id as string;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: competition_domain seasons belong to a
+          // competition id, but this club-based flow has no competition
+          // concept — using clubId as the identifier is unverified; confirm
+          // against the live schema post-deploy.
+          const created = await createLiveSeason(ctx, clubId, seasonName.trim());
+          return created.competition_id;
+        },
+      });
     },
   });
 
   const publishMut = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("publish_season", { _season_id: id });
-      if (error) throw error;
-      // Fan out push notifications to placed players. Failure is non-blocking.
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.rpc("publish_season", { _season_id: id });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: see createMut/archiveMut above re: season
+          // identity and revision — unverified until deploy.
+          await setLiveSeasonStatus(ctx, id, "published", 0);
+        },
+      });
+      // stays Supabase: no canister shape for push notification fan-out.
       await supabase.rpc("notify_season_published", { _season_id: id });
     },
   });

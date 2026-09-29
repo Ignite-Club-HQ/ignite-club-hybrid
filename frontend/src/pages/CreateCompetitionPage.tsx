@@ -19,6 +19,8 @@ import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { createLocalCompetition } from "@/lab/localCompetitionService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveCompetition } from "@/live/features/competitions";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 const PERSONAL_ORGANISER = "__personal__";
@@ -227,27 +229,48 @@ function SupabaseCreateCompetitionPage() {
     }
 
     // Existing behaviour: competition created under an existing organiser club.
-    const { data, error } = await supabase
-      .from("competitions")
-      .insert({
-        name: trimmedName,
-        description: trimmedDesc,
-        sport: trimmedSport,
-        season: trimmedSeason,
-        organizer_club_id: organizerClubId,
-        visibility,
-        status: "draft",
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
-    setSaving(false);
-    if (error || !data) {
-      toast({ title: "Could not create competition", description: error?.message, variant: "destructive" });
-      return;
+    try {
+      const newId = await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .insert({
+              name: trimmedName,
+              description: trimmedDesc,
+              sport: trimmedSport,
+              season: trimmedSeason,
+              organizer_club_id: organizerClubId,
+              visibility,
+              status: "draft",
+              created_by: user.id,
+            })
+            .select("id")
+            .single();
+          if (error || !data) throw error ?? new Error("Unexpected response from server.");
+          return data.id as string;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: the competition_domain canister only stores
+          // name/season/club_id/status — description, sport, visibility and
+          // created_by have no canister shape yet and stay Supabase-only
+          // concepts until a richer competition record exists on-chain.
+          // stays Supabase: no canister shape for description/sport/visibility/created_by.
+          const created = await createLiveCompetition(
+            ctx,
+            organizerClubId,
+            trimmedName,
+            trimmedSeason ?? "",
+          );
+          return created.id;
+        },
+      });
+      setSaving(false);
+      toast({ title: "Competition created" });
+      navigate(`/competitions/${newId}`);
+    } catch (err: any) {
+      setSaving(false);
+      toast({ title: "Could not create competition", description: err?.message, variant: "destructive" });
     }
-    toast({ title: "Competition created" });
-    navigate(`/competitions/${data.id}`);
   };
 
   const kindLabel = (kind: string) =>

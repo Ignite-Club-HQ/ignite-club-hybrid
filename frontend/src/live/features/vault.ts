@@ -1,7 +1,7 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { unwrapCandid } from "./candid";
+import { candidOpt, toNat64, unwrapCandid } from "./candid";
 
 /**
  * Vault feature -> vault_domain canister (folder/file metadata) plus
@@ -120,4 +120,100 @@ export async function listLiveVaultClubFiles(
 export async function listLiveVaultTrash(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_trashed_files(clubId), "List vault trash");
+}
+
+/**
+ * Vault write surface (folders + files) on vault_domain.
+ *
+ * NOTE: untested against a live canister until deployment — the parameter
+ * order below is inferred from vault_domain.did (positional record fields);
+ * verify against a live canister after deploy.
+ */
+
+export interface LiveVaultBlobRef {
+  canister: string;
+  content_hash: string;
+  path: string;
+}
+
+export async function createLiveVaultFolder(
+  ctx: FeatureBackendContext,
+  id: string,
+  clubId: string,
+  teamId: string | null,
+  parentId: string | null,
+  name: string,
+  restrictedRoles: string[],
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_folder(
+      id,
+      clubId,
+      candidOpt(teamId),
+      candidOpt(parentId),
+      name,
+      restrictedRoles,
+    ),
+    "Create vault folder",
+  );
+}
+
+export async function updateLiveVaultFolder(
+  ctx: FeatureBackendContext,
+  folderId: string,
+  name: string,
+  restrictedRoles: string[],
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_folder(folderId, name, restrictedRoles),
+    "Update vault folder",
+  );
+}
+
+export async function deleteLiveVaultFolder(ctx: FeatureBackendContext, folderId: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_folder(folderId), "Delete vault folder");
+}
+
+export async function registerLiveVaultFile(
+  ctx: FeatureBackendContext,
+  id: string,
+  folderId: string,
+  clubId: string,
+  teamId: string | null,
+  name: string,
+  fileUrl: string,
+  size: number,
+  mime: string,
+  isExternalLink: boolean,
+  blobRef: LiveVaultBlobRef | null,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.register_file(
+      id,
+      folderId,
+      clubId,
+      candidOpt(teamId),
+      name,
+      fileUrl,
+      toNat64(size),
+      mime,
+      isExternalLink,
+      candidOpt(blobRef),
+    ),
+    "Register vault file",
+  );
+}
+
+export async function trashLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.trash_file(fileId), "Trash vault file");
+}
+
+export async function restoreLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_file(fileId), "Restore vault file");
 }

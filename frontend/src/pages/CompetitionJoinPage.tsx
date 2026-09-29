@@ -13,6 +13,8 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { claimLocalCompetitionJoinToken } from "@/lab/localCompetitionService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { registerLiveCompetitionTeam } from "@/live/features/competitions";
 
 type CompInfo = {
   id: string;
@@ -267,25 +269,42 @@ function SupabaseCompetitionJoinPage() {
       return;
     }
     setJoining(true);
-    const { data, error } = await supabase.rpc("join_competition_with_token", {
-      p_token: token,
-      p_team_id: teamId,
-      p_division_id: divisionId || null,
-    });
-    setJoining(false);
-    if (error) {
-      const msg = (error.message || "").toLowerCase();
-      let friendly = error.message;
+    try {
+      const compId = await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("join_competition_with_token", {
+            p_token: token,
+            p_team_id: teamId,
+            p_division_id: divisionId || null,
+          });
+          if (error) throw error;
+          return (data as any[])?.[0]?.competition_id;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: register_team is the organizer-facing entry
+          // point on competition_domain and has no token/division concept —
+          // token validation and division assignment stay Supabase-only
+          // (no canister shape). This calls it with the already-resolved
+          // competition from the token lookup above; verify post-deploy.
+          const team = teams.find((t) => t.id === teamId);
+          await registerLiveCompetitionTeam(ctx, comp!.id, teamId, team?.club_id ?? "");
+          // stays Supabase: no canister shape for division assignment.
+          return comp!.id;
+        },
+      });
+      setJoining(false);
+      setDone(true);
+      setTimeout(() => navigate(`/competitions/${compId}`), 1200);
+    } catch (error: any) {
+      setJoining(false);
+      const msg = (error?.message || "").toLowerCase();
+      let friendly = error?.message;
       if (msg.includes("not_team_admin")) friendly = "You don't have admin rights for that team.";
       else if (msg.includes("invalid_token")) friendly = "This join link is no longer valid.";
       else if (msg.includes("team_not_found")) friendly = "That team could not be found.";
       else if (msg.includes("auth_required")) friendly = "Please sign in first.";
       toast({ title: "Could not join", description: friendly, variant: "destructive" });
-      return;
     }
-    setDone(true);
-    const compId = (data as any[])?.[0]?.competition_id;
-    setTimeout(() => navigate(`/competitions/${compId}`), 1200);
   };
 
   const goStartTeam = () => {

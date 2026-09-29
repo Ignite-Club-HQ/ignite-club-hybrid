@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveEventLineup } from "@/live/features/events";
 import type { Player, TeamSize, PitchBoardState } from "./types";
 import { PITCH_STATE_KEY, getPitchStateKey } from "./types";
 import { loadTimerStateForMinutes } from "./pitchStateUtils";
@@ -107,6 +109,24 @@ export async function saveEventLineup(args: {
   const { eventId, teamId, userId, snapshot } = args;
   if (!eventId || !isRealTeamId(teamId)) return false;
   if (!snapshot.players.length) return false;
+
+  // Hybrid routing: the events_domain canister only exposes `add_lineup`
+  // (one member + slot at a time), not a full-board snapshot. When routed
+  // to ICP we best-effort mirror each on-pitch player's slot; formation
+  // index, ball position and bench players have no canister shape and are
+  // NOT persisted on this branch — provisional mapping, verify post-deploy.
+  const savedToIcp = await withFeatureBackend("events", {
+    supabase: () => false,
+    icp: async (ctx) => {
+      const onPitch = snapshot.players.filter((p) => p.currentPitchPosition);
+      for (const player of onPitch) {
+        await addLiveEventLineup(ctx, eventId, player.id, String(player.currentPitchPosition), teamId);
+      }
+      return true;
+    },
+  });
+  if (savedToIcp) return true;
+
   try {
     const { error } = await supabase
       .from("event_lineups")

@@ -21,6 +21,8 @@ import TeamTrainingPausesCard from "@/components/team/TeamTrainingPausesCard";
 
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { saveLiveMembershipTeam } from "@/live/features/membership";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
 import { LevelAgeCombobox } from "@/components/LevelAgeCombobox";
 import { RsvpAudienceSelect } from "@/components/event/RsvpAudienceSelect";
@@ -242,7 +244,14 @@ export default function EditTeamPage() {
 
     setSaving(true);
 
-    const { error: teamError } = await supabase
+    // Routes to club_domain's save_team when placement settings resolve ICP
+    // for membership; provisional mapping (canister ClubTeam has only
+    // id/name/division/gender/is_active/club_id/age_group — description,
+    // logo, folder, team_type, class and auto-RSVP fields stay Supabase-only;
+    // verify against the deployed canister).
+    const teamError = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
       .from("teams")
       .update({
         name: name.trim(),
@@ -268,6 +277,25 @@ export default function EditTeamPage() {
         } : {}),
       })
       .eq("id", id!);
+        return error;
+      },
+      icp: async (ctx) => {
+        try {
+          await saveLiveMembershipTeam(ctx, {
+            id: id!,
+            name: name.trim(),
+            division: [],
+            gender: [],
+            is_active: isActive,
+            club_id: team!.club_id,
+            age_group: levelAge.trim() ? [levelAge.trim()] : [],
+          });
+          return null;
+        } catch (error) {
+          return error as Error;
+        }
+      },
+    });
 
     setSaving(false);
 

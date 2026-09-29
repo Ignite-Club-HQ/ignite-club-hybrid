@@ -4,6 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { getMatchArrivalDate } from "@/lib/matchArrivalTime";
 import { setLocalEventDuty } from "@/lab/localEventsService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventDuty } from "@/live/features/events";
 
 type DutyStatus = "open" | "completed";
 
@@ -116,6 +118,21 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         );
         return;
       }
+
+      // Hybrid routing: when the events feature resolves to ICP, claiming a
+      // duty is a duty-assignment write (provisional field mapping — verify
+      // account id / duty name against the live events_domain canister).
+      const claimedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id || !user?.id) throw new Error("Missing event or user ID");
+          const duty = duties?.find((candidate) => candidate.id === dutyId);
+          if (!duty?.name) throw new Error("Duty not found");
+          await setLiveEventDuty(ctx, id, user.id, duty.name);
+          return true;
+        },
+      });
+      if (claimedOnIcp) return;
 
       const { error } = await supabase
         .from("duties")
@@ -319,6 +336,27 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         return;
       }
       
+      // Hybrid routing: admin re-assignment of a duty is the same
+      // set-duty write as claiming (provisional — verify against the live
+      // canister post-deploy). Unassigning (userId === null) has no canister
+      // shape, so it always stays on Supabase.
+      const assignedOnIcp = userId
+        ? await withFeatureBackend("events", {
+            supabase: () => false,
+            icp: async (ctx) => {
+              if (!id) throw new Error("Missing event ID");
+              const duty = duties?.find((candidate) => candidate.id === selectedDutyId);
+              if (!duty?.name) throw new Error("Duty not found");
+              await setLiveEventDuty(ctx, id, userId, duty.name);
+              return true;
+            },
+          })
+        : false;
+      if (assignedOnIcp) {
+        // Points/notification side effects stay Supabase-only.
+        return;
+      }
+
       // Get the duty to check if it was previously unassigned
       const { data: dutyBefore } = await supabase
         .from("duties")
