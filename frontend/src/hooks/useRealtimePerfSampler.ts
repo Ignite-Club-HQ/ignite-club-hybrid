@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPlatform } from "@/lib/nativePush";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Lightweight realtime latency sampler.
