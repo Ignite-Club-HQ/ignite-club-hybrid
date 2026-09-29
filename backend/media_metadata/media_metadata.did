@@ -1,3 +1,8 @@
+type BlobRef = record {
+  canister : text;
+  path : text;
+  content_hash : text;
+};
 type Asset = record {
   id : text;
   club_id : text;
@@ -6,6 +11,7 @@ type Asset = record {
   mime : text;
   checksum : text;
   storage_path : text;
+  blob_ref : opt BlobRef;
   visibility : text;
   content_length : nat64;
   encrypted : bool;
@@ -71,6 +77,7 @@ service : {
   issue_capability : (text, text, text, nat64) -> (Result_1);
   delete_asset : (text) -> (Result_3);
   register_asset : (text, text, text, text, text, text, nat64) -> (Result);
+  set_blob_ref : (text, opt BlobRef) -> (Result);
   grant_role : (principal, text, opt text, opt text) -> (Result_4);
   list_assets : (text) -> (vec Asset) query;
   add_reaction : (text, text, nat64) -> (Result_5);

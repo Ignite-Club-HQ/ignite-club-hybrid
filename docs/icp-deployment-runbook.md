@@ -35,6 +35,7 @@ The 13 backend canisters (keys the app understands), in suggested deploy order:
 | `competition_domain` | Domain | competitions (not yet wired) |
 | `messaging_domain` | Domain | group messages |
 | `media_metadata` | Domain | media feed, reactions, comments |
+| `media_blob_store` | Domain (future) | on-chain media bytes — optional, see §6 |
 | `notification_queue` | Worker | notifications (not yet wired) |
 | `timer_jobs` | Worker | infrastructure only |
 | `secret_workload_identity` | Worker | infrastructure only |
@@ -101,6 +102,25 @@ Still on Placement Settings:
 - Nothing is deleted: Supabase data written before cutover is untouched, and
   ICP-directed writes never silently divert to Supabase (they fail loudly
   instead, so a misconfiguration is visible rather than corrupting data).
+
+## 6. Optional: move media bytes on-chain later
+
+Media *files* stay in Supabase storage by default; only metadata lives on
+`media_metadata`. The future-proofing for on-chain blobs is already in place:
+
+- Every canister asset carries an optional `blob_ref` pointer
+  (blob-store canister ID + path + SHA-256 content hash); `set_blob_ref`
+  attaches it after upload. Assets without it keep resolving to Supabase.
+- The frontend resolves an asset's bytes through
+  `frontend/src/live/mediaStorage.ts` (`resolveMediaSource` /
+  `liveAssetSource`), so feature code never hardcodes a storage backend.
+- `media_blob_store` is already a known key in Placement Settings.
+
+To adopt later: build a blob/asset canister that serves chunks over HTTP
+(`https://<canister-id>.icp0.io/<path>`), deploy it, register its ID under
+the `media_blob_store` key, and have uploads write chunks there and call
+`set_blob_ref`. Existing Supabase-backed assets are untouched and keep
+working; migrate them opportunistically if ever desired.
 
 ## Known gaps at time of writing
 

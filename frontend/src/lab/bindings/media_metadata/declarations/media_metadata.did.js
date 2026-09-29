@@ -25,9 +25,15 @@ export const idlFactory = ({ IDL }) => {
     'asset_id' : IDL.Text,
   });
   const Result_5 = IDL.Variant({ 'Ok' : Reaction, 'Err' : IDL.Text });
+  const BlobRef = IDL.Record({
+    'canister' : IDL.Text,
+    'path' : IDL.Text,
+    'content_hash' : IDL.Text,
+  });
   const Asset = IDL.Record({
     'id' : IDL.Text,
     'storage_path' : IDL.Text,
+    'blob_ref' : IDL.Opt(BlobRef),
     'retention_until_ms' : IDL.Nat64,
     'deleted' : IDL.Bool,
     'owner' : IDL.Principal,
@@ -101,6 +107,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'remove_reaction' : IDL.Func([IDL.Text], [Result_4], []),
+    'set_blob_ref' : IDL.Func([IDL.Text, IDL.Opt(BlobRef)], [Result], []),
   });
 };
 

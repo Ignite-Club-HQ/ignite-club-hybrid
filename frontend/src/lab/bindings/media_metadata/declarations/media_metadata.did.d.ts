@@ -10,9 +10,15 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface BlobRef {
+  'canister' : string,
+  'path' : string,
+  'content_hash' : string,
+}
 export interface Asset {
   'id' : string,
   'storage_path' : string,
+  'blob_ref' : [] | [BlobRef],
   'retention_until_ms' : bigint,
   'deleted' : boolean,
   'owner' : Principal,
@@ -99,6 +105,7 @@ export interface _SERVICE {
     Result
   >,
   'remove_reaction' : ActorMethod<[string], Result_4>,
+  'set_blob_ref' : ActorMethod<[string, [] | [BlobRef]], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

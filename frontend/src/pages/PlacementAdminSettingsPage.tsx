@@ -85,6 +85,8 @@ const KNOWN_CANISTER_KEYS = [
   "competition_domain",
   "messaging_domain",
   "media_metadata",
+  // Blob store for on-chain media bytes (future; optional)
+  "media_blob_store",
   // Workers (background jobs)
   "notification_queue",
   "timer_jobs",
