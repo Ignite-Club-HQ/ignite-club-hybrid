@@ -242,15 +242,47 @@ export default function NotificationsPage() {
         return fixtureData.getLocalLabNotifications(user.id);
       }
 
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(500); // Cap at 500 for performance
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("notifications")
+            .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false })
+            .limit(500); // Cap at 500 for performance
 
-      if (error) throw error;
-      let rows = (data || []) as any[];
+          if (error) throw error;
+          let rows = (data || []) as any[];
+
+          // Scope to the active club using the SAME resolver as the bell dropdown
+          // (filterClubScopedNotifications). A raw SQL `club_id.eq` filter would
+          // silently drop legacy null-club rows that the bell can still attribute
+          // via related_id lookups (e.g. reward_claimed -> reward_redemptions),
+          // which made "View all notifications" show fewer items than the
+          // dropdown. Filtering here keeps both surfaces consistent.
+          if (activeClubFilter) {
+            rows = await filterClubScopedNotifications(rows, user!.id, activeClubFilter);
+          }
+          return rows.map(n => ({ ...n, read: n.is_read })) as Notification[];
+        },
+        icp: async (ctx) => {
+          // Provisional mapping until verified against a deployed canister:
+          // the canister filters by club id directly, so legacy null-club
+          // rows attributed via related_id (the Supabase branch's resolver)
+          // are not reproduced here. Canister rows lack club-scoped join
+          // metadata; club attribution relies on the stored club field.
+          const inbox = await listLiveInbox(ctx, user!.id, activeClubFilter ?? null, 500);
+          return (inbox as any[]).map((n) => ({
+            id: n.id,
+            user_id: n.user,
+            type: n.kind,
+            message: n.body,
+            read: n.read,
+            created_at: new Date(Number(n.created_at_ms)).toISOString(),
+            related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
+          })) as Notification[];
+        },
+      });
 
       // Scope to the active club using the SAME resolver as the bell dropdown
       // (filterClubScopedNotifications). A raw SQL `club_id.eq` filter would
