@@ -139,6 +139,42 @@ persistent actor {
     #Ok(conversation)
   };
 
+  func findConversationIndex(conversation_id : Text) : ?Nat {
+    var idx = 0;
+    for (c in conversations.values()) {
+      if (c.id == conversation_id) { return ?idx };
+      idx += 1;
+    };
+    null
+  };
+
+  func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text) : Types.Message {
+    let conv = conversations[convIndex];
+    let seq = conv.next_sequence;
+    let msg : Types.Message = {
+      conversation_id = conv.id;
+      id = "msg-" # conv.id # "-" # Nat64.toText(seq);
+      sender;
+      body;
+      sequence = seq;
+      idempotency_key;
+    };
+    let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
+    conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
+      if (position == convIndex) updated_conv else conversations[position]
+    });
+    messages := messages.concat([msg]);
+    for (participant in conv.participants.values()) {
+      if (not participant.equal(sender)) {
+        let current_u = unreadFor(participant, conv.id);
+        let updated_u : Types.Unread = { current_u with count = current_u.count + 1 };
+        unread := unread.filter(func(u) = not (u.user.equal(participant) and u.conversation_id == conv.id));
+        unread := unread.concat([updated_u]);
+      };
+    };
+    msg
+  };
+
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -148,41 +184,57 @@ persistent actor {
         return #Ok(m);
       };
     };
-    var conv_idx : ?Nat = null;
-    var idx = 0;
-    for (c in conversations.values()) {
-      if (c.id == conversation_id) { conv_idx := ?idx };
-      idx += 1;
-    };
-    switch (conv_idx) {
+    switch (findConversationIndex(conversation_id)) {
       case null { #Err("Conversation not found") };
-      case (?i) {
-        let conv = conversations[i];
-        let seq = conv.next_sequence;
-        let msg : Types.Message = {
-          conversation_id;
-          id = "msg-" # conversation_id # "-" # Nat64.toText(seq);
-          sender = caller;
-          body;
-          sequence = seq;
-          idempotency_key;
-        };
-        let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
-        conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
-          if (position == i) updated_conv else conversations[position]
-        });
-        messages := messages.concat([msg]);
-        for (participant in conv.participants.values()) {
-          if (not participant.equal(caller)) {
-            let current_u = unreadFor(participant, conversation_id);
-            let updated_u : Types.Unread = { current_u with count = current_u.count + 1 };
-            unread := unread.filter(func(u) = not (u.user.equal(participant) and u.conversation_id == conversation_id));
-            unread := unread.concat([updated_u]);
+      case (?i) { #Ok(postMessage(i, caller, body, idempotency_key)) };
+    }
+  };
+
+  // Club announcement fan-out: posts the same message to the club chat
+  // (team_id null) and/or each listed team's conversation. Teams without a
+  // conversation are skipped and reported, never fatal. Idempotency keys are
+  // derived per conversation, so a retried broadcast is safe. Announcements
+  // allow a longer body than chat messages (valid() caps at 128 chars).
+  public shared ({ caller }) func broadcast_announcement(club_id : Text, team_ids : [Text], include_club_chat : Bool, body : Text, idempotency_key : Text) : async { #Ok : Types.BroadcastResult; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(idempotency_key)) return #Err("Invalid announcement");
+    if (body == "" or body.size() > 4000) return #Err("Invalid announcement body");
+    if (team_ids.size() > 100) return #Err("Too many teams");
+    if (team_ids.any(func(team) = not valid(team))) return #Err("Invalid team");
+    if (not isGovernor(caller) and not hasRole(caller, "club_admin", ?club_id, null) and not hasRole(caller, "app_admin", null, null)) return #Err("Club admin required");
+    let teamTargets : [?Text] = Array.map<Text, ?Text>(team_ids, func(team) = ?team);
+    let targets : [?Text] = if (include_club_chat) { ([null] : [?Text]).concat(teamTargets) } else { teamTargets };
+    var delivered : Nat32 = 0;
+    var skipped : [Text] = [];
+    for (target in targets.values()) {
+      var conv_idx : ?Nat = null;
+      var idx = 0;
+      for (c in conversations.values()) {
+        if (c.club_id == club_id and c.team_id == target) { conv_idx := ?idx };
+        idx += 1;
+      };
+      switch (conv_idx) {
+        case null {
+          switch (target) {
+            case (?team) { skipped := skipped.concat([team]) };
+            case null {};
           };
         };
-        #Ok(msg)
+        case (?i) {
+          let conv = conversations[i];
+          let key = idempotency_key # "-" # conv.id;
+          var already = false;
+          for (m in messages.values()) {
+            if (m.conversation_id == conv.id and m.idempotency_key == key) { already := true };
+          };
+          if (not already) {
+            ignore postMessage(i, caller, body, key);
+            delivered += 1;
+          };
+        };
       };
-    }
+    };
+    #Ok({ delivered; skipped })
   };
   public shared ({ caller }) func update_message(message_id : Text, body : Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
