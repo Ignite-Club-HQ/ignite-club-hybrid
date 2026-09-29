@@ -87,4 +87,45 @@ describe("startChatRealtimeChannel", () => {
     expect(firstUnregister).toHaveBeenCalledOnce();
     expect(removeChannel).not.toHaveBeenCalled();
   });
+
+  it("skips the subscription and polls cache keys when messaging is routed to ICP", () => {
+    vi.useFakeTimers();
+    try {
+      isFeatureRoutedToIcp.mockReturnValue(true);
+      const invalidateQueries = vi.fn();
+      const cleanup = startChatRealtimeChannel({
+        channel,
+        channelKey: "dm-conv-1",
+        userId: "user-1",
+        scope: { kind: "dm", id: "conv-1" },
+        cacheKeys: [["dm-messages", "conv-1"]],
+        queryClient: { invalidateQueries } as never,
+      });
+
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(registerChannel).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(30000);
+      expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dm-messages", "conv-1"] });
+
+      cleanup();
+      vi.advanceTimersByTime(60000);
+      expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns a no-op cleanup under ICP when no query client is provided", () => {
+    isFeatureRoutedToIcp.mockReturnValue(true);
+    const cleanup = startChatRealtimeChannel({
+      channel,
+      channelKey: "team-messages-team-1",
+      userId: "user-1",
+      scope: { kind: "team", id: "team-1" },
+    });
+    expect(subscribe).not.toHaveBeenCalled();
+    cleanup();
+    expect(removeChannel).not.toHaveBeenCalled();
+  });
 });
