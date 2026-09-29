@@ -885,9 +885,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [queryClient]);
 
-  // Real-time notifications subscription and push registration
+  // Real-time notifications subscription and push registration.
+  // When notifications are routed to ICP there is no realtime channel —
+  // the visibility/focus resync and the notifications screens' own polling
+  // keep the badge fresh instead.
   useEffect(() => {
-    if (!user) return;
+    if (!user || isFeatureRoutedToIcp("notifications")) return;
 
     // Silently enable push notifications if permission already granted
     const setupPushNotifications = async () => {

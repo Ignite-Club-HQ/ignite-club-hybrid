@@ -2,6 +2,7 @@ import type { QueryKey } from "@tanstack/react-query";
 import { noteChannelRemoved, noteChannelSubscribed } from "@/lib/chatPerfDiagnostics";
 import { registerChannel, type RealtimeChannel, type Scope } from "@/lib/realtimeChannelRegistry";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface ChatRealtimeChannelLifecycleOptions {
   channel: RealtimeChannel;
@@ -25,6 +26,13 @@ export function startChatRealtimeChannel({
   scope,
   cacheKeys,
 }: ChatRealtimeChannelLifecycleOptions): () => void {
+  // When messaging is routed to ICP, canisters are request/response — there
+  // is no realtime channel to subscribe to. Screens poll via query calls
+  // instead (30s refetchInterval / useClubRealtimeMode polling), so skip the
+  // subscription entirely rather than opening a dead Supabase socket.
+  if (isFeatureRoutedToIcp("messaging")) {
+    return () => {};
+  }
   channel.subscribe();
   noteChannelSubscribed(channelKey);
 
