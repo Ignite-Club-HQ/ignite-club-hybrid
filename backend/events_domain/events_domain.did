@@ -33,11 +33,14 @@ type LineupEntry =
  };
 type Event = 
  record {
+   cancelled: bool;
    club_id: text;
    creator: principal;
    description: text;
    ends_at_ms: nat64;
+   event_type: text;
    id: text;
+   location: opt text;
    revision: nat64;
    starts_at_ms: nat64;
    team_id: opt text;
@@ -74,11 +77,11 @@ service : {
       Ok: Duty;
     });
   create_event: (club_id: text, team_id: opt text, title: text, description:
-   text, starts_at_ms: nat64, ends_at_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: Event;
-    });
+   text, event_type: text, location: opt text, starts_at_ms: nat64,
+   ends_at_ms: nat64) -> (variant {
+                            Err: text;
+                            Ok: Event;
+                          });
   export_state: () ->
    (variant {
       Err: text;
@@ -132,6 +135,11 @@ service : {
       Err: text;
       Ok: Duty;
     });
+  set_event_cancelled: (id: text, cancelled: bool) ->
+   (variant {
+      Err: text;
+      Ok: Event;
+    });
   set_recurrence: (event_id: text, frequency: text, until_ms: nat64) ->
    (variant {
       Err: text;
@@ -152,9 +160,10 @@ service : {
       Err: text;
       Ok: Duty;
     });
-  update_event: (id: text, title: text, description: text, starts_at_ms:
-   nat64, ends_at_ms: nat64) -> (variant {
-                                   Err: text;
-                                   Ok: Event;
-                                 });
+  update_event: (id: text, title: text, description: text, event_type: 
+   text, location: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Event;
+    });
 }
