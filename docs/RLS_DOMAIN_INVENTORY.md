@@ -19,6 +19,7 @@ boundary; it does not mean production parity is complete.
 - `notification_queue`: recipient, worker capability, domain scope, preference, and delivery boundary.
 - `timer_jobs`: workflow, operator capability, callback, claim, and recovery boundary.
 - `pii_access_control`: encrypted PII, field-level access control, audit trail, cryptographic erasure, and key rotation boundary.
+- `vault_domain`: vault folder tree, club/team-scoped file metadata, restricted-role visibility, uploader, and soft-delete boundary.
 - `secret_workload_identity`: worker workload registration, scope whitelist enforcement, and vault secret access control boundary.
 
 ## Inventory size
