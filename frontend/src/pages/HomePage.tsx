@@ -35,6 +35,12 @@ import {
   fetchHomeUserRsvpsForClub,
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  fetchLiveHomeChildren,
+  fetchLiveHomeFeed,
+  fetchLiveHomeRsvps,
+} from "@/live/features/homeFeed";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { completeHomeAccountRecovery } from "@/features/home/accountRecoveryCompletion";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
@@ -219,13 +225,22 @@ export default function HomePage() {
     return () => { resetHomeOpenLog(); };
   }, []);
 
-  // CONSOLIDATED: Fetch user memberships AND events in a single query to eliminate waterfall
-  const { data: membershipAndEvents, isLoading, isFetching, isFetched } = useQuery({
-    queryKey: eventKeys.home(user?.id),
-    queryFn: async () => {
-      if (useIcpLab && user?.id) {
-        return fixtureData.getLocalLabHomeSnapshot(user.id);
-      }
+  // CONSOLIDATED: Fetch user memberships AND events in a single query to eliminate waterfall.
+  //
+  // Hybrid routing: when placement settings route the "home" feature to ICP,
+  // live/features/homeFeed.ts serves the same {memberships, events} shape from
+  // identity_access (roles), events_domain (events) and club_domain (club
+  // names) instead of the queries below.
+  //
+  // SUPABASE-ONLY home surfaces (no canister shape — ICP-only cutover plan,
+  // Stage C): rewards/points (club_rewards, reward_redemptions,
+  // redeem_club_reward), pro/subscriptions (club_subscriptions,
+  // team_subscriptions), pitch boards (active_games,
+  // get_team_children_for_pitch_board), join dialogs (all-clubs/all-teams
+  // lists, child_team_assignments, pending_invites), role_requests,
+  // notification inserts, mini-leagues. These stay on Supabase by design even
+  // when the home feature routes to ICP.
+  const fetchHomeFromSupabase = async () => {
 
       // Step 1: Fetch user roles.
       // CRITICAL: throw on error (do NOT silently return empty). On resume from
@@ -525,6 +540,18 @@ export default function HomePage() {
       const limited = filterRecurringEvents(filtered);
 
       return { memberships, events: limited as Event[] };
+  };
+
+  const { data: membershipAndEvents, isLoading, isFetching, isFetched } = useQuery({
+    queryKey: eventKeys.home(user?.id),
+    queryFn: async () => {
+      if (useIcpLab && user?.id) {
+        return fixtureData.getLocalLabHomeSnapshot(user.id);
+      }
+      return withFeatureBackend("home", {
+        supabase: fetchHomeFromSupabase,
+        icp: (ctx) => fetchLiveHomeFeed(ctx),
+      });
     },
     enabled: !!user,
     staleTime: 2 * 60 * 1000,
@@ -627,35 +654,41 @@ export default function HomePage() {
     queryFn: async () => {
       if (eventIds.length === 0) return [];
       if (useIcpLab) return [];
+      // Hybrid routing: on ICP the caller's RSVPs come from the events_domain
+      // my_rsvps query instead of the Supabase rsvps table.
+      return withFeatureBackend("home", {
+        supabase: async () => {
+          const eventIdsByClub = new Map<string, string[]>();
+          for (const event of events ?? []) {
+            const clubId = (event as { club_id?: string | null }).club_id;
+            if (!clubId) continue;
+            const ids = eventIdsByClub.get(clubId) ?? [];
+            ids.push(event.id);
+            eventIdsByClub.set(clubId, ids);
+          }
 
-      const eventIdsByClub = new Map<string, string[]>();
-      for (const event of events ?? []) {
-        const clubId = (event as { club_id?: string | null }).club_id;
-        if (!clubId) continue;
-        const ids = eventIdsByClub.get(clubId) ?? [];
-        ids.push(event.id);
-        eventIdsByClub.set(clubId, ids);
-      }
+          const provider: HomeRsvpProvider = {
+            async listUserRsvps(userId, visibleEventIds) {
+              const { data, error } = await supabase
+                .from("rsvps")
+                .select("event_id, status")
+                .eq("user_id", userId)
+                .is("child_id", null)
+                .in("event_id", [...visibleEventIds]);
+              if (error) throw error;
+              return data ?? [];
+            },
+          };
 
-      const provider: HomeRsvpProvider = {
-        async listUserRsvps(userId, visibleEventIds) {
-          const { data, error } = await supabase
-            .from("rsvps")
-            .select("event_id, status")
-            .eq("user_id", userId)
-            .is("child_id", null)
-            .in("event_id", [...visibleEventIds]);
-          if (error) throw error;
-          return data ?? [];
+          const results = await Promise.all(
+            [...eventIdsByClub.values()].map((visibleEventIds) =>
+              fetchHomeUserRsvpsForClub(provider, user!.id, visibleEventIds),
+            ),
+          );
+          return results.flat();
         },
-      };
-
-      const results = await Promise.all(
-        [...eventIdsByClub.values()].map((visibleEventIds) =>
-          fetchHomeUserRsvpsForClub(provider, user!.id, visibleEventIds),
-        ),
-      );
-      return results.flat();
+        icp: (ctx) => fetchLiveHomeRsvps(ctx, eventIds),
+      });
     },
     enabled: !!user && eventIds.length > 0,
     staleTime: 2 * 60 * 1000,
@@ -879,22 +912,30 @@ export default function HomePage() {
   const { data: userChildren = [] } = useQuery({
     queryKey: ["user-children-home", user?.id],
     queryFn: async () => {
-      const ownedPromise = supabase
-        .from("children")
-        .select("id, name, ignite_points")
-        .eq("parent_id", user!.id);
+      // Hybrid routing: on ICP children come from the club_domain
+      // list_children query (names stay unresolved — PII — until the
+      // pii_access_control read path is built).
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const ownedPromise = supabase
+            .from("children")
+            .select("id, name, ignite_points")
+            .eq("parent_id", user!.id);
 
-      const guardianLinksPromise = supabase
-        .from("child_guardians")
-        .select("child_id, children:child_id!inner(id, name, ignite_points)")
-        .eq("guardian_id", user!.id);
+          const guardianLinksPromise = supabase
+            .from("child_guardians")
+            .select("child_id, children:child_id!inner(id, name, ignite_points)")
+            .eq("guardian_id", user!.id);
 
-      const [{ data: owned }, { data: guardianLinks }] = await Promise.all([
-        ownedPromise,
-        guardianLinksPromise,
-      ]);
+          const [{ data: owned }, { data: guardianLinks }] = await Promise.all([
+            ownedPromise,
+            guardianLinksPromise,
+          ]);
 
-      return mergeHomeUserChildren(owned as any, guardianLinks as any);
+          return mergeHomeUserChildren(owned as any, guardianLinks as any);
+        },
+        icp: (ctx) => fetchLiveHomeChildren(ctx),
+      });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
