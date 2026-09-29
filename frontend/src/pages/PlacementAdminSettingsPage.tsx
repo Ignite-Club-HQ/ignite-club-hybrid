@@ -70,7 +70,7 @@ const ELIGIBILITY_LABELS: Record<BackendEligibility, string> = {
   both: "Both",
 };
 
-// The 13 backend canisters from backend/ + icp-domain-topology.json, plus the
+// The 14 backend canisters from backend/ + icp-domain-topology.json, plus the
 // Internet Identity frontend asset canister. Used as suggestions in the mapping UI.
 const KNOWN_CANISTER_KEYS = [
   // Control plane (global infrastructure)
