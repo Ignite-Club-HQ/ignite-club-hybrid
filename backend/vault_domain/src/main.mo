@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat64 "mo:core/Nat64";

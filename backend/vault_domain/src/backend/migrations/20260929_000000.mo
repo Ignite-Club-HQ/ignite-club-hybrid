@@ -36,7 +36,7 @@ module {
       team_id : ?Text;
     }];
   };
-  public func run(old : OldActor) : NewActor {
+  public func migration(_old : OldActor) : NewActor {
     {
       var governor = Principal.anonymous();
       var folders = [];
