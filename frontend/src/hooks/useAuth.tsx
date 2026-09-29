@@ -26,7 +26,7 @@ import { notificationKeys } from "@/lab/notificationQueryKeys";
 // agent/candid SDK and its crypto dependencies (~480KB), which must not enter
 // every page's initial chunk — only IcpAuthProvider (ICP lab auth mode) needs it.
 import type { InternetIdentitySession } from "@/lab/internetIdentityAuth";
-import type { IcpIdentityProfile } from "@/live/identityProfile";
+import { getCachedIcpIdentityProfile, type IcpIdentityProfile } from "@/live/identityProfileCache";
 
 
 interface Profile {
@@ -1350,7 +1350,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signOut: async () => {
       localStorage.removeItem("ignite_icp_internet_identity_session");
       setSession(null);
-      const { clearIcpIdentityProfileCache } = await import("@/live/identityProfile");
+      const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
       const { signOutInternetIdentity } = await import("@/lab/internetIdentityAuth");
       await signOutInternetIdentity();
