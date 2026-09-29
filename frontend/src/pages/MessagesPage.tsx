@@ -757,7 +757,9 @@ export default function MessagesPage() {
     // that each parsed/merged/restringified the 100-500KB messages-page cache
     // blob. Patching the in-memory query data directly lets previews stay
     // live without any of that work.
-    if (isNative) return;
+    // When messaging is routed to ICP there is no realtime channel to open —
+    // the inbox relies on the 30s refetchInterval polling, same as native.
+    if (isNative || isFeatureRoutedToIcp("messaging")) return;
 
     const rafState = { team: 0, club: 0, group: 0, dm: 0, unread: 0 } as Record<string, number>;
     const schedule = (key: keyof typeof rafState, fn: () => void) => {
