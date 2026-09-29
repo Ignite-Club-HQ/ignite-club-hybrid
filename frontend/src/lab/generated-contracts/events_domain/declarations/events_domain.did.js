@@ -25,12 +25,15 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'title' : IDL.Text,
     'creator' : IDL.Principal,
+    'cancelled' : IDL.Bool,
     'team_id' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
     'starts_at_ms' : IDL.Nat64,
     'ends_at_ms' : IDL.Nat64,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
+    'location' : IDL.Opt(IDL.Text),
+    'event_type' : IDL.Text,
   });
   const Recurrence = IDL.Record({
     'until_ms' : IDL.Nat64,
@@ -78,7 +81,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_event' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat64],
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
         [],
       ),
@@ -144,6 +156,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
         [],
       ),
+    'set_event_cancelled' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_recurrence' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Recurrence, 'Err' : IDL.Text })],
@@ -165,7 +182,15 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'update_event' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat64],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
         [],
       ),

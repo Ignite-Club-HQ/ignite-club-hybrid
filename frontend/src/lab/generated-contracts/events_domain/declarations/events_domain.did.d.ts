@@ -26,12 +26,15 @@ export interface Event {
   'id' : string,
   'title' : string,
   'creator' : Principal,
+  'cancelled' : boolean,
   'team_id' : [] | [string],
   'description' : string,
   'starts_at_ms' : bigint,
   'ends_at_ms' : bigint,
   'revision' : bigint,
   'club_id' : string,
+  'location' : [] | [string],
+  'event_type' : string,
 }
 export interface LineupEntry {
   'member' : string,
@@ -78,7 +81,16 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'create_event' : ActorMethod<
-    [string, [] | [string], string, string, bigint, bigint],
+    [
+      string,
+      [] | [string],
+      string,
+      string,
+      string,
+      [] | [string],
+      bigint,
+      bigint,
+    ],
     { 'Ok' : Event } |
       { 'Err' : string }
   >,
@@ -133,6 +145,11 @@ export interface _SERVICE {
     { 'Ok' : Duty } |
       { 'Err' : string }
   >,
+  'set_event_cancelled' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
   'set_recurrence' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Recurrence } |
@@ -154,7 +171,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'update_event' : ActorMethod<
-    [string, string, string, bigint, bigint],
+    [string, string, string, string, [] | [string], bigint, bigint],
     { 'Ok' : Event } |
       { 'Err' : string }
   >,

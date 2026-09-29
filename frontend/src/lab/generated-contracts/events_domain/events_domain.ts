@@ -77,12 +77,15 @@ export interface Event {
     id: string;
     title: string;
     creator: Principal;
+    cancelled: boolean;
     team_id?: string;
     description: string;
     starts_at_ms: bigint;
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
+    location?: string;
+    event_type: string;
 }
 export interface Duty {
     account_id: string;
@@ -124,7 +127,7 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    create_event(club_id: string, team_id: string | null, title: string, description: string, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
+    create_event(club_id: string, team_id: string | null, title: string, description: string, event_type: string, location: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
@@ -171,6 +174,7 @@ export interface events_domainInterface {
         Err: string;
     }>;
     list_events(club_id: string | null, team_id: string | null): Promise<Array<Event>>;
+    my_rsvps(): Promise<Array<Rsvp>>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -195,6 +199,13 @@ export interface events_domainInterface {
     set_duty(event_id: string, account_id: string, duty: string): Promise<{
         __kind__: "Ok";
         Ok: Duty;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_event_cancelled(id: string, cancelled: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Event;
     } | {
         __kind__: "Err";
         Err: string;
@@ -227,7 +238,7 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    update_event(id: string, title: string, description: string, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
+    update_event(id: string, title: string, description: string, event_type: string, location: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
@@ -268,14 +279,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.complete_duty(arg0, arg1);
         return from_candid_variant_n7(result);
     }
-    async create_event(arg0: string, arg1: string | null, arg2: string, arg3: string, arg4: bigint, arg5: bigint): Promise<{
+    async create_event(arg0: string, arg1: string | null, arg2: string, arg3: string, arg4: string, arg5: string | null, arg6: bigint, arg7: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.create_event(arg0, to_candid_opt_n2(arg1), arg2, arg3, arg4, arg5);
+        const result = await this.actor.create_event(arg0, to_candid_opt_n2(arg1), arg2, arg3, arg4, to_candid_opt_n2(arg5), arg6, arg7);
         return from_candid_variant_n8(result);
     }
     async export_state(): Promise<{
@@ -333,6 +344,10 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.list_events(to_candid_opt_n2(arg0), to_candid_opt_n2(arg1));
         return from_candid_vec_n14(result);
     }
+    async my_rsvps(): Promise<Array<Rsvp>> {
+        const result = await this.actor.my_rsvps();
+        return result;
+    }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -372,6 +387,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.set_duty(arg0, arg1, arg2);
         return from_candid_variant_n7(result);
+    }
+    async set_event_cancelled(arg0: string, arg1: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: Event;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_event_cancelled(arg0, arg1);
+        return from_candid_variant_n8(result);
     }
     async set_recurrence(arg0: string, arg1: string, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -413,14 +438,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.uncomplete_duty(arg0, arg1);
         return from_candid_variant_n7(result);
     }
-    async update_event(arg0: string, arg1: string, arg2: string, arg3: bigint, arg4: bigint): Promise<{
+    async update_event(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string | null, arg5: bigint, arg6: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_event(arg0, arg1, arg2, arg3, arg4);
+        const result = await this.actor.update_event(arg0, arg1, arg2, arg3, to_candid_opt_n2(arg4), arg5, arg6);
         return from_candid_variant_n8(result);
     }
 }
@@ -443,33 +468,42 @@ function from_candid_record_n10(value: {
     id: string;
     title: string;
     creator: Principal;
+    cancelled: boolean;
     team_id: [] | [string];
     description: string;
     starts_at_ms: bigint;
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
+    location: [] | [string];
+    event_type: string;
 }): {
     id: string;
     title: string;
     creator: Principal;
+    cancelled: boolean;
     team_id?: string;
     description: string;
     starts_at_ms: bigint;
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
+    location?: string;
+    event_type: string;
 } {
     return {
         id: value.id,
         title: value.title,
         creator: value.creator,
+        cancelled: value.cancelled,
         team_id: record_opt_to_undefined(from_candid_opt_n6(value.team_id)),
         description: value.description,
         starts_at_ms: value.starts_at_ms,
         ends_at_ms: value.ends_at_ms,
         revision: value.revision,
-        club_id: value.club_id
+        club_id: value.club_id,
+        location: record_opt_to_undefined(from_candid_opt_n6(value.location)),
+        event_type: value.event_type
     };
 }
 function from_candid_record_n12(value: {
