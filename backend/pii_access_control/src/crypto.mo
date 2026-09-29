@@ -65,7 +65,7 @@ module {
     // multiple of 64 bytes.
     // Use Int arithmetic: (56 - ((msg_len + 1) % 64)) can be negative as an
     // intermediate, which would trap with Nat.
-    let pad_len = Nat.fromNat(((56 - Int.abs((msg_len + 1) % 64)) + 64) % 64);
+    let pad_len = Int.abs(((56 - Int.abs((msg_len + 1) % 64)) + 64) % 64);
     let total_len = msg_len + 1 + pad_len + 8;
 
     let padded = Array.tabulate<Nat8>(total_len, func(i) {
