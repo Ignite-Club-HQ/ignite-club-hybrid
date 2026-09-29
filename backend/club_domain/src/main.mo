@@ -40,6 +40,9 @@ persistent actor {
   // than silently applied or replayed.
   var mutationLog : [(Text, Text, Types.Mutation)];
 
+  var newsPosts : [Types.NewsPost];
+  var parentInvites : [Types.ParentInvite];
+
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
     if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
@@ -81,6 +84,23 @@ persistent actor {
   };
 
   func nowNs() : Nat64 { Nat.toNat64(Int.abs(Time.now())) };
+
+  func nowMs() : Nat64 { nowNs() / 1_000_000 };
+
+  // Club admin, or a team admin/coach of the specific team.
+  func canManageTeam(caller : Principal, club : Text, team_id : ?Text) : Bool {
+    if (isAdmin(caller, club)) return true;
+    switch (team_id) {
+      case null { false };
+      case (?team) {
+        acl.roles.any(func(grant) =
+          grant.user.equal(caller) and
+          (grant.role == "team_admin" or grant.role == "coach") and
+          (grant.club == ?club or grant.club == null) and
+          (grant.team == ?team or grant.team == null))
+      };
+    }
+  };
 
   func validateDraft(draft : Types.Draft) : ?Text {
     let title = Text.trim(draft.title, #char ' ');
@@ -218,6 +238,177 @@ persistent actor {
       if (s.club_id == club_id) res := res.concat([s]);
     };
     #Ok(res)
+  };
+
+  // Hard delete — the Supabase sponsor manager deletes rows outright, so
+  // the canister matches (is_active remains available for soft hiding).
+  public shared ({ caller }) func delete_sponsor(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (sponsors.find(func(s) = s.id == id)) {
+      case null { #Err("Sponsor not found") };
+      case (?sponsor) {
+        if (not isAdmin(caller, sponsor.club_id)) return #Err("Club admin required");
+        sponsors := sponsors.filter(func(s) = s.id != id);
+        #Ok
+      };
+    }
+  };
+
+  func validNewsStatus(status : Text) : Bool { status == "draft" or status == "published" };
+
+  public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text) : async { #Ok : Types.NewsPost; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (club_id == "" or club_id.size() > 128) return #Err("Invalid club");
+    if (title == "" or title.size() > 200) return #Err("Invalid title");
+    if (body.size() > 8000) return #Err("Invalid body");
+    if (not validNewsStatus(status)) return #Err("Invalid status");
+    let now = nowMs();
+    let post : Types.NewsPost = {
+      id = "news-" # club_id # "-" # Nat.toText(newsPosts.size() + 1);
+      club_id; title; body; status;
+      created_by = caller;
+      created_at_ms = now;
+      updated_at_ms = now;
+      revision = 1;
+    };
+    newsPosts := newsPosts.concat([post]);
+    #Ok(post)
+  };
+
+  public shared ({ caller }) func update_news_post(id : Text, title : Text, body : Text, status : Text, expected_revision : Nat64) : async { #Ok : Types.NewsPost; #Err : Text } {
+    auth(caller);
+    if (title == "" or title.size() > 200) return #Err("Invalid title");
+    if (body.size() > 8000) return #Err("Invalid body");
+    if (not validNewsStatus(status)) return #Err("Invalid status");
+    switch (newsPosts.find(func(p) = p.id == id)) {
+      case null { #Err("News post not found") };
+      case (?current) {
+        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        if (current.revision != expected_revision) return #Err("News post revision conflict");
+        let updated : Types.NewsPost = { current with title; body; status; updated_at_ms = nowMs(); revision = current.revision + 1 };
+        newsPosts := newsPosts.map(func(p) = if (p.id == id) updated else p);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_news_post(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (newsPosts.find(func(p) = p.id == id)) {
+      case null { #Err("News post not found") };
+      case (?current) {
+        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        newsPosts := newsPosts.filter(func(p) = p.id != id);
+        #Ok
+      };
+    }
+  };
+
+  // Admins see every post (including drafts); members see published only.
+  public query ({ caller }) func list_news(club_id : Text) : async { #Ok : [Types.NewsPost]; #Err : Text } {
+    if (isAdmin(caller, club_id)) {
+      #Ok(newsPosts.filter(func(p) = p.club_id == club_id))
+    } else {
+      if (not isMember(caller, club_id)) return #Err("Forbidden");
+      #Ok(newsPosts.filter(func(p) = p.club_id == club_id and p.status == "published"))
+    }
+  };
+
+  // Cross-club feed: published posts from the clubs the caller belongs to.
+  // Clubs the caller is not a member of are silently skipped.
+  public query ({ caller }) func list_news_multi(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
+    auth(caller);
+    if (club_ids.size() > 50) return #Err("Too many clubs");
+    let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
+    #Ok(newsPosts.filter(func(p) =
+      visible.any(func(club) = club == p.club_id) and
+      (p.status == "published" or isAdmin(caller, p.club_id))))
+  };
+
+  // Parent invites: a club/team admin mints a token for a child; the
+  // accepting parent links themselves as guardian (and family member, when
+  // their identity is linked to an account) in one atomic call — the
+  // canister equivalent of the Supabase parent-invite RPCs. NOTE: this
+  // trusts the admin-issued token as proof of the guardian relationship;
+  // a verified guardian-relationship check is a post-deploy roadmap item,
+  // matching the PII reader-grant stance.
+  public shared ({ caller }) func create_parent_invite(club_id : Text, team_id : ?Text, child_id : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, team_id)) return #Err("Team or club admin required");
+    if (child_id == "" or child_id.size() > 128) return #Err("Invalid child");
+    switch (team_id) {
+      case (?team) {
+        if (not acl.teams.any(func(t) = t.id == team and t.club == club_id)) return #Err("Team not found in club");
+      };
+      case null {};
+    };
+    let now = nowMs();
+    let invite : Types.ParentInvite = {
+      id = "inv-" # club_id # "-" # Nat.toText(parentInvites.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      club_id; team_id; child_id;
+      invited_by = caller;
+      created_at_ms = now;
+      expires_at_ms = now + 7 * 24 * 60 * 60 * 1000;
+      accepted_by = null;
+    };
+    parentInvites := parentInvites.concat([invite]);
+    #Ok(invite)
+  };
+
+  public query ({ caller }) func get_parent_invite(token : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
+    auth(caller);
+    switch (parentInvites.find(func(i) = i.id == token)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        #Ok(invite)
+      };
+    }
+  };
+
+  public shared ({ caller }) func accept_parent_invite(token : Text) : async { #Ok : Types.ParentInvite; #Err : Text } {
+    auth(caller);
+    switch (parentInvites.find(func(i) = i.id == token)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.accepted_by != null) return #Err("Invite already accepted");
+        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        // Ensure the child record exists and carries the invited team.
+        switch (invite.team_id) {
+          case (?team) {
+            switch (acl.children.find(func(c) = c.id == invite.child_id)) {
+              case null {
+                let child : Types.Child = { id = invite.child_id; teams = [team]; parent = null };
+                acl := { acl with children = acl.children.concat([child]) };
+              };
+              case (?child) {
+                if (not child.teams.any(func(t) = t == team)) {
+                  let updated : Types.Child = { child with teams = child.teams.concat([team]) };
+                  acl := { acl with children = acl.children.map(func(c) = if (c.id == invite.child_id) updated else c) };
+                };
+              };
+            };
+          };
+          case null {};
+        };
+        if (not acl.guardians.any(func(g) = g.child == invite.child_id and g.user.equal(caller))) {
+          acl := { acl with guardians = acl.guardians.concat([{ child = invite.child_id; user = caller }]) };
+        };
+        switch (accountFor(caller)) {
+          case (?account) {
+            if (not accountFamilies.any(func(f) = f.account_id == account.id and f.child_id == invite.child_id)) {
+              accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = invite.child_id }]);
+            };
+          };
+          case null {};
+        };
+        let accepted : Types.ParentInvite = { invite with accepted_by = ?caller };
+        parentInvites := parentInvites.map(func(i) = if (i.id == token) accepted else i);
+        #Ok(accepted)
+      };
+    }
   };
 
   public query ({ caller }) func list_links(club : Text, admin_view : Bool) : async { #Ok : Types.Listing; #Err : Text } {
