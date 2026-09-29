@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import type { Database } from "@/integrations/supabase/types";

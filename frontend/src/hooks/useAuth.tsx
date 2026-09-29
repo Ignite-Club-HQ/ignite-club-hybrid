@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef, ReactNode, useC
 import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { prefetchUserData } from "@/lib/prefetchData";
 import { clearProfileCache } from "@/lib/profileCache";

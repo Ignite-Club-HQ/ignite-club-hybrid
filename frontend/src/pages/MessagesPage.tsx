@@ -15,6 +15,7 @@ import { QueryErrorBanner } from "@/components/QueryErrorBanner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WifiOff } from "lucide-react";
@@ -951,7 +952,7 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   useEffect(() => {
     if (!user?.id) return;
     const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
-    if (!isNative) return;
+    if (!isNative || isFeatureRoutedToIcp("messaging")) return;
 
     // Resolve an author display name without ever invalidating react-query.
     // 1) "You" if it's the current user.
