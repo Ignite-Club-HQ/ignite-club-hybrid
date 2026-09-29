@@ -3,6 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import type { VaultFolderView } from "./types";
 import { getVaultScope } from "./vaultScope";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveVaultFolder,
+  deleteLiveVaultFolder,
+  restoreLiveVaultFile,
+  trashLiveVaultFile,
+  updateLiveVaultFolder,
+} from "@/live/features/vault";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -21,7 +29,15 @@ export function renameVaultFolder(
   newName: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  return updateName("vault_folders", folderId, newName, client);
+  return withFeatureBackend("vault", {
+    supabase: () => updateName("vault_folders", folderId, newName, client),
+    icp: async (ctx) => {
+      // Provisional mapping: restricted_roles are not tracked by this
+      // Supabase-side rename call, so the canister folder's role list is
+      // reset to empty here — verify against the live canister post-deploy.
+      await updateLiveVaultFolder(ctx, folderId, newName, []);
+    },
+  });
 }
 
 export function renameVaultItem(
@@ -61,20 +77,42 @@ export async function createVaultFolder(
   },
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const insert: Database["public"]["Tables"]["vault_folders"]["Insert"] = {
-    name: options.name,
-    created_by: options.userId,
-    parent_id: options.parentFolderId,
-  };
-  if (options.view.type === "club") {
-    insert.club_id = options.view.clubId;
-  } else if (options.view.type === "team") {
-    insert.club_id = options.view.clubId;
-    insert.team_id = options.view.teamId;
-  }
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const insert: Database["public"]["Tables"]["vault_folders"]["Insert"] = {
+        name: options.name,
+        created_by: options.userId,
+        parent_id: options.parentFolderId,
+      };
+      if (options.view.type === "club") {
+        insert.club_id = options.view.clubId;
+      } else if (options.view.type === "team") {
+        insert.club_id = options.view.clubId;
+        insert.team_id = options.view.teamId;
+      }
 
-  const { error } = await client.from("vault_folders").insert(insert);
-  if (error) throw error;
+      const { error } = await client.from("vault_folders").insert(insert);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: mini-league scoped views have no canister
+      // shape (folders only carry club + optional team) — verify the
+      // club/team id mapping against the live canister post-deploy.
+      const clubId = options.view.type === "club" || options.view.type === "team"
+        ? options.view.clubId
+        : "";
+      const teamId = options.view.type === "team" ? options.view.teamId : null;
+      await createLiveVaultFolder(
+        ctx,
+        crypto.randomUUID(),
+        clubId,
+        teamId,
+        options.parentFolderId,
+        options.name,
+        [],
+      );
+    },
+  });
 }
 
 /**
@@ -114,8 +152,15 @@ export async function deleteVaultFolder(
   folderId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const { error } = await client.from("vault_folders").delete().eq("id", folderId);
-  if (error) throw error;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { error } = await client.from("vault_folders").delete().eq("id", folderId);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      await deleteLiveVaultFolder(ctx, folderId);
+    },
+  });
 }
 
 export async function softDeleteVaultItem(
@@ -124,24 +169,42 @@ export async function softDeleteVaultItem(
   deletedAt: Date = new Date(),
   client: IgniteSupabaseClient = supabase,
 ): Promise<string> {
-  const { error } = await client
-    .from("vault_files")
-    .update({ deleted_at: deletedAt.toISOString(), deleted_by: deletedBy })
-    .eq("id", itemId);
-  if (error) throw error;
-  return itemId;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { error } = await client
+        .from("vault_files")
+        .update({ deleted_at: deletedAt.toISOString(), deleted_by: deletedBy })
+        .eq("id", itemId);
+      if (error) throw error;
+      return itemId;
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: canister trash has no deleted_by/deleted_at
+      // fields — deletion actor/timestamp tracking stays Supabase-only.
+      await trashLiveVaultFile(ctx, itemId);
+      return itemId;
+    },
+  });
 }
 
 export async function restoreVaultItem(
   itemId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<string> {
-  const { error } = await client
-    .from("vault_files")
-    .update({ deleted_at: null, deleted_by: null })
-    .eq("id", itemId);
-  if (error) throw error;
-  return itemId;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { error } = await client
+        .from("vault_files")
+        .update({ deleted_at: null, deleted_by: null })
+        .eq("id", itemId);
+      if (error) throw error;
+      return itemId;
+    },
+    icp: async (ctx) => {
+      await restoreLiveVaultFile(ctx, itemId);
+      return itemId;
+    },
+  });
 }
 
 export async function permanentlyDeleteVaultPhoto(
