@@ -19,6 +19,9 @@ import { pickNativePhoto, shouldUseNativePicker as shouldUseNativeIOSPicker, ens
 import { showPhotoPermissionDeniedToast } from "@/lib/showPhotoPermissionDeniedToast";
 import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { registerLiveAsset } from "@/live/features/media";
+import { sha256Hex } from "@/live/blobStoreProtocol";
 import {
   isIOSEnvironment,
   scheduleIOSNativeOverlayRecovery,
@@ -481,6 +484,32 @@ export function UploadPhotoSheet({
         console.error("Failed to cleanup orphaned storage file:", cleanupError);
       }
       throw insertError || new Error("Insert failed");
+    }
+
+    // Hybrid routing: when the media feature resolves to ICP, register the
+    // asset metadata on the media_metadata canister so reactions/comments and
+    // the club feed read path see it. Supabase-routed deployments skip this
+    // entirely. A configured-but-failed registration throws (same rule as
+    // the blob upload above) rather than silently losing the metadata.
+    if (clubId) {
+      await withFeatureBackend("media", {
+        supabase: () => undefined,
+        icp: async (ctx) => {
+          const checksum = blobUpload
+            ? blobUpload.blobRef.content_hash
+            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+          await registerLiveAsset(ctx, {
+            clubId,
+            kind: "photo",
+            mime: file.type || "application/octet-stream",
+            checksum,
+            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
+            visibility: "club",
+            contentLength: file.size,
+            blobRef: blobUpload?.blobRef,
+          });
+        },
+      });
     }
 
     // One-way mirror: gallery upload → vault "Gallery Uploads" folder
