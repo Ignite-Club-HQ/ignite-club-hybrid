@@ -25,6 +25,16 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveClubProfile,
+  saveLiveClubProfile,
+  getLiveClubSettings,
+  saveLiveClubSettings,
+  type LiveClubProfile,
+  type LiveClubSettings,
+} from "@/live/features/club";
+import { candidOpt } from "@/live/features/candid";
 
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
@@ -195,24 +205,70 @@ export default function EditClubPage() {
 
     setSaving(true);
 
-    const { error } = await supabase
-      .from("clubs")
-      .update({
-        name: name.trim(),
-        description: description.trim() || null,
-        logo_url: logoUrl || null,
-        sport: sport || null,
-        contact_email: contactEmail.trim() || null,
-        class_mode_enabled: classModeEnabled,
-        allow_guests_default: allowGuestsDefault,
-        max_guests_per_member_default: maxGuestsDefault,
-        ...(showEventsStripToggle ? { events_sponsor_strip_enabled: eventsSponsorStripEnabled } : {}),
-      } as any)
-      .eq("id", id!);
+    // Routes to club_domain's club profile/settings when placement settings
+    // resolve ICP for membership. sport, class_mode_enabled,
+    // allow_guests_default, max_guests_per_member_default and
+    // events_sponsor_strip_enabled stay Supabase: no canister shape.
+    try {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("clubs")
+            .update({
+              name: name.trim(),
+              description: description.trim() || null,
+              logo_url: logoUrl || null,
+              sport: sport || null,
+              contact_email: contactEmail.trim() || null,
+              class_mode_enabled: classModeEnabled,
+              allow_guests_default: allowGuestsDefault,
+              max_guests_per_member_default: maxGuestsDefault,
+              ...(showEventsStripToggle ? { events_sponsor_strip_enabled: eventsSponsorStripEnabled } : {}),
+            } as any)
+            .eq("id", id!);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existingProfileOpt = await getLiveClubProfile(ctx, id!);
+          const existingProfile = existingProfileOpt[0];
+          const profile: LiveClubProfile = existingProfile
+            ? {
+                ...existingProfile,
+                name: name.trim(),
+                description: candidOpt(description.trim() || undefined),
+                logo_url: candidOpt(logoUrl || undefined),
+              }
+            : {
+                // provisional mapping — verify against deployed canister
+                id: id!,
+                name: name.trim(),
+                slug: id!,
+                description: candidOpt(description.trim() || undefined),
+                logo_url: candidOpt(logoUrl || undefined),
+                primary_color: [],
+                secondary_color: [],
+                is_active: true,
+                created_at_ms: BigInt(Date.now()),
+              };
+          await saveLiveClubProfile(ctx, profile);
 
-    setSaving(false);
-
-    if (error) {
+          const existingSettingsOpt = await getLiveClubSettings(ctx, id!);
+          const existingSettings = existingSettingsOpt[0];
+          const settings: LiveClubSettings = existingSettings
+            ? { ...existingSettings, contact_email: candidOpt(contactEmail.trim() || undefined) }
+            : {
+                // provisional mapping — verify against deployed canister
+                club_id: id!,
+                contact_email: candidOpt(contactEmail.trim() || undefined),
+                membership_open: true,
+                announcement: [],
+                public_directory: false,
+              };
+          await saveLiveClubSettings(ctx, settings);
+        },
+      });
+    } catch (error: any) {
+      setSaving(false);
       toast({
         title: "Error",
         description: "Failed to update club. Please try again.",
@@ -220,6 +276,8 @@ export default function EditClubPage() {
       });
       return;
     }
+
+    setSaving(false);
 
     toast({
       title: "Club updated!",
