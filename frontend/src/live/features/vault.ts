@@ -53,6 +53,25 @@ export async function getLiveDecryptedPii(
   );
 }
 
+/**
+ * Batch read of decrypted PII fields (e.g. child display names). The canister
+ * omits records the caller cannot read and audits every attempt, so callers
+ * should treat a missing entry as "no access / not registered" and fall back.
+ */
+export async function getLiveDecryptedPiiBatch(
+  ctx: FeatureBackendContext,
+  piiIds: string[],
+  fieldId: string,
+  operation: string,
+  purpose: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_decrypted_pii_batch(piiIds, fieldId, operation, purpose),
+    "Get decrypted PII batch",
+  );
+}
+
 export async function deleteLivePii(
   ctx: FeatureBackendContext,
   piiId: string,

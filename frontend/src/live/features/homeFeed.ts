@@ -3,6 +3,7 @@ import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import { getLiveClubProfile } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
 import { listLiveChildren } from "./membership";
+import { getLiveDecryptedPiiBatch } from "./vault";
 
 /**
  * Home feed -> identity_access (roles), events_domain (events + RSVPs) and
@@ -11,9 +12,9 @@ import { listLiveChildren } from "./membership";
  * featureBackend.ts); until then HomePage stays on its Supabase queries.
  *
  * PROVISIONAL until verified against deployed canisters:
- * - the canister Event record has no type/location/cancellation fields, so
- *   `type` maps to "training" and cancellation/location fields map to
- *   null/false;
+ * - event type/location/cancellation now come from the canister Event
+ *   record; a "mini_league" type maps to "social" because HomePage's Event
+ *   union only covers game/training/social and mini-leagues stay Supabase-only;
  * - recurrences are not exposed by list_events, so is_recurring maps to
  *   false and the recurring-series cap is a no-op on this branch;
  * - account ids are matched against principal text until account ids are
@@ -108,16 +109,16 @@ export function mapLiveHomeEvent(
   return {
     id: event.id,
     title: event.title,
-    type: "training",
+    type: event.event_type === "game" || event.event_type === "social" ? event.event_type : "training",
     event_date: new Date(Number(event.starts_at_ms)).toISOString(),
     start_time: null,
     address: null,
-    location_name: null,
+    location_name: event.location[0] ?? null,
     suburb: null,
     club_id: event.club_id,
     team_id: event.team_id[0] ?? null,
     mini_league_id: null,
-    is_cancelled: false,
+    is_cancelled: event.cancelled,
     is_bye: false,
     is_recurring: false,
     parent_event_id: null,
@@ -209,14 +210,38 @@ export async function fetchLiveHomeRsvps(
 }
 
 /**
- * The caller's children from club_domain. The canister Child record carries
- * no name (child names are PII held behind pii_access_control), so `name`
- * resolves to null until that read path is built; ignite_points is
- * Supabase-only and maps to 0.
+ * The caller's children from club_domain, with display names decrypted
+ * through pii_access_control. PII records are keyed pii_id = child id,
+ * field_id = "name"; the caller must be the record's domain_owner (the
+ * registering parent/guardian) or a granted reader. Unreadable or
+ * unregistered names fall back to null. ignite_points is Supabase-only and
+ * maps to 0. PROVISIONAL: verify the pii_id/field_id convention against the
+ * deployed canisters post-deploy.
  */
 export async function fetchLiveHomeChildren(
   ctx: FeatureBackendContext,
 ): Promise<{ id: string; name: string | null; ignite_points: number }[]> {
   const children = await listLiveChildren(ctx);
-  return children.map((child) => ({ id: child.id, name: null, ignite_points: 0 }));
+  const nameByChildId = new Map<string, string>();
+  try {
+    const decrypted = await getLiveDecryptedPiiBatch(
+      ctx,
+      children.map((child) => child.id),
+      "name",
+      "home_feed",
+      "Display child names on the home feed",
+    );
+    const decoder = new TextDecoder();
+    for (const record of decrypted) {
+      const name = decoder.decode(record.plaintext).trim();
+      if (name) nameByChildId.set(record.pii_id, name);
+    }
+  } catch {
+    // Best effort: a PII read failure must not blank the home children list.
+  }
+  return children.map((child) => ({
+    id: child.id,
+    name: nameByChildId.get(child.id) ?? null,
+    ignite_points: 0,
+  }));
 }
