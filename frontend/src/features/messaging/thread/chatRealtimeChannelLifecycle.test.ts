@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { subscribe, removeChannel, registerChannel, noteChannelSubscribed, noteChannelRemoved } = vi.hoisted(() => ({
+const { subscribe, removeChannel, registerChannel, noteChannelSubscribed, noteChannelRemoved, isFeatureRoutedToIcp } = vi.hoisted(() => ({
   subscribe: vi.fn(),
   removeChannel: vi.fn(),
   registerChannel: vi.fn(),
   noteChannelSubscribed: vi.fn(),
   noteChannelRemoved: vi.fn(),
+  isFeatureRoutedToIcp: vi.fn(() => false),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 vi.mock("@/lib/realtimeChannelRegistry", () => ({ registerChannel }));
 vi.mock("@/lib/chatPerfDiagnostics", () => ({ noteChannelSubscribed, noteChannelRemoved }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp }));
 
 import { startChatRealtimeChannel } from "./chatRealtimeChannelLifecycle";
 
