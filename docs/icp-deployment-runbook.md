@@ -116,11 +116,30 @@ Media *files* stay in Supabase storage by default; only metadata lives on
   `liveAssetSource`), so feature code never hardcodes a storage backend.
 - `media_blob_store` is already a known key in Placement Settings.
 
-To adopt later: build a blob/asset canister that serves chunks over HTTP
-(`https://<canister-id>.icp0.io/<path>`), deploy it, register its ID under
-the `media_blob_store` key, and have uploads write chunks there and call
-`set_blob_ref`. Existing Supabase-backed assets are untouched and keep
-working; migrate them opportunistically if ever desired.
+Everything except the canister itself is already built:
+
+- The contract is fixed at `backend/media_blob_store/media_blob_store.did`
+  (chunked `begin_upload`/`put_chunk`/`finalize_upload`/`abort_upload`,
+  `http_request` serving at `https://<canister-id>.icp0.io/<path>`,
+  `get_content_hash`, `health`); frontend bindings live under
+  `frontend/src/lab/bindings/media_blob_store/declarations/` and the protocol
+  is pinned by `frontend/src/live/blobStoreProtocol.test.ts`.
+- Uploads already route through `frontend/src/live/mediaUpload.ts`
+  (`tryUploadMediaToBlobStore`): gallery photo and vault uploads check the
+  `media_blob_store` setting and go on-chain once an ID is registered AND the
+  member is signed in with Internet Identity; until then Supabase storage
+  runs unchanged. A configured-but-failed upload throws rather than silently
+  diverting to Supabase.
+- `frontend/scripts/migrate-media-to-blob-store.mjs` (run with bun) moves existing
+  Supabase photos on-chain: downloads, SHA-256s, chunked-uploads, rewrites
+  the photo row's URL, and calls `set_blob_ref` on the matching
+  `media_metadata` asset. Supports `--dry-run`, `--limit`, `--club`; safe to
+  re-run. Test it free on the ICP playground before mainnet.
+
+To adopt: implement the canister against the fixed .did, deploy it, paste its
+ID under the `media_blob_store` key — uploads switch automatically. Then run
+the migration script for existing media if desired; untouched assets keep
+working from Supabase storage.
 
 ## Known gaps at time of writing
 

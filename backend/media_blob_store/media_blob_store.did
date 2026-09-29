@@ -1,0 +1,75 @@
+// media_blob_store — fixed public contract for the future on-chain media
+// blob store. The frontend upload path (frontend/src/live/blobStoreUpload.ts)
+// and the migration script (scripts/migrate-media-to-blob-store.mjs) are
+// written against exactly this interface, so the canister implementation
+// fills in code against an already-tested contract.
+//
+// Serving model: blobs are served over HTTPS at
+//   https://<canister-id>.icp0.io/<path>
+// via http_request, which matches blobAssetUrl in
+// frontend/src/live/mediaStorage.ts. A blob's `path` is the same value the
+// app uses as its Supabase storage path (e.g. clubs/<club>/teams/<team>/...),
+// so a migration can move bytes without changing any pointers.
+//
+// Upload protocol (chunked, resumable per chunk):
+//   1. begin_upload(path, mime, total_size, chunk_count) -> upload_id
+//   2. put_chunk(upload_id, index, data) for each index in 0..chunk_count-1
+//      (chunk size is defined client-side, currently 1_000_000 bytes)
+//   3. finalize_upload(upload_id) -> { path, content_hash, content_length }
+//      content_hash is the lowercase hex SHA-256 of the full byte stream.
+//   abort_upload(upload_id) discards a partial upload.
+// The canister MUST reject finalize when chunks are missing or the
+// accumulated byte count disagrees with total_size, and SHOULD reject a
+// second begin_upload for a path that already has a finalized blob unless
+// the caller owns the existing blob.
+
+type HeaderField = record { text; text };
+
+type HttpRequest = record {
+  url : text;
+  method : text;
+  headers : vec HeaderField;
+  body : blob;
+};
+
+type HttpResponse = record {
+  status_code : nat16;
+  headers : vec HeaderField;
+  body : blob;
+};
+
+type FinalizedBlob = record {
+  path : text;
+  content_hash : text;
+  content_length : nat64;
+};
+
+type Health = record {
+  version : text;
+  blob_count : nat64;
+  total_bytes : nat64;
+};
+
+type Result = variant { Ok; Err : text };
+type ResultUploadId = variant { Ok : text; Err : text };
+type ResultFinalized = variant { Ok : FinalizedBlob; Err : text };
+
+service : {
+  // Start a chunked upload. Returns an opaque upload id.
+  begin_upload : (text, text, nat64, nat32) -> (ResultUploadId);
+  // Upload one chunk (index within 0..chunk_count-1).
+  put_chunk : (text, nat32, blob) -> (Result);
+  // Assemble, verify, and persist. Returns the path and SHA-256 hash the
+  // caller records in media_metadata's blob_ref.
+  finalize_upload : (text) -> (ResultFinalized);
+  // Discard a partial upload.
+  abort_upload : (text) -> (Result);
+  // Lowercase hex SHA-256 of a finalized blob, for verification.
+  get_content_hash : (text) -> (opt text) query;
+  // Remove a blob (owner / governor gated).
+  delete_blob : (text) -> (Result);
+  // Standard asset serving: GET /<path> returns the blob bytes.
+  http_request : (HttpRequest) -> (HttpResponse) query;
+  // Cheap liveness/capacity probe.
+  health : () -> (Health) query;
+}

@@ -18,6 +18,7 @@ import { isCancelledSelectionError, getReadableUploadError } from "@/lib/uploadE
 import { pickNativePhoto, shouldUseNativePicker as shouldUseNativeIOSPicker, ensurePhotoLibraryPermission, PhotoPermissionDeniedError, isPhotoPermissionError } from "@/lib/nativePhotoPicker";
 import { showPhotoPermissionDeniedToast } from "@/lib/showPhotoPermissionDeniedToast";
 import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import {
   isIOSEnvironment,
   scheduleIOSNativeOverlayRecovery,
@@ -432,15 +433,30 @@ export function UploadPhotoSheet({
       storagePath = `unassigned/${user!.id}/${timestamp}-${randomSuffix}.${fileExt}`;
     }
 
-    const { error: uploadError } = await supabase.storage
-      .from("photos")
-      .upload(storagePath, file, { cacheControl: "31536000" });
+    // ICP blob store: when a media_blob_store canister is configured in
+    // placement settings AND the member is signed in with Internet Identity,
+    // bytes go on-chain and the photo row stores the on-chain URL. Otherwise
+    // the Supabase storage upload below runs unchanged.
+    const blobUpload = await tryUploadMediaToBlobStore({
+      storagePath,
+      file,
+      mime: file.type || "application/octet-stream",
+    });
 
-    if (uploadError) throw uploadError;
+    let storageUrl: string;
+    if (blobUpload) {
+      storageUrl = blobUpload.url;
+    } else {
+      const { error: uploadError } = await supabase.storage
+        .from("photos")
+        .upload(storagePath, file, { cacheControl: "31536000" });
 
-    // Store the Supabase storage URL format (will be converted to signed URL when displayed)
-    const supabaseUrl = "REDACTED_LAB_VALUE";
-    const storageUrl = `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
+      if (uploadError) throw uploadError;
+
+      // Store the Supabase storage URL format (will be converted to signed URL when displayed)
+      const supabaseUrl = "REDACTED_LAB_VALUE";
+      storageUrl = `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
+    }
 
     // 1. Insert into photos table (for media gallery)
     const { data: insertedPhoto, error: insertError } = await supabase.from("photos").insert({
