@@ -215,14 +215,20 @@ persistent actor {
 
   public shared ({ caller }) func clear_inbox(user : Text, club : ?Text) : async Types.ResultNat16 {
     authenticated(caller);
-    let before = items.size();
-    items := items.filter(func(item) {
+    var kept : [Types.Notification] = [];
+    var removed : Nat16 = 0;
+    for (item in items.values()) {
       let clubOk = switch (club) { case (?c) { item.club == c }; case null { true } };
-      not (item.user == user and clubOk)
-    });
-    let removed = before - items.size();
-    if (removed > 65535) { return #Err("Removed count overflow") };
-    #Ok(Nat16.fromNat(removed))
+      if (item.user == user and clubOk) {
+        if (removed == 65535) { return #Err("Inbox too large to clear in one call") };
+        clearLease(item.id);
+        removed += 1;
+      } else {
+        kept := kept.concat([item]);
+      };
+    };
+    items := kept;
+    #Ok(removed)
   };
 
   public shared ({ caller }) func claim(now_ms : Nat64, limit : Nat16) : async Types.Results {
