@@ -1,5 +1,5 @@
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveEvent, setLiveEventDuty } from "@/live/features/events";
+import { createLiveEvent, createLiveEventSeries, setLiveEventDuty } from "@/live/features/events";
 
 export type CreateEventTransactionInput = {
   event: Record<string, unknown>;
@@ -35,16 +35,42 @@ export async function createEventTransaction(
       const startsAtMs = new Date(input.eventDate).getTime();
       const endTime = eventRecord.end_time as string | undefined;
       const endsAtMs = endTime ? new Date(endTime).getTime() : startsAtMs;
-      const created = await createLiveEvent(ctx, {
+      const base = {
         clubId: String(eventRecord.club_id ?? ""),
         teamId: (eventRecord.team_id as string | null | undefined) ?? null,
         title: String(eventRecord.title ?? ""),
         description: String(eventRecord.description ?? ""),
         eventType: String(eventRecord.type ?? "training"),
         location: (eventRecord.location_name as string | null | undefined) ?? null,
-        startsAtMs,
-        endsAtMs,
-      });
+      };
+
+      // Recurring: the canister expands the series itself. Provisional —
+      // input.childDates is the browser-computed occurrence list; we derive
+      // the frequency from the median gap (weekly/fortnightly/monthly) and
+      // the end from the last occurrence rather than passing dates through.
+      if (input.childDates && input.childDates.length > 0) {
+        const gaps = input.childDates
+          .slice(0, 4)
+          .map((d) => Math.round((new Date(d).getTime() - startsAtMs) / 86_400_000));
+        const step = gaps[0] ?? 7;
+        const frequency = step <= 1 ? "daily" : step <= 7 ? "weekly" : step <= 14 ? "fortnightly" : "monthly";
+        const untilMs = new Date(input.childDates[input.childDates.length - 1]).getTime();
+        const { events } = await createLiveEventSeries(ctx, {
+          ...base,
+          frequency,
+          firstStartsAtMs: startsAtMs,
+          firstEndsAtMs: endsAtMs,
+          untilMs,
+        });
+        const first = events[0];
+        if (!first) throw new Error("Event series could not be created.");
+        for (const duty of input.duties) {
+          await setLiveEventDuty(ctx, first.id, duty.assigned_to ?? "", duty.name);
+        }
+        return first.id;
+      }
+
+      const created = await createLiveEvent(ctx, { ...base, startsAtMs, endsAtMs });
 
       // Best-effort duty sync: the canister has no equivalent of the atomic
       // create_event_with_duties RPC, so duties are written as a separate
@@ -53,9 +79,6 @@ export async function createEventTransaction(
       for (const duty of input.duties) {
         await setLiveEventDuty(ctx, created.id, duty.assigned_to ?? "", duty.name);
       }
-
-      // stays Supabase: no canister shape for recurring series expansion
-      // (childDates) — this is handled entirely inside the Supabase RPC.
 
       return created.id;
     },
