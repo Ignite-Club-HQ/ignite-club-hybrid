@@ -451,11 +451,20 @@ export default function NotificationsPage() {
       if (ids.length === 0) return;
       if (useIcpLab) return;
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .in("id", ids);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .update({ is_read: true })
+            .in("id", ids);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // The canister marks the caller's inbox (optionally club-scoped),
+          // matching the visible-set semantics of this mutation.
+          await markAllLiveNotificationsRead(ctx, user!.id, activeClubFilter ?? null);
+        },
+      });
     },
     onMutate: async () => {
       // Optimistic update - mark visible notifications as read
@@ -476,11 +485,18 @@ export default function NotificationsPage() {
     mutationFn: async (id: string) => {
       if (useIcpLab) return id;
 
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .delete()
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveNotification(ctx, id);
+        },
+      });
       return id;
     },
     onMutate: async (id) => {
@@ -501,11 +517,18 @@ export default function NotificationsPage() {
       if (ids.length === 0) return;
       if (useIcpLab) return;
 
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .in("id", ids);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .delete()
+            .in("id", ids);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await clearLiveInbox(ctx, user!.id, activeClubFilter ?? null);
+        },
+      });
     },
     onMutate: async () => {
       // Cancel any in-flight queries to prevent stale data overwriting
