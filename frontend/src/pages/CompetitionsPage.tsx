@@ -14,6 +14,8 @@ import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { useMemo } from "react";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveCompetitions } from "@/live/features/competitions";
 
 export default function CompetitionsPage() {
   usePageTitle("Competitions");
@@ -130,14 +132,39 @@ function SupabaseCompetitionsPage() {
   const { data: allCompetitions = [], isLoading } = useQuery({
     queryKey: ["my-competitions", user?.id],
     enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competitions")
-        .select("id, name, sport, season, status, visibility, starts_on, ends_on, organizer_club_id, source, last_synced_at, clubs:organizer_club_id(name), competition_entries(team_id, status, teams:team_id(club_id, deleted_at))")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .select("id, name, sport, season, status, visibility, starts_on, ends_on, organizer_club_id, source, last_synced_at, clubs:organizer_club_id(name), competition_entries(team_id, status, teams:team_id(club_id, deleted_at))")
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return data ?? [];
+        },
+        // Provisional: list_competitions requires a club id, so the ICP branch
+        // only lists when a club context is selected (no global list); the
+        // canister competition has no sport/visibility/date fields yet.
+        icp: async (ctx) => {
+          if (!activeClubFilter) return [];
+          const comps = await listLiveCompetitions(ctx, activeClubFilter);
+          return (comps as any[]).map((c) => ({
+            id: c.id,
+            name: c.name,
+            sport: null,
+            season: c.season,
+            status: c.status,
+            visibility: null,
+            starts_on: null,
+            ends_on: null,
+            organizer_club_id: c.club_id,
+            source: null,
+            last_synced_at: null,
+            clubs: null,
+            competition_entries: [],
+          }));
+        },
+      }),
   });
 
   const competitions = useMemo(() => {
