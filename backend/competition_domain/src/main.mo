@@ -340,6 +340,6 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 1; governor; roles; competitions; entries; tokens; seasons; matches })
+    #Ok({ schema = 2; governor; roles; competitions; entries; tokens; seasons; matches })
   };
 };
