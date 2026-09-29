@@ -208,7 +208,6 @@ persistent actor {
     auth(caller);
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
       case null { #Err("Trashed file not found") };
-      // PLACEHOLDER-ANCHOR-VAULT-NEW-METHODS
       case (?file) {
         if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
         let updated : Types.VaultFile = { file with deleted_at_ms = null };
