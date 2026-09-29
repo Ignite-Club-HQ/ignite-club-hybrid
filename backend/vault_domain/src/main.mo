@@ -205,15 +205,24 @@ persistent actor {
 
   public query ({ caller }) func list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
+    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+      case (?folder) { if (not canViewFolder(caller, folder)) return #Ok([]) };
+      case null {};
+    };
     #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null))
   };
 
-  public query ({ caller }) func list_club_files(club : Text, team : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+  public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
       item.deleted_at_ms == null and
-      (team == null or item.team == team or item.team == null)))
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null true;
+        case (?folder) canViewFolder(caller, folder);
+      }))
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
@@ -222,7 +231,7 @@ persistent actor {
       case null { #Err("File not found") };
       case (?file) {
         if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
-        let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs() };
+        let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
@@ -235,7 +244,7 @@ persistent actor {
       case null { #Err("Trashed file not found") };
       case (?file) {
         if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
-        let updated : Types.VaultFile = { file with deleted_at_ms = null };
+        let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
