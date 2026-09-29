@@ -105,6 +105,7 @@ persistent actor {
       mime;
       checksum;
       storage_path;
+      blob_ref = null;
       visibility;
       content_length = 0;
       encrypted;
@@ -115,6 +116,38 @@ persistent actor {
     };
     assets := assets.concat([asset]);
     #Ok(asset)
+  };
+
+  // Points an asset at bytes held by an ICP blob-store canister instead of
+  // the off-chain storage_path. The blob store is a separate canister; this
+  // canister only records where the bytes live. Passing null clears the
+  // pointer and returns the asset to off-chain storage resolution.
+  public shared ({ caller }) func set_blob_ref(asset_id : Text, blob_ref : ?Types.BlobRef) : async { #Ok : Types.Asset; #Err : Text } {
+    auth(caller);
+    var found_idx : ?Nat = null;
+    var idx = 0;
+    for (a in assets.values()) {
+      if (a.id == asset_id and not a.deleted) { found_idx := ?idx };
+      idx += 1;
+    };
+    switch (found_idx) {
+      case null { #Err("Asset not found") };
+      case (?i) {
+        let asset = assets[i];
+        if (not asset.owner.equal(caller) and not isGovernor(caller)) return #Err("Asset owner required");
+        switch (blob_ref) {
+          case (?r) {
+            if (not valid(r.canister) or not valid(r.path) or not valid(r.content_hash)) return #Err("Invalid blob reference");
+          };
+          case null {};
+        };
+        let updated : Types.Asset = { asset with blob_ref };
+        assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
+          if (position == i) updated else assets[position]
+        });
+        #Ok(updated)
+      };
+    }
   };
 
   public shared ({ caller }) func issue_capability(asset_id : Text, action : Text, purpose : Text, expires_at_ms : Nat64) : async { #Ok : Types.Capability; #Err : Text } {

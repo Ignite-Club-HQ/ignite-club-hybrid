@@ -1,4 +1,12 @@
 module {
+  // Optional pointer to bytes held by an ICP blob-store canister
+  // (canister key "media_blob_store"). When absent, the asset's bytes live
+  // in off-chain object storage addressed by storage_path.
+  public type BlobRef = {
+    canister : Text;
+    path : Text;
+    content_hash : Text;
+  };
   public type Asset = {
     id : Text;
     club_id : Text;
@@ -7,6 +15,7 @@ module {
     mime : Text;
     checksum : Text;
     storage_path : Text;
+    blob_ref : ?BlobRef;
     visibility : Text;
     content_length : Nat64;
     encrypted : Bool;
