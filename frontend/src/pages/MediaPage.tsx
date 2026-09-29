@@ -31,6 +31,11 @@ import {
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchGalleryCardPhotoIds,
+  fetchHighlightedMediaPhoto,
+  fetchMediaFeedPage,
+} from "@/features/media/mediaReadRepository";
 import { fetchMediaComments, fetchMediaReactions } from "@/features/media/mediaReadRepository";
 import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "@/features/media/mediaEngagementRepository";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -513,12 +518,7 @@ function SupabaseMediaPage() {
     queryKey: ["gallery-chat-card-photo-ids", cardId],
     queryFn: async () => {
       if (!cardId) return null;
-      const { data } = await supabase
-        .from("gallery_chat_cards")
-        .select("photo_ids")
-        .eq("id", cardId)
-        .maybeSingle();
-      return (data?.photo_ids as string[] | null) ?? [];
+      return fetchGalleryCardPhotoIds(cardId);
     },
     enabled: !!cardId,
     staleTime: 5 * 60 * 1000,
@@ -553,40 +553,40 @@ function SupabaseMediaPage() {
 
       const start = performance.now();
       diagLog("photos:start", { pageParam });
-      let query = supabase
-        .from("photos")
-        .select("id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, uploader_id, album_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))")
-        .eq("show_in_feed", true)
-        .is("deleted_at", null);
-
-      if (cardId && cardPhotoIds?.length) query = query.in("id", cardPhotoIds);
-      if (selectedClubFilter) query = query.eq("club_id", selectedClubFilter);
-      if (selectedTeamFilter) query = query.eq("team_id", selectedTeamFilter);
-      if (urlEventId) query = query.eq("event_id", urlEventId);
-      if (dateFromKey) query = query.gte("created_at", dateFromKey);
-      if (dateToKey) query = query.lte("created_at", dateToKey);
 
       // Hard wall-clock budget: a GET that was in flight when the WebView was
       // frozen never fails on its own, which used to leave the gallery on
       // "Updating..." forever AND keep a connection slot occupied, starving
       // other pages (Schedule) of sockets. 15s then abort → error → retry.
+      // Provisional: the budget/abort signal only applies to the Supabase
+      // branch inside fetchMediaFeedPage; the ICP branch has no long-poll to
+      // abort.
       const budget = createChatFetchBudget(15_000);
-      let data: any[] | null = null;
+      let result: { photos: any[]; nextCursor: number | undefined };
       let error: any = null;
       try {
-        const res = await query
-          .order("created_at", { ascending: false })
-          .range(pageParam, pageParam + PHOTOS_PER_PAGE - 1)
-          .abortSignal(budget.signal);
-        data = res.data as any[] | null;
-        error = res.error;
+        result = await fetchMediaFeedPage({
+          clubId: selectedClubFilter,
+          teamId: selectedTeamFilter,
+          eventId: urlEventId ?? null,
+          dateFrom: dateFromKey,
+          dateTo: dateToKey,
+          cardId: cardId ?? null,
+          cardPhotoIds,
+          offset: pageParam,
+          pageSize: PHOTOS_PER_PAGE,
+        });
+      } catch (err) {
+        error = err;
+        result = { photos: [], nextCursor: undefined };
       } finally {
         budget.done();
       }
+      const data = result.photos;
       diagLog("photos:end", { pageParam, ms: Math.round(performance.now() - start), rows: data?.length ?? null, error: error?.message });
 
       if (error) throw error;
-      
+
       // Cache first page results for offline access
       if (pageParam === 0 && data && !selectedClubFilter && !selectedTeamFilter && !urlEventId && !dateFromKey && !dateToKey && !cardId) {
         cachePhotos(null, null, null, data.map(p => ({
@@ -604,8 +604,8 @@ function SupabaseMediaPage() {
         setCachedPhotosData(null);
         setIsCacheStale(false);
       }
-      
-      return { photos: data || [], nextCursor: data && data.length === PHOTOS_PER_PAGE ? pageParam + PHOTOS_PER_PAGE : undefined };
+
+      return result;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     initialPageParam: 0,
@@ -636,21 +636,9 @@ function SupabaseMediaPage() {
     queryFn: async () => {
       if (!highlightedPhotoId) return null;
       // Retry with backoff for very recent uploads where DB replication may
-      // briefly lag behind the push notification.
-      const delays = [0, 500, 1000, 2000];
-      for (let i = 0; i < delays.length; i++) {
-        if (delays[i] > 0) await new Promise((r) => setTimeout(r, delays[i]));
-        const { data, error } = await supabase
-          .from("photos")
-          .select("id, file_url, image_url, title, caption, created_at, club_id, team_id, event_id, mini_league_id, uploader_id, clubs!club_id(name, is_pro), teams(name, club_id, clubs!club_id(name)), mini_leagues(name, club_id, clubs!club_id(name))")
-          .eq("id", highlightedPhotoId)
-          .eq("show_in_feed", true)
-          .is("deleted_at", null)
-          .maybeSingle();
-        if (error) throw error;
-        if (data) return data;
-      }
-      return null;
+      // briefly lag behind the push notification. fetchHighlightedMediaPhoto
+      // owns the retry loop so it can be routed to ICP too.
+      return fetchHighlightedMediaPhoto(highlightedPhotoId);
     },
     enabled: !!user && !!highlightedPhotoId,
     staleTime: 0,

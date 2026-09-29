@@ -100,6 +100,8 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 
 
 const MESSAGES_PER_PAGE = 30;
@@ -1302,14 +1304,33 @@ export default function ClubChatPage() {
         return queuedSend();
       }
       
-      const { error } = await supabase.from("club_messages").insert({
-        text,
-        club_id: clubId!,
-        author_id: user!.id,
-        image_url,
-        reply_to_id,
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_messages").insert({
+            text,
+            club_id: clubId!,
+            author_id: user!.id,
+            image_url,
+            reply_to_id,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: club id doubles as the conversation id (same
+          // convention as the read-side poll). Reply threading is
+          // Supabase-only.
+          const attachment = image_url
+            ? { kind: "image", refId: image_url, url: image_url }
+            : (() => {
+                const poll = /\[poll:([^\]]+)\]/.exec(text);
+                if (poll) return { kind: "poll", refId: poll[1], url: null };
+                const news = /\[news:([^\]]+)\]/.exec(text);
+                if (news) return { kind: "news", refId: news[1], url: null };
+                return null;
+              })();
+          await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment);
+        },
       });
-      if (error) throw error;
       return deliveredSend();
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
@@ -1438,8 +1459,15 @@ export default function ClubChatPage() {
       if (useIcpLab) {
         throw new Error("Editing club messages is not available in the local ICP contract.");
       }
-      const { error } = await supabase.from("club_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await updateLiveMessage(ctx, editingMessage.id, message.trim());
+        },
+      });
     },
     onSuccess: () => {
       setMessage("");
