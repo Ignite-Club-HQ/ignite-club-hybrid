@@ -62,6 +62,12 @@ export const idlFactory = ({ IDL }) => {
     'account_id' : IDL.Text,
     'child_id' : IDL.Text,
   });
+  const Profile = IDL.Record({
+    'account_id' : IDL.Text,
+    'avatar_ref' : IDL.Opt(IDL.Text),
+    'updated_at_ns' : IDL.Nat64,
+    'display_name' : IDL.Text,
+  });
   const RoleGrant = IDL.Record({
     'account_id' : IDL.Text,
     'club' : IDL.Opt(IDL.Text),
@@ -78,12 +84,18 @@ export const idlFactory = ({ IDL }) => {
     'external_bindings' : IDL.Vec(ExternalSiteBinding),
     'families' : IDL.Vec(FamilyLink),
     'challenges' : IDL.Vec(LinkChallenge),
+    'profiles' : IDL.Vec(Profile),
     'roles' : IDL.Vec(RoleGrant),
     'next_challenge' : IDL.Nat64,
   });
   const Result_3 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
   const Result_6 = IDL.Variant({
     'Ok' : IDL.Vec(ExternalSiteBinding),
+    'Err' : IDL.Text,
+  });
+  const Result_9 = IDL.Variant({ 'Ok' : Profile, 'Err' : IDL.Text });
+  const Result_10 = IDL.Variant({
+    'Ok' : IDL.Vec(RoleGrant),
     'Err' : IDL.Text,
   });
   const Result_7 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
@@ -124,6 +136,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_8],
         ['query'],
       ),
+    'get_profile' : IDL.Func([], [Result_9], ['query']),
     'grant_role' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [Result_4],
@@ -140,6 +153,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_4],
         [],
       ),
+    'my_roles' : IDL.Func([], [Result_10], ['query']),
     'register_account' : IDL.Func([], [Result], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
     'set_exclusion' : IDL.Func(
@@ -158,6 +172,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_7],
         [],
       ),
+    'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

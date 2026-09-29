@@ -2,7 +2,10 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   BACKEND_ROUTING_CONFIG_KEY,
   applyBackendRoutingConfig,
+  cacheBackendRoutingConfig,
   getBackendRoutingConfig,
+  getBuildTimeBackendRoutingConfig,
+  readCachedBackendRoutingConfig,
   parseBackendRoutingConfig,
   resolveBackendForCountry,
   resolveTargetForCountry,
@@ -21,6 +24,14 @@ import { getCurrentCountry } from "./userCountry";
  * Kept separate from `backendRouting.ts` because that module must stay free
  * of Supabase imports (see icpAdminOverrides.ts for the module-cycle rule).
  */
+/**
+ * Loads the routing config with explicit precedence:
+ *   stored app_settings row > build-time env > localStorage cache > default.
+ * The build-time and cache fallbacks exist so an ICP-routed deployment still
+ * boots on ICP when Supabase is unreachable — previously this silently fell
+ * back to Supabase-everywhere and the app could not even learn it should be
+ * on ICP.
+ */
 export async function loadBackendRoutingConfig(): Promise<void> {
   try {
     const { data, error } = await supabase
@@ -29,13 +40,35 @@ export async function loadBackendRoutingConfig(): Promise<void> {
       .eq("key", BACKEND_ROUTING_CONFIG_KEY)
       .maybeSingle();
     if (error) throw error;
-    applyBackendRoutingConfig(data ? parseBackendRoutingConfig(data.value) : null);
+    const stored = data ? parseBackendRoutingConfig(data.value) : null;
+    if (stored) {
+      applyBackendRoutingConfig(stored);
+      cacheBackendRoutingConfig(stored);
+      return;
+    }
   } catch (error) {
     console.warn(
-      "[backend-routing] Could not load routing config; defaulting to Supabase.",
+      "[backend-routing] Could not load routing config from Supabase; trying build-time configuration.",
       error,
     );
   }
+  try {
+    const buildTime = getBuildTimeBackendRoutingConfig();
+    if (buildTime) {
+      applyBackendRoutingConfig(buildTime);
+      return;
+    }
+  } catch (error) {
+    console.warn("[backend-routing] Build-time routing config is invalid; ignoring it.", error);
+  }
+  const cached = readCachedBackendRoutingConfig();
+  if (cached) {
+    applyBackendRoutingConfig(cached);
+    console.warn("[backend-routing] Using the last cached routing config.");
+    return;
+  }
+  console.warn("[backend-routing] No routing config available; defaulting to Supabase.");
+  applyBackendRoutingConfig(null);
 }
 
 function isIcpAvailable(): boolean {
