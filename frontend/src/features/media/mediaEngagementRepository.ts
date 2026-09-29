@@ -1,43 +1,92 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  addLiveComment,
+  addLiveReaction,
+  listLiveReactions,
+  removeLiveReaction,
+} from "@/live/features/media";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
+/**
+ * Media engagement writes (reactions, comments).
+ *
+ * Hybrid routing mirrors the reads in mediaReadRepository: when the media
+ * feature resolves to ICP the canister's add/remove calls are used with the
+ * photo id doubling as the canister asset id (the same provisional mapping
+ * the feed read uses). Until the canister ID is configured every caller
+ * stays on Supabase. NOTE: untested against a live canister until
+ * deployment.
+ */
 export async function replaceMediaReaction(
   input: { photoId: string; userId: string; reactionType: string },
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const { error: deleteError } = await client.from("photo_reactions").delete()
-    .eq("photo_id", input.photoId).eq("user_id", input.userId);
-  if (deleteError) throw deleteError;
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { error: deleteError } = await client.from("photo_reactions").delete()
+        .eq("photo_id", input.photoId).eq("user_id", input.userId);
+      if (deleteError) throw deleteError;
 
-  const { error: insertError } = await client.from("photo_reactions").insert({
-    photo_id: input.photoId,
-    user_id: input.userId,
-    reaction_type: input.reactionType,
+      const { error: insertError } = await client.from("photo_reactions").insert({
+        photo_id: input.photoId,
+        user_id: input.userId,
+        reaction_type: input.reactionType,
+      });
+      if (insertError) throw insertError;
+    },
+    icp: async (ctx) => {
+      // The canister keys reactions by (asset, user), so add_reaction already
+      // replaces any existing reaction from this caller — no delete needed.
+      await addLiveReaction(ctx, input.photoId, input.reactionType, Date.now());
+    },
   });
-  if (insertError) throw insertError;
 }
 
 export async function removeMediaReaction(
   input: { photoId: string; userId: string },
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const { error } = await client.from("photo_reactions").delete()
-    .eq("photo_id", input.photoId).eq("user_id", input.userId);
-  if (error) throw error;
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { error } = await client.from("photo_reactions").delete()
+        .eq("photo_id", input.photoId).eq("user_id", input.userId);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      // remove_reaction takes the reaction id; resolve the caller's reaction
+      // on this asset first. A missing reaction is a no-op, matching the
+      // Supabase delete.
+      const reactions = await listLiveReactions(ctx, input.photoId);
+      const mine = (reactions as any[]).find(
+        (reaction) => reaction.user.toText() === ctx.identity.getPrincipal().toText(),
+      );
+      if (mine) await removeLiveReaction(ctx, mine.id);
+    },
+  });
 }
 
 export async function createMediaComment(
   input: { photoId: string; userId: string; text: string; replyToId?: string },
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const { error } = await client.from("photo_comments").insert({
-    photo_id: input.photoId,
-    user_id: input.userId,
-    text: input.text,
-    reply_to_id: input.replyToId || null,
+  return withFeatureBackend("media", {
+    supabase: async () => {
+      const { error } = await client.from("photo_comments").insert({
+        photo_id: input.photoId,
+        user_id: input.userId,
+        text: input.text,
+        reply_to_id: input.replyToId || null,
+      });
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      // The canister comment shape has no reply threading; replyToId is
+      // dropped on the ICP branch until the canister model covers it.
+      await addLiveComment(ctx, input.photoId, input.text, Date.now());
+    },
   });
-  if (error) throw error;
 }
