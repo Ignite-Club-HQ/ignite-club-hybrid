@@ -12,12 +12,12 @@ import { idlFactory as blobStoreIdl } from "../lab/bindings/media_blob_store/dec
 
 describe("blob store protocol", () => {
   it("splits bytes into consecutive fixed-size chunks", () => {
-    const bytes = new Uint8Array(BLOB_CHUNK_SIZE * 2 + 7).map((_, i) => i % 251);
-    const chunks = chunkBytes(bytes);
+    const bytes = new Uint8Array(2507).map((_, i) => i % 251);
+    const chunks = chunkBytes(bytes, 1000);
     expect(chunks).toHaveLength(3);
-    expect(chunks[0]).toHaveLength(BLOB_CHUNK_SIZE);
-    expect(chunks[1]).toHaveLength(BLOB_CHUNK_SIZE);
-    expect(chunks[2]).toHaveLength(7);
+    expect(chunks[0]).toHaveLength(1000);
+    expect(chunks[1]).toHaveLength(1000);
+    expect(chunks[2]).toHaveLength(507);
     expect(new Uint8Array(chunks.flatMap((c) => Array.from(c)))).toEqual(bytes);
   });
 
