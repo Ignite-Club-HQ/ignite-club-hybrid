@@ -1019,14 +1019,24 @@ export default function GroupChatPage() {
         return queuedSend();
       }
       
-      const { error } = await supabase.from("group_messages").insert({
-        group_id: groupId,
-        author_id: user.id,
-        text,
-        image_url,
-        reply_to_id,
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("group_messages").insert({
+            group_id: groupId,
+            author_id: user.id,
+            text,
+            image_url,
+            reply_to_id,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: group id doubles as the conversation id (same
+          // convention as the read path); image attachments and reply threading
+          // have no canister shape yet and are dropped on the ICP branch.
+          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`);
+        },
       });
-      if (error) throw error;
       return deliveredSend();
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
