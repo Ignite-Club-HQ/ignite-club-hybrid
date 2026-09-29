@@ -42,6 +42,11 @@ export function useChatOnlineCount(
   const { user } = useAuth();
   const { teamId, clubId, miniLeagueId, groupAllowedRoles, enabled = true } = opts;
 
+  // Presence has no canister equivalent: when messaging is routed to ICP the
+  // online count degrades to hidden (both sources are Supabase-only) rather
+  // than firing queries that can never succeed.
+  const presenceAvailable = !isFeatureRoutedToIcp("messaging");
+
   const { data: memberIds } = useQuery({
     queryKey: [
       "chat-online-member-ids",
@@ -126,7 +131,7 @@ export function useChatOnlineCount(
       const ids = (data as Array<{ user_id: string }>).map((r) => r.user_id);
       return [...new Set(ids)];
     },
-    enabled: enabled && !!chatId,
+    enabled: enabled && !!chatId && presenceAvailable,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
   });
@@ -134,7 +139,7 @@ export function useChatOnlineCount(
   const ids = useMemo(() => memberIds || [], [memberIds]);
 
   // --- Source 1: Realtime presence channel (instant on desktop) ---
-  const realtimeOnlineSet = useOnlineSet(ids);
+  const realtimeOnlineSet = useOnlineSet(presenceAvailable ? ids : []);
 
   // --- Source 2: DB heartbeat fallback (survives mobile backgrounding) ---
   const { data: heartbeatOnlineIds } = useQuery({
@@ -148,7 +153,7 @@ export function useChatOnlineCount(
       if (error || !data) return [];
       return (data as Array<{ user_id: string }>).map((r) => r.user_id);
     },
-    enabled: enabled && ids.length > 0,
+    enabled: enabled && ids.length > 0 && presenceAvailable,
     staleTime: 30 * 1000,
     refetchInterval: 45 * 1000,
   });
