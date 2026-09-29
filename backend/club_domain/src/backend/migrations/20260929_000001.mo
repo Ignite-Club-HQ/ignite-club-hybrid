@@ -14,6 +14,8 @@ module {
     exclusions : [Exclusion];
     roles : [RoleGrant];
   };
+  // The Acl record above must mirror types.mo exactly — an earlier draft
+  // dropped `clubs`, which the enhanced-migration check rightly rejected.
   type Draft = { url : Text; title : Text; icon : Text; is_active : Bool; open_mode : Text; subtitle : ?Text };
   type Link = { id : Text; sort_order : Nat32; created_at_ms : Nat64; draft : Draft; club_id : Text };
   type Listing = { links : [Link]; revision : Nat64 };
