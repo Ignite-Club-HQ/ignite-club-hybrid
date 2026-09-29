@@ -24,7 +24,7 @@ persistent actor {
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
-  func nowMs() : Nat64 { Nat64.fromNat(Int.abs(Time.now()) / 1_000_000) };
+  func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
   // Mirrors the Supabase event_type enum so canister events round-trip with
   // the app's existing type handling.
   func validEventType(value : Text) : Bool {
@@ -132,7 +132,7 @@ persistent actor {
     let maxCount = Nat.min(366, Nat64.toNat((until_ms - first_starts_at_ms) / step) + 1);
     let base = events.size();
     let children = Array.tabulate<Types.Event>(maxCount, func(index) {
-      let offset = step * Nat64.fromNat(index);
+      let offset = step * Nat.toNat64(index);
       { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1 }
     });
     series := series.concat([created]);
@@ -167,7 +167,7 @@ persistent actor {
     auth(caller);
     switch (requireManageSeries(caller, id)) {
       case (#Err(e)) return #Err(e);
-      case (#Ok(current)) {
+      case (#Ok(_current)) {
         let doomed = events.filter(func(item) = item.series_id == ?id and item.starts_at_ms >= from_ms);
         let doomedIds = doomed.map(func(item) = item.id);
         func isDoomed(eventId : Text) : Bool { doomedIds.any(func(d) = d == eventId) };
@@ -186,7 +186,7 @@ persistent actor {
             if (item.id == id) { { item with until_ms = from_ms; revision = item.revision + 1 } } else item
           );
         };
-        #Ok(Nat32.fromNat(doomed.size()))
+        #Ok(Nat.toNat32(doomed.size()))
       };
     }
   };
