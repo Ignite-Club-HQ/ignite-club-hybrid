@@ -20,6 +20,7 @@ import { showPhotoPermissionDeniedToast } from "@/lib/showPhotoPermissionDeniedT
 import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { registerLiveAsset } from "@/live/features/media";
 import { sha256Hex } from "@/live/blobStoreProtocol";
 import {
@@ -518,8 +519,11 @@ export function UploadPhotoSheet({
 
     // One-way mirror: gallery upload → vault "Gallery Uploads" folder
     // (team-scoped if a team is selected, else club-wide). Vault edits/deletes
-    // never propagate back to the gallery.
-    syncGalleryPhotoToVault({
+    // never propagate back to the gallery. Supabase-only: when the vault
+    // feature is ICP-routed the mirror would write a Supabase vault_files row
+    // the canister never sees, so it is skipped instead of split.
+    if (!isFeatureRoutedToIcp("vault")) {
+      syncGalleryPhotoToVault({
       fileUrl: storageUrl,
       fileName: file.name,
       fileSize: file.size,
