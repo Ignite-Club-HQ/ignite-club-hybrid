@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { updateCompetitionMatch } from "@/features/competitions/fixtures/matchWorkflows";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -70,7 +71,10 @@ export function EditMatchDetailsDialog({
       ? new Date(`${dateStr}T${timeStr || "09:00"}:00`).toISOString()
       : match.scheduled_at ?? null;
     setSaving(true);
-    const { error } = await supabaseClient.from("competition_matches").update({
+    // Routed through the hybrid workflow: score updates go to the competitions
+    // canister when ICP is active; detail edits like this one fall back to
+    // Supabase inside the workflow (no canister shape for them yet).
+    const { error } = await updateCompetitionMatch(match.id, {
       home_team_id: homeId,
       away_team_id: awayId,
       division_id: divisionId || null,
@@ -81,7 +85,7 @@ export function EditMatchDetailsDialog({
       duration_minutes: duration ? Number(duration) : null,
       arrival_minutes_before: arrival ? Number(arrival) : null,
       notes: notes || null,
-    }).eq("id", match.id);
+    });
     setSaving(false);
     if (error) {
       toast({ title: "Could not update match", description: error.message, variant: "destructive" });
