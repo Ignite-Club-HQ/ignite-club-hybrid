@@ -14,6 +14,8 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { roleLabels, type AppRole } from "@/features/membership/rolePresentation";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveRoleGrants } from "@/live/features/membership";
 import { IcpLabRoleRosterView } from "@/features/membership/IcpLabRoleRosterView";
 import { groupRoleRowsByUser } from "@/features/membership/roleRoster";
 import {

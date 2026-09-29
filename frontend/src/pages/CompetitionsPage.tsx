@@ -14,6 +14,8 @@ import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { useMemo } from "react";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveCompetitions } from "@/live/features/competitions";
 
 export default function CompetitionsPage() {
   usePageTitle("Competitions");

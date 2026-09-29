@@ -4,6 +4,56 @@ import type { Database } from "@/integrations/supabase/types";
 import type { VaultFolderView } from "./types";
 import { filterVisibleVaultFolders, getVaultScope } from "./vaultScope";
 import { isVaultImageItem } from "./vaultItemClassification";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveVaultClubFiles,
+  listLiveVaultFiles,
+  listLiveVaultFolders,
+  listLiveVaultTrash,
+} from "@/live/features/vault";
+
+/**
+ * Map vault_domain canister records onto the Supabase vault row shapes the
+ * UI consumes. Provisional: the canister has no mini-league scope, and the
+ * uploader is an ICP principal (rendered as its text form) rather than a
+ * Supabase user id — verify against the deployed canister.
+ */
+function mapLiveVaultFolder(folder: any): VaultFolderRow {
+  return {
+    id: folder.id,
+    name: folder.name,
+    club_id: folder.club,
+    team_id: folder.team[0] ?? null,
+    parent_id: folder.parent_id[0] ?? null,
+    restricted_roles: folder.restricted_roles ?? [],
+    created_at: new Date(Number(folder.created_at_ms)).toISOString(),
+    deleted_at:
+      folder.deleted_at_ms[0] !== undefined
+        ? new Date(Number(folder.deleted_at_ms[0])).toISOString()
+        : null,
+  } as unknown as VaultFolderRow;
+}
+
+function mapLiveVaultFile(file: any): VaultFileRow {
+  return {
+    id: file.id,
+    folder_id: file.folder_id || null,
+    club_id: file.club,
+    team_id: file.team[0] ?? null,
+    mini_league_id: null,
+    name: file.name,
+    file_url: file.file_url,
+    file_size: Number(file.size),
+    file_type: file.mime,
+    uploaded_by: file.uploaded_by?.toText?.() ?? String(file.uploaded_by),
+    created_at: new Date(Number(file.created_at_ms)).toISOString(),
+    deleted_at:
+      file.deleted_at_ms[0] !== undefined
+        ? new Date(Number(file.deleted_at_ms[0])).toISOString()
+        : null,
+    is_external_link: file.is_external_link,
+  } as unknown as VaultFileRow;
+}
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 export type VaultFolderRow = Database["public"]["Tables"]["vault_folders"]["Row"];
