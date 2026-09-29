@@ -157,7 +157,7 @@ persistent actor {
     null
   };
 
-  func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text) : Types.Message {
+  func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : Types.Message {
     let conv = conversations[convIndex];
     let seq = conv.next_sequence;
     let msg : Types.Message = {
@@ -167,6 +167,8 @@ persistent actor {
       body;
       sequence = seq;
       idempotency_key;
+      edited_at_ms = null;
+      attachment;
     };
     let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
@@ -184,10 +186,11 @@ persistent actor {
     msg
   };
 
-  public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text) : async { #Ok : Types.Message; #Err : Text } {
+  public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not valid(body) or not valid(idempotency_key)) return #Err("Invalid message");
+    switch (attachment) { case (?a) { if (not validAttachment(a)) return #Err("Invalid attachment") }; case null {} };
     for (m in messages.values()) {
       if (m.conversation_id == conversation_id and m.idempotency_key == idempotency_key) {
         return #Ok(m);
@@ -195,7 +198,7 @@ persistent actor {
     };
     switch (findConversationIndex(conversation_id)) {
       case null { #Err("Conversation not found") };
-      case (?i) { #Ok(postMessage(i, caller, body, idempotency_key)) };
+      case (?i) { #Ok(postMessage(i, caller, body, idempotency_key, attachment)) };
     }
   };
 
@@ -237,7 +240,7 @@ persistent actor {
             if (m.conversation_id == conv.id and m.idempotency_key == key) { already := true };
           };
           if (not already) {
-            ignore postMessage(i, caller, body, key);
+            ignore postMessage(i, caller, body, key, null);
             delivered += 1;
           };
         };
@@ -266,7 +269,7 @@ persistent actor {
           };
         };
         if (not is_team_message) return #Err("Team message required");
-        let updated : Types.Message = { current with body };
+        let updated : Types.Message = { current with body; edited_at_ms = ?nowMs() };
         messages := Array.tabulate<Types.Message>(messages.size(), func(position) {
           if (position == i) updated else messages[position]
         });
@@ -390,6 +393,6 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 1; governor; roles; conversations; messages; receipts; unread })
+    #Ok({ schema = 2; governor; roles; conversations; messages; receipts; unread })
   };
 };
