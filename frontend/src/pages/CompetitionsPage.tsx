@@ -15,7 +15,8 @@ import { useMemo } from "react";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveCompetitions } from "@/live/features/competitions";
+import { listLiveCompetitions, listLiveCompetitionsMulti } from "@/live/features/competitions";
+import { listLiveMembershipClubs } from "@/live/features/membership";
 
 export default function CompetitionsPage() {
   usePageTitle("Competitions");
@@ -142,12 +143,19 @@ function SupabaseCompetitionsPage() {
           if (error) throw error;
           return data ?? [];
         },
-        // Provisional: list_competitions requires a club id, so the ICP branch
-        // only lists when a club context is selected (no global list); the
-        // canister competition has no sport/visibility/date fields yet.
+        // Provisional: without a club filter the ICP branch unions the
+        // competitions of every club visible to the caller (list_clubs is
+        // caller-scoped); the canister competition has no sport/visibility/
+        // date fields yet.
         icp: async (ctx) => {
-          if (!activeClubFilter) return [];
-          const comps = await listLiveCompetitions(ctx, activeClubFilter);
+          const comps = activeClubFilter
+            ? await listLiveCompetitions(ctx, activeClubFilter)
+            : await (async () => {
+                const clubs = await listLiveMembershipClubs(ctx);
+                const clubIds = clubs.map((c) => c.id);
+                if (clubIds.length === 0) return [];
+                return listLiveCompetitionsMulti(ctx, clubIds);
+              })();
           return (comps as any[]).map((c) => ({
             id: c.id,
             name: c.name,

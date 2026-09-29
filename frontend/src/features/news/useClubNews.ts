@@ -5,24 +5,32 @@ import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSec
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubAnnouncement } from "@/live/features/news";
+import { listLiveNews, listLiveNewsMulti } from "@/live/features/club";
 
 /**
- * Provisional mapping of the club_domain announcement onto the club_news row
- * shape: the canister currently stores a single announcement string per club,
- * not a multi-post news feed. Used while the news feature is routed to ICP.
+ * Map a club_domain NewsPost onto the club_news row shape the UI consumes.
+ * Provisional: the canister has no image/target-team/important fields, and
+ * author_id is an ICP principal rendered as text — verify post-deploy.
  */
-function announcementToNewsRow(clubId: string, announcement: string): ClubNewsRow {
+function liveNewsPostToRow(post: {
+  id: string;
+  club_id: string;
+  title: string;
+  body: string;
+  status: string;
+  created_by: { toText?: () => string };
+  created_at_ms: bigint;
+}): ClubNewsRow {
   return {
-    id: `club-announcement-${clubId}`,
-    club_id: clubId,
-    title: "Club announcement",
-    content: announcement,
+    id: post.id,
+    club_id: post.club_id,
+    title: post.title,
+    content: post.body,
     image_url: null,
-    author_id: null,
+    author_id: post.created_by?.toText?.() ?? String(post.created_by),
     target_team_ids: null,
     is_important: false,
-    published_at: new Date().toISOString(),
+    published_at: new Date(Number(post.created_at_ms)).toISOString(),
   };
 }
 
@@ -79,12 +87,24 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
           return rows;
         },
         icp: async (ctx) => {
-          // The club_domain canister stores a single announcement per club, so
-          // a cross-club feed has no canister query yet.
-          if (!clubId) return [];
-          const announcement = await getLiveClubAnnouncement(ctx, clubId);
-          if (!announcement) return [];
-          const rows = [announcementToNewsRow(clubId, announcement)];
+          // Provisional: with no club filter the feed unions the member's
+          // clubs (the canister requires club ids); the member's club ids
+          // come from the club_domain whoami account record.
+          const posts = clubId
+            ? await listLiveNews(ctx, clubId)
+            : await (async () => {
+                // Provisional: with no club filter the feed unions the clubs
+                // visible to the caller (list_clubs is caller-scoped).
+                const { listLiveMembershipClubs } = await import("@/live/features/membership");
+                const clubs = await listLiveMembershipClubs(ctx);
+                const clubIds = clubs.map((c) => c.id);
+                if (clubIds.length === 0) return [];
+                return listLiveNewsMulti(ctx, clubIds);
+              })();
+          const rows = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
+            .filter((p) => p.status === "published")
+            .map(liveNewsPostToRow)
+            .slice(0, limit);
           writeHomeSectionSnapshot("club-news", snapshotScope, rows);
           return rows;
         },
@@ -122,12 +142,16 @@ export function useClubNewsPost(newsId?: string | null) {
           return (data as ClubNewsRow | null) ?? null;
         },
         icp: async (ctx) => {
-          // Only the synthetic announcement row (id `club-announcement-<club>`)
-          // is resolvable from the canister.
-          const match = /^club-announcement-(.+)$/.exec(newsId!);
-          if (!match) return null;
-          const announcement = await getLiveClubAnnouncement(ctx, match[1]);
-          return announcement ? announcementToNewsRow(match[1], announcement) : null;
+          // The canister has no get-by-id; resolve the post via the caller's
+          // clubs (role grants) and filter. Provisional — verify post-deploy.
+          const { listLiveMembershipClubs } = await import("@/live/features/membership");
+          const clubs = await listLiveMembershipClubs(ctx);
+          const clubIds = clubs.map((c) => c.id);
+          if (clubIds.length === 0) return null;
+          const posts = await listLiveNewsMulti(ctx, clubIds);
+          const post = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
+            .find((p) => p.id === newsId);
+          return post ? liveNewsPostToRow(post) : null;
         },
       });
     },

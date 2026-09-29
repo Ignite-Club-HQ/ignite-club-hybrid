@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { acceptLiveParentInvite } from "@/live/features/club";
 
 /**
  * Transactional acceptance of a parent invitation that carries child metadata.
@@ -67,6 +69,27 @@ export async function acceptParentTeamInvite(params: {
   inviteId?: string | null;
   inviteToken?: string | null;
 }): Promise<AcceptParentInviteResult> {
+  // ICP branch: the club_domain canister mints token-based parent invites;
+  // acceptance atomically links the guardian. Documented risk: the canister
+  // trusts its admin-issued token as guardian proof — a secure guardian-
+  // relationship check is still pending, so do not expand authorization.
+  const icpResult = await withFeatureBackend("membership", {
+    supabase: () => null as AcceptParentInviteResult | null,
+    icp: async (ctx): Promise<AcceptParentInviteResult | null> => {
+      if (!params.inviteToken) return null;
+      const invite = await acceptLiveParentInvite(ctx, params.inviteToken);
+      return {
+        childIds: invite?.child_id ? [invite.child_id] : [],
+        // The canister's accept is idempotent within its token model, but it
+        // does not report whether this call was the first acceptance.
+        alreadyAccepted: false,
+        teamId: invite?.team_id?.[0] ?? null,
+        clubId: invite?.club_id ?? null,
+      };
+    },
+  });
+  if (icpResult) return icpResult;
+
   const { data, error } = await supabase.rpc("accept_parent_team_invite" as any, {
     _invite_id: params.inviteId ?? null,
     _invite_token: params.inviteToken ?? null,

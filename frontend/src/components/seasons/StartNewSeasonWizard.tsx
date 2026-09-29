@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Season } from "@/hooks/useClubSeasons";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveSeason, setLiveSeasonStatus } from "@/live/features/competitions";
+import { createLiveSeason, duplicateLiveSeason, setLiveSeasonStatus } from "@/live/features/competitions";
 import { ReturningMembersStep } from "./ReturningMembersStep";
 import { SeasonInviteStep } from "./SeasonInviteStep";
 
@@ -85,15 +85,26 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
   const createMut = useMutation({
     mutationFn: async (): Promise<string> => {
       if (duplicateStructure && currentSeason) {
-        // stays Supabase: no canister shape for duplicate_season_structure
-        // (structure/staff cloning across seasons).
-        const { data, error } = await supabase.rpc("duplicate_season_structure", {
-          _source_season_id: currentSeason.id,
-          _new_season_name: seasonName.trim(),
-          _copy_staff: copyStaff,
+        return withFeatureBackend("competitions", {
+          supabase: async () => {
+            const { data, error } = await supabase.rpc("duplicate_season_structure", {
+              _source_season_id: currentSeason.id,
+              _new_season_name: seasonName.trim(),
+              _copy_staff: copyStaff,
+            });
+            if (error) throw error;
+            return data as string;
+          },
+          icp: async (ctx) => {
+            // Provisional mapping: this club-based flow has no competition
+            // concept — using clubId as the competition identifier is
+            // unverified; confirm against the live schema post-deploy.
+            // The canister duplicates entries only; staff copying has no
+            // canister shape (copyStaff is ignored on this branch).
+            const season = await duplicateLiveSeason(ctx, clubId, currentSeason.name, seasonName.trim());
+            return season.competition_id;
+          },
         });
-        if (error) throw error;
-        return data as string;
       }
       return withFeatureBackend("competitions", {
         supabase: async () => {

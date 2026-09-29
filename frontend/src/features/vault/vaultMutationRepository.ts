@@ -111,9 +111,9 @@ export async function createVaultFolder(
       if (error) throw error;
     },
     icp: async (ctx) => {
-      // Provisional mapping: mini-league scoped views have no canister
-      // shape (folders only carry club + optional team) — verify the
-      // club/team id mapping against the live canister post-deploy.
+      // Provisional mapping: mini-league views pass a placeholder club id
+      // (the canister scopes by mini_league_id) — verify the club/team id
+      // mapping against the live canister post-deploy.
       const clubId = options.view.type === "club" || options.view.type === "team"
         ? options.view.clubId
         : "";
@@ -126,6 +126,7 @@ export async function createVaultFolder(
         options.parentFolderId,
         options.name,
         [],
+        options.view.type === "mini-league" ? options.view.miniLeagueId : null,
       );
     },
   });
@@ -195,8 +196,8 @@ export async function softDeleteVaultItem(
       return itemId;
     },
     icp: async (ctx) => {
-      // Provisional mapping: canister trash has no deleted_by/deleted_at
-      // fields — deletion actor/timestamp tracking stays Supabase-only.
+      // The canister records the deleting principal (and timestamp)
+      // canister-side on trash.
       await trashLiveVaultFile(ctx, itemId);
       return itemId;
     },

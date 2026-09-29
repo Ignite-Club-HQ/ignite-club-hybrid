@@ -3,6 +3,8 @@ import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventCancelled } from "@/live/features/events";
 
 // Thrown when a recurring-series cancellation committed only one of its two
 // writes. Records explicitly which mutation committed — never inferred from
@@ -43,6 +45,21 @@ export function useCancelEventMutation(params: UseCancelEventMutationArgs) {
 
       const isSeries =
         cancelType === 'series' && (!!event?.parent_event_id || !!event?.is_recurring);
+
+      // ICP branch: cancel via the events_domain canister. Series
+      // cancellation has no parent/child split on the canister (children are
+      // expanded occurrences of the series), so the root id covers the whole
+      // series — provisional, verify post-deploy. Chat posting and push
+      // notifications below stay Supabase-only for now.
+      const icpHandled = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          const rootId = isSeries ? (event?.parent_event_id || id!) : id!;
+          await setLiveEventCancelled(ctx, rootId, true);
+          return true;
+        },
+      });
+      if (icpHandled) return 0;
 
       if (isSeries) {
         // Either arrangement: current event is a child (use its parent id) or
