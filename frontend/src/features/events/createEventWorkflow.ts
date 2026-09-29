@@ -40,6 +40,8 @@ export async function createEventTransaction(
         teamId: (eventRecord.team_id as string | null | undefined) ?? null,
         title: String(eventRecord.title ?? ""),
         description: String(eventRecord.description ?? ""),
+        eventType: String(eventRecord.type ?? "training"),
+        location: (eventRecord.location_name as string | null | undefined) ?? null,
         startsAtMs,
         endsAtMs,
       });

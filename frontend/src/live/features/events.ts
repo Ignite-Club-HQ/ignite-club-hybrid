@@ -20,6 +20,9 @@ export interface LiveEventInput {
   teamId?: string | null;
   title: string;
   description: string;
+  /** Mirrors the Supabase event_type enum: game | training | social | mini_league. */
+  eventType: string;
+  location?: string | null;
   startsAtMs: number | Date;
   endsAtMs: number | Date;
 }
@@ -51,6 +54,8 @@ export async function createLiveEvent(ctx: FeatureBackendContext, input: LiveEve
       candidOpt(input.teamId),
       input.title,
       input.description,
+      input.eventType,
+      candidOpt(input.location),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
     ),
@@ -69,10 +74,28 @@ export async function updateLiveEvent(
       eventId,
       input.title,
       input.description,
+      input.eventType,
+      candidOpt(input.location),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
     ),
     "Update event",
+  );
+}
+
+/**
+ * Cancellation is a dedicated canister method so cancelling cannot clobber
+ * other fields with stale browser state (see events_domain main.mo).
+ */
+export async function setLiveEventCancelled(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  cancelled: boolean,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_cancelled(eventId, cancelled),
+    cancelled ? "Cancel event" : "Reinstate event",
   );
 }
 

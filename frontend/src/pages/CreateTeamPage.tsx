@@ -325,6 +325,11 @@ export default function CreateTeamPage() {
             is_active: true,
             club_id: clubId!,
             age_group: levelAge.trim() ? [levelAge.trim()] : [],
+            description: description.trim() ? [description.trim()] : [],
+            // Logo uploads after team creation (same as the Supabase branch);
+            // folder, class-mode and RSVP-audience fields stay Supabase-only.
+            logo_url: [],
+            team_type: teamType ? [teamType] : [],
           });
           return { data: { id }, error: null };
         } catch (error) {

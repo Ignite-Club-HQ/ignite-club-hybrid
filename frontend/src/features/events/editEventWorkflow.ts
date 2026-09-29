@@ -85,6 +85,8 @@ export async function updateEventTransaction(
       await updateLiveEvent(ctx, input.eventId, {
         title: String(updates.title ?? ""),
         description: String(updates.description ?? ""),
+        eventType: String(updates.type ?? "training"),
+        location: (updates.location_name as string | null | undefined) ?? null,
         startsAtMs,
         endsAtMs,
       });
