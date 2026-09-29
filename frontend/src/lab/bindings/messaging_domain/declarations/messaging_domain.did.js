@@ -9,6 +9,10 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const BroadcastResult = IDL.Record({
+    'skipped' : IDL.Vec(IDL.Text),
+    'delivered' : IDL.Nat32,
+  });
   const Conversation = IDL.Record({
     'id' : IDL.Text,
     'participants' : IDL.Vec(IDL.Principal),
@@ -61,6 +65,11 @@ export const idlFactory = ({ IDL }) => {
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'broadcast_announcement' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text), IDL.Bool, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : BroadcastResult, 'Err' : IDL.Text })],
         [],
       ),
     'create_conversation' : IDL.Func(

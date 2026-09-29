@@ -9,15 +9,15 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
-  const status = IDL.Variant({
+  const Status = IDL.Variant({
     'Failed' : IDL.Null,
     'Delivered' : IDL.Null,
     'Processing' : IDL.Null,
     'Pending' : IDL.Null,
   });
-  const notification = IDL.Record({
+  const Notification = IDL.Record({
     'id' : IDL.Text,
-    'status' : status,
+    'status' : Status,
     'body' : IDL.Text,
     'club' : IDL.Text,
     'next_attempt_ms' : IDL.Nat64,
@@ -29,17 +29,17 @@ export const idlFactory = ({ IDL }) => {
     'related_id' : IDL.Opt(IDL.Text),
     'idempotency_key' : IDL.Text,
   });
-  const result = IDL.Variant({ 'Ok' : notification, 'Err' : IDL.Text });
-  const results = IDL.Variant({
-    'Ok' : IDL.Vec(notification),
+  const Result = IDL.Variant({ 'Ok' : Notification, 'Err' : IDL.Text });
+  const Results = IDL.Variant({
+    'Ok' : IDL.Vec(Notification),
     'Err' : IDL.Text,
   });
-  const result_nat16 = IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text });
+  const ResultNat16 = IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text });
   
   return IDL.Service({
-    'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [result], []),
-    'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [results], []),
-    'clear_inbox' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [result_nat16], []),
+    'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
+    'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [Results], []),
+    'clear_inbox' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [ResultNat16], []),
     'delete_notification' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -47,13 +47,25 @@ export const idlFactory = ({ IDL }) => {
       ),
     'enqueue' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
-        [result],
+        [Result],
         [],
       ),
-    'fail' : IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [result], []),
+    'fail' : IDL.Func([IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)], [Result], []),
+    'fan_out' : IDL.Func(
+        [
+          IDL.Vec(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+        ],
+        [ResultNat16],
+        [],
+      ),
     'get_notification' : IDL.Func(
         [IDL.Text],
-        [IDL.Opt(notification)],
+        [IDL.Opt(Notification)],
         ['query'],
       ),
     'grant_worker' : IDL.Func(
@@ -68,16 +80,16 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_inbox' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat16],
-        [results],
+        [Results],
         ['query'],
       ),
     'mark_all_read' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
-        [result_nat16],
+        [ResultNat16],
         [],
       ),
-    'mark_read' : IDL.Func([IDL.Text], [result], []),
-    'recover' : IDL.Func([], [result_nat16], []),
+    'mark_read' : IDL.Func([IDL.Text], [Result], []),
+    'recover' : IDL.Func([], [ResultNat16], []),
   });
 };
 
