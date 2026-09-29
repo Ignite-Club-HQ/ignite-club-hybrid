@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveMatchResult } from "@/live/features/competitions";
+import { recordLiveMatch, setLiveMatchResult } from "@/live/features/competitions";
 
 export interface MatchMutationError {
   message: string;
@@ -140,6 +140,41 @@ export async function updateCompetitionMatch(
         .update(payload as never)
         .eq("id", matchId);
       return { error };
+    },
+  });
+}
+
+/**
+ * Persist a generated fixture batch. Supabase inserts all rows atomically;
+ * the ICP branch records each match on the competitions canister —
+ * provisional: only competition/home/away team ids have a canister shape, so
+ * schedule/venue fields are not persisted there, and there is no batch shape
+ * so the calls run sequentially.
+ */
+export async function createGeneratedMatches(
+  rows: Array<Record<string, unknown>>,
+): Promise<MatchMutationResult> {
+  return withFeatureBackend("competitions", {
+    supabase: async () => {
+      const { error } = await supabase
+        .from("competition_matches")
+        .insert(rows as never);
+      return { error };
+    },
+    icp: async (ctx) => {
+      try {
+        for (const row of rows) {
+          await recordLiveMatch(
+            ctx,
+            String(row.competition_id),
+            String(row.home_team_id),
+            String(row.away_team_id),
+          );
+        }
+        return { error: null };
+      } catch (e) {
+        return { error: { message: e instanceof Error ? e.message : String(e) } };
+      }
     },
   });
 }
