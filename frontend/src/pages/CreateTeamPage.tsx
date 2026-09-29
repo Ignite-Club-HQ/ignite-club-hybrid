@@ -313,7 +313,25 @@ export default function CreateTeamPage() {
         } : {}),
       })
       .select()
-      .single();
+      .single(),
+      icp: async (ctx) => {
+        try {
+          const id = crypto.randomUUID();
+          await saveLiveMembershipTeam(ctx, {
+            id,
+            name: name.trim(),
+            division: [],
+            gender: [],
+            is_active: true,
+            club_id: clubId!,
+            age_group: levelAge.trim() ? [levelAge.trim()] : [],
+          });
+          return { data: { id }, error: null };
+        } catch (error) {
+          return { data: null, error: error as { code?: string } };
+        }
+      },
+    });
 
     if (teamError) {
       setSaving(false);
