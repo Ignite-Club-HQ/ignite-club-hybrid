@@ -59,7 +59,7 @@ describe("single event -> recurring series conversion is atomic", () => {
   });
 
   it("stays Supabase-only for series expansion (no canister shape)", () => {
-    expect(workflowConversion).toContain("stays Supabase");
+    expect(workflow).toContain("stays Supabase: no canister shape for recurring series expansion");
     expect(workflowConversion).not.toContain("withFeatureBackend");
   });
 });
