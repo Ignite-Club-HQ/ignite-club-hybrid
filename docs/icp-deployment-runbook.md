@@ -144,10 +144,6 @@ working from Supabase storage.
 
 ## Known gaps at time of writing
 
-- Not yet wired to live reads: membership, competitions, notifications,
-  vault — their canisters expose governance/worker-facing operations that
-  don't yet match the app's browser read paths. Service modules are ready
-  in `frontend/src/live/features/`.
 - End-to-end verification requires deployed canisters and an Internet
   Identity sign-in; the dry-run preview is the pre-deployment check.
 
