@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 
 module {
