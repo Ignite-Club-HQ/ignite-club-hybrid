@@ -42,6 +42,7 @@ import {
 } from "@/components/layout/ClubSwitcherHint";
 import { invalidateNotificationSurfaces } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 // Preload Ignite icon so it's instantly available when switching from club theme
 const preloadedIgniteIcon = new Image();
@@ -99,6 +100,7 @@ function LogoClubThemeDropdown() {
     staleTime: 60_000,
     queryFn: async () => {
       if (!user?.id) return [];
+      if (resolveAuthBackend() === "icp") return [];
 
       // Get club IDs from user roles
       const { data: clubRoles, error: clubRolesError } = await supabase
@@ -351,10 +353,11 @@ export function AppHeader() {
   const hintAlreadySeen = user?.id ? hasSeenClubSwitcherHint(user.id) : true;
   const { data: userClubCount = 0 } = useQuery({
     queryKey: ["user-club-count-for-switcher-hint", user?.id],
-    enabled: !!user?.id && !hintAlreadySeen,
+    enabled: !!user?.id && !hintAlreadySeen && resolveAuthBackend() !== "icp",
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!user?.id) return 0;
+      if (resolveAuthBackend() === "icp") return 0;
       const db = supabase as any;
       const [clubRoles, teamRoles, teamMemberships, clubPlayers] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
@@ -420,6 +423,10 @@ export function AppHeader() {
     }
     
     console.log('[AppHeader] Saving theme to profile:', newTheme, 'for user:', user.id);
+    if (resolveAuthBackend() === "icp") {
+      // Theme preference persistence has no ICP-backed profile column yet.
+      return;
+    }
     setIsSavingTheme(true);
     try {
       const { error } = await supabase
@@ -504,6 +511,7 @@ export function AppHeader() {
   // Check if user has any vault-eligible club role (club_admin, league_admin, committee_member)
   const { data: hasVaultRole } = useQuery({
     queryKey: ["has-vault-role", user?.id],
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     queryFn: async () => {
       const { data } = await supabase
         .from("user_roles")
@@ -561,6 +569,7 @@ export function AppHeader() {
   const markAllAsRead = useMutation({
     mutationFn: async () => {
       if (!user?.id) return;
+      if (resolveAuthBackend() === "icp") return;
 
       // Only ever flips is_read — notifications are never deleted here so the
       // user keeps their full history and can still open them later.
@@ -619,6 +628,7 @@ export function AppHeader() {
     queryKey: notificationKeys.recentFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id) return [];
+      if (resolveAuthBackend() === "icp") return [];
       let q = supabase
         .from("notifications")
         .select("id, message, type, created_at, is_read, related_id, club_id")
@@ -667,6 +677,7 @@ export function AppHeader() {
     queryKey: notificationKeys.clubUnreadFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id || !activeClubFilter) return 0;
+      if (resolveAuthBackend() === "icp") return 0;
       // Pull unread rows (capped) so we can drop DMs from senders who don't
       // share the active club — matches the popover's filtering logic.
       const { data } = await supabase
@@ -692,6 +703,7 @@ export function AppHeader() {
 
   const markAsRead = useMutation({
     mutationFn: async (id: string) => {
+      if (resolveAuthBackend() === "icp") return id;
       const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
@@ -756,6 +768,10 @@ export function AppHeader() {
   const navigateWithFreshJump = (to: string) => navigate(withChatJumpNonce(to));
 
   const handleNotificationClick = async (notification: typeof recentNotifications[0]) => {
+    if (resolveAuthBackend() === "icp") {
+      navigate("/notifications");
+      return;
+    }
     try {
       console.log("[AppHeaderNotifTap] click", {
         notifId: notification.id,

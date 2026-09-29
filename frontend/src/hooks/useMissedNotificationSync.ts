@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const LAST_SYNC_KEY = "notifications-last-sync";
 const LAST_SHOWN_KEY = "notifications-last-shown";
@@ -135,6 +136,7 @@ export function useMissedNotificationSync(userId: string | undefined) {
    */
   const syncMissedNotifications = useCallback(async (forceShow = false) => {
     if (!userId) return;
+    if (resolveAuthBackend() === "icp") return;
     if (isShowing.current) return;
 
     try {
@@ -242,6 +244,7 @@ export function useMissedNotificationSync(userId: string | undefined) {
   // Sync on mount and when app becomes visible
   useEffect(() => {
     if (!userId) return;
+    if (resolveAuthBackend() === "icp") return;
 
     // Sync after a short delay on mount
     const mountTimer = setTimeout(() => syncMissedNotifications(false), 3000);

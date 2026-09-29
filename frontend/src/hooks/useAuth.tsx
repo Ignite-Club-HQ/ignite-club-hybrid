@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { prefetchUserData } from "@/lib/prefetchData";
@@ -352,7 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return (inbox as any[]).filter((n) => !n.read).length;
         },
       }),
-      isFeatureRoutedToIcp("notifications")
+      isFeatureRoutedToIcp("notifications") || resolveAuthBackend() === "icp"
         ? Promise.resolve(null)
         : fetchUnreadMessageCounts(userId),
     ]);

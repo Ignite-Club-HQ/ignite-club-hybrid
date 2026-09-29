@@ -5,6 +5,7 @@ import {
   type UnreadMessageCounts,
 } from "@/lib/unreadMessageCounts";
 import { Capacitor } from "@capacitor/core";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Shared query key for the unread-message-counts RPC. Every consumer
@@ -52,10 +53,11 @@ export function useUnreadMessageCounts<TData = UnreadMessageCounts>(
   options: Options<TData> = {},
 ) {
   const { enabled = true, select, placeholderData } = options;
+  const isIcp = resolveAuthBackend() === "icp";
   return useQuery<UnreadMessageCounts, Error, TData>({
     queryKey: unreadMessageCountsKey(userId),
-    queryFn: () => fetchUnreadMessageCounts(userId!),
-    enabled: !!userId && enabled,
+    queryFn: () => (isIcp ? createEmptyUnreadMessageCounts() : fetchUnreadMessageCounts(userId!)),
+    enabled: !!userId && enabled && !isIcp,
     staleTime: 5 * 60 * 1000,
     refetchInterval: jitteredInterval,
     select,
