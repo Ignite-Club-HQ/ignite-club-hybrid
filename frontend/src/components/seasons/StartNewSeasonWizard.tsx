@@ -134,6 +134,10 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         supabase: async () => {
           const { error } = await supabase.rpc("publish_season", { _season_id: id });
           if (error) throw error;
+          // stays Supabase: no canister shape for push notification fan-out.
+          // Runs inside the branch so a canister season id is never passed to
+          // the Supabase RPC.
+          await supabase.rpc("notify_season_published", { _season_id: id });
         },
         icp: async (ctx) => {
           // Provisional mapping: see createMut/archiveMut above re: season
@@ -141,8 +145,6 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           await setLiveSeasonStatus(ctx, id, "published", 0);
         },
       });
-      // stays Supabase: no canister shape for push notification fan-out.
-      await supabase.rpc("notify_season_published", { _season_id: id });
     },
   });
 
