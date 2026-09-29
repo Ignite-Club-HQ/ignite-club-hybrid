@@ -40,6 +40,11 @@ import type { RsvpAudience } from "@/lib/rsvpAudience";
 import { useAuth } from "@/hooks/useAuth";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  convertEventToRecurringSeries,
+  syncEventDuties,
+  updateEventTransaction,
+} from "@/features/events/editEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
@@ -871,19 +876,6 @@ function SupabaseEditEventPage() {
       if (enableRecurring && !isRecurring) {
         const endDate = new Date(recurrenceEndDate);
         const dates = generateRecurringDates(parsedDateTime, endDate);
-
-        const childEvents = dates.slice(1).map((date) => {
-          const childDateTime = new Date(date);
-          childDateTime.setHours(parsedDateTime.getHours(), parsedDateTime.getMinutes());
-          const childEnd = newEndIso
-            ? new Date(childDateTime.getTime() + (new Date(newEndIso).getTime() - parsedDateTime.getTime())).toISOString()
-            : null;
-          return {
-            event_date: childDateTime.toISOString(),
-            start_time: childDateTime.toISOString(),
-            end_time: childEnd,
-          };
-        });
 
         // Series expansion stays Supabase-only inside the workflow (no
         // canister shape for recurring series expansion).

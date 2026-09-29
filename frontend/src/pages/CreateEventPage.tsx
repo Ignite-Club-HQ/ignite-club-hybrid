@@ -44,6 +44,7 @@ import type { RsvpAudience } from "@/lib/rsvpAudience";
 import { useAuth } from "@/hooks/useAuth";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { supabase } from "@/integrations/supabase/client";
+import { createEventTransaction } from "@/features/events/createEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
