@@ -219,10 +219,10 @@ persistent actor {
       item.deleted_at_ms == null and
       (team == null or item.team == team or item.team == null) and
       (mini_league_id == null or item.mini_league_id == mini_league_id) and
-      switch (folders.find(func(f) = f.id == item.folder_id)) {
-        case null true;
-        case (?folder) canViewFolder(caller, folder);
-      }))
+      (switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null { true };
+        case (?folder) { canViewFolder(caller, folder) };
+      })))
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
