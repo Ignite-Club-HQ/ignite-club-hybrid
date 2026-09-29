@@ -17,8 +17,11 @@ export interface notification {
   'club' : string,
   'next_attempt_ms' : bigint,
   'kind' : string,
+  'read' : boolean,
   'user' : string,
   'attempts' : number,
+  'created_at_ms' : bigint,
+  'related_id' : [] | [string],
   'idempotency_key' : string,
 }
 export type result = { 'Ok' : notification } |
@@ -34,6 +37,12 @@ export type status = { 'Failed' : null } |
 export interface _SERVICE {
   'acknowledge' : ActorMethod<[string, string], result>,
   'claim' : ActorMethod<[bigint, number], results>,
+  'clear_inbox' : ActorMethod<[string, [] | [string]], result_nat16>,
+  'delete_notification' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'enqueue' : ActorMethod<
     [string, string, string, string, string, string],
     result
@@ -46,6 +55,9 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'list_inbox' : ActorMethod<[string, [] | [string], number], results>,
+  'mark_all_read' : ActorMethod<[string, [] | [string]], result_nat16>,
+  'mark_read' : ActorMethod<[string], result>,
   'recover' : ActorMethod<[], result_nat16>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
