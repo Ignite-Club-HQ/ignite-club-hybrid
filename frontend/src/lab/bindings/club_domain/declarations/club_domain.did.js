@@ -153,8 +153,13 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_10 = IDL.Variant({ 'Ok' : IDL.Opt(ClubTeam), 'Err' : IDL.Text });
   const Result_11 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
+  const Result_20 = IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text });
   const Result_12 = IDL.Variant({
     'Ok' : IDL.Vec(ClubProfile),
+    'Err' : IDL.Text,
+  });
+  const Result_21 = IDL.Variant({
+    'Ok' : IDL.Vec(AccountRole),
     'Err' : IDL.Text,
   });
   const Result_13 = IDL.Variant({
@@ -204,12 +209,14 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'list_children' : IDL.Func([], [Result_20], ['query']),
     'list_clubs' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Nat16],
         [Result_12],
         ['query'],
       ),
     'list_links' : IDL.Func([IDL.Text, IDL.Bool], [Result_3], ['query']),
+    'list_role_grants' : IDL.Func([IDL.Text], [Result_21], ['query']),
     'list_sponsors' : IDL.Func([IDL.Text], [Result_13], ['query']),
     'list_teams' : IDL.Func([IDL.Text], [Result_14], ['query']),
     'mutate' : IDL.Func([Request], [Result_15], []),
