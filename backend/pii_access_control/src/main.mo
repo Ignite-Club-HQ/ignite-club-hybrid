@@ -50,7 +50,7 @@ import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
-import VarArray "mo:core/VarArray";
+import Crypto "./crypto";
 
 persistent actor {
 
@@ -129,22 +129,22 @@ persistent actor {
 
   // ==================== State ====================
 
-  var pii_records : [PiiRecord] = [];
-  var audit_log : [AuditRecord] = [];
-  var key_metadata_list : [KeyMetadata] = [];
-  var master_secrets : [MasterSecretEntry] = [];
+  // Enhanced orthogonal persistence: state is declared without initializers
+  // and seeded by the migration chain in src/backend/migrations (initial
+  // bootstrap 20260913_000000.mo).
+  var pii_records : [PiiRecord];
+  var audit_log : [AuditRecord];
+  var key_metadata_list : [KeyMetadata];
+  var master_secrets : [MasterSecretEntry];
 
-  var master_key_id_current : Text = "master-key-2026-09-13";
-  var metadata_version : Nat32 = 1;
-  var last_key_rotation : Nat64 = 0;
-  var governor : Principal = Principal.anonymous();
+  var master_key_id_current : Text;
+  var metadata_version : Nat32;
+  var last_key_rotation : Nat64;
+  var governor : Principal;
 
   // Lazily-initialized root secret for media key derivation. Populated on
   // first call to derive_media_key using raw_rand.
-  var media_root_secret : ?[Nat8] = null;
-
-  let TAG_LEN : Nat = 32; // SHA-256 output size
-  let NONCE_LEN : Nat = 12;
+  var media_root_secret : ?[Nat8];
 
   // ==================== Helper Functions ====================
 

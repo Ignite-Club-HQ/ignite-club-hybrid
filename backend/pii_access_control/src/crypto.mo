@@ -50,7 +50,7 @@ module {
   public func sha256(msg : [Nat8]) : [Nat8] {
     var h0 : Nat32 = 0x6a09e667;
     var h1 : Nat32 = 0xbb67ae85;
-    var h2 : Nat32 = 0xb0e6b172;
+    var h2 : Nat32 = 0x3c6ef372;
     var h3 : Nat32 = 0xa54ff53a;
     var h4 : Nat32 = 0x510e527f;
     var h5 : Nat32 = 0x9b05688c;
