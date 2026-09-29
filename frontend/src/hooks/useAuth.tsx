@@ -907,7 +907,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the visibility/focus resync and the notifications screens' own polling
   // keep the badge fresh instead.
   useEffect(() => {
-    if (!user || isFeatureRoutedToIcp("notifications")) return;
+    if (!user) return;
+    const notificationsOnIcp = isFeatureRoutedToIcp("notifications");
 
     // Silently enable push notifications if permission already granted
     const setupPushNotifications = async () => {
@@ -941,7 +942,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     };
 
-    const channel = supabase
+    // When notifications are routed to ICP there is no realtime channel —
+    // canisters are request/response, so the resync below plus the
+    // notifications screens' own polling keep the badge fresh instead.
+    const channel = notificationsOnIcp ? null : supabase
       .channel(`notifications-global:${user.id}`)
       .on(
         'postgres_changes',
@@ -1033,6 +1037,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       .subscribe();
 
+    // Poll the canister inbox while the tab is visible so badge counts stay
+    // fresh without a realtime channel.
+    const icpPoll = notificationsOnIcp
+      ? window.setInterval(() => {
+          if (document.visibilityState !== "visible") return;
+          fetchUnreadCount(user.id).catch(() => {});
+        }, 30000)
+      : null;
+
     // Re-sync unread count from server when app becomes visible or focused.
     // visibility + focus often both fire on native resume, so debounce them
     // into a single invalidation window (~500 ms) to avoid duplicate RPCs.
@@ -1056,7 +1069,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
+      if (icpPoll) window.clearInterval(icpPoll);
       Object.keys(inboxRefreshState).forEach((k) => {
         if (inboxRefreshState[k]) cancelAnimationFrame(inboxRefreshState[k]);
       });
