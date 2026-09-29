@@ -84,6 +84,9 @@ module {
     is_active : Bool;
     club_id : Text;
     age_group : ?Text;
+    description : ?Text;
+    logo_url : ?Text;
+    team_type : ?Text;
   };
   public type Account = { id : Text; legacy_subject : Principal; version : Nat64; principals : [Principal] };
   public type AccountExclusion = { account_id : Text; club : Text };

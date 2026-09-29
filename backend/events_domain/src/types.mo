@@ -1,6 +1,6 @@
 module {
   public type RoleGrant = { user : Principal; role : Text; club_id : Text; team_id : ?Text };
-  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; revision : Nat64 };
+  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; revision : Nat64 };
   public type Rsvp = { event_id : Text; account_id : Text; state : Text; updated_at_ms : Nat64 };
   public type Attendance = { event_id : Text; account_id : Text; present : Bool; note : Text };
   public type LineupEntry = { event_id : Text; member : Text; slot : Text; team_id : ?Text };

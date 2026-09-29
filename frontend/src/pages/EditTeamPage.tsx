@@ -289,6 +289,10 @@ export default function EditTeamPage() {
             is_active: isActive,
             club_id: team!.club_id,
             age_group: levelAge.trim() ? [levelAge.trim()] : [],
+            description: description.trim() ? [description.trim()] : [],
+            logo_url: logoUrl ? [logoUrl] : [],
+            team_type: teamType ? [teamType] : [],
+            // Folder, class-mode and auto-RSVP DM fields stay Supabase-only.
           });
           return null;
         } catch (error) {

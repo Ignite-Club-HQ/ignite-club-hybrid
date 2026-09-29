@@ -105,10 +105,39 @@ export enum Variant_Active_Shredded_RotationPending_Revoked {
  * / Encrypts and mediates access to personally identifiable information (PII)
  * / Enforces field-level access policies and maintains audit trail
  * /
- * / Production note: This uses synthetic encryption for lab testing.
- * / Production deployment should integrate with:
- * / - Hardware Security Module (HSM) or KMS for master key storage
- * / - vetKeys for child media key derivation
+ * / Encryption construction (interim, pre-vetKeys):
+ * / - Master secrets are 32 random bytes obtained from the management canister's
+ * /   `raw_rand` (via `mo:core/Random.blob`, which calls raw_rand directly) on
+ * /   `initialize_master_key` / `rotate_key`. Secrets are kept per key_id in
+ * /   stable state so records encrypted under a retired key remain decryptable.
+ * /   No method ever returns secret material; only opaque key_ids/metadata leave
+ * /   the canister.
+ * / - Per-field key = SHA-256(master_secret || pii_id || field_id).
+ * / - Nonces are 12 random bytes drawn fresh from raw_rand for every
+ * /   `register_pii` call (register_pii is already an update call, so this is
+ * /   a plain `await`).
+ * / - Confidentiality: SHA-256-based CTR-mode keystream, where each 32-byte
+ * /   keystream block is SHA-256(field_key || nonce || counter_be32), counter
+ * /   starting at 0 and incrementing per 32-byte block, XORed with plaintext.
+ * / - Integrity: encrypt-then-MAC. tag = SHA-256(field_key || nonce ||
+ * /   ciphertext). The tag (32 bytes) is appended to the ciphertext bytes
+ * /   stored/returned in `EncryptedPii.ciphertext` (no public record shape
+ * /   changed). Decryption recomputes and compares the tag before returning
+ * /   plaintext, failing closed (#Err) on any mismatch, truncated input, or
+ * /   unknown master_key_id.
+ * / - `derive_media_key` uses a separate raw_rand-generated 32-byte
+ * /   `media_root_secret` (created lazily on first use) and returns
+ * /   SHA-256(media_root_secret || child_id || authorizer || purpose),
+ * /   32 bytes, still gated by the same authorization checks as before.
+ * /
+ * / This is a meaningful improvement over the previous XOR/timestamp
+ * / "synthetic encryption" placeholder, but it is still symmetric key material
+ * / held in canister heap/stable memory. Production deployment should still
+ * / migrate to:
+ * / - vetKeys for child media key derivation and/or field key derivation,
+ * /   removing raw master secret material from canister memory entirely
+ * / - Hardware Security Module (HSM) or KMS-backed custody for the true root
+ * /   of trust, with this canister only holding derived, scoped key handles
  * / - External vault for secret workload identity
  */
 export interface pii_access_controlInterface {
@@ -141,6 +170,13 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_decrypted_pii_batch(pii_ids: Array<string>, field_id: string, operation: string, purpose: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<DecryptedPii>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_encrypted_pii(pii_id: string, field_id: string): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -149,6 +185,13 @@ export interface pii_access_controlInterface {
         Err: string;
     }>;
     get_key_metadata(): Promise<Array<KeyMetadata>>;
+    grant_pii_read(pii_id: string, field_id: string, reader: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     initialize_master_key(initial_key_id: string): Promise<{
         __kind__: "Ok";
         Ok: string;
@@ -159,6 +202,13 @@ export interface pii_access_controlInterface {
     register_pii(pii_id: string, field_id: string, plaintext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    revoke_pii_read(pii_id: string, field_id: string, reader: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -218,6 +268,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.get_decrypted_pii(arg0, arg1, arg2, arg3);
         return from_candid_variant_n6(result);
     }
+    async get_decrypted_pii_batch(arg0: Array<string>, arg1: string, arg2: string, arg3: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<DecryptedPii>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_decrypted_pii_batch(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n7(result);
+    }
     async get_encrypted_pii(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -226,11 +286,21 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.get_encrypted_pii(arg0, arg1);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async get_key_metadata(): Promise<Array<KeyMetadata>> {
         const result = await this.actor.get_key_metadata();
-        return from_candid_vec_n8(result);
+        return from_candid_vec_n9(result);
+    }
+    async grant_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_pii_read(arg0, arg1, arg2);
+        return from_candid_variant_n5(result);
     }
     async initialize_master_key(arg0: string): Promise<{
         __kind__: "Ok";
@@ -240,7 +310,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.initialize_master_key(arg0);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n13(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -250,7 +320,17 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
+    }
+    async revoke_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.revoke_pii_read(arg0, arg1, arg2);
+        return from_candid_variant_n5(result);
     }
     async rotate_key(arg0: string): Promise<{
         __kind__: "Ok";
@@ -260,13 +340,13 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.rotate_key(arg0);
-        return from_candid_variant_n13(result);
+        return from_candid_variant_n14(result);
     }
 }
-function from_candid_KeyMetadata_n9(value: _KeyMetadata): KeyMetadata {
-    return from_candid_record_n10(value);
+function from_candid_KeyMetadata_n10(value: _KeyMetadata): KeyMetadata {
+    return from_candid_record_n11(value);
 }
-function from_candid_record_n10(value: {
+function from_candid_record_n11(value: {
     status: {
         Active: null;
     } | {
@@ -286,13 +366,13 @@ function from_candid_record_n10(value: {
     rotation_due_at: bigint;
 } {
     return {
-        status: from_candid_variant_n11(value.status),
+        status: from_candid_variant_n12(value.status),
         key_id: value.key_id,
         created_at: value.created_at,
         rotation_due_at: value.rotation_due_at
     };
 }
-function from_candid_variant_n11(value: {
+function from_candid_variant_n12(value: {
     Active: null;
 } | {
     Shredded: null;
@@ -303,7 +383,7 @@ function from_candid_variant_n11(value: {
 }): Variant_Active_Shredded_RotationPending_Revoked {
     return "Active" in value ? Variant_Active_Shredded_RotationPending_Revoked.Active : "Shredded" in value ? Variant_Active_Shredded_RotationPending_Revoked.Shredded : "RotationPending" in value ? Variant_Active_Shredded_RotationPending_Revoked.RotationPending : "Revoked" in value ? Variant_Active_Shredded_RotationPending_Revoked.Revoked : value;
 }
-function from_candid_variant_n12(value: {
+function from_candid_variant_n13(value: {
     Ok: string;
 } | {
     Err: string;
@@ -322,7 +402,7 @@ function from_candid_variant_n12(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n13(value: {
+function from_candid_variant_n14(value: {
     Ok: _KeyRotationResult;
 } | {
     Err: string;
@@ -418,6 +498,25 @@ function from_candid_variant_n6(value: {
     } : value;
 }
 function from_candid_variant_n7(value: {
+    Ok: Array<_DecryptedPii>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<DecryptedPii>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n8(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;
@@ -436,8 +535,8 @@ function from_candid_variant_n7(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n8(value: Array<_KeyMetadata>): Array<KeyMetadata> {
-    return value.map((x)=>from_candid_KeyMetadata_n9(x));
+function from_candid_vec_n9(value: Array<_KeyMetadata>): Array<KeyMetadata> {
+    return value.map((x)=>from_candid_KeyMetadata_n10(x));
 }
 function to_candid_AuditFilter_n1(value: AuditFilter): _AuditFilter {
     return to_candid_record_n2(value);
