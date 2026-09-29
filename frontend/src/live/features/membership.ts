@@ -1,4 +1,6 @@
+import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
+import { unwrapCandid } from "./candid";
 import {
   getLiveTeam,
   listLiveClubs,
@@ -29,6 +31,18 @@ export async function getLiveMembershipTeam(ctx: FeatureBackendContext, teamId: 
 
 export async function saveLiveMembershipTeam(ctx: FeatureBackendContext, team: LiveClubTeam) {
   return saveLiveTeam(ctx, team);
+}
+
+/** Club-admin gated on the canister; returns account role grants for the club. */
+export async function listLiveRoleGrants(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_role_grants(clubId), "List role grants");
+}
+
+/** Caller-scoped: children linked to the signed-in member's account. */
+export async function listLiveChildren(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_children(), "List children");
 }
 
 export async function listLiveMembershipClubs(ctx: FeatureBackendContext) {

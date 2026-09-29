@@ -70,3 +70,11 @@ candid = "backend/pii_access_control/pii_access_control.did"
 [canisters.secret_workload_identity]
 main = "backend/secret_workload_identity/src/main.mo"
 candid = "backend/secret_workload_identity/secret_workload_identity.did"
+
+[canisters.vault_domain]
+main = "backend/vault_domain/src/main.mo"
+candid = "backend/vault_domain/vault_domain.did"
+
+[canisters.vault_domain.migrations]
+chain = "backend/vault_domain/src/backend/migrations"
+check-limit = 1

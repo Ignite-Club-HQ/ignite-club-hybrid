@@ -131,6 +131,8 @@ type RoleGrant = record {
   user : principal;
 };
 type Snapshot = record { schema : nat32; clubs : vec record { text; Listing } };
+type Result_20 = variant { Ok : vec Child; Err : text };
+type Result_21 = variant { Ok : vec AccountRole; Err : text };
 type State = record {
   schema : nat32;
   accounts : vec Account;
@@ -157,8 +159,10 @@ service : {
   get_team : (text) -> (Result_10) query;
   import_frozen_club : (text, Listing) -> (Result_11);
   import_links : (Snapshot) -> (Result_11);
+  list_children : () -> (Result_20) query;
   list_clubs : (opt text, nat16) -> (Result_12) query;
   list_links : (text, bool) -> (Result_3) query;
+  list_role_grants : (text) -> (Result_21) query;
   list_sponsors : (text) -> (Result_13) query;
   list_teams : (text) -> (Result_14) query;
   mutate : (Request) -> (Result_15);

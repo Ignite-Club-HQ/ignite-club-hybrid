@@ -38,6 +38,14 @@ import {
   notificationListFamilyKey,
 } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  clearLiveInbox,
+  deleteLiveNotification,
+  listLiveInbox,
+  markAllLiveNotificationsRead,
+  markLiveNotificationRead,
+} from "@/live/features/notifications";
 
 
 /**
@@ -242,15 +250,37 @@ export default function NotificationsPage() {
         return fixtureData.getLocalLabNotifications(user.id);
       }
 
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(500); // Cap at 500 for performance
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("notifications")
+            .select("id, user_id, type, message, related_id, is_read, created_at, club_id")
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false })
+            .limit(500); // Cap at 500 for performance
 
-      if (error) throw error;
-      let rows = (data || []) as any[];
+          if (error) throw error;
+          let rows = (data || []) as any[];
+
+    },
+        icp: async (ctx) => {
+          // Provisional mapping until verified against a deployed canister:
+          // the canister filters by club id directly, so legacy null-club
+          // rows attributed via related_id (the Supabase branch's resolver)
+          // are not reproduced here. Canister rows lack club-scoped join
+          // metadata; club attribution relies on the stored club field.
+          const inbox = await listLiveInbox(ctx, user!.id, activeClubFilter ?? null, 500);
+          return (inbox as any[]).map((n) => ({
+            id: n.id,
+            user_id: n.user,
+            type: n.kind,
+            message: n.body,
+            read: n.read,
+            created_at: new Date(Number(n.created_at_ms)).toISOString(),
+            related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
+          })) as Notification[];
+        },
+      });
 
       // Scope to the active club using the SAME resolver as the bell dropdown
       // (filterClubScopedNotifications). A raw SQL `club_id.eq` filter would
@@ -394,11 +424,18 @@ export default function NotificationsPage() {
     mutationFn: async (id: string) => {
       if (useIcpLab) return id;
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .update({ is_read: true })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await markLiveNotificationRead(ctx, id);
+        },
+      });
       return id;
     },
     onMutate: async (id) => {
@@ -422,11 +459,20 @@ export default function NotificationsPage() {
       if (ids.length === 0) return;
       if (useIcpLab) return;
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .in("id", ids);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .update({ is_read: true })
+            .in("id", ids);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // The canister marks the caller's inbox (optionally club-scoped),
+          // matching the visible-set semantics of this mutation.
+          await markAllLiveNotificationsRead(ctx, user!.id, activeClubFilter ?? null);
+        },
+      });
     },
     onMutate: async () => {
       // Optimistic update - mark visible notifications as read
@@ -447,11 +493,18 @@ export default function NotificationsPage() {
     mutationFn: async (id: string) => {
       if (useIcpLab) return id;
 
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .delete()
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveNotification(ctx, id);
+        },
+      });
       return id;
     },
     onMutate: async (id) => {
@@ -472,11 +525,18 @@ export default function NotificationsPage() {
       if (ids.length === 0) return;
       if (useIcpLab) return;
 
-      const { error } = await supabase
-        .from("notifications")
-        .delete()
-        .in("id", ids);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .delete()
+            .in("id", ids);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await clearLiveInbox(ctx, user!.id, activeClubFilter ?? null);
+        },
+      });
     },
     onMutate: async () => {
       // Cancel any in-flight queries to prevent stale data overwriting

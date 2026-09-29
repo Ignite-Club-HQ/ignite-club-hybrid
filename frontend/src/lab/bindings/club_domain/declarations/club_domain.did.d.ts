@@ -146,6 +146,10 @@ export type Result_19 = { 'Ok' : ClubTeam } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : Config } |
   { 'Err' : string };
+export type Result_20 = { 'Ok' : Array<Child> } |
+  { 'Err' : string };
+export type Result_21 = { 'Ok' : Array<AccountRole> } |
+  { 'Err' : string };
 export type Result_3 = { 'Ok' : Listing } |
   { 'Err' : string };
 export type Result_4 = { 'Ok' : State } |
@@ -196,8 +200,10 @@ export interface _SERVICE {
   'import_frozen_club' : ActorMethod<[string, Listing], Result_11>,
   'import_links' : ActorMethod<[Snapshot], Result_11>,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'list_children' : ActorMethod<[], Result_20>,
   'list_clubs' : ActorMethod<[[] | [string], number], Result_12>,
   'list_links' : ActorMethod<[string, boolean], Result_3>,
+  'list_role_grants' : ActorMethod<[string], Result_21>,
   'list_sponsors' : ActorMethod<[string], Result_13>,
   'list_teams' : ActorMethod<[string], Result_14>,
   'mutate' : ActorMethod<[Request], Result_15>,
