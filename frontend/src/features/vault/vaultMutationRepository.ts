@@ -7,6 +7,9 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import {
   createLiveVaultFolder,
   deleteLiveVaultFolder,
+  moveLiveVaultFile,
+  permanentlyDeleteLiveVaultFile,
+  renameLiveVaultFile,
   restoreLiveVaultFile,
   trashLiveVaultFile,
   updateLiveVaultFolder,
@@ -45,7 +48,10 @@ export function renameVaultItem(
   newName: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  return updateName("vault_files", fileId, newName, client);
+  return withFeatureBackend("vault", {
+    supabase: () => updateName("vault_files", fileId, newName, client),
+    icp: (ctx) => renameLiveVaultFile(ctx, fileId, newName),
+  });
 }
 
 export async function moveVaultFile(
@@ -56,16 +62,26 @@ export async function moveVaultFile(
   },
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const update: { folder_id: string | null; team_id?: string | null } = {
-    folder_id: options.targetFolderId,
-  };
-  if (options.targetTeamId !== undefined) update.team_id = options.targetTeamId;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const update: { folder_id: string | null; team_id?: string | null } = {
+        folder_id: options.targetFolderId,
+      };
+      if (options.targetTeamId !== undefined) update.team_id = options.targetTeamId;
 
-  const { error } = await client
-    .from("vault_files")
-    .update(update)
-    .eq("id", options.fileId);
-  if (error) throw error;
+      const { error } = await client
+        .from("vault_files")
+        .update(update)
+        .eq("id", options.fileId);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: the canister adopts the target folder's team
+      // scope, so targetTeamId has no canister parameter; the vault root is
+      // the empty folder id. Verify against the live canister post-deploy.
+      await moveLiveVaultFile(ctx, options.fileId, options.targetFolderId ?? "");
+    },
+  });
 }
 
 export async function createVaultFolder(
@@ -238,8 +254,18 @@ export async function permanentlyDeleteVaultFile(
   itemId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  const response = await client.functions.invoke("permanent-delete-photos", {
-    body: { fileIds: [itemId], deletionType: "permanent" },
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const response = await client.functions.invoke("permanent-delete-photos", {
+        body: { fileIds: [itemId], deletionType: "permanent" },
+      });
+      if (response.error) throw new Error(response.error.message);
+    },
+    icp: async (ctx) => {
+      // The canister hard-deletes the metadata row. File bytes live in
+      // Supabase storage (the ICP blob store is not built yet), so byte
+      // cleanup stays with the storage layer — provisional.
+      await permanentlyDeleteLiveVaultFile(ctx, itemId);
+    },
   });
-  if (response.error) throw new Error(response.error.message);
 }
