@@ -1,12 +1,14 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useClubProAccess, useFreeClubPollingEnabled } = vi.hoisted(() => ({
+const { useClubProAccess, useFreeClubPollingEnabled, isFeatureRoutedToIcp } = vi.hoisted(() => ({
   useClubProAccess: vi.fn(),
   useFreeClubPollingEnabled: vi.fn(),
+  isFeatureRoutedToIcp: vi.fn(() => false),
 }));
 vi.mock("@/hooks/useClubProAccess", () => ({ useClubProAccess }));
 vi.mock("@/hooks/useFreeClubPollingEnabled", () => ({ useFreeClubPollingEnabled }));
+vi.mock("@/live/loadBackendRouting", () => ({ isFeatureRoutedToIcp }));
 
 import { FREE_CLUB_POLL_INTERVAL_MS, useClubRealtimeMode } from "./useClubRealtimeMode";
 
@@ -14,6 +16,7 @@ describe("useClubRealtimeMode entitlement boundary", () => {
   beforeEach(() => {
     useFreeClubPollingEnabled.mockReturnValue(true);
     useClubProAccess.mockReturnValue({ hasPro: false, isLoading: false });
+    isFeatureRoutedToIcp.mockReturnValue(false);
   });
 
   it("polls a resolved Free club when the operational flag is enabled", () => {
@@ -31,5 +34,14 @@ describe("useClubRealtimeMode entitlement boundary", () => {
     useFreeClubPollingEnabled.mockReturnValue(flag);
     const { result } = renderHook(() => useClubRealtimeMode(clubId));
     expect(result.current.mode).toBe("realtime");
+  });
+
+  it("polls whenever messaging is routed to ICP, regardless of entitlement or club", () => {
+    isFeatureRoutedToIcp.mockImplementation((feature) => feature === "messaging");
+    useClubProAccess.mockReturnValue({ hasPro: true, isLoading: false });
+    const { result } = renderHook(() => useClubRealtimeMode("club-pro"));
+    expect(result.current).toEqual({ mode: "polling", intervalMs: FREE_CLUB_POLL_INTERVAL_MS });
+    const unresolved = renderHook(() => useClubRealtimeMode(null));
+    expect(unresolved.result.current.mode).toBe("polling");
   });
 });
