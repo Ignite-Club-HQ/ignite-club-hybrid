@@ -38,8 +38,8 @@ export async function registerLiveAsset(
   input: LiveAssetRegistration,
 ) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
-  const asset = unwrapCandid(
-    await actor.register_asset(
+  const asset = await unwrapCandid(
+    actor.register_asset(
       input.clubId,
       input.kind,
       input.mime,
@@ -52,7 +52,7 @@ export async function registerLiveAsset(
   );
   if (!input.blobRef) return asset;
   return unwrapCandid(
-    await actor.set_blob_ref(asset.id, [input.blobRef]),
+    actor.set_blob_ref(asset.id, [input.blobRef]),
     "Set blob reference",
   );
 }
