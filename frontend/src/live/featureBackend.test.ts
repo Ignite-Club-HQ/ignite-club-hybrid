@@ -82,7 +82,7 @@ describe("feature canister mapping", () => {
     ).toBe(false);
     expect(
       isFeatureCanisterConfigured(
-        icpTarget({ pii_access_control: "aaaaa-dd" }),
+        icpTarget({ vault_domain: "aaaaa-dd" }),
         "vault",
       ),
     ).toBe(true);
