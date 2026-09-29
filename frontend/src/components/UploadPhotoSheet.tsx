@@ -533,6 +533,7 @@ export function UploadPhotoSheet({
       teamId: teamId || null,
       miniLeagueId: miniLeagueId || null,
     }).catch((e) => console.warn("gallery → vault sync failed:", e));
+    }
 
     return { url: storageUrl, photoId: insertedPhoto.id };
   };
@@ -787,8 +788,12 @@ export function UploadPhotoSheet({
     // on 2026-05-16 — 21 photos with album_id=NULL rendered as 21 separate
     // feed cards). Never silently fall back to ungrouped: retry once, and
     // if still failing, abort the whole upload with a clear error.
+    // When media is ICP-routed the canister owns asset metadata: no Supabase
+    // photo rows, albums, or gallery chat cards are written (those tables are
+    // never read back on the ICP branch).
+    const mediaOnIcp = !!clubId && isFeatureRoutedToIcp("media");
     let albumId: string | null = null;
-    if (photosToUpload.length > 1) {
+    if (!mediaOnIcp && photosToUpload.length > 1) {
       const args = {
         _club_id: clubId || null,
         _team_id: teamId || null,
@@ -874,7 +879,7 @@ export function UploadPhotoSheet({
     // Aggregation (10-min window) and message text are handled in the RPC.
     // Push notification only when ≥5 items in the resulting card.
     // ---------------------------------------------------------------------
-    if (teamId && successCount >= 2 && uploadedPhotoIds.length >= 2) {
+    if (!mediaOnIcp && teamId && successCount >= 2 && uploadedPhotoIds.length >= 2) {
       try {
         const heroPhotoId = uploadedPhotoIds[0];
         const heroUrl = uploadedUrls[0];
