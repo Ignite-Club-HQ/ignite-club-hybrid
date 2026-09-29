@@ -4,7 +4,7 @@ module {
   public type Rsvp = { event_id : Text; account_id : Text; state : Text; updated_at_ms : Nat64 };
   public type Attendance = { event_id : Text; account_id : Text; present : Bool; note : Text };
   public type LineupEntry = { event_id : Text; member : Text; slot : Text; team_id : ?Text };
-  public type Duty = { event_id : Text; account_id : Text; duty : Text };
+  public type Duty = { event_id : Text; account_id : Text; duty : Text; completed : Bool };
   public type RosterEntry = { event_id : Text; account_id : Text; child_id : ?Text };
   public type Recurrence = { event_id : Text; frequency : Text; until_ms : Nat64 };
   public type State = {

@@ -123,7 +123,42 @@ persistent actor {
   public shared ({ caller }) func set_duty(event_id : Text, account_id : Text, duty : Text) : async { #Ok : Types.Duty; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
-    let value : Types.Duty = { event_id; account_id; duty }; duties := duties.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); duties := duties.concat([value]); #Ok(value)
+    // Re-setting the same duty keeps its completion state; renaming the duty
+    // or assigning a different one starts incomplete.
+    let completed = switch (duties.find(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      case (?current) { current.duty == duty and current.completed };
+      case null { false };
+    };
+    let value : Types.Duty = { event_id; account_id; duty; completed }; duties := duties.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); duties := duties.concat([value]); #Ok(value)
+  };
+
+  // NOTE: like set_rsvp/set_attendance, completion trusts the
+  // browser-supplied account id until account ids are bound to principals
+  // via identity_access — members mark their own duties complete.
+  func setDutyCompleted(event_id : Text, account_id : Text, completed : Bool) : { #Ok : Types.Duty; #Err : Text } {
+    switch (duties.find(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      case null { #Err("Duty not found") };
+      case (?current) {
+        let updated : Types.Duty = { current with completed = completed };
+        duties := duties.map(func(item) = if (item.event_id == event_id and item.account_id == account_id) { updated } else { item });
+        #Ok(updated)
+      };
+    }
+  };
+  public shared ({ caller }) func complete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
+    auth(caller);
+    setDutyCompleted(event_id, account_id, true)
+  };
+  public shared ({ caller }) func uncomplete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
+    auth(caller);
+    setDutyCompleted(event_id, account_id, false)
+  };
+  public shared ({ caller }) func remove_duty(event_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not duties.any(func(item) = item.event_id == event_id and item.account_id == account_id)) return #Err("Duty not found");
+    duties := duties.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id));
+    #Ok
   };
   public shared ({ caller }) func set_roster(event_id : Text, account_id : Text, child_id : ?Text) : async { #Ok : Types.RosterEntry; #Err : Text } {
     auth(caller);
