@@ -9,6 +9,7 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const Result_7 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const Comment = IDL.Record({
     'id' : IDL.Text,
     'deleted' : IDL.Bool,
@@ -26,20 +27,20 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_5 = IDL.Variant({ 'Ok' : Reaction, 'Err' : IDL.Text });
   const BlobRef = IDL.Record({
-    'canister' : IDL.Text,
     'path' : IDL.Text,
     'content_hash' : IDL.Text,
+    'canister' : IDL.Text,
   });
   const Asset = IDL.Record({
     'id' : IDL.Text,
     'storage_path' : IDL.Text,
-    'blob_ref' : IDL.Opt(BlobRef),
     'retention_until_ms' : IDL.Nat64,
     'deleted' : IDL.Bool,
     'owner' : IDL.Principal,
     'kind' : IDL.Text,
     'mime' : IDL.Text,
     'encrypted' : IDL.Bool,
+    'blob_ref' : IDL.Opt(BlobRef),
     'content_length' : IDL.Nat64,
     'checksum' : IDL.Text,
     'child_sensitive' : IDL.Bool,
@@ -74,9 +75,14 @@ export const idlFactory = ({ IDL }) => {
   const Result_2 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
   const Result_4 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const Result_1 = IDL.Variant({ 'Ok' : Capability, 'Err' : IDL.Text });
+  const Result_8 = IDL.Variant({
+    'Ok' : IDL.Vec(IDL.Principal),
+    'Err' : IDL.Text,
+  });
   const Result = IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text });
   
   return IDL.Service({
+    'addBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_7], []),
     'add_comment' : IDL.Func([IDL.Text, IDL.Text, IDL.Nat64], [Result_6], []),
     'add_reaction' : IDL.Func([IDL.Text, IDL.Text, IDL.Nat64], [Result_5], []),
     'delete_asset' : IDL.Func([IDL.Text], [Result_3], []),
@@ -98,6 +104,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_1],
         [],
       ),
+    'listBulkAccessPrincipals' : IDL.Func([], [Result_8], ['query']),
     'list_assets' : IDL.Func([IDL.Text], [IDL.Vec(Asset)], ['query']),
     'list_comments' : IDL.Func([IDL.Text], [IDL.Vec(Comment)], ['query']),
     'list_reactions' : IDL.Func([IDL.Text], [IDL.Vec(Reaction)], ['query']),
@@ -106,6 +113,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'removeBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_7], []),
     'remove_reaction' : IDL.Func([IDL.Text], [Result_4], []),
     'set_blob_ref' : IDL.Func([IDL.Text, IDL.Opt(BlobRef)], [Result], []),
   });

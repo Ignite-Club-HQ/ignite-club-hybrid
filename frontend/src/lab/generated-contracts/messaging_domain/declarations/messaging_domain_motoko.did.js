@@ -58,6 +58,11 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'addBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
@@ -83,6 +88,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'listBulkAccessPrincipals' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_messages' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Vec(Message)],
@@ -96,6 +106,11 @@ export const idlFactory = ({ IDL }) => {
     'mark_read' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
+        [],
+      ),
+    'removeBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'send_message' : IDL.Func(

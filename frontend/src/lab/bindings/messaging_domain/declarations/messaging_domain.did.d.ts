@@ -58,6 +58,11 @@ export interface Unread {
   'last_read_sequence' : bigint,
 }
 export interface _SERVICE {
+  'addBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'create_conversation' : ActorMethod<
     [string, [] | [string], Array<Principal>],
     { 'Ok' : Conversation } |
@@ -75,6 +80,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'listBulkAccessPrincipals' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_messages' : ActorMethod<[string, [] | [bigint]], Array<Message>>,
   'list_messages_page' : ActorMethod<
     [string, [] | [bigint], number],
@@ -84,6 +94,11 @@ export interface _SERVICE {
   'mark_read' : ActorMethod<
     [string, string],
     { 'Ok' : Receipt } |
+      { 'Err' : string }
+  >,
+  'removeBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'send_message' : ActorMethod<
