@@ -36,6 +36,13 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  createGeneratedMatches,
+  deleteCompetitionMatch,
+  trimCompetitionRounds,
+  updateCompetitionMatch,
+} from "@/features/competitions/fixtures/matchWorkflows";
+import { buildManualMatchRow, createManualMatch } from "@/features/competitions/fixtures/manualMatchWorkflow";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import { TeamAvatar } from "@/components/competition/TeamAvatar";
 import { LadderView } from "@/components/competition/CompetitionLadderView";
@@ -374,7 +381,7 @@ export function CompetitionFixturesPanel({ competitionId, isAdmin, divisions, en
       toast({ title: "No fixtures fit the window", description: "Widen the time window, add weekdays, or push the end date.", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("competition_matches").insert(rows);
+    const { error } = await createGeneratedMatches(rows as unknown as Array<Record<string, unknown>>);
     setGenerating(false);
     if (error) {
       const raw = (error.message || "").toLowerCase();
@@ -1129,11 +1136,7 @@ function SetMaxRoundsButton({
     setSaving(true);
     try {
       if (willDelete.length > 0) {
-        const { error } = await supabase
-          .from("competition_matches")
-          .delete()
-          .eq("competition_id", competitionId)
-          .gt("round_number", target);
+        const { error } = await trimCompetitionRounds(competitionId, target);
         if (error) throw error;
         toast({ title: `Trimmed to ${target} round${target === 1 ? "" : "s"}` });
       } else if (willAdd > 0) {
@@ -1306,10 +1309,7 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
     if (isExternal && !match.manually_overridden_at) {
       payload.manually_overridden_at = new Date().toISOString();
     }
-    const { error } = await supabase
-      .from("competition_matches")
-      .update(payload as never)
-      .eq("id", match.id);
+    const { error } = await updateCompetitionMatch(match.id, payload);
     if (error) {
       toast({ title: "Could not save", description: error.message, variant: "destructive" });
       return;
@@ -1329,7 +1329,7 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
 
   const remove = async () => {
     if (!window.confirm("Delete this match?")) return;
-    const { error } = await supabase.from("competition_matches").delete().eq("id", match.id);
+    const { error } = await deleteCompetitionMatch(match.id);
     if (error) {
       toast({ title: "Could not delete", description: error.message, variant: "destructive" });
       return;
@@ -1615,21 +1615,20 @@ function AddMatchButton({ competitionId, entries, divisions, defaultOpen = false
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("competition_matches").insert({
-      competition_id: competitionId,
-      home_team_id: homeId,
-      away_team_id: awayId,
-      division_id: divisionId || null,
-      scheduled_at: new Date(scheduledAt).toISOString(),
-      venue: venue,
-      pitch_number: pitch.trim() || null,
-      round_number: round ? Number(round) : null,
-      duration_minutes: duration ? Number(duration) : null,
-      arrival_minutes_before: arrival ? Number(arrival) : null,
-      notes: notes || null,
-      status: "scheduled",
-      created_by: user?.id ?? null,
-    } as any);
+    const { error } = await createManualMatch(buildManualMatchRow({
+      competitionId,
+      homeTeamId: homeId,
+      awayTeamId: awayId,
+      divisionId,
+      scheduledAt,
+      venue,
+      pitch,
+      round,
+      duration,
+      arrival,
+      notes,
+      createdBy: user?.id ?? null,
+    }));
     setSaving(false);
     if (error) {
       toast({ title: "Could not add match", description: error.message, variant: "destructive" });

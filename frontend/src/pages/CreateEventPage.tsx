@@ -44,6 +44,7 @@ import type { RsvpAudience } from "@/lib/rsvpAudience";
 import { useAuth } from "@/hooks/useAuth";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { supabase } from "@/integrations/supabase/client";
+import { createEventTransaction } from "@/features/events/createEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
@@ -1000,16 +1001,15 @@ function SupabaseCreateEventPage() {
         if (childDates.length === 0) childDates = null;
       }
 
-      const { data: newEventId, error } = await supabase.rpc("create_event_with_duties", {
-        p_event: {
-          ...baseEventData,
-          event_date: parsedDateTime.toISOString(),
-        } as any,
-        p_child_dates: childDates,
-        p_duties: dutyPayload as any,
+      // Routed through the hybrid workflow: Supabase uses the atomic
+      // create_event_with_duties RPC; the ICP branch creates the event on the
+      // events_domain canister and syncs duties as follow-up calls.
+      const newEventId = await createEventTransaction(supabase, {
+        event: baseEventData,
+        eventDate: parsedDateTime.toISOString(),
+        childDates,
+        duties: dutyPayload,
       });
-
-      if (error) throw error;
       if (!newEventId) throw new Error("Event could not be created.");
 
       try {

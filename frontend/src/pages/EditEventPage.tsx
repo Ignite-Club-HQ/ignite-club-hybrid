@@ -40,6 +40,11 @@ import type { RsvpAudience } from "@/lib/rsvpAudience";
 import { useAuth } from "@/hooks/useAuth";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  convertEventToRecurringSeries,
+  syncEventDuties,
+  updateEventTransaction,
+} from "@/features/events/editEventWorkflow";
 import { type SavedLocation } from "@/components/AddressAutocomplete";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { EventAudienceSelector } from "@/components/event/EventAudienceSelector";
@@ -872,35 +877,17 @@ function SupabaseEditEventPage() {
         const endDate = new Date(recurrenceEndDate);
         const dates = generateRecurringDates(parsedDateTime, endDate);
 
-        const childEvents = dates.slice(1).map((date) => {
-          const childDateTime = new Date(date);
-          childDateTime.setHours(parsedDateTime.getHours(), parsedDateTime.getMinutes());
-          const childEnd = newEndIso
-            ? new Date(childDateTime.getTime() + (new Date(newEndIso).getTime() - parsedDateTime.getTime())).toISOString()
-            : null;
-          return {
-            event_date: childDateTime.toISOString(),
-            start_time: childDateTime.toISOString(),
-            end_time: childEnd,
-          };
+        // Series expansion stays Supabase-only inside the workflow (no
+        // canister shape for recurring series expansion).
+        const occurrences = await convertEventToRecurringSeries(supabase, {
+          eventId: id!,
+          updates: updateData,
+          selectedDate: parsedDateTime,
+          selectedStartTime: newStartIso,
+          selectedEndTime: newEndIso,
+          occurrenceDates: dates,
+          recurrenceEndDate,
         });
-
-        const { data: convertResult, error: convertError } = await supabase.rpc(
-          "convert_event_to_recurring_series",
-          {
-            p_event_id: id!,
-            p_parent_updates: updateData as any,
-            p_child_events: childEvents as any,
-            p_parent_event_date: parsedDateTime.toISOString(),
-            p_parent_start_time: newStartIso,
-            p_parent_end_time: newEndIso,
-            p_recurrence_end_date: recurrenceEndDate,
-          },
-        );
-        if (convertError) throw convertError;
-
-        const occurrences =
-          (convertResult as { occurrence_count?: number } | null)?.occurrence_count ?? dates.length;
 
         toast({
           title: "Recurring series created",
@@ -912,46 +899,45 @@ function SupabaseEditEventPage() {
         // selected event, its parent, and all siblings either all succeed or
         // all roll back. The RPC verifies caller permission server-side and
         // preserves each sibling's own event_date / start_time / end_time.
-        const { error: rpcError } = await supabase.rpc("update_event_series", {
-          p_event_id: id!,
-          p_updates: updateData as any,
-          p_selected_event_date: parsedDateTime.toISOString(),
-          p_selected_start_time: newStartIso,
-          p_selected_end_time: newEndIso,
+        // Routed through the hybrid workflow: the whole-series update stays on
+        // the transactional RPC (no canister shape); a single-event update goes
+        // to the events_domain canister when ICP is the active backend.
+        await updateEventTransaction(supabase, {
+          eventId: id!,
+          updates: updateData,
+          selectedEventDate: parsedDateTime.toISOString(),
+          selectedStartTime: newStartIso,
+          selectedEndTime: newEndIso,
+          updateSeries: true,
         });
-        if (rpcError) throw rpcError;
       } else {
-        // Just update this single event — keep start_time/end_time aligned with the new event_date
-        const { error } = await supabase
-          .from("events")
-          .update({
-            ...updateData,
-            event_date: parsedDateTime.toISOString(),
-            start_time: newStartIso,
-            end_time: newEndIso,
-          })
-          .eq("id", id!);
-        if (error) throw error;
+        // Just update this single event — the workflow keeps start_time/end_time
+        // aligned with the new event_date on both backends.
+        await updateEventTransaction(supabase, {
+          eventId: id!,
+          updates: updateData,
+          selectedEventDate: parsedDateTime.toISOString(),
+          selectedStartTime: newStartIso,
+          selectedEndTime: newEndIso,
+          updateSeries: false,
+        });
       }
 
       // Duty changes for game events are applied by a single transactional RPC:
       // every removal, edit and addition either commits together or rolls back,
       // and the RPC raises when RLS would silently skip a row.
       if (type === "game") {
-        const { data: syncedRaw, error: dutyError } = await supabase.rpc("sync_event_duties", {
-          p_event_id: id!,
-          p_delete_ids: dutiesToDelete,
-          p_duties: duties.map((duty, idx) => ({
-            idx,
-            id: duty.id ?? null,
-            name: duty.name,
-            assigned_to: duty.assignedTo,
-          })) as any,
-        });
-        if (dutyError) throw Object.assign(dutyError, { __dutyStage: "sync" });
+        // Routed through the hybrid workflow: Supabase applies all duty
+        // changes in one transactional RPC; the ICP branch sets duties on the
+        // events_domain canister (duty removals stay Supabase-only there).
+        let synced: { idx: number; id: string }[];
+        try {
+          synced = await syncEventDuties(supabase, id!, dutiesToDelete, duties);
+        } catch (dutyError: any) {
+          throw Object.assign(dutyError, { __dutyStage: "sync" });
+        }
 
         setDutiesToDelete([]);
-        const synced = (syncedRaw as { idx: number; id: string }[] | null) ?? [];
         if (synced.length > 0) {
           setDuties((prev) =>
             prev.map((d, idx) => {

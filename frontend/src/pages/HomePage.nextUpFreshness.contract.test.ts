@@ -8,8 +8,8 @@ const homePage = read("src/pages/HomePage.tsx");
 const eventCacheRefresh = read("src/lib/eventCacheRefresh.ts");
 
 function successfulCreateWindow(): string {
-  const start = createEventPage.indexOf('supabase.rpc("create_event_with_duties"');
-  expect(start, "CreateEventPage must invoke its transactional creation RPC").toBeGreaterThanOrEqual(0);
+  const start = createEventPage.indexOf("createEventTransaction(supabase, {");
+  expect(start, "CreateEventPage must invoke its transactional creation workflow").toBeGreaterThanOrEqual(0);
   const end = createEventPage.indexOf("} catch (error: any)", start);
   expect(end, "Could not locate the successful event-creation block").toBeGreaterThan(start);
   return createEventPage.slice(start, end);
