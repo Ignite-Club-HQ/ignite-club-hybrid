@@ -83,9 +83,24 @@ persistent actor {
     };
     if (club_id != competition_club or not valid(team_id)) return #Err("Team club mismatch");
     if (entries.any(func(item) = item.competition_id == competition_id and item.team_id == team_id)) return #Err("Team already registered");
-    let entry : Types.TeamEntry = { competition_id; team_id; club_id; status = "registered" };
+    let entry : Types.TeamEntry = { competition_id; team_id; club_id; status = "registered"; division_id = null };
     entries := entries.concat([entry]);
     #Ok(entry)
+  };
+
+  // Assigns a registered team to a division (null clears the assignment).
+  public shared ({ caller }) func assign_division(competition_id : Text, team_id : Text, division_id : ?Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    switch (division_id) { case (?d) { if (d.size() > 128) return #Err("Invalid division") }; case null {} };
+    switch (entries.find(func(item) = item.competition_id == competition_id and item.team_id == team_id)) {
+      case null { #Err("Team is not registered in competition") };
+      case (?current) {
+        let updated : Types.TeamEntry = { current with division_id };
+        entries := entries.map(func(item) = if (item.competition_id == competition_id and item.team_id == team_id) updated else item);
+        #Ok(updated)
+      };
+    }
   };
 
   public shared ({ caller }) func issue_join_token(competition_id : Text, team_id : Text, expires_at_ms : Nat64) : async { #Ok : Types.JoinToken; #Err : Text } {
@@ -134,9 +149,44 @@ persistent actor {
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(name)) return #Err("Invalid season");
-    let season : Types.Season = { competition_id; name; status = "draft"; revision = 1 };
+    if (seasons.any(func(item) = item.competition_id == competition_id and item.name == name)) return #Err("Season already exists");
+    let season : Types.Season = { competition_id; name; status = "draft"; divisions = []; revision = 1 };
     seasons := seasons.concat([season]);
     #Ok(season)
+  };
+
+  // Duplicates a season's structure (division list) under a new name,
+  // matching the Supabase duplicate_season_structure RPC. Entries and
+  // matches are competition-scoped, so they carry over unchanged; the new
+  // season starts as a draft.
+  public shared ({ caller }) func duplicate_season(competition_id : Text, source_name : Text, new_name : Text) : async { #Ok : Types.Season; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not valid(new_name)) return #Err("Invalid season");
+    if (seasons.any(func(item) = item.competition_id == competition_id and item.name == new_name)) return #Err("Season already exists");
+    switch (seasons.find(func(item) = item.competition_id == competition_id and item.name == source_name)) {
+      case null { #Err("Source season not found") };
+      case (?source) {
+        let season : Types.Season = { competition_id; name = new_name; status = "draft"; divisions = source.divisions; revision = 1 };
+        seasons := seasons.concat([season]);
+        #Ok(season)
+      };
+    }
+  };
+
+  // Replaces a season's division structure.
+  public shared ({ caller }) func set_season_divisions(competition_id : Text, name : Text, divisions : [Text]) : async { #Ok : Types.Season; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (divisions.size() > 64 or divisions.any(func(d) = not valid(d))) return #Err("Invalid divisions");
+    switch (seasons.find(func(item) = item.competition_id == competition_id and item.name == name)) {
+      case null { #Err("Season not found") };
+      case (?current) {
+        let updated : Types.Season = { current with divisions; revision = current.revision + 1 };
+        seasons := seasons.map(func(item) = if (item.competition_id == competition_id and item.name == name) updated else item);
+        #Ok(updated)
+      };
+    }
   };
 
   public shared ({ caller }) func set_season_status(competition_id : Text, status : Text, expected_revision : Nat64) : async { #Ok : Types.Season; #Err : Text } {
