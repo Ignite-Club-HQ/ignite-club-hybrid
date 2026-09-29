@@ -14,6 +14,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { deleteLiveAsset } from "@/live/features/media";
 
 export type MediaDeletionMode = "feed_only" | "feed_and_vault";
 
@@ -52,6 +54,23 @@ export async function deleteMediaPhoto(
     throw new Error("Unsupported deletion mode");
   }
 
+  return withFeatureBackend("media", {
+    supabase: () => deleteMediaPhotoSupabase(supabase, { photoId, mode, callerId }),
+    icp: async (ctx) => {
+      // Provisional mapping — photo id = asset id; verify against deployed
+      // canister. The canister only models a single "delete the asset"
+      // operation, so both deletion modes map to the same call; Vault
+      // mirroring has no canister-side counterpart yet.
+      await deleteLiveAsset(ctx, photoId);
+      return { photoId, mode, vaultFileId: null, vaultUpdated: false };
+    },
+  });
+}
+
+async function deleteMediaPhotoSupabase(
+  supabase: SupabaseClient<any, any, any>,
+  { photoId, mode, callerId }: DeleteMediaPhotoArgs,
+): Promise<DeleteMediaPhotoResult> {
   const { data, error } = await supabase.rpc("delete_media_photo", {
     _photo_id: photoId,
     _mode: mode,

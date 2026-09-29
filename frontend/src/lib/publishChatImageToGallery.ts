@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { deleteLiveAsset } from "@/live/features/media";
 
 /**
  * Publish a chat-attached image to the team / club media gallery.
@@ -145,12 +147,21 @@ export async function publishChatImageToGallery(
  * disappears from the gallery immediately and can be cleaned up later.
  */
 export async function unpublishGalleryPhoto(photoId: string): Promise<void> {
-  const { error } = await supabase
-    .from("photos")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", photoId);
-  if (error) {
-    console.error("[unpublishGalleryPhoto] failed", error);
-    throw new Error("Could not undo");
-  }
+  await withFeatureBackend("media", {
+    supabase: async () => {
+      const { error } = await supabase
+        .from("photos")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", photoId);
+      if (error) {
+        console.error("[unpublishGalleryPhoto] failed", error);
+        throw new Error("Could not undo");
+      }
+    },
+    icp: async (ctx) => {
+      // Provisional mapping — photo id = asset id; verify against deployed
+      // canister.
+      await deleteLiveAsset(ctx, photoId);
+    },
+  });
 }
