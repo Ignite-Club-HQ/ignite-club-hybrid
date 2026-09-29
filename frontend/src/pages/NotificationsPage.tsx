@@ -254,17 +254,7 @@ export default function NotificationsPage() {
           if (error) throw error;
           let rows = (data || []) as any[];
 
-          // Scope to the active club using the SAME resolver as the bell dropdown
-          // (filterClubScopedNotifications). A raw SQL `club_id.eq` filter would
-          // silently drop legacy null-club rows that the bell can still attribute
-          // via related_id lookups (e.g. reward_claimed -> reward_redemptions),
-          // which made "View all notifications" show fewer items than the
-          // dropdown. Filtering here keeps both surfaces consistent.
-          if (activeClubFilter) {
-            rows = await filterClubScopedNotifications(rows, user!.id, activeClubFilter);
-          }
-          return rows.map(n => ({ ...n, read: n.is_read })) as Notification[];
-        },
+    },
         icp: async (ctx) => {
           // Provisional mapping until verified against a deployed canister:
           // the canister filters by club id directly, so legacy null-club
