@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { prefetchUserData } from "@/lib/prefetchData";
 import { clearProfileCache } from "@/lib/profileCache";
@@ -331,17 +332,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // MESSAGE_NOTIFICATION_TYPES imported from @/lib/notificationTypes
 
   const fetchUnreadCount = useCallback(async (userId: string) => {
-    const [allResult, messageCounts] = await Promise.all([
-      supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("is_read", false),
-      fetchUnreadMessageCounts(userId),
+    // Notification count is feature-routed so the bell badge keeps working
+    // when notifications are served by the canister. Message unread counts
+    // stay Supabase (message unread tracking has no canister shape).
+    const [allCount, messageCounts] = await Promise.all([
+      withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { count, error } = await supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", userId)
+            .eq("is_read", false);
+          if (error) throw error;
+          return count || 0;
+        },
+        icp: async (ctx) => {
+          const { listLiveInbox } = await import("@/live/features/notifications");
+          const inbox = await listLiveInbox(ctx, userId, null, 500);
+          return (inbox as any[]).filter((n) => !n.read).length;
+        },
+      }),
+      isFeatureRoutedToIcp("notifications")
+        ? Promise.resolve(null)
+        : fetchUnreadMessageCounts(userId),
     ]);
 
-    setUnreadCount(allResult.count || 0);
-    setUnreadMessagesCount(getTotalUnreadMessageCount(messageCounts));
+    setUnreadCount(allCount);
+    if (messageCounts) setUnreadMessagesCount(getTotalUnreadMessageCount(messageCounts));
   }, []);
 
   useEffect(() => {
