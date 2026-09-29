@@ -375,6 +375,13 @@ export default function GroupChatPage() {
       if (useIcpLab && groupId && user?.id) {
         return fixtureData.getLocalLabGroup(groupId, user.id) as ChatGroup | null;
       }
+      if (isFeatureRoutedToIcp("messaging")) {
+        // The messaging canister has no single-conversation/group metadata
+        // read shape yet — querying Supabase chat_groups with a canister
+        // conversation id would return null (or a cross-backend row), so
+        // skip it. Header/menus fall back gracefully. Provisional.
+        return null;
+      }
 
       const { data, error } = await supabase
         .from("chat_groups")
