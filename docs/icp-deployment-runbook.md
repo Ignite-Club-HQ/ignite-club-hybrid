@@ -21,7 +21,7 @@ dfx deploy <canister_name> --network ic
 dfx canister id <canister_name> --network ic
 ```
 
-The 13 backend canisters (keys the app understands), in suggested deploy order:
+The 14 backend canisters (keys the app understands), in suggested deploy order:
 
 | Key | Role | App features that use it |
 |---|---|---|
@@ -29,14 +29,15 @@ The 13 backend canisters (keys the app understands), in suggested deploy order:
 | `shard_router` | Control plane | infrastructure only |
 | `migration_coordinator` | Control plane | infrastructure only |
 | `identity_access` | Domain | sign-in / Internet Identity |
-| `pii_access_control` | Domain | vault (not yet wired) |
-| `club_domain` | Domain | club news, membership (news wired; membership pending) |
+| `pii_access_control` | Domain | encrypted PII records |
+| `vault_domain` | Domain | vault folders, files, trash |
+| `club_domain` | Domain | club news, membership (role roster) |
 | `events_domain` | Domain | events, RSVPs, home schedule |
-| `competition_domain` | Domain | competitions (not yet wired) |
+| `competition_domain` | Domain | competitions |
 | `messaging_domain` | Domain | group messages |
 | `media_metadata` | Domain | media feed, reactions, comments |
 | `media_blob_store` | Domain (future) | on-chain media bytes — optional, see §6 |
-| `notification_queue` | Worker | notifications (not yet wired) |
+| `notification_queue` | Worker | notifications inbox |
 | `timer_jobs` | Worker | infrastructure only |
 | `secret_workload_identity` | Worker | infrastructure only |
 
