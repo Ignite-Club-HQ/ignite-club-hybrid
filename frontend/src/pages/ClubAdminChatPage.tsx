@@ -1143,6 +1143,7 @@ function SupabaseClubAdminChatPage() {
       // Scoped by CLUB id: losing club membership must revoke this channel.
       scope: { kind: "club_admin", id: conversation?.club_id ?? conversationId },
       cacheKeys: [["club-admin-messages", conversationId]],
+      queryClient,
     });
   }, [conversationId, conversation?.club_id, queryClient, queryKey, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
 

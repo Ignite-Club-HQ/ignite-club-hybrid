@@ -819,6 +819,7 @@ export default function BroadcastChatPage() {
       userId: user?.id,
       scope: { kind: "global", id: "" },
       cacheKeys: [["broadcast-messages"]],
+      queryClient,
     });
   }, [queryClient, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
 

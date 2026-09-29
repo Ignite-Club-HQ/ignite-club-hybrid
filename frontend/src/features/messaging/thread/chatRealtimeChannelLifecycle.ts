@@ -1,4 +1,4 @@
-import type { QueryKey } from "@tanstack/react-query";
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { noteChannelRemoved, noteChannelSubscribed } from "@/lib/chatPerfDiagnostics";
 import { registerChannel, type RealtimeChannel, type Scope } from "@/lib/realtimeChannelRegistry";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,8 @@ interface ChatRealtimeChannelLifecycleOptions {
   userId: string | undefined;
   scope: Scope;
   cacheKeys?: QueryKey[];
+  /** Required for the ICP polling fallback; unused on the realtime path. */
+  queryClient?: QueryClient;
 }
 
 /**
@@ -25,17 +27,15 @@ export function startChatRealtimeChannel({
   userId,
   scope,
   cacheKeys,
+  queryClient,
 }: ChatRealtimeChannelLifecycleOptions): () => void {
   // When messaging is routed to ICP, canisters are request/response — there
-  // is no realtime channel to subscribe to. Screens poll via query calls
-  // instead (30s refetchInterval / useClubRealtimeMode polling), so skip the
-  // subscription entirely rather than opening a dead Supabase socket.
+  // is no realtime channel to subscribe to. Club/team/group chat screens
+  // already poll via useClubRealtimeMode; for the other chat screens, poll
+  // the provided cache keys (paused while the tab is hidden) so DMs,
+  // broadcast and club-admin chats still refresh on canister backends.
   if (isFeatureRoutedToIcp("messaging")) {
-    // When messaging is routed to ICP, canisters are request/response — there
-    // is no realtime channel to subscribe to. Poll the screen's message
-    // queries instead (paused while the tab is hidden), so DMs, broadcast
-    // and club-admin chats still refresh on canister backends.
-    if (!cacheKeys || cacheKeys.length === 0) return () => {};
+    if (!queryClient || !cacheKeys || cacheKeys.length === 0) return () => {};
     const poll = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       for (const key of cacheKeys) queryClient.invalidateQueries({ queryKey: key });
