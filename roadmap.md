@@ -23,7 +23,8 @@
 - [x] Wire orphaned workflow modules into their screens (page-mapping audit): CreateEventPage → createEventTransaction, EditEventPage → updateEventTransaction/syncEventDuties/convertEventToRecurringSeries, CompetitionFixturesPanel → createGeneratedMatches (new bulk workflow)/createManualMatch/updateCompetitionMatch/deleteCompetitionMatch/trimCompetitionRounds, EditMatchDetailsDialog → updateCompetitionMatch. Source-pinning contract tests updated to assert pages route through the workflows. Typecheck clean, build OK, contract tests green
 - [x] ICP-only cutover Stage A: boot config without Supabase — routing config precedence stored app_settings > IGNITE_LIVE_BACKEND_ROUTING_JSON > localStorage cache > Supabase default (loadBackendRouting.ts, 9 tests)
 - [x] ICP-only cutover Stage B: real identity on ICP — identity_access canister gains Profile record + set_profile/get_profile/my_roles (schema 1→2 migration, erase_account wipes profiles, 12 cargo tests incl. candid-vs-.did guard); frontend live/identityProfileCache.ts (light, no ICP SDK) + live/identityProfile.ts (canister fetch, dynamic-import only); IcpAuthProvider renders the real canister profile/roles instead of the fabricated stub, cache-first with background refresh, sign-out clears the cache. Bindings regenerated, drift check 14 contracts passed
-- [ ] ICP-only cutover Stage C: route home feed + profile/children reads through canisters; Stage D: realtime/push gap (polling via query calls)
+- [x] ICP-only cutover Stage C: home feed + RSVPs + children reads routed through canisters
+- [ ] ICP-only cutover Stage D: realtime/push gap (polling via query calls)
 - [ ] Verify ICP branches end-to-end after canisters are deployed (Internet Identity sign-in + live canister calls)
 - [ ] User deploys canisters; enter IDs via /admin/placement-settings or IGNITE_LIVE_ICP_CANISTER_IDS_JSON
 - [ ] Confirm Internet Identity as canister auth before building authenticated update calls
