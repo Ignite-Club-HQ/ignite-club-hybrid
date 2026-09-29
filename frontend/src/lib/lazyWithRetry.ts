@@ -17,6 +17,11 @@ import { lazy, type ComponentType } from "react";
 
 const RELOAD_GUARD_KEY = "ignite_chunk_reload_at";
 const RELOAD_GUARD_WINDOW_MS = 30_000;
+// How long we keep trying to recover a chunk-load failure before surfacing an
+// error. Dev-server restarts and deploy rollouts can outlast a single reload,
+// so one guarded reload is not enough on its own.
+const RECOVERY_WINDOW_MS = 120_000;
+const RECOVERY_RETRY_MS = 3_000;
 
 function shouldAttemptReload(): boolean {
   try {
@@ -61,10 +66,26 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
       }
     }
 
-    if (isChunkLoadError(lastError) && typeof window !== "undefined" && shouldAttemptReload()) {
-      window.location.reload();
-      // Keep the promise pending while the reload happens so no error UI flashes.
-      await new Promise(() => {});
+    if (isChunkLoadError(lastError) && typeof window !== "undefined") {
+      // Recovery loop: keep retrying the import (the dev server / CDN may just
+      // be mid-restart), and reload the page whenever the reload guard allows
+      // so a stale chunk manifest is picked up. Only give up after the
+      // recovery window, so a transient outage never blanks the screen.
+      const deadline = Date.now() + RECOVERY_WINDOW_MS;
+      while (Date.now() < deadline) {
+        if (shouldAttemptReload()) {
+          window.location.reload();
+          // Keep the promise pending while the reload happens so no error UI flashes.
+          await new Promise(() => {});
+        }
+        await delay(RECOVERY_RETRY_MS);
+        try {
+          return await factory();
+        } catch (error) {
+          lastError = error;
+          if (!isChunkLoadError(error)) throw error;
+        }
+      }
     }
 
     throw lastError;
