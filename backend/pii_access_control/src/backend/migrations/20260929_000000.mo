@@ -27,11 +27,11 @@ module {
   };
   type AuditRecord = {
     timestamp : Nat64;
+    requesting_principal : Principal;
     pii_id : Text;
     field_id : Text;
     operation : Text;
-    requesting_principal : Principal;
-    success : Bool;
+    allowed : Bool;
     purpose : Text;
   };
   type KeyMetadata = {
