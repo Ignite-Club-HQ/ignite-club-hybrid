@@ -1,75 +1,188 @@
-type Competition = record {
-  id : text;
-  club_id : text;
-  name : text;
-  season : text;
-  status : text;
-  revision : nat64;
-};
-type Match = record { id : text; competition_id : text; home_team : text; away_team : text; status : text; home_score : nat16; away_score : nat16; revision : nat64 };
-type Season = record { competition_id : text; name : text; status : text; revision : nat64 };
-type Init = record { governor : principal };
-type JoinToken = record {
-  id : text;
-  competition_id : text;
-  team_id : text;
-  issued_by : principal;
-  expires_at_ms : nat64;
-  used : bool;
-};
-type Result = variant { Ok : Competition; Err : text };
-type Result_1 = variant { Ok : JoinToken; Err : text };
-type Result_2 = variant { Ok : State; Err : text };
-type Result_3 = variant { Ok : TeamEntry; Err : text };
-type Result_4 = variant { Ok; Err : text };
-type Result_5 = variant { Ok : text; Err : text };
-type Result_6 = variant { Ok : Match; Err : text };
-type Result_7 = variant { Ok : Season; Err : text };
-type Result_8 = variant { Ok; Err : text };
-type Result_9 = variant { Ok : vec principal; Err : text };
-type Result_10 = variant { Ok : vec Competition; Err : text };
-type Result_11 = variant { Ok : vec TeamEntry; Err : text };
-type Result_12 = variant { Ok : vec Season; Err : text };
-type Result_13 = variant { Ok : vec Match; Err : text };
-type RoleGrant = record {
-  user : principal;
-  role : text;
-  competition_id : text;
-  team_id : opt text;
-};
-type State = record {
-  schema : nat32;
-  governor : principal;
-  roles : vec RoleGrant;
-  competitions : vec Competition;
-  entries : vec TeamEntry;
-  tokens : vec JoinToken;
-  seasons : vec Season;
-  matches : vec Match;
-};
-type TeamEntry = record {
-  competition_id : text;
-  team_id : text;
-  club_id : text;
-  status : text;
-};
+type TeamEntry = 
+ record {
+   club_id: text;
+   competition_id: text;
+   division_id: opt text;
+   status: text;
+   team_id: text;
+ };
+type State = 
+ record {
+   competitions: vec Competition;
+   entries: vec TeamEntry;
+   governor: principal;
+   matches: vec Match;
+   roles: vec RoleGrant;
+   schema: nat32;
+   seasons: vec Season;
+   tokens: vec JoinToken;
+ };
+type Season = 
+ record {
+   competition_id: text;
+   divisions: vec text;
+   name: text;
+   revision: nat64;
+   status: text;
+ };
+type RoleGrant = 
+ record {
+   competition_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Match = 
+ record {
+   arrival_minutes_before: opt nat16;
+   away_score: nat16;
+   away_team: text;
+   competition_id: text;
+   division_id: opt text;
+   duration_minutes: opt nat16;
+   home_score: nat16;
+   home_team: text;
+   id: text;
+   notes: opt text;
+   pitch_number: opt text;
+   revision: nat64;
+   round_number: opt nat16;
+   scheduled_at_ms: opt nat64;
+   status: text;
+   venue: opt text;
+ };
+type JoinToken = 
+ record {
+   competition_id: text;
+   expires_at_ms: nat64;
+   id: text;
+   issued_by: principal;
+   team_id: text;
+   used: bool;
+ };
+type Competition = 
+ record {
+   club_id: text;
+   id: text;
+   name: text;
+   revision: nat64;
+   season: text;
+   status: text;
+ };
 service : {
-  initialize : () -> (Result_4);
-  addBulkAccessPrincipal : (principal) -> (Result_8);
-  removeBulkAccessPrincipal : (principal) -> (Result_8);
-  listBulkAccessPrincipals : () -> (Result_9) query;
-  claim_join_token : (text) -> (Result_5);
-  create_season : (text, text) -> (Result_7);
-  create_competition : (text, text, text) -> (Result);
-  export_state : () -> (Result_2) query;
-  grant_role : (principal, text, text, opt text) -> (Result_4);
-  issue_join_token : (text, text, nat64) -> (Result_1);
-  register_team : (text, text, text) -> (Result_3);
-  record_match : (text, text, text) -> (Result_6);
-  set_match_result : (text, nat16, nat16, nat64) -> (Result_6);
-  set_season_status : (text, text, nat64) -> (Result_7);
-  list_competitions : (text) -> (Result_10) query;
-  list_entries : (text) -> (Result_11) query;
-  list_seasons : (text) -> (Result_12) query;
-  list_matches : (text) -> (Result_13) query;
-};
+  addBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  assign_division: (competition_id: text, team_id: text, division_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: TeamEntry;
+                 });
+  claim_join_token: (token_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: text;
+                                         });
+  create_competition: (club_id: text, name: text, season: text) ->
+   (variant {
+      Err: text;
+      Ok: Competition;
+    });
+  create_season: (competition_id: text, name: text) ->
+   (variant {
+      Err: text;
+      Ok: Season;
+    });
+  duplicate_season: (competition_id: text, source_name: text, new_name:
+   text) -> (variant {
+               Err: text;
+               Ok: Season;
+             });
+  export_state: () -> (variant {
+                         Err: text;
+                         Ok: State;
+                       }) query;
+  grant_role: ("principal": principal, role: text, competition_id: text,
+   team_id: opt text) -> (variant {
+                            Err: text;
+                            Ok;
+                          });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  issue_join_token: (competition_id: text, team_id: text, expires_at_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: JoinToken;
+              });
+  listBulkAccessPrincipals: () ->
+   (variant {
+      Err: text;
+      Ok: vec principal;
+    }) query;
+  list_competitions: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec Competition;
+    }) query;
+  list_competitions_multi: (club_ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec Competition;
+    }) query;
+  list_entries: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec TeamEntry;
+    }) query;
+  list_matches: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec Match;
+    }) query;
+  list_seasons: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec Season;
+    }) query;
+  record_match: (competition_id: text, home_team: text, away_team: text) ->
+   (variant {
+      Err: text;
+      Ok: Match;
+    });
+  register_team: (competition_id: text, team_id: text, club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: TeamEntry;
+    });
+  removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  set_match_result: (match_id: text, home_score: nat16, away_score: nat16,
+   expected_revision: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: Match;
+                                 });
+  set_season_divisions: (competition_id: text, name: text, divisions:
+   vec text) -> (variant {
+                   Err: text;
+                   Ok: Season;
+                 });
+  set_season_status: (competition_id: text, status: text, expected_revision:
+   nat64) -> (variant {
+                Err: text;
+                Ok: Season;
+              });
+  update_match_details: (match_id: text, home_team: text, away_team: 
+   text, division_id: opt text, scheduled_at_ms: opt nat64, venue: opt text,
+   pitch_number: opt text, round_number: opt nat16, duration_minutes:
+   opt nat16, arrival_minutes_before: opt nat16, notes: opt text,
+   expected_revision: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: Match;
+                                 });
+}
