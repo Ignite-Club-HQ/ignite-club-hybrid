@@ -228,27 +228,38 @@ export async function permanentlyDeleteVaultPhoto(
   itemId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<string> {
-  const { data: vaultFile } = await client
-    .from("vault_files")
-    .select("file_url")
-    .eq("id", itemId)
-    .maybeSingle();
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { data: vaultFile } = await client
+        .from("vault_files")
+        .select("file_url")
+        .eq("id", itemId)
+        .maybeSingle();
 
-  const photoIds: string[] = [];
-  if (vaultFile?.file_url) {
-    const { data: photoRecord } = await client
-      .from("photos")
-      .select("id")
-      .eq("image_url", vaultFile.file_url)
-      .maybeSingle();
-    if (photoRecord) photoIds.push(photoRecord.id);
-  }
+      const photoIds: string[] = [];
+      if (vaultFile?.file_url) {
+        const { data: photoRecord } = await client
+          .from("photos")
+          .select("id")
+          .eq("image_url", vaultFile.file_url)
+          .maybeSingle();
+        if (photoRecord) photoIds.push(photoRecord.id);
+      }
 
-  const response = await client.functions.invoke("permanent-delete-photos", {
-    body: { photoIds, fileIds: [itemId], deletionType: "permanent" },
+      const response = await client.functions.invoke("permanent-delete-photos", {
+        body: { photoIds, fileIds: [itemId], deletionType: "permanent" },
+      });
+      if (response.error) throw new Error(response.error.message);
+      return itemId;
+    },
+    icp: async (ctx) => {
+      // The canister hard-deletes the metadata row. The linked photos row and
+      // file bytes live in Supabase (the ICP blob store is not built yet), so
+      // byte cleanup stays with the storage layer — provisional.
+      await permanentlyDeleteLiveVaultFile(ctx, itemId);
+      return itemId;
+    },
   });
-  if (response.error) throw new Error(response.error.message);
-  return itemId;
 }
 
 export async function permanentlyDeleteVaultFile(
