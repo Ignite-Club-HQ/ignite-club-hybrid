@@ -2,8 +2,10 @@ import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
+import Int "mo:core/Int";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
 import Types "types";
 
 persistent actor {
@@ -27,6 +29,13 @@ persistent actor {
   };
 
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
+
+  func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
+
+  func validAttachment(attachment : Types.Attachment) : Bool {
+    valid(attachment.kind) and valid(attachment.ref_id) and
+    (switch (attachment.url) { case null { true }; case (?url) { url.size() <= 2048 } })
+  };
 
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
