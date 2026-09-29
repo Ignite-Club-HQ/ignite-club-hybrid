@@ -1,11 +1,11 @@
-type Unread =
+type Unread = 
  record {
    conversation_id: text;
    count: nat64;
    last_read_sequence: nat64;
    user: principal;
  };
-type State =
+type State = 
  record {
    conversations: vec Conversation;
    governor: principal;
@@ -15,27 +15,27 @@ type State =
    schema: nat32;
    unread: vec Unread;
  };
-type RoleGrant =
+type RoleGrant = 
  record {
    club_id: opt text;
    role: text;
    team_id: opt text;
    user: principal;
  };
-type Receipt =
+type Receipt = 
  record {
    conversation_id: text;
    message_id: text;
    read: bool;
    user: principal;
  };
-type MessagePage =
+type MessagePage = 
  record {
    latest_sequence: nat64;
    messages: vec Message;
    next_sequence: opt nat64;
  };
-type Message =
+type Message = 
  record {
    body: text;
    conversation_id: text;
@@ -44,7 +44,7 @@ type Message =
    sender: principal;
    sequence: nat64;
  };
-type Conversation =
+type Conversation = 
  record {
    club_id: text;
    id: text;
@@ -52,10 +52,23 @@ type Conversation =
    participants: vec principal;
    team_id: opt text;
  };
+type BroadcastResult = 
+ record {
+   delivered: nat32;
+   skipped: vec text;
+ };
 service : {
-  addBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
-  removeBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
-  listBulkAccessPrincipals: () -> (variant { Err: text; Ok: vec principal; }) query;
+  addBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  broadcast_announcement: (club_id: text, team_ids: vec text,
+   include_club_chat: bool, body: text, idempotency_key: text) ->
+   (variant {
+      Err: text;
+      Ok: BroadcastResult;
+    });
   create_conversation: (club_id: text, team_id: opt text, participants:
    vec principal) -> (variant {
                         Err: text;
@@ -78,6 +91,11 @@ service : {
                        Err: text;
                        Ok;
                      });
+  listBulkAccessPrincipals: () ->
+   (variant {
+      Err: text;
+      Ok: vec principal;
+    }) query;
   list_messages: (conversation_id: text, after: opt nat64) ->
    (vec Message) query;
   list_messages_page: (conversation_id: text, after: opt nat64, limit:
@@ -90,7 +108,12 @@ service : {
       Err: text;
       Ok: Receipt;
     });
-  send_message: (conversation_id: text, body: text, idempotency_key:
+  removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  send_message: (conversation_id: text, body: text, idempotency_key: 
    text) -> (variant {
                Err: text;
                Ok: Message;

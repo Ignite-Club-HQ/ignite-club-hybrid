@@ -46,6 +46,7 @@ type Event =
 type Duty = 
  record {
    account_id: text;
+   completed: bool;
    duty: text;
    event_id: text;
  };
@@ -57,19 +58,102 @@ type Attendance =
    present: bool;
  };
 service : {
-  initialize: () -> (variant { Err: text; Ok; });
-  addBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
-  removeBulkAccessPrincipal: ("principal": principal) -> (variant { Err: text; Ok; });
-  listBulkAccessPrincipals: () -> (variant { Err: text; Ok: vec principal; }) query;
-  add_lineup: (event_id: text, member: text, slot: text, team_id: opt text) -> (variant { Err: text; Ok: LineupEntry; });
-  create_event: (club_id: text, team_id: opt text, title: text, description: text, starts_at_ms: nat64, ends_at_ms: nat64) -> (variant { Err: text; Ok: Event; });
-  export_state: () -> (variant { Err: text; Ok: record { attendance: vec Attendance; duties: vec Duty; events: vec Event; governor: principal; lineups: vec LineupEntry; recurrences: vec Recurrence; roles: vec RoleGrant; roster: vec RosterEntry; rsvps: vec Rsvp; schema: nat32; }; }) query;
-  grant_role: ("principal": principal, role: text, club_id: text, team_id: opt text) -> (variant { Err: text; Ok; });
+  addBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  add_lineup: (event_id: text, member: text, slot: text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: LineupEntry;
+                 });
+  complete_duty: (event_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok: Duty;
+    });
+  create_event: (club_id: text, team_id: opt text, title: text, description:
+   text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Event;
+    });
+  export_state: () ->
+   (variant {
+      Err: text;
+      Ok:
+       record {
+         attendance: vec Attendance;
+         duties: vec Duty;
+         events: vec Event;
+         governor: principal;
+         lineups: vec LineupEntry;
+         recurrences: vec Recurrence;
+         roles: vec RoleGrant;
+         roster: vec RosterEntry;
+         rsvps: vec Rsvp;
+         schema: nat32;
+       };
+    }) query;
+  grant_role: ("principal": principal, role: text, club_id: text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  listBulkAccessPrincipals: () ->
+   (variant {
+      Err: text;
+      Ok: vec principal;
+    }) query;
   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
-  set_attendance: (event_id: text, account_id: text, present: bool, note: text) -> (variant { Err: text; Ok: Attendance; });
-  set_duty: (event_id: text, account_id: text, duty: text) -> (variant { Err: text; Ok: Duty; });
-  set_recurrence: (event_id: text, frequency: text, until_ms: nat64) -> (variant { Err: text; Ok: Recurrence; });
-  set_roster: (event_id: text, account_id: text, child_id: opt text) -> (variant { Err: text; Ok: RosterEntry; });
-  set_rsvp: (event_id: text, account_id: text, state: text) -> (variant { Err: text; Ok: Rsvp; });
-  update_event: (id: text, title: text, description: text, starts_at_ms: nat64, ends_at_ms: nat64) -> (variant { Err: text; Ok: Event; });
+  removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  remove_duty: (event_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  set_attendance: (event_id: text, account_id: text, present: bool, note:
+   text) -> (variant {
+               Err: text;
+               Ok: Attendance;
+             });
+  set_duty: (event_id: text, account_id: text, duty: text) ->
+   (variant {
+      Err: text;
+      Ok: Duty;
+    });
+  set_recurrence: (event_id: text, frequency: text, until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Recurrence;
+    });
+  set_roster: (event_id: text, account_id: text, child_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: RosterEntry;
+    });
+  set_rsvp: (event_id: text, account_id: text, state: text) ->
+   (variant {
+      Err: text;
+      Ok: Rsvp;
+    });
+  uncomplete_duty: (event_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok: Duty;
+    });
+  update_event: (id: text, title: text, description: text, starts_at_ms:
+   nat64, ends_at_ms: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: Event;
+                                 });
 }
