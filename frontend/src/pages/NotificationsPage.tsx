@@ -39,6 +39,7 @@ import {
 } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   clearLiveInbox,
   deleteLiveNotification,
@@ -299,6 +300,9 @@ export default function NotificationsPage() {
     // updated elsewhere never renders a stale read/unread split — `true` is a
     // no-op while staleTime is unmet, which made the page disagree with the bell.
     refetchOnMount: "always",
+    // ICP-routed notifications have no realtime channel (see the effect
+    // below) — poll the canister inbox via query calls instead.
+    refetchInterval: isFeatureRoutedToIcp("notifications") ? 30000 : false,
   });
 
   // Split into unread (newest first) and earlier/read (newest first) BEFORE
@@ -349,9 +353,11 @@ export default function NotificationsPage() {
     setDisplayCount(prev => prev + NOTIFICATIONS_PER_PAGE);
   }, []);
 
-  // Real-time subscription for new notifications - direct cache updates
+  // Real-time subscription for new notifications - direct cache updates.
+  // Skipped when notifications are routed to ICP: canisters are
+  // request/response, so the list query above polls instead.
   useEffect(() => {
-    if (!user || useIcpLab) return;
+    if (!user || useIcpLab || isFeatureRoutedToIcp("notifications")) return;
 
     // Channel name is scoped to the user id AND to this page. `useAuth` runs
     // its own global `notifications-realtime` subscription for unread-count

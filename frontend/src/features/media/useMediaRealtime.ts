@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { mediaKeys } from "./mediaQueryKeys";
 
 type MediaChangePayload = {
@@ -14,9 +15,12 @@ export function useMediaRealtime(userId: string | undefined, photoIds: readonly 
   const queryClient = useQueryClient();
   const photoIdsSignature = photoIds.join(",");
   const visiblePhotoIds = useMemo(() => new Set(photoIds), [photoIdsSignature]);
+  // ICP-routed media has no realtime channel (canisters are
+  // request/response) — skip Supabase subscriptions and poll instead.
+  const mediaOnIcp = isFeatureRoutedToIcp("media");
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || mediaOnIcp) return;
     const channel = supabase
       .channel(`media-feed-${userId}`)
       .on(
