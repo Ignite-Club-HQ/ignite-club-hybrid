@@ -1,15 +1,20 @@
 type status = variant { Pending; Processing; Delivered; Failed };
-type notification = record { id : text; user : text; club : text; kind : text; body : text; idempotency_key : text; status : status; attempts : nat32; next_attempt_ms : nat64 };
+type notification = record { id : text; user : text; club : text; kind : text; body : text; idempotency_key : text; status : status; attempts : nat32; next_attempt_ms : nat64; read : bool; related_id : opt text; created_at_ms : nat64 };
 type result = variant { Ok : notification; Err : text };
 type results = variant { Ok : vec notification; Err : text };
 type result_nat16 = variant { Ok : nat16; Err : text };
 service : {
   acknowledge : (text, text) -> (result);
   claim : (nat64, nat16) -> (results);
+  clear_inbox : (text, opt text) -> (result_nat16);
+  delete_notification : (text) -> (variant { Ok; Err : text });
   enqueue : (text, text, text, text, text, text) -> (result);
   fail : (text, text, opt nat64) -> (result);
   get_notification : (text) -> (opt notification) query;
   grant_worker : (principal) -> (variant { Ok; Err : text });
   initialize : () -> (variant { Ok; Err : text });
+  list_inbox : (text, opt text, nat16) -> (results) query;
+  mark_all_read : (text, opt text) -> (result_nat16);
+  mark_read : (text) -> (result);
   recover : () -> (result_nat16);
 };
