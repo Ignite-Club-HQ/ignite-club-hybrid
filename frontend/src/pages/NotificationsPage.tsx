@@ -416,11 +416,18 @@ export default function NotificationsPage() {
     mutationFn: async (id: string) => {
       if (useIcpLab) return id;
 
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notifications")
+            .update({ is_read: true })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await markLiveNotificationRead(ctx, id);
+        },
+      });
       return id;
     },
     onMutate: async (id) => {
