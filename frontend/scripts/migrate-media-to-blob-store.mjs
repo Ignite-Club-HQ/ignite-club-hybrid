@@ -33,9 +33,9 @@ import {
   chunkCountFor,
   sha256Hex,
   storagePathFromPublicUrl,
-} from "../frontend/src/live/blobStoreProtocol.ts";
-import { idlFactory as blobStoreIdl } from "../frontend/src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js";
-import { idlFactory as mediaMetadataIdl } from "../frontend/src/lab/bindings/media_metadata/declarations/media_metadata.did.js";
+} from "../src/live/blobStoreProtocol.ts";
+import { idlFactory as blobStoreIdl } from "../src/lab/bindings/media_blob_store/declarations/media_blob_store.did.js";
+import { idlFactory as mediaMetadataIdl } from "../src/lab/bindings/media_metadata/declarations/media_metadata.did.js";
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
