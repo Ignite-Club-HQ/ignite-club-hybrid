@@ -1034,9 +1034,18 @@ export default function GroupChatPage() {
         },
         icp: async (ctx) => {
           // Provisional mapping: group id doubles as the conversation id (same
-          // convention as the read path); image attachments and reply threading
-          // have no canister shape yet and are dropped on the ICP branch.
-          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`);
+          // convention as the read path). Attachments map onto the canister's
+          // typed attachment; reply threading stays Supabase-only.
+          const attachment = image_url
+            ? { kind: "image", refId: image_url, url: image_url }
+            : (() => {
+                const poll = /\[poll:([^\]]+)\]/.exec(text);
+                if (poll) return { kind: "poll", refId: poll[1], url: null };
+                const news = /\[news:([^\]]+)\]/.exec(text);
+                if (news) return { kind: "news", refId: news[1], url: null };
+                return null;
+              })();
+          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment);
         },
       });
       return deliveredSend();

@@ -58,8 +58,11 @@ describe("single event -> recurring series conversion is atomic", () => {
     expect(workflowConversion).toContain("occurrence_count");
   });
 
-  it("stays Supabase-only for series expansion (no canister shape)", () => {
-    expect(workflow).toContain("stays Supabase: no canister shape for recurring series expansion");
-    expect(workflowConversion).not.toContain("withFeatureBackend");
+  it("routes series expansion through the feature backend", () => {
+    // The events_domain canister now owns series expansion (create_series);
+    // the workflow picks the branch at runtime instead of falling back to
+    // Supabase unconditionally.
+    expect(workflowConversion).toContain("withFeatureBackend");
+    expect(workflowConversion).toContain("createLiveEventSeries");
   });
 });

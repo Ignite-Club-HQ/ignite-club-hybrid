@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { addLiveEventLineup } from "@/live/features/events";
+import { getLiveLineupSnapshot, saveLiveLineupSnapshot } from "@/live/features/events";
 import type { Player, TeamSize, PitchBoardState } from "./types";
 import { PITCH_STATE_KEY, getPitchStateKey } from "./types";
 import { loadTimerStateForMinutes } from "./pitchStateUtils";
@@ -78,6 +78,47 @@ export async function fetchEventLineup(
   teamId: string
 ): Promise<EventLineupRecord | null> {
   if (!eventId || !isRealTeamId(teamId)) return null;
+
+  // Hybrid routing: read the canister lineup snapshot when events are ICP-
+  // routed. Provisional mapping (inverse of saveEventLineup): formation is
+  // parsed back to its index, slot back to the pitch position label; verify
+  // against the deployed canister post-deploy.
+  const icpRecord = await withFeatureBackend("events", {
+    supabase: () => null as EventLineupRecord | null,
+    icp: async (ctx): Promise<EventLineupRecord | null> => {
+      try {
+        const raw = await getLiveLineupSnapshot(ctx, eventId, teamId);
+        const snap = Array.isArray(raw) ? raw[0] : raw;
+        if (!snap || !Array.isArray(snap.players) || snap.players.length === 0) return null;
+        const snapshot: EventLineupSnapshot = {
+          players: snap.players.map((p) => ({
+            id: p.member,
+            name: "",
+            minutesPlayed: 0,
+            isInjured: false,
+            currentPitchPosition: p.bench ? undefined : p.slot,
+            position: p.x[0] !== undefined && p.y[0] !== undefined
+              ? { x: p.x[0], y: p.y[0] }
+              : undefined,
+            number: p.number[0] !== undefined ? p.number[0] : undefined,
+          })) as unknown as Player[],
+          teamSize: Number(snap.team_size) as TeamSize,
+          selectedFormation: Number(snap.formation[0] ?? 0),
+          ballPosition: snap.ball_x[0] !== undefined && snap.ball_y[0] !== undefined
+            ? { x: snap.ball_x[0], y: snap.ball_y[0] }
+            : undefined,
+          savedAt: Date.now(),
+          version: 1,
+        };
+        return { snapshot, updatedAt: Date.now() };
+      } catch (e) {
+        console.warn("[EventLineup] ICP fetch failed", e);
+        return null;
+      }
+    },
+  });
+  if (icpRecord) return icpRecord;
+
   try {
     const { data, error } = await supabase
       .from("event_lineups")
@@ -110,18 +151,29 @@ export async function saveEventLineup(args: {
   if (!eventId || !isRealTeamId(teamId)) return false;
   if (!snapshot.players.length) return false;
 
-  // Hybrid routing: the events_domain canister only exposes `add_lineup`
-  // (one member + slot at a time), not a full-board snapshot. When routed
-  // to ICP we best-effort mirror each on-pitch player's slot; formation
-  // index, ball position and bench players have no canister shape and are
-  // NOT persisted on this branch — provisional mapping, verify post-deploy.
+  // Hybrid routing: the events_domain canister stores a full-board lineup
+  // snapshot (formation, ball position, bench, coordinates) per
+  // (event, team). Provisional mapping: formation is stored as its index
+  // string, slot as the pitch position label; verify against the deployed
+  // canister post-deploy.
   const savedToIcp = await withFeatureBackend("events", {
     supabase: () => false,
     icp: async (ctx) => {
-      const onPitch = snapshot.players.filter((p) => p.currentPitchPosition);
-      for (const player of onPitch) {
-        await addLiveEventLineup(ctx, eventId, player.id, String(player.currentPitchPosition), teamId);
-      }
+      await saveLiveLineupSnapshot(ctx, eventId, {
+        teamId,
+        formation: String(snapshot.selectedFormation),
+        teamSize: Number(snapshot.teamSize),
+        ballX: snapshot.ballPosition?.x ?? null,
+        ballY: snapshot.ballPosition?.y ?? null,
+        players: snapshot.players.map((p) => ({
+          member: p.id,
+          slot: p.currentPitchPosition ? String(p.currentPitchPosition) : "bench",
+          number: p.number ?? null,
+          x: p.position?.x ?? null,
+          y: p.position?.y ?? null,
+          bench: !p.currentPitchPosition,
+        })),
+      });
       return true;
     },
   });

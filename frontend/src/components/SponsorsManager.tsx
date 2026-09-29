@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { compressImage } from "@/lib/imageCompression";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
+import { deleteLiveSponsor, listLiveSponsors, saveLiveSponsor, type LiveClubSponsor } from "@/live/features/club";
 
 interface Sponsor {
   id: string;
@@ -166,9 +166,13 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
             id: crypto.randomUUID(),
             club_id: clubId,
             name: sponsorData.name,
+            description: sponsorData.description ? [sponsorData.description] : [],
             website_url: sponsorData.website_url ? [sponsorData.website_url] : [],
             logo_url: sponsorData.logo_url ? [sponsorData.logo_url] : [],
             is_active: sponsorData.is_active,
+            is_team_only: sponsorData.is_team_only,
+            exposure_percentage:
+              sponsorData.exposure_percentage != null ? [sponsorData.exposure_percentage] : [],
             tier: sponsorData.tier ?? "none",
             sort_order: existing.length,
           };
@@ -226,9 +230,13 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
             ? {
                 ...current,
                 name: data.name,
+                description: data.description ? [data.description] : [],
                 website_url: data.website_url ? [data.website_url] : [],
                 logo_url: data.logo_url ? [data.logo_url] : [],
                 is_active: data.is_active,
+                is_team_only: data.is_team_only,
+                exposure_percentage:
+                  data.exposure_percentage != null ? [data.exposure_percentage] : [],
                 tier: data.tier ?? "none",
               }
             : {
@@ -236,9 +244,13 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
                 id,
                 club_id: clubId,
                 name: data.name,
+                description: data.description ? [data.description] : [],
                 website_url: data.website_url ? [data.website_url] : [],
                 logo_url: data.logo_url ? [data.logo_url] : [],
                 is_active: data.is_active,
+                is_team_only: data.is_team_only,
+                exposure_percentage:
+                  data.exposure_percentage != null ? [data.exposure_percentage] : [],
                 tier: data.tier ?? "none",
                 sort_order: existing.length,
               };
@@ -256,16 +268,18 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     },
   });
 
-  // Hard delete stays Supabase: no canister shape (club_domain sponsors are
-  // deactivated via is_active, not removed).
   const deleteSponsorMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("sponsors")
-        .delete()
-        .eq("id", id);
-      
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("sponsors")
+            .delete()
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: (ctx) => deleteLiveSponsor(ctx, id),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });

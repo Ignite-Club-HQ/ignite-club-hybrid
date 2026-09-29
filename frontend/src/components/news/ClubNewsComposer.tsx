@@ -17,6 +17,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveNewsPost } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { useClubTeamsForNews, useNewsPublishableClubs } from "@/features/news/useClubNews";
@@ -213,22 +215,50 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       }
 
 
-      const { data, error } = await supabase
-        .from("club_news")
-        .insert({
-          club_id: effectiveClubId,
-          title: title.trim().slice(0, TITLE_MAX),
-          content: content.trim(),
-          image_url: imageUrl,
-          author_id: user?.id ?? null,
-          target_team_ids: audience === "teams" ? teamIds : null,
-          is_important: important,
-          attachments: attachments as unknown as never,
-        })
-        .select("id")
+      // Capture the routing decision so post-publish Supabase-only steps can
+      // be skipped when the post went to the canister.
+      let isIcpBackend = false;
+      const data = await withFeatureBackend("news", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_news")
+            .insert({
+              club_id: effectiveClubId,
+              title: title.trim().slice(0, TITLE_MAX),
+              content: content.trim(),
+              image_url: imageUrl,
+              author_id: user?.id ?? null,
+              target_team_ids: audience === "teams" ? teamIds : null,
+              is_important: important,
+              attachments: attachments as unknown as never,
+            })
+            .select("id")
 
-        .single();
-      if (error) throw error;
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          isIcpBackend = true;
+          // Provisional mapping: the canister news post carries
+          // title/body/status only — image, team targeting, importance and
+          // attachments are dropped on this branch; push notifications and
+          // the chat share below stay Supabase-only. Verify post-deploy.
+          const post = await createLiveNewsPost(
+            ctx,
+            effectiveClubId,
+            title.trim().slice(0, TITLE_MAX),
+            content.trim(),
+            "published",
+          );
+          return { id: post.id };
+        },
+      });
+
+      // Notification fan-out and the chat share are Supabase-only (the
+      // notification canister handles ICP fan-out separately); skip them when
+      // the post went to the canister to avoid Supabase RPCs on canister ids.
+      if (isIcpBackend) return data.id;
 
       const { error: notifyErr } = await supabase.rpc("notify_club_news", {
         _news_id: data.id,

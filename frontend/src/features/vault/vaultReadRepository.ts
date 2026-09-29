@@ -24,6 +24,7 @@ function mapLiveVaultFolder(folder: any): VaultFolderRow {
     name: folder.name,
     club_id: folder.club,
     team_id: folder.team[0] ?? null,
+    mini_league_id: folder.mini_league_id?.[0] ?? null,
     parent_id: folder.parent_id[0] ?? null,
     restricted_roles: folder.restricted_roles ?? [],
     created_at: new Date(Number(folder.created_at_ms)).toISOString(),
@@ -40,7 +41,7 @@ function mapLiveVaultFile(file: any): VaultFileRow {
     folder_id: file.folder_id || null,
     club_id: file.club,
     team_id: file.team[0] ?? null,
-    mini_league_id: null,
+    mini_league_id: file.mini_league_id?.[0] ?? null,
     name: file.name,
     file_url: file.file_url,
     file_size: Number(file.size),
@@ -51,6 +52,9 @@ function mapLiveVaultFile(file: any): VaultFileRow {
       file.deleted_at_ms[0] !== undefined
         ? new Date(Number(file.deleted_at_ms[0])).toISOString()
         : null,
+    deleted_by: file.deleted_by?.[0]
+      ? (file.deleted_by[0]?.toText?.() ?? String(file.deleted_by[0]))
+      : null,
     is_external_link: file.is_external_link,
   } as unknown as VaultFileRow;
 }
@@ -258,10 +262,9 @@ export async function fetchVaultItems(
       const { data } = await query.order("created_at", { ascending: false });
       return data ?? [];
     },
-    // Provisional: mini-league scoping has no canister shape — returns empty
-    // under ICP; verify folder semantics against vault_domain.
+    // Provisional: mini-league views resolve through the canister's
+    // mini_league_id scope; verify against the deployed canister post-deploy.
     icp: async (ctx) => {
-      if (view.type === "mini-league") return [];
       if (view.type === "club") {
         if (!options.isClubAdmin && !options.isCoachOrTeamAdmin) return [];
         if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
@@ -272,6 +275,7 @@ export async function fetchVaultItems(
             ctx,
             view.clubId,
             view.type === "team" ? view.teamId : null,
+            view.type === "mini-league" ? view.miniLeagueId : null,
           );
       const rows = (files as any[]).map(mapLiveVaultFile);
       return scope.folderId ? rows : rows.filter((row) => !row.folder_id);

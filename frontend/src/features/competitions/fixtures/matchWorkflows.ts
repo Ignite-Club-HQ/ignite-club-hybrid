@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLiveMatch, setLiveMatchResult } from "@/live/features/competitions";
+import { recordLiveMatch, setLiveMatchResult, updateLiveMatchDetails } from "@/live/features/competitions";
 
 export interface MatchMutationError {
   message: string;
@@ -134,12 +134,28 @@ export async function updateCompetitionMatch(
           return { error: { message: e instanceof Error ? e.message : String(e) } };
         }
       }
-      // stays Supabase: no canister shape for non-score match detail edits
-      const { error } = await supabase
-        .from("competition_matches")
-        .update(payload as never)
-        .eq("id", matchId);
-      return { error };
+      // Non-score detail edits (teams, schedule, venue, division, notes) go
+      // to update_match_details. Provisional: the Supabase payload does not
+      // carry a canister revision, so 0 is passed — confirm the canister's
+      // revision-check semantics against the deployed canister post-deploy.
+      try {
+        await updateLiveMatchDetails(ctx, matchId, {
+          homeTeamId: String(payload.home_team_id ?? ""),
+          awayTeamId: String(payload.away_team_id ?? ""),
+          divisionId: (payload.division_id as string | null) ?? null,
+          scheduledAtMs: payload.scheduled_at ? new Date(payload.scheduled_at as string).getTime() : null,
+          venue: (payload.venue as string | null) ?? null,
+          pitchNumber: (payload.pitch_number as string | null) ?? null,
+          roundNumber: typeof payload.round_number === "number" ? payload.round_number : null,
+          durationMinutes: typeof payload.duration_minutes === "number" ? payload.duration_minutes : null,
+          arrivalMinutesBefore: typeof payload.arrival_minutes_before === "number" ? payload.arrival_minutes_before : null,
+          notes: (payload.notes as string | null) ?? null,
+          expectedRevision: 0,
+        });
+        return { error: null };
+      } catch (e) {
+        return { error: { message: e instanceof Error ? e.message : String(e) } };
+      }
     },
   });
 }
