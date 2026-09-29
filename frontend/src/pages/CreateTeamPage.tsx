@@ -18,6 +18,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { saveLiveMembershipTeam } from "@/live/features/membership";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
 import { LevelAgeCombobox } from "@/components/LevelAgeCombobox";
@@ -284,8 +286,14 @@ export default function CreateTeamPage() {
       return;
     }
 
-    // Create the team (without logo - will update after upload)
-    const { data: team, error: teamError } = await supabase
+    // Create the team (without logo - will update after upload).
+    // Routes to club_domain's save_team when placement settings resolve ICP
+    // for membership; provisional mapping (canister ClubTeam has only
+    // id/name/division/gender/is_active/club_id/age_group — description,
+    // logo, folder, team_type, class and RSVP-audience fields stay
+    // Supabase-only; verify against the deployed canister).
+    const { data: team, error: teamError } = await withFeatureBackend("membership", {
+      supabase: () => supabase
       .from("teams")
       .insert({
         name: name.trim(),
