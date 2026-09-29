@@ -7,6 +7,7 @@ import {
   reserveVaultStorage,
   settleVaultStorage,
 } from "@/lib/vaultUpload";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import type { VaultFolderView } from "./types";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -76,6 +77,12 @@ export interface VaultUploadDependencies {
   settleStorage: typeof settleVaultStorage;
   compensateUpload: typeof compensateVaultUpload;
   buildStorageUrl: typeof buildVaultStorageUrl;
+  /**
+   * Optional on-chain upload path (ICP media_blob_store). Returns null when
+   * no blob store is configured or there is no Internet Identity session —
+   * the Supabase storage upload then runs unchanged.
+   */
+  tryBlobUpload?: typeof tryUploadMediaToBlobStore;
 }
 
 const defaultUploadDependencies: VaultUploadDependencies = {
@@ -83,6 +90,7 @@ const defaultUploadDependencies: VaultUploadDependencies = {
   settleStorage: settleVaultStorage,
   compensateUpload: compensateVaultUpload,
   buildStorageUrl: buildVaultStorageUrl,
+  tryBlobUpload: tryUploadMediaToBlobStore,
 };
 
 export async function uploadVaultItem(
@@ -105,17 +113,31 @@ export async function uploadVaultItem(
   const clubId = "clubId" in options.view ? options.view.clubId ?? null : null;
   const reservationId = await dependencies.reserveStorage(clubId, options.file.size);
 
-  const { error: uploadError } = await client.storage
-    .from("photos")
-    .upload(storagePath, options.file, { cacheControl: "31536000" });
-  if (uploadError) {
-    await dependencies.settleStorage(reservationId, false);
-    throw uploadError;
+  // ICP blob store (future on-chain media): bytes go on-chain when a
+  // media_blob_store canister is configured and the member is signed in with
+  // Internet Identity; otherwise Supabase storage, unchanged.
+  const blobUpload = dependencies.tryBlobUpload
+    ? await dependencies.tryBlobUpload({
+        storagePath,
+        file: options.file,
+        mime: options.file.type || "application/octet-stream",
+      })
+    : null;
+
+  if (!blobUpload) {
+    const { error: uploadError } = await client.storage
+      .from("photos")
+      .upload(storagePath, options.file, { cacheControl: "31536000" });
+    if (uploadError) {
+      await dependencies.settleStorage(reservationId, false);
+      throw uploadError;
+    }
   }
 
   const insert: VaultFileInsert = {
-    file_url: dependencies.buildStorageUrl(storagePath),
-    storage_bucket: "photos",
+    file_url: blobUpload ? blobUpload.url : dependencies.buildStorageUrl(storagePath),
+    // On-chain bytes do not live in the Supabase bucket.
+    storage_bucket: blobUpload ? null : "photos",
     storage_path: storagePath,
     uploaded_by: options.userId,
     name: options.name,
