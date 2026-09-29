@@ -9,6 +9,7 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const Result_8 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const Result_5 = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
   const Competition = IDL.Record({
     'id' : IDL.Text,
@@ -69,10 +70,25 @@ export const idlFactory = ({ IDL }) => {
   const Result_2 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
   const Result_4 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
   const Result_1 = IDL.Variant({ 'Ok' : JoinToken, 'Err' : IDL.Text });
+  const Result_9 = IDL.Variant({
+    'Ok' : IDL.Vec(IDL.Principal),
+    'Err' : IDL.Text,
+  });
+  const Result_10 = IDL.Variant({
+    'Ok' : IDL.Vec(Competition),
+    'Err' : IDL.Text,
+  });
+  const Result_11 = IDL.Variant({
+    'Ok' : IDL.Vec(TeamEntry),
+    'Err' : IDL.Text,
+  });
+  const Result_13 = IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text });
+  const Result_12 = IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text });
   const Result_6 = IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text });
   const Result_3 = IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text });
   
   return IDL.Service({
+    'addBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_8], []),
     'claim_join_token' : IDL.Func([IDL.Text], [Result_5], []),
     'create_competition' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
@@ -92,8 +108,14 @@ export const idlFactory = ({ IDL }) => {
         [Result_1],
         [],
       ),
+    'listBulkAccessPrincipals' : IDL.Func([], [Result_9], ['query']),
+    'list_competitions' : IDL.Func([IDL.Text], [Result_10], ['query']),
+    'list_entries' : IDL.Func([IDL.Text], [Result_11], ['query']),
+    'list_matches' : IDL.Func([IDL.Text], [Result_13], ['query']),
+    'list_seasons' : IDL.Func([IDL.Text], [Result_12], ['query']),
     'record_match' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [Result_6], []),
     'register_team' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [Result_3], []),
+    'removeBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_8], []),
     'set_match_result' : IDL.Func(
         [IDL.Text, IDL.Nat16, IDL.Nat16, IDL.Nat64],
         [Result_6],
