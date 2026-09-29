@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveMatchResult } from "@/live/features/competitions";
 
 export interface MatchMutationError {
   message: string;
@@ -109,11 +111,37 @@ export async function updateCompetitionMatch(
   matchId: string,
   payload: Record<string, unknown>,
 ): Promise<MatchMutationResult> {
-  const { error } = await supabase
-    .from("competition_matches")
-    .update(payload as never)
-    .eq("id", matchId);
-  return { error };
+  return withFeatureBackend("competitions", {
+    supabase: async () => {
+      const { error } = await supabase
+        .from("competition_matches")
+        .update(payload as never)
+        .eq("id", matchId);
+      return { error };
+    },
+    icp: async (ctx) => {
+      // Only the score-update shape (home_score/away_score) has a canister
+      // counterpart (`set_match_result`); schedule/venue/notes edits have no
+      // canister shape and fall back to Supabase. Provisional — verify
+      // field mapping post-deploy.
+      const homeScore = payload.home_score;
+      const awayScore = payload.away_score;
+      if (typeof homeScore === "number" && typeof awayScore === "number") {
+        try {
+          await setLiveMatchResult(ctx, matchId, homeScore, awayScore, Date.now());
+          return { error: null };
+        } catch (e) {
+          return { error: { message: e instanceof Error ? e.message : String(e) } };
+        }
+      }
+      // stays Supabase: no canister shape for non-score match detail edits
+      const { error } = await supabase
+        .from("competition_matches")
+        .update(payload as never)
+        .eq("id", matchId);
+      return { error };
+    },
+  });
 }
 
 export async function deleteCompetitionMatch(
