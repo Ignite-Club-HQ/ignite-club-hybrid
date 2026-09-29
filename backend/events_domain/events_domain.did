@@ -111,6 +111,7 @@ service : {
       Ok: vec principal;
     }) query;
   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+  my_rsvps: () -> (vec Rsvp) query;
   removeBulkAccessPrincipal: ("principal": principal) ->
    (variant {
       Err: text;

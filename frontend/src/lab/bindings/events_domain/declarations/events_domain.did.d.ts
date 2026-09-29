@@ -112,6 +112,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |

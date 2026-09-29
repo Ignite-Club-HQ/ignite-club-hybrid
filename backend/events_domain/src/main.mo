@@ -37,17 +37,17 @@ persistent actor {
     };
     isGovernor(caller) or hasRole(caller, "club_admin", event.club_id, null) or teamAllowed
   };
+  // Any role grant scoped to the club counts as membership for read
+  // visibility (players, parents, coaches, admins). Mirrors the Supabase RLS
+  // member-visibility rule so member-facing reads (home feed, schedule) work
+  // for regular members, not just admins/coaches.
+  func isClubMember(caller : Principal, club : Text) : Bool {
+    roles.any(func(grant) = grant.user.equal(caller) and grant.club_id == club)
+  };
   func canView(caller : Principal, event : Types.Event) : Bool {
     if (caller.equal(Principal.anonymous())) return false;
     if (isGovernor(caller) or event.creator.equal(caller)) return true;
-    switch (event.team_id) {
-      case (?team) {
-        hasRole(caller, "team_admin", event.club_id, ?team)
-          or hasRole(caller, "coach", event.club_id, ?team)
-          or hasRole(caller, "club_admin", event.club_id, null)
-      };
-      case null { hasRole(caller, "club_admin", event.club_id, null) };
-    }
+    isClubMember(caller, event.club_id)
   };
   func replaceEvent(index : Nat, value : Types.Event) { events := Array.tabulate<Types.Event>(events.size(), func(position) { if (position == index) value else events[position] }) };
   func requireManage(caller : Principal, id : Text) : { #Ok : Types.Event; #Err : Text } {
@@ -195,6 +195,16 @@ persistent actor {
   public query ({ caller }) func listBulkAccessPrincipals() : async { #Ok : [Principal]; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     #Ok(bulkAccessPrincipals)
+  };
+
+  // Caller-scoped RSVP read for member-facing surfaces (home feed). Returns
+  // only the caller's own RSVPs; the full export stays governor/bulk-access
+  // gated below. PROVISIONAL: account_id is matched against the caller's
+  // principal text until account ids are bound to principals post-deploy.
+  public query ({ caller }) func my_rsvps() : async [Types.Rsvp] {
+    auth(caller);
+    let accountId = Principal.toText(caller);
+    rsvps.filter(func(item) = item.account_id == accountId)
   };
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence] }; #Err : Text } {
