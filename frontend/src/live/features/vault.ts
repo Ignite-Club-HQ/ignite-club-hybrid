@@ -217,3 +217,37 @@ export async function restoreLiveVaultFile(ctx: FeatureBackendContext, fileId: s
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.restore_file(fileId), "Restore vault file");
 }
+
+export async function renameLiveVaultFile(
+  ctx: FeatureBackendContext,
+  fileId: string,
+  name: string,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.rename_file(fileId, name), "Rename vault file");
+}
+
+/**
+ * Moves a file into another folder of the same club (canister adopts the
+ * folder's team scope). Pass "" to move to the vault root — the canister has
+ * no null folder id, so root is the empty string; team scope then stays as
+ * it was. Provisional until the vault scope model is verified post-deploy.
+ */
+export async function moveLiveVaultFile(
+  ctx: FeatureBackendContext,
+  fileId: string,
+  folderId: string,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.move_file(fileId, folderId), "Move vault file");
+}
+
+/**
+ * Hard delete of the metadata row. File bytes live outside the canister
+ * (Supabase storage today, the blob store later), so byte cleanup stays
+ * with the storage layer.
+ */
+export async function permanentlyDeleteLiveVaultFile(ctx: FeatureBackendContext, fileId: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_file_permanent(fileId), "Permanently delete vault file");
+}

@@ -113,6 +113,40 @@ export async function setLiveEventDuty(
   return unwrapCandid(actor.set_duty(eventId, accountId, duty), "Set duty");
 }
 
+/**
+ * Duty completion surface. The canister keys duties by (event, account), so
+ * these only cover assigned duties — open duties with no assignee have no
+ * canister shape and stay Supabase-only. Provisional: the account id is
+ * browser-supplied until account ids are bound to principals
+ * (identity_access).
+ */
+export async function completeLiveEventDuty(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.complete_duty(eventId, accountId), "Complete duty");
+}
+
+export async function uncompleteLiveEventDuty(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.uncomplete_duty(eventId, accountId), "Reopen duty");
+}
+
+export async function removeLiveEventDuty(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_duty(eventId, accountId), "Remove duty");
+}
+
 export async function addLiveEventLineup(
   ctx: FeatureBackendContext,
   eventId: string,
