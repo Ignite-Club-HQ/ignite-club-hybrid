@@ -16,6 +16,7 @@ import { suppressChatScope } from "@/lib/pushTapSuppression";
 import { mark as coldMark } from "@/lib/coldStartMarks";
 import { requestClubSwitchForNotification } from "@/lib/notificationClubSwitch";
 import { useNotificationClubSwitch } from "@/hooks/useNotificationClubSwitch";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 
 const APP_STORE_URL = "https://reference.invalid";
@@ -194,6 +195,9 @@ export function PushNotificationManager() {
   // show the update prompt on app open whenever an unread system_update exists.
   useEffect(() => {
     if (!user?.id || !isNativePlatform()) return;
+    // ICP sessions have a principal as user.id — the Supabase notifications
+    // table is keyed on Supabase auth UUIDs, so this check would only error.
+    if (resolveAuthBackend() === "icp") return;
 
     let cancelled = false;
     let removeAppStateListener: (() => void) | undefined;

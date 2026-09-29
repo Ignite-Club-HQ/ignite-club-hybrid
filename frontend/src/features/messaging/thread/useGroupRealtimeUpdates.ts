@@ -11,6 +11,7 @@ import { findLocalReplyMessage } from "@/lib/chatRealtimeReply";
 import { findSupersededOptimisticIndex } from "@/lib/failedSendRestore";
 import { fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import type { GroupChatSupabaseClient, GroupMessage, MessageReaction } from "@/features/messaging/thread/groupChatData";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface UseGroupRealtimeUpdatesOptions {
   groupId?: string;
@@ -39,17 +40,25 @@ export const useGroupRealtimeUpdates = ({
   applyGroupReactionDelete,
   supabaseClient,
 }: UseGroupRealtimeUpdatesOptions) => {
+  // Hybrid routing: the lab flag or a live ICP routing both mean the
+  // canister is the source of truth — the canister has no live updates, so
+  // polling is mandatory (previously chat silently stopped updating when
+  // messaging was ICP-routed, since no Supabase channel fires and the
+  // polling arm only ran for the lab fixture).
+  const messagingOnIcp = useIcpLab || isFeatureRoutedToIcp("messaging");
+
   useEffect(() => {
-    if (!groupId || groupRealtimeMode !== "polling") return;
+    if (!groupId) return;
+    if (!messagingOnIcp && groupRealtimeMode !== "polling") return;
     const id = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
     }, groupPollIntervalMs);
     return () => window.clearInterval(id);
-  }, [groupId, groupRealtimeMode, groupPollIntervalMs, queryClient]);
+  }, [groupId, messagingOnIcp, groupRealtimeMode, groupPollIntervalMs, queryClient]);
 
   // Real-time subscription - directly update cache instead of invalidating
   useEffect(() => {
-    if (!groupId || useIcpLab) return;
+    if (!groupId || messagingOnIcp) return;
     if (groupRealtimeMode === "polling") return;
 
     const channel = supabaseClient
@@ -240,7 +249,7 @@ export const useGroupRealtimeUpdates = ({
     reconcileScope,
     applyGroupReaction,
     applyGroupReactionDelete,
-    useIcpLab,
+    messagingOnIcp,
     setLocalMessages,
     supabaseClient,
   ]);

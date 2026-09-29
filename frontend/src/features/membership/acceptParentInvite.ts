@@ -131,21 +131,30 @@ export async function provisionInviteChildren(params: {
   inviteId: string;
   guardianId: string;
 }): Promise<string[]> {
-  // The RPC verifies auth.uid(), guardianId and invite ownership before writing.
-  const { data, error } = await supabase.rpc("provision_invite_children" as any, {
+  return withFeatureBackend("membership", {
+    supabase: async () => {
+      // The RPC verifies auth.uid(), guardianId and invite ownership before writing.
+      const { data, error } = await supabase.rpc("provision_invite_children" as any, {
     _invite_id: params.inviteId,
     _guardian_id: params.guardianId,
   });
 
 
-  if (error) {
-    console.error("[provisionInviteChildren] failed", {
-      code: (error as any)?.code,
-      message: error.message,
-    });
-    throw error;
-  }
+      if (error) {
+        console.error("[provisionInviteChildren] failed", {
+          code: (error as any)?.code,
+          message: error.message,
+        });
+        throw error;
+      }
 
-  const payload = (data ?? {}) as { child_ids?: string[] };
-  return Array.isArray(payload.child_ids) ? payload.child_ids : [];
+      const payload = (data ?? {}) as { child_ids?: string[] };
+      return Array.isArray(payload.child_ids) ? payload.child_ids : [];
+    },
+    icp: () => {
+      // Canister invite acceptance is a single atomic call — there is no DB
+      // trigger race for this safety net to repair, so it has nothing to do.
+      return [] as string[];
+    },
+  });
 }

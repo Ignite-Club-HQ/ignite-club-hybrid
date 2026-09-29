@@ -20,6 +20,7 @@ import { showPhotoPermissionDeniedToast } from "@/lib/showPhotoPermissionDeniedT
 import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { registerLiveAsset } from "@/live/features/media";
 import { sha256Hex } from "@/live/blobStoreProtocol";
 import {
@@ -461,7 +462,37 @@ export function UploadPhotoSheet({
       storageUrl = `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
     }
 
-    // 1. Insert into photos table (for media gallery)
+    // 1. Record the photo metadata. Hybrid routing: when the media feature
+    // resolves to ICP, the media_metadata canister is the source of truth and
+    // NO Supabase photos row is written (previously the row was always
+    // inserted and the canister only mirrored it — a data split). A
+    // configured-but-failed registration throws (same rule as the blob
+    // upload above) rather than silently losing the metadata. Photos without
+    // a club stay Supabase-only (the canister requires a club id).
+    if (clubId && isFeatureRoutedToIcp("media")) {
+      const asset = await withFeatureBackend("media", {
+        supabase: () => {
+          throw new Error("unreachable: media routing checked above");
+        },
+        icp: async (ctx) => {
+          const checksum = blobUpload
+            ? blobUpload.blobRef.content_hash
+            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+          return registerLiveAsset(ctx, {
+            clubId,
+            kind: "photo",
+            mime: file.type || "application/octet-stream",
+            checksum,
+            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
+            visibility: "club",
+            contentLength: file.size,
+            blobRef: blobUpload?.blobRef,
+          });
+        },
+      });
+      return { url: storageUrl, photoId: asset.id };
+    }
+
     const { data: insertedPhoto, error: insertError } = await supabase.from("photos").insert({
       image_url: storageUrl,
       uploader_id: user!.id,
@@ -486,36 +517,13 @@ export function UploadPhotoSheet({
       throw insertError || new Error("Insert failed");
     }
 
-    // Hybrid routing: when the media feature resolves to ICP, register the
-    // asset metadata on the media_metadata canister so reactions/comments and
-    // the club feed read path see it. Supabase-routed deployments skip this
-    // entirely. A configured-but-failed registration throws (same rule as
-    // the blob upload above) rather than silently losing the metadata.
-    if (clubId) {
-      await withFeatureBackend("media", {
-        supabase: () => undefined,
-        icp: async (ctx) => {
-          const checksum = blobUpload
-            ? blobUpload.blobRef.content_hash
-            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
-          await registerLiveAsset(ctx, {
-            clubId,
-            kind: "photo",
-            mime: file.type || "application/octet-stream",
-            checksum,
-            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
-            visibility: "club",
-            contentLength: file.size,
-            blobRef: blobUpload?.blobRef,
-          });
-        },
-      });
-    }
-
     // One-way mirror: gallery upload → vault "Gallery Uploads" folder
     // (team-scoped if a team is selected, else club-wide). Vault edits/deletes
-    // never propagate back to the gallery.
-    syncGalleryPhotoToVault({
+    // never propagate back to the gallery. Supabase-only: when the vault
+    // feature is ICP-routed the mirror would write a Supabase vault_files row
+    // the canister never sees, so it is skipped instead of split.
+    if (!isFeatureRoutedToIcp("vault")) {
+      syncGalleryPhotoToVault({
       fileUrl: storageUrl,
       fileName: file.name,
       fileSize: file.size,
@@ -525,6 +533,7 @@ export function UploadPhotoSheet({
       teamId: teamId || null,
       miniLeagueId: miniLeagueId || null,
     }).catch((e) => console.warn("gallery → vault sync failed:", e));
+    }
 
     return { url: storageUrl, photoId: insertedPhoto.id };
   };
@@ -779,8 +788,12 @@ export function UploadPhotoSheet({
     // on 2026-05-16 — 21 photos with album_id=NULL rendered as 21 separate
     // feed cards). Never silently fall back to ungrouped: retry once, and
     // if still failing, abort the whole upload with a clear error.
+    // When media is ICP-routed the canister owns asset metadata: no Supabase
+    // photo rows, albums, or gallery chat cards are written (those tables are
+    // never read back on the ICP branch).
+    const mediaOnIcp = !!clubId && isFeatureRoutedToIcp("media");
     let albumId: string | null = null;
-    if (photosToUpload.length > 1) {
+    if (!mediaOnIcp && photosToUpload.length > 1) {
       const args = {
         _club_id: clubId || null,
         _team_id: teamId || null,
@@ -866,7 +879,7 @@ export function UploadPhotoSheet({
     // Aggregation (10-min window) and message text are handled in the RPC.
     // Push notification only when ≥5 items in the resulting card.
     // ---------------------------------------------------------------------
-    if (teamId && successCount >= 2 && uploadedPhotoIds.length >= 2) {
+    if (!mediaOnIcp && teamId && successCount >= 2 && uploadedPhotoIds.length >= 2) {
       try {
         const heroPhotoId = uploadedPhotoIds[0];
         const heroUrl = uploadedUrls[0];

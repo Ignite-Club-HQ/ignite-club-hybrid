@@ -127,6 +127,7 @@ import { useChatPerfMarks } from "@/hooks/useChatPerfMarks";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
 import { Capacitor } from "@capacitor/core";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
@@ -374,6 +375,13 @@ export default function GroupChatPage() {
     queryFn: async () => {
       if (useIcpLab && groupId && user?.id) {
         return fixtureData.getLocalLabGroup(groupId, user.id) as ChatGroup | null;
+      }
+      if (isFeatureRoutedToIcp("messaging")) {
+        // The messaging canister has no single-conversation/group metadata
+        // read shape yet — querying Supabase chat_groups with a canister
+        // conversation id would return null (or a cross-backend row), so
+        // skip it. Header/menus fall back gracefully. Provisional.
+        return null;
       }
 
       const { data, error } = await supabase
