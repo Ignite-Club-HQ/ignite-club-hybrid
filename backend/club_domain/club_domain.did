@@ -157,6 +157,7 @@ service : {
   get_team : (text) -> (Result_10) query;
   import_frozen_club : (text, Listing) -> (Result_11);
   import_links : (Snapshot) -> (Result_11);
+  list_children : () -> (Result_20) query;
   list_clubs : (opt text, nat16) -> (Result_12) query;
   list_links : (text, bool) -> (Result_3) query;
   list_sponsors : (text) -> (Result_13) query;
