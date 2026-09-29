@@ -461,7 +461,37 @@ export function UploadPhotoSheet({
       storageUrl = `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
     }
 
-    // 1. Insert into photos table (for media gallery)
+    // 1. Record the photo metadata. Hybrid routing: when the media feature
+    // resolves to ICP, the media_metadata canister is the source of truth and
+    // NO Supabase photos row is written (previously the row was always
+    // inserted and the canister only mirrored it — a data split). A
+    // configured-but-failed registration throws (same rule as the blob
+    // upload above) rather than silently losing the metadata. Photos without
+    // a club stay Supabase-only (the canister requires a club id).
+    if (clubId && isFeatureRoutedToIcp("media")) {
+      const asset = await withFeatureBackend("media", {
+        supabase: () => {
+          throw new Error("unreachable: media routing checked above");
+        },
+        icp: async (ctx) => {
+          const checksum = blobUpload
+            ? blobUpload.blobRef.content_hash
+            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+          return registerLiveAsset(ctx, {
+            clubId,
+            kind: "photo",
+            mime: file.type || "application/octet-stream",
+            checksum,
+            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
+            visibility: "club",
+            contentLength: file.size,
+            blobRef: blobUpload?.blobRef,
+          });
+        },
+      });
+      return { url: storageUrl, photoId: asset.id };
+    }
+
     const { data: insertedPhoto, error: insertError } = await supabase.from("photos").insert({
       image_url: storageUrl,
       uploader_id: user!.id,
@@ -484,32 +514,6 @@ export function UploadPhotoSheet({
         console.error("Failed to cleanup orphaned storage file:", cleanupError);
       }
       throw insertError || new Error("Insert failed");
-    }
-
-    // Hybrid routing: when the media feature resolves to ICP, register the
-    // asset metadata on the media_metadata canister so reactions/comments and
-    // the club feed read path see it. Supabase-routed deployments skip this
-    // entirely. A configured-but-failed registration throws (same rule as
-    // the blob upload above) rather than silently losing the metadata.
-    if (clubId) {
-      await withFeatureBackend("media", {
-        supabase: () => undefined,
-        icp: async (ctx) => {
-          const checksum = blobUpload
-            ? blobUpload.blobRef.content_hash
-            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
-          await registerLiveAsset(ctx, {
-            clubId,
-            kind: "photo",
-            mime: file.type || "application/octet-stream",
-            checksum,
-            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
-            visibility: "club",
-            contentLength: file.size,
-            blobRef: blobUpload?.blobRef,
-          });
-        },
-      });
     }
 
     // One-way mirror: gallery upload → vault "Gallery Uploads" folder
