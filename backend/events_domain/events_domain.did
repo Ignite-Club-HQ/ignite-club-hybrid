@@ -57,7 +57,7 @@ type Attendance =
    note: text;
    present: bool;
  };
-service events_domain : {
+service : {
   addBulkAccessPrincipal: ("principal": principal) ->
    (variant {
       Err: text;
