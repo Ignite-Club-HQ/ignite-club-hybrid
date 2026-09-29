@@ -2,7 +2,7 @@ import type { Identity } from "@icp-sdk/core/agent";
 import type { Profile as CanisterProfile } from "../lab/bindings/identity_access/declarations/identity_access.did.js";
 import { connectLiveIdentityAccessClientWithIdentity, isLiveIdentityAccessConfigured } from "./identityAccess";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
-import { cacheIcpIdentityProfile, type IcpIdentityProfile } from "./identityProfileCache";
+import { cacheIcpIdentityProfile, getCachedIcpIdentityProfile, type IcpIdentityProfile } from "./identityProfileCache";
 
 /**
  * Resolves the "current user" profile for an Internet Identity session from
@@ -25,6 +25,43 @@ export type { IcpIdentityProfile } from "./identityProfileCache";
  * completion. Canister/network failures DO throw so the caller can surface
  * them rather than silently rendering a fabricated identity.
  */
+export interface SaveIcpIdentityProfileInput {
+  displayName: string;
+  avatarRef?: string | null;
+}
+
+/**
+ * Saves display name / avatar to the identity_access canister via
+ * `set_profile`, then updates the local identity profile cache (preserving
+ * previously known role grants) so the UI reflects the change immediately.
+ */
+export async function saveIcpIdentityProfile(
+  identity: Identity,
+  principal: string,
+  input: SaveIcpIdentityProfileInput,
+  target: IcpTargetConfig = getActiveIcpTarget(),
+): Promise<IcpIdentityProfile> {
+  if (!isLiveIdentityAccessConfigured(target)) {
+    throw new Error(`Identity access canister is not configured for ICP target ${target.alias}.`);
+  }
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    const canisterProfile = await client.setProfile(input.displayName, input.avatarRef ?? undefined);
+    const previous = getCachedIcpIdentityProfile(principal);
+    const resolved: IcpIdentityProfile = {
+      accountId: principal,
+      displayName: canisterProfile?.display_name ?? input.displayName,
+      avatarRef: canisterProfile?.avatar_ref?.[0] ?? input.avatarRef ?? null,
+      roles: previous?.roles ?? [],
+      profileMissing: false,
+    };
+    cacheIcpIdentityProfile(principal, resolved);
+    return resolved;
+  } finally {
+    client.dispose();
+  }
+}
+
 export async function fetchIcpIdentityProfile(
   identity: Identity,
   principal: string,

@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { updateProfileCache } from "@/lib/profileCache";
 import { Capacitor } from "@capacitor/core";
 import { pickNativePhoto, shouldUseNativePicker } from "@/lib/nativePhotoPicker";
@@ -23,6 +24,7 @@ import { mimeToExtension } from "@/lib/binaryUtils";
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const isIcpLive = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { toast } = useToast();
   const [displayName, setDisplayName] = useState("");
@@ -154,6 +156,35 @@ export default function EditProfilePage() {
       setSaving(false);
       toast({ title: "Profile changes are local to this lab session" });
       navigate(-1);
+      return;
+    }
+
+    if (isIcpLive) {
+      try {
+        const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("You need to sign in again.");
+        await saveIcpIdentityProfile(identity, user!.id, {
+          displayName: displayName.trim(),
+          avatarRef: avatarUrl.trim() || null,
+        });
+      } catch (error) {
+        setSaving(false);
+        toast({
+          title: "Failed to update profile",
+          description: error instanceof Error ? error.message : "Could not update profile",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setSaving(false);
+      await refreshProfile();
+      toast({ title: "Profile updated!" });
+      navigate("/profile");
       return;
     }
 
@@ -291,24 +322,26 @@ export default function EditProfilePage() {
           </div>
 
           {/* Country */}
-          <div className="space-y-2">
-            <Label htmlFor="country">Country</Label>
-            <Select value={country || "unset"} onValueChange={(v) => setCountry(v === "unset" ? "" : v)}>
-              <SelectTrigger id="country">
-                <SelectValue placeholder="Not set" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unset">Not set</SelectItem>
-                {ISO_COUNTRY_CODES.map(code => (
-                  <SelectItem key={code} value={code}>{countryName(code)} ({code})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Used to decide which backend serves app features for you. If not set, your
-              country is estimated from your internet connection.
-            </p>
-          </div>
+          {!isIcpLive && (
+            <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <Select value={country || "unset"} onValueChange={(v) => setCountry(v === "unset" ? "" : v)}>
+                <SelectTrigger id="country">
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unset">Not set</SelectItem>
+                  {ISO_COUNTRY_CODES.map(code => (
+                    <SelectItem key={code} value={code}>{countryName(code)} ({code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used to decide which backend serves app features for you. If not set, your
+                country is estimated from your internet connection.
+              </p>
+            </div>
+          )}
 
           {/* Leaderboard privacy */}
           <div className="flex items-start justify-between gap-3 rounded-lg border p-3">

@@ -16,6 +16,8 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { AddDutySheet } from "@/components/AddDutySheet";
 import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventDuty, removeLiveEventDuty } from "@/live/features/events";
 
 // Lazy load PitchBoard for performance
 const PitchBoard = lazyWithRetry(() => import("@/components/pitch/PitchBoard"));
@@ -308,6 +310,26 @@ function SupabaseEventGroupPitchPage() {
   // Assign duty mutation
   const assignDutyMutation = useMutation({
     mutationFn: async ({ dutyId, assignedTo }: { dutyId: string; assignedTo: string | null }) => {
+      // Hybrid routing: assigning a group duty maps onto the events_domain
+      // set_duty write (same shape as the main event duty flow in
+      // useEventDutyMutations — keyed by event + account + duty name).
+      // Unassigning (assignedTo === null) has no canister shape and always
+      // stays on Supabase. Provisional: verify duty-name keying against the
+      // live canister post-deploy.
+      const assignedOnIcp = assignedTo
+        ? await withFeatureBackend("events", {
+            supabase: () => false,
+            icp: async (ctx) => {
+              if (!eventId) throw new Error("Missing event ID");
+              const duty = duties?.find((candidate) => candidate.id === dutyId);
+              if (!duty?.name) throw new Error("Duty not found");
+              await setLiveEventDuty(ctx, eventId, assignedTo, duty.name);
+              return true;
+            },
+          })
+        : false;
+      if (assignedOnIcp) return;
+
       const { error } = await supabase
         .from("event_group_duties")
         .update({ assigned_to: assignedTo, status: assignedTo ? "confirmed" : "pending" })
@@ -324,6 +346,22 @@ function SupabaseEventGroupPitchPage() {
   // Delete duty mutation
   const deleteDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
+      // Hybrid routing: removing an assigned group duty maps onto the
+      // events_domain remove_duty write (keyed by event + account); open
+      // (unassigned) duties have no canister shape and stay Supabase-only.
+      const duty = duties?.find((candidate) => candidate.id === dutyId);
+      if (duty?.assigned_to) {
+        const removedOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            if (!eventId) throw new Error("Missing event ID");
+            await removeLiveEventDuty(ctx, eventId, duty.assigned_to as string);
+            return true;
+          },
+        });
+        if (removedOnIcp) return;
+      }
+
       const { error } = await supabase.from("event_group_duties").delete().eq("id", dutyId);
       if (error) throw error;
     },

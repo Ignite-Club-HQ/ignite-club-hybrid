@@ -83,6 +83,8 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 
 
 const MESSAGES_PER_PAGE = 15;
@@ -973,18 +975,53 @@ export default function DirectMessagePage() {
           __queued: true,
         } as any;
       }
-      const { data, error } = await supabase
-        .from("direct_messages")
-        .insert({
-          conversation_id: conversationId!,
-          author_id: user!.id,
-          text,
-          image_url: imageUrl || null,
-          reply_to_id: replyToId || null, // Ensure empty string becomes null for UUID column
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      let data: any;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data: inserted, error } = await supabase
+            .from("direct_messages")
+            .insert({
+              conversation_id: conversationId!,
+              author_id: user!.id,
+              text,
+              image_url: imageUrl || null,
+              reply_to_id: replyToId || null, // Ensure empty string becomes null for UUID column
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          data = inserted;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: DM conversation id doubles as the messaging
+          // conversation id (same convention used by the read-side poll).
+          const attachment = imageUrl
+            ? { kind: "image", refId: imageUrl, url: imageUrl }
+            : (() => {
+                const poll = /\[poll:([^\]]+)\]/.exec(text);
+                if (poll) return { kind: "poll", refId: poll[1], url: null };
+                const news = /\[news:([^\]]+)\]/.exec(text);
+                if (news) return { kind: "news", refId: news[1], url: null };
+                return null;
+              })();
+          const sent = await sendLiveMessage(
+            ctx,
+            conversationId!,
+            text,
+            `${conversationId}:${user!.id}:${Date.now()}`,
+            attachment,
+          );
+          data = {
+            id: (sent as any)?.id ?? createSendTempId(),
+            text,
+            image_url: imageUrl || null,
+            conversation_id: conversationId!,
+            author_id: user!.id,
+            reply_to_id: null,
+            created_at: new Date().toISOString(),
+          };
+        },
+      });
       return data;
     },
     onMutate: async ({ text, imageUrl, replyToId }) => {
@@ -1117,8 +1154,16 @@ export default function DirectMessagePage() {
   const updateMessageMutation = useMutation({
     mutationFn: async () => {
       if (!editingMessage) return;
-      const { error } = await supabase.from("direct_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("direct_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional: message id is shared across both backends.
+          await updateLiveMessage(ctx, editingMessage.id, message.trim());
+        },
+      });
     },
     onSuccess: () => {
       setMessage("");
