@@ -1,8 +1,11 @@
 import Array "mo:core/Array";
+import Int "mo:core/Int";
 import Nat "mo:core/Nat";
+import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
 import Types "types";
 
 persistent actor {
@@ -12,13 +15,16 @@ persistent actor {
   var rsvps : [Types.Rsvp];
   var attendance : [Types.Attendance];
   var lineups : [Types.LineupEntry];
+  var lineupSnapshots : [Types.LineupSnapshot];
   var duties : [Types.Duty];
   var roster : [Types.RosterEntry];
   var recurrences : [Types.Recurrence];
+  var series : [Types.EventSeries];
   var bulkAccessPrincipals : [Principal];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
+  func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
   // Mirrors the Supabase event_type enum so canister events round-trip with
   // the app's existing type handling.
   func validEventType(value : Text) : Bool {
@@ -26,6 +32,14 @@ persistent actor {
   };
   func validLocation(value : ?Text) : Bool {
     switch (value) { case null true; case (?text) text.size() <= 256 }
+  };
+  func validFrequency(value : Text) : Bool {
+    value == "daily" or value == "weekly" or value == "monthly"
+  };
+  // Recurrence step in milliseconds. Monthly steps a fixed 30 days —
+  // provisional, no calendar math canister-side.
+  func frequencyStepMs(frequency : Text) : Nat64 {
+    if (frequency == "daily") 86_400_000 else if (frequency == "weekly") 604_800_000 else 2_592_000_000
   };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
@@ -38,12 +52,15 @@ persistent actor {
       grant.user.equal(caller) and grant.role == role and grant.club_id == club and (grant.team_id == team or grant.team_id == null)
     })
   };
-  func manages(caller : Principal, event : Types.Event) : Bool {
-    let teamAllowed = switch (event.team_id) {
-      case (?team) { hasRole(caller, "team_admin", event.club_id, ?team) or hasRole(caller, "coach", event.club_id, ?team) };
+  func managesClubTeam(caller : Principal, club_id : Text, team_id : ?Text, creator : Principal) : Bool {
+    let teamAllowed = switch (team_id) {
+      case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) };
       case null { false };
     };
-    isGovernor(caller) or hasRole(caller, "club_admin", event.club_id, null) or teamAllowed
+    isGovernor(caller) or creator.equal(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed
+  };
+  func manages(caller : Principal, event : Types.Event) : Bool {
+    managesClubTeam(caller, event.club_id, event.team_id, event.creator)
   };
   // Any role grant scoped to the club counts as membership for read
   // visibility (players, parents, coaches, admins). Mirrors the Supabase RLS
@@ -57,11 +74,22 @@ persistent actor {
     if (isGovernor(caller) or event.creator.equal(caller)) return true;
     isClubMember(caller, event.club_id)
   };
+  func canViewSeries(caller : Principal, item : Types.EventSeries) : Bool {
+    if (caller.equal(Principal.anonymous())) return false;
+    if (isGovernor(caller) or item.creator.equal(caller)) return true;
+    isClubMember(caller, item.club_id)
+  };
   func replaceEvent(index : Nat, value : Types.Event) { events := Array.tabulate<Types.Event>(events.size(), func(position) { if (position == index) value else events[position] }) };
   func requireManage(caller : Principal, id : Text) : { #Ok : Types.Event; #Err : Text } {
     switch (events.find(func(item) = item.id == id)) {
       case null { #Err("Event not found") };
       case (?current) { if (not manages(caller, current)) #Err("Event management forbidden") else #Ok(current) };
+    }
+  };
+  func requireManageSeries(caller : Principal, id : Text) : { #Ok : Types.EventSeries; #Err : Text } {
+    switch (series.find(func(item) = item.id == id)) {
+      case null { #Err("Series not found") };
+      case (?current) { if (not managesClubTeam(caller, current.club_id, current.team_id, current.creator)) #Err("Series management forbidden") else #Ok(current) };
     }
   };
 
@@ -83,8 +111,92 @@ persistent actor {
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; revision = 1 };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1 };
     events := events.concat([created]); #Ok(created)
+  };
+
+  // Creates a recurring series plus all child occurrences up to until_ms.
+  // One call replaces the Supabase create_event_with_duties recurring
+  // expansion; child events are ordinary events linked by series_id.
+  public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validFrequency(frequency) or first_starts_at_ms >= first_ends_at_ms or first_starts_at_ms > until_ms) return #Err("Invalid series");
+    let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
+    let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
+    if (not allowed) return #Err("Club or team admin required");
+    let seriesId = "ser-" # club_id # "-" # Nat.toText(series.size());
+    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1 };
+    let step = frequencyStepMs(frequency);
+    let duration = first_ends_at_ms - first_starts_at_ms;
+    // Cap at 366 occurrences to bound message/state size.
+    let maxCount = Nat.min(366, Nat64.toNat((until_ms - first_starts_at_ms) / step) + 1);
+    let base = events.size();
+    let children = Array.tabulate<Types.Event>(maxCount, func(index) {
+      let offset = step * Nat.toNat64(index);
+      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1 }
+    });
+    series := series.concat([created]);
+    events := events.concat(children);
+    #Ok({ series = created; events = children })
+  };
+
+  // Updates series fields and every future (>= from_ms) child event's
+  // details. Times of individual occurrences are preserved.
+  public shared ({ caller }) func update_series(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, from_ms : Nat64) : async { #Ok : Types.EventSeries; #Err : Text } {
+    auth(caller);
+    switch (requireManageSeries(caller, id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location)) return #Err("Invalid series update");
+        let updated : Types.EventSeries = { current with title; description; event_type; location; revision = current.revision + 1 };
+        series := series.map(func(item) = if (item.id == id) updated else item);
+        events := events.map(func(item) =
+          if (item.series_id == ?id and item.starts_at_ms >= from_ms) {
+            { item with title; description; event_type; location; revision = item.revision + 1 }
+          } else item
+        );
+        #Ok(updated)
+      };
+    }
+  };
+
+  // Deletes future (>= from_ms) occurrences of a series and their dependent
+  // rows. When no occurrences remain, the series record itself is removed;
+  // otherwise its recurrence end is truncated to from_ms.
+  public shared ({ caller }) func delete_series(id : Text, from_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    switch (requireManageSeries(caller, id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_current)) {
+        let doomed = events.filter(func(item) = item.series_id == ?id and item.starts_at_ms >= from_ms);
+        let doomedIds = doomed.map(func(item) = item.id);
+        func isDoomed(eventId : Text) : Bool { doomedIds.any(func(d) = d == eventId) };
+        events := events.filter(func(item) = not (item.series_id == ?id and item.starts_at_ms >= from_ms));
+        rsvps := rsvps.filter(func(item) = not isDoomed(item.event_id));
+        attendance := attendance.filter(func(item) = not isDoomed(item.event_id));
+        lineups := lineups.filter(func(item) = not isDoomed(item.event_id));
+        lineupSnapshots := lineupSnapshots.filter(func(item) = not isDoomed(item.event_id));
+        duties := duties.filter(func(item) = not isDoomed(item.event_id));
+        roster := roster.filter(func(item) = not isDoomed(item.event_id));
+        recurrences := recurrences.filter(func(item) = not isDoomed(item.event_id));
+        if (not events.any(func(item) = item.series_id == ?id)) {
+          series := series.filter(func(item) = item.id != id);
+        } else {
+          series := series.map(func(item) =
+            if (item.id == id) { { item with until_ms = from_ms; revision = item.revision + 1 } } else item
+          );
+        };
+        #Ok(Nat.toNat32(doomed.size()))
+      };
+    }
+  };
+
+  public query ({ caller }) func list_series(club_id : ?Text, team_id : ?Text) : async [Types.EventSeries] {
+    series.filter(func(item) =
+      canViewSeries(caller, item)
+        and (club_id == null or club_id == ?item.club_id)
+        and (team_id == null or team_id == item.team_id)
+    )
   };
 
   public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
@@ -143,6 +255,36 @@ persistent actor {
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     let value : Types.LineupEntry = { event_id; member; slot; team_id }; lineups := lineups.concat([value]); #Ok(value)
   };
+
+  // Full pitch-board snapshot per (event, team): formation, team size, ball
+  // position and every player (on-pitch and bench). One upsert replaces the
+  // per-player add_lineup mirroring which silently dropped formation, ball
+  // position and bench players. Supersedes add_lineup for pitch-board saves.
+  public shared ({ caller }) func save_lineup_snapshot(event_id : Text, team_id : ?Text, formation : ?Text, team_size : Nat16, ball_x : ?Float, ball_y : ?Float, players : [Types.LineupPlayer]) : async { #Ok : Types.LineupSnapshot; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (players.size() > 100) return #Err("Too many lineup players");
+    let existing = lineupSnapshots.find(func(item) = item.event_id == event_id and item.team_id == team_id);
+    let value : Types.LineupSnapshot = {
+      event_id; team_id; formation; team_size; ball_x; ball_y; players;
+      updated_by = caller; updated_at_ms = nowMs();
+      revision = switch (existing) { case (?current) current.revision + 1; case null 1 };
+    };
+    lineupSnapshots := lineupSnapshots.filter(func(item) = not (item.event_id == event_id and item.team_id == team_id));
+    lineupSnapshots := lineupSnapshots.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func get_lineup_snapshot(event_id : Text, team_id : ?Text) : async { #Ok : ?Types.LineupSnapshot; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(lineupSnapshots.find(func(item) = item.event_id == event_id and item.team_id == team_id))
+      };
+    }
+  };
+
   public shared ({ caller }) func set_duty(event_id : Text, account_id : Text, duty : Text) : async { #Ok : Types.Duty; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
@@ -191,7 +333,7 @@ persistent actor {
   public shared ({ caller }) func set_recurrence(event_id : Text, frequency : Text, until_ms : Nat64) : async { #Ok : Types.Recurrence; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
-    if (frequency != "daily" and frequency != "weekly" and frequency != "monthly") return #Err("Invalid recurrence");
+    if (not validFrequency(frequency)) return #Err("Invalid recurrence");
     let value : Types.Recurrence = { event_id; frequency; until_ms }; recurrences := recurrences.filter(func(item) = item.event_id != event_id); recurrences := recurrences.concat([value]); #Ok(value)
   };
 
@@ -230,8 +372,8 @@ persistent actor {
     rsvps.filter(func(item) = item.account_id == accountId)
   };
 
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence] }; #Err : Text } {
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    #Ok({ schema = 1; governor; roles; events; rsvps; attendance; lineups; duties; roster; recurrences })
+    #Ok({ schema = 2; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series })
   };
 };
