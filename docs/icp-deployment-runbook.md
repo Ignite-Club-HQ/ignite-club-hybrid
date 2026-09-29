@@ -130,7 +130,7 @@ Everything except the canister itself is already built:
   member is signed in with Internet Identity; until then Supabase storage
   runs unchanged. A configured-but-failed upload throws rather than silently
   diverting to Supabase.
-- `scripts/migrate-media-to-blob-store.mjs` (run with bun) moves existing
+- `frontend/scripts/migrate-media-to-blob-store.mjs` (run with bun) moves existing
   Supabase photos on-chain: downloads, SHA-256s, chunked-uploads, rewrites
   the photo row's URL, and calls `set_blob_ref` on the matching
   `media_metadata` asset. Supports `--dry-run`, `--limit`, `--club`; safe to

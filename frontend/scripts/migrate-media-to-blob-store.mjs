@@ -12,7 +12,7 @@
  * Usage (from the repo root, bun resolves the frontend's dependencies):
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
  *   MEDIA_BLOB_STORE_CANISTER_ID=... IC_IDENTITY_PEM=/path/to/identity.pem \
- *   bun scripts/migrate-media-to-blob-store.mjs [--dry-run] [--limit N] [--club <clubId>]
+ *   bun frontend/scripts/migrate-media-to-blob-store.mjs [--dry-run] [--limit N] [--club <clubId>]
  *
  * Optional env:
  *   MEDIA_METADATA_CANISTER_ID  — also set blob_ref on matching canister assets
