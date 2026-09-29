@@ -19,6 +19,7 @@ export interface Attendance {
 export interface Duty {
   'account_id' : string,
   'duty' : string,
+  'completed' : boolean,
   'event_id' : string,
 }
 export interface Event {
@@ -71,6 +72,11 @@ export interface _SERVICE {
     { 'Ok' : LineupEntry } |
       { 'Err' : string }
   >,
+  'complete_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : Duty } |
+      { 'Err' : string }
+  >,
   'create_event' : ActorMethod<
     [string, [] | [string], string, string, bigint, bigint],
     { 'Ok' : Event } |
@@ -111,6 +117,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
@@ -134,6 +145,11 @@ export interface _SERVICE {
   'set_rsvp' : ActorMethod<
     [string, string, string],
     { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'uncomplete_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : Duty } |
       { 'Err' : string }
   >,
   'update_event' : ActorMethod<

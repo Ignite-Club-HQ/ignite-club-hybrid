@@ -5,5 +5,6 @@ module {
   public type Receipt = { conversation_id : Text; user : Principal; message_id : Text; read : Bool };
   public type Unread = { conversation_id : Text; user : Principal; count : Nat64; last_read_sequence : Nat64 };
   public type MessagePage = { messages : [Message]; next_sequence : ?Nat64; latest_sequence : Nat64 };
+  public type BroadcastResult = { delivered : Nat32; skipped : [Text] };
   public type State = { schema : Nat32; governor : Principal; roles : [RoleGrant]; conversations : [Conversation]; messages : [Message]; receipts : [Receipt]; unread : [Unread] };
 }

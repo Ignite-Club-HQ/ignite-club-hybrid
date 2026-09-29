@@ -20,7 +20,6 @@ export const idlFactory = ({ IDL }) => {
     'parent_id' : IDL.Opt(IDL.Text),
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
-  const FolderResult = IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text });
   const BlobRef = IDL.Record({
     'path' : IDL.Text,
     'content_hash' : IDL.Text,
@@ -41,15 +40,6 @@ export const idlFactory = ({ IDL }) => {
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'uploaded_by' : IDL.Principal,
   });
-  const FilesResult = IDL.Variant({
-    'Ok' : IDL.Vec(VaultFile),
-    'Err' : IDL.Text,
-  });
-  const FoldersResult = IDL.Variant({
-    'Ok' : IDL.Vec(VaultFolder),
-    'Err' : IDL.Text,
-  });
-  const FileResult = IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text });
   
   return IDL.Service({
     'create_folder' : IDL.Func(
@@ -61,10 +51,19 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Vec(IDL.Text),
         ],
-        [FolderResult],
+        [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
         [],
       ),
-    'delete_folder' : IDL.Func([IDL.Text], [FolderResult], []),
+    'delete_file_permanent' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_folder' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
+        [],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -77,16 +76,29 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_club_files' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
-        [FilesResult],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
         ['query'],
       ),
-    'list_files' : IDL.Func([IDL.Text], [FilesResult], ['query']),
+    'list_files' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_folders' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
-        [FoldersResult],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFolder), 'Err' : IDL.Text })],
         ['query'],
       ),
-    'list_trashed_files' : IDL.Func([IDL.Text], [FilesResult], ['query']),
+    'list_trashed_files' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'move_file' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'register_file' : IDL.Func(
         [
           IDL.Text,
@@ -100,14 +112,27 @@ export const idlFactory = ({ IDL }) => {
           IDL.Bool,
           IDL.Opt(BlobRef),
         ],
-        [FileResult],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
-    'restore_file' : IDL.Func([IDL.Text], [FileResult], []),
-    'trash_file' : IDL.Func([IDL.Text], [FileResult], []),
+    'rename_file' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_file' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'trash_file' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
     'update_folder' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Text)],
-        [FolderResult],
+        [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
         [],
       ),
   });

@@ -10,9 +10,9 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export interface notification {
+export interface Notification {
   'id' : string,
-  'status' : status,
+  'status' : Status,
   'body' : string,
   'club' : string,
   'next_attempt_ms' : bigint,
@@ -24,20 +24,20 @@ export interface notification {
   'related_id' : [] | [string],
   'idempotency_key' : string,
 }
-export type result = { 'Ok' : notification } |
+export type Result = { 'Ok' : Notification } |
   { 'Err' : string };
-export type result_nat16 = { 'Ok' : number } |
+export type ResultNat16 = { 'Ok' : number } |
   { 'Err' : string };
-export type results = { 'Ok' : Array<notification> } |
+export type Results = { 'Ok' : Array<Notification> } |
   { 'Err' : string };
-export type status = { 'Failed' : null } |
+export type Status = { 'Failed' : null } |
   { 'Delivered' : null } |
   { 'Processing' : null } |
   { 'Pending' : null };
 export interface _SERVICE {
-  'acknowledge' : ActorMethod<[string, string], result>,
-  'claim' : ActorMethod<[bigint, number], results>,
-  'clear_inbox' : ActorMethod<[string, [] | [string]], result_nat16>,
+  'acknowledge' : ActorMethod<[string, string], Result>,
+  'claim' : ActorMethod<[bigint, number], Results>,
+  'clear_inbox' : ActorMethod<[string, [] | [string]], ResultNat16>,
   'delete_notification' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -45,20 +45,24 @@ export interface _SERVICE {
   >,
   'enqueue' : ActorMethod<
     [string, string, string, string, string, string],
-    result
+    Result
   >,
-  'fail' : ActorMethod<[string, string, [] | [bigint]], result>,
-  'get_notification' : ActorMethod<[string], [] | [notification]>,
+  'fail' : ActorMethod<[string, string, [] | [bigint]], Result>,
+  'fan_out' : ActorMethod<
+    [Array<string>, string, string, string, string, [] | [string]],
+    ResultNat16
+  >,
+  'get_notification' : ActorMethod<[string], [] | [Notification]>,
   'grant_worker' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'list_inbox' : ActorMethod<[string, [] | [string], number], results>,
-  'mark_all_read' : ActorMethod<[string, [] | [string]], result_nat16>,
-  'mark_read' : ActorMethod<[string], result>,
-  'recover' : ActorMethod<[], result_nat16>,
+  'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
+  'mark_all_read' : ActorMethod<[string, [] | [string]], ResultNat16>,
+  'mark_read' : ActorMethod<[string], Result>,
+  'recover' : ActorMethod<[], ResultNat16>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

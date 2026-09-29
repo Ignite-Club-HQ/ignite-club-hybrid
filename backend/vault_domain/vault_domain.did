@@ -1,21 +1,107 @@
-type BlobRef = record { canister : text; content_hash : text; path : text };
-type VaultFolder = record { id : text; club : text; team : opt text; parent_id : opt text; name : text; restricted_roles : vec text; created_by : principal; created_at_ms : nat64; deleted_at_ms : opt nat64 };
-type VaultFile = record { id : text; folder_id : text; club : text; team : opt text; name : text; file_url : text; size : nat64; mime : text; uploaded_by : principal; created_at_ms : nat64; deleted_at_ms : opt nat64; is_external_link : bool; blob_ref : opt BlobRef };
-type FolderResult = variant { Ok : VaultFolder; Err : text };
-type FileResult = variant { Ok : VaultFile; Err : text };
-type FoldersResult = variant { Ok : vec VaultFolder; Err : text };
-type FilesResult = variant { Ok : vec VaultFile; Err : text };
+type VaultFolder = 
+ record {
+   club: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   deleted_at_ms: opt nat64;
+   id: text;
+   name: text;
+   parent_id: opt text;
+   restricted_roles: vec text;
+   team: opt text;
+ };
+type VaultFile = 
+ record {
+   blob_ref: opt BlobRef;
+   club: text;
+   created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
+   file_url: text;
+   folder_id: text;
+   id: text;
+   is_external_link: bool;
+   mime: text;
+   name: text;
+   size: nat64;
+   team: opt text;
+   uploaded_by: principal;
+ };
+type BlobRef = 
+ record {
+   canister: text;
+   content_hash: text;
+   path: text;
+ };
 service : {
-  create_folder : (text, text, opt text, opt text, text, vec text) -> (FolderResult);
-  delete_folder : (text) -> (FolderResult);
-  grant_role : (principal, text, opt text, opt text) -> (variant { Ok; Err : text });
-  initialize : () -> (variant { Ok; Err : text });
-  list_club_files : (text, opt text) -> (FilesResult) query;
-  list_files : (text) -> (FilesResult) query;
-  list_folders : (text, opt text) -> (FoldersResult) query;
-  list_trashed_files : (text) -> (FilesResult) query;
-  register_file : (text, text, text, opt text, text, text, nat64, text, bool, opt BlobRef) -> (FileResult);
-  restore_file : (text) -> (FileResult);
-  trash_file : (text) -> (FileResult);
-  update_folder : (text, text, vec text) -> (FolderResult);
-};
+  create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
+   name: text, restricted_roles: vec text) ->
+   (variant {
+      Err: text;
+      Ok: VaultFolder;
+    });
+  delete_file_permanent: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+  delete_folder: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: VaultFolder;
+                                });
+  grant_role: (user: principal, role: text, club_id: opt text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  list_club_files: (club: text, team: opt text) ->
+   (variant {
+      Err: text;
+      Ok: vec VaultFile;
+    }) query;
+  list_files: (folder_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec VaultFile;
+    }) query;
+  list_folders: (club: text, team: opt text) ->
+   (variant {
+      Err: text;
+      Ok: vec VaultFolder;
+    }) query;
+  list_trashed_files: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: vec VaultFile;
+    }) query;
+  move_file: (id: text, folder_id: text) ->
+   (variant {
+      Err: text;
+      Ok: VaultFile;
+    });
+  register_file: (id: text, folder_id: text, club: text, team: opt text,
+   name: text, file_url: text, size: nat64, mime: text, is_external_link:
+   bool, blob_ref: opt BlobRef) -> (variant {
+                                      Err: text;
+                                      Ok: VaultFile;
+                                    });
+  rename_file: (id: text, name: text) -> (variant {
+                                            Err: text;
+                                            Ok: VaultFile;
+                                          });
+  restore_file: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: VaultFile;
+                               });
+  trash_file: (id: text) -> (variant {
+                               Err: text;
+                               Ok: VaultFile;
+                             });
+  update_folder: (id: text, name: text, restricted_roles: vec text) ->
+   (variant {
+      Err: text;
+      Ok: VaultFolder;
+    });
+}

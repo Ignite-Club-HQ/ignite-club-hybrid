@@ -15,6 +15,12 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'event_id' : IDL.Text,
   });
+  const Duty = IDL.Record({
+    'account_id' : IDL.Text,
+    'duty' : IDL.Text,
+    'completed' : IDL.Bool,
+    'event_id' : IDL.Text,
+  });
   const Event = IDL.Record({
     'id' : IDL.Text,
     'title' : IDL.Text,
@@ -35,11 +41,6 @@ export const idlFactory = ({ IDL }) => {
     'account_id' : IDL.Text,
     'present' : IDL.Bool,
     'note' : IDL.Text,
-    'event_id' : IDL.Text,
-  });
-  const Duty = IDL.Record({
-    'account_id' : IDL.Text,
-    'duty' : IDL.Text,
     'event_id' : IDL.Text,
   });
   const RosterEntry = IDL.Record({
@@ -69,6 +70,11 @@ export const idlFactory = ({ IDL }) => {
     'add_lineup' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : LineupEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'complete_duty' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
         [],
       ),
     'create_event' : IDL.Func(
@@ -122,6 +128,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'remove_duty' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_attendance' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
         [IDL.Variant({ 'Ok' : Attendance, 'Err' : IDL.Text })],
@@ -145,6 +156,11 @@ export const idlFactory = ({ IDL }) => {
     'set_rsvp' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
+        [],
+      ),
+    'uncomplete_duty' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
         [],
       ),
     'update_event' : IDL.Func(

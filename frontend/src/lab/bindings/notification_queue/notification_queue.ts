@@ -51,9 +51,30 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface notification {
+export type ResultNat16 = {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result = {
+    __kind__: "Ok";
+    Ok: Notification;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Results = {
+    __kind__: "Ok";
+    Ok: Array<Notification>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Notification {
     id: string;
-    status: status;
+    status: Status;
     body: string;
     club: string;
     next_attempt_ms: bigint;
@@ -65,48 +86,28 @@ export interface notification {
     related_id?: string;
     idempotency_key: string;
 }
-export type result_nat16 = {
-    __kind__: "Ok";
-    Ok: number;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type result = {
-    __kind__: "Ok";
-    Ok: notification;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type results = {
-    __kind__: "Ok";
-    Ok: Array<notification>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export enum status {
+export enum Status {
     Failed = "Failed",
     Delivered = "Delivered",
     Processing = "Processing",
     Pending = "Pending"
 }
 export interface notification_queueInterface {
-    acknowledge(arg0: string, arg1: string): Promise<result>;
-    claim(arg0: bigint, arg1: number): Promise<results>;
-    clear_inbox(arg0: string, arg1: string | null): Promise<result_nat16>;
-    delete_notification(arg0: string): Promise<{
+    acknowledge(id: string, key: string): Promise<Result>;
+    claim(now_ms: bigint, limit: number): Promise<Results>;
+    clear_inbox(user: string, club: string | null): Promise<ResultNat16>;
+    delete_notification(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
     }>;
-    enqueue(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<result>;
-    fail(arg0: string, arg1: string, arg2: bigint | null): Promise<result>;
-    get_notification(arg0: string): Promise<notification | null>;
-    grant_worker(arg0: Principal): Promise<{
+    enqueue(id: string, user: string, club: string, kind: string, body: string, key: string): Promise<Result>;
+    fail(id: string, error: string, retry_at_ms: bigint | null): Promise<Result>;
+    fan_out(users: Array<string>, club: string, kind: string, body: string, key_prefix: string, related_id: string | null): Promise<ResultNat16>;
+    get_notification(id: string): Promise<Notification | null>;
+    grant_worker(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -120,25 +121,25 @@ export interface notification_queueInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    list_inbox(arg0: string, arg1: string | null, arg2: number): Promise<results>;
-    mark_all_read(arg0: string, arg1: string | null): Promise<result_nat16>;
-    mark_read(arg0: string): Promise<result>;
-    recover(): Promise<result_nat16>;
+    list_inbox(user: string, club: string | null, limit: number): Promise<Results>;
+    mark_all_read(user: string, club: string | null): Promise<ResultNat16>;
+    mark_read(id: string): Promise<Result>;
+    recover(): Promise<ResultNat16>;
 }
-import type { notification as _notification, result as _result, result_nat16 as _result_nat16, results as _results, status as _status } from "./declarations/notification_queue.did";
+import type { Notification as _Notification, Result as _Result, ResultNat16 as _ResultNat16, Results as _Results, Status as _Status } from "./declarations/notification_queue.did";
 export class Notification_queue implements notification_queueInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
-    async acknowledge(arg0: string, arg1: string): Promise<result> {
+    async acknowledge(arg0: string, arg1: string): Promise<Result> {
         const result = await this.actor.acknowledge(arg0, arg1);
-        return from_candid_result_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async claim(arg0: bigint, arg1: number): Promise<results> {
+    async claim(arg0: bigint, arg1: number): Promise<Results> {
         const result = await this.actor.claim(arg0, arg1);
-        return from_candid_results_n8(result);
+        return from_candid_Results_n8(result);
     }
-    async clear_inbox(arg0: string, arg1: string | null): Promise<result_nat16> {
+    async clear_inbox(arg0: string, arg1: string | null): Promise<ResultNat16> {
         const result = await this.actor.clear_inbox(arg0, to_candid_opt_n11(arg1));
-        return from_candid_result_nat16_n12(result);
+        return from_candid_ResultNat16_n12(result);
     }
     async delete_notification(arg0: string): Promise<{
         __kind__: "Ok";
@@ -150,15 +151,19 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.delete_notification(arg0);
         return from_candid_variant_n14(result);
     }
-    async enqueue(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<result> {
+    async enqueue(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<Result> {
         const result = await this.actor.enqueue(arg0, arg1, arg2, arg3, arg4, arg5);
-        return from_candid_result_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async fail(arg0: string, arg1: string, arg2: bigint | null): Promise<result> {
+    async fail(arg0: string, arg1: string, arg2: bigint | null): Promise<Result> {
         const result = await this.actor.fail(arg0, arg1, to_candid_opt_n15(arg2));
-        return from_candid_result_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async get_notification(arg0: string): Promise<notification | null> {
+    async fan_out(arg0: Array<string>, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string | null): Promise<ResultNat16> {
+        const result = await this.actor.fan_out(arg0, arg1, arg2, arg3, arg4, to_candid_opt_n11(arg5));
+        return from_candid_ResultNat16_n12(result);
+    }
+    async get_notification(arg0: string): Promise<Notification | null> {
         const result = await this.actor.get_notification(arg0);
         return from_candid_opt_n16(result);
     }
@@ -182,35 +187,47 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.initialize();
         return from_candid_variant_n14(result);
     }
-    async list_inbox(arg0: string, arg1: string | null, arg2: number): Promise<results> {
+    async list_inbox(arg0: string, arg1: string | null, arg2: number): Promise<Results> {
         const result = await this.actor.list_inbox(arg0, to_candid_opt_n11(arg1), arg2);
-        return from_candid_results_n8(result);
+        return from_candid_Results_n8(result);
     }
-    async mark_all_read(arg0: string, arg1: string | null): Promise<result_nat16> {
+    async mark_all_read(arg0: string, arg1: string | null): Promise<ResultNat16> {
         const result = await this.actor.mark_all_read(arg0, to_candid_opt_n11(arg1));
-        return from_candid_result_nat16_n12(result);
+        return from_candid_ResultNat16_n12(result);
     }
-    async mark_read(arg0: string): Promise<result> {
+    async mark_read(arg0: string): Promise<Result> {
         const result = await this.actor.mark_read(arg0);
-        return from_candid_result_n1(result);
+        return from_candid_Result_n1(result);
     }
-    async recover(): Promise<result_nat16> {
+    async recover(): Promise<ResultNat16> {
         const result = await this.actor.recover();
-        return from_candid_result_nat16_n12(result);
+        return from_candid_ResultNat16_n12(result);
     }
 }
-function from_candid_notification_n3(value: _notification): notification {
+function from_candid_Notification_n3(value: _Notification): Notification {
     return from_candid_record_n4(value);
 }
-function from_candid_opt_n16(value: [] | [_notification]): notification | null {
-    return value.length === 0 ? null : from_candid_notification_n3(value[0]);
+function from_candid_ResultNat16_n12(value: _ResultNat16): ResultNat16 {
+    return from_candid_variant_n13(value);
+}
+function from_candid_Result_n1(value: _Result): Result {
+    return from_candid_variant_n2(value);
+}
+function from_candid_Results_n8(value: _Results): Results {
+    return from_candid_variant_n9(value);
+}
+function from_candid_Status_n5(value: _Status): Status {
+    return from_candid_variant_n6(value);
+}
+function from_candid_opt_n16(value: [] | [_Notification]): Notification | null {
+    return value.length === 0 ? null : from_candid_Notification_n3(value[0]);
 }
 function from_candid_opt_n7(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n4(value: {
     id: string;
-    status: _status;
+    status: _Status;
     body: string;
     club: string;
     next_attempt_ms: bigint;
@@ -223,7 +240,7 @@ function from_candid_record_n4(value: {
     idempotency_key: string;
 }): {
     id: string;
-    status: status;
+    status: Status;
     body: string;
     club: string;
     next_attempt_ms: bigint;
@@ -237,7 +254,7 @@ function from_candid_record_n4(value: {
 } {
     return {
         id: value.id,
-        status: from_candid_status_n5(value.status),
+        status: from_candid_Status_n5(value.status),
         body: value.body,
         club: value.club,
         next_attempt_ms: value.next_attempt_ms,
@@ -249,18 +266,6 @@ function from_candid_record_n4(value: {
         related_id: record_opt_to_undefined(from_candid_opt_n7(value.related_id)),
         idempotency_key: value.idempotency_key
     };
-}
-function from_candid_result_n1(value: _result): result {
-    return from_candid_variant_n2(value);
-}
-function from_candid_result_nat16_n12(value: _result_nat16): result_nat16 {
-    return from_candid_variant_n13(value);
-}
-function from_candid_results_n8(value: _results): results {
-    return from_candid_variant_n9(value);
-}
-function from_candid_status_n5(value: _status): status {
-    return from_candid_variant_n6(value);
 }
 function from_candid_variant_n13(value: {
     Ok: number;
@@ -301,19 +306,19 @@ function from_candid_variant_n14(value: {
     } : value;
 }
 function from_candid_variant_n2(value: {
-    Ok: _notification;
+    Ok: _Notification;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: notification;
+    Ok: Notification;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_notification_n3(value.Ok)
+        Ok: from_candid_Notification_n3(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -327,16 +332,16 @@ function from_candid_variant_n6(value: {
     Processing: null;
 } | {
     Pending: null;
-}): status {
-    return "Failed" in value ? status.Failed : "Delivered" in value ? status.Delivered : "Processing" in value ? status.Processing : "Pending" in value ? status.Pending : value;
+}): Status {
+    return "Failed" in value ? Status.Failed : "Delivered" in value ? Status.Delivered : "Processing" in value ? Status.Processing : "Pending" in value ? Status.Pending : value;
 }
 function from_candid_variant_n9(value: {
-    Ok: Array<_notification>;
+    Ok: Array<_Notification>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Array<notification>;
+    Ok: Array<Notification>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -349,8 +354,8 @@ function from_candid_variant_n9(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n10(value: Array<_notification>): Array<notification> {
-    return value.map((x)=>from_candid_notification_n3(x));
+function from_candid_vec_n10(value: Array<_Notification>): Array<Notification> {
+    return value.map((x)=>from_candid_Notification_n3(x));
 }
 function to_candid_opt_n11(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);

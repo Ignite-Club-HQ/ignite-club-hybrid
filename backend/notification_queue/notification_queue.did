@@ -1,20 +1,64 @@
-type status = variant { Pending; Processing; Delivered; Failed };
-type notification = record { id : text; user : text; club : text; kind : text; body : text; idempotency_key : text; status : status; attempts : nat32; next_attempt_ms : nat64; read : bool; related_id : opt text; created_at_ms : nat64 };
-type result = variant { Ok : notification; Err : text };
-type results = variant { Ok : vec notification; Err : text };
-type result_nat16 = variant { Ok : nat16; Err : text };
+type Status = 
+ variant {
+   Delivered;
+   Failed;
+   Pending;
+   Processing;
+ };
+type Results = 
+ variant {
+   Err: text;
+   Ok: vec Notification;
+ };
+type ResultNat16 = 
+ variant {
+   Err: text;
+   Ok: nat16;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok: Notification;
+ };
+type Notification = 
+ record {
+   attempts: nat32;
+   body: text;
+   club: text;
+   created_at_ms: nat64;
+   id: text;
+   idempotency_key: text;
+   kind: text;
+   next_attempt_ms: nat64;
+   read: bool;
+   related_id: opt text;
+   status: Status;
+   user: text;
+ };
 service : {
-  acknowledge : (text, text) -> (result);
-  claim : (nat64, nat16) -> (results);
-  clear_inbox : (text, opt text) -> (result_nat16);
-  delete_notification : (text) -> (variant { Ok; Err : text });
-  enqueue : (text, text, text, text, text, text) -> (result);
-  fail : (text, text, opt nat64) -> (result);
-  get_notification : (text) -> (opt notification) query;
-  grant_worker : (principal) -> (variant { Ok; Err : text });
-  initialize : () -> (variant { Ok; Err : text });
-  list_inbox : (text, opt text, nat16) -> (results) query;
-  mark_all_read : (text, opt text) -> (result_nat16);
-  mark_read : (text) -> (result);
-  recover : () -> (result_nat16);
-};
+  acknowledge: (id: text, key: text) -> (Result);
+  claim: (now_ms: nat64, limit: nat16) -> (Results);
+  clear_inbox: (user: text, club: opt text) -> (ResultNat16);
+  delete_notification: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+  enqueue: (id: text, user: text, club: text, kind: text, body: text, key:
+   text) -> (Result);
+  fail: (id: text, error: text, retry_at_ms: opt nat64) -> (Result);
+  fan_out: (users: vec text, club: text, kind: text, body: text, key_prefix:
+   text, related_id: opt text) -> (ResultNat16);
+  get_notification: (id: text) -> (opt Notification) query;
+  grant_worker: ("principal": principal) -> (variant {
+                                               Err: text;
+                                               Ok;
+                                             });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  list_inbox: (user: text, club: opt text, limit: nat16) -> (Results) query;
+  mark_all_read: (user: text, club: opt text) -> (ResultNat16);
+  mark_read: (id: text) -> (Result);
+  recover: () -> (ResultNat16);
+}

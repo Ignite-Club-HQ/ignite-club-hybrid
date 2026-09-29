@@ -15,14 +15,6 @@ export interface BlobRef {
   'content_hash' : string,
   'canister' : string,
 }
-export type FileResult = { 'Ok' : VaultFile } |
-  { 'Err' : string };
-export type FilesResult = { 'Ok' : Array<VaultFile> } |
-  { 'Err' : string };
-export type FolderResult = { 'Ok' : VaultFolder } |
-  { 'Err' : string };
-export type FoldersResult = { 'Ok' : Array<VaultFolder> } |
-  { 'Err' : string };
 export interface VaultFile {
   'id' : string,
   'club' : string,
@@ -52,19 +44,50 @@ export interface VaultFolder {
 export interface _SERVICE {
   'create_folder' : ActorMethod<
     [string, string, [] | [string], [] | [string], string, Array<string>],
-    FolderResult
+    { 'Ok' : VaultFolder } |
+      { 'Err' : string }
   >,
-  'delete_folder' : ActorMethod<[string], FolderResult>,
+  'delete_file_permanent' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_folder' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFolder } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'list_club_files' : ActorMethod<[string, [] | [string]], FilesResult>,
-  'list_files' : ActorMethod<[string], FilesResult>,
-  'list_folders' : ActorMethod<[string, [] | [string]], FoldersResult>,
-  'list_trashed_files' : ActorMethod<[string], FilesResult>,
+  'list_club_files' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'list_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'list_folders' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : Array<VaultFolder> } |
+      { 'Err' : string }
+  >,
+  'list_trashed_files' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'move_file' : ActorMethod<
+    [string, string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
   'register_file' : ActorMethod<
     [
       string,
@@ -78,11 +101,29 @@ export interface _SERVICE {
       boolean,
       [] | [BlobRef],
     ],
-    FileResult
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
   >,
-  'restore_file' : ActorMethod<[string], FileResult>,
-  'trash_file' : ActorMethod<[string], FileResult>,
-  'update_folder' : ActorMethod<[string, string, Array<string>], FolderResult>,
+  'rename_file' : ActorMethod<
+    [string, string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'restore_file' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'trash_file' : ActorMethod<
+    [string],
+    { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'update_folder' : ActorMethod<
+    [string, string, Array<string>],
+    { 'Ok' : VaultFolder } |
+      { 'Err' : string }
+  >,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

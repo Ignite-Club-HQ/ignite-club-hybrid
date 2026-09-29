@@ -10,6 +10,10 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface BroadcastResult {
+  'skipped' : Array<string>,
+  'delivered' : number,
+}
 export interface Conversation {
   'id' : string,
   'participants' : Array<Principal>,
@@ -61,6 +65,11 @@ export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'broadcast_announcement' : ActorMethod<
+    [string, Array<string>, boolean, string, string],
+    { 'Ok' : BroadcastResult } |
       { 'Err' : string }
   >,
   'create_conversation' : ActorMethod<

@@ -97,3 +97,36 @@ export async function getLiveUnreadCount(ctx: FeatureBackendContext, conversatio
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.unread_count(conversationId), "Unread count");
 }
+
+export interface LiveAnnouncementInput {
+  clubId: string;
+  teamIds: string[];
+  includeClubChat: boolean;
+  body: string;
+  idempotencyKey: string;
+}
+
+/**
+ * Club announcement fan-out (the canister counterpart of the
+ * send-club-announcement edge function): posts the message to the club chat
+ * and/or each listed team's conversation in one call. Teams without a
+ * canister conversation are skipped and reported in `skipped`, never
+ * fatal. The caller must be a club admin on the canister; announcements
+ * allow a longer body than the 128-char chat message limit.
+ */
+export async function broadcastLiveAnnouncement(
+  ctx: FeatureBackendContext,
+  input: LiveAnnouncementInput,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.broadcast_announcement(
+      input.clubId,
+      input.teamIds,
+      input.includeClubChat,
+      input.body,
+      input.idempotencyKey,
+    ),
+    "Broadcast announcement",
+  );
+}

@@ -34,6 +34,44 @@ export async function enqueueLiveNotification(
   );
 }
 
+export interface LiveNotificationFanOutInput {
+  userIds: string[];
+  clubId: string;
+  kind: string;
+  body: string;
+  /**
+   * Per-attempt unique prefix; the canister derives each recipient's id as
+   * `<prefix>-<userId>`, so a retried call with the same prefix is
+   * idempotent per recipient and a new prefix re-notifies.
+   */
+  idempotencyKeyPrefix: string;
+  relatedId?: string | null;
+}
+
+/**
+ * Browser fan-out: one update call enqueues the same notification for many
+ * recipients (bulk reminders, duty notices, invites) instead of one call
+ * per recipient. Provisional: recipients are browser-supplied account ids
+ * until account ids are bound to principals (identity_access).
+ */
+export async function fanOutLiveNotifications(
+  ctx: FeatureBackendContext,
+  input: LiveNotificationFanOutInput,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.fan_out(
+      input.userIds,
+      input.clubId,
+      input.kind,
+      input.body,
+      input.idempotencyKeyPrefix,
+      input.relatedId ? [input.relatedId] : [],
+    ),
+    "Fan out notifications",
+  );
+}
+
 export async function getLiveNotification(ctx: FeatureBackendContext, notificationId: string) {
   const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
   return unwrapCandidOpt(await actor.get_notification(notificationId), "Get notification");
