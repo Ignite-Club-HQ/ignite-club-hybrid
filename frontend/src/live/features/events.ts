@@ -33,6 +33,16 @@ export async function listLiveEvents(
   return actor.list_events(candidOpt(clubId), candidOpt(teamId));
 }
 
+/**
+ * The caller's own RSVPs (events_domain `my_rsvps` query). Caller-scoped
+ * counterpart of the governor-gated export_state snapshot, for member-facing
+ * surfaces like the home feed. Plain query result (no Ok/Err variant).
+ */
+export async function listLiveMyRsvps(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.my_rsvps();
+}
+
 export async function createLiveEvent(ctx: FeatureBackendContext, input: LiveEventInput) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
