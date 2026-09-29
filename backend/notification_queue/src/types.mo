@@ -18,6 +18,9 @@ module {
     status : Status;
     attempts : Nat32;
     next_attempt_ms : Nat64;
+    read : Bool;
+    related_id : ?Text;
+    created_at_ms : Nat64;
   };
 
   public type Lease = {
