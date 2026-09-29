@@ -126,6 +126,8 @@ import { logChatOpenLatency } from "@/lib/chatOpenLatency";
 import { useChatPerfMarks } from "@/hooks/useChatPerfMarks";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { sendLiveMessage } from "@/live/features/messaging";
 import { Capacitor } from "@capacitor/core";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { NotificationNudgeBanner } from "@/components/NotificationNudgeBanner";

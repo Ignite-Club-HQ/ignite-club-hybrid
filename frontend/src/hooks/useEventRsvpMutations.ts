@@ -4,6 +4,8 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { queueRsvp } from "@/lib/rsvpQueue";
 import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventRsvp } from "@/live/features/events";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
 
@@ -71,6 +73,20 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
       }
 
       let rsvpId: string | null = null;
+
+      // Hybrid routing: when the events feature resolves to ICP, write the
+      // RSVP to the events_domain canister (account id = Supabase user id,
+      // matching the provisional read mapping). Points/notification side
+      // effects are Supabase-only, so they stay on the Supabase branch.
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id || !user?.id) throw new Error("Missing event or user ID");
+          await setLiveEventRsvp(ctx, id, user.id, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
 
       // Offline path: queue the RSVP, return early
       if (!navigator.onLine) {
