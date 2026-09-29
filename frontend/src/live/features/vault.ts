@@ -1,10 +1,11 @@
 import type { Principal } from "@icp-sdk/core/principal";
-import { connectLivePiiAccessControl } from "../domains";
+import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { unwrapCandid } from "./candid";
 
 /**
- * Vault feature -> pii_access_control canister.
+ * Vault feature -> vault_domain canister (folder/file metadata) plus
+ * pii_access_control (encrypted records).
  *
  * Canister-side counterpart of the Supabase vault repositories in
  * `features/vault/`: encrypted PII records with per-field access control and
