@@ -37,8 +37,10 @@ type MessagePage =
  };
 type Message = 
  record {
+   attachment: opt Attachment;
    body: text;
    conversation_id: text;
+   edited_at_ms: opt nat64;
    id: text;
    idempotency_key: text;
    sender: principal;
@@ -56,6 +58,12 @@ type BroadcastResult =
  record {
    delivered: nat32;
    skipped: vec text;
+ };
+type Attachment = 
+ record {
+   kind: text;
+   ref_id: text;
+   url: opt text;
  };
 service : {
   addBulkAccessPrincipal: ("principal": principal) ->
@@ -114,10 +122,10 @@ service : {
       Ok;
     });
   send_message: (conversation_id: text, body: text, idempotency_key: 
-   text) -> (variant {
-               Err: text;
-               Ok: Message;
-             });
+   text, attachment: opt Attachment) -> (variant {
+                                           Err: text;
+                                           Ok: Message;
+                                         });
   unread_count: (conversation_id: text) ->
    (variant {
       Err: text;

@@ -18,6 +18,8 @@ module {
     created_by : Principal;
     created_at_ms : Nat64;
     deleted_at_ms : ?Nat64;
+    deleted_by : ?Principal;
+    mini_league_id : ?Text;
   };
 
   public type VaultFile = {
@@ -32,6 +34,8 @@ module {
     uploaded_by : Principal;
     created_at_ms : Nat64;
     deleted_at_ms : ?Nat64;
+    deleted_by : ?Principal;
+    mini_league_id : ?Text;
     is_external_link : Bool;
     blob_ref : ?BlobRef;
   };

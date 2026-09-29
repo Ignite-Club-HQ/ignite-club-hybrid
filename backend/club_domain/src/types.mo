@@ -66,6 +66,8 @@ module {
     public_directory : Bool;
     club_id : Text;
   };
+  // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
+  // exposure_percentage is the strip rotation share (0-100).
   public type ClubSponsor = {
     id : Text;
     website_url : ?Text;
@@ -75,6 +77,9 @@ module {
     logo_url : ?Text;
     is_active : Bool;
     club_id : Text;
+    description : ?Text;
+    is_team_only : Bool;
+    exposure_percentage : ?Nat8;
   };
   public type ClubTeam = {
     id : Text;
@@ -87,6 +92,33 @@ module {
     description : ?Text;
     logo_url : ?Text;
     team_type : ?Text;
+  };
+  // Rich news posts replace the single announcement string on ClubSettings
+  // for the news feed. status is "draft" or "published"; members only ever
+  // see published posts.
+  public type NewsPost = {
+    id : Text;
+    club_id : Text;
+    title : Text;
+    body : Text;
+    status : Text;
+    created_by : Principal;
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+    revision : Nat64;
+  };
+  // A parent invite links a second parent/guardian to a child (and
+  // optionally a team) in one atomic accept — the canister equivalent of
+  // the Supabase parent-invite RPCs. id doubles as the share token.
+  public type ParentInvite = {
+    id : Text;
+    club_id : Text;
+    team_id : ?Text;
+    child_id : Text;
+    invited_by : Principal;
+    created_at_ms : Nat64;
+    expires_at_ms : Nat64;
+    accepted_by : ?Principal;
   };
   public type Account = { id : Text; legacy_subject : Principal; version : Nat64; principals : [Principal] };
   public type AccountExclusion = { account_id : Text; club : Text };

@@ -1,0 +1,102 @@
+import Array "mo:core/Array";
+import Principal "mo:core/Principal";
+module {
+  type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
+  type Team = { id : Text; club : Text };
+  type Child = { id : Text; teams : [Text]; parent : ?Principal };
+  type Guardian = { child : Text; user : Principal };
+  type Exclusion = { club : Text; user : Principal };
+  type Acl = {
+    teams : [Team];
+    guardians : [Guardian];
+    clubs : [Text];
+    children : [Child];
+    exclusions : [Exclusion];
+    roles : [RoleGrant];
+  };
+  // The Acl record above must mirror types.mo exactly — an earlier draft
+  // dropped `clubs`, which the enhanced-migration check rightly rejected.
+  type Draft = { url : Text; title : Text; icon : Text; is_active : Bool; open_mode : Text; subtitle : ?Text };
+  type Link = { id : Text; sort_order : Nat32; created_at_ms : Nat64; draft : Draft; club_id : Text };
+  type Listing = { links : [Link]; revision : Nat64 };
+  type ClubProfile = { id : Text; secondary_color : ?Text; name : Text; slug : Text; description : ?Text; created_at_ms : Nat64; logo_url : ?Text; is_active : Bool; primary_color : ?Text };
+  type ClubSettings = { contact_email : ?Text; membership_open : Bool; announcement : ?Text; public_directory : Bool; club_id : Text };
+  type OldClubSponsor = { id : Text; website_url : ?Text; name : Text; tier : Text; sort_order : Nat32; logo_url : ?Text; is_active : Bool; club_id : Text };
+  type ClubSponsor = { id : Text; website_url : ?Text; name : Text; tier : Text; sort_order : Nat32; logo_url : ?Text; is_active : Bool; club_id : Text; description : ?Text; is_team_only : Bool; exposure_percentage : ?Nat8 };
+  type ClubTeam = { id : Text; name : Text; division : ?Text; gender : ?Text; is_active : Bool; club_id : Text; age_group : ?Text; description : ?Text; logo_url : ?Text; team_type : ?Text };
+  type NewsPost = { id : Text; club_id : Text; title : Text; body : Text; status : Text; created_by : Principal; created_at_ms : Nat64; updated_at_ms : Nat64; revision : Nat64 };
+  type ParentInvite = { id : Text; club_id : Text; team_id : ?Text; child_id : Text; invited_by : Principal; created_at_ms : Nat64; expires_at_ms : Nat64; accepted_by : ?Principal };
+  type Account = { id : Text; legacy_subject : Principal; version : Nat64; principals : [Principal] };
+  type AccountExclusion = { account_id : Text; club : Text };
+  type AccountRole = { account_id : Text; club : ?Text; role : Text; team : ?Text };
+  type Challenge = { id : Nat64; account_id : Text; issuer : Principal; target : Principal; accepted : Bool; expires_at_ns : Nat64; expected_version : Nat64 };
+  type Family = { account_id : Text; child_id : Text };
+  type Mutation = { link : ?Link; revision : Nat64 };
+  type OldActor = {
+    var governor : Principal;
+    var acl : Acl;
+    var aclVersion : Nat64;
+    var profiles : [ClubProfile];
+    var settings : [ClubSettings];
+    var teams : [ClubTeam];
+    var sponsors : [OldClubSponsor];
+    var clubListings : [(Text, Listing)];
+    var frozenClubs : [(Text, Nat64)];
+    var accounts : [Account];
+    var accountExclusions : [AccountExclusion];
+    var accountFamilies : [Family];
+    var accountChallenges : [Challenge];
+    var accountRoles : [AccountRole];
+    var nextChallengeId : Nat64;
+    var mutationLog : [(Text, Text, Mutation)];
+  };
+  type NewActor = {
+    var governor : Principal;
+    var acl : Acl;
+    var aclVersion : Nat64;
+    var profiles : [ClubProfile];
+    var settings : [ClubSettings];
+    var teams : [ClubTeam];
+    var sponsors : [ClubSponsor];
+    var clubListings : [(Text, Listing)];
+    var frozenClubs : [(Text, Nat64)];
+    var accounts : [Account];
+    var accountExclusions : [AccountExclusion];
+    var accountFamilies : [Family];
+    var accountChallenges : [Challenge];
+    var accountRoles : [AccountRole];
+    var nextChallengeId : Nat64;
+    var mutationLog : [(Text, Text, Mutation)];
+    var newsPosts : [NewsPost];
+    var parentInvites : [ParentInvite];
+  };
+  // Adds sponsor detail fields (description, team-only toggle, exposure
+  // share) and introduces the news-post and parent-invite stores. Existing
+  // sponsors keep their data with the new fields unset (null / false) —
+  // the provisional mapping the frontend used while these fields had no
+  // canister shape.
+  public func migration(old : OldActor) : NewActor {
+    {
+      var governor = old.governor;
+      var acl = old.acl;
+      var aclVersion = old.aclVersion;
+      var profiles = old.profiles;
+      var settings = old.settings;
+      var teams = old.teams;
+      var sponsors = Array.map<OldClubSponsor, ClubSponsor>(old.sponsors, func(s) {
+        { id = s.id; website_url = s.website_url; name = s.name; tier = s.tier; sort_order = s.sort_order; logo_url = s.logo_url; is_active = s.is_active; club_id = s.club_id; description = null; is_team_only = false; exposure_percentage = null }
+      });
+      var clubListings = old.clubListings;
+      var frozenClubs = old.frozenClubs;
+      var accounts = old.accounts;
+      var accountExclusions = old.accountExclusions;
+      var accountFamilies = old.accountFamilies;
+      var accountChallenges = old.accountChallenges;
+      var accountRoles = old.accountRoles;
+      var nextChallengeId = old.nextChallengeId;
+      var mutationLog = old.mutationLog;
+      var newsPosts = [];
+      var parentInvites = [];
+    }
+  };
+};

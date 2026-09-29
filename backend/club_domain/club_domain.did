@@ -35,6 +35,17 @@ type Request =
    operation: Operation;
    request_id: text;
  };
+type ParentInvite = 
+ record {
+   accepted_by: opt principal;
+   child_id: text;
+   club_id: text;
+   created_at_ms: nat64;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   team_id: opt text;
+ };
 type Operation = 
  variant {
    Remove: record {id: text;};
@@ -50,6 +61,18 @@ type Operation =
                 active: bool;
                 id: text;
               };
+ };
+type NewsPost = 
+ record {
+   body: text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   revision: nat64;
+   status: text;
+   title: text;
+   updated_at_ms: nat64;
  };
 type Mutation = 
  record {
@@ -116,8 +139,11 @@ type ClubTeam =
 type ClubSponsor = 
  record {
    club_id: text;
+   description: opt text;
+   exposure_percentage: opt nat8;
    id: text;
    is_active: bool;
+   is_team_only: bool;
    logo_url: opt text;
    name: text;
    sort_order: nat32;
@@ -193,11 +219,34 @@ service : {
                                           Err: text;
                                           Ok: Account;
                                         });
+  accept_parent_invite: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: ParentInvite;
+    });
   begin_identity_link: (target: principal) ->
    (variant {
       Err: text;
       Ok: Challenge;
     });
+  create_news_post: (club_id: text, title: text, body: text, status: 
+   text) -> (variant {
+               Err: text;
+               Ok: NewsPost;
+             });
+  create_parent_invite: (club_id: text, team_id: opt text, child_id: 
+   text) -> (variant {
+               Err: text;
+               Ok: ParentInvite;
+             });
+  delete_news_post: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok;
+                                   });
+  delete_sponsor: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
   export_acl: () -> (variant {
                        Err: text;
                        Ok: Config;
@@ -233,6 +282,11 @@ service : {
                              Err: text;
                              Ok: Listing;
                            }) query;
+  get_parent_invite: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: ParentInvite;
+    }) query;
   get_sponsor: (id: text) -> (variant {
                                 Err: text;
                                 Ok: opt ClubSponsor;
@@ -267,6 +321,15 @@ service : {
    (variant {
       Err: text;
       Ok: Listing;
+    }) query;
+  list_news: (club_id: text) -> (variant {
+                                   Err: text;
+                                   Ok: vec NewsPost;
+                                 }) query;
+  list_news_multi: (club_ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec NewsPost;
     }) query;
   list_role_grants: (club: text) ->
    (variant {
@@ -319,6 +382,11 @@ service : {
                                                 Err: text;
                                                 Ok;
                                               });
+  update_news_post: (id: text, title: text, body: text, status: text,
+   expected_revision: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: NewsPost;
+                                 });
   whoami: () -> (variant {
                    Err: text;
                    Ok: Account;

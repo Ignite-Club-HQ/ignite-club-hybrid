@@ -55,6 +55,18 @@ persistent actor {
   // team ids are trusted text until account ids are bound to principals via
   // identity_access — see roadmap.
 
+  // A folder with restricted_roles is visible only to the governor or a
+  // caller holding one of the listed roles within the folder's club/team
+  // scope. Empty restricted_roles means visible to any club member.
+  func canViewFolder(caller : Principal, folder : Types.VaultFolder) : Bool {
+    if (folder.restricted_roles.size() == 0 or isGovernor(caller)) return true;
+    roles.any(func(grant) =
+      grant.user.equal(caller) and
+      grant.club_id == ?folder.club and
+      (folder.team == null or grant.team_id == folder.team or grant.team_id == null) and
+      folder.restricted_roles.any(func(role) = role == grant.role))
+  };
+
   public shared ({ caller }) func grant_role(user : Principal, role : Text, club_id : ?Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (not valid(role)) return #Err("Invalid role");
@@ -69,12 +81,14 @@ persistent actor {
     parent_id : ?Text,
     name : Text,
     restricted_roles : [Text],
+    mini_league_id : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller) and not hasRole(caller, club, team)) return #Err("Club role required");
     if (not valid(id) or not valid(club) or not validLong(name, 160)) return #Err("Invalid folder fields");
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
+    switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
     switch (parent_id) {
       case (?parent) {
         if (not valid(parent)) return #Err("Invalid parent");
@@ -93,6 +107,8 @@ persistent actor {
       created_by = caller;
       created_at_ms = nowMs();
       deleted_at_ms = null;
+      deleted_by = null;
+      mini_league_id;
     };
     folders := folders.concat([folder]);
     #Ok(folder)
@@ -127,19 +143,24 @@ persistent actor {
         if (not isGovernor(caller) and not hasRole(caller, folder.club, folder.team)) return #Err("Club role required");
         if (folders.any(func(item) = item.parent_id == ?id and item.deleted_at_ms == null)) return #Err("Folder has subfolders");
         if (files.any(func(item) = item.folder_id == id and item.deleted_at_ms == null)) return #Err("Folder has files");
-        let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs() };
+        let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
     }
   };
 
-  public query ({ caller }) func list_folders(club : Text, team : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
+  // mini_league_id filters to one mini league's folders; null returns all
+  // folders in the club/team scope. Folders with restricted_roles are hidden
+  // from callers who don't hold one of the listed roles.
+  public query ({ caller }) func list_folders(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFolder]; #Err : Text } {
     auth(caller);
     #Ok(folders.filter(func(item) =
       item.club == club and
       item.deleted_at_ms == null and
-      (team == null or item.team == team or item.team == null)))
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      canViewFolder(caller, item)))
   };
 
   public shared ({ caller }) func register_file(
@@ -153,12 +174,14 @@ persistent actor {
     mime : Text,
     is_external_link : Bool,
     blob_ref : ?Types.BlobRef,
+    mini_league_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller) and not hasRole(caller, club, team)) return #Err("Club role required");
     if (not valid(id) or not valid(folder_id) or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
+    switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
     switch (blob_ref) { case (?ref) { if (not validBlobRef(ref)) return #Err("Invalid blob ref") }; case null {} };
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
       case null { return #Err("Folder not found") };
@@ -172,6 +195,8 @@ persistent actor {
       uploaded_by = caller;
       created_at_ms = nowMs();
       deleted_at_ms = null;
+      deleted_by = null;
+      mini_league_id;
       is_external_link; blob_ref;
     };
     files := files.concat([file]);
@@ -180,15 +205,24 @@ persistent actor {
 
   public query ({ caller }) func list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
+    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+      case (?folder) { if (not canViewFolder(caller, folder)) return #Ok([]) };
+      case null {};
+    };
     #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null))
   };
 
-  public query ({ caller }) func list_club_files(club : Text, team : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
+  public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) =
       item.club == club and
       item.deleted_at_ms == null and
-      (team == null or item.team == team or item.team == null)))
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      (switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null { true };
+        case (?folder) { canViewFolder(caller, folder) };
+      })))
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
@@ -197,7 +231,7 @@ persistent actor {
       case null { #Err("File not found") };
       case (?file) {
         if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
-        let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs() };
+        let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
@@ -210,7 +244,7 @@ persistent actor {
       case null { #Err("Trashed file not found") };
       case (?file) {
         if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
-        let updated : Types.VaultFile = { file with deleted_at_ms = null };
+        let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };

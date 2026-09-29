@@ -27,10 +27,26 @@ export interface Event {
   'title' : string,
   'creator' : Principal,
   'cancelled' : boolean,
+  'series_id' : [] | [string],
   'team_id' : [] | [string],
   'description' : string,
   'starts_at_ms' : bigint,
   'ends_at_ms' : bigint,
+  'revision' : bigint,
+  'club_id' : string,
+  'location' : [] | [string],
+  'event_type' : string,
+}
+export interface EventSeries {
+  'id' : string,
+  'title' : string,
+  'creator' : Principal,
+  'until_ms' : bigint,
+  'first_starts_at_ms' : bigint,
+  'team_id' : [] | [string],
+  'description' : string,
+  'frequency' : string,
+  'first_ends_at_ms' : bigint,
   'revision' : bigint,
   'club_id' : string,
   'location' : [] | [string],
@@ -41,6 +57,26 @@ export interface LineupEntry {
   'slot' : string,
   'team_id' : [] | [string],
   'event_id' : string,
+}
+export interface LineupPlayer {
+  'x' : [] | [number],
+  'y' : [] | [number],
+  'member' : string,
+  'slot' : string,
+  'number' : [] | [number],
+  'bench' : boolean,
+}
+export interface LineupSnapshot {
+  'updated_by' : Principal,
+  'formation' : [] | [string],
+  'ball_x' : [] | [number],
+  'ball_y' : [] | [number],
+  'team_id' : [] | [string],
+  'updated_at_ms' : bigint,
+  'team_size' : number,
+  'players' : Array<LineupPlayer>,
+  'event_id' : string,
+  'revision' : bigint,
 }
 export interface Recurrence {
   'until_ms' : bigint,
@@ -94,15 +130,38 @@ export interface _SERVICE {
     { 'Ok' : Event } |
       { 'Err' : string }
   >,
+  'create_series' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      string,
+      string,
+      string,
+      [] | [string],
+      string,
+      bigint,
+      bigint,
+      bigint,
+    ],
+    { 'Ok' : { 'series' : EventSeries, 'events' : Array<Event> } } |
+      { 'Err' : string }
+  >,
+  'delete_series' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<
     [],
     {
         'Ok' : {
           'lineups' : Array<LineupEntry>,
           'schema' : number,
+          'series' : Array<EventSeries>,
           'recurrences' : Array<Recurrence>,
           'attendance' : Array<Attendance>,
           'events' : Array<Event>,
+          'lineupSnapshots' : Array<LineupSnapshot>,
           'duties' : Array<Duty>,
           'governor' : Principal,
           'roster' : Array<RosterEntry>,
@@ -110,6 +169,11 @@ export interface _SERVICE {
           'rsvps' : Array<Rsvp>,
         }
       } |
+      { 'Err' : string }
+  >,
+  'get_lineup_snapshot' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : [] | [LineupSnapshot] } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -124,6 +188,10 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'list_series' : ActorMethod<
+    [[] | [string], [] | [string]],
+    Array<EventSeries>
+  >,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -133,6 +201,19 @@ export interface _SERVICE {
   'remove_duty' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'save_lineup_snapshot' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      number,
+      [] | [number],
+      [] | [number],
+      Array<LineupPlayer>,
+    ],
+    { 'Ok' : LineupSnapshot } |
       { 'Err' : string }
   >,
   'set_attendance' : ActorMethod<
@@ -173,6 +254,11 @@ export interface _SERVICE {
   'update_event' : ActorMethod<
     [string, string, string, string, [] | [string], bigint, bigint],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'update_series' : ActorMethod<
+    [string, string, string, string, [] | [string], bigint],
+    { 'Ok' : EventSeries } |
       { 'Err' : string }
   >,
 }

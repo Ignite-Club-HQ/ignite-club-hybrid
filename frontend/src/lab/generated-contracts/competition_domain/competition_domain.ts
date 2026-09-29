@@ -51,123 +51,20 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export type Result_2 = {
-    __kind__: "Ok";
-    Ok: State;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface TeamEntry {
-    status: string;
-    team_id: string;
-    competition_id: string;
-    club_id: string;
-}
-export type Result_6 = {
-    __kind__: "Ok";
-    Ok: Match;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_13 = {
-    __kind__: "Ok";
-    Ok: Array<Match>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface Init {
-    governor: Principal;
-}
-export type Result_5 = {
-    __kind__: "Ok";
-    Ok: string;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface Match {
-    id: string;
-    status: string;
-    home_team: string;
-    away_team: string;
-    away_score: number;
-    home_score: number;
-    revision: bigint;
-    competition_id: string;
-}
-export type Result_1 = {
-    __kind__: "Ok";
-    Ok: JoinToken;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_9 = {
-    __kind__: "Ok";
-    Ok: Array<Principal>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface JoinToken {
-    id: string;
-    issued_by: Principal;
-    used: boolean;
-    team_id: string;
-    competition_id: string;
-    expires_at_ms: bigint;
-}
-export type Result_4 = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface Season {
     status: string;
     name: string;
+    divisions: Array<string>;
     revision: bigint;
     competition_id: string;
 }
-export type Result_11 = {
-    __kind__: "Ok";
-    Ok: Array<TeamEntry>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result = {
-    __kind__: "Ok";
-    Ok: Competition;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_3 = {
-    __kind__: "Ok";
-    Ok: TeamEntry;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_10 = {
-    __kind__: "Ok";
-    Ok: Array<Competition>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_12 = {
-    __kind__: "Ok";
-    Ok: Array<Season>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
+export interface TeamEntry {
+    status: string;
+    team_id: string;
+    division_id?: string;
+    competition_id: string;
+    club_id: string;
+}
 export interface Competition {
     id: string;
     status: string;
@@ -175,26 +72,6 @@ export interface Competition {
     season: string;
     revision: bigint;
     club_id: string;
-}
-export type Result_8 = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_7 = {
-    __kind__: "Ok";
-    Ok: Season;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface RoleGrant {
-    role: string;
-    user: Principal;
-    team_id?: string;
-    competition_id: string;
 }
 export interface State {
     seasons: Array<Season>;
@@ -206,151 +83,454 @@ export interface State {
     competitions: Array<Competition>;
     roles: Array<RoleGrant>;
 }
-export interface competition_domainInterface {
-    addBulkAccessPrincipal(arg0: Principal): Promise<Result_8>;
-    claim_join_token(arg0: string): Promise<Result_5>;
-    create_competition(arg0: string, arg1: string, arg2: string): Promise<Result>;
-    create_season(arg0: string, arg1: string): Promise<Result_7>;
-    export_state(): Promise<Result_2>;
-    grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<Result_4>;
-    initialize(): Promise<Result_4>;
-    issue_join_token(arg0: string, arg1: string, arg2: bigint): Promise<Result_1>;
-    listBulkAccessPrincipals(): Promise<Result_9>;
-    list_competitions(arg0: string): Promise<Result_10>;
-    list_entries(arg0: string): Promise<Result_11>;
-    list_matches(arg0: string): Promise<Result_13>;
-    list_seasons(arg0: string): Promise<Result_12>;
-    record_match(arg0: string, arg1: string, arg2: string): Promise<Result_6>;
-    register_team(arg0: string, arg1: string, arg2: string): Promise<Result_3>;
-    removeBulkAccessPrincipal(arg0: Principal): Promise<Result_8>;
-    set_match_result(arg0: string, arg1: number, arg2: number, arg3: bigint): Promise<Result_6>;
-    set_season_status(arg0: string, arg1: string, arg2: bigint): Promise<Result_7>;
+export interface Match {
+    id: string;
+    status: string;
+    round_number?: number;
+    venue?: string;
+    duration_minutes?: number;
+    home_team: string;
+    notes?: string;
+    pitch_number?: string;
+    scheduled_at_ms?: bigint;
+    away_team: string;
+    away_score: number;
+    division_id?: string;
+    home_score: number;
+    revision: bigint;
+    arrival_minutes_before?: number;
+    competition_id: string;
 }
-import type { Competition as _Competition, JoinToken as _JoinToken, Match as _Match, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, Season as _Season, State as _State, TeamEntry as _TeamEntry } from "./declarations/competition_domain.did";
+export interface RoleGrant {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    competition_id: string;
+}
+export interface JoinToken {
+    id: string;
+    issued_by: Principal;
+    used: boolean;
+    team_id: string;
+    competition_id: string;
+    expires_at_ms: bigint;
+}
+export interface competition_domainInterface {
+    addBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    assign_division(competition_id: string, team_id: string, division_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    claim_join_token(token_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: string;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    create_competition(club_id: string, name: string, season: string): Promise<{
+        __kind__: "Ok";
+        Ok: Competition;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    create_season(competition_id: string, name: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    duplicate_season(competition_id: string, source_name: string, new_name: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    export_state(): Promise<{
+        __kind__: "Ok";
+        Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    grant_role(principal: Principal, role: string, competition_id: string, team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    initialize(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    issue_join_token(competition_id: string, team_id: string, expires_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: JoinToken;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    listBulkAccessPrincipals(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_competitions(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_competitions_multi(club_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_entries(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_matches(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Match>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_seasons(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Season>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    record_match(competition_id: string, home_team: string, away_team: string): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    register_team(competition_id: string, team_id: string, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    removeBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_match_result(match_id: string, home_score: number, away_score: number, expected_revision: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_season_divisions(competition_id: string, name: string, divisions: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_season_status(competition_id: string, status: string, expected_revision: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    update_match_details(match_id: string, home_team: string, away_team: string, division_id: string | null, scheduled_at_ms: bigint | null, venue: string | null, pitch_number: string | null, round_number: number | null, duration_minutes: number | null, arrival_minutes_before: number | null, notes: string | null, expected_revision: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+}
+import type { Competition as _Competition, JoinToken as _JoinToken, Match as _Match, RoleGrant as _RoleGrant, Season as _Season, State as _State, TeamEntry as _TeamEntry } from "./declarations/competition_domain.did";
 export class Competition_domain implements competition_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
-    async addBulkAccessPrincipal(arg0: Principal): Promise<Result_8> {
+    async addBulkAccessPrincipal(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.addBulkAccessPrincipal(arg0);
-        return from_candid_Result_8_n1(result);
+        return from_candid_variant_n1(result);
     }
-    async claim_join_token(arg0: string): Promise<Result_5> {
+    async assign_division(arg0: string, arg1: string, arg2: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.assign_division(arg0, arg1, to_candid_opt_n2(arg2));
+        return from_candid_variant_n3(result);
+    }
+    async claim_join_token(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: string;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.claim_join_token(arg0);
-        return from_candid_Result_5_n3(result);
+        return from_candid_variant_n7(result);
     }
-    async create_competition(arg0: string, arg1: string, arg2: string): Promise<Result> {
+    async create_competition(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Competition;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.create_competition(arg0, arg1, arg2);
-        return from_candid_Result_n5(result);
+        return from_candid_variant_n8(result);
     }
-    async create_season(arg0: string, arg1: string): Promise<Result_7> {
+    async create_season(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.create_season(arg0, arg1);
-        return from_candid_Result_7_n7(result);
+        return from_candid_variant_n9(result);
     }
-    async export_state(): Promise<Result_2> {
+    async duplicate_season(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.duplicate_season(arg0, arg1, arg2);
+        return from_candid_variant_n9(result);
+    }
+    async export_state(): Promise<{
+        __kind__: "Ok";
+        Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.export_state();
-        return from_candid_Result_2_n9(result);
+        return from_candid_variant_n10(result);
     }
-    async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<Result_4> {
-        const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n17(arg3));
-        return from_candid_Result_4_n18(result);
+    async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n2(arg3));
+        return from_candid_variant_n1(result);
     }
-    async initialize(): Promise<Result_4> {
+    async initialize(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.initialize();
-        return from_candid_Result_4_n18(result);
+        return from_candid_variant_n1(result);
     }
-    async issue_join_token(arg0: string, arg1: string, arg2: bigint): Promise<Result_1> {
+    async issue_join_token(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: JoinToken;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.issue_join_token(arg0, arg1, arg2);
-        return from_candid_Result_1_n19(result);
+        return from_candid_variant_n22(result);
     }
-    async listBulkAccessPrincipals(): Promise<Result_9> {
+    async listBulkAccessPrincipals(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_Result_9_n21(result);
+        return from_candid_variant_n23(result);
     }
-    async list_competitions(arg0: string): Promise<Result_10> {
+    async list_competitions(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.list_competitions(arg0);
-        return from_candid_Result_10_n23(result);
+        return from_candid_variant_n24(result);
     }
-    async list_entries(arg0: string): Promise<Result_11> {
+    async list_competitions_multi(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_competitions_multi(arg0);
+        return from_candid_variant_n24(result);
+    }
+    async list_entries(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.list_entries(arg0);
-        return from_candid_Result_11_n25(result);
+        return from_candid_variant_n25(result);
     }
-    async list_matches(arg0: string): Promise<Result_13> {
+    async list_matches(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Match>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.list_matches(arg0);
-        return from_candid_Result_13_n27(result);
+        return from_candid_variant_n26(result);
     }
-    async list_seasons(arg0: string): Promise<Result_12> {
+    async list_seasons(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Season>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.list_seasons(arg0);
-        return from_candid_Result_12_n29(result);
+        return from_candid_variant_n27(result);
     }
-    async record_match(arg0: string, arg1: string, arg2: string): Promise<Result_6> {
+    async record_match(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.record_match(arg0, arg1, arg2);
-        return from_candid_Result_6_n31(result);
+        return from_candid_variant_n28(result);
     }
-    async register_team(arg0: string, arg1: string, arg2: string): Promise<Result_3> {
+    async register_team(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.register_team(arg0, arg1, arg2);
-        return from_candid_Result_3_n33(result);
+        return from_candid_variant_n3(result);
     }
-    async removeBulkAccessPrincipal(arg0: Principal): Promise<Result_8> {
+    async removeBulkAccessPrincipal(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
-        return from_candid_Result_8_n1(result);
+        return from_candid_variant_n1(result);
     }
-    async set_match_result(arg0: string, arg1: number, arg2: number, arg3: bigint): Promise<Result_6> {
+    async set_match_result(arg0: string, arg1: number, arg2: number, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.set_match_result(arg0, arg1, arg2, arg3);
-        return from_candid_Result_6_n31(result);
+        return from_candid_variant_n28(result);
     }
-    async set_season_status(arg0: string, arg1: string, arg2: bigint): Promise<Result_7> {
+    async set_season_divisions(arg0: string, arg1: string, arg2: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_season_divisions(arg0, arg1, arg2);
+        return from_candid_variant_n9(result);
+    }
+    async set_season_status(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Season;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.set_season_status(arg0, arg1, arg2);
-        return from_candid_Result_7_n7(result);
+        return from_candid_variant_n9(result);
+    }
+    async update_match_details(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: bigint | null, arg5: string | null, arg6: string | null, arg7: number | null, arg8: number | null, arg9: number | null, arg10: string | null, arg11: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Match;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n2(arg3), to_candid_opt_n29(arg4), to_candid_opt_n2(arg5), to_candid_opt_n2(arg6), to_candid_opt_n30(arg7), to_candid_opt_n30(arg8), to_candid_opt_n30(arg9), to_candid_opt_n2(arg10), arg11);
+        return from_candid_variant_n28(result);
     }
 }
-function from_candid_Result_10_n23(value: _Result_10): Result_10 {
-    return from_candid_variant_n24(value);
+function from_candid_Match_n15(value: _Match): Match {
+    return from_candid_record_n16(value);
 }
-function from_candid_Result_11_n25(value: _Result_11): Result_11 {
-    return from_candid_variant_n26(value);
-}
-function from_candid_Result_12_n29(value: _Result_12): Result_12 {
-    return from_candid_variant_n30(value);
-}
-function from_candid_Result_13_n27(value: _Result_13): Result_13 {
-    return from_candid_variant_n28(value);
-}
-function from_candid_Result_1_n19(value: _Result_1): Result_1 {
-    return from_candid_variant_n20(value);
-}
-function from_candid_Result_2_n9(value: _Result_2): Result_2 {
-    return from_candid_variant_n10(value);
-}
-function from_candid_Result_3_n33(value: _Result_3): Result_3 {
-    return from_candid_variant_n34(value);
-}
-function from_candid_Result_4_n18(value: _Result_4): Result_4 {
-    return from_candid_variant_n2(value);
-}
-function from_candid_Result_5_n3(value: _Result_5): Result_5 {
-    return from_candid_variant_n4(value);
-}
-function from_candid_Result_6_n31(value: _Result_6): Result_6 {
-    return from_candid_variant_n32(value);
-}
-function from_candid_Result_7_n7(value: _Result_7): Result_7 {
-    return from_candid_variant_n8(value);
-}
-function from_candid_Result_8_n1(value: _Result_8): Result_8 {
-    return from_candid_variant_n2(value);
-}
-function from_candid_Result_9_n21(value: _Result_9): Result_9 {
-    return from_candid_variant_n22(value);
-}
-function from_candid_Result_n5(value: _Result): Result {
-    return from_candid_variant_n6(value);
-}
-function from_candid_RoleGrant_n14(value: _RoleGrant): RoleGrant {
-    return from_candid_record_n15(value);
+function from_candid_RoleGrant_n20(value: _RoleGrant): RoleGrant {
+    return from_candid_record_n21(value);
 }
 function from_candid_State_n11(value: _State): State {
     return from_candid_record_n12(value);
 }
-function from_candid_opt_n16(value: [] | [string]): string | null {
+function from_candid_TeamEntry_n4(value: _TeamEntry): TeamEntry {
+    return from_candid_record_n5(value);
+}
+function from_candid_opt_n17(value: [] | [number]): number | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n18(value: [] | [bigint]): bigint | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n6(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n12(value: {
@@ -375,15 +555,69 @@ function from_candid_record_n12(value: {
     return {
         seasons: value.seasons,
         schema: value.schema,
-        entries: value.entries,
-        matches: value.matches,
+        entries: from_candid_vec_n13(value.entries),
+        matches: from_candid_vec_n14(value.matches),
         tokens: value.tokens,
         governor: value.governor,
         competitions: value.competitions,
-        roles: from_candid_vec_n13(value.roles)
+        roles: from_candid_vec_n19(value.roles)
     };
 }
-function from_candid_record_n15(value: {
+function from_candid_record_n16(value: {
+    id: string;
+    status: string;
+    round_number: [] | [number];
+    venue: [] | [string];
+    duration_minutes: [] | [number];
+    home_team: string;
+    notes: [] | [string];
+    pitch_number: [] | [string];
+    scheduled_at_ms: [] | [bigint];
+    away_team: string;
+    away_score: number;
+    division_id: [] | [string];
+    home_score: number;
+    revision: bigint;
+    arrival_minutes_before: [] | [number];
+    competition_id: string;
+}): {
+    id: string;
+    status: string;
+    round_number?: number;
+    venue?: string;
+    duration_minutes?: number;
+    home_team: string;
+    notes?: string;
+    pitch_number?: string;
+    scheduled_at_ms?: bigint;
+    away_team: string;
+    away_score: number;
+    division_id?: string;
+    home_score: number;
+    revision: bigint;
+    arrival_minutes_before?: number;
+    competition_id: string;
+} {
+    return {
+        id: value.id,
+        status: value.status,
+        round_number: record_opt_to_undefined(from_candid_opt_n17(value.round_number)),
+        venue: record_opt_to_undefined(from_candid_opt_n6(value.venue)),
+        duration_minutes: record_opt_to_undefined(from_candid_opt_n17(value.duration_minutes)),
+        home_team: value.home_team,
+        notes: record_opt_to_undefined(from_candid_opt_n6(value.notes)),
+        pitch_number: record_opt_to_undefined(from_candid_opt_n6(value.pitch_number)),
+        scheduled_at_ms: record_opt_to_undefined(from_candid_opt_n18(value.scheduled_at_ms)),
+        away_team: value.away_team,
+        away_score: value.away_score,
+        division_id: record_opt_to_undefined(from_candid_opt_n6(value.division_id)),
+        home_score: value.home_score,
+        revision: value.revision,
+        arrival_minutes_before: record_opt_to_undefined(from_candid_opt_n17(value.arrival_minutes_before)),
+        competition_id: value.competition_id
+    };
+}
+function from_candid_record_n21(value: {
     role: string;
     user: Principal;
     team_id: [] | [string];
@@ -397,9 +631,49 @@ function from_candid_record_n15(value: {
     return {
         role: value.role,
         user: value.user,
-        team_id: record_opt_to_undefined(from_candid_opt_n16(value.team_id)),
+        team_id: record_opt_to_undefined(from_candid_opt_n6(value.team_id)),
         competition_id: value.competition_id
     };
+}
+function from_candid_record_n5(value: {
+    status: string;
+    team_id: string;
+    division_id: [] | [string];
+    competition_id: string;
+    club_id: string;
+}): {
+    status: string;
+    team_id: string;
+    division_id?: string;
+    competition_id: string;
+    club_id: string;
+} {
+    return {
+        status: value.status,
+        team_id: value.team_id,
+        division_id: record_opt_to_undefined(from_candid_opt_n6(value.division_id)),
+        competition_id: value.competition_id,
+        club_id: value.club_id
+    };
+}
+function from_candid_variant_n1(value: {
+    Ok: null;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
 function from_candid_variant_n10(value: {
     Ok: _State;
@@ -420,26 +694,7 @@ function from_candid_variant_n10(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n2(value: {
-    Ok: null;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n20(value: {
+function from_candid_variant_n22(value: {
     Ok: _JoinToken;
 } | {
     Err: string;
@@ -458,7 +713,7 @@ function from_candid_variant_n20(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n22(value: {
+function from_candid_variant_n23(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -496,7 +751,7 @@ function from_candid_variant_n24(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n26(value: {
+function from_candid_variant_n25(value: {
     Ok: Array<_TeamEntry>;
 } | {
     Err: string;
@@ -509,13 +764,13 @@ function from_candid_variant_n26(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_vec_n13(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n26(value: {
     Ok: Array<_Match>;
 } | {
     Err: string;
@@ -528,13 +783,13 @@ function from_candid_variant_n28(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_vec_n14(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n30(value: {
+function from_candid_variant_n27(value: {
     Ok: Array<_Season>;
 } | {
     Err: string;
@@ -553,7 +808,7 @@ function from_candid_variant_n30(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n32(value: {
+function from_candid_variant_n28(value: {
     Ok: _Match;
 } | {
     Err: string;
@@ -566,13 +821,13 @@ function from_candid_variant_n32(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_Match_n15(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n3(value: {
     Ok: _TeamEntry;
 } | {
     Err: string;
@@ -585,13 +840,13 @@ function from_candid_variant_n34(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_TeamEntry_n4(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n4(value: {
+function from_candid_variant_n7(value: {
     Ok: string;
 } | {
     Err: string;
@@ -610,7 +865,7 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
+function from_candid_variant_n8(value: {
     Ok: _Competition;
 } | {
     Err: string;
@@ -629,7 +884,7 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n8(value: {
+function from_candid_variant_n9(value: {
     Ok: _Season;
 } | {
     Err: string;
@@ -648,10 +903,22 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n13(value: Array<_RoleGrant>): Array<RoleGrant> {
-    return value.map((x)=>from_candid_RoleGrant_n14(x));
+function from_candid_vec_n13(value: Array<_TeamEntry>): Array<TeamEntry> {
+    return value.map((x)=>from_candid_TeamEntry_n4(x));
 }
-function to_candid_opt_n17(value: string | null): [] | [string] {
+function from_candid_vec_n14(value: Array<_Match>): Array<Match> {
+    return value.map((x)=>from_candid_Match_n15(x));
+}
+function from_candid_vec_n19(value: Array<_RoleGrant>): Array<RoleGrant> {
+    return value.map((x)=>from_candid_RoleGrant_n20(x));
+}
+function to_candid_opt_n2(value: string | null): [] | [string] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n29(value: bigint | null): [] | [bigint] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n30(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

@@ -69,9 +69,12 @@ export interface ClubSponsor {
   'name' : string,
   'tier' : string,
   'sort_order' : number,
+  'description' : [] | [string],
   'logo_url' : [] | [string],
+  'is_team_only' : boolean,
   'is_active' : boolean,
   'club_id' : string,
+  'exposure_percentage' : [] | [number],
 }
 export interface ClubTeam {
   'id' : string,
@@ -111,12 +114,33 @@ export interface Link {
 }
 export interface Listing { 'links' : Array<Link>, 'revision' : bigint }
 export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
+export interface NewsPost {
+  'id' : string,
+  'status' : string,
+  'title' : string,
+  'body' : string,
+  'updated_at_ms' : bigint,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'revision' : bigint,
+  'club_id' : string,
+}
 export type Operation = {
     'SetActive' : { 'id' : string, 'active' : boolean }
   } |
   { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
   { 'Remove' : { 'id' : string } } |
   { 'Reorder' : { 'first' : string, 'second' : string } };
+export interface ParentInvite {
+  'id' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : [] | [string],
+  'child_id' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
 export interface Request {
   'request_id' : string,
   'club' : string,
@@ -149,9 +173,34 @@ export interface _SERVICE {
     { 'Ok' : Account } |
       { 'Err' : string }
   >,
+  'accept_parent_invite' : ActorMethod<
+    [string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
   'begin_identity_link' : ActorMethod<
     [Principal],
     { 'Ok' : Challenge } |
+      { 'Err' : string }
+  >,
+  'create_news_post' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : NewsPost } |
+      { 'Err' : string }
+  >,
+  'create_parent_invite' : ActorMethod<
+    [string, [] | [string], string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'delete_news_post' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_sponsor' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
@@ -182,6 +231,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_parent_invite' : ActorMethod<
+    [string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
   'get_sponsor' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSponsor] } |
@@ -216,6 +270,16 @@ export interface _SERVICE {
   'list_links' : ActorMethod<
     [string, boolean],
     { 'Ok' : Listing } |
+      { 'Err' : string }
+  >,
+  'list_news' : ActorMethod<
+    [string],
+    { 'Ok' : Array<NewsPost> } |
+      { 'Err' : string }
+  >,
+  'list_news_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<NewsPost> } |
       { 'Err' : string }
   >,
   'list_role_grants' : ActorMethod<
@@ -267,6 +331,11 @@ export interface _SERVICE {
   'unfreeze_club' : ActorMethod<
     [string, bigint],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'update_news_post' : ActorMethod<
+    [string, string, string, string, bigint],
+    { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
   'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,

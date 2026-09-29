@@ -1,5 +1,11 @@
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventDuty, updateLiveEvent } from "@/live/features/events";
+import {
+  createLiveEventSeries,
+  getLiveEventsSnapshot,
+  setLiveEventDuty,
+  updateLiveEvent,
+  updateLiveEventSeries,
+} from "@/live/features/events";
 
 export type EventUpdateTransactionInput = {
   eventId: string;
@@ -61,16 +67,26 @@ export async function updateEventTransaction(
     },
     icp: async (ctx) => {
       if (input.updateSeries) {
-        // stays Supabase: no canister shape for update_event_series
-        // (series-wide atomic update across all future occurrences).
-        const { error } = await client.rpc("update_event_series", {
-          p_event_id: input.eventId,
-          p_updates: input.updates,
-          p_selected_event_date: input.selectedEventDate,
-          p_selected_start_time: input.selectedStartTime,
-          p_selected_end_time: input.selectedEndTime,
+        // Canister counterpart of update_event_series: find the series this
+        // event belongs to via the snapshot, then rewrite future occurrences
+        // from the selected date. Provisional — the canister series carries
+        // title/description/type/location only; per-occurrence time changes
+        // are not replayed (children keep the series' original times).
+        const snapshot = await getLiveEventsSnapshot(ctx);
+        const event = (snapshot.events as Array<{ id: string; series_id: [] | [string] }>)
+          .find((e) => e.id === input.eventId);
+        const seriesId = event?.series_id?.[0];
+        if (!seriesId) throw new Error("Event is not part of a recurring series.");
+        const updates = input.updates as Record<string, unknown>;
+        const current = (snapshot.series as Array<{ id: string; title: string; description: string; event_type: string; location: [] | [string] }>)
+          .find((s) => s.id === seriesId);
+        await updateLiveEventSeries(ctx, seriesId, {
+          title: String(updates.title ?? current?.title ?? ""),
+          description: String(updates.description ?? current?.description ?? ""),
+          eventType: String(updates.type ?? current?.event_type ?? "training"),
+          location: (updates.location_name as string | null | undefined) ?? current?.location?.[0] ?? null,
+          fromMs: new Date(input.selectedEventDate).getTime(),
         });
-        if (error) throw error;
         return;
       }
 
@@ -134,10 +150,11 @@ export async function syncEventDuties(
 /**
  * Convert an existing single event into a recurring parent and its children.
  *
- * Parent conversion and child insertion are delegated to one database
- * transaction. Child scope and creator identity are derived server-side.
- *
- * stays Supabase: no canister shape for recurring series expansion.
+ * Supabase delegates parent conversion and child insertion to one database
+ * transaction. On ICP the canister creates the series (with the converted
+ * event's details as the first occurrence); the original single event is
+ * left in place — provisional mapping, verify post-deploy whether the
+ * original should be cancelled or absorbed.
  */
 export async function convertEventToRecurringSeries(
   client: any,
@@ -146,27 +163,49 @@ export async function convertEventToRecurringSeries(
   const durationMs = input.selectedEndTime
     ? new Date(input.selectedEndTime).getTime() - input.selectedDate.getTime()
     : null;
-  const childEvents = input.occurrenceDates.slice(1).map((date) => {
-    const childDateTime = new Date(date);
-    childDateTime.setHours(input.selectedDate.getHours(), input.selectedDate.getMinutes());
-    return {
-      event_date: childDateTime.toISOString(),
-      start_time: childDateTime.toISOString(),
-      end_time: durationMs === null
-        ? null
-        : new Date(childDateTime.getTime() + durationMs).toISOString(),
-    };
+  return withFeatureBackend("events", {
+    supabase: async () => {
+      const childEvents = input.occurrenceDates.slice(1).map((date) => {
+        const childDateTime = new Date(date);
+        childDateTime.setHours(input.selectedDate.getHours(), input.selectedDate.getMinutes());
+        return {
+          event_date: childDateTime.toISOString(),
+          start_time: childDateTime.toISOString(),
+          end_time: durationMs === null
+            ? null
+            : new Date(childDateTime.getTime() + durationMs).toISOString(),
+        };
+      });
+      const { data, error } = await client.rpc("convert_event_to_recurring_series", {
+        p_event_id: input.eventId,
+        p_parent_updates: input.updates,
+        p_child_events: childEvents,
+        p_parent_event_date: input.selectedDate.toISOString(),
+        p_parent_start_time: input.selectedStartTime,
+        p_parent_end_time: input.selectedEndTime,
+        p_recurrence_end_date: input.recurrenceEndDate,
+      });
+      if (error) throw error;
+      return (data as { occurrence_count?: number } | null)?.occurrence_count
+        ?? input.occurrenceDates.length;
+    },
+    icp: async (ctx) => {
+      const updates = input.updates as Record<string, unknown>;
+      const untilMs = new Date(input.recurrenceEndDate).getTime();
+      const firstStartsAtMs = input.selectedDate.getTime();
+      const { events } = await createLiveEventSeries(ctx, {
+        clubId: String(updates.club_id ?? ""),
+        teamId: (updates.team_id as string | null | undefined) ?? null,
+        title: String(updates.title ?? ""),
+        description: String(updates.description ?? ""),
+        eventType: String(updates.type ?? "training"),
+        location: (updates.location_name as string | null | undefined) ?? null,
+        frequency: "weekly",
+        firstStartsAtMs,
+        firstEndsAtMs: durationMs === null ? firstStartsAtMs : firstStartsAtMs + durationMs,
+        untilMs,
+      });
+      return events.length;
+    },
   });
-  const { data, error } = await client.rpc("convert_event_to_recurring_series", {
-    p_event_id: input.eventId,
-    p_parent_updates: input.updates,
-    p_child_events: childEvents,
-    p_parent_event_date: input.selectedDate.toISOString(),
-    p_parent_start_time: input.selectedStartTime,
-    p_parent_end_time: input.selectedEndTime,
-    p_recurrence_end_date: input.recurrenceEndDate,
-  });
-  if (error) throw error;
-  return (data as { occurrence_count?: number } | null)?.occurrence_count
-    ?? input.occurrenceDates.length;
 }

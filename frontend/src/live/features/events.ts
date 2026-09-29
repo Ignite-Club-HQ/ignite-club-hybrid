@@ -207,6 +207,152 @@ export async function setLiveEventRecurrence(
   );
 }
 
+export interface LiveEventSeriesInput {
+  clubId: string;
+  teamId?: string | null;
+  title: string;
+  description: string;
+  eventType: string;
+  location?: string | null;
+  frequency: string;
+  firstStartsAtMs: number | Date;
+  firstEndsAtMs: number | Date;
+  untilMs: number | Date;
+}
+
+/**
+ * Recurring series surface. create_series generates the child events
+ * canister-side (the counterpart of the Supabase RPC's child-date
+ * expansion); update_series rewrites future children from fromMs;
+ * delete_series removes future children and truncates the series.
+ */
+export async function createLiveEventSeries(
+  ctx: FeatureBackendContext,
+  input: LiveEventSeriesInput,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_series(
+      input.clubId,
+      candidOpt(input.teamId),
+      input.title,
+      input.description,
+      input.eventType,
+      candidOpt(input.location),
+      input.frequency,
+      toNat64(input.firstStartsAtMs),
+      toNat64(input.firstEndsAtMs),
+      toNat64(input.untilMs),
+    ),
+    "Create event series",
+  );
+}
+
+export async function updateLiveEventSeries(
+  ctx: FeatureBackendContext,
+  seriesId: string,
+  input: {
+    title: string;
+    description: string;
+    eventType: string;
+    location?: string | null;
+    fromMs: number | Date;
+  },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_series(
+      seriesId,
+      input.title,
+      input.description,
+      input.eventType,
+      candidOpt(input.location),
+      toNat64(input.fromMs),
+    ),
+    "Update event series",
+  );
+}
+
+export async function deleteLiveEventSeries(
+  ctx: FeatureBackendContext,
+  seriesId: string,
+  fromMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.delete_series(seriesId, toNat64(fromMs)),
+    "Delete event series",
+  );
+}
+
+export async function listLiveEventSeries(
+  ctx: FeatureBackendContext,
+  clubId?: string | null,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.list_series(candidOpt(clubId), candidOpt(teamId));
+}
+
+export interface LiveLineupPlayer {
+  member: string;
+  slot: string;
+  number?: number | null;
+  x?: number | null;
+  y?: number | null;
+  bench: boolean;
+}
+
+/**
+ * Full lineup snapshot (formation, ball position, bench, coordinates) — the
+ * richer counterpart of add_lineup, which only mirrors on-pitch members.
+ */
+export async function saveLiveLineupSnapshot(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  input: {
+    teamId?: string | null;
+    formation?: string | null;
+    teamSize: number;
+    ballX?: number | null;
+    ballY?: number | null;
+    players: LiveLineupPlayer[];
+  },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_lineup_snapshot(
+      eventId,
+      candidOpt(input.teamId),
+      candidOpt(input.formation),
+      input.teamSize,
+      candidOpt(input.ballX),
+      candidOpt(input.ballY),
+      input.players.map((p) => ({
+        member: p.member,
+        slot: p.slot,
+        number: candidOpt(p.number),
+        x: candidOpt(p.x),
+        y: candidOpt(p.y),
+        bench: p.bench,
+      })),
+    ),
+    "Save lineup",
+  );
+}
+
+export async function getLiveLineupSnapshot(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_lineup_snapshot(eventId, candidOpt(teamId)),
+    "Load lineup",
+  );
+}
+
 /**
  * Full events-domain snapshot (events, RSVPs, attendance, roster, duties,
  * lineups, recurrences). The canister exposes no per-event RSVP/attendance

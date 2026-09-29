@@ -76,6 +76,89 @@ export async function saveLiveSponsor(ctx: FeatureBackendContext, sponsor: LiveC
   return unwrapCandid(actor.save_sponsor(sponsor), "Save sponsor");
 }
 
+export async function deleteLiveSponsor(ctx: FeatureBackendContext, sponsorId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_sponsor(sponsorId), "Delete sponsor");
+}
+
+/**
+ * Rich news posts (the news feed) — the counterpart of the Supabase
+ * club_news posts. The single announcement string on club settings stays
+ * for the banner surface.
+ */
+export async function createLiveNewsPost(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  title: string,
+  body: string,
+  status: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_news_post(clubId, title, body, status),
+    "Create news post",
+  );
+}
+
+export async function updateLiveNewsPost(
+  ctx: FeatureBackendContext,
+  postId: string,
+  title: string,
+  body: string,
+  status: string,
+  expectedRevision: number,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_news_post(postId, title, body, status, BigInt(expectedRevision)),
+    "Update news post",
+  );
+}
+
+export async function deleteLiveNewsPost(ctx: FeatureBackendContext, postId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_news_post(postId), "Delete news post");
+}
+
+export async function listLiveNews(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_news(clubId), "List news");
+}
+
+/** Cross-club feed: published posts from clubs the caller belongs to. */
+export async function listLiveNewsMulti(ctx: FeatureBackendContext, clubIds: string[]) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_news_multi(clubIds), "List news");
+}
+
+/**
+ * Parent invites — the canister counterpart of the Supabase parent-invite
+ * RPCs. create mints a share token; accept atomically links the accepting
+ * parent as guardian (+ family link and team assignment).
+ */
+export async function createLiveParentInvite(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string | null,
+  childId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_parent_invite(clubId, candidOpt(teamId), childId),
+    "Create parent invite",
+  );
+}
+
+export async function getLiveParentInvite(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_parent_invite(token), "Load parent invite");
+}
+
+export async function acceptLiveParentInvite(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_parent_invite(token), "Accept parent invite");
+}
+
 export async function liveClubWhoami(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.whoami(), "Whoami");

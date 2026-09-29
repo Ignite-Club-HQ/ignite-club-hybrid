@@ -4,7 +4,9 @@ type VaultFolder =
    created_at_ms: nat64;
    created_by: principal;
    deleted_at_ms: opt nat64;
+   deleted_by: opt principal;
    id: text;
+   mini_league_id: opt text;
    name: text;
    parent_id: opt text;
    restricted_roles: vec text;
@@ -16,11 +18,13 @@ type VaultFile =
    club: text;
    created_at_ms: nat64;
    deleted_at_ms: opt nat64;
+   deleted_by: opt principal;
    file_url: text;
    folder_id: text;
    id: text;
    is_external_link: bool;
    mime: text;
+   mini_league_id: opt text;
    name: text;
    size: nat64;
    team: opt text;
@@ -34,7 +38,7 @@ type BlobRef =
  };
 service : {
   create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
-   name: text, restricted_roles: vec text) ->
+   name: text, restricted_roles: vec text, mini_league_id: opt text) ->
    (variant {
       Err: text;
       Ok: VaultFolder;
@@ -56,7 +60,7 @@ service : {
                        Err: text;
                        Ok;
                      });
-  list_club_files: (club: text, team: opt text) ->
+  list_club_files: (club: text, team: opt text, mini_league_id: opt text) ->
    (variant {
       Err: text;
       Ok: vec VaultFile;
@@ -66,7 +70,7 @@ service : {
       Err: text;
       Ok: vec VaultFile;
     }) query;
-  list_folders: (club: text, team: opt text) ->
+  list_folders: (club: text, team: opt text, mini_league_id: opt text) ->
    (variant {
       Err: text;
       Ok: vec VaultFolder;
@@ -83,10 +87,11 @@ service : {
     });
   register_file: (id: text, folder_id: text, club: text, team: opt text,
    name: text, file_url: text, size: nat64, mime: text, is_external_link:
-   bool, blob_ref: opt BlobRef) -> (variant {
-                                      Err: text;
-                                      Ok: VaultFile;
-                                    });
+   bool, blob_ref: opt BlobRef, mini_league_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: VaultFile;
+    });
   rename_file: (id: text, name: text) -> (variant {
                                             Err: text;
                                             Ok: VaultFile;
