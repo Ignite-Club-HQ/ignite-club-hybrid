@@ -277,6 +277,25 @@ export default function EditTeamPage() {
         } : {}),
       })
       .eq("id", id!);
+        return error;
+      },
+      icp: async (ctx) => {
+        try {
+          await saveLiveMembershipTeam(ctx, {
+            id: id!,
+            name: name.trim(),
+            division: [],
+            gender: [],
+            is_active: isActive,
+            club_id: team!.club_id,
+            age_group: levelAge.trim() ? [levelAge.trim()] : [],
+          });
+          return null;
+        } catch (error) {
+          return error as Error;
+        }
+      },
+    });
 
     setSaving(false);
 
