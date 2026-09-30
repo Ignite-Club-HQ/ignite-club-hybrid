@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Global "users must re-read and accept Terms & Privacy Policy" switch.
@@ -78,6 +79,11 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
     summary: null,
   };
 
+  // NOTE (provisional gap): there is no canister terms-acceptance shape yet,
+  // so ICP-mode users always skip this per-user acceptance check and
+  // `mustAccept` stays false for them, even when the global switch is on.
+  const isIcp = resolveAuthBackend() === "icp";
+
   const acceptanceQuery = useQuery({
     queryKey: ["legal-acceptance", userId],
     queryFn: async () => {
@@ -89,14 +95,14 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
       if (error) throw error;
       return data ?? null;
     },
-    // Only ever queried when the switch is actually on.
-    enabled: !!userId && setting.required,
+    // Only ever queried when the switch is actually on (and not in ICP mode).
+    enabled: !!userId && setting.required && !isIcp,
     staleTime: 60 * 1000,
     retry: 1,
   });
 
   let mustAccept = false;
-  if (setting.required && setting.effective_at && acceptanceQuery.data !== undefined) {
+  if (!isIcp && setting.required && setting.effective_at && acceptanceQuery.data !== undefined) {
     const effective = new Date(setting.effective_at).getTime();
     const terms = acceptanceQuery.data?.terms_accepted_at;
     const privacy = acceptanceQuery.data?.privacy_accepted_at;

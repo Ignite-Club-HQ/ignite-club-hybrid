@@ -104,6 +104,7 @@ import ClubRecentGames from "@/components/history/ClubRecentGames";
 import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsSection";
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 
 
@@ -119,6 +120,9 @@ export default function ClubDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  // Club deletion/restore and role-request flows have no club_domain canister
+  // shape yet, so they are gated off entirely for Internet Identity accounts.
+  const isIcpAccount = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -206,6 +210,12 @@ export default function ClubDetailPage() {
     queryFn: async () => {
       if (useIcpLab && id) {
         return { total: 1, adults: 1, juniors: 0, growth: 0, monthChange: 0 };
+      }
+      // PROVISIONAL: no club_domain canister shape for member-count reads yet;
+      // return a zero fallback for Internet Identity accounts instead of
+      // querying Supabase user_roles/child_team_assignments by principal id.
+      if (isIcpAccount) {
+        return { total: 0, adults: 0, juniors: 0, growth: 0, monthChange: 0 };
       }
 
       // Get team IDs for this club (exclude deleted teams)
@@ -765,6 +775,7 @@ export default function ClubDetailPage() {
     queryKey: ["club-request", id, user?.id],
     queryFn: async () => {
       if (useIcpLab) return null;
+      if (isIcpAccount) return null;
       const { data } = await supabase
         .from("role_requests")
         .select("*")
@@ -774,12 +785,14 @@ export default function ClubDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id && !!user && !isMember && !useIcpLab,
+    enabled: !!id && !!user && !isMember && !useIcpLab && !isIcpAccount,
   });
 
   const requestRoleMutation = useMutation({
     mutationFn: async () => {
       if (useIcpLab) throw new Error("Club role requests are unavailable in ICP lab mode.");
+      // PROVISIONAL: no canister shape for role requests yet.
+      if (isIcpAccount) throw new Error("Requesting a club role isn't available for Internet Identity accounts yet.");
       const { error } = await supabase.from("role_requests").insert({
         user_id: user!.id,
         club_id: id!,
@@ -814,6 +827,11 @@ export default function ClubDetailPage() {
   const handleDelete = async () => {
     if (useIcpLab) {
       toast({ title: "Club deletion is unavailable in ICP lab mode", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no club_domain canister shape for club deletion yet.
+    if (isIcpAccount) {
+      toast({ title: "Club deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     if (isDeleting) return;
@@ -1062,6 +1080,11 @@ export default function ClubDetailPage() {
   const handlePermanentDeleteClub = async () => {
     if (useIcpLab) {
       toast({ title: "Permanent club deletion is unavailable in ICP lab mode", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no club_domain canister shape for permanent club deletion yet.
+    if (isIcpAccount) {
+      toast({ title: "Permanent club deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     setIsDeleting(true);

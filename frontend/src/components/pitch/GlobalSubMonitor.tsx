@@ -8,6 +8,7 @@ import { useGameStats } from "@/hooks/useGameStats";
 import { showBrowserNotification, requestNotificationPermission } from "@/lib/notifications";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { usePitchBoardNotifications } from "@/hooks/usePitchBoardNotifications";
 import type { Json } from "@/integrations/supabase/types";
 import { setSyncStatus } from "@/hooks/useSyncStatus";
@@ -146,6 +147,7 @@ export default function GlobalSubMonitor() {
   const immediateCheckRef = useRef<{ key: string; at: number } | null>(null);
 
   const triggerImmediatePitchCheck = useCallback(async (source: string, dedupeKey?: string) => {
+    if (resolveAuthBackend() === "icp") return; // background push sync is Supabase-only; local pitch board still runs
     const now = Date.now();
     if (dedupeKey && immediateCheckRef.current?.key === dedupeKey && (now - immediateCheckRef.current.at) < 4000) {
       return;
@@ -170,6 +172,12 @@ export default function GlobalSubMonitor() {
 
   // Sync game state to database for server-side push notifications
   const syncToDatabase = useCallback(async () => {
+    if (resolveAuthBackend() === "icp") {
+      // Background active_games sync/push notifications are Supabase-only;
+      // the local pitch board keeps running without server sync in ICP mode.
+      setSyncStatus({ status: "idle", lastSyncTime: null });
+      return;
+    }
     if (!user?.id) {
       console.log('[SYNC] No user logged in, skipping sync');
       setSyncStatus({ status: "idle", lastSyncTime: null });
@@ -530,6 +538,7 @@ export default function GlobalSubMonitor() {
   // Create database notification which triggers server-side push via database trigger
   const createPitchBoardNotification = useCallback(async (type: string, message: string) => {
     if (!user?.id) return;
+    if (resolveAuthBackend() === "icp") return;
     if (!pitchBoardNotificationsEnabled) return; // Check preference
     
     try {
@@ -602,7 +611,7 @@ export default function GlobalSubMonitor() {
       let eventDate: string | undefined;
       let opponent: string | undefined;
 
-      if (pitchState.linkedEventId) {
+      if (pitchState.linkedEventId && resolveAuthBackend() !== "icp") {
         try {
           const { data: eventData } = await supabase
             .from('events')
@@ -662,7 +671,7 @@ export default function GlobalSubMonitor() {
     let eventTitle: string | undefined;
     let eventDate: string | undefined;
     let opponent: string | undefined;
-    if (pitchState.linkedEventId) {
+    if (pitchState.linkedEventId && resolveAuthBackend() !== "icp") {
       try {
         const { data: eventData } = await supabase
           .from('events')

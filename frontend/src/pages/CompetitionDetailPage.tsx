@@ -18,6 +18,9 @@ import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { registerLiveCompetitionTeam } from "@/live/features/competitions";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
@@ -275,6 +278,10 @@ function SupabaseCompetitionDetailPage() {
     queryKey: ["competition-isadmin", id, user?.id],
     enabled: !!id && !!user,
     queryFn: async () => {
+      // PROVISIONAL: no canister equivalent for is_competition_admin yet.
+      // Fall back to "not an admin" in ICP mode, which safely hides the
+      // management UI instead of querying Supabase by principal id.
+      if (resolveAuthBackend() === "icp") return false;
       const { data } = await supabase.rpc("is_competition_admin", {
         _user_id: user!.id,
         _competition_id: id!,
@@ -1278,18 +1285,32 @@ function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { com
   const submitExisting = async () => {
     if (!teamId) return;
     setSaving(true);
-    const { error } = await supabase.from("competition_entries").insert({
-      competition_id: competitionId,
-      team_id: teamId,
-      division_id: divisionId || null,
-      invited_by: user!.id,
-      status: "invited",
-    });
-    setSaving(false);
-    if (error) {
-      toast({ title: "Could not invite team", description: error.message, variant: "destructive" });
+    try {
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.from("competition_entries").insert({
+            competition_id: competitionId,
+            team_id: teamId,
+            division_id: divisionId || null,
+            invited_by: user!.id,
+            status: "invited",
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: register_team has no invite/division concept
+          // (it directly registers the team); division assignment stays
+          // Supabase-only until a canister shape exists.
+          const team = teams.find((t: any) => t.id === teamId);
+          await registerLiveCompetitionTeam(ctx, competitionId, teamId, team?.club_id ?? "");
+        },
+      });
+    } catch (error: any) {
+      setSaving(false);
+      toast({ title: "Could not invite team", description: error?.message, variant: "destructive" });
       return;
     }
+    setSaving(false);
     toast({ title: "Team invited" });
     setTeamId(""); setDivisionId(""); setOpen(false); onDone();
   };
@@ -1300,6 +1321,11 @@ function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { com
     if (!tName) { toast({ title: "Team name required", variant: "destructive" }); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast({ title: "Valid contact email required", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no canister shape for shell-team invites / transactional email.
+    if (resolveAuthBackend() === "icp") {
+      toast({ title: "Inviting a new team isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -1526,6 +1552,11 @@ function AddDivisionForm({ competitionId, onDone }: { competitionId: string; onD
     if (!name.trim()) return;
     if (dayEnd <= dayStart) {
       toast({ title: "Day window invalid", description: "Latest kickoff must be after earliest.", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no canister shape for competition_divisions yet.
+    if (resolveAuthBackend() === "icp") {
+      toast({ title: "Adding divisions isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     setSaving(true);

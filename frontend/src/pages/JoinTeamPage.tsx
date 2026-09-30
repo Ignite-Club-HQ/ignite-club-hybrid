@@ -28,6 +28,7 @@ import { JoinTeamInviteCard } from "@/components/join-team/JoinTeamInviteCard";
 import { JoinTeamStatusCard } from "@/components/join-team/JoinTeamStatusCard";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 
@@ -1158,6 +1159,14 @@ function SupabaseJoinTeamPage() {
 
   const joinMutation = useMutation({
     mutationFn: async () => {
+      // Provisional: the entire accept-invite flow (user_roles, child
+      // records/guardians, notifications, claim_mini_league_invite rpc,
+      // send-email function) is Supabase-only with no membership.ts
+      // canister shape yet. Block it outright for Internet Identity
+      // accounts rather than let any of those uuid-keyed calls fail.
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
+      }
       if (!invite || !user) throw new Error("Missing data");
 
       // Block join if there's a name validation error
@@ -1423,6 +1432,17 @@ function SupabaseJoinTeamPage() {
       return;
     }
     
+    // Provisional: invite acceptance has no ICP canister shape yet — block
+    // before triggering any of the Supabase mutation chain.
+    if (resolveAuthBackend() === "icp") {
+      toast({
+        title: "Not available yet",
+        description: "Accepting invites isn't available for Internet Identity accounts yet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // User is logged in with complete profile - proceed with join (may need photo consent for parent role)
     joinMutation.mutate();
   };

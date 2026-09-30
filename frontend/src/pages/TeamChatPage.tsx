@@ -63,6 +63,7 @@ import {
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isSameDay } from "date-fns";
 import { ChatDateSeparator } from "@/components/chat/ChatDateSeparator";
 import { ChatMessage } from "@/components/chat/ChatMessage";
@@ -396,6 +397,14 @@ export default function TeamChatPage() {
   const handleRemoveRoleFromSelectedMember = useCallback(async (roleItem: { id: string; role: string }) => {
     if (!teamId) return;
 
+    // Provisional: user_roles is a Supabase-only table with no membership.ts
+    // canister equivalent for role removal yet — block the action for
+    // Internet Identity accounts instead of firing a failing uuid query.
+    if (resolveAuthBackend() === "icp") {
+      toast.error("Member management isn't available for Internet Identity accounts yet");
+      return;
+    }
+
     const { error } = await supabase
       .from("user_roles")
       .delete()
@@ -414,6 +423,14 @@ export default function TeamChatPage() {
 
   const handleRemoveSelectedMemberFromTeam = useCallback(async () => {
     if (!teamId || !selectedMember) return;
+
+    // Provisional: no canister shape for member removal (remove_team_member
+    // is a Supabase-only rpc) — block the action for Internet Identity
+    // accounts instead of firing a failing uuid-keyed rpc.
+    if (resolveAuthBackend() === "icp") {
+      toast.error("Member management isn't available for Internet Identity accounts yet");
+      return;
+    }
 
     // Scoped RPC — see remove_team_member migration. Ensures guardian-derived
     // access (child_team_assignments) and team-chat group memberships are
