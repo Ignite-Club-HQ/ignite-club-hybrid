@@ -155,6 +155,11 @@ service : {
          series: vec EventSeries;
        };
     }) query;
+  get_event_roster: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec RosterEntry;
+    }) query;
   get_lineup_snapshot: (event_id: text, team_id: opt text) ->
    (variant {
       Err: text;
