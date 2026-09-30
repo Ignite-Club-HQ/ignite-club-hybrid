@@ -374,3 +374,54 @@ export async function getLiveEventsSnapshot(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.export_state(), "Load events snapshot");
 }
+
+
+/**
+ * Multi-event counterpart of getLiveEventRoster, used by EventsPage.tsx to
+ * derive which teams/clubs the II caller's linked children are rostered on.
+ * events_domain has no child_guardians/children/child_team_assignments
+ * tables (those are Supabase-only), so instead of a single roster read we
+ * fan get_event_roster (getLiveEventRoster) out across every event visible
+ * to the caller and keep only rows for this account. Best-effort: a failed
+ * per-event roster read is skipped rather than failing the whole scope.
+ */
+export async function getLiveAccountRosterScope(
+  ctx: FeatureBackendContext,
+  accountId: string,
+) {
+  const events = (await listLiveEvents(ctx)) as Array<{
+    id?: string;
+    team_id?: [] | [string];
+    club_id?: string;
+  }>;
+  const teamIds = new Set<string>();
+  const clubIds = new Set<string>();
+  const childIds = new Set<string>();
+
+  await Promise.all(
+    (events ?? []).map(async (event) => {
+      if (!event?.id) return;
+      let rows: Array<{ account_id?: string; child_id?: [] | [string] }> = [];
+      try {
+        rows = (await getLiveEventRoster(ctx, event.id)) as typeof rows;
+      } catch {
+        return;
+      }
+      const mineRows = (rows ?? []).filter((r) => r.account_id === accountId);
+      if (mineRows.length === 0) return;
+      const team = Array.isArray(event.team_id) && event.team_id.length > 0 ? event.team_id[0] : null;
+      if (team) teamIds.add(team);
+      if (event.club_id) clubIds.add(event.club_id);
+      for (const row of mineRows) {
+        const child = Array.isArray(row.child_id) && row.child_id.length > 0 ? row.child_id[0] : null;
+        if (child) childIds.add(child);
+      }
+    }),
+  );
+
+  return {
+    childIds: Array.from(childIds),
+    teamIds: Array.from(teamIds),
+    clubIds: Array.from(clubIds),
+  };
+}
