@@ -320,6 +320,11 @@ persistent actor {
     #Ok(matches.filter(func(item) = item.competition_id == competition_id))
   };
 
+  public query ({ caller }) func is_competition_admin(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
+    auth(caller);
+    #Ok(canManageCompetition(caller, competition_id))
+  };
+
   public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
