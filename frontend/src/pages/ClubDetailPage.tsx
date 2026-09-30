@@ -105,6 +105,14 @@ import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsS
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  softDeleteLiveClub,
+  restoreLiveClub,
+  deleteLiveClubPermanent,
+  requestLiveRole,
+} from "@/live/features/membership";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 
 
@@ -791,16 +799,20 @@ export default function ClubDetailPage() {
   const requestRoleMutation = useMutation({
     mutationFn: async () => {
       if (useIcpLab) throw new Error("Club role requests are unavailable in ICP lab mode.");
-      // PROVISIONAL: no canister shape for role requests yet.
-      if (isIcpAccount) throw new Error("Requesting a club role isn't available for Internet Identity accounts yet.");
-      const { error } = await supabase.from("role_requests").insert({
-        user_id: user!.id,
-        club_id: id!,
-        role: selectedRole,
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("role_requests").insert({
+            user_id: user!.id,
+            club_id: id!,
+            role: selectedRole,
+          });
+          if (error) throw error;
+          // Admin notifications are created by the on_role_request_created DB
+          // trigger (which includes the requester's name). No client-side
+          // insert needed.
+        },
+        icp: (ctx) => requestLiveRole(ctx, id!, selectedRole),
       });
-      if (error) throw error;
-      // Admin notifications are created by the on_role_request_created DB trigger
-      // (which includes the requester's name). No client-side insert needed.
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-request", id] });
@@ -829,13 +841,30 @@ export default function ClubDetailPage() {
       toast({ title: "Club deletion is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for club deletion yet.
-    if (isIcpAccount) {
-      toast({ title: "Club deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
     if (isDeleting) return;
     setIsDeleting(true);
+    // Club soft-delete on the canister has no team/chat cascade or
+    // notification equivalent, so handle the ICP branch separately and skip
+    // the Supabase-only cascade/notification steps below.
+    if (isFeatureRoutedToIcp("membership")) {
+      try {
+        await withFeatureBackend("membership", {
+          supabase: () => softDeleteLiveClub({} as any, id!), // unreachable: gated above
+          icp: (ctx) => softDeleteLiveClub(ctx, id!),
+        });
+        setShowDeleteDialog(false);
+        clearClubSetupLocalState(id!);
+        queryClient.invalidateQueries({ queryKey: ["club", id] });
+        queryClient.invalidateQueries({ queryKey: ["clubs"] });
+        toast({ title: "Club deleted", description: "You can restore it within 30 days from the clubs page." });
+        navigate("/clubs");
+      } catch (err) {
+        toast({ title: "Error", description: `Failed to delete club: ${safeErrMessage(err)}`, variant: "destructive" });
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
     try {
       // 1. Load the club's team IDs
       const { data: teamsData, error: teamsErr } = await supabase
@@ -1009,6 +1038,21 @@ export default function ClubDetailPage() {
   const handleRestoreClub = async () => {
     if (isRestoring) return;
     setIsRestoring(true);
+    if (isFeatureRoutedToIcp("membership")) {
+      try {
+        await withFeatureBackend("membership", {
+          supabase: () => restoreLiveClub({} as any, id!), // unreachable: gated above
+          icp: (ctx) => restoreLiveClub(ctx, id!),
+        });
+        queryClient.invalidateQueries({ queryKey: ["club", id] });
+        toast({ title: "Club restored!" });
+      } catch (err) {
+        toast({ title: "Error", description: `Failed to restore club: ${safeErrMessage(err)}`, variant: "destructive" });
+      } finally {
+        setIsRestoring(false);
+      }
+      return;
+    }
     try {
       // Capture the deletion marker BEFORE clearing it so we only restore what
       // was deleted as part of the same club-deletion operation.
@@ -1082,19 +1126,19 @@ export default function ClubDetailPage() {
       toast({ title: "Permanent club deletion is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for permanent club deletion yet.
-    if (isIcpAccount) {
-      toast({ title: "Permanent club deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
     setIsDeleting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("permanent-delete-entity", {
-        body: { entityType: "club", entityId: id },
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("permanent-delete-entity", {
+            body: { entityType: "club", entityId: id },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+        },
+        icp: (ctx) => deleteLiveClubPermanent(ctx, id!),
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      
+
       setShowPermanentDeleteDialog(false);
       toast({ title: "Club permanently deleted", description: "All data has been removed." });
       navigate("/clubs");
