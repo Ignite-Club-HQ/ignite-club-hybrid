@@ -4,6 +4,7 @@ import { purgeClubScopedQueryCache } from "@/lib/clubScopeCachePurge";
 import { guardClubListResult, resetClubListEmptyGuard } from "@/lib/clubListEmptyGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useTheme } from "next-themes";
 import { preloadLogo } from "@/components/ui/logo-image";
 import { consumeAuthThemeHint } from "@/lib/authThemeHint";
@@ -269,6 +270,8 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
     console.warn('[ClubThemeProvider] AuthProvider not available yet');
   }
   
+  const isIcp = resolveAuthBackend() === "icp";
+
   const { resolvedTheme } = useTheme();
   
   // CRITICAL: Read theme from DOM class first, then localStorage
@@ -534,6 +537,12 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       const storedId = localStorage.getItem(getStorageKey(user.id));
       
       // Load theme preference from database (cross-device sync)
+      if (isIcp) {
+        setIsLoadingFromDb(false);
+        setHasCheckedDefault(true);
+        setIsUserSwitching(false);
+        return;
+      }
       const loadThemeFromDb = async () => {
         setIsLoadingFromDb(true);
         try {
@@ -713,7 +722,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       
       loadThemeFromDb();
     }
-  }, [user?.id, isDarkMode]);
+  }, [user?.id, isDarkMode, isIcp]);
 
 
   // Clear theme CSS on logout (but keep localStorage preference for re-login)
@@ -739,7 +748,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!user?.id || isIcp) return [];
 
       // Get user's clubs through their roles
       const { data: userRoles, error: rolesError } = await supabase
@@ -866,7 +875,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
 
     },
     retry: 3,
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isIcp,
   });
 
   // ALL clubs the user belongs to (Pro + free) — used to validate active club
@@ -876,7 +885,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!user?.id || isIcp) return [];
       const [rolesRes, teamRolesRes] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
         supabase.from("user_roles").select("teams!inner(club_id)").eq("user_id", user.id).not("team_id", "is", null),
@@ -904,7 +913,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       );
     },
     retry: 3,
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isIcp,
 
   });
 
@@ -964,13 +973,15 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       }
       
       // Save preference to database for cross-device sync
-      supabase
-        .from('profiles')
-        .update({ active_club_theme_id: clubId })
-        .eq('id', user.id)
-        .then(({ error }) => {
-          if (error) console.error('Failed to save club theme preference:', error);
-        });
+      if (!isIcp) {
+        supabase
+          .from('profiles')
+          .update({ active_club_theme_id: clubId })
+          .eq('id', user.id)
+          .then(({ error }) => {
+            if (error) console.error('Failed to save club theme preference:', error);
+          });
+      }
     }
   };
 
@@ -1156,7 +1167,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
   const { data: activeClubTeamIds = [] } = useQuery({
     queryKey: ["active-club-teams", activeClubTheme],
     queryFn: async () => {
-      if (!activeClubTheme) return [];
+      if (!activeClubTheme || isIcp) return [];
       const { data, error } = await supabase
         .from("teams")
         .select("id")
@@ -1164,7 +1175,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       if (error) return [];
       return data.map(t => t.id);
     },
-    enabled: !!activeClubTheme,
+    enabled: !!activeClubTheme && !isIcp,
     staleTime: 300000, // Cache for 5 minutes
   });
 

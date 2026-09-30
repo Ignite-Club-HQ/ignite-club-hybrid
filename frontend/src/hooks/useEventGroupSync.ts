@@ -3,9 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { shouldApplyRemoteTimerState, shouldWriteLocalTimerState, type LocalEventGroupTimer } from "@/lib/eventGroupTimerGuard";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 
 const SYNC_INTERVAL = 5000; // Fallback polling interval
+
+// Event group sync (realtime channel + CAS writes) is Supabase-only. When
+// auth is ICP or the events feature is ICP-routed, this hook must not open a
+// Supabase Realtime channel or perform Supabase reads/writes — the pitch
+// board keeps working locally without cross-device sync.
+const isSupabaseEventGroupSyncDisabled = () =>
+  resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("events");
 const PITCH_STATE_KEY = "ignite-pitch-board-state";
 const PITCH_STATE_KEY_BASE = "ignite-pitch-board-state-team";
 const getPitchStateKeyForTeam = (teamId: string) => `${PITCH_STATE_KEY_BASE}-${teamId}`;
@@ -84,6 +93,7 @@ export function useEventGroupSync(
    */
   const loadFromDatabase = useCallback(async (force = false) => {
     if (!actualGroupId) return;
+    if (isSupabaseEventGroupSyncDisabled()) return;
 
     try {
       const { data, error } = await supabase
@@ -142,6 +152,7 @@ export function useEventGroupSync(
   const syncToDatabase = useCallback(async () => {
     if (!actualGroupId) return;
     if (readOnly) return; // spectators never write
+    if (isSupabaseEventGroupSyncDisabled()) return;
 
     const { pitchState, timerState } = loadLocalState();
 
@@ -219,6 +230,7 @@ export function useEventGroupSync(
    */
   const subscribeToChannel = useCallback(() => {
     if (!actualGroupId || channelRef.current) return;
+    if (isSupabaseEventGroupSyncDisabled()) return;
 
     const channel = supabase.channel(`event-group:${actualGroupId}`, {
       config: { broadcast: { self: false } },

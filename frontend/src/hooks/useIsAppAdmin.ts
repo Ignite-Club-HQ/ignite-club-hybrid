@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Single authoritative source of app-admin permission detection.
@@ -27,6 +28,9 @@ export const isAppAdminQueryKey = (userId: string | null | undefined) =>
   ["is-app-admin", userId] as const;
 
 export async function fetchIsAppAdmin(userId: string): Promise<boolean> {
+  // Admin tooling is Supabase-only by design; ICP principals have no
+  // corresponding user_roles row shape, so short-circuit to non-admin.
+  if (resolveAuthBackend() === "icp") return false;
   const { data, error } = await supabase
     .from("user_roles")
     .select("id")

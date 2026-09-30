@@ -1423,6 +1423,13 @@ export default function GroupChatPage() {
     queryKey: ["competition-chat-posting", groupCompetitionId, user?.id],
     enabled: !!groupCompetitionId && !!user?.id,
     queryFn: async () => {
+      // PROVISIONAL: no canister shape for competitions.member_chat_admins_only
+      // or is_competition_admin. In ICP mode, allow posting (matching the
+      // rest of the ICP messaging path) instead of querying Supabase by
+      // principal id.
+      if (isFeatureRoutedToIcp("messaging")) {
+        return { adminsOnly: false, isCompetitionAdmin: false };
+      }
       const [{ data: comp }, { data: isAdmin }] = await Promise.all([
         supabase
           .from("competitions")

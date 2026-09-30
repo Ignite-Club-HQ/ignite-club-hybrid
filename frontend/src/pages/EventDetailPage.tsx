@@ -69,6 +69,7 @@ import {
 } from "@/components/pitch/pitchBoardOpenFlag";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -113,6 +114,10 @@ export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile, refreshProfile } = useAuth();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  // Production ICP-mode gate (distinct from the useIcpLab dev/testing flag
+  // above). events.ts has no canister shape for the children/guardian roster
+  // reads below, so these fall back to empty results in ICP mode.
+  const isIcpAuthBackend = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPersona = searchParams.get("persona");
@@ -674,9 +679,14 @@ export default function EventDetailPage() {
           .from("user_roles")
           .select("user_id, role, profiles:user_id (id, display_name, avatar_url)")
           .eq("team_id", event!.team_id!),
-        supabase.rpc("get_team_children_for_pitch_board", {
-          p_team_id: event!.team_id!,
-        }),
+        // Provisional: get_team_children_for_pitch_board has no canister
+        // equivalent — ICP-mode users see an empty child picker instead of a
+        // failing uuid-keyed rpc.
+        isIcpAuthBackend
+          ? Promise.resolve({ data: [], error: null } as any)
+          : supabase.rpc("get_team_children_for_pitch_board", {
+              p_team_id: event!.team_id!,
+            }),
         supabase
           .from("rsvps")
           .select("user_id, child_id, status")
@@ -774,9 +784,13 @@ export default function EventDetailPage() {
 
       // The club bot holds roles so it can post in chats, but it is not a
       // real member — never surface it in attendance lists.
+      // Provisional: bot_user_id lookup has no canister equivalent — ICP-mode
+      // users just skip the bot exclusion instead of failing the query.
       const [{ data, error }, { data: clubRow }] = await Promise.all([
         query,
-        supabase.from("clubs").select("bot_user_id").eq("id", event!.club_id).maybeSingle(),
+        isIcpAuthBackend
+          ? Promise.resolve({ data: null } as any)
+          : supabase.from("clubs").select("bot_user_id").eq("id", event!.club_id).maybeSingle(),
       ]);
       if (error) throw error;
       const botUserId = clubRow?.bot_user_id ?? null;
@@ -810,7 +824,10 @@ export default function EventDetailPage() {
 
       let childParentMap = new Map<string, string | null>();
       let guardianCountMap = new Map<string, number>();
-      if (childIds.length > 0) {
+      // Provisional: children/child_guardians lookups have no canister
+      // equivalent — ICP-mode users skip this enrichment (players just
+      // won't be marked `is_pending` from these signals).
+      if (childIds.length > 0 && !isIcpAuthBackend) {
         const [childrenRes, guardiansRes] = await Promise.all([
           supabase.from("children").select("id, parent_id").in("id", childIds),
           supabase.from("child_guardians").select("child_id").in("child_id", childIds),
@@ -1023,7 +1040,7 @@ export default function EventDetailPage() {
   // SECURITY DEFINER RPC returns the minimum roster for THIS event only.
   const scopedRosterQuery = useQuery({
     queryKey: ["targeted-event-roster", id],
-    enabled: !!id && !!targetTeamIdsForFetch && !!canManageEvent && !useIcpLab,
+    enabled: !!id && !!targetTeamIdsForFetch && !!canManageEvent && !useIcpLab && !isIcpAuthBackend,
     staleTime: 60_000,
     queryFn: async () => {
       const provider: TargetedAttendanceProvider = {
@@ -1113,7 +1130,7 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data || [];
     },
-    enabled: childIdsOnTeam.length > 0 && !useIcpLab,
+    enabled: childIdsOnTeam.length > 0 && !useIcpLab && !isIcpAuthBackend,
   });
 
   // Adults linked to an in-scope child are part of the event audience even

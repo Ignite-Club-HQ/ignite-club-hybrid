@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type AccessibilityPrefs = {
   textScale: number; // 0.9 .. 1.5
@@ -83,6 +84,7 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
   // Hydrate from server on login (server is source of truth).
   useEffect(() => {
     if (!user?.id) return;
+    if (resolveAuthBackend() === "icp") return;
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
@@ -113,7 +115,7 @@ export function AccessibilityPrefsProvider({ children }: { children: React.React
       try {
         localStorage.setItem(LS_KEY, JSON.stringify(next));
       } catch {}
-      if (user?.id) {
+      if (user?.id && resolveAuthBackend() !== "icp") {
         await supabase
           .from("profiles")
           .update({ accessibility_prefs: next as any })
