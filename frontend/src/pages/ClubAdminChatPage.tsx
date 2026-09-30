@@ -145,6 +145,7 @@ const getCachedClubAdminMessages = (conversationId: string): ClubAdminMessage[] 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabAdminChatMessages } from "@/lab/fixtureDataLayer";
 
+import { resolveAuthBackend } from "@/live/authBackendMode";
 export default function ClubAdminChatPage() {
   const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
   if (useIcpLab) {
@@ -257,7 +258,7 @@ function SupabaseClubAdminChatPage() {
     isFetching: conversationIsFetching,
   } = useQuery({
     queryKey: ["club-admin-conversation", conversationId],
-    queryFn: async () => {
+    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
       const { data, error } = await supabase
         .from("club_admin_conversations")
         .select("*")
@@ -266,13 +267,13 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data ?? null;
     },
-    enabled: !!conversationId && authReady,
+    enabled: !!conversationId && authReady && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
   });
 
   const { hasPro: clubHasPro, isLoading: clubProLoading } = useClubProAccess(
     conversation?.club_id ?? null,
-    { enabled: !!conversation?.club_id && authReady }
+    { enabled: !!conversation?.club_id && authReady && resolveAuthBackend() !== "icp" }
   );
 
   // Sync active club to this conversation's club so push-launched threads
@@ -282,7 +283,7 @@ function SupabaseClubAdminChatPage() {
   // Fetch club details
   const { data: club } = useQuery({
     queryKey: ["club-detail-chat", conversation?.club_id],
-    queryFn: async () => {
+    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
       const clubId = conversation?.club_id;
       if (!clubId) return null;
       const { data, error } = await supabase
@@ -293,14 +294,14 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!conversation?.club_id && authReady,
+    enabled: !!conversation?.club_id && authReady && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
   });
 
   // Fetch member profile (for admin view)
   const { data: memberProfile } = useQuery({
     queryKey: ["club-admin-member-profile", conversation?.member_user_id],
-    queryFn: async () => {
+    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
       const memberId = conversation?.member_user_id;
       if (!memberId) return null;
       const { data, error } = await selectCachedProfileById(memberId);
@@ -373,7 +374,7 @@ function SupabaseClubAdminChatPage() {
     refetch: refetchMessages,
   } = useQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: async () => { if (resolveAuthBackend() === "icp") return { messages: [], hasOlderMessages: false }; 
       // 15s wall budget (mirrors TeamChatPage) so a socket left half-dead by an
       // Android background freeze can never leave this thread pending forever.
       const budget = createChatFetchBudget(15_000);

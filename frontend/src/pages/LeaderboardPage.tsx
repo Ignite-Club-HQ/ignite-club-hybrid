@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubList, getLocalLabLeaderboard, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 type WindowKey = "week" | "month" | "all";
@@ -51,7 +52,7 @@ export default function LeaderboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [scope, setScope] = useState<Scope>("club");

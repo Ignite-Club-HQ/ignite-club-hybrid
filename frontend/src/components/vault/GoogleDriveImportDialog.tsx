@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -51,6 +52,12 @@ export function GoogleDriveImportDialog({
   targetTeamId,
   targetClubId,
 }: GoogleDriveImportDialogProps) {
+  // Drive import calls the `google-drive-import` Supabase Edge Function with
+  // a Supabase session token. Under ICP there is no Supabase session and no
+  // edge function to call, so this stays Supabase-only until a vault
+  // canister/blob store exists to receive imported files. Show a clear
+  // message instead of silently failing every fetch.
+  const vaultRoutedToIcp = isFeatureRoutedToIcp("vault");
   const [step, setStep] = useState<"connect" | "browse" | "importing">("connect");
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
@@ -661,6 +668,32 @@ export function GoogleDriveImportDialog({
   };
 
   const selectedCount = selectedFiles.size + selectedFolders.size;
+
+  if (vaultRoutedToIcp) {
+    return (
+      <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+        <ResponsiveDialogContent className="sm:max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              Import from Google Drive
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
+          <div className="py-6 space-y-3 text-center">
+            <p className="font-medium">Google Drive import isn't available for this vault yet</p>
+            <p className="text-sm text-muted-foreground">
+              Drive import stays Supabase-only until the vault canister/blob store exists on
+              Internet Identity. Ask an admin to switch this vault's backend to Supabase, or
+              check back once ICP vault storage ships.
+            </p>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </div>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+    );
+  }
 
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange}>

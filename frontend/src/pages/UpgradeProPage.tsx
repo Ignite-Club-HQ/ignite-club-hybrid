@@ -32,6 +32,7 @@ import {
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 
 const PRO_FEATURES = [
@@ -79,8 +80,7 @@ const isSoccerClub = (sport: string | null | undefined): boolean => {
 
 export default function UpgradeProPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-10">

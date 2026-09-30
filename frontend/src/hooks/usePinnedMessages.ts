@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -45,6 +46,7 @@ export function usePinnedMessages(
   const query = useQuery({
     queryKey: pinnedQueryKey(chatType, chatId ?? ""),
     enabled: enabledOpt && !!chatId,
+    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
     queryFn: async (): Promise<PinnedMessageWithContent[]> => {
       if (!chatId) return [];
 
@@ -103,6 +105,9 @@ export function usePinnedMessages(
   // Realtime subscription
   useEffect(() => {
     if (!chatId) return;
+    // Messaging is ICP-routed: no realtime channel to subscribe to. The
+    // refetchInterval above polls pinned messages every 30s instead.
+    if (isFeatureRoutedToIcp("messaging")) return;
     const channel = supabase
       .channel(`pinned-${chatType}-${chatId}`)
       .on(

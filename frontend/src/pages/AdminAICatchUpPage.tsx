@@ -28,10 +28,10 @@ interface ProClubRow {
 }
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminAICatchUpPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (resolveAuthBackend() === "icp") {
     return <IcpUnavailablePage title="AI catch-up administration is unavailable in ICP lab mode" description="AI processing and provider configuration remain an approved external-worker boundary." />;
   }
   return <SupabaseAdminAICatchUpPage />;

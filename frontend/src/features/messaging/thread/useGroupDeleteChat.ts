@@ -2,6 +2,7 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { NavigateFunction } from "react-router-dom";
 import type { GroupChatSupabaseClient } from "@/features/messaging/thread/groupChatData";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface UseGroupDeleteChatOptions {
   groupId?: string;
@@ -25,6 +26,9 @@ export const useGroupDeleteChat = ({
   navigate,
 }: UseGroupDeleteChatOptions) =>
   useMutation({
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Chat deletion isn't available yet on the Internet Identity messaging backend.");
+      }
     mutationFn: async () => {
       if (useIcpLab) return;
 

@@ -26,6 +26,7 @@ import { ParticipantProfileSheet, type ParticipantRoleEntry } from "@/components
 import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -252,7 +253,7 @@ export function ChatParticipantsList({
       ]);
       return !!teamRoleResult.data || !!clubRoleResult.data || !!appAdminResult.data;
     },
-    enabled: enabled && !useIcpLab && !!user && !!effectiveTeamId && resolvedClubId !== undefined,
+    enabled: enabled && !useIcpLab && !!user && !!effectiveTeamId && resolvedClubId !== undefined && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
   });
 
@@ -426,7 +427,7 @@ export function ChatParticipantsList({
       }
       return Array.from(memberMap.values());
     },
-    enabled,
+    enabled: enabled && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
   });
 
@@ -447,7 +448,7 @@ export function ChatParticipantsList({
       const { data } = await supabase.from("clubs").select("bot_user_id").eq("id", cId).maybeSingle();
       return data?.bot_user_id ?? null;
     },
-    enabled,
+    enabled: enabled && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 30,
   });
 
@@ -477,7 +478,7 @@ export function ChatParticipantsList({
       }
       return map;
     },
-    enabled: enabled && !useIcpLab && memberIds.length > 0,
+    enabled: enabled && !useIcpLab && memberIds.length > 0 && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 2,
   });
 
@@ -490,7 +491,7 @@ export function ChatParticipantsList({
       for (const row of data || []) map[row.user_id] = row.has_push;
       return map;
     },
-    enabled: enabled && !useIcpLab && memberIds.length > 0,
+    enabled: enabled && !useIcpLab && memberIds.length > 0 && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 2,
   });
 
@@ -556,7 +557,7 @@ export function ChatParticipantsList({
       }
       return map;
     },
-    enabled: enabled && !useIcpLab && memberIds.length > 0,
+    enabled: enabled && !useIcpLab && memberIds.length > 0 && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
   });
 
@@ -573,7 +574,7 @@ export function ChatParticipantsList({
       if (error || !data) return [];
       return (data as Array<{ user_id: string }>).map((r) => r.user_id);
     },
-    enabled: enabled && !useIcpLab && memberIds.length > 0,
+    enabled: enabled && !useIcpLab && memberIds.length > 0 && resolveAuthBackend() !== "icp",
     staleTime: 30 * 1000,
     refetchInterval: 45 * 1000,
   });

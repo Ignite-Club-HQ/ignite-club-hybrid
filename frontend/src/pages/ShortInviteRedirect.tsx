@@ -4,10 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import igniteIcon from "@/assets/ignite-icon.png";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function ShortInviteRedirect() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   if (useIcpLab) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">

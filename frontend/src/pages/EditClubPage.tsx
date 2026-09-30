@@ -23,7 +23,7 @@ import { SPORT_EMOJIS, getSportEmoji, isClassModeSport, isTeamOnlySport } from "
 import { shouldUseNativePicker, pickNativePhoto } from "@/lib/nativePhotoPicker";
 import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
@@ -44,7 +44,7 @@ export default function EditClubPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

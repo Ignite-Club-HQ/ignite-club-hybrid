@@ -18,11 +18,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabDmAttachments } from "@/lab/fixtureDataLayer";
 
 export default function AdminDmAttachmentsPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return <IcpLabAdminDmAttachmentsPage />;
   }

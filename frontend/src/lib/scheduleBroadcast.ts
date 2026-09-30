@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Server-side schedule refresh broadcast.
@@ -18,6 +20,14 @@ export async function sendScheduleBroadcast(
   teamId?: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    // Internet Identity sessions are canister-authenticated — there is no
+    // Supabase session to refresh or to attribute this row to, and Supabase
+    // RLS would reject the insert outright. Subscribers on the ICP path
+    // already poll for updates (see subscribeToScheduleBroadcasts below), so
+    // there's nothing to bump here.
+    if (resolveAuthBackend() === "icp") {
+      return { ok: true };
+    }
     const userId = await ensureFreshSession();
     const { error } = await supabase.from("schedule_broadcasts").insert({
       club_id: clubId,
@@ -40,6 +50,18 @@ export function subscribeToScheduleBroadcasts(
   onBump: (row: { club_id: string; team_id: string | null }) => void,
 ): () => void {
   if (clubIds.length === 0) return () => {};
+
+  // When events are routed to ICP, canisters are request/response — there is
+  // no realtime channel to subscribe to, and no one will ever insert a
+  // schedule_broadcasts row (see sendScheduleBroadcast above). Poll instead,
+  // same Stage-D pattern as startChatRealtimeChannel / useClubRealtimeMode.
+  if (isFeatureRoutedToIcp("events")) {
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      onBump({ club_id: clubIds[0], team_id: null });
+    }, 30000);
+    return () => clearInterval(poll);
+  }
 
   const channel = supabase
     .channel(`schedule-broadcasts:${clubIds.sort().join(",")}`)

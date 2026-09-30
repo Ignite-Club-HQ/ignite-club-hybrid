@@ -24,6 +24,7 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 import igniteIcon from "@/assets/ignite-icon.png";
 
@@ -35,7 +36,7 @@ function getOrdinalSuffix(n: number): string {
 
 export default function ProfilePage() {
   const { user, profile, signOut } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   const notificationNudge = useNotificationNudge(user?.id, "settings");
   usePageTitle("Profile");
   const { toast } = useToast();

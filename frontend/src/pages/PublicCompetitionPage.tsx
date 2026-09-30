@@ -7,11 +7,11 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function PublicCompetitionPage() {
   usePageTitle("Competition");
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
   if (useIcpLab) {
     return (
       <div className="container max-w-3xl mx-auto px-4 py-10">

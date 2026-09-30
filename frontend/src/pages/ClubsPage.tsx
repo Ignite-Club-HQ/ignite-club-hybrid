@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { PageLoading } from "@/components/ui/page-loading";
 import { getSportEmoji, SPORT_EMOJIS } from "@/lib/sportEmojis";
@@ -58,7 +58,7 @@ interface Sponsor {
 export default function ClubsPage() {
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();

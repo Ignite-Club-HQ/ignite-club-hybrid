@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 
 export default function ClaimTeamPage() {
@@ -19,7 +19,7 @@ export default function ClaimTeamPage() {
   const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error" | "icp_preview">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const icpClaimableTeam = getLocalLabClaimableTeam("team-icp-001");
 
   usePageTitle("Claim your team");

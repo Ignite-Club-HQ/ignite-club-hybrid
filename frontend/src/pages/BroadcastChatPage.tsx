@@ -90,6 +90,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const MESSAGES_PER_PAGE = 30;
 
@@ -363,7 +364,7 @@ export default function BroadcastChatPage() {
 
       return { messages, hasOlderMessages: hasMore };
     },
-    enabled: !!user?.id, // session token is sufficient; don't wait for profile fetch (`authReady`) to unblock first paint
+    enabled: !!user?.id && resolveAuthBackend() !== "icp", // session token is sufficient; don't wait for profile fetch (`authReady`) to unblock first paint
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnMount: "always", // Force refetch on every mount so reactions/messages added while away are picked up (true is a no-op while staleTime is unmet)

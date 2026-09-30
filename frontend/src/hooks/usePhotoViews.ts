@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 // Stable no-op ref callback used when no userId/photoId is available.
 const noopRef = (_el: HTMLElement | null) => {};
@@ -49,6 +50,7 @@ export function usePhotoViewCounts(photoIds: string[]) {
     },
     enabled: photoIds.length > 0,
     staleTime: 60 * 1000,
+    refetchInterval: photoIds.length > 0 && isFeatureRoutedToIcp("media") ? 30_000 : false,
     // Keep previously-fetched counts visible while a new id set (e.g. next
     // infinite-scroll page) is loading. Without this, the query key change
     // briefly returns `undefined` and every view badge flickers to hidden
@@ -186,6 +188,10 @@ export function usePhotoViewRealtime(photoIds: string[], currentUserId?: string)
 
   useEffect(() => {
     if (photoIds.length === 0) return;
+    // Media is ICP-routed: no realtime channel to subscribe to. The
+    // refetchInterval on usePhotoViewCounts polls view counts every 30s
+    // instead (visibility gating not needed — it's a lightweight RPC).
+    if (isFeatureRoutedToIcp("media")) return;
     const ids = new Set(photoIds);
 
     // Channel name must be globally unique per id set; a stable hash of the

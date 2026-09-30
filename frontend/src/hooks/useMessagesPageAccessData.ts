@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useQuery } from "@tanstack/react-query";
 import type { InboxClub } from "@/features/messaging/inbox/inboxPreviewSources";
 
@@ -21,7 +22,7 @@ export function useMessagesPageAccessData({
   memberClubs: readonly { id?: string }[];
   initialAdminClubs?: InboxClub[];
 }) {
-  const enabled = !!userId && initialized && !useIcpLab;
+  const enabled = !!userId && initialized && !useIcpLab && resolveAuthBackend() !== "icp";
   const memberClubIds = useMemo(
     () => memberClubs.map((club) => club.id).filter(Boolean) as string[],
     [memberClubs],
@@ -197,7 +198,7 @@ export function useMessagesPageAccessData({
         return [id, !!subscription && isActiveProSubscription(subscription)];
       }));
     },
-    enabled: memberClubIds.length > 0 && !useIcpLab,
+    enabled: memberClubIds.length > 0 && !useIcpLab && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev: Record<string, boolean> | undefined) => prev,
     retry: 2,

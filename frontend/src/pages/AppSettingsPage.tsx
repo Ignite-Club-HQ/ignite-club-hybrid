@@ -14,12 +14,12 @@ import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
 import { LegalReacceptanceAdminCard } from "@/components/admin/LegalReacceptanceAdminCard";
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabAppSettings } from "@/lab/fixtureDataLayer";
 
 export default function AppSettingsPage() {
   const navigate = useNavigate();
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (resolveAuthBackend() === "icp") {
     const settings = getLocalLabAppSettings();
     return (
       <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">

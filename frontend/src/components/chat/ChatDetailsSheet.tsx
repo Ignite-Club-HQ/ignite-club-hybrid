@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { isVideoUrl } from "@/lib/videoUtils";
 import { cn } from "@/lib/utils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type ChatDetailsType = ChatSharedMediaType | "support";
 
@@ -112,7 +113,7 @@ export function ChatDetailsSheet({
   const resolvedTeamIdForClub = chatType === "team" ? chatId : teamId;
   const { data: derivedClubId } = useQuery({
     queryKey: ["chat-details-sheet-club-id", resolvedTeamIdForClub, clubId, chatType, chatId],
-    enabled: open && !useIcpLab && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)),
+    enabled: open && !useIcpLab && !clubId && (chatType === "team" || (chatType === "group" && !!resolvedTeamIdForClub)) && resolveAuthBackend() !== "icp",
     staleTime: 60_000,
     queryFn: async () => {
       if (!resolvedTeamIdForClub) return null;

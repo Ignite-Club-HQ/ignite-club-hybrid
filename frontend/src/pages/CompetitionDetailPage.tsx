@@ -28,7 +28,7 @@ import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink"
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { Crown } from "lucide-react";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { IcpCompetitionContent } from "@/components/competition/IcpCompetitionContent";
 import {
   createLocalCompetitionSeason,
@@ -43,7 +43,7 @@ import {
 
 export default function CompetitionDetailPage() {
   usePageTitle("Competition");
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
 
   if (useIcpLab) {
     return <IcpCompetitionDetailPage />;

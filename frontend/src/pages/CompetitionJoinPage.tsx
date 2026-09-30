@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { claimLocalCompetitionJoinToken } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveCompetitionTeam } from "@/live/features/competitions";
@@ -33,7 +33,7 @@ const ENTERED_STATUSES = new Set(["accepted", "invited"]);
 export default function CompetitionJoinPage() {
   usePageTitle("Join competition");
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
 
   if (useIcpLab) {
     return <IcpCompetitionJoinPage />;

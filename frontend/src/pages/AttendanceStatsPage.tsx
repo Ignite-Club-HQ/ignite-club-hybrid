@@ -34,7 +34,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabAttendanceStats } from "@/lab/fixtureDataLayer";
 import { exportLocalEventsState, isLocalEventsCanisterUnavailable } from "@/lab/localEventsService";
 
@@ -62,7 +62,7 @@ interface AttendanceStatsPageProps {
 
 export default function AttendanceStatsPage({ teamIdOverride, embedded }: AttendanceStatsPageProps = {}) {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
 
   if (useIcpLab) {
     return <IcpLabAttendanceStatsPage teamId={teamIdOverride ?? "team-icp-001"} embedded={embedded} navigate={navigate} />;

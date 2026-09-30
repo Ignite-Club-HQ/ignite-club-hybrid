@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 function generatePassword(): string {
   // High-entropy random password to satisfy HIBP/strength checks
@@ -46,7 +46,7 @@ function generatePassword(): string {
 
 export default function AdminTempPasswordPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
 
   if (useIcpLab) {
     return (

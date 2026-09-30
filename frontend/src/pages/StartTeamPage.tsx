@@ -9,6 +9,7 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubList } from "@/lab/fixtureDataLayer";
 
 
@@ -24,7 +25,7 @@ export default function StartTeamPage() {
 
   const { toast } = useToast();
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
   const [working, setWorking] = useState(false);
   const autoRoutedRef = useRef(false);

@@ -58,11 +58,12 @@ const typeColors = {
 type StatusFilter = "all" | FeedbackStatus;
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabFeedback } from "@/lab/fixtureDataLayer";
 
 export default function ManageFeedbackPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     const feedback = getLocalLabFeedback("club-icp-001");
     return (

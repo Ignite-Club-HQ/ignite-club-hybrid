@@ -42,6 +42,7 @@ import { z } from "zod";
 import { addMonths, addYears, isPast, parseISO } from "date-fns";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -84,8 +85,7 @@ type Step = 1 | 2 | 3 | 4 | 5;
 
 export default function SignupProPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return (
       <div className="container max-w-lg mx-auto px-4 py-10">

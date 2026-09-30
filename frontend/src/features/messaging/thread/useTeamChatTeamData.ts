@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Minimal Supabase client surface this hook needs. Callers pass their page's
@@ -54,7 +55,7 @@ export function useTeamChatTeamData({
       if (error) throw error;
       return data ?? null;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 

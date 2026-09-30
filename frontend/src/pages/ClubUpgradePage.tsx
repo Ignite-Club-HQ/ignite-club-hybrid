@@ -45,7 +45,7 @@ import {
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 
@@ -110,7 +110,7 @@ export default function ClubUpgradePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { activeClubFilter } = useClubTheme();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeFootball, setPromoCodeFootball] = useState("");

@@ -13,6 +13,7 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { SPORT_EMOJIS } from "@/lib/sportEmojis";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
@@ -185,12 +186,17 @@ function SupabaseCreateCompetitionPage() {
     if (!user || !name.trim() || !organizerClubId) return;
     setSaving(true);
 
-    try {
-      await ensureFreshSession();
-    } catch (err: any) {
-      setSaving(false);
-      toast({ title: "Session expired", description: "Please sign in again and retry.", variant: "destructive" });
-      return;
+    // Internet Identity sessions are canister-authenticated — there is no
+    // Supabase session to refresh, and the ICP competition-creation path
+    // below (withFeatureBackend("competitions")) proceeds without one.
+    if (resolveAuthBackend() !== "icp") {
+      try {
+        await ensureFreshSession();
+      } catch (err: any) {
+        setSaving(false);
+        toast({ title: "Session expired", description: "Please sign in again and retry.", variant: "destructive" });
+        return;
+      }
     }
 
     const trimmedName = name.trim();

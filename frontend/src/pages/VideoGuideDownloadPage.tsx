@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Navigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const VIDEO_GUIDE_CONTENT = `# Ignite Sports Club App - Complete Video Recording Guide
 
@@ -1642,8 +1643,7 @@ const VideoGuideDownloadPageProtected = () => {
 };
 
 export default function VideoGuideDownloadPageRoute() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return (
       <div className="container max-w-2xl mx-auto px-4 py-10">

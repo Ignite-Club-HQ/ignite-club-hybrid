@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabWelcomeMessage } from "@/lab/fixtureDataLayer";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 // Helper to convert URLs and markdown-style links in text to clickable links
 function renderTextWithLinks(text: string) {
@@ -103,7 +104,7 @@ function SupabaseWelcomeMessagePage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user,
+    enabled: !!user && resolveAuthBackend() !== "icp",
   });
 
   if (isLoading) return <PageLoading />;
