@@ -31,6 +31,9 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -205,39 +208,78 @@ function SupabaseJoinTeamPage() {
   });
 
 
-  // Fetch team invite details using secure RPC function (for regular invites)
+  // Fetch team invite details. Supabase branch: secure RPC lookup by
+  // shareable token (unchanged). ICP branch: club_domain canister invites
+  // are keyed by id rather than a separate short token, so when the
+  // "membership" feature is routed to ICP we resolve via getLiveTeamInvite
+  // instead of the Supabase RPC.
   const { data: teamInvite, isLoading: teamInviteLoading, error: teamInviteError } = useQuery({
     queryKey: membershipKeys.teamInvite(token),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .rpc("get_team_invite_by_token", { _token: token! });
-      if (error) throw error;
-      if (data && data.length > 0) {
-        const row = data[0];
-        return {
-          id: row.id,
-          team_id: row.team_id,
-          role: row.role,
-          token: row.token,
-          uses_count: row.uses_count,
-          max_uses: row.max_uses,
-          expires_at: row.expires_at,
-          created_at: row.created_at,
-          created_by: row.created_by,
-          metadata: row.metadata as { child_name?: string; child_year_of_birth?: number } | null,
-          teams: {
-            id: row.team_id,
-            name: row.team_name,
-            logo_url: row.team_logo_url,
-            club_id: row.club_id,
-            clubs: {
-              name: row.club_name,
-              logo_url: undefined as string | undefined
-            }
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .rpc("get_team_invite_by_token", { _token: token! });
+          if (error) throw error;
+          if (data && data.length > 0) {
+            const row = data[0];
+            return {
+              id: row.id,
+              team_id: row.team_id,
+              role: row.role,
+              token: row.token,
+              uses_count: row.uses_count,
+              max_uses: row.max_uses,
+              expires_at: row.expires_at,
+              created_at: row.created_at,
+              created_by: row.created_by,
+              metadata: row.metadata as { child_name?: string; child_year_of_birth?: number } | null,
+              teams: {
+                id: row.team_id,
+                name: row.team_name,
+                logo_url: row.team_logo_url,
+                club_id: row.club_id,
+                clubs: {
+                  name: row.club_name,
+                  logo_url: undefined as string | undefined
+                }
+              }
+            };
           }
-        };
-      }
-      return null;
+          return null;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: the canister's `get_team_invite` candid
+          // record shape isn't finalised yet, so this defensively reads the
+          // fields it needs and falls back to sane defaults. The `token`
+          // route param is treated as the canister invite id — there is no
+          // separate short-token lookup on the canister side yet.
+          const raw = (await getLiveTeamInvite(ctx, token!)) as Record<string, unknown> | null;
+          if (!raw) return null;
+          return {
+            id: (raw.id as string) ?? token!,
+            team_id: (raw.team_id as string) ?? null,
+            role: (raw.role as string) ?? null,
+            token: token,
+            uses_count: (raw.uses_count as number) ?? 0,
+            max_uses: (raw.max_uses as number | null) ?? null,
+            expires_at: (raw.expires_at as string | null) ?? null,
+            created_at: (raw.created_at as string | null) ?? null,
+            created_by: (raw.created_by as string | null) ?? null,
+            metadata: (raw.metadata as { child_name?: string; child_year_of_birth?: number } | null) ?? null,
+            teams: {
+              id: (raw.team_id as string) ?? null,
+              name: (raw.team_name as string) ?? "",
+              logo_url: (raw.team_logo_url as string | null) ?? null,
+              club_id: (raw.club_id as string) ?? null,
+              clubs: {
+                name: (raw.club_name as string) ?? "",
+                logo_url: undefined as string | undefined,
+              },
+            },
+          };
+        },
+      });
     },
     enabled: !!token && !isPendingInvite,
     retry: 2,
@@ -900,142 +942,177 @@ function SupabaseJoinTeamPage() {
         claimToken: token ?? null,
       });
     } else if (!isPendingInvite) {
-      // Regular team invite - check expiry and usage limits
-      if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-        throw new Error("This invite link has expired");
-      }
+      // Regular (shareable-link) team invite. Supabase branch: pending-invite
+      // reconciliation, usage-limit bookkeeping and role insert exactly as
+      // before. ICP branch: accept the invite on the club_domain canister —
+      // there is no pending_invites reconciliation or uses_count table there,
+      // and role storage is handled by the canister's accept_team_invite.
+      const membershipIcpRouted = isFeatureRoutedToIcp("membership");
 
-      if (invite.max_uses && invite.uses_count >= invite.max_uses) {
-        throw new Error("This invite link has reached its usage limit");
-      }
-
-      // Reconcile any matching pending invites for this user (by user_id or email)
-      const userEmail = user.email?.toLowerCase().trim();
-      const orClauses = [`invited_user_id.eq.${user.id}`];
-      if (userEmail) {
-        orClauses.push(`invited_email.ilike.${userEmail}`);
-      }
-
-      const { data: matchingPendingInvites } = await supabase
-        .from("pending_invites")
-        .select("id, invited_label, role, metadata, team_id, club_id")
-        .eq("team_id", invite.team_id)
-        .eq("status", "pending")
-        .or(orClauses.join(","))
-        .order("created_at", { ascending: false });
-
-      if (matchingPendingInvites && matchingPendingInvites.length > 0) {
-        // Most recent matching row wins for child provisioning.
-        reconciledInvite = matchingPendingInvites[0] as ReconciledInvite;
-
-        // Use the first match's label to prefill display name if needed
-        const firstLabel = matchingPendingInvites.find(i => i.invited_label)?.invited_label;
-        if (firstLabel) {
-          const { data: profile } = await selectCachedProfileById(user.id);
-
-          if (!profile?.display_name) {
-            await supabase
-              .from("profiles")
-              .update({ display_name: firstLabel })
-              .eq("id", user.id);
-          }
+      if (membershipIcpRouted) {
+        await withFeatureBackend("membership", {
+          supabase: async () => {
+            // Unreachable: membershipIcpRouted already selected the ICP
+            // branch for this call, this only satisfies withFeatureBackend's
+            // required shape.
+          },
+          icp: async (ctx) => {
+            // Confirm the invite is still resolvable, then accept it.
+            await getLiveTeamInvite(ctx, invite.id);
+            await acceptLiveTeamInvite(ctx, invite.id);
+          },
+        });
+        // Provisional: II users are identified by principal, not a Supabase
+        // uuid, so the user_roles insert below (and its RLS/email-mismatch
+        // handling) does not apply here — the canister call above is the
+        // sole source of truth for role grants on ICP-routed invites.
+      } else {
+        // Regular team invite - check expiry and usage limits
+        if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+          throw new Error("This invite link has expired");
         }
 
-        // Mark ALL matching pending invites as accepted
-        const matchingIds = matchingPendingInvites.map(i => i.id);
-        await supabase
+        if (invite.max_uses && invite.uses_count >= invite.max_uses) {
+          throw new Error("This invite link has reached its usage limit");
+        }
+
+        // Reconcile any matching pending invites for this user (by user_id or email)
+        const userEmail = user.email?.toLowerCase().trim();
+        const orClauses = [`invited_user_id.eq.${user.id}`];
+        if (userEmail) {
+          orClauses.push(`invited_email.ilike.${userEmail}`);
+        }
+
+        const { data: matchingPendingInvites } = await supabase
           .from("pending_invites")
-          .update({ 
-            status: "accepted", 
-            accepted_at: new Date().toISOString(),
-            invited_user_id: user.id
-          })
-          .in("id", matchingIds);
+          .select("id, invited_label, role, metadata, team_id, club_id")
+          .eq("team_id", invite.team_id)
+          .eq("status", "pending")
+          .or(orClauses.join(","))
+          .order("created_at", { ascending: false });
+
+        if (matchingPendingInvites && matchingPendingInvites.length > 0) {
+          // Most recent matching row wins for child provisioning.
+          reconciledInvite = matchingPendingInvites[0] as ReconciledInvite;
+
+          // Use the first match's label to prefill display name if needed
+          const firstLabel = matchingPendingInvites.find(i => i.invited_label)?.invited_label;
+          if (firstLabel) {
+            const { data: profile } = await selectCachedProfileById(user.id);
+
+            if (!profile?.display_name) {
+              await supabase
+                .from("profiles")
+                .update({ display_name: firstLabel })
+                .eq("id", user.id);
+            }
+          }
+
+          // Mark ALL matching pending invites as accepted
+          const matchingIds = matchingPendingInvites.map(i => i.id);
+          await supabase
+            .from("pending_invites")
+            .update({ 
+              status: "accepted", 
+              accepted_at: new Date().toISOString(),
+              invited_user_id: user.id
+            })
+            .in("id", matchingIds);
+          
+          console.log("[JoinTeam] Reconciled", matchingIds.length, "pending invite(s) for user");
+
+          // The reconciled invite may carry child metadata (named parent invite).
+          // Without this the invite is consumed and its child silently discarded.
+          const reconciledMetadata =
+            (reconciledInvite.metadata as InviteChildMetadata | null) ??
+            ((teamInvite?.metadata as InviteChildMetadata | null) ?? null);
+          if (reconciledInvite.role === "parent") {
+            try {
+              const provisioned = await provisionChildrenFromInviteMetadata({
+                inviteId: reconciledInvite.id,
+                // Already flipped to accepted above.
+                inviteStatus: "accepted",
+                inviteRole: reconciledInvite.role,
+                metadata: reconciledMetadata,
+                teamId: reconciledInvite.team_id ?? invite.team_id ?? null,
+                clubId: reconciledInvite.club_id ?? inviteClubId ?? null,
+                userId: user.id,
+                claimToken: null,
+              });
+              provisionedChildIdsRef.current = provisioned;
+              console.log(
+                "[JoinTeam] Reconciled invite provisioned children:",
+                provisioned.length,
+              );
+            } catch (provisionError) {
+              console.error(
+                "[JoinTeam] Reconciled invite child provisioning failed:",
+                provisionError,
+              );
+              provisionedChildIdsRef.current = [];
+              // Never consume the invite when provisioning produced no children —
+              // leave it pending so a retry (or an admin) can finish the job.
+              await supabase
+                .from("pending_invites")
+                .update({ status: "pending", accepted_at: null })
+                .eq("id", reconciledInvite.id);
+              toast({
+                title: "We couldn't link your child automatically",
+                description: "Please add them below.",
+              });
+            }
+          }
+        }
+
+
+        // Increment uses_count for team invite
+        await supabase
+          .from("team_invites")
+          .update({ uses_count: invite.uses_count + 1 })
+          .eq("id", invite.id);
+      }
+    }
+
+    // Add user to team with all selected roles. ICP-routed regular team
+    // invites already granted the role via acceptLiveTeamInvite above, so
+    // this Supabase user_roles insert only runs for the Supabase branch
+    // (isPendingInvite invites, or !isPendingInvite invites not ICP-routed).
+    const skipSupabaseRoleInsert = !isPendingInvite && isFeatureRoutedToIcp("membership");
+    if (!skipSupabaseRoleInsert) {
+      for (const role of rolesToAdd) {
+        const { error: roleError } = await supabase.from("user_roles").insert({
+          user_id: user.id,
+          team_id: invite.team_id ?? null,
+          // Club-level invites (e.g. committee_member) have no team — the club id
+          // must still be stamped so the role resolves to the right club.
+          club_id: invite.teams?.club_id ?? inviteClubId,
+          role: role,
+        });
+
         
-        console.log("[JoinTeam] Reconciled", matchingIds.length, "pending invite(s) for user");
-
-        // The reconciled invite may carry child metadata (named parent invite).
-        // Without this the invite is consumed and its child silently discarded.
-        const reconciledMetadata =
-          (reconciledInvite.metadata as InviteChildMetadata | null) ??
-          ((teamInvite?.metadata as InviteChildMetadata | null) ?? null);
-        if (reconciledInvite.role === "parent") {
-          try {
-            const provisioned = await provisionChildrenFromInviteMetadata({
-              inviteId: reconciledInvite.id,
-              // Already flipped to accepted above.
-              inviteStatus: "accepted",
-              inviteRole: reconciledInvite.role,
-              metadata: reconciledMetadata,
-              teamId: reconciledInvite.team_id ?? invite.team_id ?? null,
-              clubId: reconciledInvite.club_id ?? inviteClubId ?? null,
-              userId: user.id,
-              claimToken: null,
-            });
-            provisionedChildIdsRef.current = provisioned;
-            console.log(
-              "[JoinTeam] Reconciled invite provisioned children:",
-              provisioned.length,
-            );
-          } catch (provisionError) {
-            console.error(
-              "[JoinTeam] Reconciled invite child provisioning failed:",
-              provisionError,
-            );
-            provisionedChildIdsRef.current = [];
-            // Never consume the invite when provisioning produced no children —
-            // leave it pending so a retry (or an admin) can finish the job.
-            await supabase
-              .from("pending_invites")
-              .update({ status: "pending", accepted_at: null })
-              .eq("id", reconciledInvite.id);
-            toast({
-              title: "We couldn't link your child automatically",
-              description: "Please add them below.",
-            });
+        // Ignore duplicate key errors
+        if (roleError) {
+          const isDuplicate = roleError.code === '23505' || roleError.message.includes('duplicate key') || roleError.message.includes('unique constraint');
+          if (!isDuplicate) {
+            console.error('Role insert error:', roleError);
+            // Provide a user-friendly message for RLS violations (usually email mismatch)
+            if (roleError.message.includes('row-level security policy')) {
+              const invitedEmail = isPendingInvite ? pendingInviteData?.invited_email : null;
+              const hint = invitedEmail 
+                ? `Please make sure you signed up with the email address the invite was sent to (${invitedEmail}). If you used a different email, ask your admin to resend the invite to your correct email.`
+                : `Please make sure you signed up with the same email address the invite was sent to. If you used a different email, ask your admin to resend the invite to your correct email.`;
+              throw new Error(hint);
+            }
+            throw new Error(`Failed to add ${role} role: ${roleError.message}`);
           }
-        }
-      }
-
-
-      // Increment uses_count for team invite
-      await supabase
-        .from("team_invites")
-        .update({ uses_count: invite.uses_count + 1 })
-        .eq("id", invite.id);
-    }
-
-    // Add user to team with all selected roles
-    for (const role of rolesToAdd) {
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: user.id,
-        team_id: invite.team_id ?? null,
-        // Club-level invites (e.g. committee_member) have no team — the club id
-        // must still be stamped so the role resolves to the right club.
-        club_id: invite.teams?.club_id ?? inviteClubId,
-        role: role,
-      });
-
-      
-      // Ignore duplicate key errors
-      if (roleError) {
-        const isDuplicate = roleError.code === '23505' || roleError.message.includes('duplicate key') || roleError.message.includes('unique constraint');
-        if (!isDuplicate) {
-          console.error('Role insert error:', roleError);
-          // Provide a user-friendly message for RLS violations (usually email mismatch)
-          if (roleError.message.includes('row-level security policy')) {
-            const invitedEmail = isPendingInvite ? pendingInviteData?.invited_email : null;
-            const hint = invitedEmail 
-              ? `Please make sure you signed up with the email address the invite was sent to (${invitedEmail}). If you used a different email, ask your admin to resend the invite to your correct email.`
-              : `Please make sure you signed up with the same email address the invite was sent to. If you used a different email, ask your admin to resend the invite to your correct email.`;
-            throw new Error(hint);
-          }
-          throw new Error(`Failed to add ${role} role: ${roleError.message}`);
         }
       }
     }
 
-    // Handle child auto-creation for regular team invites with metadata
+    // Handle child auto-creation for regular team invites with metadata.
+    // Kept Supabase-only by design (children/child_team_assignments/
+    // child_guardians have no canister shape yet) even when the invite
+    // itself was accepted via the club_domain canister above.
     if (!isPendingInvite && teamInvite?.metadata && rolesToAdd.includes("parent")) {
       const childMeta = teamInvite.metadata as { child_name?: string; child_year_of_birth?: number };
       if (childMeta.child_name) {
@@ -1093,7 +1170,8 @@ function SupabaseJoinTeamPage() {
         .eq("id", pendingInviteData.id);
     }
 
-    // Send notification to the new member
+    // Send notification to the new member. Notifications stay Supabase-only
+    // by design — there is no canister notification/enqueue surface yet.
     const roleNames = rolesToAdd.map(r => roleLabels[r]).join(", ");
     const membershipRelatedId = inviteMiniLeagueId || invite.team_id || invite?.teams?.club_id;
     await supabase.from("notifications").insert({
@@ -1159,15 +1237,29 @@ function SupabaseJoinTeamPage() {
 
   const joinMutation = useMutation({
     mutationFn: async () => {
-      // Provisional: the entire accept-invite flow (user_roles, child
-      // records/guardians, notifications, claim_mini_league_invite rpc,
-      // send-email function) is Supabase-only with no membership.ts
-      // canister shape yet. Block it outright for Internet Identity
-      // accounts rather than let any of those uuid-keyed calls fail.
-      if (resolveAuthBackend() === "icp") {
+      if (!invite || !user) throw new Error("Missing data");
+
+      const membershipIcpRouted = isFeatureRoutedToIcp("membership");
+      // Mini-league joins (league-admin grants, parent join-links, or a
+      // mini-league-linked named invite) go through claim_mini_league_invite
+      // / mini_league_admins / mini_league_players — all Supabase-only, with
+      // no canister equivalent yet. Provisional: block with a clear message
+      // instead of attempting any of those uuid-keyed calls for II accounts.
+      const targetsMiniLeague =
+        !!inviteMiniLeagueId || !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id;
+      if (membershipIcpRouted && targetsMiniLeague) {
+        throw new Error(
+          "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
+        );
+      }
+
+      // Named/pending invites (pending_invites table: name-restricted
+      // invites, child metadata provisioning) also have no canister shape
+      // yet — block them for II accounts as before. Regular shareable team
+      // invites are handled below via getLiveTeamInvite/acceptLiveTeamInvite.
+      if (membershipIcpRouted && isPendingInvite) {
         throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
       }
-      if (!invite || !user) throw new Error("Missing data");
 
       // Block join if there's a name validation error
       if (nameValidationError) {

@@ -83,6 +83,15 @@ import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQue
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  softDeleteLiveTeam,
+  restoreLiveTeam,
+  deleteLiveTeamPermanent,
+  removeLiveMember,
+} from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import {
@@ -889,13 +898,33 @@ export default function TeamDetailPage() {
       toast({ title: "Team deletion is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for team soft-delete yet.
-    if (isIcpAccount) {
-      toast({ title: "Team deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
     if (isDeleting) return; // prevent duplicate submission
     setIsDeleting(true);
+    // Team soft-delete is a club_domain call with no notification/tombstone
+    // equivalent on the canister; handle it separately and skip the
+    // Supabase-only recipient lookup / notification insert below.
+    if (isFeatureRoutedToIcp("membership")) {
+      try {
+        await withFeatureBackend("membership", {
+          supabase: () => softDeleteLiveTeam({} as any, id!), // unreachable: gated by isFeatureRoutedToIcp above
+          icp: (ctx) => softDeleteLiveTeam(ctx, id!),
+        });
+        markTeamDeleted(id!);
+        queryClient.invalidateQueries({ queryKey: ["team", id] });
+        if (team?.club_id) {
+          queryClient.invalidateQueries({ queryKey: ["club", team.club_id] });
+          queryClient.invalidateQueries({ queryKey: ["club-teams", team.club_id] });
+        }
+        setShowDeleteDialog(false);
+        toast({ title: "Team deleted", description: "You can restore it within 30 days." });
+        navigate(`/clubs/${team?.club_id}`);
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to delete team.", variant: "destructive" });
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
     try {
       // 1. Load + dedupe intended notification recipients (excluding initiator)
       const { data: teamMembers } = await supabase
@@ -1004,17 +1033,18 @@ export default function TeamDetailPage() {
       toast({ title: "Team restore is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for team restore yet.
-    if (isIcpAccount) {
-      toast({ title: "Team restore isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase.from("teams").update({
-      deleted_at: null,
-      deleted_by: null,
-    } as any).eq("id", id!);
-
-    if (error) {
+    try {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("teams").update({
+            deleted_at: null,
+            deleted_by: null,
+          } as any).eq("id", id!);
+          if (error) throw error;
+        },
+        icp: (ctx) => restoreLiveTeam(ctx, id!),
+      });
+    } catch (error) {
       toast({ title: "Error", description: "Failed to restore team.", variant: "destructive" });
       return;
     }
@@ -1032,19 +1062,19 @@ export default function TeamDetailPage() {
       toast({ title: "Permanent team deletion is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for permanent team deletion yet.
-    if (isIcpAccount) {
-      toast({ title: "Permanent team deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
     setIsDeleting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("permanent-delete-entity", {
-        body: { entityType: "team", entityId: id },
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("permanent-delete-entity", {
+            body: { entityType: "team", entityId: id },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+        },
+        icp: (ctx) => deleteLiveTeamPermanent(ctx, id!),
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      
+
       setShowPermanentDeleteDialog(false);
       toast({ title: "Team permanently deleted", description: "All data has been removed." });
       navigate(`/clubs/${team?.club_id}`);
@@ -1742,30 +1772,35 @@ export default function TeamDetailPage() {
             setRemoveMember(null);
             return;
           }
-          // PROVISIONAL: no club_domain canister shape for team-member removal yet.
-          if (isIcpAccount) {
-            toast({ title: "Member removal isn't available for Internet Identity accounts yet", variant: "destructive" });
-            setRemoveMember(null);
-            return;
-          }
-          // Use scoped RPC so team role, child assignments to this team,
-          // and team-chat group memberships are revoked atomically.
-          // child_guardians and access to unrelated teams are preserved.
-          const { error } = await supabase.rpc("remove_team_member", {
-            _team_id: id,
-            _user_id: removeMember.userId,
-          });
-          if (error) {
-            toast({ title: "Failed to remove member", description: error.message, variant: "destructive" });
-          } else {
-            await supabase.from("notifications").insert({
-              user_id: removeMember.userId,
-              type: "membership",
-              message: `You have been removed from ${team?.name || "the team"}`,
-              related_id: id,
+          try {
+            await withFeatureBackend("membership", {
+              supabase: async () => {
+                // Use scoped RPC so team role, child assignments to this team,
+                // and team-chat group memberships are revoked atomically.
+                // child_guardians and access to unrelated teams are preserved.
+                const { error } = await supabase.rpc("remove_team_member", {
+                  _team_id: id,
+                  _user_id: removeMember.userId,
+                });
+                if (error) throw error;
+
+                await supabase.from("notifications").insert({
+                  user_id: removeMember.userId,
+                  type: "membership",
+                  message: `You have been removed from ${team?.name || "the team"}`,
+                  related_id: id,
+                });
+              },
+              // Provisional: removeMember.userId is a principal string for
+              // Internet Identity accounts; removes every role grant the
+              // member holds in this team's club (no per-team scoping and no
+              // notification equivalent on the canister).
+              icp: (ctx) => removeLiveMember(ctx, team!.club_id, Principal.fromText(removeMember.userId)),
             });
             refreshRemovedTeamMember(queryClient, id);
             toast({ title: "Member removed" });
+          } catch (error: any) {
+            toast({ title: "Failed to remove member", description: error?.message, variant: "destructive" });
           }
           setRemoveMember(null);
         }}

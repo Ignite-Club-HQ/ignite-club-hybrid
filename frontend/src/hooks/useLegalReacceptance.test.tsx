@@ -9,10 +9,27 @@ const mocks = vi.hoisted(() => ({
   settingError: null as unknown,
   acceptances: new Map<string, { terms_accepted_at: string | null; privacy_accepted_at: string | null }>(),
   reads: [] as string[],
+  backend: "supabase" as "supabase" | "icp",
+  icpIdentity: { principal: "principal-a" } as unknown,
+  icpAcceptance: null as { termsVersion: number } | null,
+  setIcpTermsAcceptance: vi.fn(async () => ({})),
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ user: mocks.userId ? { id: mocks.userId } : null }),
+}));
+
+vi.mock("@/live/authBackendMode", () => ({
+  resolveAuthBackend: () => mocks.backend,
+}));
+
+vi.mock("@/live/internetIdentityAuth", () => ({
+  getCurrentInternetIdentity: async () => mocks.icpIdentity,
+}));
+
+vi.mock("@/live/legalTerms", () => ({
+  fetchMyIcpTermsAcceptance: async () => mocks.icpAcceptance,
+  setIcpTermsAcceptance: (...args: unknown[]) => mocks.setIcpTermsAcceptance(...args),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -43,7 +60,7 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-import { useLegalReacceptance } from "./useLegalReacceptance";
+import { icpTermsVersionFromSetting, useLegalReacceptance } from "./useLegalReacceptance";
 
 function wrapper() {
   const client = new QueryClient({
@@ -68,6 +85,11 @@ describe("useLegalReacceptance", () => {
     mocks.settingError = null;
     mocks.acceptances.clear();
     mocks.reads.length = 0;
+    mocks.backend = "supabase";
+    mocks.icpIdentity = { principal: "principal-a" };
+    mocks.icpAcceptance = null;
+    mocks.setIcpTermsAcceptance.mockClear();
+    mocks.setIcpTermsAcceptance.mockResolvedValue({});
   });
 
   it("defaults to off when the setting row is missing", async () => {
@@ -157,3 +179,63 @@ describe("useLegalReacceptance", () => {
     expect(result.current.mustAccept).toBe(true);
   });
 });
+
+describe("useLegalReacceptance (ICP branch)", () => {
+  beforeEach(() => {
+    mocks.userId = "principal-a";
+    mocks.setting = null;
+    mocks.settingError = null;
+    mocks.acceptances.clear();
+    mocks.reads.length = 0;
+    mocks.backend = "icp";
+    mocks.icpIdentity = { principal: "principal-a" };
+    mocks.icpAcceptance = null;
+    mocks.setIcpTermsAcceptance.mockClear();
+    mocks.setIcpTermsAcceptance.mockResolvedValue({});
+  });
+
+  it("never queries the Supabase profiles table when routed to ICP", async () => {
+    mocks.setting = firstActivation;
+    mocks.icpAcceptance = { termsVersion: icpTermsVersionFromSetting(firstActivation) };
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(mocks.reads).not.toContain("profiles");
+  });
+
+  it("requires acceptance when the accepted version predates the derived required version", async () => {
+    mocks.setting = firstActivation;
+    const requiredVersion = icpTermsVersionFromSetting(firstActivation);
+    mocks.icpAcceptance = { termsVersion: requiredVersion - 1 };
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mustAccept).toBe(true);
+  });
+
+  it("does not require acceptance once the accepted version meets the derived required version", async () => {
+    mocks.setting = firstActivation;
+    const requiredVersion = icpTermsVersionFromSetting(firstActivation);
+    mocks.icpAcceptance = { termsVersion: requiredVersion };
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mustAccept).toBe(false);
+  });
+
+  it("treats a never-accepted user (no acceptance record) as needing to accept", async () => {
+    mocks.setting = firstActivation;
+    mocks.icpAcceptance = null;
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.mustAccept).toBe(true);
+  });
+
+  it("acceptCurrentTerms calls setIcpTermsAcceptance with the derived version for the current identity", async () => {
+    mocks.setting = firstActivation;
+    const requiredVersion = icpTermsVersionFromSetting(firstActivation);
+    mocks.icpAcceptance = { termsVersion: requiredVersion - 1 };
+    const { result } = renderHook(() => useLegalReacceptance(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await result.current.acceptCurrentTerms();
+    expect(mocks.setIcpTermsAcceptance).toHaveBeenCalledWith(mocks.icpIdentity, requiredVersion);
+  });
+});
+

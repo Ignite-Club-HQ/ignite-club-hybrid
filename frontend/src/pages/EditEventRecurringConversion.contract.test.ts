@@ -65,4 +65,23 @@ describe("single event -> recurring series conversion is atomic", () => {
     expect(workflowConversion).toContain("withFeatureBackend");
     expect(workflowConversion).toContain("createLiveEventSeries");
   });
+
+  it("threads the user-selected recurrence pattern from EditEventPage into the workflow call", () => {
+    expect(conversionBlock).toContain("frequency: recurrencePattern");
+  });
+
+  it("declares frequency on the RecurringConversionInput contract", () => {
+    expect(workflow).toContain('frequency: "daily" | "weekly" | "biweekly" | "monthly"');
+  });
+
+  it("maps the biweekly pattern onto the canister's fortnightly frequency, passing other patterns through unchanged", () => {
+    expect(workflowConversion).toContain('input.frequency === "biweekly" ? "fortnightly" : input.frequency');
+    // The Supabase branch keeps using occurrenceDates (already pattern-expanded)
+    // rather than sending a raw frequency string.
+    const supabaseBranch = workflowConversion.slice(
+      workflowConversion.indexOf("supabase: async"),
+      workflowConversion.indexOf("icp: async"),
+    );
+    expect(supabaseBranch).not.toContain("input.frequency");
+  });
 });

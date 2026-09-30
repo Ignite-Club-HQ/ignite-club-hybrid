@@ -67,12 +67,16 @@ beforeEach(() => {
   setSessionMock.mockResolvedValue({ error: null });
   isNativeMock.mockReturnValue(false);
 
-  // navigator.credentials
-  (globalThis as any).navigator = (globalThis as any).navigator || {};
-  (navigator as any).credentials = {
-    get: vi.fn(async () => fakeCredential()),
-    create: vi.fn(async () => fakeCredential()),
-  };
+  // navigator.credentials — navigator is a getter-only accessor under
+  // vitest 5's jsdom, so define `credentials` on the existing object.
+  Object.defineProperty(globalThis.navigator, 'credentials', {
+    value: {
+      get: vi.fn(async () => fakeCredential()),
+      create: vi.fn(async () => fakeCredential()),
+    },
+    configurable: true,
+    writable: true,
+  });
   (window as any).PublicKeyCredential = class {
     static isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
   };

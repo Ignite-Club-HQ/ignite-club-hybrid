@@ -51,6 +51,8 @@ import { useUserEventViews } from "@/hooks/useEventViews";
 import { ScheduleDateStrip } from "@/components/events/ScheduleDateStrip";
 import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveAccountRosterScope } from "@/live/features/events";
 
 type EventType = "game" | "training" | "social";
 
@@ -198,28 +200,35 @@ export default function EventsPage() {
         if (r.team_id) teamIds.add(r.team_id);
       });
 
-      // Provisional: no canister equivalent for these parent-filter lookups —
-      // ICP-mode users skip them and fall back to the unfiltered (non-parent)
-      // club list.
-      const [{ data: guardianRows }, { data: ownChildren }] = isIcpAuthBackend
-        ? [{ data: [] as any[] }, { data: [] as any[] }]
-        : await Promise.all([
+      // Roster/attendance-derived team scope: routed through withFeatureBackend
+      // so ICP-auth users get a real (best-effort) lookup instead of always
+      // falling back to the unfiltered club list. Supabase path is unchanged.
+      const childDerivedTeamIds = await withFeatureBackend("events", {
+        supabase: async () => {
+          const [{ data: guardianRows }, { data: ownChildren }] = await Promise.all([
             supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
             supabase.from("children").select("id").eq("parent_id", user!.id),
           ]);
-      const childIds = Array.from(new Set([
-        ...(guardianRows || []).map((g: any) => g.child_id).filter(Boolean),
-        ...(ownChildren || []).map((c: any) => c.id).filter(Boolean),
-      ]));
-      if (childIds.length > 0) {
-        const { data: childTeams } = await supabase
-          .from("child_team_assignments")
-          .select("team_id")
-          .in("child_id", childIds);
-        (childTeams || []).forEach((ct: any) => {
-          if (ct.team_id) teamIds.add(ct.team_id);
-        });
-      }
+          const childIds = Array.from(new Set([
+            ...(guardianRows || []).map((g: any) => g.child_id).filter(Boolean),
+            ...(ownChildren || []).map((c: any) => c.id).filter(Boolean),
+          ]));
+          if (childIds.length === 0) return [] as string[];
+          const { data: childTeams } = await supabase
+            .from("child_team_assignments")
+            .select("team_id")
+            .in("child_id", childIds);
+          return ((childTeams || []).map((ct: any) => ct.team_id).filter(Boolean)) as string[];
+        },
+        icp: async (ctx) => {
+          // II user.id is a principal string (never a UUID) — used as the
+          // roster account_id, matching EventDetailPage's getLiveEventRoster
+          // convention.
+          const scope = await getLiveAccountRosterScope(ctx, user!.id);
+          return scope.teamIds;
+        },
+      });
+      childDerivedTeamIds.forEach((tid) => teamIds.add(tid));
       
       // Get clubs from teams
       if (teamIds.size > 0) {
@@ -300,32 +309,41 @@ export default function EventsPage() {
       
       // Add teams via children (primary parents and guardians)
       step = performance.now();
-      // Provisional: no canister equivalent for these parent-filter lookups —
-      // ICP-mode users skip them and fall back to the unfiltered (non-parent)
-      // events view.
-      const [guardianRes, ownChildrenRes] = isIcpAuthBackend
-        ? [{ data: [] as any[], error: null as any }, { data: [] as any[], error: null as any }]
-        : await Promise.all([
+      // Roster/attendance-derived team scope: routed through withFeatureBackend
+      // so ICP-auth users get a real (best-effort) lookup instead of always
+      // falling back to the unfiltered events view. Supabase path is unchanged.
+      const membershipDerivedTeamIds = await withFeatureBackend("events", {
+        supabase: async () => {
+          const [guardianRes, ownChildrenRes] = await Promise.all([
             supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
             supabase.from("children").select("id").eq("parent_id", user!.id),
           ]);
-      if (guardianRes.error) throw guardianRes.error;
-      if (ownChildrenRes.error) throw ownChildrenRes.error;
-      const childIds = Array.from(new Set([
-        ...(guardianRes.data || []).map((g: any) => g.child_id).filter(Boolean),
-        ...(ownChildrenRes.data || []).map((c: any) => c.id).filter(Boolean),
-      ]));
-      if (childIds.length > 0) {
-        const { data: childTeams, error: childTeamsErr } = await supabase
-          .from("child_team_assignments")
-          .select("team_id")
-          .in("child_id", childIds);
-        if (childTeamsErr) throw childTeamsErr;
-        (childTeams || []).forEach((ct: any) => {
-          if (ct.team_id && !teamIds.includes(ct.team_id)) teamIds.push(ct.team_id);
-        });
-      }
-      diagLog("memberships:child-teams", { ms: Math.round(performance.now() - step), childIds: childIds.length });
+          if (guardianRes.error) throw guardianRes.error;
+          if (ownChildrenRes.error) throw ownChildrenRes.error;
+          const childIds = Array.from(new Set([
+            ...(guardianRes.data || []).map((g: any) => g.child_id).filter(Boolean),
+            ...(ownChildrenRes.data || []).map((c: any) => c.id).filter(Boolean),
+          ]));
+          if (childIds.length === 0) return [] as string[];
+          const { data: childTeams, error: childTeamsErr } = await supabase
+            .from("child_team_assignments")
+            .select("team_id")
+            .in("child_id", childIds);
+          if (childTeamsErr) throw childTeamsErr;
+          return ((childTeams || []).map((ct: any) => ct.team_id).filter(Boolean)) as string[];
+        },
+        icp: async (ctx) => {
+          // II user.id is a principal string (never a UUID) — used as the
+          // roster account_id, matching EventDetailPage's getLiveEventRoster
+          // convention.
+          const scope = await getLiveAccountRosterScope(ctx, user!.id);
+          return scope.teamIds;
+        },
+      });
+      membershipDerivedTeamIds.forEach((tid) => {
+        if (!teamIds.includes(tid)) teamIds.push(tid);
+      });
+      diagLog("memberships:child-teams", { ms: Math.round(performance.now() - step), childTeams: membershipDerivedTeamIds.length });
 
       // Get club IDs from team memberships
       if (teamIds.length > 0) {
