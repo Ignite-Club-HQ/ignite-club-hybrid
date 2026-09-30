@@ -55,6 +55,7 @@ export interface ClubProfile {
   'logo_url' : [] | [string],
   'is_active' : boolean,
   'primary_color' : [] | [string],
+  'deleted_at_ms' : [] | [bigint],
 }
 export interface ClubSettings {
   'contact_email' : [] | [string],
@@ -87,6 +88,7 @@ export interface ClubTeam {
   'is_active' : boolean,
   'club_id' : string,
   'age_group' : [] | [string],
+  'deleted_at_ms' : [] | [bigint],
 }
 export interface Config {
   'acl' : Acl,
@@ -153,6 +155,18 @@ export interface RoleGrant {
   'team' : [] | [string],
   'user' : Principal,
 }
+export interface RoleRequest {
+  'id' : string,
+  'account_id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'club' : string,
+  'role' : string,
+  'team' : [] | [string],
+  'user' : Principal,
+  'created_at_ms' : bigint,
+  'decided_by' : [] | [Principal],
+}
 export interface Snapshot {
   'schema' : number,
   'clubs' : Array<[string, Listing]>,
@@ -167,6 +181,18 @@ export interface State {
   'next_challenge' : bigint,
 }
 export interface Team { 'id' : string, 'club' : string }
+export interface TeamInvite {
+  'id' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : string,
+  'email' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
 export interface _SERVICE {
   'accept_identity_link' : ActorMethod<
     [bigint],
@@ -176,6 +202,21 @@ export interface _SERVICE {
   'accept_parent_invite' : ActorMethod<
     [string],
     { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'accept_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'add_role_grant' : ActorMethod<
+    [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'approve_role_request' : ActorMethod<
+    [string],
+    { 'Ok' : RoleRequest } |
       { 'Err' : string }
   >,
   'begin_identity_link' : ActorMethod<
@@ -193,12 +234,27 @@ export interface _SERVICE {
     { 'Ok' : ParentInvite } |
       { 'Err' : string }
   >,
+  'create_team_invite' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'delete_club_permanent' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_news_post' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'delete_sponsor' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_team_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -246,6 +302,11 @@ export interface _SERVICE {
     { 'Ok' : [] | [ClubTeam] } |
       { 'Err' : string }
   >,
+  'get_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |
@@ -287,9 +348,19 @@ export interface _SERVICE {
     { 'Ok' : Array<AccountRole> } |
       { 'Err' : string }
   >,
+  'list_role_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RoleRequest> } |
+      { 'Err' : string }
+  >,
   'list_sponsors' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubSponsor> } |
+      { 'Err' : string }
+  >,
+  'list_team_invites' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : Array<TeamInvite> } |
       { 'Err' : string }
   >,
   'list_teams' : ActorMethod<
@@ -298,14 +369,49 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
+  'reject_role_request' : ActorMethod<
+    [string],
+    { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'remove_member' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_role_grant' : ActorMethod<
+    [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'replace_acl' : ActorMethod<
     [bigint, Acl],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'request_role' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'restore_club' : ActorMethod<
+    [string],
+    { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'restore_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
   'revoke_identity' : ActorMethod<
     [Principal, bigint],
     { 'Ok' : Account } |
+      { 'Err' : string }
+  >,
+  'revoke_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'save_club_profile' : ActorMethod<
@@ -325,6 +431,16 @@ export interface _SERVICE {
   >,
   'save_team' : ActorMethod<
     [ClubTeam],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'soft_delete_club' : ActorMethod<
+    [string],
+    { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'soft_delete_team' : ActorMethod<
+    [string],
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,

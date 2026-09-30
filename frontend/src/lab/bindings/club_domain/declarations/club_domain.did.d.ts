@@ -55,6 +55,7 @@ export interface ClubProfile {
   'logo_url' : [] | [string],
   'is_active' : boolean,
   'primary_color' : [] | [string],
+  'deleted_at_ms' : [] | [bigint],
 }
 export interface ClubSettings {
   'contact_email' : [] | [string],
@@ -69,18 +70,25 @@ export interface ClubSponsor {
   'name' : string,
   'tier' : string,
   'sort_order' : number,
+  'description' : [] | [string],
   'logo_url' : [] | [string],
+  'is_team_only' : boolean,
   'is_active' : boolean,
   'club_id' : string,
+  'exposure_percentage' : [] | [number],
 }
 export interface ClubTeam {
   'id' : string,
   'name' : string,
   'division' : [] | [string],
+  'description' : [] | [string],
+  'team_type' : [] | [string],
+  'logo_url' : [] | [string],
   'gender' : [] | [string],
   'is_active' : boolean,
   'club_id' : string,
   'age_group' : [] | [string],
+  'deleted_at_ms' : [] | [bigint],
 }
 export interface Config {
   'acl' : Acl,
@@ -108,67 +116,56 @@ export interface Link {
 }
 export interface Listing { 'links' : Array<Link>, 'revision' : bigint }
 export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
+export interface NewsPost {
+  'id' : string,
+  'status' : string,
+  'title' : string,
+  'body' : string,
+  'updated_at_ms' : bigint,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'revision' : bigint,
+  'club_id' : string,
+}
 export type Operation = {
     'SetActive' : { 'id' : string, 'active' : boolean }
   } |
   { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
   { 'Remove' : { 'id' : string } } |
   { 'Reorder' : { 'first' : string, 'second' : string } };
+export interface ParentInvite {
+  'id' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : [] | [string],
+  'child_id' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
 export interface Request {
   'request_id' : string,
   'club' : string,
   'operation' : Operation,
   'expected_revision' : bigint,
 }
-export type Result = { 'Ok' : Account } |
-  { 'Err' : string };
-export type Result_1 = { 'Ok' : Challenge } |
-  { 'Err' : string };
-export type Result_10 = { 'Ok' : [] | [ClubTeam] } |
-  { 'Err' : string };
-export type Result_11 = { 'Ok' : null } |
-  { 'Err' : string };
-export type Result_12 = { 'Ok' : Array<ClubProfile> } |
-  { 'Err' : string };
-export type Result_13 = { 'Ok' : Array<ClubSponsor> } |
-  { 'Err' : string };
-export type Result_14 = { 'Ok' : Array<ClubTeam> } |
-  { 'Err' : string };
-export type Result_15 = { 'Ok' : Mutation } |
-  { 'Err' : string };
-export type Result_16 = { 'Ok' : ClubProfile } |
-  { 'Err' : string };
-export type Result_17 = { 'Ok' : ClubSettings } |
-  { 'Err' : string };
-export type Result_18 = { 'Ok' : ClubSponsor } |
-  { 'Err' : string };
-export type Result_19 = { 'Ok' : ClubTeam } |
-  { 'Err' : string };
-export type Result_2 = { 'Ok' : Config } |
-  { 'Err' : string };
-export type Result_20 = { 'Ok' : Array<Child> } |
-  { 'Err' : string };
-export type Result_21 = { 'Ok' : Array<AccountRole> } |
-  { 'Err' : string };
-export type Result_3 = { 'Ok' : Listing } |
-  { 'Err' : string };
-export type Result_4 = { 'Ok' : State } |
-  { 'Err' : string };
-export type Result_5 = { 'Ok' : Snapshot } |
-  { 'Err' : string };
-export type Result_6 = { 'Ok' : bigint } |
-  { 'Err' : string };
-export type Result_7 = { 'Ok' : [] | [ClubProfile] } |
-  { 'Err' : string };
-export type Result_8 = { 'Ok' : [] | [ClubSettings] } |
-  { 'Err' : string };
-export type Result_9 = { 'Ok' : [] | [ClubSponsor] } |
-  { 'Err' : string };
 export interface RoleGrant {
   'club' : [] | [string],
   'role' : string,
   'team' : [] | [string],
   'user' : Principal,
+}
+export interface RoleRequest {
+  'id' : string,
+  'account_id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'club' : string,
+  'role' : string,
+  'team' : [] | [string],
+  'user' : Principal,
+  'created_at_ms' : bigint,
+  'decided_by' : [] | [Principal],
 }
 export interface Snapshot {
   'schema' : number,
@@ -184,37 +181,280 @@ export interface State {
   'next_challenge' : bigint,
 }
 export interface Team { 'id' : string, 'club' : string }
+export interface TeamInvite {
+  'id' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : string,
+  'email' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
 export interface _SERVICE {
-  'accept_identity_link' : ActorMethod<[bigint], Result>,
-  'begin_identity_link' : ActorMethod<[Principal], Result_1>,
-  'export_acl' : ActorMethod<[], Result_2>,
-  'export_frozen_club' : ActorMethod<[string], Result_3>,
-  'export_identity_state' : ActorMethod<[], Result_4>,
-  'export_links' : ActorMethod<[], Result_5>,
-  'freeze_club' : ActorMethod<[string, bigint], Result_6>,
-  'get_club_profile' : ActorMethod<[string], Result_7>,
-  'get_club_settings' : ActorMethod<[string], Result_8>,
-  'get_link' : ActorMethod<[string], Result_3>,
-  'get_sponsor' : ActorMethod<[string], Result_9>,
-  'get_team' : ActorMethod<[string], Result_10>,
-  'import_frozen_club' : ActorMethod<[string, Listing], Result_11>,
-  'import_links' : ActorMethod<[Snapshot], Result_11>,
+  'accept_identity_link' : ActorMethod<
+    [bigint],
+    { 'Ok' : Account } |
+      { 'Err' : string }
+  >,
+  'accept_parent_invite' : ActorMethod<
+    [string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'accept_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'add_role_grant' : ActorMethod<
+    [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'approve_role_request' : ActorMethod<
+    [string],
+    { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'begin_identity_link' : ActorMethod<
+    [Principal],
+    { 'Ok' : Challenge } |
+      { 'Err' : string }
+  >,
+  'create_news_post' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : NewsPost } |
+      { 'Err' : string }
+  >,
+  'create_parent_invite' : ActorMethod<
+    [string, [] | [string], string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'create_team_invite' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'delete_club_permanent' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_news_post' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_sponsor' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_team_permanent' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
+  'export_frozen_club' : ActorMethod<
+    [string],
+    { 'Ok' : Listing } |
+      { 'Err' : string }
+  >,
+  'export_identity_state' : ActorMethod<
+    [],
+    { 'Ok' : State } |
+      { 'Err' : string }
+  >,
+  'export_links' : ActorMethod<[], { 'Ok' : Snapshot } | { 'Err' : string }>,
+  'freeze_club' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'get_club_profile' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubProfile] } |
+      { 'Err' : string }
+  >,
+  'get_club_settings' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubSettings] } |
+      { 'Err' : string }
+  >,
+  'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_parent_invite' : ActorMethod<
+    [string],
+    { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'get_sponsor' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubSponsor] } |
+      { 'Err' : string }
+  >,
+  'get_team' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubTeam] } |
+      { 'Err' : string }
+  >,
+  'get_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'import_frozen_club' : ActorMethod<
+    [string, Listing],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'import_links' : ActorMethod<
+    [Snapshot],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'list_children' : ActorMethod<[], Result_20>,
-  'list_clubs' : ActorMethod<[[] | [string], number], Result_12>,
-  'list_links' : ActorMethod<[string, boolean], Result_3>,
-  'list_role_grants' : ActorMethod<[string], Result_21>,
-  'list_sponsors' : ActorMethod<[string], Result_13>,
-  'list_teams' : ActorMethod<[string], Result_14>,
-  'mutate' : ActorMethod<[Request], Result_15>,
-  'replace_acl' : ActorMethod<[bigint, Acl], Result_6>,
-  'revoke_identity' : ActorMethod<[Principal, bigint], Result>,
-  'save_club_profile' : ActorMethod<[ClubProfile], Result_16>,
-  'save_club_settings' : ActorMethod<[ClubSettings], Result_17>,
-  'save_sponsor' : ActorMethod<[ClubSponsor], Result_18>,
-  'save_team' : ActorMethod<[ClubTeam], Result_19>,
-  'unfreeze_club' : ActorMethod<[string, bigint], Result_11>,
-  'whoami' : ActorMethod<[], Result>,
+  'list_children' : ActorMethod<
+    [],
+    { 'Ok' : Array<Child> } |
+      { 'Err' : string }
+  >,
+  'list_clubs' : ActorMethod<
+    [[] | [string], number],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
+  'list_links' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : Listing } |
+      { 'Err' : string }
+  >,
+  'list_news' : ActorMethod<
+    [string],
+    { 'Ok' : Array<NewsPost> } |
+      { 'Err' : string }
+  >,
+  'list_news_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<NewsPost> } |
+      { 'Err' : string }
+  >,
+  'list_role_grants' : ActorMethod<
+    [string],
+    { 'Ok' : Array<AccountRole> } |
+      { 'Err' : string }
+  >,
+  'list_role_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RoleRequest> } |
+      { 'Err' : string }
+  >,
+  'list_sponsors' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubSponsor> } |
+      { 'Err' : string }
+  >,
+  'list_team_invites' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : Array<TeamInvite> } |
+      { 'Err' : string }
+  >,
+  'list_teams' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
+  'reject_role_request' : ActorMethod<
+    [string],
+    { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'remove_member' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_role_grant' : ActorMethod<
+    [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'replace_acl' : ActorMethod<
+    [bigint, Acl],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'request_role' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'restore_club' : ActorMethod<
+    [string],
+    { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'restore_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'revoke_identity' : ActorMethod<
+    [Principal, bigint],
+    { 'Ok' : Account } |
+      { 'Err' : string }
+  >,
+  'revoke_team_invite' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'save_club_profile' : ActorMethod<
+    [ClubProfile],
+    { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'save_club_settings' : ActorMethod<
+    [ClubSettings],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'save_sponsor' : ActorMethod<
+    [ClubSponsor],
+    { 'Ok' : ClubSponsor } |
+      { 'Err' : string }
+  >,
+  'save_team' : ActorMethod<
+    [ClubTeam],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'soft_delete_club' : ActorMethod<
+    [string],
+    { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'soft_delete_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'unfreeze_club' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'update_news_post' : ActorMethod<
+    [string, string, string, string, bigint],
+    { 'Ok' : NewsPost } |
+      { 'Err' : string }
+  >,
+  'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];
