@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useUnreadMessageCounts } from "@/hooks/useUnreadMessageCounts";
@@ -54,7 +55,7 @@ export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
     },
     enabled: !!teamId,
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30 * 1000 : 60 * 1000,
   });
 
   // Realtime patch (both web and native): a single team-filtered subscription
@@ -64,6 +65,9 @@ export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
   // as a backstop/reconciler for author names and missed events.
   useEffect(() => {
     if (!teamId) return;
+    // ICP-routed messaging has no realtime channel; the refetchInterval above
+    // (tightened to 30s under ICP) is the sole update path.
+    if (isFeatureRoutedToIcp("messaging")) return;
     const channel = supabase
       .channel(`team-chat-preview-${teamId}`)
       .on(

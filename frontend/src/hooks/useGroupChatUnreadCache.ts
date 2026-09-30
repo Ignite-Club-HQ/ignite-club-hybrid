@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 
 export const groupChatUnreadCacheKey = (userId: string | null | undefined) =>
@@ -34,6 +35,7 @@ export function useGroupChatUnreadCache(userId: string | null | undefined) {
     staleTime: 5 * 60 * 1000,
     initialData: {} as UnreadMap,
     initialDataUpdatedAt: 0,
+    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("chat_group_unread")
@@ -51,6 +53,9 @@ export function useGroupChatUnreadCache(userId: string | null | undefined) {
 
   useEffect(() => {
     if (!userId) return;
+    // Messaging is ICP-routed: no realtime channel to subscribe to. The
+    // refetchInterval above polls this cache every 30s instead.
+    if (isFeatureRoutedToIcp("messaging")) return;
 
     // Primary: subscribe to our own rows in the denormalised cache. Payloads
     // carry the new count so we patch in-place with zero extra queries.

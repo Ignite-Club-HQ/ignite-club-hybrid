@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,10 +62,14 @@ export function PollCard({ pollId }: PollCardProps) {
       };
     },
     staleTime: 15_000,
+    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
   });
 
-  // Realtime: refresh on any vote change for this poll
+  // Realtime: refresh on any vote change for this poll. Skipped when
+  // messaging is ICP-routed (canisters are request/response, no channel to
+  // subscribe to) in favour of a 30s poll fallback below.
   useEffect(() => {
+    if (isFeatureRoutedToIcp("messaging")) return;
     const channel = supabase
       .channel(`poll-${pollId}`)
       .on(

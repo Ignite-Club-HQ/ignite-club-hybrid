@@ -271,7 +271,11 @@ export default function PlacementAdminSettingsPage() {
     },
     onSuccess: (config) => {
       applyBackendRoutingConfig(config);
-      queryClient.invalidateQueries({ queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY] });
+      // Flipping backend routing changes which backend every feature reads
+      // from (Supabase vs ICP). A full invalidation forces every feature
+      // query cache to refetch under the new mode instead of continuing to
+      // serve stale cross-mode data until each cache's own staleTime lapses.
+      queryClient.invalidateQueries();
       setRoutingTouched(false);
       toast({ title: "Backend routing saved", description: "The routing configuration is active for this session and all future sessions." });
     },

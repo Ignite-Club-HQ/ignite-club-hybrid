@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useMemo, useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
 type MessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
@@ -304,6 +305,17 @@ export function useMessageReads(
   // reconciliation fetch so any missed reads are healed.
   useEffect(() => {
     if (!contextId) return;
+
+    // Messaging is ICP-routed: no realtime channel to subscribe to. Poll the
+    // visible window's read receipts instead (visibility-gated, ~30s).
+    if (isFeatureRoutedToIcp("messaging")) {
+      reconcileRef.current();
+      const poll = setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        reconcileRef.current();
+      }, 30_000);
+      return () => clearInterval(poll);
+    }
 
     const scopeKey = messageType === "broadcast" ? "broadcast" : contextId;
 
