@@ -10,9 +10,19 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Attachment {
+  'url' : [] | [string],
+  'kind' : string,
+  'ref_id' : string,
+}
 export interface BroadcastResult {
   'skipped' : Array<string>,
   'delivered' : number,
+}
+export interface ClubMembership { 'user' : Principal, 'club_id' : string }
+export interface CompetitionAdmin {
+  'conversation_id' : string,
+  'user' : Principal,
 }
 export interface Conversation {
   'id' : string,
@@ -21,11 +31,22 @@ export interface Conversation {
   'next_sequence' : bigint,
   'club_id' : string,
 }
+export interface GroupMetadata {
+  'members' : Array<Principal>,
+  'conversation_id' : string,
+  'kind' : string,
+  'name' : string,
+  'team_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'club_id' : [] | [string],
+}
 export interface Message {
   'id' : string,
   'conversation_id' : string,
   'body' : string,
   'sender' : Principal,
+  'edited_at_ms' : [] | [bigint],
+  'attachment' : [] | [Attachment],
   'sequence' : bigint,
   'idempotency_key' : string,
 }
@@ -49,17 +70,26 @@ export interface RoleGrant {
 export interface State {
   'messages' : Array<Message>,
   'schema' : number,
+  'dmAttachmentsDisabled' : Array<Principal>,
   'unread' : Array<Unread>,
+  'groupMetadata' : Array<GroupMetadata>,
+  'clubMemberships' : Array<ClubMembership>,
   'governor' : Principal,
   'conversations' : Array<Conversation>,
   'receipts' : Array<Receipt>,
   'roles' : Array<RoleGrant>,
+  'competitionAdmins' : Array<CompetitionAdmin>,
 }
 export interface Unread {
   'conversation_id' : string,
   'count' : bigint,
   'user' : Principal,
   'last_read_sequence' : bigint,
+}
+export interface UnreadSummary {
+  'conversation_id' : string,
+  'kind' : string,
+  'count' : bigint,
 }
 export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
@@ -72,6 +102,7 @@ export interface _SERVICE {
     { 'Ok' : BroadcastResult } |
       { 'Err' : string }
   >,
+  'can_dm_user' : ActorMethod<[Principal], boolean>,
   'create_conversation' : ActorMethod<
     [string, [] | [string], Array<Principal>],
     { 'Ok' : Conversation } |
@@ -82,13 +113,25 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
+  'get_group_metadata' : ActorMethod<
+    [string],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'grant_competition_admin' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_competition_admin' : ActorMethod<[string], boolean>,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
@@ -105,14 +148,20 @@ export interface _SERVICE {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'my_unread_counts' : ActorMethod<[], Array<UnreadSummary>>,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'send_message' : ActorMethod<
-    [string, string, string],
+    [string, string, string, [] | [Attachment]],
     { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
+  'set_dm_attachments_disabled' : ActorMethod<
+    [Principal, boolean],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'unread_count' : ActorMethod<
@@ -123,6 +172,16 @@ export interface _SERVICE {
   'update_message' : ActorMethod<
     [string, string],
     { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
+  'upsert_club_membership' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'upsert_group_metadata' : ActorMethod<
+    [string, string, string, [] | [string], [] | [string], Array<Principal>],
+    { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
 }

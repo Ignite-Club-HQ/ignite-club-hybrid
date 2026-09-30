@@ -179,6 +179,13 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    is_competition_admin(competition_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     issue_join_token(competition_id: string, team_id: string, expires_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: JoinToken;
@@ -371,6 +378,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.initialize();
         return from_candid_variant_n1(result);
     }
+    async is_competition_admin(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: boolean;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.is_competition_admin(arg0);
+        return from_candid_variant_n22(result);
+    }
     async issue_join_token(arg0: string, arg1: string, arg2: bigint): Promise<{
         __kind__: "Ok";
         Ok: JoinToken;
@@ -379,7 +396,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.issue_join_token(arg0, arg1, arg2);
-        return from_candid_variant_n22(result);
+        return from_candid_variant_n23(result);
     }
     async listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
@@ -389,7 +406,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n24(result);
     }
     async list_competitions(arg0: string): Promise<{
         __kind__: "Ok";
@@ -399,7 +416,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_competitions(arg0);
-        return from_candid_variant_n24(result);
+        return from_candid_variant_n25(result);
     }
     async list_competitions_multi(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -409,7 +426,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_competitions_multi(arg0);
-        return from_candid_variant_n24(result);
+        return from_candid_variant_n25(result);
     }
     async list_entries(arg0: string): Promise<{
         __kind__: "Ok";
@@ -419,7 +436,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_entries(arg0);
-        return from_candid_variant_n25(result);
+        return from_candid_variant_n26(result);
     }
     async list_matches(arg0: string): Promise<{
         __kind__: "Ok";
@@ -429,7 +446,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_matches(arg0);
-        return from_candid_variant_n26(result);
+        return from_candid_variant_n27(result);
     }
     async list_seasons(arg0: string): Promise<{
         __kind__: "Ok";
@@ -439,7 +456,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_seasons(arg0);
-        return from_candid_variant_n27(result);
+        return from_candid_variant_n28(result);
     }
     async record_match(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";
@@ -449,7 +466,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_match(arg0, arg1, arg2);
-        return from_candid_variant_n28(result);
+        return from_candid_variant_n29(result);
     }
     async register_team(arg0: string, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";
@@ -479,7 +496,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_match_result(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n28(result);
+        return from_candid_variant_n29(result);
     }
     async set_season_divisions(arg0: string, arg1: string, arg2: Array<string>): Promise<{
         __kind__: "Ok";
@@ -508,8 +525,8 @@ export class Competition_domain implements competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n2(arg3), to_candid_opt_n29(arg4), to_candid_opt_n2(arg5), to_candid_opt_n2(arg6), to_candid_opt_n30(arg7), to_candid_opt_n30(arg8), to_candid_opt_n30(arg9), to_candid_opt_n2(arg10), arg11);
-        return from_candid_variant_n28(result);
+        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n2(arg3), to_candid_opt_n30(arg4), to_candid_opt_n2(arg5), to_candid_opt_n2(arg6), to_candid_opt_n31(arg7), to_candid_opt_n31(arg8), to_candid_opt_n31(arg9), to_candid_opt_n2(arg10), arg11);
+        return from_candid_variant_n29(result);
     }
 }
 function from_candid_Match_n15(value: _Match): Match {
@@ -695,6 +712,25 @@ function from_candid_variant_n10(value: {
     } : value;
 }
 function from_candid_variant_n22(value: {
+    Ok: boolean;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: boolean;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n23(value: {
     Ok: _JoinToken;
 } | {
     Err: string;
@@ -713,7 +749,7 @@ function from_candid_variant_n22(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
+function from_candid_variant_n24(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -732,7 +768,7 @@ function from_candid_variant_n23(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n24(value: {
+function from_candid_variant_n25(value: {
     Ok: Array<_Competition>;
 } | {
     Err: string;
@@ -751,7 +787,7 @@ function from_candid_variant_n24(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n25(value: {
+function from_candid_variant_n26(value: {
     Ok: Array<_TeamEntry>;
 } | {
     Err: string;
@@ -770,7 +806,7 @@ function from_candid_variant_n25(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n26(value: {
+function from_candid_variant_n27(value: {
     Ok: Array<_Match>;
 } | {
     Err: string;
@@ -789,7 +825,7 @@ function from_candid_variant_n26(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n27(value: {
+function from_candid_variant_n28(value: {
     Ok: Array<_Season>;
 } | {
     Err: string;
@@ -808,7 +844,7 @@ function from_candid_variant_n27(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n29(value: {
     Ok: _Match;
 } | {
     Err: string;
@@ -915,10 +951,10 @@ function from_candid_vec_n19(value: Array<_RoleGrant>): Array<RoleGrant> {
 function to_candid_opt_n2(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n29(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n30(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n30(value: number | null): [] | [number] {
+function to_candid_opt_n31(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

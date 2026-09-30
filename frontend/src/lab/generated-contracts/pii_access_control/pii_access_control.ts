@@ -141,6 +141,13 @@ export enum Variant_Active_Shredded_RotationPending_Revoked {
  * / - External vault for secret workload identity
  */
 export interface pii_access_controlInterface {
+    add_guardian_relationship(guardian: Principal, child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     audit_access(filter: AuditFilter): Promise<Array<AuditRecord>>;
     delete_pii(pii_id: string, field_id: string): Promise<{
         __kind__: "Ok";
@@ -199,9 +206,17 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    my_guardian_children(): Promise<Array<string>>;
     register_pii(pii_id: string, field_id: string, plaintext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    remove_guardian_relationship(guardian: Principal, child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -224,8 +239,18 @@ export interface pii_access_controlInterface {
 import type { AuditFilter as _AuditFilter, DecryptedPii as _DecryptedPii, EncryptedPii as _EncryptedPii, KeyMetadata as _KeyMetadata, KeyRotationResult as _KeyRotationResult, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
 export class Pii_access_control implements pii_access_controlInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
+    async add_guardian_relationship(arg0: Principal, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.add_guardian_relationship(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
     async audit_access(arg0: AuditFilter): Promise<Array<AuditRecord>> {
-        const result = await this.actor.audit_access(to_candid_AuditFilter_n1(arg0));
+        const result = await this.actor.audit_access(to_candid_AuditFilter_n2(arg0));
         return result;
     }
     async delete_pii(arg0: string, arg1: string): Promise<{
@@ -236,7 +261,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_pii(arg0, arg1);
-        return from_candid_variant_n3(result);
+        return from_candid_variant_n4(result);
     }
     async derive_media_key(arg0: string, arg1: Principal, arg2: string, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -246,7 +271,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.derive_media_key(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n4(result);
+        return from_candid_variant_n5(result);
     }
     async emergency_shutdown(): Promise<{
         __kind__: "Ok";
@@ -256,7 +281,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.emergency_shutdown();
-        return from_candid_variant_n5(result);
+        return from_candid_variant_n1(result);
     }
     async get_decrypted_pii(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
@@ -300,7 +325,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_pii_read(arg0, arg1, arg2);
-        return from_candid_variant_n5(result);
+        return from_candid_variant_n1(result);
     }
     async initialize_master_key(arg0: string): Promise<{
         __kind__: "Ok";
@@ -312,6 +337,10 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.initialize_master_key(arg0);
         return from_candid_variant_n13(result);
     }
+    async my_guardian_children(): Promise<Array<string>> {
+        const result = await this.actor.my_guardian_children();
+        return result;
+    }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -322,6 +351,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
         return from_candid_variant_n8(result);
     }
+    async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.remove_guardian_relationship(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
     async revoke_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -330,7 +369,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.revoke_pii_read(arg0, arg1, arg2);
-        return from_candid_variant_n5(result);
+        return from_candid_variant_n1(result);
     }
     async rotate_key(arg0: string): Promise<{
         __kind__: "Ok";
@@ -371,6 +410,25 @@ function from_candid_record_n11(value: {
         created_at: value.created_at,
         rotation_due_at: value.rotation_due_at
     };
+}
+function from_candid_variant_n1(value: {
+    Ok: null;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
 function from_candid_variant_n12(value: {
     Active: null;
@@ -421,7 +479,7 @@ function from_candid_variant_n14(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n3(value: {
+function from_candid_variant_n4(value: {
     Ok: _PiiDeleteResult;
 } | {
     Err: string;
@@ -440,32 +498,13 @@ function from_candid_variant_n3(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n4(value: {
-    Ok: Uint8Array;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Uint8Array;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
 function from_candid_variant_n5(value: {
-    Ok: null;
+    Ok: Uint8Array;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: null;
+    Ok: Uint8Array;
 } | {
     __kind__: "Err";
     Err: string;
@@ -538,10 +577,10 @@ function from_candid_variant_n8(value: {
 function from_candid_vec_n9(value: Array<_KeyMetadata>): Array<KeyMetadata> {
     return value.map((x)=>from_candid_KeyMetadata_n10(x));
 }
-function to_candid_AuditFilter_n1(value: AuditFilter): _AuditFilter {
-    return to_candid_record_n2(value);
+function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
+    return to_candid_record_n3(value);
 }
-function to_candid_record_n2(value: {
+function to_candid_record_n3(value: {
     opt_from_ts?: bigint;
     opt_to_ts?: bigint;
     opt_pii_id?: string;

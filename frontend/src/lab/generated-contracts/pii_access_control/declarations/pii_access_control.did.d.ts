@@ -97,6 +97,11 @@ export interface PiiDeleteResult {
  * / - External vault for secret workload identity
  */
 export interface _SERVICE {
+  'add_guardian_relationship' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'delete_pii' : ActorMethod<
     [string, string],
@@ -135,9 +140,15 @@ export interface _SERVICE {
     { 'Ok' : string } |
       { 'Err' : string }
   >,
+  'my_guardian_children' : ActorMethod<[], Array<string>>,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |
+      { 'Err' : string }
+  >,
+  'remove_guardian_relationship' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'revoke_pii_read' : ActorMethod<

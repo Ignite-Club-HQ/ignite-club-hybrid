@@ -61,13 +61,47 @@ export interface PiiDeleteResult {
  * / Encrypts and mediates access to personally identifiable information (PII)
  * / Enforces field-level access policies and maintains audit trail
  * /
- * / Production note: This uses synthetic encryption for lab testing.
- * / Production deployment should integrate with:
- * / - Hardware Security Module (HSM) or KMS for master key storage
- * / - vetKeys for child media key derivation
+ * / Encryption construction (interim, pre-vetKeys):
+ * / - Master secrets are 32 random bytes obtained from the management canister's
+ * /   `raw_rand` (via `mo:core/Random.blob`, which calls raw_rand directly) on
+ * /   `initialize_master_key` / `rotate_key`. Secrets are kept per key_id in
+ * /   stable state so records encrypted under a retired key remain decryptable.
+ * /   No method ever returns secret material; only opaque key_ids/metadata leave
+ * /   the canister.
+ * / - Per-field key = SHA-256(master_secret || pii_id || field_id).
+ * / - Nonces are 12 random bytes drawn fresh from raw_rand for every
+ * /   `register_pii` call (register_pii is already an update call, so this is
+ * /   a plain `await`).
+ * / - Confidentiality: SHA-256-based CTR-mode keystream, where each 32-byte
+ * /   keystream block is SHA-256(field_key || nonce || counter_be32), counter
+ * /   starting at 0 and incrementing per 32-byte block, XORed with plaintext.
+ * / - Integrity: encrypt-then-MAC. tag = SHA-256(field_key || nonce ||
+ * /   ciphertext). The tag (32 bytes) is appended to the ciphertext bytes
+ * /   stored/returned in `EncryptedPii.ciphertext` (no public record shape
+ * /   changed). Decryption recomputes and compares the tag before returning
+ * /   plaintext, failing closed (#Err) on any mismatch, truncated input, or
+ * /   unknown master_key_id.
+ * / - `derive_media_key` uses a separate raw_rand-generated 32-byte
+ * /   `media_root_secret` (created lazily on first use) and returns
+ * /   SHA-256(media_root_secret || child_id || authorizer || purpose),
+ * /   32 bytes, still gated by the same authorization checks as before.
+ * /
+ * / This is a meaningful improvement over the previous XOR/timestamp
+ * / "synthetic encryption" placeholder, but it is still symmetric key material
+ * / held in canister heap/stable memory. Production deployment should still
+ * / migrate to:
+ * / - vetKeys for child media key derivation and/or field key derivation,
+ * /   removing raw master secret material from canister memory entirely
+ * / - Hardware Security Module (HSM) or KMS-backed custody for the true root
+ * /   of trust, with this canister only holding derived, scoped key handles
  * / - External vault for secret workload identity
  */
 export interface _SERVICE {
+  'add_guardian_relationship' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
   'delete_pii' : ActorMethod<
     [string, string],
@@ -85,20 +119,41 @@ export interface _SERVICE {
     { 'Ok' : DecryptedPii } |
       { 'Err' : string }
   >,
+  'get_decrypted_pii_batch' : ActorMethod<
+    [Array<string>, string, string, string],
+    { 'Ok' : Array<DecryptedPii> } |
+      { 'Err' : string }
+  >,
   'get_encrypted_pii' : ActorMethod<
     [string, string],
     { 'Ok' : EncryptedPii } |
       { 'Err' : string }
   >,
   'get_key_metadata' : ActorMethod<[], Array<KeyMetadata>>,
+  'grant_pii_read' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'initialize_master_key' : ActorMethod<
     [string],
     { 'Ok' : string } |
       { 'Err' : string }
   >,
+  'my_guardian_children' : ActorMethod<[], Array<string>>,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |
+      { 'Err' : string }
+  >,
+  'remove_guardian_relationship' : ActorMethod<
+    [Principal, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'revoke_pii_read' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'rotate_key' : ActorMethod<

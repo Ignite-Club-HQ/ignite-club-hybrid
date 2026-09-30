@@ -63,10 +63,28 @@ export interface Receipt {
     user: Principal;
     message_id: string;
 }
+export interface ClubMembership {
+    user: Principal;
+    club_id: string;
+}
+export interface UnreadSummary {
+    conversation_id: string;
+    kind: string;
+    count: bigint;
+}
 export interface Attachment {
     url?: string;
     kind: string;
     ref_id: string;
+}
+export interface GroupMetadata {
+    members: Array<Principal>;
+    conversation_id: string;
+    kind: string;
+    name: string;
+    team_id?: string;
+    created_at_ms: bigint;
+    club_id?: string;
 }
 export interface Message {
     id: string;
@@ -78,6 +96,10 @@ export interface Message {
     sequence: bigint;
     idempotency_key: string;
 }
+export interface CompetitionAdmin {
+    conversation_id: string;
+    user: Principal;
+}
 export interface MessagePage {
     messages: Array<Message>;
     latest_sequence: bigint;
@@ -86,11 +108,15 @@ export interface MessagePage {
 export interface State {
     messages: Array<Message>;
     schema: number;
+    dmAttachmentsDisabled: Array<Principal>;
     unread: Array<Unread>;
+    groupMetadata: Array<GroupMetadata>;
+    clubMemberships: Array<ClubMembership>;
     governor: Principal;
     conversations: Array<Conversation>;
     receipts: Array<Receipt>;
     roles: Array<RoleGrant>;
+    competitionAdmins: Array<CompetitionAdmin>;
 }
 export interface BroadcastResult {
     skipped: Array<string>;
@@ -124,6 +150,7 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    can_dm_user(other: Principal): Promise<boolean>;
     create_conversation(club_id: string, team_id: string | null, participants: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
@@ -138,9 +165,24 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    dm_attachments_disabled(user: Principal): Promise<boolean>;
     export_state(): Promise<{
         __kind__: "Ok";
         Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_group_metadata(conversation_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    grant_competition_admin(conversation_id: string, user: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -159,6 +201,7 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    is_competition_admin(conversation_id: string): Promise<boolean>;
     listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -181,6 +224,7 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    my_unread_counts(): Promise<Array<UnreadSummary>>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -191,6 +235,13 @@ export interface messaging_domainInterface {
     send_message(conversation_id: string, body: string, idempotency_key: string, attachment: Attachment | null): Promise<{
         __kind__: "Ok";
         Ok: Message;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_dm_attachments_disabled(user: Principal, disabled: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -209,8 +260,22 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    upsert_club_membership(user: Principal, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    upsert_group_metadata(conversation_id: string, name: string, kind: string, club_id: string | null, team_id: string | null, members: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
 }
-import type { Attachment as _Attachment, BroadcastResult as _BroadcastResult, Conversation as _Conversation, Message as _Message, MessagePage as _MessagePage, Receipt as _Receipt, RoleGrant as _RoleGrant, State as _State, Unread as _Unread } from "./declarations/messaging_domain.did";
+import type { Attachment as _Attachment, BroadcastResult as _BroadcastResult, ClubMembership as _ClubMembership, CompetitionAdmin as _CompetitionAdmin, Conversation as _Conversation, GroupMetadata as _GroupMetadata, Message as _Message, MessagePage as _MessagePage, Receipt as _Receipt, RoleGrant as _RoleGrant, State as _State, Unread as _Unread } from "./declarations/messaging_domain.did";
 export class Messaging_domain implements messaging_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
@@ -233,6 +298,10 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.broadcast_announcement(arg0, arg1, arg2, arg3, arg4);
         return from_candid_variant_n2(result);
     }
+    async can_dm_user(arg0: Principal): Promise<boolean> {
+        const result = await this.actor.can_dm_user(arg0);
+        return result;
+    }
     async create_conversation(arg0: string, arg1: string | null, arg2: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
@@ -253,6 +322,10 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.delete_message(arg0);
         return from_candid_variant_n8(result);
     }
+    async dm_attachments_disabled(arg0: Principal): Promise<boolean> {
+        const result = await this.actor.dm_attachments_disabled(arg0);
+        return result;
+    }
     async export_state(): Promise<{
         __kind__: "Ok";
         Ok: State;
@@ -262,6 +335,26 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.export_state();
         return from_candid_variant_n15(result);
+    }
+    async get_group_metadata(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_group_metadata(arg0);
+        return from_candid_variant_n26(result);
+    }
+    async grant_competition_admin(arg0: string, arg1: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_competition_admin(arg0, arg1);
+        return from_candid_variant_n1(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -283,6 +376,10 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.initialize();
         return from_candid_variant_n1(result);
     }
+    async is_competition_admin(arg0: string): Promise<boolean> {
+        const result = await this.actor.is_competition_admin(arg0);
+        return result;
+    }
     async listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -291,10 +388,10 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n27(result);
     }
     async list_messages(arg0: string, arg1: bigint | null): Promise<Array<Message>> {
-        const result = await this.actor.list_messages(arg0, to_candid_opt_n24(arg1));
+        const result = await this.actor.list_messages(arg0, to_candid_opt_n28(arg1));
         return from_candid_vec_n18(result);
     }
     async list_messages_page(arg0: string, arg1: bigint | null, arg2: number): Promise<{
@@ -304,8 +401,8 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_messages_page(arg0, to_candid_opt_n24(arg1), arg2);
-        return from_candid_variant_n25(result);
+        const result = await this.actor.list_messages_page(arg0, to_candid_opt_n28(arg1), arg2);
+        return from_candid_variant_n29(result);
     }
     async mark_read(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -315,7 +412,11 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.mark_read(arg0, arg1);
-        return from_candid_variant_n28(result);
+        return from_candid_variant_n32(result);
+    }
+    async my_unread_counts(): Promise<Array<UnreadSummary>> {
+        const result = await this.actor.my_unread_counts();
+        return result;
     }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -334,8 +435,18 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n29(arg3));
+        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n33(arg3));
         return from_candid_variant_n8(result);
+    }
+    async set_dm_attachments_disabled(arg0: Principal, arg1: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_dm_attachments_disabled(arg0, arg1);
+        return from_candid_variant_n1(result);
     }
     async unread_count(arg0: string): Promise<{
         __kind__: "Ok";
@@ -345,7 +456,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.unread_count(arg0);
-        return from_candid_variant_n32(result);
+        return from_candid_variant_n36(result);
     }
     async update_message(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -357,6 +468,26 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.update_message(arg0, arg1);
         return from_candid_variant_n8(result);
     }
+    async upsert_club_membership(arg0: Principal, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.upsert_club_membership(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
+    async upsert_group_metadata(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string | null, arg5: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.upsert_group_metadata(arg0, arg1, arg2, to_candid_opt_n3(arg3), to_candid_opt_n3(arg4), arg5);
+        return from_candid_variant_n26(result);
+    }
 }
 function from_candid_Attachment_n13(value: _Attachment): Attachment {
     return from_candid_record_n14(value);
@@ -364,14 +495,17 @@ function from_candid_Attachment_n13(value: _Attachment): Attachment {
 function from_candid_Conversation_n5(value: _Conversation): Conversation {
     return from_candid_record_n6(value);
 }
-function from_candid_MessagePage_n26(value: _MessagePage): MessagePage {
-    return from_candid_record_n27(value);
+function from_candid_GroupMetadata_n20(value: _GroupMetadata): GroupMetadata {
+    return from_candid_record_n21(value);
+}
+function from_candid_MessagePage_n30(value: _MessagePage): MessagePage {
+    return from_candid_record_n31(value);
 }
 function from_candid_Message_n9(value: _Message): Message {
     return from_candid_record_n10(value);
 }
-function from_candid_RoleGrant_n21(value: _RoleGrant): RoleGrant {
-    return from_candid_record_n22(value);
+function from_candid_RoleGrant_n24(value: _RoleGrant): RoleGrant {
+    return from_candid_record_n25(value);
 }
 function from_candid_State_n16(value: _State): State {
     return from_candid_record_n17(value);
@@ -433,31 +567,70 @@ function from_candid_record_n14(value: {
 function from_candid_record_n17(value: {
     messages: Array<_Message>;
     schema: number;
+    dmAttachmentsDisabled: Array<Principal>;
     unread: Array<_Unread>;
+    groupMetadata: Array<_GroupMetadata>;
+    clubMemberships: Array<_ClubMembership>;
     governor: Principal;
     conversations: Array<_Conversation>;
     receipts: Array<_Receipt>;
     roles: Array<_RoleGrant>;
+    competitionAdmins: Array<_CompetitionAdmin>;
 }): {
     messages: Array<Message>;
     schema: number;
+    dmAttachmentsDisabled: Array<Principal>;
     unread: Array<Unread>;
+    groupMetadata: Array<GroupMetadata>;
+    clubMemberships: Array<ClubMembership>;
     governor: Principal;
     conversations: Array<Conversation>;
     receipts: Array<Receipt>;
     roles: Array<RoleGrant>;
+    competitionAdmins: Array<CompetitionAdmin>;
 } {
     return {
         messages: from_candid_vec_n18(value.messages),
         schema: value.schema,
+        dmAttachmentsDisabled: value.dmAttachmentsDisabled,
         unread: value.unread,
+        groupMetadata: from_candid_vec_n19(value.groupMetadata),
+        clubMemberships: value.clubMemberships,
         governor: value.governor,
-        conversations: from_candid_vec_n19(value.conversations),
+        conversations: from_candid_vec_n22(value.conversations),
         receipts: value.receipts,
-        roles: from_candid_vec_n20(value.roles)
+        roles: from_candid_vec_n23(value.roles),
+        competitionAdmins: value.competitionAdmins
     };
 }
-function from_candid_record_n22(value: {
+function from_candid_record_n21(value: {
+    members: Array<Principal>;
+    conversation_id: string;
+    kind: string;
+    name: string;
+    team_id: [] | [string];
+    created_at_ms: bigint;
+    club_id: [] | [string];
+}): {
+    members: Array<Principal>;
+    conversation_id: string;
+    kind: string;
+    name: string;
+    team_id?: string;
+    created_at_ms: bigint;
+    club_id?: string;
+} {
+    return {
+        members: value.members,
+        conversation_id: value.conversation_id,
+        kind: value.kind,
+        name: value.name,
+        team_id: record_opt_to_undefined(from_candid_opt_n7(value.team_id)),
+        created_at_ms: value.created_at_ms,
+        club_id: record_opt_to_undefined(from_candid_opt_n7(value.club_id))
+    };
+}
+function from_candid_record_n25(value: {
     role: string;
     user: Principal;
     team_id: [] | [string];
@@ -475,7 +648,7 @@ function from_candid_record_n22(value: {
         club_id: record_opt_to_undefined(from_candid_opt_n7(value.club_id))
     };
 }
-function from_candid_record_n27(value: {
+function from_candid_record_n31(value: {
     messages: Array<_Message>;
     latest_sequence: bigint;
     next_sequence: [] | [bigint];
@@ -568,7 +741,26 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
+function from_candid_variant_n26(value: {
+    Ok: _GroupMetadata;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: GroupMetadata;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_GroupMetadata_n20(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n27(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -587,7 +779,7 @@ function from_candid_variant_n23(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n25(value: {
+function from_candid_variant_n29(value: {
     Ok: _MessagePage;
 } | {
     Err: string;
@@ -600,13 +792,13 @@ function from_candid_variant_n25(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_MessagePage_n26(value.Ok)
+        Ok: from_candid_MessagePage_n30(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n32(value: {
     Ok: _Receipt;
 } | {
     Err: string;
@@ -625,7 +817,7 @@ function from_candid_variant_n28(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n32(value: {
+function from_candid_variant_n36(value: {
     Ok: _Unread;
 } | {
     Err: string;
@@ -685,25 +877,28 @@ function from_candid_variant_n8(value: {
 function from_candid_vec_n18(value: Array<_Message>): Array<Message> {
     return value.map((x)=>from_candid_Message_n9(x));
 }
-function from_candid_vec_n19(value: Array<_Conversation>): Array<Conversation> {
+function from_candid_vec_n19(value: Array<_GroupMetadata>): Array<GroupMetadata> {
+    return value.map((x)=>from_candid_GroupMetadata_n20(x));
+}
+function from_candid_vec_n22(value: Array<_Conversation>): Array<Conversation> {
     return value.map((x)=>from_candid_Conversation_n5(x));
 }
-function from_candid_vec_n20(value: Array<_RoleGrant>): Array<RoleGrant> {
-    return value.map((x)=>from_candid_RoleGrant_n21(x));
+function from_candid_vec_n23(value: Array<_RoleGrant>): Array<RoleGrant> {
+    return value.map((x)=>from_candid_RoleGrant_n24(x));
 }
-function to_candid_Attachment_n30(value: Attachment): _Attachment {
-    return to_candid_record_n31(value);
+function to_candid_Attachment_n34(value: Attachment): _Attachment {
+    return to_candid_record_n35(value);
 }
-function to_candid_opt_n24(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n28(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
-}
-function to_candid_opt_n29(value: Attachment | null): [] | [_Attachment] {
-    return value === null ? candid_none() : candid_some(to_candid_Attachment_n30(value));
 }
 function to_candid_opt_n3(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_record_n31(value: {
+function to_candid_opt_n33(value: Attachment | null): [] | [_Attachment] {
+    return value === null ? candid_none() : candid_some(to_candid_Attachment_n34(value));
+}
+function to_candid_record_n35(value: {
     url?: string;
     kind: string;
     ref_id: string;

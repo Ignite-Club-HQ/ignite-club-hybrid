@@ -25,12 +25,31 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'title' : IDL.Text,
     'creator' : IDL.Principal,
+    'cancelled' : IDL.Bool,
+    'series_id' : IDL.Opt(IDL.Text),
     'team_id' : IDL.Opt(IDL.Text),
     'description' : IDL.Text,
     'starts_at_ms' : IDL.Nat64,
     'ends_at_ms' : IDL.Nat64,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
+    'location' : IDL.Opt(IDL.Text),
+    'event_type' : IDL.Text,
+  });
+  const EventSeries = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'creator' : IDL.Principal,
+    'until_ms' : IDL.Nat64,
+    'first_starts_at_ms' : IDL.Nat64,
+    'team_id' : IDL.Opt(IDL.Text),
+    'description' : IDL.Text,
+    'frequency' : IDL.Text,
+    'first_ends_at_ms' : IDL.Nat64,
+    'revision' : IDL.Nat64,
+    'club_id' : IDL.Text,
+    'location' : IDL.Opt(IDL.Text),
+    'event_type' : IDL.Text,
   });
   const Recurrence = IDL.Record({
     'until_ms' : IDL.Nat64,
@@ -42,6 +61,26 @@ export const idlFactory = ({ IDL }) => {
     'present' : IDL.Bool,
     'note' : IDL.Text,
     'event_id' : IDL.Text,
+  });
+  const LineupPlayer = IDL.Record({
+    'x' : IDL.Opt(IDL.Float64),
+    'y' : IDL.Opt(IDL.Float64),
+    'member' : IDL.Text,
+    'slot' : IDL.Text,
+    'number' : IDL.Opt(IDL.Nat16),
+    'bench' : IDL.Bool,
+  });
+  const LineupSnapshot = IDL.Record({
+    'updated_by' : IDL.Principal,
+    'formation' : IDL.Opt(IDL.Text),
+    'ball_x' : IDL.Opt(IDL.Float64),
+    'ball_y' : IDL.Opt(IDL.Float64),
+    'team_id' : IDL.Opt(IDL.Text),
+    'updated_at_ms' : IDL.Nat64,
+    'team_size' : IDL.Nat16,
+    'players' : IDL.Vec(LineupPlayer),
+    'event_id' : IDL.Text,
+    'revision' : IDL.Nat64,
   });
   const RosterEntry = IDL.Record({
     'account_id' : IDL.Text,
@@ -78,8 +117,46 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_event' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat64],
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_series' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Nat64,
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'series' : EventSeries,
+              'events' : IDL.Vec(Event),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'delete_series' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
     'export_state' : IDL.Func(
@@ -89,9 +166,11 @@ export const idlFactory = ({ IDL }) => {
             'Ok' : IDL.Record({
               'lineups' : IDL.Vec(LineupEntry),
               'schema' : IDL.Nat32,
+              'series' : IDL.Vec(EventSeries),
               'recurrences' : IDL.Vec(Recurrence),
               'attendance' : IDL.Vec(Attendance),
               'events' : IDL.Vec(Event),
+              'lineupSnapshots' : IDL.Vec(LineupSnapshot),
               'duties' : IDL.Vec(Duty),
               'governor' : IDL.Principal,
               'roster' : IDL.Vec(RosterEntry),
@@ -101,6 +180,16 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        ['query'],
+      ),
+    'get_event_roster' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RosterEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_lineup_snapshot' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Opt(LineupSnapshot), 'Err' : IDL.Text })],
         ['query'],
       ),
     'grant_role' : IDL.Func(
@@ -123,6 +212,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(Event)],
         ['query'],
       ),
+    'list_series' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Vec(EventSeries)],
+        ['query'],
+      ),
     'my_rsvps' : IDL.Func([], [IDL.Vec(Rsvp)], ['query']),
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
@@ -134,6 +228,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'save_lineup_snapshot' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Nat16,
+          IDL.Opt(IDL.Float64),
+          IDL.Opt(IDL.Float64),
+          IDL.Vec(LineupPlayer),
+        ],
+        [IDL.Variant({ 'Ok' : LineupSnapshot, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_attendance' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
         [IDL.Variant({ 'Ok' : Attendance, 'Err' : IDL.Text })],
@@ -142,6 +249,11 @@ export const idlFactory = ({ IDL }) => {
     'set_duty' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_event_cancelled' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
         [],
       ),
     'set_recurrence' : IDL.Func(
@@ -165,8 +277,21 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'update_event' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Nat64, IDL.Nat64],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_series' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64],
+        [IDL.Variant({ 'Ok' : EventSeries, 'Err' : IDL.Text })],
         [],
       ),
   });

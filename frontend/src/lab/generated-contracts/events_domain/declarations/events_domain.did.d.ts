@@ -171,6 +171,11 @@ export interface _SERVICE {
       } |
       { 'Err' : string }
   >,
+  'get_event_roster' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RosterEntry> } |
+      { 'Err' : string }
+  >,
   'get_lineup_snapshot' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : [] | [LineupSnapshot] } |

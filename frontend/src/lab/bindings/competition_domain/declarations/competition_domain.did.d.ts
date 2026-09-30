@@ -18,7 +18,6 @@ export interface Competition {
   'revision' : bigint,
   'club_id' : string,
 }
-export interface Init { 'governor' : Principal }
 export interface JoinToken {
   'id' : string,
   'issued_by' : Principal,
@@ -30,41 +29,21 @@ export interface JoinToken {
 export interface Match {
   'id' : string,
   'status' : string,
+  'round_number' : [] | [number],
+  'venue' : [] | [string],
+  'duration_minutes' : [] | [number],
   'home_team' : string,
+  'notes' : [] | [string],
+  'pitch_number' : [] | [string],
+  'scheduled_at_ms' : [] | [bigint],
   'away_team' : string,
   'away_score' : number,
+  'division_id' : [] | [string],
   'home_score' : number,
   'revision' : bigint,
+  'arrival_minutes_before' : [] | [number],
   'competition_id' : string,
 }
-export type Result = { 'Ok' : Competition } |
-  { 'Err' : string };
-export type Result_1 = { 'Ok' : JoinToken } |
-  { 'Err' : string };
-export type Result_10 = { 'Ok' : Array<Competition> } |
-  { 'Err' : string };
-export type Result_11 = { 'Ok' : Array<TeamEntry> } |
-  { 'Err' : string };
-export type Result_12 = { 'Ok' : Array<Season> } |
-  { 'Err' : string };
-export type Result_13 = { 'Ok' : Array<Match> } |
-  { 'Err' : string };
-export type Result_2 = { 'Ok' : State } |
-  { 'Err' : string };
-export type Result_3 = { 'Ok' : TeamEntry } |
-  { 'Err' : string };
-export type Result_4 = { 'Ok' : null } |
-  { 'Err' : string };
-export type Result_5 = { 'Ok' : string } |
-  { 'Err' : string };
-export type Result_6 = { 'Ok' : Match } |
-  { 'Err' : string };
-export type Result_7 = { 'Ok' : Season } |
-  { 'Err' : string };
-export type Result_8 = { 'Ok' : null } |
-  { 'Err' : string };
-export type Result_9 = { 'Ok' : Array<Principal> } |
-  { 'Err' : string };
 export interface RoleGrant {
   'role' : string,
   'user' : Principal,
@@ -74,6 +53,7 @@ export interface RoleGrant {
 export interface Season {
   'status' : string,
   'name' : string,
+  'divisions' : Array<string>,
   'revision' : bigint,
   'competition_id' : string,
 }
@@ -90,31 +70,136 @@ export interface State {
 export interface TeamEntry {
   'status' : string,
   'team_id' : string,
+  'division_id' : [] | [string],
   'competition_id' : string,
   'club_id' : string,
 }
 export interface _SERVICE {
-  'addBulkAccessPrincipal' : ActorMethod<[Principal], Result_8>,
-  'claim_join_token' : ActorMethod<[string], Result_5>,
-  'create_competition' : ActorMethod<[string, string, string], Result>,
-  'create_season' : ActorMethod<[string, string], Result_7>,
-  'export_state' : ActorMethod<[], Result_2>,
+  'addBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'assign_division' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : TeamEntry } |
+      { 'Err' : string }
+  >,
+  'claim_join_token' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
+  'create_competition' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : Competition } |
+      { 'Err' : string }
+  >,
+  'create_season' : ActorMethod<
+    [string, string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'duplicate_season' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
-    Result_4
+    { 'Ok' : null } |
+      { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], Result_4>,
-  'issue_join_token' : ActorMethod<[string, string, bigint], Result_1>,
-  'listBulkAccessPrincipals' : ActorMethod<[], Result_9>,
-  'list_competitions' : ActorMethod<[string], Result_10>,
-  'list_entries' : ActorMethod<[string], Result_11>,
-  'list_matches' : ActorMethod<[string], Result_13>,
-  'list_seasons' : ActorMethod<[string], Result_12>,
-  'record_match' : ActorMethod<[string, string, string], Result_6>,
-  'register_team' : ActorMethod<[string, string, string], Result_3>,
-  'removeBulkAccessPrincipal' : ActorMethod<[Principal], Result_8>,
-  'set_match_result' : ActorMethod<[string, number, number, bigint], Result_6>,
-  'set_season_status' : ActorMethod<[string, string, bigint], Result_7>,
+  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_competition_admin' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'issue_join_token' : ActorMethod<
+    [string, string, bigint],
+    { 'Ok' : JoinToken } |
+      { 'Err' : string }
+  >,
+  'listBulkAccessPrincipals' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_competitions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'list_competitions_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'list_entries' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamEntry> } |
+      { 'Err' : string }
+  >,
+  'list_matches' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Match> } |
+      { 'Err' : string }
+  >,
+  'list_seasons' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Season> } |
+      { 'Err' : string }
+  >,
+  'record_match' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'register_team' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : TeamEntry } |
+      { 'Err' : string }
+  >,
+  'removeBulkAccessPrincipal' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_match_result' : ActorMethod<
+    [string, number, number, bigint],
+    { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
+  'set_season_divisions' : ActorMethod<
+    [string, string, Array<string>],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'set_season_status' : ActorMethod<
+    [string, string, bigint],
+    { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'update_match_details' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      [] | [string],
+      [] | [bigint],
+      [] | [string],
+      [] | [string],
+      [] | [number],
+      [] | [number],
+      [] | [number],
+      [] | [string],
+      bigint,
+    ],
+    { 'Ok' : Match } |
+      { 'Err' : string }
+  >,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

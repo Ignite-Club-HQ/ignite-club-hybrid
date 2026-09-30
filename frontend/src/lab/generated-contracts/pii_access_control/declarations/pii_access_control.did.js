@@ -59,6 +59,11 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'add_guardian_relationship' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'audit_access' : IDL.Func([AuditFilter], [IDL.Vec(AuditRecord)], ['query']),
     'delete_pii' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -101,9 +106,15 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
+    'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_guardian_relationship' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'revoke_pii_read' : IDL.Func(
