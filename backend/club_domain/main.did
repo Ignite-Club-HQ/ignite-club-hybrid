@@ -1,0 +1,500 @@
+type TeamInvite = 
+ record {
+   accepted_by: opt principal;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   revoked: bool;
+   role: text;
+   team_id: text;
+ };
+type Team = 
+ record {
+   club: text;
+   id: text;
+ };
+type State = 
+ record {
+   accounts: vec Account;
+   challenges: vec Challenge;
+   exclusions: vec AccountExclusion;
+   families: vec Family;
+   next_challenge: nat64;
+   roles: vec AccountRole;
+   schema: nat32;
+ };
+type Snapshot = 
+ record {
+   clubs: vec record {
+                text;
+                Listing;
+              };
+   schema: nat32;
+ };
+type RoleRequest = 
+ record {
+   account_id: text;
+   club: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   id: text;
+   role: text;
+   status: text;
+   team: opt text;
+   user: principal;
+ };
+type RoleGrant = 
+ record {
+   club: opt text;
+   role: text;
+   team: opt text;
+   user: principal;
+ };
+type Request = 
+ record {
+   club: text;
+   expected_revision: nat64;
+   operation: Operation;
+   request_id: text;
+ };
+type ParentInvite = 
+ record {
+   accepted_by: opt principal;
+   child_id: text;
+   club_id: text;
+   created_at_ms: nat64;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   team_id: opt text;
+ };
+type Operation = 
+ variant {
+   Remove: record {id: text;};
+   Reorder: record {
+              first: text;
+              second: text;
+            };
+   Save: record {
+           draft: Draft;
+           id: opt text;
+         };
+   SetActive: record {
+                active: bool;
+                id: text;
+              };
+ };
+type NewsPost = 
+ record {
+   body: text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   revision: nat64;
+   status: text;
+   title: text;
+   updated_at_ms: nat64;
+ };
+type Mutation = 
+ record {
+   link: opt Link;
+   revision: nat64;
+ };
+type Listing = 
+ record {
+   links: vec Link;
+   revision: nat64;
+ };
+type Link = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   draft: Draft;
+   id: text;
+   sort_order: nat32;
+ };
+type Guardian = 
+ record {
+   child: text;
+   user: principal;
+ };
+type Family = 
+ record {
+   account_id: text;
+   child_id: text;
+ };
+type Exclusion = 
+ record {
+   club: text;
+   user: principal;
+ };
+type Draft = 
+ record {
+   icon: text;
+   is_active: bool;
+   open_mode: text;
+   subtitle: opt text;
+   title: text;
+   url: text;
+ };
+type Config = 
+ record {
+   acl: Acl;
+   acl_version: nat64;
+   governor: principal;
+   schema: nat32;
+ };
+type ClubTeam = 
+ record {
+   age_group: opt text;
+   club_id: text;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   division: opt text;
+   gender: opt text;
+   id: text;
+   is_active: bool;
+   logo_url: opt text;
+   name: text;
+   team_type: opt text;
+ };
+type ClubSponsor = 
+ record {
+   club_id: text;
+   description: opt text;
+   exposure_percentage: opt nat8;
+   id: text;
+   is_active: bool;
+   is_team_only: bool;
+   logo_url: opt text;
+   name: text;
+   sort_order: nat32;
+   tier: text;
+   website_url: opt text;
+ };
+type ClubSettings = 
+ record {
+   announcement: opt text;
+   club_id: text;
+   contact_email: opt text;
+   membership_open: bool;
+   public_directory: bool;
+ };
+type ClubProfile = 
+ record {
+   created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   id: text;
+   is_active: bool;
+   logo_url: opt text;
+   name: text;
+   primary_color: opt text;
+   secondary_color: opt text;
+   slug: text;
+ };
+type Child = 
+ record {
+   id: text;
+   parent: opt principal;
+   teams: vec text;
+ };
+type Challenge = 
+ record {
+   accepted: bool;
+   account_id: text;
+   expected_version: nat64;
+   expires_at_ns: nat64;
+   id: nat64;
+   issuer: principal;
+   target: principal;
+ };
+type Acl = 
+ record {
+   children: vec Child;
+   clubs: vec text;
+   exclusions: vec Exclusion;
+   guardians: vec Guardian;
+   roles: vec RoleGrant;
+   teams: vec Team;
+ };
+type AccountRole = 
+ record {
+   account_id: text;
+   club: opt text;
+   role: text;
+   team: opt text;
+ };
+type AccountExclusion = 
+ record {
+   account_id: text;
+   club: text;
+ };
+type Account = 
+ record {
+   id: text;
+   legacy_subject: principal;
+   principals: vec principal;
+   version: nat64;
+ };
+service : {
+  accept_identity_link: (id: nat64) -> (variant {
+                                          Err: text;
+                                          Ok: Account;
+                                        });
+  accept_parent_invite: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: ParentInvite;
+    });
+  accept_team_invite: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok: TeamInvite;
+                                     });
+  add_role_grant: (user: principal, club: text, role: text, team:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  approve_role_request: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleRequest;
+                                       });
+  begin_identity_link: (target: principal) ->
+   (variant {
+      Err: text;
+      Ok: Challenge;
+    });
+  create_news_post: (club_id: text, title: text, body: text, status: 
+   text) -> (variant {
+               Err: text;
+               Ok: NewsPost;
+             });
+  create_parent_invite: (club_id: text, team_id: opt text, child_id: 
+   text) -> (variant {
+               Err: text;
+               Ok: ParentInvite;
+             });
+  create_team_invite: (club_id: text, team_id: text, email: text, role:
+   text) -> (variant {
+               Err: text;
+               Ok: TeamInvite;
+             });
+  delete_club_permanent: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+  delete_news_post: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok;
+                                   });
+  delete_sponsor: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
+  delete_team_permanent: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+  export_acl: () -> (variant {
+                       Err: text;
+                       Ok: Config;
+                     }) query;
+  export_frozen_club: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: Listing;
+    }) query;
+  export_identity_state: () -> (variant {
+                                  Err: text;
+                                  Ok: State;
+                                }) query;
+  export_links: () -> (variant {
+                         Err: text;
+                         Ok: Snapshot;
+                       }) query;
+  freeze_club: (club: text, rev: nat64) -> (variant {
+                                              Err: text;
+                                              Ok: nat64;
+                                            });
+  get_club_profile: (id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt ClubProfile;
+    }) query;
+  get_club_settings: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt ClubSettings;
+    }) query;
+  get_link: (id: text) -> (variant {
+                             Err: text;
+                             Ok: Listing;
+                           }) query;
+  get_parent_invite: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: ParentInvite;
+    }) query;
+  get_sponsor: (id: text) -> (variant {
+                                Err: text;
+                                Ok: opt ClubSponsor;
+                              }) query;
+  get_team: (id: text) -> (variant {
+                             Err: text;
+                             Ok: opt ClubTeam;
+                           }) query;
+  get_team_invite: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: TeamInvite;
+                                  }) query;
+  import_frozen_club: (club: text, listing: Listing) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  import_links: (snap: Snapshot) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  list_children: () -> (variant {
+                          Err: text;
+                          Ok: vec Child;
+                        }) query;
+  list_clubs: (start_after: opt text, limit: nat16) ->
+   (variant {
+      Err: text;
+      Ok: vec ClubProfile;
+    }) query;
+  list_links: (club: text, admin_view: bool) ->
+   (variant {
+      Err: text;
+      Ok: Listing;
+    }) query;
+  list_news: (club_id: text) -> (variant {
+                                   Err: text;
+                                   Ok: vec NewsPost;
+                                 }) query;
+  list_news_multi: (club_ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec NewsPost;
+    }) query;
+  list_role_grants: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: vec AccountRole;
+    }) query;
+  list_role_requests: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: vec RoleRequest;
+    }) query;
+  list_sponsors: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec ClubSponsor;
+    }) query;
+  list_team_invites: (club_id: text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: vec TeamInvite;
+    }) query;
+  list_teams: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec ClubTeam;
+    }) query;
+  mutate: (req: Request) -> (variant {
+                               Err: text;
+                               Ok: Mutation;
+                             });
+  reject_role_request: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: RoleRequest;
+                                      });
+  remove_member: (club: text, user: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+  remove_role_grant: (user: principal, club: text, role: text, team:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  replace_acl: (rev: nat64, new_acl: Acl) -> (variant {
+                                                Err: text;
+                                                Ok: nat64;
+                                              });
+  request_role: (club: text, role: text, team: opt text) ->
+   (variant {
+      Err: text;
+      Ok: RoleRequest;
+    });
+  restore_club: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: ClubProfile;
+                               });
+  restore_team: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: ClubTeam;
+                               });
+  revoke_identity: (target: principal, expected_version: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Account;
+    });
+  revoke_team_invite: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
+  save_club_profile: (profile: ClubProfile) ->
+   (variant {
+      Err: text;
+      Ok: ClubProfile;
+    });
+  save_club_settings: (item: ClubSettings) ->
+   (variant {
+      Err: text;
+      Ok: ClubSettings;
+    });
+  save_sponsor: (sponsor: ClubSponsor) ->
+   (variant {
+      Err: text;
+      Ok: ClubSponsor;
+    });
+  save_team: (team: ClubTeam) -> (variant {
+                                    Err: text;
+                                    Ok: ClubTeam;
+                                  });
+  soft_delete_club: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok: ClubProfile;
+                                   });
+  soft_delete_team: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok: ClubTeam;
+                                   });
+  unfreeze_club: (club: text, rev: nat64) -> (variant {
+                                                Err: text;
+                                                Ok;
+                                              });
+  update_news_post: (id: text, title: text, body: text, status: text,
+   expected_revision: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: NewsPost;
+                                 });
+  whoami: () -> (variant {
+                   Err: text;
+                   Ok: Account;
+                 }) query;
+}
