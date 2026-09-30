@@ -851,27 +851,49 @@ persistent actor {
     }
   };
 
-  public shared ({ caller }) func soft_delete_club(id : Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+  // cascade_teams mirrors the Supabase `cascade_club_soft_delete` RPC:
+  // soft-deleting a club also soft-deletes every team still active under
+  // it, so browse/roster surfaces stop listing them consistently with the
+  // club. Teams already soft-deleted independently are left untouched
+  // (their own deleted_at_ms is preserved rather than overwritten).
+  public shared ({ caller }) func soft_delete_club(id : Text, cascade_teams : Bool) : async { #Ok : Types.ClubProfile; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, id)) return #Err("Club admin required");
     switch (profiles.find(func(p) = p.id == id)) {
       case null { #Err("Club not found") };
       case (?club) {
-        let updated : Types.ClubProfile = { club with deleted_at_ms = ?nowMs() };
+        let now = nowMs();
+        let updated : Types.ClubProfile = { club with deleted_at_ms = ?now };
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
+        if (cascade_teams) {
+          teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == null) ({ t with deleted_at_ms = ?now }) else t);
+        };
         #Ok(updated)
       };
     }
   };
 
-  public shared ({ caller }) func restore_club(id : Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+  // cascade_teams mirrors `cascade_team_soft_delete` in reverse: restoring
+  // a club can optionally restore every team that was soft-deleted at (or
+  // after) the club's own deletion — an approximation of "deleted together
+  // with the club" since the canister does not track a cascade batch id.
+  public shared ({ caller }) func restore_club(id : Text, cascade_teams : Bool) : async { #Ok : Types.ClubProfile; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, id)) return #Err("Club admin required");
     switch (profiles.find(func(p) = p.id == id)) {
       case null { #Err("Club not found") };
       case (?club) {
+        let deletedAt = club.deleted_at_ms;
         let updated : Types.ClubProfile = { club with deleted_at_ms = null };
         profiles := profiles.map(func(p) = if (p.id == id) updated else p);
+        if (cascade_teams) {
+          switch (deletedAt) {
+            case (?ts) {
+              teams := teams.map(func(t) = if (t.club_id == id and t.deleted_at_ms == ?ts) ({ t with deleted_at_ms = null }) else t);
+            };
+            case null {};
+          };
+        };
         #Ok(updated)
       };
     }
@@ -958,6 +980,64 @@ persistent actor {
         let updated : Types.TeamInvite = { invite with revoked = true };
         teamInvites := teamInvites.map(func(i) = if (i.id == id) updated else i);
         #Ok
+      };
+    }
+  };
+
+  // ---- Shell teams: a club admin pre-creates a team for a coach/manager
+  // who has not signed up yet, mints a claim token, and the invited
+  // person redeems it via `claim_shell_team` — the canister equivalent of
+  // the Supabase `teams.shell_*` columns and `claim_shell_team` RPC. ----
+
+  public shared ({ caller }) func create_shell_team_invite(club_id : Text, name : Text, contact_email : ?Text, contact_name : ?Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (name == "" or name.size() > 160) return #Err("Invalid team name");
+    let now = nowMs();
+    let token = "shell-" # club_id # "-" # Nat.toText(teams.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+    let team : Types.ClubTeam = {
+      id = "team-" # club_id # "-" # Nat.toText(teams.size() + 1) # "-" # Nat64.toText(now);
+      name; division = null; gender = null; is_active = true; club_id;
+      age_group = null; description = null; logo_url = null; team_type = null;
+      deleted_at_ms = null;
+      is_shell = true;
+      shell_claim_token = ?token;
+      shell_claimed_at_ms = null;
+      shell_claimed_by = null;
+      shell_contact_email = contact_email;
+      shell_contact_name = contact_name;
+      shell_invited_by = ?caller;
+    };
+    teams := teams.concat([team]);
+    #Ok(team)
+  };
+
+  public query ({ caller }) func get_shell_team_by_token(token : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.shell_claim_token == ?token)) {
+      case null { #Err("Shell invite not found") };
+      case (?team) {
+        if (team.shell_claimed_by != null) return #Err("Shell team already claimed");
+        #Ok(team)
+      };
+    }
+  };
+
+  // Claiming grants the caller team_admin over the shell team and marks
+  // it claimed; the token is left on the record as an audit trail
+  // (claimed_by/claimed_at gate re-claiming, matching claim_shell_team).
+  public shared ({ caller }) func claim_shell_team(token : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.shell_claim_token == ?token)) {
+      case null { #Err("Shell invite not found") };
+      case (?team) {
+        if (team.shell_claimed_by != null) return #Err("Shell team already claimed");
+        if (team.deleted_at_ms != null) return #Err("Team no longer available");
+        let updated : Types.ClubTeam = { team with shell_claimed_at_ms = ?nowMs(); shell_claimed_by = ?caller };
+        teams := teams.map(func(t) = if (t.id == team.id) updated else t);
+        acl := { acl with roles = acl.roles.concat([{ user = caller; role = "team_admin"; club = ?team.club_id; team = ?team.id }]) };
+        accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?team.club_id; role = "team_admin"; team = ?team.id }]);
+        #Ok(updated)
       };
     }
   };

@@ -31,6 +31,11 @@ export const FEATURE_AREAS = [
   "competitions",
   "notifications",
   "vault",
+  "mini_leagues",
+  "points",
+  "attendance",
+  "analytics",
+  "admin",
 ] as const;
 
 export type FeatureArea = (typeof FEATURE_AREAS)[number];
@@ -43,6 +48,11 @@ export type FeatureArea = (typeof FEATURE_AREAS)[number];
  * - home -> events_domain (home schedule/RSVP reads)
  * - membership -> club_domain (teams, guardians, ACL)
  * - vault -> vault_domain (folder/file metadata; PII records stay in pii_access_control)
+ * - mini_leagues -> mini_league_domain
+ * - points -> club_points_domain
+ * - attendance -> events_domain (attendance marking lives with events)
+ * - analytics -> insights_domain (perf samples + engagement counters)
+ * - admin -> insights_domain (admin alerts, audit logs, feedback)
  */
 export const FEATURE_CANISTER_KEYS: Record<FeatureArea, string> = {
   events: "events_domain",
@@ -54,6 +64,11 @@ export const FEATURE_CANISTER_KEYS: Record<FeatureArea, string> = {
   competitions: "competition_domain",
   notifications: "notification_queue",
   vault: "vault_domain",
+  mini_leagues: "mini_league_domain",
+  points: "club_points_domain",
+  attendance: "events_domain",
+  analytics: "insights_domain",
+  admin: "insights_domain",
 };
 
 export function isFeatureArea(value: string): value is FeatureArea {
