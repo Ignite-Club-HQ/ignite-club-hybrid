@@ -16,6 +16,10 @@ persistent actor {
   var receipts : [Types.Receipt];
   var unread : [Types.Unread];
   var bulkAccessPrincipals : [Principal];
+  var groupMetadata : [Types.GroupMetadata];
+  var clubMemberships : [Types.ClubMembership];
+  var competitionAdmins : [Types.CompetitionAdmin];
+  var dmAttachmentsDisabled : [Principal];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -86,6 +90,44 @@ persistent actor {
       };
     };
     false
+  };
+
+  func findGroupMetadataIndex(conversation_id : Text) : ?Nat {
+    var idx = 0;
+    for (m in groupMetadata.values()) {
+      if (m.conversation_id == conversation_id) { return ?idx };
+      idx += 1;
+    };
+    null
+  };
+
+  func getGroupMetadataFor(conversation_id : Text) : ?Types.GroupMetadata {
+    switch (findGroupMetadataIndex(conversation_id)) {
+      case null { null };
+      case (?i) { ?groupMetadata[i] };
+    }
+  };
+
+  func isCompetitionAdminFor(caller : Principal, conversation_id : Text) : Bool {
+    isGovernor(caller) or hasRole(caller, "app_admin", null, null) or
+    competitionAdmins.any(func(a) = a.conversation_id == conversation_id and a.user.equal(caller))
+  };
+
+  func sharesClub(a : Principal, b : Principal) : Bool {
+    let clubsOfA = clubMemberships.filter(func(m) = m.user.equal(a));
+    clubsOfA.any(func(ma) = clubMemberships.any(func(mb) = mb.user.equal(b) and mb.club_id == ma.club_id))
+  };
+
+  func inferConversationKind(conversation : Types.Conversation) : Text {
+    switch (getGroupMetadataFor(conversation.id)) {
+      case (?meta) { meta.kind };
+      case null {
+        switch (conversation.team_id) {
+          case (?_) { "team" };
+          case null { if (conversation.participants.size() <= 2) "direct" else "group" };
+        }
+      };
+    }
   };
 
   func canAccessConversation(caller : Principal, conversation_id : Text) : Bool {
@@ -393,6 +435,6 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 2; governor; roles; conversations; messages; receipts; unread })
+    #Ok({ schema = 3; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled })
   };
 };
