@@ -86,6 +86,9 @@ const KNOWN_CANISTER_KEYS = [
   "messaging_domain",
   "media_metadata",
   "vault_domain",
+  "mini_league_domain",
+  "club_points_domain",
+  "insights_domain",
   // Blob store for on-chain media bytes (future; optional)
   "media_blob_store",
   // Workers (background jobs)
