@@ -1246,7 +1246,9 @@ function SupabaseJoinTeamPage() {
       // no canister equivalent yet. Provisional: block with a clear message
       // instead of attempting any of those uuid-keyed calls for II accounts.
       const targetsMiniLeague =
-        !!inviteMiniLeagueId || !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id;
+        !!inviteMiniLeagueId ||
+        !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id ||
+        !!(invite?.metadata as { mini_league_id?: string } | null | undefined)?.mini_league_id;
       if (membershipIcpRouted && targetsMiniLeague) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
@@ -1524,18 +1526,9 @@ function SupabaseJoinTeamPage() {
       return;
     }
     
-    // Provisional: invite acceptance has no ICP canister shape yet — block
-    // before triggering any of the Supabase mutation chain.
-    if (resolveAuthBackend() === "icp") {
-      toast({
-        title: "Not available yet",
-        description: "Accepting invites isn't available for Internet Identity accounts yet.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // User is logged in with complete profile - proceed with join (may need photo consent for parent role)
+    // User is logged in with complete profile - proceed with join (may need photo consent for parent role).
+    // ICP-routed memberships are accepted on the canister inside the mutation;
+    // mini-league and pending/named invites are gated there with clear messages.
     joinMutation.mutate();
   };
 

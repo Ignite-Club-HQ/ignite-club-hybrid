@@ -40,6 +40,13 @@ vi.mock("@/hooks/useClubTheme", () => ({
   useClubTheme: () => ({ setActiveClubTheme: vi.fn() }),
 }));
 
+// Join errors surface via toast (no Toaster is mounted in this test), so
+// capture the toast calls to assert on user-facing error messages.
+const toastMock = vi.fn();
+vi.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({ toast: toastMock }),
+}));
+
 const rpcMock = vi.fn();
 const fromMock = vi.fn(() => ({
   select: () => ({
@@ -126,7 +133,10 @@ describe("JoinTeamPage team-invite acceptance routing", () => {
     // get_team_invite_by_token RPC must not be used on the ICP branch.
     expect(rpcMock).not.toHaveBeenCalledWith("get_team_invite_by_token", expect.anything());
 
+    // The button is disabled until the invite role auto-selects into
+    // selectedRoles — wait for it to become enabled before clicking.
     const joinButton = await screen.findByRole("button", { name: /join/i });
+    await waitFor(() => expect(joinButton).toBeEnabled());
     fireEvent.click(joinButton);
 
     await waitFor(() => expect(acceptLiveTeamInviteMock).toHaveBeenCalledWith(expect.anything(), "invite-1"));
@@ -145,10 +155,16 @@ describe("JoinTeamPage team-invite acceptance routing", () => {
     await waitFor(() => expect(getLiveTeamInviteMock).toHaveBeenCalled());
 
     const joinButton = await screen.findByRole("button", { name: /join/i });
+    await waitFor(() => expect(joinButton).toBeEnabled());
     fireEvent.click(joinButton);
 
+    // The join mutation throws and the error surfaces via toast.
     await waitFor(() =>
-      expect(screen.getByText(/mini-league isn't available for internet identity accounts/i)).toBeInTheDocument(),
+      expect(toastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: expect.stringMatching(/mini-league isn't available for internet identity accounts/i),
+        }),
+      ),
     );
     expect(acceptLiveTeamInviteMock).not.toHaveBeenCalled();
   });
