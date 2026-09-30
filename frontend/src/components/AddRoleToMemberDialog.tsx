@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { RoleSelectionList, type RoleSelectionOption } from "./RoleSelectionList";
 
 type TeamRole = "player" | "parent" | "coach" | "team_admin";
@@ -60,6 +61,13 @@ export default function AddRoleToMemberDialog({
     mutationFn: async () => {
       if (selectedRoles.length === 0) return;
 
+      // Provisional: user_roles is a Supabase-only table with no membership.ts
+      // canister equivalent for role assignment yet — block the action for
+      // Internet Identity accounts instead of firing a failing uuid-keyed insert.
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Member management isn't available for Internet Identity accounts yet");
+      }
+
       // The RLS policy on user_roles enforces admin permissions
       // This mutation will fail if the current user lacks club_admin, team_admin, or app_admin role
       const rolesToInsert = selectedRoles.map((role) => ({
@@ -90,8 +98,9 @@ export default function AddRoleToMemberDialog({
       setSelectedRoles([]);
       toast({ title: "Role(s) added successfully" });
     },
-    onError: () => {
-      toast({ title: "Failed to add role(s)", variant: "destructive" });
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Failed to add role(s)";
+      toast({ title: message, variant: "destructive" });
     },
   });
 
