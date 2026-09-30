@@ -147,3 +147,140 @@ export async function broadcastLiveAnnouncement(
     "Broadcast announcement",
   );
 }
+
+export interface LiveGroupMetadata {
+  conversationId: string;
+  kind: string;
+  name: string;
+  teamId: string | null;
+  clubId: string | null;
+  members: Principal[];
+  createdAtMs: number;
+}
+
+function toLiveGroupMetadata(raw: {
+  conversation_id: string;
+  kind: string;
+  name: string;
+  team_id: [] | [string];
+  club_id: [] | [string];
+  members: Principal[];
+  created_at_ms: bigint;
+}): LiveGroupMetadata {
+  return {
+    conversationId: raw.conversation_id,
+    kind: raw.kind,
+    name: raw.name,
+    teamId: raw.team_id[0] ?? null,
+    clubId: raw.club_id[0] ?? null,
+    members: raw.members,
+    createdAtMs: Number(raw.created_at_ms),
+  };
+}
+
+/**
+ * Group/team/competition-thread metadata (name, kind, members) — the
+ * canister counterpart of the Supabase `chat_groups` row read.
+ */
+export async function upsertLiveGroupMetadata(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  kind: string,
+  name: string,
+  teamId: string | null | undefined,
+  clubId: string | null | undefined,
+  members: Principal[],
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(
+    actor.upsert_group_metadata(
+      conversationId,
+      kind,
+      name,
+      candidOpt(teamId),
+      candidOpt(clubId),
+      members,
+    ),
+    "Upsert group metadata",
+  );
+  return toLiveGroupMetadata(raw);
+}
+
+export async function getLiveGroupMetadata(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.get_group_metadata(conversationId), "Get group metadata");
+  return toLiveGroupMetadata(raw);
+}
+
+/**
+ * Club membership roster used by `can_dm_user` / messaging ACL checks on the
+ * canister. NOTE: there is no frontend membership-write path that produces
+ * an Internet-Identity-keyed club membership row yet (team/club membership
+ * is still written to Supabase `user_roles` keyed by uuid) — this wrapper is
+ * intentionally unused today. It exists so the future Supabase->ICP
+ * membership migration can call it directly once club membership writes
+ * move to identity_access/club_domain principals.
+ */
+export async function upsertLiveClubMembership(
+  ctx: FeatureBackendContext,
+  user: Principal,
+  clubId: string,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.upsert_club_membership(user, clubId), "Upsert club membership");
+}
+
+/** Whether the caller is allowed to open/continue a DM with `other`. */
+export async function canLiveDmUser(ctx: FeatureBackendContext, other: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.can_dm_user(other);
+}
+
+/** App-admin-controlled per-user disable of the DM "+" attachment menu. */
+export async function setLiveDmAttachmentsDisabled(
+  ctx: FeatureBackendContext,
+  user: Principal,
+  disabled: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_dm_attachments_disabled(user, disabled),
+    "Set DM attachments disabled",
+  );
+}
+
+export async function isLiveDmAttachmentsDisabled(ctx: FeatureBackendContext, user: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.dm_attachments_disabled(user);
+}
+
+/** Grants competition-admin standing for a conversation (enforced canister-side in send_message). */
+export async function grantLiveCompetitionAdmin(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  user: Principal,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.grant_competition_admin(conversationId, user),
+    "Grant competition admin",
+  );
+}
+
+export async function isLiveCompetitionAdmin(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.is_competition_admin(conversationId);
+}
+
+export interface LiveUnreadSummary {
+  conversationId: string;
+  kind: string;
+  count: number;
+}
+
+/** Per-conversation unread counts for the caller — the canister counterpart of `get_unread_message_counts`. */
+export async function myLiveUnreadCounts(ctx: FeatureBackendContext): Promise<LiveUnreadSummary[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await actor.my_unread_counts();
+  return raw.map((r) => ({ conversationId: r.conversation_id, kind: r.kind, count: Number(r.count) }));
+}

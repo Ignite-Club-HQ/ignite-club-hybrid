@@ -182,6 +182,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'get_event_roster' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RosterEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_lineup_snapshot' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Opt(LineupSnapshot), 'Err' : IDL.Text })],

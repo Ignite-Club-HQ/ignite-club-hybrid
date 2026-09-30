@@ -9,8 +9,13 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
-  const Result_8 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
-  const Result_5 = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
+  const TeamEntry = IDL.Record({
+    'status' : IDL.Text,
+    'team_id' : IDL.Text,
+    'division_id' : IDL.Opt(IDL.Text),
+    'competition_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const Competition = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -19,28 +24,29 @@ export const idlFactory = ({ IDL }) => {
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
-  const Result = IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text });
   const Season = IDL.Record({
     'status' : IDL.Text,
     'name' : IDL.Text,
+    'divisions' : IDL.Vec(IDL.Text),
     'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
-  });
-  const Result_7 = IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text });
-  const TeamEntry = IDL.Record({
-    'status' : IDL.Text,
-    'team_id' : IDL.Text,
-    'competition_id' : IDL.Text,
-    'club_id' : IDL.Text,
   });
   const Match = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
+    'round_number' : IDL.Opt(IDL.Nat16),
+    'venue' : IDL.Opt(IDL.Text),
+    'duration_minutes' : IDL.Opt(IDL.Nat16),
     'home_team' : IDL.Text,
+    'notes' : IDL.Opt(IDL.Text),
+    'pitch_number' : IDL.Opt(IDL.Text),
+    'scheduled_at_ms' : IDL.Opt(IDL.Nat64),
     'away_team' : IDL.Text,
     'away_score' : IDL.Nat16,
+    'division_id' : IDL.Opt(IDL.Text),
     'home_score' : IDL.Nat16,
     'revision' : IDL.Nat64,
+    'arrival_minutes_before' : IDL.Opt(IDL.Nat16),
     'competition_id' : IDL.Text,
   });
   const JoinToken = IDL.Record({
@@ -67,63 +73,139 @@ export const idlFactory = ({ IDL }) => {
     'competitions' : IDL.Vec(Competition),
     'roles' : IDL.Vec(RoleGrant),
   });
-  const Result_2 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
-  const Result_4 = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
-  const Result_1 = IDL.Variant({ 'Ok' : JoinToken, 'Err' : IDL.Text });
-  const Result_9 = IDL.Variant({
-    'Ok' : IDL.Vec(IDL.Principal),
-    'Err' : IDL.Text,
-  });
-  const Result_10 = IDL.Variant({
-    'Ok' : IDL.Vec(Competition),
-    'Err' : IDL.Text,
-  });
-  const Result_11 = IDL.Variant({
-    'Ok' : IDL.Vec(TeamEntry),
-    'Err' : IDL.Text,
-  });
-  const Result_13 = IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text });
-  const Result_12 = IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text });
-  const Result_6 = IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text });
-  const Result_3 = IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text });
   
   return IDL.Service({
-    'addBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_8], []),
-    'claim_join_token' : IDL.Func([IDL.Text], [Result_5], []),
+    'addBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'assign_division' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'claim_join_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_competition' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
-        [Result],
+        [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
         [],
       ),
-    'create_season' : IDL.Func([IDL.Text, IDL.Text], [Result_7], []),
-    'export_state' : IDL.Func([], [Result_2], ['query']),
+    'create_season' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'duplicate_season' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'export_state' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-        [Result_4],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'initialize' : IDL.Func([], [Result_4], []),
+    'initialize' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'is_competition_admin' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'issue_join_token' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [Result_1],
+        [IDL.Variant({ 'Ok' : JoinToken, 'Err' : IDL.Text })],
         [],
       ),
-    'listBulkAccessPrincipals' : IDL.Func([], [Result_9], ['query']),
-    'list_competitions' : IDL.Func([IDL.Text], [Result_10], ['query']),
-    'list_entries' : IDL.Func([IDL.Text], [Result_11], ['query']),
-    'list_matches' : IDL.Func([IDL.Text], [Result_13], ['query']),
-    'list_seasons' : IDL.Func([IDL.Text], [Result_12], ['query']),
-    'record_match' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [Result_6], []),
-    'register_team' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [Result_3], []),
-    'removeBulkAccessPrincipal' : IDL.Func([IDL.Principal], [Result_8], []),
+    'listBulkAccessPrincipals' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_competitions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_competitions_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_entries' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_matches' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_seasons' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'record_match' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_team' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'removeBulkAccessPrincipal' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_match_result' : IDL.Func(
         [IDL.Text, IDL.Nat16, IDL.Nat16, IDL.Nat64],
-        [Result_6],
+        [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_divisions' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
     'set_season_status' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
-        [Result_7],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_match_details' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat64),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat16),
+          IDL.Opt(IDL.Nat16),
+          IDL.Opt(IDL.Nat16),
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+        ],
+        [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
         [],
       ),
   });

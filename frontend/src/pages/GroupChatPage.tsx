@@ -127,6 +127,7 @@ import { useChatPerfMarks } from "@/hooks/useChatPerfMarks";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
 import { Capacitor } from "@capacitor/core";
@@ -377,11 +378,29 @@ export default function GroupChatPage() {
         return fixtureData.getLocalLabGroup(groupId, user.id) as ChatGroup | null;
       }
       if (isFeatureRoutedToIcp("messaging")) {
-        // The messaging canister has no single-conversation/group metadata
-        // read shape yet — querying Supabase chat_groups with a canister
-        // conversation id would return null (or a cross-backend row), so
-        // skip it. Header/menus fall back gracefully. Provisional.
-        return null;
+        return withFeatureBackend("messaging", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            try {
+              const metadata = await getLiveGroupMetadata(ctx, groupId!);
+              return {
+                id: metadata.conversationId,
+                name: metadata.name,
+                club_id: metadata.clubId,
+                team_id: metadata.teamId,
+                mini_league_id: null,
+                allowed_roles: [],
+                created_by: "",
+                membership_mode: null,
+                category: null,
+                join_policy: null,
+              } as ChatGroup;
+            } catch {
+              // Not yet created on the canister — header/menus fall back gracefully.
+              return null;
+            }
+          },
+        });
       }
 
       const { data, error } = await supabase
@@ -1428,7 +1447,21 @@ export default function GroupChatPage() {
       // rest of the ICP messaging path) instead of querying Supabase by
       // principal id.
       if (isFeatureRoutedToIcp("messaging")) {
-        return { adminsOnly: false, isCompetitionAdmin: false };
+        return withFeatureBackend("messaging", {
+          supabase: async () => ({ adminsOnly: false, isCompetitionAdmin: false }),
+          icp: async (ctx) => {
+            const isCompetitionAdmin = await isLiveCompetitionAdmin(ctx, groupId!).catch(() => false);
+            // member_chat_admins_only still lives on the Supabase competitions
+            // row; the canister only enforces the admin check, not the
+            // admins-only toggle, so read that setting from Supabase either way.
+            const { data: comp } = await supabase
+              .from("competitions")
+              .select("member_chat_admins_only")
+              .eq("id", groupCompetitionId!)
+              .maybeSingle();
+            return { adminsOnly: !!comp?.member_chat_admins_only, isCompetitionAdmin };
+          },
+        });
       }
       const [{ data: comp }, { data: isAdmin }] = await Promise.all([
         supabase

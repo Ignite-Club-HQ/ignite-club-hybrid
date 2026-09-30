@@ -32,6 +32,11 @@ export interface VaultFile {
   'deleted_at_ms' : [] | [bigint],
   'uploaded_by' : Principal,
 }
+export interface VaultFileWithFolder {
+  'folder_name' : [] | [string],
+  'folder_path' : Array<string>,
+  'file' : VaultFile,
+}
 export interface VaultFolder {
   'id' : string,
   'mini_league_id' : [] | [string],
@@ -80,9 +85,19 @@ export interface _SERVICE {
     { 'Ok' : Array<VaultFile> } |
       { 'Err' : string }
   >,
+  'list_club_files_with_folder' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<VaultFileWithFolder> } |
+      { 'Err' : string }
+  >,
   'list_files' : ActorMethod<
     [string],
     { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'list_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
       { 'Err' : string }
   >,
   'list_folders' : ActorMethod<
@@ -93,6 +108,11 @@ export interface _SERVICE {
   'list_trashed_files' : ActorMethod<
     [string],
     { 'Ok' : Array<VaultFile> } |
+      { 'Err' : string }
+  >,
+  'list_trashed_files_with_folder' : ActorMethod<
+    [string],
+    { 'Ok' : Array<VaultFileWithFolder> } |
       { 'Err' : string }
   >,
   'move_file' : ActorMethod<

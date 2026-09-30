@@ -6,10 +6,10 @@ import { filterVisibleVaultFolders, getVaultScope } from "./vaultScope";
 import { isVaultImageItem } from "./vaultItemClassification";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
-  listLiveVaultClubFiles,
-  listLiveVaultFiles,
+  listLiveVaultClubFilesWithFolder,
+  listLiveVaultFilesWithFolder,
   listLiveVaultFolders,
-  listLiveVaultTrash,
+  listLiveVaultTrashWithFolder,
 } from "@/live/features/vault";
 
 /**
@@ -35,6 +35,22 @@ function mapLiveVaultFolder(folder: any): VaultFolderRow {
   } as unknown as VaultFolderRow;
 }
 
+/**
+ * Unwraps a VaultFileWithFolder envelope down to the plain file record while
+ * carrying folder_name/folder_path along as extra properties, so callers get
+ * folder context without a separate folder-id join.
+ */
+function unwrapLiveVaultFileWithFolder(entry: any): any {
+  if (entry && typeof entry === "object" && "file" in entry) {
+    return {
+      ...entry.file,
+      _folder_name: entry.folder_name?.[0] ?? entry.folder_name ?? null,
+      _folder_path: Array.isArray(entry.folder_path) ? entry.folder_path : [],
+    };
+  }
+  return entry;
+}
+
 function mapLiveVaultFile(file: any): VaultFileRow {
   return {
     id: file.id,
@@ -56,6 +72,8 @@ function mapLiveVaultFile(file: any): VaultFileRow {
       ? (file.deleted_by[0]?.toText?.() ?? String(file.deleted_by[0]))
       : null,
     is_external_link: file.is_external_link,
+    ...(file._folder_name !== undefined ? { _folder_name: file._folder_name } : {}),
+    ...(file._folder_path !== undefined ? { _folder_path: file._folder_path } : {}),
   } as unknown as VaultFileRow;
 }
 
@@ -270,14 +288,14 @@ export async function fetchVaultItems(
         if (!options.isClubAdmin && options.isCoachOrTeamAdmin && !scope.folderId) return [];
       }
       const files = scope.folderId
-        ? await listLiveVaultFiles(ctx, scope.folderId)
-        : await listLiveVaultClubFiles(
+        ? await listLiveVaultFilesWithFolder(ctx, scope.folderId)
+        : await listLiveVaultClubFilesWithFolder(
             ctx,
             view.clubId,
             view.type === "team" ? view.teamId : null,
             view.type === "mini-league" ? view.miniLeagueId : null,
           );
-      const rows = (files as any[]).map(mapLiveVaultFile);
+      const rows = (files as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile);
       return scope.folderId ? rows : rows.filter((row) => !row.folder_id);
     },
   });
@@ -399,8 +417,10 @@ export async function fetchVaultTrash(
     },
     // Provisional: no folder/team name joins on the canister.
     icp: async (ctx) => {
-      const trashed = await listLiveVaultTrash(ctx, view.clubId);
-      return partitionVaultItems((trashed as any[]).map(mapLiveVaultFile));
+      const trashed = await listLiveVaultTrashWithFolder(ctx, view.clubId);
+      return partitionVaultItems(
+        (trashed as any[]).map(unwrapLiveVaultFileWithFolder).map(mapLiveVaultFile),
+      );
     },
   });
 }

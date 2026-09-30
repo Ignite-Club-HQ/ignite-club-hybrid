@@ -44,6 +44,11 @@ export const idlFactory = ({ IDL }) => {
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'uploaded_by' : IDL.Principal,
   });
+  const VaultFileWithFolder = IDL.Record({
+    'folder_name' : IDL.Opt(IDL.Text),
+    'folder_path' : IDL.Vec(IDL.Text),
+    'file' : VaultFile,
+  });
   
   return IDL.Service({
     'create_folder' : IDL.Func(
@@ -84,9 +89,29 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_club_files_with_folder' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'list_files' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_files_with_folder' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'list_folders' : IDL.Func(
@@ -97,6 +122,16 @@ export const idlFactory = ({ IDL }) => {
     'list_trashed_files' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(VaultFile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_trashed_files_with_folder' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(VaultFileWithFolder),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'move_file' : IDL.Func(

@@ -101,6 +101,63 @@ export async function getLiveKeyMetadata(ctx: FeatureBackendContext) {
 }
 
 /**
+ * Records a verified guardian/child relationship on pii_access_control.
+ * `grant_pii_read` for a child's PII records only succeeds once the canister
+ * can see a matching guardian relationship here — callers must add the
+ * relationship before (or alongside) granting read access, never trust a
+ * browser-supplied grant without this canister-side link.
+ */
+export async function addLiveGuardianRelationship(
+  ctx: FeatureBackendContext,
+  guardian: Principal,
+  childId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_guardian_relationship(guardian, childId), "Add guardian relationship");
+}
+
+export async function removeLiveGuardianRelationship(
+  ctx: FeatureBackendContext,
+  guardian: Principal,
+  childId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_guardian_relationship(guardian, childId), "Remove guardian relationship");
+}
+
+/** The caller's own guardian-linked children (their principal as the guardian). */
+export async function listMyLiveGuardianChildren(ctx: FeatureBackendContext) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return actor.my_guardian_children();
+}
+
+/**
+ * Grants a reader principal access to one PII field. The canister enforces
+ * the actual authorization (domain owner, or — for guardians — a verified
+ * relationship added via `add_guardian_relationship`); this call only
+ * requests the grant, it never substitutes for that check.
+ */
+export async function grantLivePiiRead(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  reader: Principal,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.grant_pii_read(piiId, fieldId, reader), "Grant PII read");
+}
+
+export async function revokeLivePiiRead(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  reader: Principal,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_pii_read(piiId, fieldId, reader), "Revoke PII read");
+}
+
+/**
  * Folder/file metadata surface on vault_domain.
  *
  * NOTE: untested against a live canister until deployment. The canister
@@ -135,6 +192,50 @@ export async function listLiveVaultClubFiles(
   return unwrapCandid(
     actor.list_club_files(clubId, teamId ? [teamId] : [], miniLeagueId ? [miniLeagueId] : []),
     "List vault club files",
+  );
+}
+
+/**
+ * Folder-joined variants of the list reads above. The canister denormalizes
+ * `folder_name`/`folder_path` onto each file so the UI can show folder
+ * context without a client-side folder-id join (VaultFileWithFolder).
+ */
+export async function listLiveVaultFilesWithFolder(
+  ctx: FeatureBackendContext,
+  folderId: string,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_files_with_folder(folderId),
+    "List vault files with folder",
+  );
+}
+
+export async function listLiveVaultClubFilesWithFolder(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string | null,
+  miniLeagueId: string | null = null,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_club_files_with_folder(
+      clubId,
+      teamId ? [teamId] : [],
+      miniLeagueId ? [miniLeagueId] : [],
+    ),
+    "List vault club files with folder",
+  );
+}
+
+export async function listLiveVaultTrashWithFolder(
+  ctx: FeatureBackendContext,
+  clubId: string,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_trashed_files_with_folder(clubId),
+    "List vault trash with folder",
   );
 }
 

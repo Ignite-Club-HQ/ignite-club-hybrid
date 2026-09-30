@@ -18,6 +18,9 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     setProfile: (displayName: string, avatarRef?: string) =>
       call(() => actor.set_profile(displayName, avatarRef ? [avatarRef] : [])),
     myRoles: () => call(() => actor.my_roles()),
+    myTermsAcceptance: () => call(() => actor.my_terms_acceptance()),
+    getTermsAcceptance: (accountId: string) => call(() => actor.get_terms_acceptance(accountId)),
+    setTermsAcceptance: (termsVersion: number) => call(() => actor.set_terms_acceptance(termsVersion)),
     exportState: () => call<State>(() => actor.export_state()),
     registerAccount: () => call(() => actor.register_account()),
     access: (club?: string, team?: string, child?: string) => call(() => actor.access(club ? [club] : [], team ? [team] : [], child ? [child] : [])),

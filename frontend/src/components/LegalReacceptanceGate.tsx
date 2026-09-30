@@ -3,7 +3,6 @@ import { FileText, ShieldCheck, Loader2, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
 import { useLegalReacceptance } from "@/hooks/useLegalReacceptance";
 import { toast } from "sonner";
 
@@ -16,7 +15,7 @@ const PRIVACY_URL = "https://reference.invalid";
  * which fails closed to "not required".
  */
 export function LegalReacceptanceGate() {
-  const { mustAccept, setting, refresh } = useLegalReacceptance();
+  const { mustAccept, setting, refresh, acceptCurrentTerms } = useLegalReacceptance();
   const [readTerms, setReadTerms] = useState(false);
   const [readPrivacy, setReadPrivacy] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -27,8 +26,7 @@ export function LegalReacceptanceGate() {
   const accept = async () => {
     setSaving(true);
     try {
-      const { error } = await supabase.rpc("accept_current_legal_terms" as never);
-      if (error) throw error;
+      await acceptCurrentTerms();
       toast.success("Thanks — your acceptance has been recorded.");
       refresh();
     } catch (e) {

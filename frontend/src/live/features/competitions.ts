@@ -213,3 +213,15 @@ export async function listLiveCompetitionsMulti(
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_competitions_multi(clubIds), "List competitions");
 }
+
+/** ICP counterpart of the Supabase `is_competition_admin` RPC. */
+export async function isLiveCompetitionAdmin(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.is_competition_admin(competitionId),
+    "Check competition admin",
+  );
+}

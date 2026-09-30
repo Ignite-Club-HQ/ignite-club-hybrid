@@ -112,6 +112,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_competition_admin' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'issue_join_token' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : JoinToken } |

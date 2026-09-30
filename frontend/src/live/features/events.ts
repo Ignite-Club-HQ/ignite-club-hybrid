@@ -123,6 +123,18 @@ export async function setLiveEventAttendance(
   );
 }
 
+/**
+ * Canonical per-event roster read (accounts + linked children) used for
+ * guardian/attendance rosters. Counterpart of the Supabase
+ * `get_targeted_event_attendance_roster` / `club_scoped_child_guardians`
+ * RPCs, which return empty results for II-authenticated (principal, not
+ * UUID) callers — this is the ICP-mode substitute.
+ */
+export async function getLiveEventRoster(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_roster(eventId), "Get event roster");
+}
+
 export async function setLiveEventRoster(
   ctx: FeatureBackendContext,
   eventId: string,

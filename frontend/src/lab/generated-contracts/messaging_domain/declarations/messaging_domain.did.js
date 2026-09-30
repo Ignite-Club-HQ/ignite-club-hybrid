@@ -41,6 +41,19 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'last_read_sequence' : IDL.Nat64,
   });
+  const GroupMetadata = IDL.Record({
+    'members' : IDL.Vec(IDL.Principal),
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Opt(IDL.Text),
+  });
+  const ClubMembership = IDL.Record({
+    'user' : IDL.Principal,
+    'club_id' : IDL.Text,
+  });
   const Receipt = IDL.Record({
     'conversation_id' : IDL.Text,
     'read' : IDL.Bool,
@@ -53,19 +66,32 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'club_id' : IDL.Opt(IDL.Text),
   });
+  const CompetitionAdmin = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'user' : IDL.Principal,
+  });
   const State = IDL.Record({
     'messages' : IDL.Vec(Message),
     'schema' : IDL.Nat32,
+    'dmAttachmentsDisabled' : IDL.Vec(IDL.Principal),
     'unread' : IDL.Vec(Unread),
+    'groupMetadata' : IDL.Vec(GroupMetadata),
+    'clubMemberships' : IDL.Vec(ClubMembership),
     'governor' : IDL.Principal,
     'conversations' : IDL.Vec(Conversation),
     'receipts' : IDL.Vec(Receipt),
     'roles' : IDL.Vec(RoleGrant),
+    'competitionAdmins' : IDL.Vec(CompetitionAdmin),
   });
   const MessagePage = IDL.Record({
     'messages' : IDL.Vec(Message),
     'latest_sequence' : IDL.Nat64,
     'next_sequence' : IDL.Opt(IDL.Nat64),
+  });
+  const UnreadSummary = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'count' : IDL.Nat64,
   });
   
   return IDL.Service({
@@ -79,6 +105,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : BroadcastResult, 'Err' : IDL.Text })],
         [],
       ),
+    'can_dm_user' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
     'create_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
@@ -89,10 +116,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'dm_attachments_disabled' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Bool],
+        ['query'],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'get_group_metadata' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'grant_competition_admin' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
@@ -104,6 +146,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -124,6 +167,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], ['query']),
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -134,6 +178,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'set_dm_attachments_disabled' : IDL.Func(
+        [IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'unread_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Unread, 'Err' : IDL.Text })],
@@ -142,6 +191,23 @@ export const idlFactory = ({ IDL }) => {
     'update_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'upsert_club_membership' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'upsert_group_metadata' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Vec(IDL.Principal),
+        ],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         [],
       ),
   });

@@ -163,3 +163,41 @@ export async function liveClubWhoami(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.whoami(), "Whoami");
 }
+
+/**
+ * Team lifecycle (soft-delete / restore / permanent-delete) — the canister
+ * counterpart of the Supabase `teams.deleted_at` tombstone flow.
+ */
+export async function softDeleteLiveTeam(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.soft_delete_team(teamId), "Delete team");
+}
+
+export async function restoreLiveTeam(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_team(teamId), "Restore team");
+}
+
+export async function deleteLiveTeamPermanent(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_team_permanent(teamId), "Permanently delete team");
+}
+
+/**
+ * Club lifecycle (soft-delete / restore / permanent-delete) — the canister
+ * counterpart of the Supabase `clubs.deleted_at` tombstone flow.
+ */
+export async function softDeleteLiveClub(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.soft_delete_club(clubId), "Delete club");
+}
+
+export async function restoreLiveClub(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_club(clubId), "Restore club");
+}
+
+export async function deleteLiveClubPermanent(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club");
+}

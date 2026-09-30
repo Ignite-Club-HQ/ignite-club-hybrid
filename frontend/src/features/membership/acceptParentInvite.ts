@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { acceptLiveParentInvite } from "@/live/features/club";
+import { addLiveGuardianRelationship, grantLivePiiRead } from "@/live/features/vault";
 
 /**
  * Transactional acceptance of a parent invitation that carries child metadata.
@@ -78,8 +79,26 @@ export async function acceptParentTeamInvite(params: {
     icp: async (ctx): Promise<AcceptParentInviteResult | null> => {
       if (!params.inviteToken) return null;
       const invite = await acceptLiveParentInvite(ctx, params.inviteToken);
+      const childId = invite?.child_id ?? null;
+      if (childId) {
+        // Record the verified guardian relationship on pii_access_control
+        // BEFORE requesting the PII read grant, so grant_pii_read's
+        // canister-side relationship check passes for this new guardian.
+        // Best effort: the invite acceptance itself already succeeded, and a
+        // grant failure here must not roll that back — the guardian can
+        // still be granted read access later.
+        const guardian = ctx.identity.getPrincipal();
+        try {
+          await addLiveGuardianRelationship(ctx, guardian, childId);
+          await grantLivePiiRead(ctx, childId, "name", guardian);
+        } catch (error) {
+          console.error("[acceptParentTeamInvite] guardian PII grant failed", {
+            message: (error as Error)?.message,
+          });
+        }
+      }
       return {
-        childIds: invite?.child_id ? [invite.child_id] : [],
+        childIds: childId ? [childId] : [],
         // The canister's accept is idempotent within its token model, but it
         // does not report whether this call was the first acceptance.
         alreadyAccepted: false,
