@@ -70,6 +70,8 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveEventRoster } from "@/live/features/events";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -1039,20 +1041,63 @@ export default function EventDetailPage() {
   // other members' `children` rows directly under RLS. A narrowly scoped
   // SECURITY DEFINER RPC returns the minimum roster for THIS event only.
   const scopedRosterQuery = useQuery({
-    queryKey: ["targeted-event-roster", id],
-    enabled: !!id && !!targetTeamIdsForFetch && !!canManageEvent && !useIcpLab && !isIcpAuthBackend,
+    queryKey: ["targeted-event-roster", id, isIcpAuthBackend],
+    enabled: !!id && !!targetTeamIdsForFetch && !!canManageEvent && !useIcpLab,
     staleTime: 60_000,
     queryFn: async () => {
-      const provider: TargetedAttendanceProvider = {
-        async listTargetedAttendanceRoster(eventId) {
-          const { data, error } = await supabase.rpc("get_targeted_event_attendance_roster", {
-            p_event_id: eventId,
-          });
-          if (error) throw error;
-          return (data ?? []) as ScopedAttendanceRosterRow[];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const provider: TargetedAttendanceProvider = {
+            async listTargetedAttendanceRoster(eventId) {
+              const { data, error } = await supabase.rpc("get_targeted_event_attendance_roster", {
+                p_event_id: eventId,
+              });
+              if (error) throw error;
+              return (data ?? []) as ScopedAttendanceRosterRow[];
+            },
+          };
+          return fetchTargetedAttendanceRoster(provider, id!);
         },
-      };
-      return fetchTargetedAttendanceRoster(provider, id!);
+        icp: async (ctx) => {
+          // events_domain get_event_roster returns accounts with their linked
+          // children for this event. Child display names stay behind
+          // pii_access_control on the canister, so `child.name` may come back
+          // empty for callers without guardian/admin scope — render whatever
+          // the canister allows rather than blocking the whole roster.
+          // Provisional mapping: field names (account_id/name/children) are
+          // best-effort until verified against the live events_domain schema
+          // post-deploy.
+          const rows = (await getLiveEventRoster(ctx, id!)) as Array<{
+            account_id?: string;
+            name?: string | null;
+            team_ids?: string[] | null;
+            children?: Array<{ id?: string; name?: string | null }>;
+          }>;
+          const roster: ScopedAttendanceRosterRow[] = [];
+          for (const row of rows ?? []) {
+            if (row.account_id) {
+              roster.push({
+                kind: "member",
+                person_id: row.account_id,
+                display_name: row.name ?? null,
+                parent_id: null,
+                team_ids: row.team_ids ?? null,
+              });
+            }
+            for (const child of row.children ?? []) {
+              if (!child?.id) continue;
+              roster.push({
+                kind: "child",
+                person_id: child.id,
+                display_name: child.name ?? null,
+                parent_id: row.account_id ?? null,
+                team_ids: row.team_ids ?? null,
+              });
+            }
+          }
+          return roster;
+        },
+      });
     },
   });
   const scopedChildRoster = useMemo(
@@ -1130,6 +1175,9 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data || [];
     },
+    // ICP mode: guardian links come back as part of getLiveEventRoster's
+    // per-account children above, so this Supabase-only RPC is skipped
+    // rather than run against a UUID that a principal-based caller has none of.
     enabled: childIdsOnTeam.length > 0 && !useIcpLab && !isIcpAuthBackend,
   });
 
