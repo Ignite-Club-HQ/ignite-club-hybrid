@@ -20,6 +20,10 @@ persistent actor {
   var roster : [Types.RosterEntry];
   var recurrences : [Types.Recurrence];
   var series : [Types.EventSeries];
+  var eventAttendance : [Types.EventAttendance];
+  var eventGuests : [Types.EventGuest];
+  var children : [Types.Child];
+  var childGuardians : [Types.ChildGuardian];
   var bulkAccessPrincipals : [Principal];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
@@ -124,8 +128,12 @@ persistent actor {
   // Creates a recurring series plus all child occurrences up to until_ms.
   // One call replaces the Supabase create_event_with_duties recurring
   // expansion; child events are ordinary events linked by series_id.
-  public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
-    auth(caller);
+  // Shared series-creation core: builds the EventSeries record plus every
+  // child occurrence up to until_ms. create_series and
+  // create_recurring_series both funnel through this (the latter converts
+  // an occurrence count into until_ms first) — mirrors the Supabase
+  // convert_event_to_recurring_series RPC's parent+children expansion.
+  func createSeriesInternal(caller : Principal, club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
     if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validFrequency(frequency) or first_starts_at_ms >= first_ends_at_ms or first_starts_at_ms > until_ms) return #Err("Invalid series");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
@@ -144,6 +152,49 @@ persistent actor {
     series := series.concat([created]);
     events := events.concat(children);
     #Ok({ series = created; events = children })
+  };
+
+  public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    auth(caller);
+    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, until_ms)
+  };
+
+  // Occurrence-count variant of create_series — mirrors
+  // convert_event_to_recurring_series's "N occurrences" mode alongside its
+  // "until date" mode. Only "weekly"/"fortnightly" are documented entry
+  // points per the roadmap; daily/monthly remain accepted since
+  // createSeriesInternal already validates them.
+  public shared ({ caller }) func create_recurring_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, occurrences : ?Nat32, until_ms : ?Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
+    auth(caller);
+    if (not validFrequency(frequency)) return #Err("Invalid series");
+    let step = frequencyStepMs(frequency);
+    let resolvedUntil : Nat64 = switch (until_ms) {
+      case (?value) value;
+      case null {
+        switch (occurrences) {
+          case (?count) if (count == 0) return #Err("Invalid series") else first_starts_at_ms + step * Nat64.fromNat(Nat32.toNat(count - 1));
+          case null return #Err("occurrences or until_ms required");
+        };
+      };
+    };
+    createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, resolvedUntil)
+  };
+
+  // Detaches a single occurrence from its series (series_id -> null) without
+  // touching sibling occurrences or the series record itself — the
+  // one-off-edit counterpart to delete_series's future-occurrences cascade.
+  public shared ({ caller }) func detach_occurrence(event_id : Text) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        if (current.series_id == null) return #Err("Event is not part of a series");
+        let updated : Types.Event = { current with series_id = null; revision = current.revision + 1 };
+        var index = 0;
+        for (item in events.values()) { if (item.id == event_id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
+        #Err("Event not found")
+      };
+    }
   };
 
   // Updates series fields and every future (>= from_ms) child event's
@@ -241,7 +292,7 @@ persistent actor {
       case (#Ok(_)) {};
     };
     if (not valid(account_id) or not valid(state)) return #Err("Invalid RSVP");
-    let value : Types.Rsvp = { event_id; account_id; state; updated_at_ms = 0 };
+    let value : Types.Rsvp = { event_id; account_id; child_id = null; state; notes = ""; has_paid = null; source = "member"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); rsvps := rsvps.concat([value]); #Ok(value)
   };
 
@@ -393,8 +444,176 @@ persistent actor {
     rsvps.filter(func(item) = item.account_id == accountId)
   };
 
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries] }; #Err : Text } {
+  // ---- Attendance (class_attendance parity) ----
+  func validAttendanceStatus(value : Text) : Bool {
+    value == "present" or value == "absent" or value == "late" or value == "excused"
+  };
+  func validSubjectKind(value : Text) : Bool { value == "account" or value == "child" };
+
+  // Coach/admin marks attendance for an event's subjects (members or
+  // children). Replaces any prior record for the same (event, subject).
+  public shared ({ caller }) func mark_attendance(event_id : Text, records : [Types.AttendanceInput]) : async { #Ok : [Types.EventAttendance]; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (records.size() > 200) return #Err("Too many attendance records");
+    for (r in records.values()) {
+      if (not valid(r.subject_id) or not validSubjectKind(r.subject_kind) or not validAttendanceStatus(r.status) or r.notes.size() > 2000) return #Err("Invalid attendance record");
+    };
+    let now = nowMs();
+    let created = records.map(func(r : Types.AttendanceInput) : Types.EventAttendance {
+      { event_id; subject_id = r.subject_id; subject_kind = r.subject_kind; status = r.status; marked_by = caller; marked_at_ms = now; notes = r.notes }
+    });
+    eventAttendance := eventAttendance.filter(func(item) = not (item.event_id == event_id and created.any(func(c) = c.subject_id == item.subject_id and c.subject_kind == item.subject_kind)));
+    eventAttendance := eventAttendance.concat(created);
+    #Ok(created)
+  };
+
+  // Full attendance roster for an event — coach/admin only (same gate as
+  // mark_attendance), mirrors class_attendance reads.
+  public query ({ caller }) func get_attendance(event_id : Text) : async { #Ok : [Types.EventAttendance]; #Err : Text } {
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    #Ok(eventAttendance.filter(func(item) = item.event_id == event_id))
+  };
+
+  // Caller-scoped attendance read (PROVISIONAL: subject_id matched against
+  // Principal.toText(caller), same convention as my_rsvps) — lets a member
+  // see their own marked attendance without the coach/admin gate.
+  public query ({ caller }) func my_attendance(event_id : ?Text) : async [Types.EventAttendance] {
+    auth(caller);
+    let accountId = Principal.toText(caller);
+    eventAttendance.filter(func(item) = item.subject_id == accountId and (event_id == null or event_id == ?item.event_id))
+  };
+
+  // ---- Roster (rsvps + event_guests + children + child_guardians parity) ----
+  func isClubMemberText(guardianId : Text, club : Text) : Bool {
+    roles.any(func(grant) = Principal.toText(grant.user) == guardianId and grant.club_id == club)
+  };
+
+  // Coach/admin seeds minimal child records so roster reads can resolve
+  // names — full child records remain owned by Supabase.
+  public shared ({ caller }) func admin_upsert_child(id : Text, name : Text, parent_id : ?Text) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
+    if (not valid(id) or not valid(name)) return #Err("Invalid child");
+    let value : Types.Child = { id; name; parent_id };
+    children := children.filter(func(item) = item.id != id); children := children.concat([value]); #Ok(value)
+  };
+
+  public shared ({ caller }) func admin_link_guardian(child_id : Text, guardian_id : Text, is_primary : Bool) : async { #Ok : Types.ChildGuardian; #Err : Text } {
+    auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
+    if (not valid(child_id) or not valid(guardian_id)) return #Err("Invalid guardian link");
+    let value : Types.ChildGuardian = { child_id; guardian_id; is_primary };
+    childGuardians := childGuardians.filter(func(item) = not (item.child_id == child_id and item.guardian_id == guardian_id));
+    childGuardians := childGuardians.concat([value]); #Ok(value)
+  };
+
+  public shared ({ caller }) func add_event_guest(event_id : Text, guest_name : Text) : async { #Ok : Types.EventGuest; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(guest_name)) return #Err("Invalid guest");
+    let value : Types.EventGuest = { id = "guest-" # event_id # "-" # Nat.toText(eventGuests.size()); event_id; guest_name; added_by = caller; created_at_ms = nowMs() };
+    eventGuests := eventGuests.concat([value]); #Ok(value)
+  };
+
+  public shared ({ caller }) func remove_event_guest(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (eventGuests.find(func(item) = item.id == id)) {
+      case null { #Err("Guest not found") };
+      case (?guest) {
+        switch (requireManage(caller, guest.event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+        eventGuests := eventGuests.filter(func(item) = item.id != id);
+        #Ok
+      };
+    }
+  };
+
+  // RSVPs for an event enriched with child names and standalone guests —
+  // mirrors the joined rsvps + event_guests + children reads guardians and
+  // coaches use to see who is coming. Visibility follows canView (any club
+  // member, manager or governor), same as get_event_roster.
+  public query ({ caller }) func event_roster(event_id : Text) : async { #Ok : Types.EventRoster; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        let enriched = rsvps.filter(func(item) = item.event_id == event_id).map(func(item) : Types.RsvpWithChild {
+          let child = switch (item.child_id) { case (?cid) children.find(func(c) = c.id == cid); case null null };
+          { rsvp = item; child }
+        });
+        #Ok({ rsvps = enriched; guests = eventGuests.filter(func(item) = item.event_id == event_id) })
+      };
+    }
+  };
+
+  // Guardian-scoped RSVP read: every RSVP for a child the caller guards,
+  // optionally narrowed to one event or one club. PROVISIONAL: guardian_id
+  // is matched against Principal.toText(caller), same convention as
+  // my_rsvps/my_attendance.
+  public query ({ caller }) func my_child_rsvps(event_id : ?Text, club_id : ?Text) : async [Types.RsvpWithChild] {
+    auth(caller);
+    let callerId = Principal.toText(caller);
+    let myChildIds = childGuardians.filter(func(g) = g.guardian_id == callerId).map(func(g) = g.child_id);
+    rsvps.filter(func(item) =
+      (switch (item.child_id) { case (?cid) myChildIds.any(func(id) = id == cid); case null false })
+        and (event_id == null or event_id == ?item.event_id)
+        and (club_id == null or (switch (events.find(func(e) = e.id == item.event_id)) { case (?e) ?e.club_id == club_id; case null false }))
+    ).map(func(item) : Types.RsvpWithChild {
+      let child = switch (item.child_id) { case (?cid) children.find(func(c) = c.id == cid); case null null };
+      { rsvp = item; child }
+    })
+  };
+
+  // Mirrors the Supabase child_is_in_event_audience RPC. PROVISIONAL
+  // definition: a child is in an event's audience if they already have an
+  // RSVP for it, or one of their guardians is a role-holder in the event's
+  // club (no team-roster table exists in this canister yet).
+  public query ({ caller }) func child_is_in_event_audience(child_id : Text, event_id : Text) : async { #Ok : Bool; #Err : Text } {
+    switch (events.find(func(e) = e.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        let hasRsvp = rsvps.any(func(r) = r.event_id == event_id and r.child_id == ?child_id);
+        let guardianIsMember = childGuardians.any(func(g) = g.child_id == child_id and isClubMemberText(g.guardian_id, event.club_id));
+        #Ok(hasRsvp or guardianIsMember)
+      };
+    }
+  };
+
+  // ---- Admin RSVP writes (admin_upsert_rsvp / admin_update_rsvp_status parity) ----
+  func validRsvpStatus(value : Text) : Bool {
+    value == "going" or value == "not_going" or value == "maybe" or value == "pending"
+  };
+
+  // Coach/admin sets (creates or replaces) an RSVP on behalf of a member or
+  // child — the canister equivalent of the admin_upsert_rsvp RPC.
+  public shared ({ caller }) func admin_upsert_rsvp(event_id : Text, account_id : Text, child_id : ?Text, status : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(account_id) or not validRsvpStatus(status) or notes.size() > 2000) return #Err("Invalid RSVP");
+    let value : Types.Rsvp = { event_id; account_id; child_id; state = status; notes; has_paid = null; source = "admin"; updated_at_ms = nowMs() };
+    rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == child_id));
+    rsvps := rsvps.concat([value]);
+    #Ok(value)
+  };
+
+  // Coach/admin flips just the status on an existing RSVP — the canister
+  // equivalent of the admin_update_rsvp_status RPC. Errors if no matching
+  // RSVP exists yet (use admin_upsert_rsvp to create one).
+  public shared ({ caller }) func admin_update_rsvp_status(event_id : Text, account_id : Text, child_id : ?Text, status : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not validRsvpStatus(status)) return #Err("Invalid RSVP status");
+    switch (rsvps.find(func(item) = item.event_id == event_id and item.account_id == account_id and item.child_id == child_id)) {
+      case null { #Err("RSVP not found") };
+      case (?current) {
+        let updated : Types.Rsvp = { current with state = status; updated_at_ms = nowMs() };
+        rsvps := rsvps.map(func(item) = if (item.event_id == event_id and item.account_id == account_id and item.child_id == child_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    #Ok({ schema = 2; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series })
+    #Ok({ schema = 3; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians })
   };
 };

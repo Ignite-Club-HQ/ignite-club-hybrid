@@ -67,7 +67,7 @@ module {
     token : Text;
     mini_league_id : Text;
     player_id : ?Text;
-    label : ?Text;
+    label_text : ?Text;
     status : Text; // "pending" | "claimed"
     claimed_by : ?Principal;
     created_by : Principal;

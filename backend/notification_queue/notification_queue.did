@@ -5,6 +5,46 @@ type Status =
    Pending;
    Processing;
  };
+type ScheduledStatus = 
+ variant {
+   Cancelled;
+   Failed;
+   Pending;
+   Sent;
+ };
+type ScheduledResults = 
+ variant {
+   Err: text;
+   Ok: vec ScheduledMessage;
+ };
+type ScheduledResult = 
+ variant {
+   Err: text;
+   Ok: ScheduledMessage;
+ };
+type ScheduledMessage = 
+ record {
+   attempted_at_ms: opt nat64;
+   author: text;
+   body: text;
+   chat_type: ChatType;
+   club_id: opt text;
+   conversation_id: opt text;
+   created_at_ms: nat64;
+   error_message: opt text;
+   group_id: opt text;
+   id: text;
+   image_url: opt text;
+   recurrence: Recurrence;
+   recurrence_parent_id: opt text;
+   recurrence_until_ms: opt nat64;
+   reply_to_id: opt text;
+   scheduled_for_ms: nat64;
+   sent_message_id: opt text;
+   status: ScheduledStatus;
+   team_id: opt text;
+   updated_at_ms: nat64;
+ };
 type Results = 
  variant {
    Err: text;
@@ -19,6 +59,79 @@ type Result =
  variant {
    Err: text;
    Ok: Notification;
+ };
+type Recurrence = 
+ variant {
+   Daily;
+   Monthly;
+   None;
+   Weekly;
+ };
+type PushAlertSettingsInput = 
+ record {
+   alerts_enabled: bool;
+   check_window_hours: nat32;
+   cooldown_hours: nat32;
+   failure_threshold_percent: nat32;
+   min_notifications: nat32;
+ };
+type PushAlertSettings = 
+ record {
+   alerts_enabled: bool;
+   check_window_hours: nat32;
+   cooldown_hours: nat32;
+   failure_threshold_percent: nat32;
+   min_notifications: nat32;
+   updated_at_ms: nat64;
+   updated_by: opt text;
+ };
+type PreferencesResult = 
+ variant {
+   Err: text;
+   Ok: Preferences;
+ };
+type PreferencesInput = 
+ record {
+   admin_enabled: bool;
+   email_admin_enabled: bool;
+   email_events_enabled: bool;
+   email_media_enabled: bool;
+   email_membership_enabled: bool;
+   email_messages_enabled: bool;
+   email_pitch_board_enabled: bool;
+   email_pom_enabled: bool;
+   email_rewards_enabled: bool;
+   events_enabled: bool;
+   media_enabled: bool;
+   membership_enabled: bool;
+   messages_enabled: bool;
+   pitch_board_enabled: bool;
+   pom_enabled: bool;
+   rewards_enabled: bool;
+   show_message_preview: bool;
+ };
+type Preferences = 
+ record {
+   admin_enabled: bool;
+   created_at_ms: nat64;
+   email_admin_enabled: bool;
+   email_events_enabled: bool;
+   email_media_enabled: bool;
+   email_membership_enabled: bool;
+   email_messages_enabled: bool;
+   email_pitch_board_enabled: bool;
+   email_pom_enabled: bool;
+   email_rewards_enabled: bool;
+   events_enabled: bool;
+   media_enabled: bool;
+   membership_enabled: bool;
+   messages_enabled: bool;
+   pitch_board_enabled: bool;
+   pom_enabled: bool;
+   rewards_enabled: bool;
+   show_message_preview: bool;
+   updated_at_ms: nat64;
+   user: text;
  };
 type Notification = 
  record {
@@ -35,20 +148,73 @@ type Notification =
    status: Status;
    user: text;
  };
+type DigestSource = 
+ variant {
+   Club;
+   Group;
+   Team;
+ };
+type DigestResults = 
+ variant {
+   Err: text;
+   Ok: vec DigestItem;
+ };
+type DigestResult = 
+ variant {
+   Err: text;
+   Ok: DigestItem;
+ };
+type DigestItem = 
+ record {
+   chat_scope_id: text;
+   classification: DigestClassification;
+   digested_at_ms: nat64;
+   id: text;
+   mentions: vec text;
+   message_created_at_ms: nat64;
+   message_id: text;
+   message_type: DigestSource;
+   provider: opt text;
+   summary: text;
+   topic: opt text;
+ };
+type DigestClassification = 
+ variant {
+   Action;
+   Decision;
+   Info;
+   Question;
+   Social;
+ };
+type ChatType = 
+ variant {
+   Broadcast;
+   Club;
+   ClubAdmin;
+   Direct;
+   Group;
+   Team;
+ };
 service : {
   acknowledge: (id: text, key: text) -> (Result);
+  cancel_scheduled: (id: text, author: text) -> (ScheduledResult);
   claim: (now_ms: nat64, limit: nat16) -> (Results);
   clear_inbox: (user: text, club: opt text) -> (ResultNat16);
   delete_notification: (id: text) -> (variant {
                                         Err: text;
                                         Ok;
                                       });
+  due_scheduled: (now_ms: nat64, limit: nat16) -> (ScheduledResults) query;
   enqueue: (id: text, user: text, club: text, kind: text, body: text, key:
    text) -> (Result);
   fail: (id: text, error: text, retry_at_ms: opt nat64) -> (Result);
   fan_out: (users: vec text, club: text, kind: text, body: text, key_prefix:
    text, related_id: opt text) -> (ResultNat16);
+  get_digest: (source: DigestSource, chat_scope_id: text, since_ms: nat64,
+   limit: nat16) -> (DigestResults) query;
   get_notification: (id: text) -> (opt Notification) query;
+  get_preferences: (user: text) -> (Preferences) query;
+  get_push_alert_settings: () -> (PushAlertSettings) query;
   grant_worker: ("principal": principal) -> (variant {
                                                Err: text;
                                                Ok;
@@ -58,7 +224,24 @@ service : {
                        Ok;
                      });
   list_inbox: (user: text, club: opt text, limit: nat16) -> (Results) query;
+  list_scheduled: (author: text, target: opt text) ->
+   (ScheduledResults) query;
   mark_all_read: (user: text, club: opt text) -> (ResultNat16);
+  mark_failed: (id: text, error: text) -> (ScheduledResult);
   mark_read: (id: text) -> (Result);
+  mark_sent: (id: text, sent_message_id: text) -> (ScheduledResult);
+  record_digest_item: (id: text, message_id: text, message_type:
+   DigestSource, chat_scope_id: text, message_created_at_ms: nat64,
+   classification: DigestClassification, summary: text, topic: opt text,
+   mentions: vec text, provider: opt text) -> (DigestResult);
   recover: () -> (ResultNat16);
+  schedule_message: (id: text, author: text, chat_type: ChatType, team_id:
+   opt text, club_id: opt text, group_id: opt text, conversation_id:
+   opt text, body: text, image_url: opt text, reply_to_id: opt text,
+   scheduled_for_ms: nat64, recurrence: Recurrence, recurrence_until_ms:
+   opt nat64) -> (ScheduledResult);
+  upsert_preferences: (user: text, input: PreferencesInput) ->
+   (PreferencesResult);
+  upsert_push_alert_settings: (input: PushAlertSettingsInput) ->
+   (PushAlertSettings);
 }
