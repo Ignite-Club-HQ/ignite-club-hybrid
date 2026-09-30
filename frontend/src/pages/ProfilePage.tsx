@@ -36,7 +36,7 @@ function getOrdinalSuffix(n: number): string {
 
 export default function ProfilePage() {
   const { user, profile, signOut } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   const notificationNudge = useNotificationNudge(user?.id, "settings");
   usePageTitle("Profile");
   const { toast } = useToast();

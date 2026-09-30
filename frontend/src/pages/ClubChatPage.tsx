@@ -103,6 +103,7 @@ import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEa
 import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const MESSAGES_PER_PAGE = 30;
 
@@ -234,7 +235,7 @@ export default function ClubChatPage() {
   const summarizeTriggerRef = useRef<(() => void) | null>(null);
   const { featureDisabled: aiCatchUpDisabled } = useAICatchUpAvailability("club", clubId);
   const { data: clubUnreadCount = 0 } = useUnreadMessageCounts<number>(user?.id ?? null, {
-    enabled: !!clubId,
+    enabled: !!clubId && resolveAuthBackend() !== "icp",
     select: (d) => (clubId ? d.clubs[clubId] ?? 0 : 0),
   });
 
@@ -362,7 +363,7 @@ export default function ClubChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
   });
 
@@ -385,7 +386,7 @@ export default function ClubChatPage() {
         .maybeSingle();
       return !!data;
     },
-    enabled: authReady && !!user?.id && !useIcpLab,
+    enabled: authReady && !!user?.id && !useIcpLab && resolveAuthBackend() !== "icp",
   });
 
   // Check if user is club admin
@@ -420,7 +421,7 @@ export default function ClubChatPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1540,7 +1541,7 @@ export default function ClubChatPage() {
     searchQuery,
     loadedMessages: localMessages,
     setMessages: (updater) => setLocalMessages((prev) => updater(prev)),
-    enabled: !!clubId,
+    enabled: !!clubId && resolveAuthBackend() !== "icp",
     cacheKey: `club:${clubId ?? ""}`,
     fetcher: async (q, signal) =>
       createChatHistorySearchFetcher<Message>({

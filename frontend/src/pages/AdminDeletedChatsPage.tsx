@@ -42,6 +42,7 @@ const RETENTION_DAYS = 30;
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabDeletedChats } from "@/lab/fixtureDataLayer";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminDeletedChatsPage() {
   const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
@@ -105,7 +106,7 @@ function SupabaseAdminDeletedChatsPage() {
           .map((r) => r.club_id as string),
       };
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
   });
 
   const isAppAdmin = !!access?.isAppAdmin;
@@ -150,7 +151,7 @@ function SupabaseAdminDeletedChatsPage() {
         club_name: r.club_id ? clubMap.get(r.club_id) ?? null : null,
       }));
     },
-    enabled: hasAccess,
+    enabled: hasAccess && resolveAuthBackend() !== "icp",
   });
 
   const restoreMutation = useMutation({

@@ -99,7 +99,6 @@ const emailPreferenceDescriptors: readonly NotificationPreferenceDescriptor<Emai
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
   // Internet Identity accounts have no password and no passkey/biometric
   // credentials (principal-based auth only) — hide the password/passkey
   // management entry points entirely rather than letting them open dialogs
@@ -119,7 +118,7 @@ export default function SettingsPage() {
   // Check if user is app admin
   useEffect(() => {
     const checkAppAdmin = async () => {
-      if (!user || useIcpLab) return;
+      if (!user || isIcpAccount) return;
       const { data } = await supabase
         .from("user_roles")
         .select("role")
@@ -129,7 +128,7 @@ export default function SettingsPage() {
       setIsAppAdmin(!!data);
     };
     checkAppAdmin();
-  }, [user, useIcpLab]);
+  }, [user, isIcpAccount]);
   
   // Push notification state
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -170,7 +169,7 @@ export default function SettingsPage() {
   // Load notification preferences
   useEffect(() => {
     const loadPreferences = async () => {
-      if (!user || useIcpLab) return;
+      if (!user || isIcpAccount) return;
       
       const { data } = await supabase
         .from("notification_preferences")
@@ -203,12 +202,12 @@ export default function SettingsPage() {
     };
     
     loadPreferences();
-  }, [user, useIcpLab]);
+  }, [user, isIcpAccount]);
 
   // Load AI Chat Recap preference from profile
   useEffect(() => {
     const loadAiPref = async () => {
-      if (!user || useIcpLab) return;
+      if (!user || isIcpAccount) return;
       const { data } = await supabase
         .from("profiles")
         .select("ai_catch_up_enabled")
@@ -220,10 +219,10 @@ export default function SettingsPage() {
       }
     };
     loadAiPref();
-  }, [user, useIcpLab]);
+  }, [user, isIcpAccount]);
 
   const handleAiCatchUpChange = async (value: boolean) => {
-    if (!user || useIcpLab) return;
+    if (!user || isIcpAccount) return;
     setAiCatchUpLoading(true);
     const prev = aiCatchUpEnabled;
     setAiCatchUpEnabled(value);
@@ -322,7 +321,7 @@ export default function SettingsPage() {
   };
 
   const handlePreferenceChange = async (key: keyof NotificationPreferences, value: boolean) => {
-    if (!user || useIcpLab) return;
+    if (!user || isIcpAccount) return;
     
     const newPrefs = { ...preferences, [key]: value };
     setPreferences(newPrefs);
@@ -343,7 +342,7 @@ export default function SettingsPage() {
   };
 
   const handleEmailPreferenceChange = async (key: keyof EmailPreferences, value: boolean) => {
-    if (!user || useIcpLab) return;
+    if (!user || isIcpAccount) return;
     
     const newPrefs = { ...emailPreferences, [key]: value };
     setEmailPreferences(newPrefs);
@@ -364,7 +363,7 @@ export default function SettingsPage() {
   };
 
   const handleTestPush = async () => {
-    if (!user || useIcpLab) return;
+    if (!user || isIcpAccount) return;
     
     setTestingPush(true);
     toast({
@@ -483,7 +482,7 @@ export default function SettingsPage() {
                 localStorage.setItem('app-theme', newTheme);
                 setTheme(newTheme);
                 
-                if (user && !useIcpLab) {
+                if (user && !isIcpAccount) {
                   try {
                     await supabase.from('profiles').update({ theme_preference: newTheme }).eq('id', user.id);
                   } catch (err) {

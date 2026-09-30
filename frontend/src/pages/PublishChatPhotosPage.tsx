@@ -18,6 +18,7 @@ interface ChatImage {
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabPublishableChatPhotos } from "@/lab/fixtureDataLayer";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function PublishChatPhotosPage() {
   const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
@@ -75,7 +76,7 @@ function SupabasePublishChatPhotosPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && resolveAuthBackend() !== "icp",
   });
 
   const { data: candidates, isLoading } = useQuery({
@@ -120,7 +121,7 @@ function SupabasePublishChatPhotosPage() {
           created_at: m.created_at as string,
         }));
     },
-    enabled: !!teamId && !!user?.id,
+    enabled: !!teamId && !!user?.id && resolveAuthBackend() !== "icp",
   });
 
   const remaining = useMemo(

@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { resolveHomeProAccess } from "@/lab/hybridHomeEntitlementRepository";
 import { mergeHomeUserChildren } from "@/lab/hybridHomeRewardsRepository";
@@ -1000,7 +1001,7 @@ export default function HomePage() {
       forChildId,
       idempotencyKey,
     }: { reward: any; forChildId: string | null; idempotencyKey?: string }) => {
-      if (useIcpLab) throw new Error("Reward redemption is unavailable in ICP lab mode.");
+      if (isFeatureRoutedToIcp("home")) throw new Error("Reward redemption is unavailable in ICP lab mode.");
       // Single authoritative transaction: authorisation, balance lock, deduction,
       // redemption row and points history all commit or roll back together.
       const { data, error } = await (supabase as any).rpc("redeem_club_reward", {
@@ -1115,7 +1116,7 @@ export default function HomePage() {
 
   const claimMutation = useMutation({
     mutationFn: async (redemption: { id: string; club_id: string; reward_name: string }) => {
-      if (useIcpLab) throw new Error("Reward fulfilment is unavailable in ICP lab mode.");
+      if (isFeatureRoutedToIcp("home")) throw new Error("Reward fulfilment is unavailable in ICP lab mode.");
 
       const { error } = await supabase
         .from("reward_redemptions")
@@ -1632,7 +1633,7 @@ export default function HomePage() {
       if (error) throw error;
       return (data || []).map(r => r.role as TeamRole);
     },
-    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && !useIcpLab,
+    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && !isFeatureRoutedToIcp("home"),
     staleTime: 30_000,
   });
 
@@ -1641,7 +1642,7 @@ export default function HomePage() {
 
   const teamRequestMutation = useMutation({
     mutationFn: async () => {
-      if (useIcpLab) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
+      if (isFeatureRoutedToIcp("home")) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
       if (isLeagueSelected && actualLeagueId) {
         // Handle league join request
         const league = miniLeagues?.find((l) => l.id === actualLeagueId);
@@ -1721,7 +1722,7 @@ export default function HomePage() {
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
     mutationFn: async (role: TeamRole) => {
-      if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
+      if (isFeatureRoutedToIcp("home")) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
       if (userRoles?.some(r => r.team_id === selectedTeam && r.role === role)) {
         throw new Error(`You already have the ${teamRoleLabel(role)} role on this team`);

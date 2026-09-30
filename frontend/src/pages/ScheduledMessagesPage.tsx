@@ -43,6 +43,7 @@ import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface ThreadInfo {
   label: string;
@@ -265,7 +266,7 @@ function SupabaseScheduledMessagesPage() {
   // Resolve a clubId for upgrade navigation on this global page
   const { data: firstClubId } = useQuery({
     queryKey: ["user-first-club", user?.id],
-    enabled: !!user?.id,
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data: roles } = await supabase

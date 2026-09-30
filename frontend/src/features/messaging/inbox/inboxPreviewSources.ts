@@ -6,6 +6,7 @@ import {
   getProfileFromCache,
   selectCachedProfilesByIds,
 } from "@/lib/profileCache";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
 
 export interface InboxClub {
@@ -48,6 +49,7 @@ export async function fetchMemberClubsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
+  if (resolveAuthBackend() === "icp") return { clubs: [], latestMessages: {} };
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return {
@@ -117,6 +119,7 @@ export async function fetchTeamsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
+  if (resolveAuthBackend() === "icp") return { teams: [], latestMessages: {} };
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return { teams: snapshot.teams, latestMessages: snapshot.latestTeamMessages };

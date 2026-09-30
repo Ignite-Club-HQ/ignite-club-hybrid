@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Megaphone, ImagePlus, Check, Loader2, Forward } from "lucide-react";
 import {
@@ -390,6 +391,9 @@ function ChatMessageInner({
       };
 
       let userId: string;
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
+      }
       try {
         userId = await ensureFreshSession();
       } catch {
@@ -491,8 +495,11 @@ function ChatMessageInner({
 
   const removeReactionMutation = useMutation({
     mutationFn: async (reactionId: string) => {
-      if (reactionId.startsWith("temp-")) {
-        return;
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Reactions aren	 available yet on the Internet Identity messaging backend.");
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
+      }
       }
       if (useIcpLab) return;
       const doDelete = async () => {
@@ -547,6 +554,9 @@ function ChatMessageInner({
 
   const deleteMessageMutation = useMutation({
     mutationFn: async () => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Message deletion isn't available yet on the Internet Identity messaging backend.");
+      }
       if (useIcpLab) return;
       const { error } = await supabase
         .from(getTableName())

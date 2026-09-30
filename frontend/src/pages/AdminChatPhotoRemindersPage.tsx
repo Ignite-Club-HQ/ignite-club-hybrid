@@ -30,6 +30,7 @@ const DEFAULTS: Settings = {
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminChatPhotoRemindersPage() {
   if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
@@ -55,7 +56,7 @@ function SupabaseAdminChatPhotoRemindersPage() {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
   });
 
   const { data: settingRow, isLoading: settingsLoading } = useQuery({
@@ -69,7 +70,7 @@ function SupabaseAdminChatPhotoRemindersPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!isAppAdmin,
+    enabled: !!isAppAdmin && resolveAuthBackend() !== "icp",
   });
 
   const [form, setForm] = useState<Settings>(DEFAULTS);
