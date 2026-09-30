@@ -52,6 +52,10 @@ export default defineConfig({
     ],
     environment: 'jsdom',
     globals: true,
+    // Vitest 5 externalizes some modules during mock resolution; externalized
+    // files resolve '@/*' imports through Node (no aliases) and crash. Inline
+    // everything so project modules always go through the alias-aware loader.
+    server: { deps: { inline: true } },
     setupFiles: ['./vitest.legacy.setup.ts'],
   },
 });
