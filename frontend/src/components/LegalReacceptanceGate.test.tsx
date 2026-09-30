@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
     summary: null as string | null,
   },
   refresh: vi.fn(),
-  rpc: vi.fn(),
+  acceptCurrentTerms: vi.fn(),
   successToast: vi.fn(),
   errorToast: vi.fn(),
 }));
@@ -21,10 +21,8 @@ vi.mock("@/hooks/useLegalReacceptance", () => ({
     setting: mocks.setting,
     isLoading: false,
     refresh: mocks.refresh,
+    acceptCurrentTerms: mocks.acceptCurrentTerms,
   }),
-}));
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: mocks.rpc },
 }));
 vi.mock("sonner", () => ({
   toast: { success: mocks.successToast, error: mocks.errorToast },
