@@ -84,7 +84,7 @@ export function EditMatchDetailsDialog({
       duration_minutes: duration ? Number(duration) : null,
       arrival_minutes_before: arrival ? Number(arrival) : null,
       notes: notes || null,
-    });
+    }, match.revision ?? 0);
     setSaving(false);
     if (error) {
       toast({ title: "Could not update match", description: error.message, variant: "destructive" });

@@ -1309,7 +1309,7 @@ function MatchRow({ match, isAdmin, competitionId, entries, divisions, hideRound
     if (isExternal && !match.manually_overridden_at) {
       payload.manually_overridden_at = new Date().toISOString();
     }
-    const { error } = await updateCompetitionMatch(match.id, payload);
+    const { error } = await updateCompetitionMatch(match.id, payload, match.revision ?? 0);
     if (error) {
       toast({ title: "Could not save", description: error.message, variant: "destructive" });
       return;
