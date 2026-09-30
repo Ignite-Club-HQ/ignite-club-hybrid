@@ -85,7 +85,8 @@ import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled } from "@/live/features/messaging";
+import { Principal } from "@icp-sdk/core/principal";
 
 
 const MESSAGES_PER_PAGE = 15;
@@ -449,13 +450,20 @@ export default function DirectMessagePage() {
     queryKey: ["dm-attachments-disabled", user?.id],
     queryFn: async () => {
       if (!user?.id) return false;
-      // Provisional: no canister shape for the app-admin attachments-disabled
-      // flag yet, so ICP-mode users default to attachments enabled instead of
-      // calling the Postgres-uuid-keyed rpc.
-      if (resolveAuthBackend() === "icp") return false;
-      const { data, error } = await supabase.rpc("dm_attachments_disabled", { _user_id: user.id });
-      if (error) return false;
-      return !!data;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("dm_attachments_disabled", { _user_id: user.id });
+          if (error) return false;
+          return !!data;
+        },
+        icp: async (ctx) => {
+          try {
+            return await isLiveDmAttachmentsDisabled(ctx, Principal.fromText(user.id));
+          } catch {
+            return false;
+          }
+        },
+      });
     },
     enabled: !!user?.id && !isIgniteSupportConversation,
     staleTime: 5 * 60 * 1000,
@@ -467,18 +475,26 @@ export default function DirectMessagePage() {
       // Always allow DMs with Ignite Support
       if (isIgniteSupportUser(otherUserId)) return true;
 
-      // Provisional: can_dm_user is a Postgres-uuid-keyed rpc with no
-      // canister equivalent. Keep the existing fail-open behavior for
-      // ICP-mode users explicitly, without ever firing the failing rpc.
-      if (resolveAuthBackend() === "icp") return true;
-
-      const { data, error } = await supabase.rpc("can_dm_user", { other_user_id: otherUserId });
-      if (error) {
-        console.error("can_dm_user error:", error);
-        // If RPC fails, don't block - they may have an existing conversation
-        return true;
-      }
-      return data as boolean;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("can_dm_user", { other_user_id: otherUserId });
+          if (error) {
+            console.error("can_dm_user error:", error);
+            // If RPC fails, don't block - they may have an existing conversation
+            return true;
+          }
+          return data as boolean;
+        },
+        icp: async (ctx) => {
+          try {
+            return await canLiveDmUser(ctx, Principal.fromText(otherUserId));
+          } catch (error) {
+            console.error("can_dm_user (icp) error:", error);
+            // Fail open — same behavior as the Supabase branch on rpc failure.
+            return true;
+          }
+        },
+      });
     },
     enabled: !!otherUserId && authReady,
     staleTime: 30 * 1000, // Shorter stale time - 30 seconds

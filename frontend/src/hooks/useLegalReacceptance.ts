@@ -52,12 +52,27 @@ export async function fetchLegalReacceptanceSetting(): Promise<LegalReacceptance
   return parseSetting(data?.value);
 }
 
+/**
+ * A stable, monotonically-increasing numeric terms version for the
+ * identity_access canister (which stores `terms_version: number`, not a
+ * date string). The canister rejects a version lower than a previously
+ * recorded one, so deriving it from `effective_at` (each activation must use
+ * a later effective date than the last) keeps it monotonic for free.
+ */
+export function icpTermsVersionFromSetting(setting: LegalReacceptanceSetting): number {
+  if (!setting.effective_at) return 0;
+  const ms = new Date(setting.effective_at).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 export interface UseLegalReacceptanceResult {
   /** True only when an admin enabled it AND this user hasn't accepted since. */
   mustAccept: boolean;
   setting: LegalReacceptanceSetting;
   isLoading: boolean;
   refresh: () => void;
+  /** Records the current user's acceptance (Supabase RPC or ICP canister call). */
+  acceptCurrentTerms: () => Promise<void>;
 }
 
 export function useLegalReacceptance(): UseLegalReacceptanceResult {
@@ -79,9 +94,8 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
     summary: null,
   };
 
-  // NOTE (provisional gap): there is no canister terms-acceptance shape yet,
-  // so ICP-mode users always skip this per-user acceptance check and
-  // `mustAccept` stays false for them, even when the global switch is on.
+  // ICP-mode users are identified by their principal (never a UUID); their
+  // per-user acceptance record lives in identity_access, not `profiles`.
   const isIcp = resolveAuthBackend() === "icp";
 
   const acceptanceQuery = useQuery({
@@ -101,25 +115,66 @@ export function useLegalReacceptance(): UseLegalReacceptanceResult {
     retry: 1,
   });
 
+  const icpAcceptanceQuery = useQuery({
+    queryKey: ["legal-acceptance-icp", userId],
+    queryFn: async () => {
+      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+      const { fetchMyIcpTermsAcceptance } = await import("@/live/legalTerms");
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return null;
+      return fetchMyIcpTermsAcceptance(identity);
+    },
+    enabled: !!userId && setting.required && isIcp,
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
+
   let mustAccept = false;
-  if (!isIcp && setting.required && setting.effective_at && acceptanceQuery.data !== undefined) {
-    const effective = new Date(setting.effective_at).getTime();
-    const terms = acceptanceQuery.data?.terms_accepted_at;
-    const privacy = acceptanceQuery.data?.privacy_accepted_at;
-    const acceptedAt = Math.min(
-      terms ? new Date(terms).getTime() : 0,
-      privacy ? new Date(privacy).getTime() : 0,
-    );
-    mustAccept = Number.isFinite(effective) && acceptedAt < effective;
+  if (setting.required && setting.effective_at) {
+    if (isIcp) {
+      if (icpAcceptanceQuery.data !== undefined) {
+        const requiredVersion = icpTermsVersionFromSetting(setting);
+        const acceptedVersion = icpAcceptanceQuery.data?.termsVersion ?? -1;
+        mustAccept = acceptedVersion < requiredVersion;
+      }
+    } else if (acceptanceQuery.data !== undefined) {
+      const effective = new Date(setting.effective_at).getTime();
+      const terms = acceptanceQuery.data?.terms_accepted_at;
+      const privacy = acceptanceQuery.data?.privacy_accepted_at;
+      const acceptedAt = Math.min(
+        terms ? new Date(terms).getTime() : 0,
+        privacy ? new Date(privacy).getTime() : 0,
+      );
+      mustAccept = Number.isFinite(effective) && acceptedAt < effective;
+    }
   }
+
+  const acceptCurrentTerms = async () => {
+    if (isIcp) {
+      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+      const { setIcpTermsAcceptance } = await import("@/live/legalTerms");
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) {
+        throw new Error("No active Internet Identity session. Sign in again to continue.");
+      }
+      await setIcpTermsAcceptance(identity, icpTermsVersionFromSetting(setting));
+      return;
+    }
+    const { error } = await supabase.rpc("accept_current_legal_terms" as never);
+    if (error) throw error;
+  };
 
   return {
     mustAccept,
     setting,
-    isLoading: settingQuery.isPending || (setting.required && acceptanceQuery.isPending),
+    isLoading:
+      settingQuery.isPending ||
+      (setting.required && (isIcp ? icpAcceptanceQuery.isPending : acceptanceQuery.isPending)),
     refresh: () => {
       void settingQuery.refetch();
       void acceptanceQuery.refetch();
+      void icpAcceptanceQuery.refetch();
     },
+    acceptCurrentTerms,
   };
 }

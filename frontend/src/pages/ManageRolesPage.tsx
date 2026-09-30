@@ -15,7 +15,14 @@ import { getLocalLabRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { roleLabels, type AppRole } from "@/features/membership/rolePresentation";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveRoleGrants } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
+import {
+  listLiveRoleGrants,
+  listLiveRoleRequests,
+  approveLiveRoleRequest,
+  rejectLiveRoleRequest,
+  removeLiveRoleGrant,
+} from "@/live/features/membership";
 import { IcpLabRoleRosterView } from "@/features/membership/IcpLabRoleRosterView";
 import { groupRoleRowsByUser } from "@/features/membership/roleRoster";
 import {
@@ -178,41 +185,68 @@ function SupabaseManageRolesPage() {
 
   const { data: requests } = useQuery({
     queryKey: ["club-role-requests", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("role_requests")
-        .select("*")
-        .eq("club_id", clubId!)
-        .eq("status", "pending");
-      if (error) throw error;
-      
-      // Fetch profiles separately
-      if (!data || data.length === 0) return [];
-      const userIds = data.map(r => r.user_id);
-      const { data: profiles } = await selectCachedProfilesByIds(userIds);
-      
-      return data.map(req => ({
-        ...req,
-        requester: profiles?.find(p => p.id === req.user_id) || null
-      }));
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("role_requests")
+            .select("*")
+            .eq("club_id", clubId!)
+            .eq("status", "pending");
+          if (error) throw error;
+
+          // Fetch profiles separately
+          if (!data || data.length === 0) return [];
+          const userIds = data.map(r => r.user_id);
+          const { data: profiles } = await selectCachedProfilesByIds(userIds);
+
+          return data.map(req => ({
+            ...req,
+            requester: profiles?.find(p => p.id === req.user_id) || null
+          }));
+        },
+        // Provisional: account_id is the canister principal text, not a
+        // Supabase profile id — no display name/avatar join on the canister.
+        icp: async (ctx) => {
+          const rows = await listLiveRoleRequests(ctx, clubId!);
+          return (rows as any[])
+            .filter((r) => r.status === "pending")
+            .map((r) => ({
+              id: r.id,
+              user_id: r.account_id,
+              club_id: r.club,
+              role: r.role,
+              status: r.status,
+              requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
+            }));
+        },
+      }),
     enabled: !!clubId,
   });
 
   const deleteRoleMutation = useMutation({
-    mutationFn: async ({ roleId, userId, roleName, userName }: { roleId: string; userId: string; roleName: string; userName: string }) => {
-      const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
-      if (error) throw error;
-      
-      // Send notification to the user about role removal
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: `Your ${roleName} role has been removed from ${club?.name || "the club"}`,
-        related_id: clubId,
+    mutationFn: async ({ roleId, userId, roleName, userName, roleValue, teamId }: { roleId: string; userId: string; roleName: string; userName: string; roleValue: string; teamId: string | null }) => {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
+          if (error) throw error;
+
+          // Send notification to the user about role removal
+          await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "membership",
+            message: `Your ${roleName} role has been removed from ${club?.name || "the club"}`,
+            related_id: clubId,
+          });
+        },
+        // No notification equivalent on the canister; the grant removal
+        // itself is the only effect.
+        icp: (ctx) =>
+          removeLiveRoleGrant(ctx, Principal.fromText(userId), clubId!, roleValue, teamId),
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["club-members-roles", clubId] });
       queryClient.invalidateQueries({ queryKey: ["club-roles", clubId] });
       toast(roleMutationFeedback.removed);
     },
@@ -224,12 +258,21 @@ function SupabaseManageRolesPage() {
       approved: boolean;
       request: any;
     }) => {
-      const rpcName = approved ? "approve_role_request" : "deny_role_request";
-      const { error } = await supabase.rpc(rpcName, { p_request_id: requestId });
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const rpcName = approved ? "approve_role_request" : "deny_role_request";
+          const { error } = await supabase.rpc(rpcName, { p_request_id: requestId });
+          if (error) throw error;
+        },
+        icp: (ctx) =>
+          approved
+            ? approveLiveRoleRequest(ctx, requestId)
+            : rejectLiveRoleRequest(ctx, requestId),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-role-requests", clubId] });
+      queryClient.invalidateQueries({ queryKey: ["club-members-roles", clubId] });
       queryClient.invalidateQueries({ queryKey: ["club-roles", clubId] });
       toast(roleMutationFeedback.requestProcessed);
     },
@@ -309,6 +352,8 @@ function SupabaseManageRolesPage() {
                               userId,
                               roleName: roleLabels[role.role as AppRole],
                               userName: profile?.display_name || "User",
+                              roleValue: role.role,
+                              teamId: role.team_id ?? null,
                             }),
                         },
                 }))}

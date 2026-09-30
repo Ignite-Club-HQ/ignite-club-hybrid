@@ -6,6 +6,8 @@ import {
 } from "@/lib/unreadMessageCounts";
 import { Capacitor } from "@capacitor/core";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveUnreadCounts } from "@/live/features/messaging";
 
 /**
  * Shared query key for the unread-message-counts RPC. Every consumer
@@ -18,6 +20,35 @@ export const UNREAD_MESSAGE_COUNTS_QUERY_KEY = "unread-message-counts" as const;
 
 export const unreadMessageCountsKey = (userId: string | null | undefined) =>
   [UNREAD_MESSAGE_COUNTS_QUERY_KEY, userId] as const;
+
+/**
+ * Converts the canister's flat `my_unread_counts` list into the same shape
+ * the Supabase RPC returns. The canister has no broadcast/club-message
+ * concept yet, so those buckets stay empty in ICP mode; "team"/"club"-kind
+ * conversation ids land in `teams`/`clubs`, everything else falls back to
+ * `groups`.
+ */
+async function fetchIcpUnreadMessageCounts(): Promise<UnreadMessageCounts> {
+  return withFeatureBackend("messaging", {
+    supabase: async () => createEmptyUnreadMessageCounts(),
+    icp: async (ctx) => {
+      const summaries = await myLiveUnreadCounts(ctx);
+      const counts = createEmptyUnreadMessageCounts();
+      for (const summary of summaries) {
+        if (summary.kind === "dm") {
+          counts.dms[summary.conversationId] = summary.count;
+        } else if (summary.kind === "team") {
+          counts.teams[summary.conversationId] = summary.count;
+        } else if (summary.kind === "club") {
+          counts.clubs[summary.conversationId] = summary.count;
+        } else {
+          counts.groups[summary.conversationId] = summary.count;
+        }
+      }
+      return counts;
+    },
+  });
+}
 
 const isNative = () => Capacitor.isNativePlatform();
 const BASE_INTERVAL_MS = isNative() ? 120_000 : 30_000;
@@ -56,8 +87,8 @@ export function useUnreadMessageCounts<TData = UnreadMessageCounts>(
   const isIcp = resolveAuthBackend() === "icp";
   return useQuery<UnreadMessageCounts, Error, TData>({
     queryKey: unreadMessageCountsKey(userId),
-    queryFn: () => (isIcp ? createEmptyUnreadMessageCounts() : fetchUnreadMessageCounts(userId!)),
-    enabled: !!userId && enabled && !isIcp,
+    queryFn: () => (isIcp ? fetchIcpUnreadMessageCounts() : fetchUnreadMessageCounts(userId!)),
+    enabled: !!userId && enabled,
     staleTime: 5 * 60 * 1000,
     refetchInterval: jitteredInterval,
     select,
