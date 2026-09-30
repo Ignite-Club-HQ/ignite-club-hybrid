@@ -82,6 +82,7 @@ import TeamCompetitionsSection from "@/components/competitions/TeamCompetitionsS
 import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQueryError";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import {
@@ -115,6 +116,10 @@ export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
+  // has no club_domain canister shape yet, so these actions are gated off entirely
+  // in ICP mode rather than falling through to Supabase against a principal id.
+  const isIcpAccount = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -838,6 +843,8 @@ export default function TeamDetailPage() {
   const requestRoleMutation = useMutation({
     mutationFn: async () => {
       if (useIcpLab) throw new Error("Team role requests are unavailable in ICP lab mode.");
+      // PROVISIONAL: no canister shape for role requests yet.
+      if (isIcpAccount) throw new Error("Requesting a team role isn't available for Internet Identity accounts yet.");
       const metadata: Record<string, any> = {};
       if (selectedRole === "parent") {
         const trimmedNew = newChildName.trim();
@@ -880,6 +887,11 @@ export default function TeamDetailPage() {
   const handleDelete = async () => {
     if (useIcpLab) {
       toast({ title: "Team deletion is unavailable in ICP lab mode", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no club_domain canister shape for team soft-delete yet.
+    if (isIcpAccount) {
+      toast({ title: "Team deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     if (isDeleting) return; // prevent duplicate submission
@@ -992,6 +1004,11 @@ export default function TeamDetailPage() {
       toast({ title: "Team restore is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
+    // PROVISIONAL: no club_domain canister shape for team restore yet.
+    if (isIcpAccount) {
+      toast({ title: "Team restore isn't available for Internet Identity accounts yet", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("teams").update({
       deleted_at: null,
       deleted_by: null,
@@ -1013,6 +1030,11 @@ export default function TeamDetailPage() {
   const handlePermanentDeleteTeam = async () => {
     if (useIcpLab) {
       toast({ title: "Permanent team deletion is unavailable in ICP lab mode", variant: "destructive" });
+      return;
+    }
+    // PROVISIONAL: no club_domain canister shape for permanent team deletion yet.
+    if (isIcpAccount) {
+      toast({ title: "Permanent team deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
       return;
     }
     setIsDeleting(true);
@@ -1717,6 +1739,12 @@ export default function TeamDetailPage() {
           if (!removeMember || !id) return;
           if (useIcpLab) {
             toast({ title: "Member removal is unavailable in ICP lab mode", variant: "destructive" });
+            setRemoveMember(null);
+            return;
+          }
+          // PROVISIONAL: no club_domain canister shape for team-member removal yet.
+          if (isIcpAccount) {
+            toast({ title: "Member removal isn't available for Internet Identity accounts yet", variant: "destructive" });
             setRemoveMember(null);
             return;
           }

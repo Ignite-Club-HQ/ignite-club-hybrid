@@ -84,6 +84,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 
 
@@ -427,6 +428,10 @@ export default function DirectMessagePage() {
     queryKey: ["dm-shared-club", user?.id, otherUserId],
     queryFn: async () => {
       if (!user?.id || !otherUserId) return null;
+      // Provisional: user_roles is a Supabase-only table keyed by uuid; there
+      // is no canister equivalent, so ICP-mode users just get an empty vault
+      // / event picker here instead of a failing uuid query.
+      if (resolveAuthBackend() === "icp") return null;
       const [mine, theirs] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
         supabase.from("user_roles").select("club_id").eq("user_id", otherUserId).not("club_id", "is", null),
@@ -444,6 +449,10 @@ export default function DirectMessagePage() {
     queryKey: ["dm-attachments-disabled", user?.id],
     queryFn: async () => {
       if (!user?.id) return false;
+      // Provisional: no canister shape for the app-admin attachments-disabled
+      // flag yet, so ICP-mode users default to attachments enabled instead of
+      // calling the Postgres-uuid-keyed rpc.
+      if (resolveAuthBackend() === "icp") return false;
       const { data, error } = await supabase.rpc("dm_attachments_disabled", { _user_id: user.id });
       if (error) return false;
       return !!data;
@@ -457,7 +466,12 @@ export default function DirectMessagePage() {
       if (!otherUserId) return false;
       // Always allow DMs with Ignite Support
       if (isIgniteSupportUser(otherUserId)) return true;
-      
+
+      // Provisional: can_dm_user is a Postgres-uuid-keyed rpc with no
+      // canister equivalent. Keep the existing fail-open behavior for
+      // ICP-mode users explicitly, without ever firing the failing rpc.
+      if (resolveAuthBackend() === "icp") return true;
+
       const { data, error } = await supabase.rpc("can_dm_user", { other_user_id: otherUserId });
       if (error) {
         console.error("can_dm_user error:", error);
