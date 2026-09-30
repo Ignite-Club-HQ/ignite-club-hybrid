@@ -233,6 +233,14 @@ persistent actor {
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not valid(body) or not valid(idempotency_key)) return #Err("Invalid message");
     switch (attachment) { case (?a) { if (not validAttachment(a)) return #Err("Invalid attachment") }; case null {} };
+    switch (getGroupMetadataFor(conversation_id)) {
+      case (?meta) {
+        if (meta.kind == "competition" and not isCompetitionAdminFor(caller, conversation_id)) {
+          return #Err("Competition chat admin required");
+        };
+      };
+      case null {};
+    };
     for (m in messages.values()) {
       if (m.conversation_id == conversation_id and m.idempotency_key == idempotency_key) {
         return #Ok(m);
@@ -436,5 +444,120 @@ persistent actor {
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
     #Ok({ schema = 3; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled })
+  };
+
+  func validKind(kind : Text) : Bool {
+    kind == "direct" or kind == "club" or kind == "team" or kind == "group" or kind == "broadcast" or kind == "competition"
+  };
+
+  func canManageGroupMetadata(caller : Principal, meta : Types.GroupMetadata) : Bool {
+    isGovernor(caller) or hasRole(caller, "app_admin", null, null) or
+    (switch (meta.club_id) { case (?club_id) { hasRole(caller, "club_admin", ?club_id, null) }; case null { false } }) or
+    (switch (meta.club_id, meta.team_id) { case (?club_id, ?team_id) { hasRole(caller, "team_admin", ?club_id, ?team_id) or hasRole(caller, "coach", ?club_id, ?team_id) }; case (_, _) { false } }) or
+    meta.members.any(func(m) = m.equal(caller))
+  };
+
+  // Upserts the Supabase `chat_groups` equivalent for a conversation: name,
+  // kind, club/team scope, and membership list. The conversation itself must
+  // already exist (created via create_conversation); this only attaches
+  // display/authorization metadata to it. Callers must be a governor,
+  // app_admin, the club/team admin for the target scope, or already a member
+  // being asked to update their own group's metadata.
+  public shared ({ caller }) func upsert_group_metadata(
+    conversation_id : Text,
+    name : Text,
+    kind : Text,
+    club_id : ?Text,
+    team_id : ?Text,
+    members : [Principal],
+  ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    if (findConversationIndex(conversation_id) == null) return #Err("Conversation not found");
+    if (not valid(conversation_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group metadata");
+    if (members.any(func(m) = m.equal(Principal.anonymous()))) return #Err("Invalid member");
+    let existing = getGroupMetadataFor(conversation_id);
+    switch (existing) {
+      case (?meta) { if (not canManageGroupMetadata(caller, meta)) return #Err("Group metadata management forbidden") };
+      case null {
+        if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null) or members.any(func(m) = m.equal(caller)))) {
+          return #Err("Group metadata management forbidden");
+        };
+      };
+    };
+    let updated : Types.GroupMetadata = { conversation_id; name; kind; club_id; team_id; members; created_at_ms = switch (existing) { case (?m) { m.created_at_ms }; case null { nowMs() } } };
+    groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+    groupMetadata := groupMetadata.concat([updated]);
+    #Ok(updated)
+  };
+
+  public query ({ caller }) func get_group_metadata(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id) and not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    switch (getGroupMetadataFor(conversation_id)) {
+      case (?meta) { #Ok(meta) };
+      case null { #Err("Group metadata not found") };
+    }
+  };
+
+  // Shared-club DM eligibility record. Governor/app_admin only — mirrors the
+  // Supabase club_members table this substitutes for.
+  public shared ({ caller }) func upsert_club_membership(user : Principal, club_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null) and not hasRole(caller, "club_admin", ?club_id, null)) return #Err("Club admin required");
+    if (user.equal(Principal.anonymous()) or not valid(club_id)) return #Err("Invalid membership");
+    if (not clubMemberships.any(func(m) = m.user.equal(user) and m.club_id == club_id)) {
+      clubMemberships := clubMemberships.concat([{ user; club_id }]);
+    };
+    #Ok
+  };
+
+  // Two users may DM each other only if they share at least one club.
+  public query ({ caller }) func can_dm_user(other : Principal) : async Bool {
+    if (caller.equal(Principal.anonymous()) or other.equal(Principal.anonymous())) return false;
+    if (caller.equal(other)) return false;
+    sharesClub(caller, other)
+  };
+
+  public shared ({ caller }) func set_dm_attachments_disabled(user : Principal, disabled : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
+    dmAttachmentsDisabled := dmAttachmentsDisabled.filter(func(p) = not p.equal(user));
+    if (disabled) { dmAttachmentsDisabled := dmAttachmentsDisabled.concat([user]) };
+    #Ok
+  };
+
+  public query ({ caller }) func dm_attachments_disabled(user : Principal) : async Bool {
+    dmAttachmentsDisabled.any(func(p) = p.equal(user))
+  };
+
+  public shared ({ caller }) func grant_competition_admin(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
+    if (user.equal(Principal.anonymous()) or not valid(conversation_id)) return #Err("Invalid competition admin");
+    if (not competitionAdmins.any(func(a) = a.conversation_id == conversation_id and a.user.equal(user))) {
+      competitionAdmins := competitionAdmins.concat([{ conversation_id; user }]);
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func is_competition_admin(conversation_id : Text) : async Bool {
+    isCompetitionAdminFor(caller, conversation_id)
+  };
+
+  // Aggregated unread counts for every conversation the caller participates
+  // in, annotated with each conversation's metadata kind so the frontend can
+  // bucket into {teams, clubs, groups, dms, broadcast} without a second
+  // round-trip per conversation.
+  public query ({ caller }) func my_unread_counts() : async [Types.UnreadSummary] {
+    if (caller.equal(Principal.anonymous())) return [];
+    var result : [Types.UnreadSummary] = [];
+    for (conversation in conversations.values()) {
+      if (conversation.participants.any(func(p) = p.equal(caller))) {
+        let u = unreadFor(caller, conversation.id);
+        if (u.count > 0) {
+          result := result.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); count = u.count }]);
+        };
+      };
+    };
+    result
   };
 };

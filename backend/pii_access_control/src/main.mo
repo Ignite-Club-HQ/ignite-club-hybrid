@@ -122,6 +122,16 @@ persistent actor {
     readers : [Principal];
   };
 
+  // A guardian relationship: `guardian` may read the PII of every pii_id in
+  // `children`. Verified (i.e. created) only via add_guardian_relationship,
+  // which requires either the governor or the guardian acting on their own
+  // behalf (self-registration flow — the caller can only ever add themself
+  // as the guardian, never impersonate another principal).
+  public type GuardianRelationship = {
+    guardian : Principal;
+    children : [Text]; // pii_id set
+  };
+
   type MasterSecretEntry = {
     key_id : Text;
     secret : [Nat8]; // 32 bytes, from raw_rand. Never exposed via any public method.
@@ -146,6 +156,11 @@ persistent actor {
   // first call to derive_media_key using raw_rand.
   var media_root_secret : ?[Nat8];
 
+  // Verified guardian -> child (pii_id) relationships backing can_read /
+  // grant_pii_read authorization. Seeded empty, populated via
+  // add_guardian_relationship.
+  var guardian_relationships : [GuardianRelationship];
+
   // ==================== Helper Functions ====================
 
   func now_ns() : Nat64 {
@@ -162,11 +177,21 @@ persistent actor {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };
 
-  // Governor, the record's domain owner, or an explicitly granted reader
-  // may read. Readers are per-record so e.g. a parent can read their own
-  // children's PII without domain-owner rights over the whole id space.
+  // True when `caller` has a verified guardian relationship (added via
+  // add_guardian_relationship) covering `pii_id`.
+  func isVerifiedGuardian(caller : Principal, pii_id : Text) : Bool {
+    not caller.equal(Principal.anonymous()) and guardian_relationships.any(
+      func(g) = g.guardian.equal(caller) and g.children.any(func(c) = c == pii_id)
+    )
+  };
+
+  // Governor, the record's domain owner, an explicitly granted reader, or a
+  // verified guardian of the child (pii_id) may read. Readers are per-record
+  // so e.g. a parent can read their own children's PII without domain-owner
+  // rights over the whole id space; guardian relationships grant the same
+  // access without requiring an explicit per-field grant.
   func can_read(caller : Principal, r : PiiRecord) : Bool {
-    isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller))
+    isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller)) or isVerifiedGuardian(caller, r.pii_id)
   };
 
   func log_audit(requesting_principal : Principal, pii_id : Text, field_id : Text, operation : Text, allowed : Bool, purpose : Text) {
@@ -428,19 +453,78 @@ persistent actor {
 
   // Grant another principal read access to one record (e.g. a second
   // guardian of the same child). Domain owner or governor only.
+  // Grants a reader read access to a record. The caller must be the
+  // governor, the record's domain owner, OR a verified guardian of the
+  // child (pii_id) — self-registered via add_guardian_relationship. This
+  // lets a verified guardian extend read access (e.g. to a co-guardian)
+  // without needing domain-owner rights over the whole id space.
   public shared ({ caller }) func grant_pii_read(pii_id : Text, field_id : Text, reader : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (reader.equal(Principal.anonymous())) return #Err("Invalid reader");
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case null { #Err("PII not found") };
       case (?r) {
-        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        let authorized = isGovernor(caller) or caller.equal(r.domain_owner) or isVerifiedGuardian(caller, pii_id);
+        if (not authorized) return #Err("Domain owner or verified guardian authorization required");
         if (not r.readers.any(func(p) = p.equal(reader))) {
           pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.concat([reader]) } } else { rec });
         };
         log_audit(caller, pii_id, field_id, "grant_read", true, "Reader access granted");
         #Ok
       };
+    }
+  };
+
+  // Registers a verified guardian relationship: `guardian` may thereafter
+  // read all PII records with pii_id == child_id via can_read, and grant
+  // reads on that child's records via grant_pii_read. Callable by the
+  // governor for any guardian, or by a principal registering themself as a
+  // guardian (self-registration — a caller can never claim guardianship on
+  // another principal's behalf).
+  public shared ({ caller }) func add_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (guardian.equal(Principal.anonymous())) return #Err("Invalid guardian");
+    if (child_id == "") return #Err("Invalid child_id");
+    if (not isGovernor(caller) and not caller.equal(guardian)) {
+      return #Err("Only the governor or the guardian themself may register this relationship");
+    };
+    let existing = guardian_relationships.find(func(g) = g.guardian.equal(guardian));
+    switch (existing) {
+      case (?g) {
+        if (not g.children.any(func(c) = c == child_id)) {
+          guardian_relationships := guardian_relationships.map(func(rec) = if (rec.guardian.equal(guardian)) { { rec with children = rec.children.concat([child_id]) } } else { rec });
+        };
+      };
+      case null {
+        guardian_relationships := guardian_relationships.concat([{ guardian = guardian; children = [child_id] }]);
+      };
+    };
+    log_audit(caller, child_id, "guardian_relationship", "add", true, "Guardian relationship registered");
+    #Ok
+  };
+
+  // Removes a guardian relationship. Callable by the governor, or by the
+  // guardian themself (a guardian may always revoke their own standing
+  // link, e.g. after a custody change).
+  public shared ({ caller }) func remove_guardian_relationship(guardian : Principal, child_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller) and not caller.equal(guardian)) {
+      return #Err("Only the governor or the guardian themself may remove this relationship");
+    };
+    guardian_relationships := Array.filter<GuardianRelationship>(
+      guardian_relationships.map(func(g) = if (g.guardian.equal(guardian)) { { g with children = g.children.filter(func(c) = c != child_id) } } else { g }),
+      func(g) = g.children.size() > 0
+    );
+    log_audit(caller, child_id, "guardian_relationship", "remove", true, "Guardian relationship removed");
+    #Ok
+  };
+
+  // Lists the pii_ids (children) the caller is a verified guardian of.
+  public shared query ({ caller }) func my_guardian_children() : async [Text] {
+    auth(caller);
+    switch (guardian_relationships.find(func(g) = g.guardian.equal(caller))) {
+      case (?g) { g.children };
+      case null { [] };
     }
   };
 
