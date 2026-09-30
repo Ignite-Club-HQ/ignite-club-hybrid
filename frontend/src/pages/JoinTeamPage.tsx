@@ -1246,7 +1246,9 @@ function SupabaseJoinTeamPage() {
       // no canister equivalent yet. Provisional: block with a clear message
       // instead of attempting any of those uuid-keyed calls for II accounts.
       const targetsMiniLeague =
-        !!inviteMiniLeagueId || !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id;
+        !!inviteMiniLeagueId ||
+        !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id ||
+        !!(invite?.metadata as { mini_league_id?: string } | null | undefined)?.mini_league_id;
       if (membershipIcpRouted && targetsMiniLeague) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
