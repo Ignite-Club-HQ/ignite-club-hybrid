@@ -75,6 +75,11 @@ export const idlFactory = ({ IDL }) => {
     'team' : IDL.Opt(IDL.Text),
     'site_id' : IDL.Opt(IDL.Text),
   });
+  const TermsAcceptance = IDL.Record({
+    'account_id' : IDL.Text,
+    'terms_version' : IDL.Nat32,
+    'accepted_at_ms' : IDL.Nat64,
+  });
   const State = IDL.Record({
     'privacy_consents' : IDL.Vec(PrivacyConsent),
     'schema' : IDL.Nat32,
@@ -86,6 +91,7 @@ export const idlFactory = ({ IDL }) => {
     'challenges' : IDL.Vec(LinkChallenge),
     'profiles' : IDL.Vec(Profile),
     'roles' : IDL.Vec(RoleGrant),
+    'terms_acceptances' : IDL.Vec(TermsAcceptance),
     'next_challenge' : IDL.Nat64,
   });
   const Result_3 = IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text });
@@ -94,11 +100,16 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_9 = IDL.Variant({ 'Ok' : Profile, 'Err' : IDL.Text });
+  const Result_12 = IDL.Variant({
+    'Ok' : IDL.Opt(TermsAcceptance),
+    'Err' : IDL.Text,
+  });
   const Result_10 = IDL.Variant({
     'Ok' : IDL.Vec(RoleGrant),
     'Err' : IDL.Text,
   });
   const Result_7 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_11 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -137,6 +148,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_profile' : IDL.Func([], [Result_9], ['query']),
+    'get_terms_acceptance' : IDL.Func([IDL.Text], [Result_12], ['query']),
     'grant_role' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [Result_4],
@@ -154,6 +166,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'my_roles' : IDL.Func([], [Result_10], ['query']),
+    'my_terms_acceptance' : IDL.Func([], [Result_12], ['query']),
     'register_account' : IDL.Func([], [Result], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
     'set_exclusion' : IDL.Func(
@@ -173,6 +186,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_11], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

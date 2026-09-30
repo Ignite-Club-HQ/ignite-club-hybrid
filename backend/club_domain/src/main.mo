@@ -42,6 +42,8 @@ persistent actor {
 
   var newsPosts : [Types.NewsPost];
   var parentInvites : [Types.ParentInvite];
+  var roleRequests : [Types.RoleRequest];
+  var teamInvites : [Types.TeamInvite];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -709,6 +711,257 @@ persistent actor {
       };
     }
   };
+  // ---- Role management: grants, requests, and member removal ----
+  // Provisional: `add_role_grant`/`remove_role_grant` mutate both the
+  // Principal-keyed `acl.roles` (the actual authorization source used by
+  // `isAdmin`/`isMember`/`canManageTeam`) and the Text-account-keyed
+  // `accountRoles` roster mirror returned by `list_role_grants`, so the
+  // roster the browser renders always matches live permissions.
+
+  func accountIdFor(caller : Principal) : Text {
+    switch (accountFor(caller)) {
+      case (?account) account.id;
+      case null "principal:" # Principal.toText(caller);
+    }
+  };
+
+  public shared ({ caller }) func add_role_grant(user : Principal, club : Text, role : Text, team : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    if (role == "") return #Err("Invalid role");
+    acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club; team }]) };
+    let accountId = accountIdFor(user);
+    accountRoles := accountRoles.concat([{ account_id = accountId; club = ?club; role; team }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func remove_role_grant(user : Principal, club : Text, role : Text, team : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.role == role and g.club == ?club and g.team == team)) };
+    let accountId = accountIdFor(user);
+    accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.role == role and g.club == ?club and g.team == team));
+    #Ok
+  };
+
+  // Removes every role a member holds in a club (club-level roles only,
+  // not global roles), the canister equivalent of the "remove member"
+  // action on ClubDetailPage/TeamDetailPage.
+  public shared ({ caller }) func remove_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.club == ?club)) };
+    let accountId = accountIdFor(user);
+    accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.club == ?club));
+    #Ok
+  };
+
+  public shared ({ caller }) func request_role(club : Text, role : Text, team : ?Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
+    auth(caller);
+    if (role == "") return #Err("Invalid role");
+    if (isExcluded(caller, club)) return #Err("Forbidden");
+    let now = nowMs();
+    let request : Types.RoleRequest = {
+      id = "rreq-" # club # "-" # Nat.toText(roleRequests.size() + 1) # "-" # Nat64.toText(now);
+      account_id = accountIdFor(caller);
+      user = caller;
+      club; role; team;
+      status = "pending";
+      created_at_ms = now;
+      decided_at_ms = null;
+      decided_by = null;
+    };
+    roleRequests := roleRequests.concat([request]);
+    #Ok(request)
+  };
+
+  public query ({ caller }) func list_role_requests(club : Text) : async { #Ok : [Types.RoleRequest]; #Err : Text } {
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    #Ok(roleRequests.filter(func(r) = r.club == club))
+  };
+
+  public shared ({ caller }) func approve_role_request(id : Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
+    auth(caller);
+    switch (roleRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        acl := { acl with roles = acl.roles.concat([{ user = req.user; role = req.role; club = ?req.club; team = req.team }]) };
+        accountRoles := accountRoles.concat([{ account_id = req.account_id; club = ?req.club; role = req.role; team = req.team }]);
+        let updated : Types.RoleRequest = { req with status = "approved"; decided_at_ms = ?nowMs(); decided_by = ?caller };
+        roleRequests := roleRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func reject_role_request(id : Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
+    auth(caller);
+    switch (roleRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        let updated : Types.RoleRequest = { req with status = "rejected"; decided_at_ms = ?nowMs(); decided_by = ?caller };
+        roleRequests := roleRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // ---- Team/club soft-delete, restore, and permanent delete ----
+
+  public shared ({ caller }) func soft_delete_team(id : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        let updated : Types.ClubTeam = { team with deleted_at_ms = ?nowMs() };
+        teams := teams.map(func(t) = if (t.id == id) updated else t);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func restore_team(id : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        let updated : Types.ClubTeam = { team with deleted_at_ms = null };
+        teams := teams.map(func(t) = if (t.id == id) updated else t);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_team_permanent(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        if (team.deleted_at_ms == null) return #Err("Team must be soft-deleted first");
+        teams := teams.filter(func(t) = t.id != id);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func soft_delete_club(id : Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, id)) return #Err("Club admin required");
+    switch (profiles.find(func(p) = p.id == id)) {
+      case null { #Err("Club not found") };
+      case (?club) {
+        let updated : Types.ClubProfile = { club with deleted_at_ms = ?nowMs() };
+        profiles := profiles.map(func(p) = if (p.id == id) updated else p);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func restore_club(id : Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, id)) return #Err("Club admin required");
+    switch (profiles.find(func(p) = p.id == id)) {
+      case null { #Err("Club not found") };
+      case (?club) {
+        let updated : Types.ClubProfile = { club with deleted_at_ms = null };
+        profiles := profiles.map(func(p) = if (p.id == id) updated else p);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_club_permanent(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, id)) return #Err("Club admin required");
+    switch (profiles.find(func(p) = p.id == id)) {
+      case null { #Err("Club not found") };
+      case (?club) {
+        if (club.deleted_at_ms == null) return #Err("Club must be soft-deleted first");
+        profiles := profiles.filter(func(p) = p.id != id);
+        settings := settings.filter(func(s) = s.club_id != id);
+        teams := teams.filter(func(t) = t.club_id != id);
+        sponsors := sponsors.filter(func(s) = s.club_id != id);
+        #Ok
+      };
+    }
+  };
+
+  // ---- Team invites (email delivery stays with Supabase; this stores the
+  // invite record and its accept/revoke state) ----
+
+  public shared ({ caller }) func create_team_invite(club_id : Text, team_id : Text, email : Text, role : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (email == "" or email.size() > 320) return #Err("Invalid email");
+    if (role == "") return #Err("Invalid role");
+    let now = nowMs();
+    let invite : Types.TeamInvite = {
+      id = "tinv-" # team_id # "-" # Nat.toText(teamInvites.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      club_id; team_id; email; role;
+      invited_by = caller;
+      created_at_ms = now;
+      expires_at_ms = now + 7 * 24 * 60 * 60 * 1000;
+      accepted_by = null;
+      revoked = false;
+    };
+    teamInvites := teamInvites.concat([invite]);
+    #Ok(invite)
+  };
+
+  public query ({ caller }) func list_team_invites(club_id : Text, team_id : ?Text) : async { #Ok : [Types.TeamInvite]; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(teamInvites.filter(func(i) = i.club_id == club_id and (team_id == null or team_id == ?i.team_id)))
+  };
+
+  public query ({ caller }) func get_team_invite(id : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
+    auth(caller);
+    switch (teamInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        #Ok(invite)
+      };
+    }
+  };
+
+  public shared ({ caller }) func accept_team_invite(id : Text) : async { #Ok : Types.TeamInvite; #Err : Text } {
+    auth(caller);
+    switch (teamInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.revoked) return #Err("Invite revoked");
+        if (invite.accepted_by != null) return #Err("Invite already accepted");
+        if (invite.expires_at_ms <= nowMs()) return #Err("Invite expired");
+        if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        acl := { acl with roles = acl.roles.concat([{ user = caller; role = invite.role; club = ?invite.club_id; team = ?invite.team_id }]) };
+        accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?invite.club_id; role = invite.role; team = ?invite.team_id }]);
+        let accepted : Types.TeamInvite = { invite with accepted_by = ?caller };
+        teamInvites := teamInvites.map(func(i) = if (i.id == id) accepted else i);
+        #Ok(accepted)
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_team_invite(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (teamInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
+        let updated : Types.TeamInvite = { invite with revoked = true };
+        teamInvites := teamInvites.map(func(i) = if (i.id == id) updated else i);
+        #Ok
+      };
+    }
+  };
+
   public query ({ caller }) func export_identity_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     #Ok({ schema = 1; accounts; exclusions = accountExclusions; families = accountFamilies; challenges = accountChallenges; roles = accountRoles; next_challenge = nextChallengeId })

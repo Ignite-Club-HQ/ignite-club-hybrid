@@ -63,6 +63,10 @@ export type Result_1 = { 'Ok' : Access } |
   { 'Err' : string };
 export type Result_10 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
+export type Result_11 = { 'Ok' : TermsAcceptance } |
+  { 'Err' : string };
+export type Result_12 = { 'Ok' : [] | [TermsAcceptance] } |
+  { 'Err' : string };
 export type Result_2 = { 'Ok' : LinkChallenge } |
   { 'Err' : string };
 export type Result_3 = { 'Ok' : State } |
@@ -97,7 +101,13 @@ export interface State {
   'challenges' : Array<LinkChallenge>,
   'profiles' : Array<Profile>,
   'roles' : Array<RoleGrant>,
+  'terms_acceptances' : Array<TermsAcceptance>,
   'next_challenge' : bigint,
+}
+export interface TermsAcceptance {
+  'account_id' : string,
+  'terms_version' : number,
+  'accepted_at_ms' : bigint,
 }
 export interface _SERVICE {
   'accept_link' : ActorMethod<[bigint], Result>,
@@ -117,6 +127,7 @@ export interface _SERVICE {
   'get_external_bindings' : ActorMethod<[string], Result_6>,
   'get_privacy_consent' : ActorMethod<[string, string], Result_8>,
   'get_profile' : ActorMethod<[], Result_9>,
+  'get_terms_acceptance' : ActorMethod<[string], Result_12>,
   'grant_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     Result_4
@@ -126,6 +137,7 @@ export interface _SERVICE {
     Result_4
   >,
   'my_roles' : ActorMethod<[], Result_10>,
+  'my_terms_acceptance' : ActorMethod<[], Result_12>,
   'register_account' : ActorMethod<[], Result>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
   'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_4>,
@@ -136,6 +148,7 @@ export interface _SERVICE {
   'set_family' : ActorMethod<[string, string], Result_4>,
   'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_7>,
   'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_11>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

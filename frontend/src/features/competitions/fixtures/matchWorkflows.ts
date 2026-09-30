@@ -110,6 +110,7 @@ export function buildMatchDetailsPayload({
 export async function updateCompetitionMatch(
   matchId: string,
   payload: Record<string, unknown>,
+  expectedRevision: number | bigint = 0,
 ): Promise<MatchMutationResult> {
   return withFeatureBackend("competitions", {
     supabase: async () => {
@@ -135,9 +136,8 @@ export async function updateCompetitionMatch(
         }
       }
       // Non-score detail edits (teams, schedule, venue, division, notes) go
-      // to update_match_details. Provisional: the Supabase payload does not
-      // carry a canister revision, so 0 is passed — confirm the canister's
-      // revision-check semantics against the deployed canister post-deploy.
+      // to update_match_details, guarded by the caller-supplied revision
+      // (defaults to 0 when the caller has no known revision yet).
       try {
         await updateLiveMatchDetails(ctx, matchId, {
           homeTeamId: String(payload.home_team_id ?? ""),
@@ -150,7 +150,7 @@ export async function updateCompetitionMatch(
           durationMinutes: typeof payload.duration_minutes === "number" ? payload.duration_minutes : null,
           arrivalMinutesBefore: typeof payload.arrival_minutes_before === "number" ? payload.arrival_minutes_before : null,
           notes: (payload.notes as string | null) ?? null,
-          expectedRevision: 0,
+          expectedRevision: Number(expectedRevision),
         });
         return { error: null };
       } catch (e) {

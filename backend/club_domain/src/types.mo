@@ -58,6 +58,9 @@ module {
     logo_url : ?Text;
     is_active : Bool;
     primary_color : ?Text;
+    // Soft-delete marker mirroring the Supabase `clubs.deleted_at` column;
+    // null means active. Permanent delete removes the record outright.
+    deleted_at_ms : ?Nat64;
   };
   public type ClubSettings = {
     contact_email : ?Text;
@@ -92,6 +95,8 @@ module {
     description : ?Text;
     logo_url : ?Text;
     team_type : ?Text;
+    // Soft-delete marker mirroring the Supabase `teams.deleted_at` column.
+    deleted_at_ms : ?Nat64;
   };
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
@@ -119,6 +124,40 @@ module {
     created_at_ms : Nat64;
     expires_at_ms : Nat64;
     accepted_by : ?Principal;
+  };
+  // A member's own request for a role, awaiting admin approval — the
+  // canister equivalent of the Supabase `role_requests` table. account_id
+  // is best-effort: the linked account id when the caller has one, else a
+  // `principal:<text>` fallback (provisional, matching the account-id=
+  // principal-text stance used elsewhere until every caller has a linked
+  // account).
+  public type RoleRequest = {
+    id : Text;
+    account_id : Text;
+    user : Principal;
+    club : Text;
+    role : Text;
+    team : ?Text;
+    status : Text; // "pending" | "approved" | "rejected"
+    created_at_ms : Nat64;
+    decided_at_ms : ?Nat64;
+    decided_by : ?Principal;
+  };
+  // A club/team admin's invite for a specific email to join a team with a
+  // given role — the canister equivalent of the Supabase `team_invites`
+  // table. Email delivery itself stays with Supabase; this only stores the
+  // invite record and its accept/revoke state.
+  public type TeamInvite = {
+    id : Text;
+    club_id : Text;
+    team_id : Text;
+    email : Text;
+    role : Text;
+    invited_by : Principal;
+    created_at_ms : Nat64;
+    expires_at_ms : Nat64;
+    accepted_by : ?Principal;
+    revoked : Bool;
   };
   public type Account = { id : Text; legacy_subject : Principal; version : Nat64; principals : [Principal] };
   public type AccountExclusion = { account_id : Text; club : Text };

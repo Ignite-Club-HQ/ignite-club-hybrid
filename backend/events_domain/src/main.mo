@@ -33,13 +33,19 @@ persistent actor {
   func validLocation(value : ?Text) : Bool {
     switch (value) { case null true; case (?text) text.size() <= 256 }
   };
+  // "fortnightly" mirrors the frontend recurring-series workflow's step
+  // classification (createEventTransaction in createEventWorkflow.ts), which
+  // buckets a 8-14 day gap as fortnightly distinct from weekly/monthly.
   func validFrequency(value : Text) : Bool {
-    value == "daily" or value == "weekly" or value == "monthly"
+    value == "daily" or value == "weekly" or value == "fortnightly" or value == "monthly"
   };
   // Recurrence step in milliseconds. Monthly steps a fixed 30 days —
   // provisional, no calendar math canister-side.
   func frequencyStepMs(frequency : Text) : Nat64 {
-    if (frequency == "daily") 86_400_000 else if (frequency == "weekly") 604_800_000 else 2_592_000_000
+    if (frequency == "daily") 86_400_000
+    else if (frequency == "weekly") 604_800_000
+    else if (frequency == "fortnightly") 1_209_600_000
+    else 2_592_000_000
   };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
@@ -335,6 +341,21 @@ persistent actor {
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validFrequency(frequency)) return #Err("Invalid recurrence");
     let value : Types.Recurrence = { event_id; frequency; until_ms }; recurrences := recurrences.filter(func(item) = item.event_id != event_id); recurrences := recurrences.concat([value]); #Ok(value)
+  };
+
+  // Per-event attendance roster for a caller who can view the event
+  // (club/team member, manager or governor). Counterpart of the Supabase
+  // `get_targeted_event_attendance_roster` RPC fallback used by
+  // EventDetailPage; child display names are resolved client-side via
+  // pii_access_control's get_decrypted_pii_batch (see live/features/vault.ts).
+  public query ({ caller }) func get_event_roster(event_id : Text) : async { #Ok : [Types.RosterEntry]; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(roster.filter(func(item) = item.event_id == event_id))
+      };
+    }
   };
 
   public query ({ caller }) func list_events(club_id : ?Text, team_id : ?Text) : async [Types.Event] {

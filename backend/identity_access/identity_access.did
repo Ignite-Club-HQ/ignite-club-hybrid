@@ -26,6 +26,11 @@ type Profile = record {
   avatar_ref : opt text;
   updated_at_ns : nat64;
 };
+type TermsAcceptance = record {
+  account_id : text;
+  terms_version : nat32;
+  accepted_at_ms : nat64;
+};
 type Init = record { governor : principal };
 type LinkChallenge = record {
   id : nat64;
@@ -47,6 +52,8 @@ type Result_7 = variant { Ok : PrivacyConsent; Err : text };
 type Result_8 = variant { Ok : bool; Err : text };
 type Result_9 = variant { Ok : Profile; Err : text };
 type Result_10 = variant { Ok : vec RoleGrant; Err : text };
+type Result_11 = variant { Ok : TermsAcceptance; Err : text };
+type Result_12 = variant { Ok : opt TermsAcceptance; Err : text };
 type RoleGrant = record {
   account_id : text;
   site_id : opt text;
@@ -65,6 +72,7 @@ type State = record {
   external_bindings : vec ExternalSiteBinding;
   privacy_consents : vec PrivacyConsent;
   profiles : vec Profile;
+  terms_acceptances : vec TermsAcceptance;
   next_challenge : nat64;
 };
 service : (Init) -> {
@@ -79,8 +87,11 @@ service : (Init) -> {
   get_external_bindings : (text) -> (Result_6) query;
   get_privacy_consent : (text, text) -> (Result_8) query;
   get_profile : () -> (Result_9) query;
+  get_terms_acceptance : (text) -> (Result_12) query;
   my_roles : () -> (Result_10) query;
+  my_terms_acceptance : () -> (Result_12) query;
   set_profile : (text, opt text) -> (Result_9);
+  set_terms_acceptance : (nat32) -> (Result_11);
   grant_role : (text, text, opt text, opt text) -> (Result_4);
   grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_4);
   revoke : (principal, nat64) -> (Result);
