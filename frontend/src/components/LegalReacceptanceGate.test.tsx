@@ -40,7 +40,7 @@ describe("LegalReacceptanceGate", () => {
       effective_at: null,
       summary: null,
     };
-    mocks.rpc.mockResolvedValue({ error: null });
+    mocks.acceptCurrentTerms.mockResolvedValue(undefined);
   });
 
   it("renders nothing while reacceptance is off or already satisfied", () => {
@@ -73,7 +73,7 @@ describe("LegalReacceptanceGate", () => {
     expect(accept).toBeEnabled();
 
     fireEvent.click(accept);
-    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("accept_current_legal_terms"));
+    await waitFor(() => expect(mocks.acceptCurrentTerms).toHaveBeenCalledOnce());
     expect(mocks.successToast).toHaveBeenCalledWith("Thanks — your acceptance has been recorded.");
     expect(mocks.refresh).toHaveBeenCalledOnce();
   });
@@ -86,7 +86,7 @@ describe("LegalReacceptanceGate", () => {
       effective_at: "2026-08-01T00:00:00.000Z",
       summary: null,
     };
-    mocks.rpc.mockResolvedValue({ error: { code: "42501", message: "technical permission detail" } });
+    mocks.acceptCurrentTerms.mockRejectedValue(new Error("technical permission detail"));
     render(<LegalReacceptanceGate />);
     fireEvent.click(screen.getByRole("link", { name: "Read Terms of Service" }));
     fireEvent.click(screen.getByRole("link", { name: "Read Privacy Policy" }));
