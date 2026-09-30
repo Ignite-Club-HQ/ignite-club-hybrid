@@ -34,6 +34,7 @@ import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListen
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { isLocalEventsCanisterUnavailable, listLocalEvents } from "@/lab/localEventsService";
@@ -84,6 +85,9 @@ export default function EventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeClubFilter } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  // Production ICP-mode gate — no canister equivalent for these
+  // child_guardians/children parent-filter lookups yet.
+  const isIcpAuthBackend = resolveAuthBackend() === "icp";
   const requestedPersona = searchParams.get("persona");
   const localIcpPersona = requestedPersona && personas.includes(requestedPersona) ? requestedPersona : "member";
   const teamFilter = searchParams.get("team");
@@ -194,10 +198,15 @@ export default function EventsPage() {
         if (r.team_id) teamIds.add(r.team_id);
       });
 
-      const [{ data: guardianRows }, { data: ownChildren }] = await Promise.all([
-        supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
-        supabase.from("children").select("id").eq("parent_id", user!.id),
-      ]);
+      // Provisional: no canister equivalent for these parent-filter lookups —
+      // ICP-mode users skip them and fall back to the unfiltered (non-parent)
+      // club list.
+      const [{ data: guardianRows }, { data: ownChildren }] = isIcpAuthBackend
+        ? [{ data: [] as any[] }, { data: [] as any[] }]
+        : await Promise.all([
+            supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
+            supabase.from("children").select("id").eq("parent_id", user!.id),
+          ]);
       const childIds = Array.from(new Set([
         ...(guardianRows || []).map((g: any) => g.child_id).filter(Boolean),
         ...(ownChildren || []).map((c: any) => c.id).filter(Boolean),
@@ -291,10 +300,15 @@ export default function EventsPage() {
       
       // Add teams via children (primary parents and guardians)
       step = performance.now();
-      const [guardianRes, ownChildrenRes] = await Promise.all([
-        supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
-        supabase.from("children").select("id").eq("parent_id", user!.id),
-      ]);
+      // Provisional: no canister equivalent for these parent-filter lookups —
+      // ICP-mode users skip them and fall back to the unfiltered (non-parent)
+      // events view.
+      const [guardianRes, ownChildrenRes] = isIcpAuthBackend
+        ? [{ data: [] as any[], error: null as any }, { data: [] as any[], error: null as any }]
+        : await Promise.all([
+            supabase.from("child_guardians").select("child_id").eq("guardian_id", user!.id),
+            supabase.from("children").select("id").eq("parent_id", user!.id),
+          ]);
       if (guardianRes.error) throw guardianRes.error;
       if (ownChildrenRes.error) throw ownChildrenRes.error;
       const childIds = Array.from(new Set([
