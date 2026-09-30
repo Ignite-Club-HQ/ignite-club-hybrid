@@ -4,6 +4,7 @@
 //   (paused ? half_paused_at : now()) - half_started_at - accumulated_pause_ms
 // Phase 1: helpers only. Phase 2 will wire these into GameTimer / Widget.
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export interface ServerTimer {
   schema_version: 2;
@@ -177,6 +178,14 @@ export async function sendTimerEvent(args: {
   if (!isServerTimerEligibleTeamId(args.teamId)) {
     throw new Error("server-timer-not-applicable");
   }
+  // Internet Identity accounts have no Supabase session/JWT, so the
+  // `pitch-timer-event` Edge Function can never authenticate them. Callers
+  // already treat `server-timer-not-applicable` as a normal "skip server
+  // sync, use local projection" signal, so reuse it instead of letting this
+  // silently fail with a confusing Supabase auth error.
+  if (resolveAuthBackend() === "icp") {
+    throw new Error("server-timer-not-applicable");
+  }
   const { data, error } = await supabase.functions.invoke("pitch-timer-event", {
 
     body: {
@@ -199,6 +208,13 @@ export async function readServerTimer(teamId: string | null): Promise<TimerReadR
   // a stale session is still in localStorage but auto-refresh hasn't run.
   const empty: TimerReadResponse = { found: false, server_now: new Date().toISOString() };
   if (!isServerTimerEligibleTeamId(teamId)) return empty;
+  // Internet Identity accounts have no Supabase session, so
+  // `pitch-timer-read` (a Supabase Edge Function gated on a Supabase JWT)
+  // can never succeed for them. No-op cleanly here instead of silently
+  // degrading through a doomed `supabase.auth.getSession()` call below —
+  // the server-anchored pitch timer stays Supabase-only until there's an
+  // ICP equivalent.
+  if (resolveAuthBackend() === "icp") return empty;
   let accessToken: string | null = null;
 
   try {

@@ -430,6 +430,12 @@ function SupabaseJoinTeamPage() {
     if (!meta?.children?.length || meta.mini_league_id) return;
     if (!["parent", "guardian"].includes(String(pendingInviteData.role))) return;
 
+    // Internet Identity users have no Supabase session and `user.email` is
+    // always undefined, so this email-match comparison intentionally always
+    // evaluates false for II accounts — it falls through to the
+    // `invited_user_id` check instead. Named pending-invite joins are blocked
+    // outright for II earlier in the accept flow (see joinMutation), so this
+    // provisioning effect never fires for an II session in practice.
     const invitedEmail = (pendingInviteData.invited_email || "").toLowerCase().trim();
     const userEmail = (user.email || "").toLowerCase().trim();
     const belongsToUser =
@@ -517,6 +523,13 @@ function SupabaseJoinTeamPage() {
    * Email-matched pending invites override the name-mismatch gate. If the
    * invite's email matches the signed-in user, we treat it as belonging to this
    * account regardless of any invited_label/display_name difference.
+   *
+   * Internet Identity users have no `user.email` (principal-based accounts,
+   * no Supabase session), so this explicitly evaluates to `false` under
+   * `resolveAuthBackend() === "icp"` rather than silently misbehaving — II
+   * accepting pending invites is already blocked with a clear error in
+   * `joinMutation`, so this only affects the pre-join name-mismatch UI, never
+   * an actual accept.
    */
   const emailMatches =
     isPendingInvite &&
@@ -604,6 +617,10 @@ function SupabaseJoinTeamPage() {
   // A matching email always wins over a name difference.
   useEffect(() => {
     if (isPendingInvite && pendingInviteData?.invited_label && user && userProfile !== undefined) {
+      // Skip under Internet Identity: `user.email` is always undefined for
+      // principal-based II accounts, so this never matches — that's
+      // intentional, not a silent failure. II pending-invite joins are
+      // blocked with a clear error before this could ever be submitted.
       const emailMatches =
         !!pendingInviteData.invited_email &&
         !!user.email &&
@@ -806,7 +823,12 @@ function SupabaseJoinTeamPage() {
     let reconciledInvite: ReconciledInvite | null = null;
 
 
-    // For pending invites, validate name match
+    // For pending invites, validate name match. Note: this whole branch is
+    // unreachable for Internet Identity accounts — `joinMutation` throws a
+    // clear "not available for Internet Identity accounts yet" error for any
+    // `isPendingInvite` join before `executeJoin` runs. The email-match
+    // comparison below would otherwise always be false for II anyway, since
+    // `user.email` is undefined for principal-based accounts.
     if (isPendingInvite && pendingInviteData?.invited_label) {
       const { data: profile } = await selectCachedProfileById(user.id);
 
