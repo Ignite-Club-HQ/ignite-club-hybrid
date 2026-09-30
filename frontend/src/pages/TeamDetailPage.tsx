@@ -83,6 +83,15 @@ import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQue
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  softDeleteLiveTeam,
+  restoreLiveTeam,
+  deleteLiveTeamPermanent,
+  removeLiveMember,
+} from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import {
@@ -889,13 +898,33 @@ export default function TeamDetailPage() {
       toast({ title: "Team deletion is unavailable in ICP lab mode", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no club_domain canister shape for team soft-delete yet.
-    if (isIcpAccount) {
-      toast({ title: "Team deletion isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
     if (isDeleting) return; // prevent duplicate submission
     setIsDeleting(true);
+    // Team soft-delete is a club_domain call with no notification/tombstone
+    // equivalent on the canister; handle it separately and skip the
+    // Supabase-only recipient lookup / notification insert below.
+    if (isFeatureRoutedToIcp("membership")) {
+      try {
+        await withFeatureBackend("membership", {
+          supabase: () => softDeleteLiveTeam({} as any, id!), // unreachable: gated by isFeatureRoutedToIcp above
+          icp: (ctx) => softDeleteLiveTeam(ctx, id!),
+        });
+        markTeamDeleted(id!);
+        queryClient.invalidateQueries({ queryKey: ["team", id] });
+        if (team?.club_id) {
+          queryClient.invalidateQueries({ queryKey: ["club", team.club_id] });
+          queryClient.invalidateQueries({ queryKey: ["club-teams", team.club_id] });
+        }
+        setShowDeleteDialog(false);
+        toast({ title: "Team deleted", description: "You can restore it within 30 days." });
+        navigate(`/clubs/${team?.club_id}`);
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to delete team.", variant: "destructive" });
+      } finally {
+        setIsDeleting(false);
+      }
+      return;
+    }
     try {
       // 1. Load + dedupe intended notification recipients (excluding initiator)
       const { data: teamMembers } = await supabase

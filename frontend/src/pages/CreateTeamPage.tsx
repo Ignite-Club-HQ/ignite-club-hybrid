@@ -20,7 +20,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { saveLiveMembershipTeam } from "@/live/features/membership";
+import { saveLiveMembershipTeam, addLiveRoleGrant } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
 import { LevelAgeCombobox } from "@/components/LevelAgeCombobox";
@@ -391,14 +392,29 @@ export default function CreateTeamPage() {
     }
 
     // Handle admin assignment
-    if (adminAssignment?.type === 'existing_user' && adminAssignment.userId && !membershipOnIcp) {
-      // Assign the selected user as team admin
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: adminAssignment.userId,
-        role: "team_admin" as AppRole,
-        club_id: clubId!,
-        team_id: team.id,
-      });
+    if (adminAssignment?.type === 'existing_user' && adminAssignment.userId) {
+      let roleError: unknown = null;
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => {
+            const { error } = await supabase.from("user_roles").insert({
+              user_id: adminAssignment.userId,
+              role: "team_admin" as AppRole,
+              club_id: clubId!,
+              team_id: team.id,
+            });
+            if (error) throw error;
+          },
+          // Provisional: adminAssignment.userId is a Supabase profile id, not
+          // a principal — this only succeeds when the id already parses as
+          // one (e.g. the assigning club is already fully ICP-provisioned).
+          // Verify account-id mapping against the deployed club_domain.
+          icp: (ctx) =>
+            addLiveRoleGrant(ctx, Principal.fromText(adminAssignment.userId!), clubId!, "team_admin", team.id),
+        });
+      } catch (error) {
+        roleError = error;
+      }
 
       setSaving(false);
       if (roleError) {
@@ -410,7 +426,18 @@ export default function CreateTeamPage() {
       }
       await invalidateTeamLists(queryClient, user?.id);
       navigate(`/teams/${team.id}`);
-    } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName && !membershipOnIcp) {
+    } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName && membershipOnIcp) {
+      // Email invites have no club_domain equivalent yet (no invite-send
+      // capability on the canister) — stay Supabase-only and surface a clear
+      // message instead of silently dropping the invite.
+      setSaving(false);
+      toast({
+        title: `${entityLabel(club)} created`,
+        description: "Email invites for team admins aren't available for Internet Identity accounts yet.",
+      });
+      await invalidateTeamLists(queryClient, user?.id);
+      navigate(`/teams/${team.id}`);
+    } else if (adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName) {
       // Create pending invite with email
       const inviteToken = crypto.randomUUID();
       const link = `${window.location.origin}/join/p/${inviteToken}`;
@@ -481,14 +508,25 @@ export default function CreateTeamPage() {
           teamName: team.name 
         } 
       });
-    } else if (!membershipOnIcp) {
+    } else {
       // Default: Assign creator as team_admin
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: user!.id,
-        role: "team_admin" as AppRole,
-        club_id: clubId!,
-        team_id: team.id,
-      });
+      let roleError: unknown = null;
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => {
+            const { error } = await supabase.from("user_roles").insert({
+              user_id: user!.id,
+              role: "team_admin" as AppRole,
+              club_id: clubId!,
+              team_id: team.id,
+            });
+            if (error) throw error;
+          },
+          icp: (ctx) => addLiveRoleGrant(ctx, ctx.identity.getPrincipal(), clubId!, "team_admin", team.id),
+        });
+      } catch (error) {
+        roleError = error;
+      }
 
       setSaving(false);
 
