@@ -41,9 +41,10 @@ interface NotificationPreferenceRow {
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function NotificationPreferencesPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (isFeatureRoutedToIcp("notifications")) {
     return <IcpUnavailablePage title="Notification preferences are unavailable in ICP lab mode" description="Preference persistence and external push or email delivery are not connected to ICP services yet." />;
   }
   return <SupabaseNotificationPreferencesPage />;

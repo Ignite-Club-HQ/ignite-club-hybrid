@@ -15,6 +15,7 @@ import { setInviteFlowContext, getInviteFlowContext, clearInviteFlowContext } fr
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -39,7 +40,7 @@ export default function JoinClubPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const [joined, setJoined] = useState(false);
   const autoJoinAttempted = useRef(false);
   

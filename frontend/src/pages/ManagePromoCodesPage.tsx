@@ -38,10 +38,11 @@ type PromoType = "subscription" | "storage";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 
 export default function ManagePromoCodesPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (resolveAuthBackend() === "icp") {
     return <IcpUnavailablePage title="Promo-code administration is unavailable in ICP lab mode" description="Promo codes remain part of the disabled external billing boundary." />;
   }
   return <SupabaseManagePromoCodesPage />;

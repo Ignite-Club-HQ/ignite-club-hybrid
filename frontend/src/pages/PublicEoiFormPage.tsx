@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { WEEKDAYS } from "@/lib/eoiUtils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type EoiConfig = {
   season_id: string;
@@ -33,8 +34,7 @@ type EoiConfig = {
 };
 
 export default function PublicEoiFormPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   if (useIcpLab) {
     return (
       <div className="container max-w-md mx-auto px-4 py-6 space-y-4">

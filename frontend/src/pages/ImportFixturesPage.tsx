@@ -21,9 +21,10 @@ import { ClubAdminConfirmBanner } from "@/components/ClubAdminConfirmBanner";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function ImportFixturesPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (isFeatureRoutedToIcp("events")) {
     return <IcpUnavailablePage title="Fixture import is unavailable in ICP lab mode" description="External calendar and document-provider imports remain disabled until an approved worker boundary is implemented." />;
   }
   return <SupabaseImportFixturesPage />;

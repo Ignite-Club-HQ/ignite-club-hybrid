@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getPasswordResetRedirectUrl } from "@/lib/passwordResetRedirect";
 import { z } from "zod";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 
@@ -48,8 +49,7 @@ const passwordSchema = z.object({
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return (
       <div className="container max-w-md mx-auto px-4 py-10">

@@ -32,6 +32,7 @@ const ManageMiniLeagueAdminsSheet = lazyWithRetry(() => import("@/components/min
 import PendingInvitesList from "@/components/PendingInvitesList";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabMiniLeagueDetail } from "@/lab/fixtureDataLayer";
 
 interface MiniLeagueEvent {
@@ -48,7 +49,7 @@ interface MiniLeagueEvent {
 }
 
 export default function MiniLeagueDetailPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
   if (useIcpLab) {
     return <IcpLabMiniLeagueDetailPage />;
   }

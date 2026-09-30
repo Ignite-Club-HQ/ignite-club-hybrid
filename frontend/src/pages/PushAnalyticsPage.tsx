@@ -74,9 +74,10 @@ interface AlertSettings {
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function PushAnalyticsPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (resolveAuthBackend() === "icp") {
     return <IcpUnavailablePage title="Push analytics are unavailable in ICP lab mode" description="Push delivery and analytics remain disabled external-provider workflows." />;
   }
   return <SupabasePushAnalyticsPage />;

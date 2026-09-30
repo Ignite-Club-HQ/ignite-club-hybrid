@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { getPasswordResetRedirectUrl } from "@/lib/passwordResetRedirect";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const emailSchema = z.string().email("Please enter a valid email address");
 // Server-side verification is authoritative; this is the last-line client
@@ -26,8 +27,7 @@ const SIX_DIGIT_CODE = /^\d{6}$/;
 export default function VerifyResetCodePage() {
   usePageTitle("Verify Reset Code");
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = resolveAuthBackend() === "icp";
   if (useIcpLab) {
     return (
       <div className="container max-w-md mx-auto px-4 py-10">

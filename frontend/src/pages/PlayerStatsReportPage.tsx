@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabPlayerStatsReport } from "@/lab/fixtureDataLayer";
 
 interface Team {
@@ -40,8 +41,7 @@ interface GameEvent {
 
 export default function PlayerStatsReportPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
-
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
   if (useIcpLab) {
     const report = getLocalLabPlayerStatsReport("team-icp-001");
     return (

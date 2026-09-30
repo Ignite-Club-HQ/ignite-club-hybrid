@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabMiniLeagues } from "@/lab/fixtureDataLayer";
 
 interface MiniLeague {
@@ -42,7 +43,7 @@ interface MiniLeague {
 }
 
 export default function MiniLeaguesPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
   if (useIcpLab) {
     return <IcpLabMiniLeaguesPage />;
   }
