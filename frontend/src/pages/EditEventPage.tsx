@@ -888,6 +888,7 @@ function SupabaseEditEventPage() {
           selectedEndTime: newEndIso,
           occurrenceDates: dates,
           recurrenceEndDate,
+          frequency: recurrencePattern,
         });
 
         toast({

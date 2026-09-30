@@ -30,6 +30,16 @@ export type RecurringConversionInput = {
   selectedEndTime: string | null;
   occurrenceDates: Date[];
   recurrenceEndDate: string;
+  /**
+   * User-selected recurrence cadence from EditEventPage's recurrence
+   * selector ("daily" | "weekly" | "biweekly" | "monthly"). Supabase ignores
+   * this (occurrenceDates already reflect the pattern); the ICP branch maps
+   * it onto the canister's frequency vocabulary, which spells the two-week
+   * cadence "fortnightly" rather than "biweekly" — provisional mapping,
+   * verify against the live events_domain canister's accepted frequency
+   * strings post-deploy.
+   */
+  frequency: "daily" | "weekly" | "biweekly" | "monthly";
 };
 
 /**
@@ -200,7 +210,8 @@ export async function convertEventToRecurringSeries(
         description: String(updates.description ?? ""),
         eventType: String(updates.type ?? "training"),
         location: (updates.location_name as string | null | undefined) ?? null,
-        frequency: "weekly",
+        // Canister vocabulary uses "fortnightly" instead of "biweekly".
+        frequency: input.frequency === "biweekly" ? "fortnightly" : input.frequency,
         firstStartsAtMs,
         firstEndsAtMs: durationMs === null ? firstStartsAtMs : firstStartsAtMs + durationMs,
         untilMs,
