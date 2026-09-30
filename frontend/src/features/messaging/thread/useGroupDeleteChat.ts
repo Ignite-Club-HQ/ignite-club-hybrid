@@ -27,7 +27,7 @@ export const useGroupDeleteChat = ({
 }: UseGroupDeleteChatOptions) =>
   useMutation({
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Chat deletion isn	 available yet on the Internet Identity messaging backend.");
+        throw new Error("Chat deletion isn't available yet on the Internet Identity messaging backend.");
       }
     mutationFn: async () => {
       if (useIcpLab) return;

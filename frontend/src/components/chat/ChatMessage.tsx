@@ -496,10 +496,7 @@ function ChatMessageInner({
   const removeReactionMutation = useMutation({
     mutationFn: async (reactionId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Reactions aren	 available yet on the Internet Identity messaging backend.");
-      if (isFeatureRoutedToIcp("messaging")) {
         throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
-      }
       }
       if (useIcpLab) return;
       const doDelete = async () => {
