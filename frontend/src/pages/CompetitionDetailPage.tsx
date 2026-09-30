@@ -20,7 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveCompetitionTeam } from "@/live/features/competitions";
+import { registerLiveCompetitionTeam, isLiveCompetitionAdmin, assignLiveDivision } from "@/live/features/competitions";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
@@ -277,17 +277,17 @@ function SupabaseCompetitionDetailPage() {
   const { data: isAdmin = false, isLoading: isAdminLoading } = useQuery({
     queryKey: ["competition-isadmin", id, user?.id],
     enabled: !!id && !!user,
-    queryFn: async () => {
-      // PROVISIONAL: no canister equivalent for is_competition_admin yet.
-      // Fall back to "not an admin" in ICP mode, which safely hides the
-      // management UI instead of querying Supabase by principal id.
-      if (resolveAuthBackend() === "icp") return false;
-      const { data } = await supabase.rpc("is_competition_admin", {
-        _user_id: user!.id,
-        _competition_id: id!,
-      });
-      return !!data;
-    },
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data } = await supabase.rpc("is_competition_admin", {
+            _user_id: user!.id,
+            _competition_id: id!,
+          });
+          return !!data;
+        },
+        icp: async (ctx) => isLiveCompetitionAdmin(ctx, id!),
+      }),
   });
 
   const organizerClubId = (competition as any)?.organizer_club_id ?? null;
@@ -704,6 +704,15 @@ function TeamsByDivision({
       ? (divisions.find((d: any) => d.id === divisionId)?.name ?? "Unassigned")
       : "Unassigned";
     const divFilter = [entry.division_id, divisionId].filter(Boolean) as string[];
+
+    // ICP mode has no competition_matches table to check for affected
+    // fixtures, so assign directly through the canister without the
+    // Supabase move-confirmation flow.
+    if (resolveAuthBackend() === "icp") {
+      await doAssignDivision(entry.id, divisionId, false, entry.team_id, divFilter);
+      return;
+    }
+
     let count = 0;
     try {
       let q = supabase
@@ -741,13 +750,23 @@ function TeamsByDivision({
     affectedDivisionIds: string[] = [],
   ) => {
     setSavingId(entryId);
-    const { error } = await supabase
-      .from("competition_entries")
-      .update({ division_id: divisionId })
-      .eq("id", entryId);
-    if (error) {
+    try {
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("competition_entries")
+            .update({ division_id: divisionId })
+            .eq("id", entryId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          if (!teamId) throw new Error("Team id is required to assign a division");
+          await assignLiveDivision(ctx, competitionId, teamId, divisionId);
+        },
+      });
+    } catch (error: any) {
       setSavingId(null);
-      toast({ title: "Could not move team", description: error.message, variant: "destructive" });
+      toast({ title: "Could not move team", description: error?.message, variant: "destructive" });
       return;
     }
     let cleared = false;

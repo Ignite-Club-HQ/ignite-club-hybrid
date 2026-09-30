@@ -1,6 +1,7 @@
+import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { unwrapCandid } from "./candid";
+import { candidOpt, unwrapCandid } from "./candid";
 import {
   getLiveTeam,
   listLiveClubs,
@@ -53,3 +54,139 @@ export async function listLiveMembershipClubs(ctx: FeatureBackendContext) {
 export async function getLiveMembershipWhoami(ctx: FeatureBackendContext) {
   return liveClubWhoami(ctx);
 }
+
+/**
+ * ACL role grants — direct add/remove of an `AccountRole` entry (club_admin
+ * / team_admin / coach / etc.). `team` scopes the grant to a team; omit for
+ * a club-wide grant.
+ */
+export async function addLiveRoleGrant(
+  ctx: FeatureBackendContext,
+  user: Principal,
+  club: string,
+  role: string,
+  team?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.add_role_grant(user, club, role, candidOpt(team)),
+    "Add role grant",
+  );
+}
+
+export async function removeLiveRoleGrant(
+  ctx: FeatureBackendContext,
+  user: Principal,
+  club: string,
+  role: string,
+  team?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_role_grant(user, club, role, candidOpt(team)),
+    "Remove role grant",
+  );
+}
+
+/** Removes every role grant a member holds in a club (all teams included). */
+export async function removeLiveMember(
+  ctx: FeatureBackendContext,
+  club: string,
+  user: Principal,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_member(club, user), "Remove member");
+}
+
+/**
+ * Self-service role requests — the canister counterpart of the Supabase
+ * `role_requests` table (a member asks for a role; a club/team admin
+ * approves or rejects it).
+ */
+export async function requestLiveRole(
+  ctx: FeatureBackendContext,
+  club: string,
+  role: string,
+  team?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.request_role(club, role, candidOpt(team)),
+    "Request role",
+  );
+}
+
+export async function listLiveRoleRequests(ctx: FeatureBackendContext, club: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_role_requests(club), "List role requests");
+}
+
+export async function approveLiveRoleRequest(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.approve_role_request(id), "Approve role request");
+}
+
+export async function rejectLiveRoleRequest(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.reject_role_request(id), "Reject role request");
+}
+
+/**
+ * Team invites — token-based invite links scoped to a team, the canister
+ * counterpart of the Supabase `pending_invites`/team-invite RPCs. Unlike the
+ * Supabase flow, the canister does not send email; callers must surface the
+ * invite link/id through their own channel.
+ */
+export async function createLiveTeamInvite(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  email: string,
+  role: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_team_invite(clubId, teamId, email, role),
+    "Create team invite",
+  );
+}
+
+export async function listLiveTeamInvites(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_team_invites(clubId, candidOpt(teamId)),
+    "List team invites",
+  );
+}
+
+export async function getLiveTeamInvite(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_team_invite(id), "Load team invite");
+}
+
+export async function acceptLiveTeamInvite(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_team_invite(id), "Accept team invite");
+}
+
+export async function revokeLiveTeamInvite(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_team_invite(id), "Revoke team invite");
+}
+
+/**
+ * Team lifecycle re-exports (club_domain owns team records; see club.ts for
+ * the underlying implementation).
+ */
+export {
+  softDeleteLiveTeam,
+  restoreLiveTeam,
+  deleteLiveTeamPermanent,
+  softDeleteLiveClub,
+  restoreLiveClub,
+  deleteLiveClubPermanent,
+} from "./club";
