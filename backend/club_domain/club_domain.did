@@ -1,3 +1,16 @@
+type TeamInvite = 
+ record {
+   accepted_by: opt principal;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   revoked: bool;
+   role: text;
+   team_id: text;
+ };
 type Team = 
  record {
    club: text;
@@ -20,6 +33,19 @@ type Snapshot =
                 Listing;
               };
    schema: nat32;
+ };
+type RoleRequest = 
+ record {
+   account_id: text;
+   club: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   id: text;
+   role: text;
+   status: text;
+   team: opt text;
+   user: principal;
  };
 type RoleGrant = 
  record {
@@ -127,6 +153,7 @@ type ClubTeam =
  record {
    age_group: opt text;
    club_id: text;
+   deleted_at_ms: opt nat64;
    description: opt text;
    division: opt text;
    gender: opt text;
@@ -161,6 +188,7 @@ type ClubSettings =
 type ClubProfile = 
  record {
    created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
    description: opt text;
    id: text;
    is_active: bool;
@@ -224,6 +252,19 @@ service : {
       Err: text;
       Ok: ParentInvite;
     });
+  accept_team_invite: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok: TeamInvite;
+                                     });
+  add_role_grant: (user: principal, club: text, role: text, team:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  approve_role_request: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleRequest;
+                                       });
   begin_identity_link: (target: principal) ->
    (variant {
       Err: text;
@@ -239,6 +280,15 @@ service : {
                Err: text;
                Ok: ParentInvite;
              });
+  create_team_invite: (club_id: text, team_id: text, email: text, role:
+   text) -> (variant {
+               Err: text;
+               Ok: TeamInvite;
+             });
+  delete_club_permanent: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
   delete_news_post: (id: text) -> (variant {
                                      Err: text;
                                      Ok;
@@ -247,6 +297,10 @@ service : {
                                    Err: text;
                                    Ok;
                                  });
+  delete_team_permanent: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
   export_acl: () -> (variant {
                        Err: text;
                        Ok: Config;
@@ -295,6 +349,10 @@ service : {
                              Err: text;
                              Ok: opt ClubTeam;
                            }) query;
+  get_team_invite: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: TeamInvite;
+                                  }) query;
   import_frozen_club: (club: text, listing: Listing) ->
    (variant {
       Err: text;
@@ -336,10 +394,20 @@ service : {
       Err: text;
       Ok: vec AccountRole;
     }) query;
+  list_role_requests: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: vec RoleRequest;
+    }) query;
   list_sponsors: (club_id: text) ->
    (variant {
       Err: text;
       Ok: vec ClubSponsor;
+    }) query;
+  list_team_invites: (club_id: text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: vec TeamInvite;
     }) query;
   list_teams: (club_id: text) ->
    (variant {
@@ -350,15 +418,45 @@ service : {
                                Err: text;
                                Ok: Mutation;
                              });
+  reject_role_request: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: RoleRequest;
+                                      });
+  remove_member: (club: text, user: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+  remove_role_grant: (user: principal, club: text, role: text, team:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
   replace_acl: (rev: nat64, new_acl: Acl) -> (variant {
                                                 Err: text;
                                                 Ok: nat64;
                                               });
+  request_role: (club: text, role: text, team: opt text) ->
+   (variant {
+      Err: text;
+      Ok: RoleRequest;
+    });
+  restore_club: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: ClubProfile;
+                               });
+  restore_team: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: ClubTeam;
+                               });
   revoke_identity: (target: principal, expected_version: nat64) ->
    (variant {
       Err: text;
       Ok: Account;
     });
+  revoke_team_invite: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
   save_club_profile: (profile: ClubProfile) ->
    (variant {
       Err: text;
@@ -378,6 +476,14 @@ service : {
                                     Err: text;
                                     Ok: ClubTeam;
                                   });
+  soft_delete_club: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok: ClubProfile;
+                                   });
+  soft_delete_team: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok: ClubTeam;
+                                   });
   unfreeze_club: (club: text, rev: nat64) -> (variant {
                                                 Err: text;
                                                 Ok;
