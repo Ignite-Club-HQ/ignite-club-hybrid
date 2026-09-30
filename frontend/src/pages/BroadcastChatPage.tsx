@@ -74,6 +74,8 @@ import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 
 import { useMessageReads } from "@/hooks/useMessageReads";
 import { useMarkVisibleChatMessagesRead } from "@/hooks/useMarkVisibleChatMessagesRead";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { queueMessage } from "@/lib/messageQueue";
@@ -859,14 +861,33 @@ export default function BroadcastChatPage() {
         return;
       }
       
-      const { error } = await supabase.from("broadcast_messages").insert({
-        text,
-        author_id: user!.id,
-        image_url,
-        reply_to_id,
-        target_club_ids: targetClubIds.length > 0 ? targetClubIds : null,
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("broadcast_messages").insert({
+            text,
+            author_id: user!.id,
+            image_url,
+            reply_to_id,
+            target_club_ids: targetClubIds.length > 0 ? targetClubIds : null,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fixed "broadcast" conversation id, matching the ["broadcast-messages"]
+          // query key / queueMessage targetId convention. Reply threading and
+          // club targeting are Supabase-only.
+          const attachment = image_url
+            ? { kind: "image", refId: image_url, url: image_url }
+            : (() => {
+                const poll = /\[poll:([^\]]+)\]/.exec(text);
+                if (poll) return { kind: "poll", refId: poll[1], url: null };
+                const news = /\[news:([^\]]+)\]/.exec(text);
+                if (news) return { kind: "news", refId: news[1], url: null };
+                return null;
+              })();
+          await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment);
+        },
       });
-      if (error) throw error;
     },
     onMutate: async ({ text, image_url, reply_to_id }) => {
       await queryClient.cancelQueries({ queryKey: ["broadcast-messages"] });
@@ -966,8 +987,15 @@ export default function BroadcastChatPage() {
   const updateMessageMutation = useMutation({
     mutationFn: async () => {
       if (!editingMessage) return;
-      const { error } = await supabase.from("broadcast_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("broadcast_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await updateLiveMessage(ctx, editingMessage.id, message.trim());
+        },
+      });
     },
     onSuccess: () => {
       setMessage("");
