@@ -58,6 +58,38 @@ persistent actor {
   // A folder with restricted_roles is visible only to the governor or a
   // caller holding one of the listed roles within the folder's club/team
   // scope. Empty restricted_roles means visible to any club member.
+  // Breadcrumb of folder names from root to `folder`, newest ancestor last.
+  // Bounded by depth 32 to avoid runaway loops on a corrupted parent chain.
+  func folderPath(folder : Types.VaultFolder) : [Text] {
+    var names : [Text] = [folder.name];
+    var current = folder;
+    var guard = 0;
+    label walking loop {
+      guard += 1;
+      if (guard > 32) break walking;
+      switch (current.parent_id) {
+        case null { break walking };
+        case (?parentId) {
+          switch (folders.find(func(item) = item.id == parentId)) {
+            case null { break walking };
+            case (?parent) { names := Array.concat([parent.name], names); current := parent };
+          };
+        };
+      };
+    };
+    names
+  };
+
+  // Joins a file with its folder's display name/path for the vault browser,
+  // which otherwise has to issue a second lookup per file. A file with no
+  // (or a deleted) folder returns null name/path — same as vault root.
+  func withFolderJoin(file : Types.VaultFile) : Types.VaultFileWithFolder {
+    switch (folders.find(func(item) = item.id == file.folder_id)) {
+      case null { { file; folder_name = null; folder_path = [] } };
+      case (?folder) { { file; folder_name = ?folder.name; folder_path = folderPath(folder) } };
+    }
+  };
+
   func canViewFolder(caller : Principal, folder : Types.VaultFolder) : Bool {
     if (folder.restricted_roles.size() == 0 or isGovernor(caller)) return true;
     roles.any(func(grant) =
@@ -212,6 +244,17 @@ persistent actor {
     #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null))
   };
 
+  // Folder-joined counterpart of list_files for the vault browser's folder
+  // path/name breadcrumbs — same visibility rules as list_files.
+  public query ({ caller }) func list_files_with_folder(folder_id : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    auth(caller);
+    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+      case (?folder) { if (not canViewFolder(caller, folder)) return #Ok([]) };
+      case null {};
+    };
+    #Ok(files.filter(func(item) = item.folder_id == folder_id and item.deleted_at_ms == null).map(withFolderJoin))
+  };
+
   public query ({ caller }) func list_club_files(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) =
@@ -223,6 +266,20 @@ persistent actor {
         case null { true };
         case (?folder) { canViewFolder(caller, folder) };
       })))
+  };
+
+  // Folder-joined counterpart of list_club_files — same filters/visibility.
+  public query ({ caller }) func list_club_files_with_folder(club : Text, team : ?Text, mini_league_id : ?Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    auth(caller);
+    #Ok(files.filter(func(item) =
+      item.club == club and
+      item.deleted_at_ms == null and
+      (team == null or item.team == team or item.team == null) and
+      (mini_league_id == null or item.mini_league_id == mini_league_id) and
+      (switch (folders.find(func(f) = f.id == item.folder_id)) {
+        case null { true };
+        case (?folder) { canViewFolder(caller, folder) };
+      })).map(withFolderJoin))
   };
 
   public shared ({ caller }) func trash_file(id : Text) : async { #Ok : Types.VaultFile; #Err : Text } {
@@ -312,5 +369,12 @@ persistent actor {
   public query ({ caller }) func list_trashed_files(club : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null))
+  };
+
+  // Folder-joined counterpart of list_trashed_files, for the trash view's
+  // "was in <folder>" breadcrumb.
+  public query ({ caller }) func list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
+    auth(caller);
+    #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null).map(withFolderJoin))
   };
 };

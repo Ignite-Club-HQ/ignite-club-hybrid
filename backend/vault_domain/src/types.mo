@@ -40,6 +40,15 @@ module {
     blob_ref : ?BlobRef;
   };
 
+  // Folder path/name join for the vault browser (breadcrumb of ancestor
+  // folder names, root first). Empty path/null name means no live folder
+  // (vault root or a deleted folder).
+  public type VaultFileWithFolder = {
+    file : VaultFile;
+    folder_name : ?Text;
+    folder_path : [Text];
+  };
+
   public type RoleGrant = {
     user : Principal;
     role : Text;

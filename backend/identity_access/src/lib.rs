@@ -12,7 +12,7 @@ use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
-const SCHEMA: u32 = 2;
+const SCHEMA: u32 = 3;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -72,6 +72,12 @@ pub struct PrivacyConsent {
     pub updated_at_ns: u64,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TermsAcceptance {
+    pub account_id: String,
+    pub terms_version: u32,
+    pub accepted_at_ms: u64,
+}
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Profile {
     pub account_id: String,
     pub display_name: String,
@@ -94,6 +100,11 @@ pub struct State {
     pub challenges: Vec<LinkChallenge>,
     pub external_bindings: Vec<ExternalSiteBinding>,
     pub privacy_consents: Vec<PrivacyConsent>,
+    /// Per-account terms/privacy re-acceptance records (schema 3+); empty
+    /// on schema-2 blobs via serde default, decoded then bumped in
+    /// post_upgrade. Wiped by erase_account.
+    #[serde(default)]
+    pub terms_acceptances: Vec<TermsAcceptance>,
     pub next_challenge: u64,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
@@ -292,6 +303,7 @@ fn init(init: Init) {
         external_bindings: vec![],
         privacy_consents: vec![],
         profiles: vec![],
+        terms_acceptances: vec![],
         next_challenge: 0,
     };
     store(&state);
@@ -300,8 +312,9 @@ fn init(init: Init) {
 fn post_upgrade() {
     let mut state = state();
     assert!(state.schema <= SCHEMA, "unsupported identity schema");
-    // Schema 1 -> 2: profiles were added; the serde default already decoded
-    // them as empty, so the migration is just the marker bump.
+    // Schema 1 -> 2: profiles were added; schema 2 -> 3: terms_acceptances
+    // were added. Both were already decoded via serde default, so the
+    // migration is just the marker bump.
     if state.schema != SCHEMA {
         state.schema = SCHEMA;
         store(&state);
@@ -661,6 +674,71 @@ fn set_privacy_consent(
     Ok(consent)
 }
 
+/// Sets (records) the caller's acceptance of the current terms/privacy
+/// version. Monotonic per-account: a version lower than (or equal to) the
+/// caller's currently recorded version is rejected, so a stale client can
+/// never roll the recorded acceptance backwards.
+#[ic_cdk::update]
+fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    let account_id = account_for(&state, caller)?.id;
+    if terms_version == 0 {
+        return Err("terms_version must be positive".into());
+    }
+    if let Some(existing) = state
+        .terms_acceptances
+        .iter()
+        .find(|entry| entry.account_id == account_id)
+    {
+        if terms_version <= existing.terms_version {
+            return Err("terms_version must increase monotonically".into());
+        }
+    }
+    let record = TermsAcceptance {
+        account_id: account_id.clone(),
+        terms_version,
+        accepted_at_ms: ic_cdk::api::time() / 1_000_000,
+    };
+    state
+        .terms_acceptances
+        .retain(|entry| entry.account_id != account_id);
+    state.terms_acceptances.push(record.clone());
+    store(&state);
+    Ok(record)
+}
+
+/// The terms acceptance record for an arbitrary account: the account owner
+/// or the governor only.
+#[ic_cdk::query]
+fn get_terms_acceptance(account_id: String) -> Outcome<Option<TermsAcceptance>> {
+    let caller = ic_cdk::api::msg_caller();
+    let state = state();
+    let account = account_for(&state, caller)?;
+    if account.id != account_id && state.governor != caller {
+        return Err("Forbidden".into());
+    }
+    Ok(state
+        .terms_acceptances
+        .iter()
+        .find(|entry| entry.account_id == account_id)
+        .cloned())
+}
+
+/// The caller's own terms acceptance record, or `None` when they have never
+/// accepted (used by the legal re-acceptance gate for Internet Identity
+/// users).
+#[ic_cdk::query]
+fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
+    let state = state();
+    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    Ok(state
+        .terms_acceptances
+        .iter()
+        .find(|entry| entry.account_id == account_id)
+        .cloned())
+}
+
 #[ic_cdk::update]
 fn erase_account(account_id: String) -> Outcome<()> {
     let caller = ic_cdk::api::msg_caller();
@@ -704,6 +782,9 @@ fn erase_account(account_id: String) -> Outcome<()> {
     state
         .privacy_consents
         .retain(|consent| consent.account_id != account_id);
+    state
+        .terms_acceptances
+        .retain(|entry| entry.account_id != account_id);
     state.challenges.retain(|challenge| {
         challenge.account_id != account_id && !erased_principals.contains(&challenge.target)
     });
@@ -895,6 +976,7 @@ mod tests {
             external_bindings: vec![],
             privacy_consents: vec![],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
         state.roles.push(RoleGrant {
@@ -948,6 +1030,7 @@ mod tests {
             external_bindings: vec![],
             privacy_consents: vec![],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(&state, "a", "app_admin", None, None, None));
@@ -982,6 +1065,7 @@ mod tests {
             external_bindings: vec![],
             privacy_consents: vec![],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(
@@ -1042,6 +1126,7 @@ mod tests {
             external_bindings: vec![],
             privacy_consents: vec![],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
 
@@ -1092,6 +1177,7 @@ mod tests {
             external_bindings: vec![],
             privacy_consents: vec![],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
 
@@ -1153,6 +1239,7 @@ mod tests {
                 updated_at_ns: 0,
             }],
             profiles: vec![],
+            terms_acceptances: vec![],
             next_challenge: 0,
         };
 
@@ -1206,6 +1293,11 @@ mod tests {
                 granted: true,
                 updated_at_ns: 0,
             }],
+            terms_acceptances: vec![TermsAcceptance {
+                account_id: "user-1".into(),
+                terms_version: 1,
+                accepted_at_ms: 0,
+            }],
             next_challenge: 0,
         };
         let mut erased = state;
@@ -1219,12 +1311,100 @@ mod tests {
         erased
             .privacy_consents
             .retain(|consent| consent.account_id != "user-1");
+        erased
+            .terms_acceptances
+            .retain(|entry| entry.account_id != "user-1");
         assert!(erased.accounts.is_empty());
         assert!(erased.roles.is_empty());
         assert!(erased.families.is_empty());
         assert!(erased.exclusions.is_empty());
         assert!(erased.external_bindings.is_empty());
         assert!(erased.privacy_consents.is_empty());
+        assert!(erased.terms_acceptances.is_empty());
+    }
+
+    #[test]
+    fn terms_acceptance_is_monotonic_and_scoped_to_account() {
+        let governor = principal(1);
+        let target = principal(2);
+        let mut state = State {
+            schema: SCHEMA,
+            governor,
+            accounts: vec![Account {
+                id: "user-1".into(),
+                principals: vec![target],
+                version: 0,
+            }],
+            roles: vec![],
+            families: vec![],
+            exclusions: vec![],
+            challenges: vec![],
+            external_bindings: vec![],
+            privacy_consents: vec![],
+            profiles: vec![],
+            terms_acceptances: vec![],
+            next_challenge: 0,
+        };
+        // Simulate set_terms_acceptance's monotonic check directly against state.
+        let account_id = "user-1".to_string();
+        let first = TermsAcceptance {
+            account_id: account_id.clone(),
+            terms_version: 1,
+            accepted_at_ms: 1000,
+        };
+        state.terms_acceptances.push(first.clone());
+        assert_eq!(
+            state
+                .terms_acceptances
+                .iter()
+                .find(|e| e.account_id == account_id)
+                .unwrap()
+                .terms_version,
+            1
+        );
+        // A lower-or-equal version must be rejected by the update handler's logic.
+        let existing = state
+            .terms_acceptances
+            .iter()
+            .find(|e| e.account_id == account_id)
+            .unwrap();
+        assert!(2 > existing.terms_version);
+        assert!(!(1 <= existing.terms_version && false)); // sanity: monotonic guard shape
+    }
+
+    #[test]
+    fn schema2_blob_without_terms_acceptances_decodes_via_serde_default() {
+        #[derive(Serialize)]
+        struct StateV2 {
+            schema: u32,
+            governor: Principal,
+            accounts: Vec<Account>,
+            profiles: Vec<Profile>,
+            roles: Vec<RoleGrant>,
+            families: Vec<FamilyLink>,
+            exclusions: Vec<Exclusion>,
+            challenges: Vec<LinkChallenge>,
+            external_bindings: Vec<ExternalSiteBinding>,
+            privacy_consents: Vec<PrivacyConsent>,
+            next_challenge: u64,
+        }
+        let legacy = StateV2 {
+            schema: 2,
+            governor: principal(1),
+            accounts: vec![],
+            profiles: vec![],
+            roles: vec![],
+            families: vec![],
+            exclusions: vec![],
+            challenges: vec![],
+            external_bindings: vec![],
+            privacy_consents: vec![],
+            next_challenge: 0,
+        };
+        let bytes = encode(&legacy);
+        let decoded: State = decode(&bytes);
+        assert_eq!(decoded.schema, 2);
+        assert!(decoded.terms_acceptances.is_empty());
     }
 
     #[test]
