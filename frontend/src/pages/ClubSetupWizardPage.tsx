@@ -31,7 +31,7 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import {
   StepIntro,
@@ -120,7 +120,7 @@ export default function ClubSetupWizardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
   usePageTitle("Set up your club");
 

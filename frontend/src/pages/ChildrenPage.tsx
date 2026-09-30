@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -69,7 +69,7 @@ interface ChildAssignment {
 }
 
 export default function ChildrenPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   if (useIcpLab) return <IcpChildrenPage />;
   return <SupabaseChildrenPage />;
 }

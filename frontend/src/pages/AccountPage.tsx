@@ -9,11 +9,11 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { requireAccessToken, SessionExpiredError, SESSION_EXPIRED_MESSAGE } from "@/lib/requireAccessToken";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AccountPage() {
   const { user, signOut } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { toast } = useToast();
   const [deletingAccount, setDeletingAccount] = useState(false);

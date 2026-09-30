@@ -29,7 +29,7 @@ import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
 import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 // TeamAdminInviteDialog now shown on TeamDetailPage via navigation state
 import type { Database } from "@/integrations/supabase/types";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -44,7 +44,7 @@ export default function CreateTeamPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
 
   const [name, setName] = useState("");

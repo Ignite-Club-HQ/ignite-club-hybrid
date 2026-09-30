@@ -8,7 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const ICP_LAB_ADMIN_LINKS: { to: string; label: string }[] = [
   { to: "/admin/users", label: "Manage users" },
@@ -20,7 +20,7 @@ const ICP_LAB_ADMIN_LINKS: { to: string; label: string }[] = [
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (resolveAuthBackend() === "icp") {
     return (
       <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
         <div className="flex items-center gap-2">

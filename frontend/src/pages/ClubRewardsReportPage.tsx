@@ -41,7 +41,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { downloadTextReport } from "@/lib/reportExport";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubDetail, getLocalLabRewardRedemptions, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 export default function ClubRewardsReportPage() {
@@ -49,7 +49,7 @@ export default function ClubRewardsReportPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
   
   // Default to current month
   const [startDate, setStartDate] = useState<Date>(startOfMonth(new Date()));

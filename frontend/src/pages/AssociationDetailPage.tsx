@@ -18,14 +18,14 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { AssociationEventsPanel } from "@/components/AssociationEventsPanel";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabAssociationDetail } from "@/lab/fixtureDataLayer";
 
 export default function AssociationDetailPage() {
   usePageTitle("Association");
   const navigate = useNavigate();
   const { associationId } = useParams<{ associationId: string }>();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
 
   if (useIcpLab) {
     const association = getLocalLabAssociationDetail(associationId ?? "association-icp-001");

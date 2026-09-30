@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import LegalPageEmbed from "@/components/LegalPageEmbed";
 import { Button } from "@/components/ui/button";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
 
 /**
@@ -14,7 +14,7 @@ import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
 export default function ClubLinkEmbedPage() {
   const { linkId } = useParams<{ linkId: string }>();
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
 
   const { data, isLoading } = useQuery({

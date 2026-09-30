@@ -15,12 +15,12 @@ import {
 } from "@/features/news/useClubNews";
 import ClubNewsComposer from "@/components/news/ClubNewsComposer";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /** Club News archive — newest first. */
 export default function ClubNewsPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("news");
   const { activeClubFilter } = useClubTheme();
   const { data: posts = [], isLoading } = useClubNewsFeed(activeClubFilter);
   const { data: publishableClubs = [] } = useNewsPublishableClubs();

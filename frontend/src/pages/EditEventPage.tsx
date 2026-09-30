@@ -58,7 +58,7 @@ import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
 import { SeriesEndDateEditor } from "@/components/event/SeriesEndDateEditor";
 import { EventEditScheduleSection } from "@/components/event/EventEditScheduleSection";
 import { eventKeys } from "@/lab/eventQueryKeys";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalEvent, setLocalEventRecurrence, updateLocalEvent } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
 import {
@@ -77,7 +77,7 @@ const EVENT_TYPES = [
 ];
 
 export default function EditEventPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("events");
 
   if (useIcpLab) {
     return <IcpEditEventPage />;

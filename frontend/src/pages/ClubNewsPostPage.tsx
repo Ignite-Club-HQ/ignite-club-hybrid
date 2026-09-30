@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClubNewsPost, useClubTeamsForNews, useTeamNamesByIds } from "@/features/news/useClubNews";
 import { parseNewsAttachments } from "@/features/news/newsAttachments";
 import NewsArticleBody from "@/components/news/NewsArticleBody";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 
 
@@ -19,7 +19,7 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 export default function ClubNewsPostPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("news");
   const { data: post, isLoading } = useClubNewsPost(newsId);
   const { data: teams = [] } = useClubTeamsForNews(post?.club_id ?? null);
   const { data: targetTeams = [] } = useTeamNamesByIds(post?.target_team_ids);

@@ -8,14 +8,14 @@ import ClubRewardsManager from "@/components/ClubRewardsManager";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabRewards } from "@/lab/fixtureDataLayer";
 
 export default function ClubRewardsPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveAuthBackend() === "icp";
 
   // Fetch club subscription
   const { data: clubSubscription, isLoading: isLoadingSub } = useQuery({

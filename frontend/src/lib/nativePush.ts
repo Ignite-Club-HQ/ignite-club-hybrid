@@ -12,6 +12,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { isNotificationPrefetchEnabled } from './notificationPrefetchFlag';
 import { prefetchChatChunkForUrl } from './chatChunkPrefetch';
+import { resolveAuthBackend } from '@/live/authBackendMode';
 
 // Lazy load Capacitor core to prevent crashes if not available
 let Capacitor: any = null;
@@ -309,10 +310,20 @@ export async function getLaunchNotification(): Promise<any | null> {
 // Initialize native push notifications
 export async function initializeNativePush(userId: string): Promise<{ success: boolean; error?: string }> {
   console.log('[NativePush] initializeNativePush called with userId:', userId);
-  
+
   if (!isNativePlatform()) {
     console.log('[NativePush] Not a native platform, returning early');
     return { success: false, error: 'Not a native platform' };
+  }
+
+  // Push is Supabase-only by design: `saveFCMToken` upserts into the
+  // Supabase `fcm_tokens` table via an RLS policy keyed on the Supabase
+  // auth uid, and delivery is driven by Supabase Edge Functions. Internet
+  // Identity accounts have no Supabase session/uid, so explicitly skip
+  // registration rather than letting the upsert fail against RLS.
+  if (resolveAuthBackend() === 'icp') {
+    console.log('[NativePush] Internet Identity session — push registration is Supabase-only, skipping');
+    return { success: false, error: 'Push notifications are not available for Internet Identity accounts yet' };
   }
 
   console.log('[NativePush] Initializing for user:', userId);
