@@ -82,6 +82,8 @@ import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chat
 import { CLUB_ADMIN_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdapters";
 import { Capacitor } from "@capacitor/core";
 
+import { withFeatureBackend } from "@/live/featureRouter";
+import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { noteChatMount, noteChatUnmount } from "@/lib/chatPerfDiagnostics";
 import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealtimeChannelLifecycle";
@@ -807,19 +809,39 @@ function SupabaseClubAdminChatPage() {
           ...queuedSend(),
         } as any;
       }
-      const { data, error } = await supabase
-        .from("club_admin_messages")
-        .insert({
-          conversation_id: conversationId!,
-          author_id: user!.id,
-          text,
-          image_url: imageUrl ?? null,
-          reply_to_id: replyToId || null,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return { ...data, ...deliveredSend() };
+      let inserted: any = null;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_admin_messages")
+            .insert({
+              conversation_id: conversationId!,
+              author_id: user!.id,
+              text,
+              image_url: imageUrl ?? null,
+              reply_to_id: replyToId || null,
+            })
+            .select()
+            .single();
+          if (error) throw error;
+          inserted = data;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: conversation id doubles as the ICP
+          // conversation id. Reply threading is Supabase-only.
+          const attachment = imageUrl
+            ? { kind: "image", refId: imageUrl, url: imageUrl }
+            : (() => {
+                const poll = /\[poll:([^\]]+)\]/.exec(text);
+                if (poll) return { kind: "poll", refId: poll[1], url: null };
+                const news = /\[news:([^\]]+)\]/.exec(text);
+                if (news) return { kind: "news", refId: news[1], url: null };
+                return null;
+              })();
+          inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment);
+        },
+      });
+      return { ...inserted, ...deliveredSend() };
     },
     onMutate: async ({ text, imageUrl: optImageUrl, replyToId }) => {
       // Mutation-specific temp id so overlapping sends roll back independently.
@@ -982,8 +1004,15 @@ function SupabaseClubAdminChatPage() {
   const updateMessageMutation = useMutation({
     mutationFn: async () => {
       if (!editingMessage) return;
-      const { error } = await supabase.from("club_admin_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_admin_messages").update({ text: message.trim() }).eq("id", editingMessage.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await updateLiveMessage(ctx, editingMessage.id, message.trim());
+        },
+      });
     },
     onSuccess: () => {
       setMessage("");
