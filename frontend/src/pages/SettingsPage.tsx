@@ -20,6 +20,7 @@ import { useUserHasAnyAICatchUpClub } from "@/hooks/useUserHasAnyAICatchUpClub";
 import { useQueryClient } from "@tanstack/react-query";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { NotificationPreferenceList, type NotificationPreferenceDescriptor } from "@/components/NotificationPreferenceList";
 
 // Check if we're on native platform at module load time
@@ -99,6 +100,11 @@ const emailPreferenceDescriptors: readonly NotificationPreferenceDescriptor<Emai
 export default function SettingsPage() {
   const { user } = useAuth();
   const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  // Internet Identity accounts have no password and no passkey/biometric
+  // credentials (principal-based auth only) — hide the password/passkey
+  // management entry points entirely rather than letting them open dialogs
+  // that hit Supabase auth calls with no Supabase session behind them.
+  const isIcpAccount = resolveAuthBackend() === "icp";
   usePageTitle("Settings");
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -426,7 +432,8 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Change Password */}
+      {/* Change Password — Internet Identity has no password to change */}
+      {!isIcpAccount && (
       <Card
         className="cursor-pointer hover:border-primary/50 transition-colors"
         onClick={() => setChangePasswordOpen(true)}
@@ -444,6 +451,7 @@ export default function SettingsPage() {
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </CardContent>
       </Card>
+      )}
 
       {/* Appearance Card */}
       <Card>
@@ -511,7 +519,7 @@ export default function SettingsPage() {
 
 
       {/* Biometrics / Passkeys */}
-      {biometricsAvailable && (
+      {biometricsAvailable && !isIcpAccount && (
         <Card 
           className="cursor-pointer hover:border-primary/50 transition-colors"
           onClick={hasPasskey ? () => setPasskeyDialogOpen(true) : handleSetupBiometrics}

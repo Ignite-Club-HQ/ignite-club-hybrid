@@ -1,5 +1,6 @@
 import { onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Empty-success poisoning guard for the club/theme list queries.
@@ -40,6 +41,14 @@ export async function guardClubListResult<T>(cacheKey: string, next: T[]): Promi
   if (!hadDataKeys.has(cacheKey)) return next;
 
   if (!onlineManager.isOnline()) throw new TransientEmptyClubListError(cacheKey);
+
+  // Internet Identity accounts have no Supabase session, so the
+  // `supabase.auth.getSession()` health check below can never confirm a
+  // "healthy" session for them. This already degraded safely (falls into the
+  // catch below and treats the empty result as transient), but make the
+  // ICP skip explicit rather than relying on that fallthrough: the club list
+  // health check is Supabase-only until membership queries have an ICP path.
+  if (resolveAuthBackend() === "icp") return next;
 
   try {
     const { data, error } = await supabase.auth.getSession();

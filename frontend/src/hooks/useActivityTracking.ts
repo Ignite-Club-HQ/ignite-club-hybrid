@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 // Generate a unique session ID per browser session
 const SESSION_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -56,6 +57,13 @@ const SUPPRESS_AFTER_AUTH_ERROR_MS = 60_000;
 export function useActivityTracking() {
   const { user } = useAuth();
   const location = useLocation();
+  // Every read/write here goes straight to Supabase (auth.getSession, the
+  // `track_user_activity_start` / `update_user_activity_duration` RPCs).
+  // Internet Identity accounts have no Supabase session, so these already
+  // degrade safely (getSession returns null -> early return), but make the
+  // gate explicit rather than relying on that fallthrough — activity
+  // tracking is Supabase-only until there's an ICP equivalent.
+  const icpRouted = resolveAuthBackend() === "icp";
   const activeLogIdRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(Date.now());
   const flushIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -83,6 +91,7 @@ export function useActivityTracking() {
 
   const startTracking = useCallback(async (path: string) => {
     if (!user) return;
+    if (icpRouted) return;
     if (inflightInsert) return;
     if (Date.now() < suppressUntil) return;
 
@@ -135,11 +144,11 @@ export function useActivityTracking() {
     } finally {
       inflightInsert = false;
     }
-  }, [user, flushDuration]);
+  }, [user, flushDuration, icpRouted]);
 
   // Track page changes (debounced)
   useEffect(() => {
-    if (!user) return;
+    if (!user || icpRouted) return;
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -162,7 +171,7 @@ export function useActivityTracking() {
       }
       flushDuration();
     };
-  }, [location.pathname, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.pathname, user?.id, icpRouted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cache the current access token so the unload handler (which can't await)
   // has a fresh JWT to send. Without the user's JWT, the PATCH runs as the
@@ -170,6 +179,7 @@ export function useActivityTracking() {
   // "new row violates row-level security policy" errors.
   const accessTokenRef = useRef<string | null>(null);
   useEffect(() => {
+    if (icpRouted) return;
     let cancelled = false;
     supabase.auth.getSession().then(({ data }) => {
       if (!cancelled) accessTokenRef.current = data.session?.access_token ?? null;
@@ -181,7 +191,7 @@ export function useActivityTracking() {
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [icpRouted]);
 
   // Flush on visibility change (tab switch, app background)
   useEffect(() => {
