@@ -62,12 +62,21 @@ module {
     // null means active. Permanent delete removes the record outright.
     deleted_at_ms : ?Nat64;
   };
+  // Sponsor-strip display toggles mirror the Supabase `clubs` columns of
+  // the same name: whether the media gallery strip, the media header
+  // strip, the events page strip, and in-chat-thread ad slots show
+  // sponsors for this club. Defaults to false for clubs that predate
+  // these fields, matching the Supabase column defaults.
   public type ClubSettings = {
     contact_email : ?Text;
     membership_open : Bool;
     announcement : ?Text;
     public_directory : Bool;
     club_id : Text;
+    media_sponsors_enabled : Bool;
+    media_header_sponsors_enabled : Bool;
+    events_sponsor_strip_enabled : Bool;
+    chat_thread_ads_enabled : Bool;
   };
   // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
   // exposure_percentage is the strip rotation share (0-100).
@@ -84,6 +93,10 @@ module {
     is_team_only : Bool;
     exposure_percentage : ?Nat8;
   };
+  // Shell-team fields mirror the Supabase `teams.shell_*` columns: a
+  // club admin can pre-create a "shell" team for a coach/manager who has
+  // not signed up yet, mint a claim token, and the invited person claims
+  // it (becoming team_admin) via `claim_shell_team`.
   public type ClubTeam = {
     id : Text;
     name : Text;
@@ -97,6 +110,13 @@ module {
     team_type : ?Text;
     // Soft-delete marker mirroring the Supabase `teams.deleted_at` column.
     deleted_at_ms : ?Nat64;
+    is_shell : Bool;
+    shell_claim_token : ?Text;
+    shell_claimed_at_ms : ?Nat64;
+    shell_claimed_by : ?Principal;
+    shell_contact_email : ?Text;
+    shell_contact_name : ?Text;
+    shell_invited_by : ?Principal;
   };
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
