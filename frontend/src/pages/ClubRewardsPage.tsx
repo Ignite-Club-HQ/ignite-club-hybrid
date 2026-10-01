@@ -21,7 +21,7 @@ export default function ClubRewardsPage() {
   const { data: clubSubscription, isLoading: isLoadingSub } = useQuery({
     queryKey: ["club-subscription", clubId],
     queryFn: async () => {
-      if (useIcpLab) return { is_pro: true };
+      if (useIcpLab) return { is_pro: true, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false };
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")

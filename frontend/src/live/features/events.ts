@@ -790,9 +790,23 @@ export async function createLiveEventGroup(
   ctx: FeatureBackendContext,
   eventId: string,
   name: string,
+  teamLetter?: string | null,
+  colour?: string | null,
+  abilityBand?: string | null,
+  pitchName?: string | null,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.create_event_group(eventId, name), "Create event group");
+  return unwrapCandid(
+    actor.create_event_group(
+      eventId,
+      name,
+      teamLetter ?? null,
+      colour ?? null,
+      abilityBand ?? null,
+      pitchName ?? null,
+    ),
+    "Create event group",
+  );
 }
 
 export async function renameLiveEventGroup(
@@ -818,9 +832,13 @@ export async function addLiveGroupPlayer(
   ctx: FeatureBackendContext,
   groupId: string,
   accountId: string,
+  teamLetter?: string | null,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.add_group_player(groupId, accountId), "Add group player");
+  return unwrapCandid(
+    actor.add_group_player(groupId, accountId, teamLetter ?? null),
+    "Add group player",
+  );
 }
 
 export async function removeLiveGroupPlayer(

@@ -378,13 +378,11 @@ export default function EventDetailPage() {
         supabase: async () => null,
         icp: async (ctx) => {
           if (!id) throw new Error("Missing event ID");
-          const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
-            guests?: Array<{ id: string; event_id?: string; guest_name: string; added_by?: string }>;
-          };
-          return (roster.guests ?? []).map((g) => ({
+          const roster = await getLiveEventRosterDetailed(ctx, id);
+          return roster.guests.map((g) => ({
             id: g.id,
-            event_id: g.event_id ?? id,
-            added_by: g.added_by ?? "",
+            event_id: g.event_id,
+            added_by: g.added_by.toText(),
             guest_name: g.guest_name,
             added_by_name: "A member",
           }));

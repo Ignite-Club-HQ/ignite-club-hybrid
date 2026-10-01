@@ -263,10 +263,13 @@ function SupabaseManageRolesPage() {
           const { error } = await supabase.rpc(rpcName, { p_request_id: requestId });
           if (error) throw error;
         },
-        icp: (ctx) =>
-          approved
-            ? approveLiveRoleRequest(ctx, requestId)
-            : rejectLiveRoleRequest(ctx, requestId),
+        icp: async (ctx) => {
+          if (approved) {
+            await approveLiveRoleRequest(ctx, requestId);
+          } else {
+            await rejectLiveRoleRequest(ctx, requestId);
+          }
+        },
       });
     },
     onSuccess: () => {

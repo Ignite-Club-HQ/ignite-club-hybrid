@@ -11,7 +11,7 @@ describe("vaultKeys", () => {
   });
 
   it("builds the exact view key used by optimistic item removal", () => {
-    const view = { type: "team", clubId: "club-1", teamId: "team-1", teamName: "U10 Blue" } as const;
+    const view = { type: "team", clubId: "club-1", clubName: "Synthetic Club", teamId: "team-1", teamName: "U10 Blue" } as const;
     expect(vaultKeys.filesForView(view, false, true)).toEqual([
       "vault-files",
       view,

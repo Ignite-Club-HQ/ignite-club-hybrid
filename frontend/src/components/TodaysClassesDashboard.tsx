@@ -86,7 +86,9 @@ export function TodaysClassesDashboard({ clubId }: TodaysClassesDashboardProps) 
     queryKey: ["todays-attendance-counts", activeTerm?.id, todayDate, classIds],
     queryFn: async () => {
       if (!activeTerm?.id || classIds.length === 0) return {};
-      return withFeatureBackend("attendance", {
+      return withFeatureBackend<
+        Record<string, { present: number; total: number }> | typeof ATTENDANCE_NOT_AVAILABLE_ON_ICP
+      >("attendance", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("class_attendance")

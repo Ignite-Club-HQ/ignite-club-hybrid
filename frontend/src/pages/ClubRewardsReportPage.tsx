@@ -46,6 +46,18 @@ import { getLocalLabClubDetail, getLocalLabRewardRedemptions, getLocalLabTeamLis
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveRedemptions } from "@/live/features/points";
 
+interface ReportRedemption {
+  id: string;
+  points_spent: number;
+  status: string;
+  redeemed_at: string | null;
+  child_id: string | null;
+  user_id: string | null;
+  club_rewards: { name: string; reward_type: string } | null;
+  children: { name: string } | null;
+  profiles: { display_name: string } | null;
+}
+
 export default function ClubRewardsReportPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const navigate = useNavigate();
@@ -64,7 +76,7 @@ export default function ClubRewardsReportPage() {
   const { data: clubSubscription, isLoading: isLoadingSub } = useQuery({
     queryKey: ["club-subscription", clubId],
     queryFn: async () => {
-      if (useIcpLab) return { is_pro: true };
+      if (useIcpLab) return { is_pro: true, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false };
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -159,7 +171,7 @@ export default function ClubRewardsReportPage() {
           return redeemedAt >= startDate && redeemedAt <= endDate;
         });
       }
-      return withFeatureBackend("points", {
+      return withFeatureBackend<ReportRedemption[]>("points", {
         supabase: async () => {
           // First, get redemptions within date range
           let query = supabase
@@ -183,6 +195,20 @@ export default function ClubRewardsReportPage() {
           const { data, error } = await query;
           if (error) throw error;
 
+          const mapRow = (r: NonNullable<typeof data>[number]): ReportRedemption => ({
+            id: r.id,
+            points_spent: r.points_spent,
+            status: r.status,
+            redeemed_at: r.redeemed_at,
+            child_id: r.child_id,
+            user_id: r.user_id,
+            club_rewards: r.club_rewards
+              ? { name: r.club_rewards.name, reward_type: r.club_rewards.reward_type }
+              : null,
+            children: r.children ? { name: r.children.name } : null,
+            profiles: r.profiles ? { display_name: r.profiles.display_name } : null,
+          });
+
           // If filtering by team, we need to filter users who are members of that team
           if (selectedTeamId !== "all" && data) {
             const { data: teamMembers } = await supabase
@@ -200,13 +226,15 @@ export default function ClubRewardsReportPage() {
 
             const teamChildIds = new Set(childAssignments?.map(c => c.child_id) || []);
 
-            return data.filter(r =>
-              teamMemberIds.has(r.user_id) ||
-              (r.child_id && teamChildIds.has(r.child_id))
-            );
+            return data
+              .filter(r =>
+                teamMemberIds.has(r.user_id) ||
+                (r.child_id && teamChildIds.has(r.child_id))
+              )
+              .map(mapRow);
           }
 
-          return data || [];
+          return (data || []).map(mapRow);
         },
         icp: async (ctx) => {
           // `list_redemptions` has no reward/child/profile display-name joins

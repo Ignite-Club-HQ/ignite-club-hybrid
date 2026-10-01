@@ -51,11 +51,13 @@ export function EventNoteSection({
         supabase: async () => null,
         icp: async (ctx) => {
           const result = await getLiveCoachNote(ctx, eventId);
-          return (result && result.length ? result[0] : null) as {
-            note: string;
-            author: string;
-            updated_at: bigint | number;
-          } | null;
+          const raw = result && result.length ? result[0] : null;
+          if (!raw) return null;
+          return {
+            note: raw.note,
+            author: raw.updated_by.toText(),
+            updated_at: raw.updated_at_ms,
+          };
         },
       }),
   });

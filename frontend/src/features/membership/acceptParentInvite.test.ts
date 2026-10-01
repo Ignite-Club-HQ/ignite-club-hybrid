@@ -24,8 +24,10 @@ vi.mock("@/live/features/club", () => ({
 }));
 
 vi.mock("@/live/features/vault", () => ({
-  addLiveGuardianRelationship: (...args: unknown[]) => mocks.addLiveGuardianRelationship(...args),
-  grantLivePiiRead: (...args: unknown[]) => mocks.grantLivePiiRead(...args),
+  addLiveGuardianRelationship: (ctx: unknown, guardian: unknown, childId: string) =>
+    mocks.addLiveGuardianRelationship(ctx, guardian, childId),
+  grantLivePiiRead: (ctx: unknown, piiId: string, fieldId: string, reader: unknown) =>
+    mocks.grantLivePiiRead(ctx, piiId, fieldId, reader),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({

@@ -126,6 +126,7 @@ describe("single event to recurring-series conversion", () => {
       new Date("2026-09-03T00:00:00.000Z"),
     ],
     recurrenceEndDate: "2026-09-03",
+    frequency: "weekly" as const,
   };
 
   function conversionClient(data: unknown = { occurrence_count: 3 }, error: unknown = null) {

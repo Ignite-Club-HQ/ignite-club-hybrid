@@ -269,6 +269,11 @@ export default function TeamDetailPage() {
           formation: null,
           minutes_per_half: 45,
           disable_position_swaps: false,
+          admin_pro_override: false,
+          admin_pro_football_override: false,
+          disable_batch_subs: false,
+          rotate_gk_at_halftime: true,
+          show_lineup_picker: false,
         };
       }
 
@@ -357,6 +362,9 @@ export default function TeamDetailPage() {
           cancelled_at: null,
           disable_auto_subs: false,
           rotation_speed: 1,
+          admin_pro_override: false,
+          admin_pro_football_override: false,
+          trial_ends_at: null,
         };
       }
 
@@ -1042,7 +1050,7 @@ export default function TeamDetailPage() {
           } as any).eq("id", id!);
           if (error) throw error;
         },
-        icp: (ctx) => restoreLiveTeam(ctx, id!),
+        icp: async (ctx) => { await restoreLiveTeam(ctx, id!); },
       });
     } catch (error) {
       toast({ title: "Error", description: "Failed to restore team.", variant: "destructive" });

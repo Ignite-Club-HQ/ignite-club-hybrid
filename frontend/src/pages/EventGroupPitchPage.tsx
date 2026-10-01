@@ -318,7 +318,7 @@ function SupabaseEventGroupPitchPage() {
         // mini_league_players.parent_user_id onto Supabase profiles and
         // club user_roles — no canister equivalent. ICP-routed sessions see
         // an empty assignee list rather than a partial/incorrect one.
-        icp: async () => [] as { id: string; display_name: string | null }[],
+        icp: async () => [] as { id: string; display_name: string | null; avatar_url: string | null }[],
       }),
     enabled: !!group?.event?.mini_league_id,
   });

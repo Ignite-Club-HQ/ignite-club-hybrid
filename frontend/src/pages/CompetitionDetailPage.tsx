@@ -1298,7 +1298,7 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
     queryKey: ["all-teams-for-invite", search, clubFilterId],
     enabled: open && mode === "existing",
     queryFn: async () => {
-      let q = supabase.from("teams").select("id, name, clubs:club_id(name)").order("name").limit(50);
+      let q = supabase.from("teams").select("id, name, club_id, clubs:club_id(name)").order("name").limit(50);
       if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
       if (clubFilterId) q = q.eq("club_id", clubFilterId);
       const { data } = await q;
