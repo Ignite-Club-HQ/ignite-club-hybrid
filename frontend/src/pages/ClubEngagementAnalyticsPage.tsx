@@ -1111,19 +1111,19 @@ function SupabaseClubEngagementAnalyticsPage({
 
       {/* Benchmark: Active Member % */}
       <SectionHeader icon={Users} title="Active Member Rate" description="Members with any meaningful action in this period" />
-      {benchmarksError ? <AnalyticsErrorCard /> : <ActiveMemberCard b={benchmarks} />}
+      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <ActiveMemberCard b={benchmarks} />}
 
       {/* Benchmark: DAU / WAU / MAU */}
       <SectionHeader icon={Activity} title="Engagement (DAU / WAU / MAU)" description="Industry-standard active-user metrics" />
-      {benchmarksError ? <AnalyticsErrorCard /> : <EngagementBenchmarkCards b={benchmarks} />}
+      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <EngagementBenchmarkCards b={benchmarks} />}
 
       {/* Benchmark: Message Participation */}
       <SectionHeader icon={MessageSquare} title="Message Participation" description="How members engage with chat" />
-      {benchmarksError ? <AnalyticsErrorCard /> : <MessageParticipationCard b={benchmarks} />}
+      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <MessageParticipationCard b={benchmarks} />}
 
       {/* Benchmark: Read Rates */}
       <SectionHeader icon={Eye} title="Read Rates" description="Communication effectiveness — viewers within 7 days" />
-      {benchmarksError ? <AnalyticsErrorCard /> : <ReadRatesGrid b={benchmarks} />}
+      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <ReadRatesGrid b={benchmarks} />}
 
       {/* Section 2: Member Adoption */}
       <SectionHeader
@@ -1247,7 +1247,7 @@ function SupabaseClubEngagementAnalyticsPage({
 
       {/* Section 6: Sponsor Performance */}
       <SectionHeader icon={Trophy} title="Sponsor Performance" description="Unique reach, profile views, clicks and CTR" />
-      <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />
+      {isIcpAnalytics ? <NotAvailableCard /> : <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />}
 
       {/* Section 6b: In-app Ad Performance (platform-wide only — house ads served to Free clubs).
           AdMob-mediated impressions/revenue are reported separately in the Google AdMob console. */}
@@ -1386,6 +1386,17 @@ function AnalyticsErrorCard() {
       <CardContent className="p-3 flex items-start gap-2 text-sm text-destructive">
         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
         <span>Analytics could not load. Refresh this page to try again.</span>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotAvailableCard() {
+  return (
+    <Card className="border-border/60">
+      <CardContent className="p-3 flex items-start gap-2 text-sm text-muted-foreground">
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+        <span>Not available on this backend yet.</span>
       </CardContent>
     </Card>
   );
