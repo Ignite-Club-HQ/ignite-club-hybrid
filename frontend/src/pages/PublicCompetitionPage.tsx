@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function PublicCompetitionPage() {

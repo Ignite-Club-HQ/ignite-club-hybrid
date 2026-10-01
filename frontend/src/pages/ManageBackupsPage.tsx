@@ -41,11 +41,12 @@ interface TreeNode {
 }
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function ManageBackupsPage() {
-  if (resolveAuthBackend() === "icp") {
+  const useIcpLab = isFeatureRoutedToIcp("admin");
+  if (useIcpLab) {
     return <IcpUnavailablePage title="Backup administration is unavailable in ICP lab mode" description="Backup creation, download, and restore require an approved encrypted export and recovery design." />;
   }
   return <SupabaseManageBackupsPage />;

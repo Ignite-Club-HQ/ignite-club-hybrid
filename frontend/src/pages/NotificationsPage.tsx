@@ -31,7 +31,6 @@ import {
   type ChatTarget,
 } from "@/lib/notificationChatRouting";
 import { requestClubSwitchForChatTarget, requestClubSwitchForNotificationUrl } from "@/lib/notificationClubSwitch";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import {
   invalidateNotificationSurfaces,
@@ -185,7 +184,7 @@ const NOTIFICATIONS_PER_PAGE = 30;
 
 export default function NotificationsPage() {
   const { user, refreshUnreadCount, clearUnreadCount } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("notifications");
   const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   usePageTitle("Notifications");
   const navigate = useNavigate();

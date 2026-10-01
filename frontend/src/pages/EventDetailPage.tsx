@@ -1,3 +1,4 @@
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
 import { useEventDutyMutations } from "@/hooks/useEventDutyMutations";
@@ -69,7 +70,6 @@ import {
   shouldRestorePitchBoardForCurrentPath,
 } from "@/components/pitch/pitchBoardOpenFlag";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveEventRoster, getLiveEventRosterDetailed } from "@/live/features/events";
@@ -116,7 +116,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile, refreshProfile } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("events");
   // Production ICP-mode gate (distinct from the useIcpLab dev/testing flag
   // above). events.ts has no canister shape for the children/guardian roster
   // reads below, so these fall back to empty results in ICP mode.

@@ -32,11 +32,12 @@ interface UserWithVersion {
 }
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function SendUpdateReminderPage() {
-  if (resolveAuthBackend() === "icp") {
+  const useIcpLab = isFeatureRoutedToIcp("notifications");
+  if (useIcpLab) {
     return <IcpUnavailablePage title="Update reminders are unavailable in ICP lab mode" description="Recipient selection and reminder delivery are not connected to ICP and approved external-worker services yet." />;
   }
   return <SupabaseSendUpdateReminderPage />;

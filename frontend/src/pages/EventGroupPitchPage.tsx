@@ -39,7 +39,6 @@ interface GroupPlayer {
   team: "a" | "b" | null;
 }
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabEventGroupPitch } from "@/lab/fixtureDataLayer";
 

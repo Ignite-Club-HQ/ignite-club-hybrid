@@ -17,7 +17,6 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabPlayerStatsReport } from "@/lab/fixtureDataLayer";
 
@@ -41,7 +40,7 @@ interface GameEvent {
 
 export default function PlayerStatsReportPage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = isFeatureRoutedToIcp("analytics");
   if (useIcpLab) {
     const report = getLocalLabPlayerStatsReport("team-icp-001");
     return (

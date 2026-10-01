@@ -27,7 +27,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { resolveHomeProAccess } from "@/lab/hybridHomeEntitlementRepository";
@@ -209,7 +208,7 @@ export default function HomePage() {
     () => getCachedNextUp<{ memberships: any; events: Event[]; cachedAt: number }>(user?.id),
     [user?.id],
   );
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("home");
 
   // Home perf: mark mount + track primary-query return + first paint. See
   // src/lib/homeOpenLatency.ts. Best-effort; one sample per open.

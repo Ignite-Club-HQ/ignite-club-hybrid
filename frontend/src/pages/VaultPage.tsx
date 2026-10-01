@@ -67,7 +67,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { VaultContentRenderer, type ContentSectionProps, type TrashSectionProps } from "@/components/vault/VaultContentRenderer";
 import { invalidateVaultCache } from "@/features/vault/vaultQueryKeys";

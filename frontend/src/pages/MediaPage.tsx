@@ -88,9 +88,8 @@ import {
 // date don't show a view count since scroll views weren't recorded yet.
 const PHOTO_VIEWS_FEATURE_LAUNCH = new Date("2026-04-18T00:00:00Z");
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 export default function MediaPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (isFeatureRoutedToIcp("media")) {
     return <IcpMediaFeedPage />;
   }
   return <SupabaseMediaPage />;

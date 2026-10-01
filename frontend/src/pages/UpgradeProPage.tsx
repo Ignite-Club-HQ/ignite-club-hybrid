@@ -31,7 +31,6 @@ import {
 } from "@/components/subscription/UpgradePlanPresentation";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 

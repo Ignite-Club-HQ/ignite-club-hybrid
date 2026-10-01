@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { useMemo } from "react";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabWelcomeMessage } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
@@ -66,7 +66,7 @@ function renderTextWithLinks(text: string) {
 
 export default function WelcomeMessagePage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
 
   if (useIcpLab) {
     const welcome = getLocalLabWelcomeMessage("club-icp-001");

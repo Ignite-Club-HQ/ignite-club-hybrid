@@ -37,12 +37,13 @@ type ScopeType = "club" | "team";
 type PromoType = "subscription" | "storage";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 
 export default function ManagePromoCodesPage() {
-  if (resolveAuthBackend() === "icp") {
+  const useIcpLab = isFeatureRoutedToIcp("admin");
+  if (useIcpLab) {
     return <IcpUnavailablePage title="Promo-code administration is unavailable in ICP lab mode" description="Promo codes remain part of the disabled external billing boundary." />;
   }
   return <SupabaseManagePromoCodesPage />;

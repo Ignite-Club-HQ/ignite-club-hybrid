@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSectionSnapshot";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -63,7 +62,7 @@ const NEWS_COLUMNS =
 
 export function useClubNewsFeed(clubId?: string | null, limit = 50) {
   const snapshotScope = `${clubId ?? "all"}_${limit}`;
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("news");
   return useQuery<ClubNewsRow[]>({
     queryKey: ["club-news", clubId ?? "all", limit],
     queryFn: async () => {
@@ -127,7 +126,7 @@ export function useLatestClubNews(clubId?: string | null) {
 }
 
 export function useClubNewsPost(newsId?: string | null) {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("news");
   return useQuery<ClubNewsRow | null>({
     queryKey: ["club-news-post", newsId],
     queryFn: async () => {

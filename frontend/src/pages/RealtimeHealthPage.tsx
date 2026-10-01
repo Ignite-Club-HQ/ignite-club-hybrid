@@ -68,11 +68,12 @@ type RealtimeStatsResponse =
   | { supported: false; reason: string };
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function RealtimeHealthPage() {
-  if (resolveAuthBackend() === "icp") {
+  const useIcpLab = isFeatureRoutedToIcp("admin");
+  if (useIcpLab) {
     return <IcpUnavailablePage title="Realtime health monitoring is unavailable in ICP lab mode" description="This dashboard monitors Supabase realtime infrastructure and has no equivalent ICP service contract." />;
   }
   return <SupabaseRealtimeHealthPage />;

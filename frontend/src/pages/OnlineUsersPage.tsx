@@ -8,12 +8,11 @@ import { PageLoading } from "@/components/ui/page-loading";
 import OnlineUsersTab from "@/components/admin/OnlineUsersTab";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabOnlineUsers } from "@/lab/fixtureDataLayer";
 
 export default function OnlineUsersPage() {
-  const useIcpLab = isFeatureRoutedToIcp("messaging");
+  const useIcpLab = isFeatureRoutedToIcp("admin");
   if (useIcpLab) {
     return <IcpLabOnlineUsersPage />;
   }

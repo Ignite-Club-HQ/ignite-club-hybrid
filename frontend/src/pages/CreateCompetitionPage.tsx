@@ -1,3 +1,4 @@
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +19,6 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { createLocalCompetition } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveCompetition } from "@/live/features/competitions";
@@ -36,7 +36,7 @@ export default function CreateCompetitionPage() {
   usePageTitle("New competition");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("competitions");
 
   if (useIcpLab) {
     return <IcpCreateCompetitionPage preselectedOrganizer={searchParams.get("organizer")} />;

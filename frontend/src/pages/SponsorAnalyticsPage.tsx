@@ -1,3 +1,4 @@
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -22,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Eye, MousePointer, TrendingUp } from "lucide-react";
 import { subDays, startOfDay } from "date-fns";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type DateRange = "7d" | "30d" | "90d" | "all";
@@ -45,7 +45,7 @@ interface ContextBreakdown {
 
 export default function SponsorAnalyticsPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = isFeatureRoutedToIcp("analytics");
   if (useIcpLab) {
     return (
       <div className="container max-w-3xl mx-auto px-4 py-10">

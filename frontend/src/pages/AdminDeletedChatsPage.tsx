@@ -40,12 +40,12 @@ interface DeletedGroup {
 
 const RETENTION_DAYS = 30;
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabDeletedChats } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminDeletedChatsPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("admin");
   if (useIcpLab) {
     return <IcpLabAdminDeletedChatsPage />;
   }

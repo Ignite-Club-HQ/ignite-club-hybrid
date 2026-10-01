@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubList, getLocalLabLeaderboard, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
@@ -52,7 +51,7 @@ export default function LeaderboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = isFeatureRoutedToIcp("points");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [scope, setScope] = useState<Scope>("club");
