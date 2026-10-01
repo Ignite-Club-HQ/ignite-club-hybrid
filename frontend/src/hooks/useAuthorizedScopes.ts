@@ -27,6 +27,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { revokeScope } from "@/lib/realtimeChannelRegistry";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 export type AuthorizedScopesStatus = "loading" | "ready" | "failed";
 
@@ -50,6 +53,21 @@ interface MembershipRow {
 }
 
 async function fetchMemberships(userId: string): Promise<MembershipRow> {
+  if (isFeatureRoutedToIcp("membership")) {
+    // Internet Identity users: the canister's caller-scoped role-grant list
+    // replaces the Supabase `user_roles` membership read. Group/DM scoping
+    // has no canister mirror yet, so those stay empty (fail-closed).
+    const grants = await withFeatureBackend("membership", {
+      supabase: async () => [],
+      icp: (ctx) => myLiveRoleGrants(ctx),
+    });
+    return {
+      clubIds: [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))],
+      teamIds: [...new Set(grants.map((g) => g.team).filter((t): t is string => !!t))],
+      groupIds: [],
+      dmConversationIds: [],
+    };
+  }
   // `user_roles` is the single source of truth for club + team membership
   // (see mem://user-roles). `group_members` gates chat groups. DM access is
   // participant_1/participant_2 on `direct_conversations`.

@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Loader2, Camera, ImageIcon, Plus, Check, Copy, Wand2, ChevronDown, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { updateLiveMiniLeague } from "@/live/features/miniLeagues";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -230,11 +231,19 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
             .eq("id", league.id);
           if (error) throw error;
         },
-        // Gated: no clean mapping to update_mini_league exists here yet
-        // because this dialog also drives Supabase-only logo storage uploads;
-        // disabled under ICP routing rather than writing to Supabase.
-        icp: async () => {
-          throw new Error("Saving league settings isn't available yet on this backend.");
+        // Logo upload stays Supabase-only (storage bytes); settings fields map
+        // cleanly onto update_mini_league.
+        icp: async (ctx) => {
+          await updateLiveMiniLeague(ctx, league.id, {
+            name: editName.trim(),
+            description: editDescription.trim() || null,
+            logoUrl: editLogoUrl,
+            teamSize: editTeamSize,
+            minPlayersPerSide: editMinPlayersPerSide,
+            minutesPerHalf: editMinutesPerHalf,
+            bibColors: editBibColors,
+            showMatchesToMembers: editShowMatchesToMembers,
+          });
         },
       }),
     onSuccess: () => {

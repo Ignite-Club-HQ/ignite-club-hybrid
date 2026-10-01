@@ -11,6 +11,9 @@
  * users — replacing guesswork with evidence.
  */
 
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLiveClientPerf } from "@/live/features/insights";
+
 const SLOW_THRESHOLD_MS = 5_000;
 
 // Local throttle so we don't spam the table from a single bad session
@@ -99,26 +102,35 @@ export function maybeLogSlowFetch(opts: {
       ua: typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 200) : null,
     };
 
-    const endpoint = `${supabaseUrl}/rest/v1/client_perf_log`;
-    const body = JSON.stringify(entry);
+    void withFeatureBackend("analytics", {
+      supabase: async () => {
+        const endpoint = `${supabaseUrl}/rest/v1/client_perf_log`;
+        const body = JSON.stringify(entry);
 
-    // Try sendBeacon first (won't block, survives page unload).
-    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-      // sendBeacon can't set custom headers; PostgREST requires apikey.
-      // Fall through to fetch when we need auth headers.
-    }
-
-    // Fire-and-forget fetch with anon key (RLS permits authenticated inserts only).
-    fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: anonKey,
-        Authorization: `Bearer ${getAccessToken() || anonKey}`,
-        Prefer: "return=minimal",
+        // Fire-and-forget fetch with anon key (RLS permits authenticated inserts only).
+        await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: anonKey,
+            Authorization: `Bearer ${getAccessToken() || anonKey}`,
+            Prefer: "return=minimal",
+          },
+          body,
+          keepalive: true,
+        });
       },
-      body,
-      keepalive: true,
+      icp: async (ctx) => {
+        await recordLiveClientPerf(ctx, [
+          {
+            metric: entry.query_name,
+            path: entry.url_path || entry.query_name,
+            value_ms: entry.duration_ms,
+            at_ms: BigInt(Date.now()),
+            principal: ctx.identity.getPrincipal(),
+          },
+        ]);
+      },
     }).catch(() => { /* swallow */ });
   } catch {
     /* swallow */

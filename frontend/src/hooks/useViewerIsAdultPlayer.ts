@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 /**
  * True when the signed-in adult holds `role = 'player'` in the scope of this
@@ -28,6 +31,19 @@ export function useViewerIsAdultPlayer(event: {
     enabled: !!user?.id && !!(teamId || clubId || targetTeamIds.length > 0),
     staleTime: 60_000,
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
+        });
+        return grants.some((g) => {
+          if (g.role !== "player") return false;
+          if (teamId) return g.team === teamId;
+          if (targetTeamIds.length > 0) return !!g.team && targetTeamIds.includes(g.team);
+          if (clubId) return g.club === clubId;
+          return false;
+        });
+      }
       let q = supabase
         .from("user_roles")
         .select("id")

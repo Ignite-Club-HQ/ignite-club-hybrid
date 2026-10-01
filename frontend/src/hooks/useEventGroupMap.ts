@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 export type EventGrouping = "level" | "team";
 
@@ -105,6 +108,23 @@ export function useEventGroupMap({ clubId, grouping, targetTeamIds, scopedRoster
           assignments: scopedRows
             .filter((r) => r.kind === "child")
             .flatMap((r) => (r.team_ids ?? []).map((teamId) => ({ child_id: r.person_id, team_id: teamId }))),
+        };
+      }
+
+      if (isFeatureRoutedToIcp("membership")) {
+        // Internet Identity users: the canister only exposes the caller's
+        // own role grants (no child-assignment mirror yet), so grouping is
+        // scoped to the caller's own team memberships.
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
+        });
+        return {
+          teams: teams ?? [],
+          roles: grants
+            .filter((g) => g.team && teamIds.includes(g.team))
+            .map((g) => ({ user_id: g.user.toText(), team_id: g.team as string })),
+          assignments: [] as Array<{ child_id: string; team_id: string }>,
         };
       }
 
