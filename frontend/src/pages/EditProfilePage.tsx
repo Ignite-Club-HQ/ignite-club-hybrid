@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { updateProfileCache } from "@/lib/profileCache";
 import { Capacitor } from "@capacitor/core";
@@ -23,7 +23,7 @@ import { mimeToExtension } from "@/lib/binaryUtils";
 
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const isIcpLive = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { toast } = useToast();

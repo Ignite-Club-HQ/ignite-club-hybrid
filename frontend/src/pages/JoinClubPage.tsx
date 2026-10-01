@@ -14,7 +14,6 @@ import { AppStoreDownloadGuide } from "@/components/AppStoreDownloadGuide";
 import { setInviteFlowContext, getInviteFlowContext, clearInviteFlowContext } from "@/components/InviteFlowProgress";
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
 import type { Database } from "@/integrations/supabase/types";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 

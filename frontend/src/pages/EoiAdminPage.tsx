@@ -48,7 +48,6 @@ import { EoiTeamSuggestions } from "@/components/eoi/EoiTeamSuggestions";
 import { exportEoisCSV } from "@/lib/exportEois";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
 

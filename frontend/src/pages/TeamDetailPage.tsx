@@ -81,7 +81,7 @@ import { computeAppAdminOverride, type TeamAppAdminOverrideChange } from "@/lib/
 import TeamCompetitionsSection from "@/components/competitions/TeamCompetitionsSection";
 import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQueryError";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -124,7 +124,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
   // has no club_domain canister shape yet, so these actions are gated off entirely
   // in ICP mode rather than falling through to Supabase against a principal id.

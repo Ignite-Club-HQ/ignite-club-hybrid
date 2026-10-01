@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";
 import { EOI_STATUS_LABELS } from "@/lib/eoiUtils";
 import { toast } from "sonner";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
 

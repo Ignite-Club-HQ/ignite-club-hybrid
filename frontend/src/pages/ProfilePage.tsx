@@ -23,7 +23,6 @@ import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";

@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { connectLocalIdentityAccessClient, resetLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { personas } from "@/lab/syntheticIdentities.mjs";
