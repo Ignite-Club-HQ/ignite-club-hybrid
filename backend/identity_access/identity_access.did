@@ -58,13 +58,22 @@ type Profile = record {
   updated_at_ns : nat64;
   display_name : text;
 };
+// One row of a `search_profiles` result: the profile plus the account's
+// first principal (needed by callers to grant roles).
+type ProfileSearchResult = record {
+  account_id : text;
+  "principal" : principal;
+  avatar_ref : opt text;
+  display_name : text;
+};
 type Result = variant { Ok : Account; Err : text };
 type Result_1 = variant { Ok : Access; Err : text };
 type Result_10 = variant { Ok : opt TermsAcceptance; Err : text };
 type Result_11 = variant { Ok : vec RoleGrant; Err : text };
 type Result_12 = variant { Ok : Entitlement; Err : text };
-type Result_13 = variant { Ok : PrivacyConsent; Err : text };
-type Result_14 = variant { Ok : TermsAcceptance; Err : text };
+type Result_13 = variant { Ok : vec ProfileSearchResult; Err : text };
+type Result_14 = variant { Ok : PrivacyConsent; Err : text };
+type Result_15 = variant { Ok : TermsAcceptance; Err : text };
 type Result_2 = variant { Ok; Err : text };
 type Result_3 = variant { Ok : LinkChallenge; Err : text };
 type Result_4 = variant { Ok : ExternalSiteBinding; Err : text };
@@ -166,6 +175,13 @@ service : (Init) -> {
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
+  // Case-insensitive substring search over display names — the ICP-mode
+  // counterpart of the Supabase `search_invitable_profiles` RPC, used by the
+  // "add an existing member" pickers. Returns at most `limit` (capped at 25)
+  // matches; each result carries the account's first principal so the caller
+  // can grant roles without a second lookup. Profiles without an account or
+  // with a blank name are skipped.
+  search_profiles : (text, nat16) -> (Result_13) query;
   // Governor-only: sets (or rotates) the shared HMAC secret used to verify
   // `redeem_entitlement` attestations. Must match the secret held by the
   // session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
@@ -177,7 +193,7 @@ service : (Init) -> {
   set_exclusion : (text, text, opt text) -> (Result_2);
   set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_2);
   set_family : (text, text) -> (Result_2);
-  set_privacy_consent : (text, text, bool) -> (Result_13);
+  set_privacy_consent : (text, text, bool) -> (Result_14);
   // Sets (or replaces) the caller's profile. The account must already exist —
   // sign-in provisioning calls register_account first.
   set_profile : (text, opt text) -> (Result_9);
@@ -185,6 +201,6 @@ service : (Init) -> {
   // version. Monotonic per-account: a version lower than (or equal to) the
   // caller's currently recorded version is rejected, so a stale client can
   // never roll the recorded acceptance backwards.
-  set_terms_acceptance : (nat32) -> (Result_14);
+  set_terms_acceptance : (nat32) -> (Result_15);
   whoami : () -> (Result) query;
 }

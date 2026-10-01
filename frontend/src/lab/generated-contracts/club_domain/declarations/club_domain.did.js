@@ -92,6 +92,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const ClubTeam = IDL.Record({
     'id' : IDL.Text,
+    'playhq_team_id' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'division' : IDL.Opt(IDL.Text),
     'description' : IDL.Opt(IDL.Text),
@@ -104,6 +105,8 @@ export const idlFactory = ({ IDL }) => {
     'gender' : IDL.Opt(IDL.Text),
     'shell_claimed_at_ms' : IDL.Opt(IDL.Nat64),
     'is_active' : IDL.Bool,
+    'playhq_auto_create_events' : IDL.Bool,
+    'playhq_competition_id' : IDL.Opt(IDL.Text),
     'shell_contact_email' : IDL.Opt(IDL.Text),
     'shell_claimed_by' : IDL.Opt(IDL.Principal),
     'club_id' : IDL.Text,
@@ -123,11 +126,13 @@ export const idlFactory = ({ IDL }) => {
   const ClubProfile = IDL.Record({
     'id' : IDL.Text,
     'secondary_color' : IDL.Opt(IDL.Text),
+    'playhq_tenant' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'slug' : IDL.Text,
     'description' : IDL.Opt(IDL.Text),
     'created_at_ms' : IDL.Nat64,
     'logo_url' : IDL.Opt(IDL.Text),
+    'playhq_org_id' : IDL.Opt(IDL.Text),
     'is_active' : IDL.Bool,
     'primary_color' : IDL.Opt(IDL.Text),
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
@@ -225,6 +230,11 @@ export const idlFactory = ({ IDL }) => {
     'schema' : IDL.Nat32,
     'clubs' : IDL.Vec(IDL.Tuple(IDL.Text, Listing)),
   });
+  const ClubBranding = IDL.Record({
+    'name' : IDL.Text,
+    'contact_email' : IDL.Opt(IDL.Text),
+    'logo_url' : IDL.Opt(IDL.Text),
+  });
   const ClubSettings = IDL.Record({
     'invite_email_style' : IDL.Opt(IDL.Text),
     'theme_primary_color' : IDL.Opt(IDL.Text),
@@ -260,6 +270,16 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Text,
     'member_id' : IDL.Text,
     'position' : IDL.Text,
+  });
+  const ClubTerm = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'name' : IDL.Text,
+    'end_date' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'start_date' : IDL.Text,
+    'is_active' : IDL.Bool,
+    'club_id' : IDL.Text,
   });
   const RemovedMember = IDL.Record({
     'club' : IDL.Text,
@@ -424,6 +444,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_club_term' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_news_post' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -463,6 +488,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
+      ),
+    'get_club_branding' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
+        ['query'],
       ),
     'get_club_profile' : IDL.Func(
         [IDL.Text],
@@ -552,6 +582,11 @@ export const idlFactory = ({ IDL }) => {
     'list_club_join_requests' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubJoinRequest), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_club_terms' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTerm), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_clubs' : IDL.Func(
@@ -753,6 +788,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'save_club_term' : IDL.Func(
+        [ClubTerm],
+        [IDL.Variant({ 'Ok' : ClubTerm, 'Err' : IDL.Text })],
+        [],
+      ),
     'save_sponsor' : IDL.Func(
         [ClubSponsor],
         [IDL.Variant({ 'Ok' : ClubSponsor, 'Err' : IDL.Text })],
@@ -776,6 +816,11 @@ export const idlFactory = ({ IDL }) => {
     'set_club_switcher_hint' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_term_status' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTerm, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_theme_palette' : IDL.Func(

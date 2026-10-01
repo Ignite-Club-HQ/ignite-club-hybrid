@@ -343,6 +343,11 @@ export default function CreateTeamPage() {
             shell_contact_email: [],
             shell_claimed_by: [],
             deleted_at_ms: [],
+            // PlayHQ link fields — teams created here start unlinked;
+            // PlayHQTeamLinkCard manages them afterwards.
+            playhq_team_id: [],
+            playhq_competition_id: [],
+            playhq_auto_create_events: false,
           });
           return { data: { id, name: name.trim() }, error: null };
         } catch (error) {

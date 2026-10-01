@@ -440,15 +440,12 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
             );
 
             if (player.parentEmail.trim() && !player.existingParentUserId) {
-              await createLivePendingInvite(
-                ctx,
+              await createLivePendingInvite(ctx, {
+                kind: "club",
                 clubId,
-                player.parentEmail.trim().toLowerCase(),
-                null,
-                "parent",
-                player.parentName.trim() || player.parentEmail.trim(),
-                `mini_league_id:${miniLeagueId}`,
-              );
+                email: player.parentEmail.trim().toLowerCase(),
+                role: "parent",
+              });
             }
 
             return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent: false };

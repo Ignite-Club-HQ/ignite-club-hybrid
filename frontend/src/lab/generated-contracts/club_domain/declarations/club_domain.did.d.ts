@@ -46,6 +46,11 @@ export interface Child {
   'club_id' : [] | [string],
   'parent' : [] | [Principal],
 }
+export interface ClubBranding {
+  'name' : string,
+  'contact_email' : [] | [string],
+  'logo_url' : [] | [string],
+}
 export interface ClubJoinRequest {
   'id' : string,
   'status' : string,
@@ -58,11 +63,13 @@ export interface ClubJoinRequest {
 export interface ClubProfile {
   'id' : string,
   'secondary_color' : [] | [string],
+  'playhq_tenant' : [] | [string],
   'name' : string,
   'slug' : string,
   'description' : [] | [string],
   'created_at_ms' : bigint,
   'logo_url' : [] | [string],
+  'playhq_org_id' : [] | [string],
   'is_active' : boolean,
   'primary_color' : [] | [string],
   'deleted_at_ms' : [] | [bigint],
@@ -100,6 +107,7 @@ export interface ClubSponsor {
 }
 export interface ClubTeam {
   'id' : string,
+  'playhq_team_id' : [] | [string],
   'name' : string,
   'division' : [] | [string],
   'description' : [] | [string],
@@ -112,12 +120,24 @@ export interface ClubTeam {
   'gender' : [] | [string],
   'shell_claimed_at_ms' : [] | [bigint],
   'is_active' : boolean,
+  'playhq_auto_create_events' : boolean,
+  'playhq_competition_id' : [] | [string],
   'shell_contact_email' : [] | [string],
   'shell_claimed_by' : [] | [Principal],
   'club_id' : string,
   'archived' : boolean,
   'age_group' : [] | [string],
   'deleted_at_ms' : [] | [bigint],
+}
+export interface ClubTerm {
+  'id' : string,
+  'status' : string,
+  'name' : string,
+  'end_date' : string,
+  'created_at_ms' : bigint,
+  'start_date' : string,
+  'is_active' : boolean,
+  'club_id' : string,
 }
 export interface Config {
   'acl' : Acl,
@@ -397,6 +417,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_club_term' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_news_post' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -427,6 +452,11 @@ export interface _SERVICE {
   'freeze_club' : ActorMethod<
     [string, bigint],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'get_club_branding' : ActorMethod<
+    [string],
+    { 'Ok' : ClubBranding } |
       { 'Err' : string }
   >,
   'get_club_profile' : ActorMethod<
@@ -505,6 +535,11 @@ export interface _SERVICE {
   'list_club_join_requests' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubJoinRequest> } |
+      { 'Err' : string }
+  >,
+  'list_club_terms' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubTerm> } |
       { 'Err' : string }
   >,
   'list_clubs' : ActorMethod<
@@ -689,6 +724,11 @@ export interface _SERVICE {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'save_club_term' : ActorMethod<
+    [ClubTerm],
+    { 'Ok' : ClubTerm } |
+      { 'Err' : string }
+  >,
   'save_sponsor' : ActorMethod<
     [ClubSponsor],
     { 'Ok' : ClubSponsor } |
@@ -712,6 +752,11 @@ export interface _SERVICE {
   'set_club_switcher_hint' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_term_status' : ActorMethod<
+    [string, string],
+    { 'Ok' : ClubTerm } |
       { 'Err' : string }
   >,
   'set_club_theme_palette' : ActorMethod<

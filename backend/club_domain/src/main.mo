@@ -51,6 +51,7 @@ persistent actor {
   var teamCaptains : [Types.TeamCaptain];
   var clubJoinRequests : [Types.ClubJoinRequest];
   var themePrefs : [(Principal, Text)];
+  var clubTerms : [Types.ClubTerm];
   var removedMembers : [Types.RemovedMember];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
@@ -1058,6 +1059,7 @@ persistent actor {
       shell_contact_email = contact_email;
       shell_contact_name = contact_name;
       shell_invited_by = ?caller;
+      playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
     };
     teams := teams.concat([team]);
     #Ok(team)
@@ -1511,6 +1513,7 @@ persistent actor {
           shell_contact_name = null;
           shell_invited_by = null;
           archived = false;
+          playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
         };
         teams := teams.concat([team]);
         let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
@@ -1602,6 +1605,7 @@ persistent actor {
       primary_color = null;
       secondary_color = null;
       deleted_at_ms = null;
+      playhq_tenant = null; playhq_org_id = null;
     };
     profiles := profiles.concat([profile]);
     acl := { acl with roles = acl.roles.concat([{ user = caller; role = "club_admin"; club = ?id; team = null }]) };
@@ -1735,6 +1739,97 @@ persistent actor {
     switch (themePrefs.find(func(entry) = entry.0.equal(caller))) {
       case (?entry) #Ok(?entry.1);
       case null #Ok(null);
+    }
+  };
+
+  // ---- Club branding + PlayHQ config (Phase 2 of the NEEDS-CANISTER
+  // completion plan). Branding is a compact read combining the club
+  // profile's name/logo with the settings contact email — the invite and
+  // admin surfaces only need these three fields. ----
+
+  public query ({ caller }) func get_club_branding(club_id : Text) : async { #Ok : Types.ClubBranding; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    let profile = switch (profiles.find(func(c) = c.id == club_id)) {
+      case (?c) c;
+      case null return #Err("Club not found");
+    };
+    let s = currentSettingsFor(club_id);
+    #Ok({ name = profile.name; logo_url = profile.logo_url; contact_email = s.contact_email })
+  };
+
+  // ---- Club terms (class/season enrolment periods) — canister counterpart
+  // of the Supabase `terms` table. save_club_term creates when the id is not
+  // found, otherwise updates in place; an empty id creates with a fresh id.
+  // Overlap rule matches the frontend validation: two active terms for the
+  // same club may not share a date range. ----
+
+  func validTermStatus(status : Text) : Bool { status == "active" or status == "archived" or status == "completed" };
+
+  func termsOverlap(a : Types.ClubTerm, b : Types.ClubTerm) : Bool {
+    a.club_id == b.club_id and a.id != b.id and a.is_active and b.is_active and
+    a.start_date <= b.end_date and b.start_date <= a.end_date
+  };
+
+  public query ({ caller }) func list_club_terms(club_id : Text) : async { #Ok : [Types.ClubTerm]; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(clubTerms.filter(func(t) = t.club_id == club_id))
+  };
+
+  public shared ({ caller }) func save_club_term(term : Types.ClubTerm) : async { #Ok : Types.ClubTerm; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, term.club_id)) return #Err("Club admin required");
+    if (term.name == "" or term.name.size() > 200) return #Err("Invalid name");
+    if (term.start_date == "" or term.end_date == "") return #Err("Start and end dates are required");
+    if (term.start_date > term.end_date) return #Err("Start date must be on or before end date");
+    if (not validTermStatus(term.status)) return #Err("Invalid status");
+    let stored : Types.ClubTerm = {
+      id = if (term.id == "") "term-" # term.club_id # "-" # Nat.toText(clubTerms.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000) else term.id;
+      club_id = term.club_id;
+      name = term.name;
+      start_date = term.start_date;
+      end_date = term.end_date;
+      is_active = term.status == "active";
+      status = term.status;
+      created_at_ms = switch (clubTerms.find(func(t) = t.id == term.id and term.id != "")) {
+        case (?existing) existing.created_at_ms;
+        case null nowMs();
+      };
+    };
+    if (stored.is_active and clubTerms.find(func(t) = termsOverlap(stored, t)) != null) {
+      return #Err("Another active term overlaps these dates");
+    };
+    clubTerms := clubTerms.filter(func(t) = t.id != stored.id).concat([stored]);
+    #Ok(stored)
+  };
+
+  public shared ({ caller }) func set_club_term_status(id : Text, status : Text) : async { #Ok : Types.ClubTerm; #Err : Text } {
+    auth(caller);
+    if (not validTermStatus(status)) return #Err("Invalid status");
+    switch (clubTerms.find(func(t) = t.id == id)) {
+      case null { #Err("Term not found") };
+      case (?current) {
+        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        let updated : Types.ClubTerm = { current with status = status; is_active = status == "active" };
+        if (updated.is_active and clubTerms.find(func(t) = termsOverlap(updated, t)) != null) {
+          return #Err("Another active term overlaps these dates");
+        };
+        clubTerms := clubTerms.map(func(t) = if (t.id == id) updated else t);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_club_term(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (clubTerms.find(func(t) = t.id == id)) {
+      case null { #Err("Term not found") };
+      case (?current) {
+        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        clubTerms := clubTerms.filter(func(t) = t.id != id);
+        #Ok
+      };
     }
   };
 

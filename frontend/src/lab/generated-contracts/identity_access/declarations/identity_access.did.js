@@ -124,8 +124,18 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_12 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
-  const Result_13 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
-  const Result_14 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
+  const ProfileSearchResult = IDL.Record({
+    'account_id' : IDL.Text,
+    'principal' : IDL.Principal,
+    'avatar_ref' : IDL.Opt(IDL.Text),
+    'display_name' : IDL.Text,
+  });
+  const Result_13 = IDL.Variant({
+    'Ok' : IDL.Vec(ProfileSearchResult),
+    'Err' : IDL.Text,
+  });
+  const Result_14 = IDL.Variant({ 'Ok' : PrivacyConsent, 'Err' : IDL.Text });
+  const Result_15 = IDL.Variant({ 'Ok' : TermsAcceptance, 'Err' : IDL.Text });
   
   return IDL.Service({
     'accept_link' : IDL.Func([IDL.Nat64], [Result], []),
@@ -194,6 +204,7 @@ export const idlFactory = ({ IDL }) => {
     'register_account' : IDL.Func([], [Result], []),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
+    'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_13], ['query']),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
     'set_entitlement' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Nat64, IDL.Text],
@@ -213,11 +224,11 @@ export const idlFactory = ({ IDL }) => {
     'set_family' : IDL.Func([IDL.Text, IDL.Text], [Result_2], []),
     'set_privacy_consent' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool],
-        [Result_13],
+        [Result_14],
         [],
       ),
     'set_profile' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [Result_9], []),
-    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_14], []),
+    'set_terms_acceptance' : IDL.Func([IDL.Nat32], [Result_15], []),
     'whoami' : IDL.Func([], [Result], ['query']),
   });
 };

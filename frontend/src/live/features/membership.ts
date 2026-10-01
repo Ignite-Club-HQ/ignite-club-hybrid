@@ -1,5 +1,6 @@
 import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
+import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
 import {
@@ -193,3 +194,28 @@ export {
   getLiveShellTeamByToken,
   claimLiveShellTeam,
 } from "./club";
+
+/**
+ * Fuzzy display-name search over identity_access profiles — the ICP-mode
+ * counterpart of the Supabase `search_invitable_profiles` RPC, used by the
+ * "add an existing member" pickers. Each result carries the account's first
+ * principal, which doubles as the user id for role grants.
+ */
+export async function searchLiveInvitableProfiles(
+  ctx: FeatureBackendContext,
+  query: string,
+  limit = 10,
+) {
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+  try {
+    const results = await client.searchProfiles(query.trim(), limit);
+    return results.map((r) => ({
+      id: r.principal.toText(),
+      account_id: r.account_id,
+      display_name: r.display_name,
+      avatar_ref: r.avatar_ref[0] ?? null,
+    }));
+  } finally {
+    client.dispose();
+  }
+}
