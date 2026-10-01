@@ -71,7 +71,7 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveEventRoster } from "@/live/features/events";
+import { getLiveEventRoster, getLiveEventRosterDetailed, getMyLiveChildRsvps } from "@/live/features/events";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -254,6 +254,40 @@ export default function EventDetailPage() {
         return listLocalEventRsvps(localIcpPersona, id);
       }
 
+      // Production ICP routing: events_domain has no per-event RSVP table
+      // shaped like Supabase `rsvps`, so the roster (account RSVPs + linked
+      // children) and the caller's own child RSVPs are read via the
+      // upgraded event_roster / my_child_rsvps queries and mapped into the
+      // Supabase-shaped row the rest of this page expects. Enrichment
+      // (profile display names, mini_league_players) has no canister
+      // equivalent and is left null — provisional until verified post-deploy.
+      const icpRsvps = await withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
+            rsvps?: Array<{ account_id: string; child_id: [] | [string]; status: string; notes?: string }>;
+          };
+          const rows = (roster.rsvps ?? []).map((r) => {
+            const childId = Array.isArray(r.child_id) && r.child_id.length > 0 ? r.child_id[0] : null;
+            return {
+              id: `${id}:${r.account_id}:${childId ?? "self"}`,
+              event_id: id,
+              user_id: r.account_id,
+              child_id: childId,
+              status: r.status,
+              notes: r.notes || null,
+              source: "user",
+              profiles: null,
+              children: null,
+              mini_league_players: null,
+            };
+          });
+          return rows;
+        },
+      });
+      if (icpRsvps) return icpRsvps;
+
       const provider: EventRsvpProvider = {
         async listRsvps(eventId) {
           const { data, error } = await supabase
@@ -329,6 +363,29 @@ export default function EventDetailPage() {
     queryKey: ["event-guests", id],
     queryFn: async () => {
       if (useIcpLab) return [];
+
+      // Production ICP routing: the upgraded event_roster query returns
+      // guests alongside RSVPs. `added_by` has no canister-side account id
+      // today (the canister does not record who added a guest), so the
+      // adder name enrichment below is skipped — provisional until the
+      // canister exposes it.
+      const icpGuests = await withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
+            guests?: Array<{ id: string; event_id?: string; guest_name: string; added_by?: string }>;
+          };
+          return (roster.guests ?? []).map((g) => ({
+            id: g.id,
+            event_id: g.event_id ?? id,
+            added_by: g.added_by ?? "",
+            guest_name: g.guest_name,
+            added_by_name: "A member",
+          }));
+        },
+      });
+      if (icpGuests) return icpGuests;
 
       const provider: EventSupportingReadsProvider = {
         async listEventGuests(eventId) {
