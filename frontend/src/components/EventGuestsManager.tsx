@@ -39,7 +39,7 @@ export function EventGuestsManager({
   const [newGuestName, setNewGuestName] = useState("");
 
   // Fetch all guests for this event
-  const { data: allGuests = [], isLoading } = useQuery({
+  const { data: allGuests = [], isLoading } = useQuery<EventGuest[]>({
     queryKey: ["event-guests", eventId],
     queryFn: async () => {
       // `added_by` has no canister-side account id today (the canister does
