@@ -5,32 +5,37 @@ type Access = record {
   guardian : bool;
   team_member : bool;
 };
-type Account = record { id : text; version : nat64; principals : vec principal; };
-type Exclusion = record { account_id : text; site_id : opt text; club : text; team : opt text };
-type FamilyLink = record { account_id : text; child_id : text };
+type Account = record {
+  id : text;
+  version : nat64;
+  principals : vec principal;
+};
+// A Pro entitlement granted to a principal from an IAP (App Store) receipt
+// or a governor/verifier write. `transaction_id` is the Apple transaction
+// id (or empty for non-IAP grants) and is the replay-protection key: once a
+// transaction id has been redeemed, only the same principal may redeem it
+// again (idempotent re-verification), never a different one.
+type Entitlement = record {
+  transaction_id : text;
+  "principal" : principal;
+  product_id : text;
+  source : text;
+  granted_at_ms : nat64;
+  expires_at_ms : nat64;
+};
+type Exclusion = record {
+  account_id : text;
+  club : text;
+  team : opt text;
+  site_id : opt text;
+};
 type ExternalSiteBinding = record {
   account_id : text;
-  site_id : text;
   external_user_id : text;
   linked_at_ns : nat64;
+  site_id : text;
 };
-type PrivacyConsent = record {
-  account_id : text;
-  purpose : text;
-  granted : bool;
-  updated_at_ns : nat64;
-};
-type Profile = record {
-  account_id : text;
-  display_name : text;
-  avatar_ref : opt text;
-  updated_at_ns : nat64;
-};
-type TermsAcceptance = record {
-  account_id : text;
-  terms_version : nat32;
-  accepted_at_ms : nat64;
-};
+type FamilyLink = record { account_id : text; child_id : text };
 type Init = record { governor : principal };
 type LinkChallenge = record {
   id : nat64;
@@ -41,64 +46,145 @@ type LinkChallenge = record {
   expires_at_ns : nat64;
   expected_version : nat64;
 };
+type PrivacyConsent = record {
+  account_id : text;
+  updated_at_ns : nat64;
+  granted : bool;
+  purpose : text;
+};
+type Profile = record {
+  account_id : text;
+  avatar_ref : opt text;
+  updated_at_ns : nat64;
+  display_name : text;
+};
 type Result = variant { Ok : Account; Err : text };
 type Result_1 = variant { Ok : Access; Err : text };
-type Result_2 = variant { Ok : LinkChallenge; Err : text };
-type Result_3 = variant { Ok : State; Err : text };
-type Result_4 = variant { Ok; Err : text };
-type Result_5 = variant { Ok : ExternalSiteBinding; Err : text };
-type Result_6 = variant { Ok : vec ExternalSiteBinding; Err : text };
-type Result_7 = variant { Ok : PrivacyConsent; Err : text };
-type Result_8 = variant { Ok : bool; Err : text };
+type Result_10 = variant { Ok : opt TermsAcceptance; Err : text };
+type Result_11 = variant { Ok : vec RoleGrant; Err : text };
+type Result_12 = variant { Ok : Entitlement; Err : text };
+type Result_13 = variant { Ok : PrivacyConsent; Err : text };
+type Result_14 = variant { Ok : TermsAcceptance; Err : text };
+type Result_2 = variant { Ok; Err : text };
+type Result_3 = variant { Ok : LinkChallenge; Err : text };
+type Result_4 = variant { Ok : ExternalSiteBinding; Err : text };
+type Result_5 = variant { Ok : bool; Err : text };
+type Result_6 = variant { Ok : State; Err : text };
+type Result_7 = variant { Ok : vec ExternalSiteBinding; Err : text };
+type Result_8 = variant { Ok : vec Entitlement; Err : text };
 type Result_9 = variant { Ok : Profile; Err : text };
-type Result_10 = variant { Ok : vec RoleGrant; Err : text };
-type Result_11 = variant { Ok : TermsAcceptance; Err : text };
-type Result_12 = variant { Ok : opt TermsAcceptance; Err : text };
 type RoleGrant = record {
   account_id : text;
-  site_id : opt text;
   club : opt text;
   role : text;
   team : opt text;
+  site_id : opt text;
 };
 type State = record {
+  privacy_consents : vec PrivacyConsent;
   schema : nat32;
+  // Principals (in addition to the governor) allowed to call
+  // `set_entitlement` directly — e.g. a server-side receipt verifier
+  // identity. Empty by default; only the governor can grow this list.
+  verifiers : vec principal;
+  // Shared HMAC secret used to verify `redeem_entitlement` attestations
+  // minted by the session-free IAP verification endpoint. Empty until the
+  // governor calls `set_attestation_secret`; redemption is rejected while
+  // empty.
+  attestation_secret : blob;
   accounts : vec Account;
   governor : principal;
   exclusions : vec Exclusion;
+  external_bindings : vec ExternalSiteBinding;
+  // Pro entitlements granted via IAP receipt verification or governor/
+  // verifier writes (schema 4+); empty on older blobs via serde default.
+  entitlements : vec Entitlement;
   families : vec FamilyLink;
   challenges : vec LinkChallenge;
-  roles : vec RoleGrant;
-  external_bindings : vec ExternalSiteBinding;
-  privacy_consents : vec PrivacyConsent;
+  // One profile per account. `#[serde(default)]` keeps schema-1 stable
+  // blobs (written before profiles existed) decodable; post_upgrade bumps
+  // the schema marker once decoded.
   profiles : vec Profile;
+  roles : vec RoleGrant;
+  // Per-account terms/privacy re-acceptance records (schema 3+); empty
+  // on schema-2 blobs via serde default, decoded then bumped in
+  // post_upgrade. Wiped by erase_account.
   terms_acceptances : vec TermsAcceptance;
   next_challenge : nat64;
+};
+type TermsAcceptance = record {
+  account_id : text;
+  terms_version : nat32;
+  accepted_at_ms : nat64;
 };
 service : (Init) -> {
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
-  begin_link : (principal) -> (Result_2);
-  bind_external_site : (text, text, text) -> (Result_5);
-  check_field_access : (text, text) -> (Result_8) query;
-  export_state : () -> (Result_3) query;
-  erase_account : (text) -> (Result_4);
-  get_external_bindings : (text) -> (Result_6) query;
-  get_privacy_consent : (text, text) -> (Result_8) query;
+  // Governor-only: grants an additional verifier principal permitted to call
+  // `set_entitlement` directly (e.g. a trusted server-side receipt verifier
+  // identity, once one is established).
+  add_verifier : (principal) -> (Result_2);
+  begin_link : (principal) -> (Result_3);
+  bind_external_site : (text, text, text) -> (Result_4);
+  check_field_access : (text, text) -> (Result_5) query;
+  erase_account : (text) -> (Result_2);
+  export_state : () -> (Result_6) query;
+  get_external_bindings : (text) -> (Result_7) query;
+  // The caller's own entitlement records (active and expired).
+  get_my_entitlements : () -> (Result_8) query;
+  get_privacy_consent : (text, text) -> (Result_5) query;
+  // The caller's own profile, or an error when none has been set yet.
   get_profile : () -> (Result_9) query;
-  get_terms_acceptance : (text) -> (Result_12) query;
-  my_roles : () -> (Result_10) query;
-  my_terms_acceptance : () -> (Result_12) query;
-  set_profile : (text, opt text) -> (Result_9);
-  set_terms_acceptance : (nat32) -> (Result_11);
-  grant_role : (text, text, opt text, opt text) -> (Result_4);
-  grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_4);
-  revoke : (principal, nat64) -> (Result);
+  // The terms acceptance record for an arbitrary account: the account owner
+  // or the governor only.
+  get_terms_acceptance : (text) -> (Result_10) query;
+  grant_role : (text, text, opt text, opt text) -> (Result_2);
+  grant_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_2);
+  // True when `principal` holds any non-expired Pro entitlement. Callable by
+  // any authenticated principal (boolean only, no entitlement detail leaked).
+  is_pro : (principal) -> (Result_5) query;
+  // Every role grant held by the caller, across all clubs/teams.
+  my_roles : () -> (Result_11) query;
+  // The caller's own terms acceptance record, or `None` when they have never
+  // accepted (used by the legal re-acceptance gate for Internet Identity
+  // users).
+  my_terms_acceptance : () -> (Result_10) query;
+  // Caller-authenticated: redeems a signed attestation minted by the
+  // session-free IAP verification endpoint after it confirms an Apple
+  // receipt/transaction with the App Store. The endpoint has no Internet
+  // Identity session and cannot act as the caller, so instead of writing the
+  // entitlement itself it signs `{principal}|{product_id}|{transaction_id}|
+  // {expires_at_ms}|{source}` with the shared secret and returns that
+  // signature to the client; the client (already authenticated as `principal`
+  // via II) submits it here, where the signature over its *own* principal is
+  // verified before the entitlement is written. A different principal cannot
+  // replay the signature because it is bound to the principal that produced
+  // it (changing the principal changes the signed message).
+  redeem_entitlement : (text, text, nat64, text, text) -> (Result_12);
   register_account : () -> (Result);
-  set_exclusion : (text, text, opt text) -> (Result_4);
-  set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_4);
-  set_family : (text, text) -> (Result_4);
-  set_privacy_consent : (text, text, bool) -> (Result_7);
+  // Governor-only: revokes a verifier principal.
+  remove_verifier : (principal) -> (Result_2);
+  revoke : (principal, nat64) -> (Result);
+  // Governor-only: sets (or rotates) the shared HMAC secret used to verify
+  // `redeem_entitlement` attestations. Must match the secret held by the
+  // session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
+  set_attestation_secret : (blob) -> (Result_2);
+  // Governor- or verifier-only: records a Pro entitlement for an arbitrary
+  // principal. Used by a trusted server-side writer; client-submitted IAP
+  // receipts instead go through `redeem_entitlement` below.
+  set_entitlement : (principal, text, text, nat64, text) -> (Result_12);
+  set_exclusion : (text, text, opt text) -> (Result_2);
+  set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_2);
+  set_family : (text, text) -> (Result_2);
+  set_privacy_consent : (text, text, bool) -> (Result_13);
+  // Sets (or replaces) the caller's profile. The account must already exist —
+  // sign-in provisioning calls register_account first.
+  set_profile : (text, opt text) -> (Result_9);
+  // Sets (records) the caller's acceptance of the current terms/privacy
+  // version. Monotonic per-account: a version lower than (or equal to) the
+  // caller's currently recorded version is rejected, so a stale client can
+  // never roll the recorded acceptance backwards.
+  set_terms_acceptance : (nat32) -> (Result_14);
   whoami : () -> (Result) query;
 }
