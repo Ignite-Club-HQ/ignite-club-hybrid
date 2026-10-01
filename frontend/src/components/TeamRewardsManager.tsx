@@ -30,6 +30,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveClubReward,
+  deleteLiveClubReward,
+  listLiveClubRewards,
+  updateLiveClubReward,
+} from "@/live/features/points";
 
 interface TeamReward {
   id: string;
@@ -62,15 +69,36 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   const { data: teamRewards = [], isLoading: isTeamRewardsLoading } = useQuery({
     queryKey: ["team-pom-rewards", teamId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*")
-        .eq("club_id", clubId)
-        .eq("team_id", teamId)
-        .eq("reward_type", "player_of_match")
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data || []) as TeamReward[];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_rewards")
+            .select("*")
+            .eq("club_id", clubId)
+            .eq("team_id", teamId)
+            .eq("reward_type", "player_of_match")
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return (data || []) as TeamReward[];
+        },
+        icp: async (ctx) => {
+          const rewards = await listLiveClubRewards(ctx, clubId, teamId, false);
+          return rewards
+            .filter((r) => r.reward_type === "player_of_match")
+            .sort((a, b) => Number(a.created_at_ms) - Number(b.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              team_id: r.team_id[0] ?? null,
+              name: r.name,
+              description: r.description[0] ?? null,
+              points_required: r.points_required,
+              is_active: r.is_active,
+              reward_type: r.reward_type,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+            })) as TeamReward[];
+        },
+      });
     },
   });
 
@@ -78,16 +106,37 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   const { data: clubRewards = [], isLoading: isClubRewardsLoading } = useQuery({
     queryKey: ["club-pom-rewards", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*")
-        .eq("club_id", clubId)
-        .is("team_id", null)
-        .eq("reward_type", "player_of_match")
-        .eq("is_active", true)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data || []) as TeamReward[];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_rewards")
+            .select("*")
+            .eq("club_id", clubId)
+            .is("team_id", null)
+            .eq("reward_type", "player_of_match")
+            .eq("is_active", true)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return (data || []) as TeamReward[];
+        },
+        icp: async (ctx) => {
+          const rewards = await listLiveClubRewards(ctx, clubId, null, true);
+          return rewards
+            .filter((r) => r.reward_type === "player_of_match")
+            .sort((a, b) => Number(a.created_at_ms) - Number(b.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              team_id: r.team_id[0] ?? null,
+              name: r.name,
+              description: r.description[0] ?? null,
+              points_required: r.points_required,
+              is_active: r.is_active,
+              reward_type: r.reward_type,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+            })) as TeamReward[];
+        },
+      });
     },
   });
 
