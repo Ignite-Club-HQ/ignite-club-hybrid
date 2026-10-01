@@ -619,3 +619,13 @@ export async function getLiveMyThemePreference(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.get_my_theme_preference(), "Get theme preference");
 }
+
+/**
+ * Caller-scoped role grants across all clubs — canister counterpart of a
+ * cross-club membership read (Supabase equivalent queries `user_roles` for
+ * the signed-in user across every club they belong to).
+ */
+export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.my_role_grants();
+}
