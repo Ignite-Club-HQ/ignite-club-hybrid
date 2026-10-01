@@ -9,6 +9,7 @@ import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
 import { useAuth } from "@/hooks/useAuth";
 import { readAdTierHint, writeAdTierHint, type AdTierHint } from "@/lib/adTierHint";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface SponsorOrAdCarouselProps {
   location: "home" | "events" | "messages" | "event-detail" | "schedule";
@@ -61,6 +62,16 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
       if (activeClubFilter) {
         const allowed = await isEventsStripEnabledForClub(activeClubFilter);
         return { allowed, effectiveClubId: allowed ? activeClubFilter : null };
+      }
+
+      // II users have no Supabase session (auth.getUser() returns null) and
+      // `user_roles.user_id` is uuid-typed, so there is no club to discover
+      // this way for a principal-text id. NEEDS-CANISTER: resolving "which of
+      // my clubs has the events sponsor strip enabled" without an explicit
+      // club filter has no club_domain counterpart (list_role_grants is
+      // scoped by club, not by caller-across-all-clubs).
+      if (resolveAuthBackend() === "icp") {
+        return { allowed: false, effectiveClubId: null as string | null };
       }
 
       const { data: { user } } = await supabase.auth.getUser();
@@ -182,6 +193,16 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
     queryKey: ["user-has-active-sponsors", effectiveClubFilter],
     placeholderData: keepPreviousData,
     queryFn: async () => {
+      // II users have no Supabase session and `user_roles`/`sponsors` are
+      // keyed/filtered by uuid — the per-club check (effectiveClubFilter set)
+      // still works below via plain club_id equality, but the "all of my
+      // clubs" fallback needs the Supabase user id. NEEDS-CANISTER: insights_domain
+      // exposes club_engagement_sponsor_performance (per-club), not a
+      // cross-club "does any of my clubs have active sponsors" lookup.
+      if (!effectiveClubFilter && resolveAuthBackend() === "icp") {
+        return false;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
 

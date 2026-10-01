@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { Capacitor } from "@capacitor/core";
 
 type PaymentType = "subscription" | "uniform";
@@ -203,6 +204,12 @@ export default function MemberSubscriptionPaymentsManager({
 
   const markPaidMutation = useMutation({
     mutationFn: async () => {
+      // Non-IAP payments are Supabase-only by design; manual "Mark Paid"
+      // bookkeeping writes directly to member_subscription_payments with no
+      // club_points_domain/club_domain counterpart.
+      // NEEDS-CANISTER: manual payment ledger (member_subscription_payments)
+      // has no canister equivalent.
+      assertSupabaseWritePath("membership", "manual 'Mark Paid' bookkeeping (member_subscription_payments) has no canister equivalent");
       if (!selectedMember) return;
       const insertData: any = {
         user_id: selectedMember.isChild ? selectedMember.parentUserId : selectedMember.userId,
@@ -257,6 +264,10 @@ export default function MemberSubscriptionPaymentsManager({
   // Bulk send fee payment reminder notifications
   const sendReminderMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: fee-payment-reminder notifications write directly to
+      // the Supabase `notifications` table; notification_queue has no
+      // equivalent "bulk fee reminder" insert yet.
+      assertSupabaseWritePath("membership", "bulk fee-payment reminder notifications have no canister equivalent");
       // Get unpaid entries - for children, notify the parent
       const unpaidParentIds = [...new Set(
         payableEntries

@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -278,23 +279,35 @@ export default function PlayerOfMatchSelector({
             newPoints: balanceAfter,
           });
 
-          // Send notification with points
-          await supabase.from("notifications").insert({
-            user_id: userId,
-            type: "player_of_match",
-            message: rewardName
-              ? `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${rewardName}!`
-              : `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
-            related_id: eventId,
-          });
+          // Send notification with points. Supabase-only: notification_queue
+          // has no "bulk fan-out with reward-name interpolation" equivalent
+          // and the points-award itself already succeeded above, so skip
+          // (rather than throw) for ICP so the award doesn't appear to fail
+          // after already landing on the canister.
+          // NEEDS-CANISTER: player_of_match award notifications have no
+          // notification_queue counterpart.
+          if (!isFeatureRoutedToIcp("points")) {
+            await supabase.from("notifications").insert({
+              user_id: userId,
+              type: "player_of_match",
+              message: rewardName
+                ? `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${rewardName}!`
+                : `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
+              related_id: eventId,
+            });
+          }
         } else if (childId) {
           // Get child info for notification (no canister equivalent for this
           // display-only lookup — see live/features/points.ts doc comment).
-          const { data: child } = await supabase
-            .from("children")
-            .select("parent_id, name")
-            .eq("id", childId)
-            .single();
+          // NEEDS-CANISTER: club_domain/events_domain has no `children` table
+          // read; skip for ICP instead of throwing a uuid-type error.
+          const child = isFeatureRoutedToIcp("points")
+            ? null
+            : (await supabase
+                .from("children")
+                .select("parent_id, name")
+                .eq("id", childId)
+                .single()).data;
 
           // Atomic child points increment (+ matching history entry,
           // recorded atomically by award_points on the ICP branch).
@@ -347,8 +360,9 @@ export default function PlayerOfMatchSelector({
             newPoints: childBalanceAfter,
           });
 
-          // Notify parent with points
-          if (child?.parent_id) {
+          // Notify parent with points (same gate as above — skip rather
+          // than fail part-way for ICP-routed points).
+          if (child?.parent_id && !isFeatureRoutedToIcp("points")) {
             await supabase.from("notifications").insert({
               user_id: child.parent_id,
               type: "player_of_match",
@@ -359,8 +373,11 @@ export default function PlayerOfMatchSelector({
             });
           }
         }
-      } else {
-        // Send notification without points
+      } else if (!isFeatureRoutedToIcp("points")) {
+        // Send notification without points. No points award happened in this
+        // branch (pointsToAward === 0), so the gate here simply skips the
+        // Supabase-only notification/child lookup for ICP rather than
+        // throwing — matches the points-branch skip behaviour above.
         if (userId) {
           await supabase.from("notifications").insert({
             user_id: userId,

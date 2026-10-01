@@ -98,10 +98,15 @@ export function ClubAnnouncementDialog({
         throw new Error("Pick at least one team or the club chat.");
       }
 
+      // club_id/team_ids are Supabase uuids in Supabase mode, but under
+      // ICP-routed messaging/membership they are club_domain string ids
+      // (not RFC4122 uuids) carried on an Internet Identity principal —
+      // `.uuid()` would reject those. Validate as a non-empty string instead;
+      // actual id resolution/ownership is enforced server-side either way.
       const parsed = z
         .object({
-          club_id: z.string().uuid(),
-          team_ids: z.array(z.string().uuid()),
+          club_id: z.string().min(1),
+          team_ids: z.array(z.string().min(1)),
           message: z.string().trim().min(1).max(4000),
         })
         .refine((v) => v.team_ids.length > 0 || sendToClubChat, {

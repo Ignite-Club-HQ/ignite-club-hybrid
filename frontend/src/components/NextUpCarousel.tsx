@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -189,6 +190,15 @@ function getUrgencyBadge(dateStr: string) {
 }
 
 function useChildRsvps(eventId: string, userId: string | undefined) {
+  // II users' `userId` is their principal text, not a Supabase uuid — the
+  // `children`/`child_guardians` lookups below are uuid-typed columns and
+  // throw for principal-shaped values. events_domain has no
+  // children/child_guardians table (child rosters only exist per-event via
+  // get_event_roster), so there is no canister read to substitute here.
+  // NEEDS-CANISTER: household RSVP roll-up (children-by-guardian across all
+  // events) has no events_domain/club_domain counterpart — gate the query
+  // off for II users instead of throwing a uuid-type error.
+  const icpAuth = resolveAuthBackend() === "icp";
   return useQuery({
     queryKey: ["child-rsvps-card", eventId, userId],
     queryFn: async () => {
@@ -222,7 +232,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
         children: { name: string } | null;
       }>;
     },
-    enabled: !!userId,
+    enabled: !!userId && !icpAuth,
     staleTime: 30 * 1000,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
