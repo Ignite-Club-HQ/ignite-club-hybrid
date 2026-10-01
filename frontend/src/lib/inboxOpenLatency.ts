@@ -16,6 +16,8 @@
  * by an in-module flag so re-renders don't multi-log.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLivePerfSample } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";
 import { mark as coldMark, snapshotStages, logStagesToConsole, getMarkTs } from "./coldStartMarks";
 
@@ -136,6 +138,14 @@ export async function logInboxOpenLatency(args: LogArgs): Promise<void> {
     logStagesToConsole(`inboxOpen:${args.source}`);
 
     const doInsert = () => {
+      void withFeatureBackend("analytics", {
+        supabase: async () => { supabaseInsert(); },
+        icp: async (ctx) => {
+          await recordLivePerfSample(ctx, "inbox_open", args.source, tap_to_paint_ms, args.fromCache ?? args.cacheHit, platform);
+        },
+      }).catch(() => {});
+    };
+    const supabaseInsert = () => {
       void supabase.from("inbox_open_perf").insert({
         user_id: args.userId!,
         source: args.source,

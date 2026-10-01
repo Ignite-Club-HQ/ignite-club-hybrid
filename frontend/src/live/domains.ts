@@ -7,10 +7,16 @@ import { idlFactory as clubDomainIdl } from "../lab/bindings/club_domain/declara
 import type { _SERVICE as ClubDomainActor } from "../lab/bindings/club_domain/declarations/club_domain.did.js";
 import { idlFactory as competitionDomainIdl } from "../lab/bindings/competition_domain/declarations/competition_domain.did.js";
 import type { _SERVICE as CompetitionDomainActor } from "../lab/bindings/competition_domain/declarations/competition_domain.did.js";
+import { idlFactory as clubPointsDomainIdl } from "../lab/bindings/club_points_domain/declarations/club_points_domain.did.js";
+import type { _SERVICE as ClubPointsDomainActor } from "../lab/bindings/club_points_domain/declarations/club_points_domain.did.js";
 import { idlFactory as eventsDomainIdl } from "../lab/bindings/events_domain/declarations/events_domain.did.js";
 import type { _SERVICE as EventsDomainActor } from "../lab/bindings/events_domain/declarations/events_domain.did.js";
 import { idlFactory as mediaMetadataIdl } from "../lab/bindings/media_metadata/declarations/media_metadata.did.js";
 import type { _SERVICE as MediaMetadataActor } from "../lab/bindings/media_metadata/declarations/media_metadata.did.js";
+import { idlFactory as insightsDomainIdl } from "../lab/bindings/insights_domain/declarations/insights_domain.did.js";
+import type { _SERVICE as InsightsDomainActor } from "../lab/bindings/insights_domain/declarations/insights_domain.did.js";
+import { idlFactory as miniLeagueDomainIdl } from "../lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js";
+import type { _SERVICE as MiniLeagueDomainActor } from "../lab/bindings/mini_league_domain/declarations/mini_league_domain.did.js";
 import { idlFactory as messagingDomainIdl } from "../lab/bindings/messaging_domain/declarations/messaging_domain.did.js";
 import type { _SERVICE as MessagingDomainActor } from "../lab/bindings/messaging_domain/declarations/messaging_domain.did.js";
 import { idlFactory as migrationCoordinatorIdl } from "../lab/bindings/migration_coordinator/declarations/migration_coordinator.did.js";
@@ -45,10 +51,13 @@ import type { _SERVICE as VaultDomainActor } from "../lab/bindings/vault_domain/
 
 export const DOMAIN_LABELS: Record<string, string> = {
   club_domain: "Club domain",
+  club_points_domain: "Club points domain",
   competition_domain: "Competition domain",
   events_domain: "Events domain",
   identity_access: "Identity access",
   media_metadata: "Media metadata",
+  insights_domain: "Insights domain",
+  mini_league_domain: "Mini league domain",
   messaging_domain: "Messaging domain",
   migration_coordinator: "Migration coordinator",
   notification_queue: "Notification queue",
@@ -85,14 +94,23 @@ export const connectLiveClubDomain = (target: IcpTargetConfig, identity: Identit
 export const connectLiveCompetitionDomain = (target: IcpTargetConfig, identity: Identity) =>
   connect<CompetitionDomainActor>(target, identity, "competition_domain", competitionDomainIdl);
 
+export const connectLiveClubPointsDomain = (target: IcpTargetConfig, identity: Identity) =>
+  connect<ClubPointsDomainActor>(target, identity, "club_points_domain", clubPointsDomainIdl);
+
 export const connectLiveEventsDomain = (target: IcpTargetConfig, identity: Identity) =>
   connect<EventsDomainActor>(target, identity, "events_domain", eventsDomainIdl);
 
 export const connectLiveMediaMetadata = (target: IcpTargetConfig, identity: Identity) =>
   connect<MediaMetadataActor>(target, identity, "media_metadata", mediaMetadataIdl);
 
+export const connectLiveInsightsDomain = (target: IcpTargetConfig, identity: Identity) =>
+  connect<InsightsDomainActor>(target, identity, "insights_domain", insightsDomainIdl);
+
 export const connectLiveMessagingDomain = (target: IcpTargetConfig, identity: Identity) =>
   connect<MessagingDomainActor>(target, identity, "messaging_domain", messagingDomainIdl);
+
+export const connectLiveMiniLeagueDomain = (target: IcpTargetConfig, identity: Identity) =>
+  connect<MiniLeagueDomainActor>(target, identity, "mini_league_domain", miniLeagueDomainIdl);
 
 export const connectLiveMigrationCoordinator = (target: IcpTargetConfig, identity: Identity) =>
   connect<MigrationCoordinatorActor>(target, identity, "migration_coordinator", migrationCoordinatorIdl);

@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveChildPoints, getLiveUserPoints } from "@/live/features/points";
 
 /**
  * Read a user's reward-points balance scoped to a single club.
@@ -13,13 +15,18 @@ export function useUserClubPoints(userId: string | null | undefined, clubId: str
     queryKey: ["user-club-points", userId, clubId],
     queryFn: async () => {
       if (!userId || !clubId) return 0;
-      const { data } = await supabase
-        .from("user_club_points")
-        .select("points")
-        .eq("user_id", userId)
-        .eq("club_id", clubId)
-        .maybeSingle();
-      return data?.points ?? 0;
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_club_points")
+            .select("points")
+            .eq("user_id", userId)
+            .eq("club_id", clubId)
+            .maybeSingle();
+          return data?.points ?? 0;
+        },
+        icp: (ctx) => getLiveUserPoints(ctx, clubId, userId),
+      });
     },
     enabled: !!userId && !!clubId,
     staleTime: 1000 * 30,
@@ -38,13 +45,18 @@ export function useChildClubPoints(childId: string | null | undefined, clubId: s
     queryKey: ["child-club-points", childId, clubId],
     queryFn: async () => {
       if (!childId || !clubId) return 0;
-      const { data } = await supabase
-        .from("child_club_points")
-        .select("points")
-        .eq("child_id", childId)
-        .eq("club_id", clubId)
-        .maybeSingle();
-      return data?.points ?? 0;
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("child_club_points")
+            .select("points")
+            .eq("child_id", childId)
+            .eq("club_id", clubId)
+            .maybeSingle();
+          return data?.points ?? 0;
+        },
+        icp: (ctx) => getLiveChildPoints(ctx, clubId, childId),
+      });
     },
     enabled: !!childId && !!clubId,
     staleTime: 1000 * 30,

@@ -187,17 +187,59 @@ export async function deleteLiveTeamPermanent(ctx: FeatureBackendContext, teamId
  * Club lifecycle (soft-delete / restore / permanent-delete) — the canister
  * counterpart of the Supabase `clubs.deleted_at` tombstone flow.
  */
-export async function softDeleteLiveClub(ctx: FeatureBackendContext, clubId: string) {
+export async function softDeleteLiveClub(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  cascadeTeams = true,
+) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.soft_delete_club(clubId), "Delete club");
+  return unwrapCandid(actor.soft_delete_club(clubId, cascadeTeams), "Delete club");
 }
 
-export async function restoreLiveClub(ctx: FeatureBackendContext, clubId: string) {
+export async function restoreLiveClub(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  cascadeTeams = true,
+) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.restore_club(clubId), "Restore club");
+  return unwrapCandid(actor.restore_club(clubId, cascadeTeams), "Restore club");
 }
 
 export async function deleteLiveClubPermanent(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club");
+}
+
+/**
+ * Shell-team invites — the canister counterpart of the Supabase
+ * `invite_shell_team_to_competition` RPC + `claim_shell_team` flow. A shell
+ * team is a placeholder `ClubTeam` created before its club/contact exists;
+ * claiming it links the claiming principal as its admin.
+ *
+ * NOTE: untested against a live canister until deployment. Division
+ * assignment and competition-entry linkage stay Supabase-only — the
+ * canister shape has no competition/division concept.
+ */
+export async function createLiveShellTeamInvite(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  name: string,
+  contactEmail?: string | null,
+  contactName?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_shell_team_invite(clubId, name, candidOpt(contactEmail), candidOpt(contactName)),
+    "Invite shell team",
+  );
+}
+
+export async function getLiveShellTeamByToken(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_shell_team_by_token(token), "Load shell team invite");
+}
+
+export async function claimLiveShellTeam(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.claim_shell_team(token), "Claim shell team");
 }

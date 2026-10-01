@@ -1,5 +1,7 @@
 import { onCLS, onLCP, onTTFB, onINP, type Metric } from "web-vitals";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLiveWebVital } from "@/live/features/insights";
 
 /**
  * Lightweight Web Vitals reporter that logs Core Web Vitals to Supabase.
@@ -34,17 +36,32 @@ async function sendMetric(metric: Metric) {
   if (!getShouldSample()) return;
 
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    await withFeatureBackend("analytics", {
+      supabase: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
 
-    await supabase.from("web_vitals").insert({
-      user_id: session?.user?.id ?? null,
-      metric_name: metric.name,
-      metric_value: Math.round(metric.value * 100) / 100,
-      rating: metric.rating, // "good" | "needs-improvement" | "poor"
-      page_path: window.location.pathname,
-      user_agent: navigator.userAgent.substring(0, 255),
-      connection_type: getConnectionType(),
-      device_memory: getDeviceMemory(),
+        await supabase.from("web_vitals").insert({
+          user_id: session?.user?.id ?? null,
+          metric_name: metric.name,
+          metric_value: Math.round(metric.value * 100) / 100,
+          rating: metric.rating, // "good" | "needs-improvement" | "poor"
+          page_path: window.location.pathname,
+          user_agent: navigator.userAgent.substring(0, 255),
+          connection_type: getConnectionType(),
+          device_memory: getDeviceMemory(),
+        });
+      },
+      icp: async (ctx) => {
+        // Provisional mapping: user agent / connection / device memory have
+        // no canister equivalent yet — only name/value/rating/path survive.
+        await recordLiveWebVital(
+          ctx,
+          metric.name,
+          Math.round(metric.value * 100) / 100,
+          metric.rating,
+          window.location.pathname,
+        );
+      },
     });
   } catch (e) {
     // Silently fail — never impact user experience for analytics

@@ -30,20 +30,167 @@ export const idlFactory = ({ IDL }) => {
     'idempotency_key' : IDL.Text,
   });
   const Result = IDL.Variant({ 'Ok' : Notification, 'Err' : IDL.Text });
+  const ScheduledStatus = IDL.Variant({
+    'Failed' : IDL.Null,
+    'Sent' : IDL.Null,
+    'Cancelled' : IDL.Null,
+    'Pending' : IDL.Null,
+  });
+  const Recurrence = IDL.Variant({
+    'Weekly' : IDL.Null,
+    'None' : IDL.Null,
+    'Daily' : IDL.Null,
+    'Monthly' : IDL.Null,
+  });
+  const ChatType = IDL.Variant({
+    'Club' : IDL.Null,
+    'Group' : IDL.Null,
+    'ClubAdmin' : IDL.Null,
+    'Team' : IDL.Null,
+    'Broadcast' : IDL.Null,
+    'Direct' : IDL.Null,
+  });
+  const ScheduledMessage = IDL.Record({
+    'id' : IDL.Text,
+    'status' : ScheduledStatus,
+    'recurrence_until_ms' : IDL.Opt(IDL.Nat64),
+    'sent_message_id' : IDL.Opt(IDL.Text),
+    'image_url' : IDL.Opt(IDL.Text),
+    'conversation_id' : IDL.Opt(IDL.Text),
+    'body' : IDL.Text,
+    'error_message' : IDL.Opt(IDL.Text),
+    'team_id' : IDL.Opt(IDL.Text),
+    'updated_at_ms' : IDL.Nat64,
+    'reply_to_id' : IDL.Opt(IDL.Text),
+    'scheduled_for_ms' : IDL.Nat64,
+    'author' : IDL.Text,
+    'recurrence' : Recurrence,
+    'created_at_ms' : IDL.Nat64,
+    'recurrence_parent_id' : IDL.Opt(IDL.Text),
+    'group_id' : IDL.Opt(IDL.Text),
+    'attempted_at_ms' : IDL.Opt(IDL.Nat64),
+    'club_id' : IDL.Opt(IDL.Text),
+    'chat_type' : ChatType,
+  });
+  const ScheduledResult = IDL.Variant({
+    'Ok' : ScheduledMessage,
+    'Err' : IDL.Text,
+  });
   const Results = IDL.Variant({
     'Ok' : IDL.Vec(Notification),
     'Err' : IDL.Text,
   });
   const ResultNat16 = IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text });
+  const ScheduledResults = IDL.Variant({
+    'Ok' : IDL.Vec(ScheduledMessage),
+    'Err' : IDL.Text,
+  });
+  const DigestSource = IDL.Variant({
+    'Club' : IDL.Null,
+    'Group' : IDL.Null,
+    'Team' : IDL.Null,
+  });
+  const DigestClassification = IDL.Variant({
+    'Question' : IDL.Null,
+    'Info' : IDL.Null,
+    'Action' : IDL.Null,
+    'Social' : IDL.Null,
+    'Decision' : IDL.Null,
+  });
+  const DigestItem = IDL.Record({
+    'id' : IDL.Text,
+    'topic' : IDL.Opt(IDL.Text),
+    'provider' : IDL.Opt(IDL.Text),
+    'message_created_at_ms' : IDL.Nat64,
+    'summary' : IDL.Text,
+    'message_type' : DigestSource,
+    'mentions' : IDL.Vec(IDL.Text),
+    'message_id' : IDL.Text,
+    'chat_scope_id' : IDL.Text,
+    'digested_at_ms' : IDL.Nat64,
+    'classification' : DigestClassification,
+  });
+  const DigestResults = IDL.Variant({
+    'Ok' : IDL.Vec(DigestItem),
+    'Err' : IDL.Text,
+  });
+  const Preferences = IDL.Record({
+    'email_pitch_board_enabled' : IDL.Bool,
+    'admin_enabled' : IDL.Bool,
+    'email_rewards_enabled' : IDL.Bool,
+    'pom_enabled' : IDL.Bool,
+    'user' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'email_events_enabled' : IDL.Bool,
+    'email_admin_enabled' : IDL.Bool,
+    'rewards_enabled' : IDL.Bool,
+    'messages_enabled' : IDL.Bool,
+    'created_at_ms' : IDL.Nat64,
+    'media_enabled' : IDL.Bool,
+    'pitch_board_enabled' : IDL.Bool,
+    'email_media_enabled' : IDL.Bool,
+    'email_messages_enabled' : IDL.Bool,
+    'show_message_preview' : IDL.Bool,
+    'email_membership_enabled' : IDL.Bool,
+    'events_enabled' : IDL.Bool,
+    'email_pom_enabled' : IDL.Bool,
+    'membership_enabled' : IDL.Bool,
+  });
+  const PushAlertSettings = IDL.Record({
+    'updated_by' : IDL.Opt(IDL.Text),
+    'alerts_enabled' : IDL.Bool,
+    'updated_at_ms' : IDL.Nat64,
+    'check_window_hours' : IDL.Nat32,
+    'cooldown_hours' : IDL.Nat32,
+    'min_notifications' : IDL.Nat32,
+    'failure_threshold_percent' : IDL.Nat32,
+  });
+  const DigestResult = IDL.Variant({ 'Ok' : DigestItem, 'Err' : IDL.Text });
+  const PreferencesInput = IDL.Record({
+    'email_pitch_board_enabled' : IDL.Bool,
+    'admin_enabled' : IDL.Bool,
+    'email_rewards_enabled' : IDL.Bool,
+    'pom_enabled' : IDL.Bool,
+    'email_events_enabled' : IDL.Bool,
+    'email_admin_enabled' : IDL.Bool,
+    'rewards_enabled' : IDL.Bool,
+    'messages_enabled' : IDL.Bool,
+    'media_enabled' : IDL.Bool,
+    'pitch_board_enabled' : IDL.Bool,
+    'email_media_enabled' : IDL.Bool,
+    'email_messages_enabled' : IDL.Bool,
+    'show_message_preview' : IDL.Bool,
+    'email_membership_enabled' : IDL.Bool,
+    'events_enabled' : IDL.Bool,
+    'email_pom_enabled' : IDL.Bool,
+    'membership_enabled' : IDL.Bool,
+  });
+  const PreferencesResult = IDL.Variant({
+    'Ok' : Preferences,
+    'Err' : IDL.Text,
+  });
+  const PushAlertSettingsInput = IDL.Record({
+    'alerts_enabled' : IDL.Bool,
+    'check_window_hours' : IDL.Nat32,
+    'cooldown_hours' : IDL.Nat32,
+    'min_notifications' : IDL.Nat32,
+    'failure_threshold_percent' : IDL.Nat32,
+  });
   
   return IDL.Service({
     'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
+    'cancel_scheduled' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [Results], []),
     'clear_inbox' : IDL.Func([IDL.Text, IDL.Opt(IDL.Text)], [ResultNat16], []),
     'delete_notification' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
+      ),
+    'due_scheduled' : IDL.Func(
+        [IDL.Nat64, IDL.Nat16],
+        [ScheduledResults],
+        ['query'],
       ),
     'enqueue' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
@@ -63,11 +210,18 @@ export const idlFactory = ({ IDL }) => {
         [ResultNat16],
         [],
       ),
+    'get_digest' : IDL.Func(
+        [DigestSource, IDL.Text, IDL.Nat64, IDL.Nat16],
+        [DigestResults],
+        ['query'],
+      ),
     'get_notification' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(Notification)],
         ['query'],
       ),
+    'get_preferences' : IDL.Func([IDL.Text], [Preferences], ['query']),
+    'get_push_alert_settings' : IDL.Func([], [PushAlertSettings], ['query']),
     'grant_worker' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -83,13 +237,65 @@ export const idlFactory = ({ IDL }) => {
         [Results],
         ['query'],
       ),
+    'list_scheduled' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [ScheduledResults],
+        ['query'],
+      ),
     'mark_all_read' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [ResultNat16],
         [],
       ),
+    'mark_failed' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'mark_read' : IDL.Func([IDL.Text], [Result], []),
+    'mark_sent' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
+    'record_digest_item' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          DigestSource,
+          IDL.Text,
+          IDL.Nat64,
+          DigestClassification,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [DigestResult],
+        [],
+      ),
     'recover' : IDL.Func([], [ResultNat16], []),
+    'schedule_message' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          ChatType,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          Recurrence,
+          IDL.Opt(IDL.Nat64),
+        ],
+        [ScheduledResult],
+        [],
+      ),
+    'upsert_preferences' : IDL.Func(
+        [IDL.Text, PreferencesInput],
+        [PreferencesResult],
+        [],
+      ),
+    'upsert_push_alert_settings' : IDL.Func(
+        [PushAlertSettingsInput],
+        [PushAlertSettings],
+        [],
+      ),
   });
 };
 

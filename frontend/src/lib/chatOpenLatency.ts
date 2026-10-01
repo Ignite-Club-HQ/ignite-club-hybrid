@@ -9,6 +9,8 @@
  * committing to further prefetch optimisations.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLivePerfSample } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";
 import { mark as coldMark, snapshotStages, logStagesToConsole, stopLongTaskWindow } from "./coldStartMarks";
 
@@ -82,6 +84,14 @@ export async function logChatOpenLatency(args: LogArgs): Promise<void> {
     // Defer the insert until the browser is idle so it doesn't compete with
     // the messages fetch / first-paint critical path on notification opens.
     const doInsert = () => {
+      void withFeatureBackend("analytics", {
+        supabase: async () => { supabaseInsert(); },
+        icp: async (ctx) => {
+          await recordLivePerfSample(ctx, "chat_open", args.source, tap_to_render_ms, args.fromCache, platform);
+        },
+      }).catch(() => {});
+    };
+    const supabaseInsert = () => {
       void supabase.from("chat_open_perf").insert({
         user_id: args.userId!,
         chat_kind: args.kind,

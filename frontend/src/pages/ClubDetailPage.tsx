@@ -849,8 +849,8 @@ export default function ClubDetailPage() {
     if (isFeatureRoutedToIcp("membership")) {
       try {
         await withFeatureBackend("membership", {
-          supabase: () => softDeleteLiveClub({} as any, id!), // unreachable: gated above
-          icp: (ctx) => softDeleteLiveClub(ctx, id!),
+          supabase: () => softDeleteLiveClub({} as any, id!, true), // unreachable: gated above
+          icp: (ctx) => softDeleteLiveClub(ctx, id!, true),
         });
         setShowDeleteDialog(false);
         clearClubSetupLocalState(id!);
@@ -1041,8 +1041,8 @@ export default function ClubDetailPage() {
     if (isFeatureRoutedToIcp("membership")) {
       try {
         await withFeatureBackend("membership", {
-          supabase: () => restoreLiveClub({} as any, id!), // unreachable: gated above
-          icp: (ctx) => restoreLiveClub(ctx, id!),
+          supabase: () => restoreLiveClub({} as any, id!, true), // unreachable: gated above
+          icp: (ctx) => restoreLiveClub(ctx, id!, true),
         });
         queryClient.invalidateQueries({ queryKey: ["club", id] });
         toast({ title: "Club restored!" });

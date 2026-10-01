@@ -21,9 +21,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { getLocalLabMiniLeagues } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listMyLiveMiniLeagues,
+  listLiveMiniLeaguesByClub,
+  listLivePlayers,
+  listLiveSessions,
+  createLiveMiniLeague,
+} from "@/live/features/miniLeagues";
 
 interface MiniLeague {
   id: string;
@@ -43,44 +48,6 @@ interface MiniLeague {
 }
 
 export default function MiniLeaguesPage() {
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
-  if (useIcpLab) {
-    return <IcpLabMiniLeaguesPage />;
-  }
-  return <SupabaseMiniLeaguesPage />;
-}
-
-/** Read-only synthetic mini-league list; creation and administration remain unavailable until competition_domain admin tooling is wired here. */
-function IcpLabMiniLeaguesPage() {
-  const navigate = useNavigate();
-  const leagues = getLocalLabMiniLeagues("club-icp-001");
-
-  return (
-    <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-bold">Mini Leagues</h1>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Showing synthetic ICP lab mini leagues. Creating and managing leagues is disabled.
-      </p>
-      <div className="space-y-2">
-        {leagues.map((league) => (
-          <Card key={league.id} onClick={() => navigate(`/mini-leagues/${league.id}`)} className="cursor-pointer hover:border-primary transition-colors">
-            <CardContent className="p-4 flex items-center justify-between">
-              <span className="text-sm font-medium">{league.name}</span>
-              <span className="text-xs text-muted-foreground">{league.team_count} teams</span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SupabaseMiniLeaguesPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -149,75 +116,110 @@ function SupabaseMiniLeaguesPage() {
   // Fetch mini leagues the user has access to (admin or has a player assigned)
   const { data: miniLeagues, isLoading } = useQuery({
     queryKey: ["mini-leagues", clubIdFromUrl, user?.id],
-    queryFn: async () => {
-      // First, get league IDs where user is a parent (has a player)
-      const { data: playerLeagues } = await supabase
-        .from("mini_league_players")
-        .select("mini_league_id")
-        .eq("parent_user_id", user!.id);
-      
-      const parentLeagueIds = playerLeagues?.map(p => p.mini_league_id) || [];
-      
-      // Get admin club IDs (clubs where user is club_admin, league_admin, or app_admin)
-      const { data: adminRoles } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .in("role", ["league_admin", "app_admin"])
-        .not("club_id", "is", null);
-      
-      const adminClubIds = adminRoles?.map(r => r.club_id) as string[] || [];
-      
-      // Get leagues where user is admin
-      let adminLeagueIds: string[] = [];
-      if (adminClubIds.length > 0) {
-        const { data: adminLeagues } = await supabase
-          .from("mini_leagues")
-          .select("id")
-          .in("club_id", adminClubIds);
-        adminLeagueIds = adminLeagues?.map(l => l.id) || [];
-      }
-      
-      // Combine both sets of league IDs
-      const allAccessibleLeagueIds = [...new Set([...parentLeagueIds, ...adminLeagueIds])];
-      
-      if (allAccessibleLeagueIds.length === 0) {
-        return [] as MiniLeague[];
-      }
-      
-      // Fetch the actual league data
-      let query = supabase
-        .from("mini_leagues")
-        .select(`*, club:clubs!club_id(id, name)`)
-        .in("id", allAccessibleLeagueIds)
-        .order("created_at", { ascending: false });
-      
-      if (clubIdFromUrl) {
-        query = query.eq("club_id", clubIdFromUrl);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
+    queryFn: async () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          // First, get league IDs where user is a parent (has a player)
+          const { data: playerLeagues } = await supabase
+            .from("mini_league_players")
+            .select("mini_league_id")
+            .eq("parent_user_id", user!.id);
 
-      // Get counts for each league
-      const leaguesWithCounts = await Promise.all(
-        (data || []).map(async (league) => {
-          const [playersResult, sessionsResult] = await Promise.all([
-            supabase.from("mini_league_players").select("id", { count: "exact", head: true }).eq("mini_league_id", league.id),
-            supabase.from("events").select("id", { count: "exact", head: true }).eq("mini_league_id", league.id),
-          ]);
-          return {
-            ...league,
-            _count: {
-              players: playersResult.count || 0,
-              sessions: sessionsResult.count || 0,
-            },
-          };
-        })
-      );
+          const parentLeagueIds = playerLeagues?.map(p => p.mini_league_id) || [];
 
-      return leaguesWithCounts as MiniLeague[];
-    },
+          // Get admin club IDs (clubs where user is club_admin, league_admin, or app_admin)
+          const { data: adminRoles } = await supabase
+            .from("user_roles")
+            .select("club_id")
+            .eq("user_id", user!.id)
+            .in("role", ["league_admin", "app_admin"])
+            .not("club_id", "is", null);
+
+          const adminClubIds = adminRoles?.map(r => r.club_id) as string[] || [];
+
+          // Get leagues where user is admin
+          let adminLeagueIds: string[] = [];
+          if (adminClubIds.length > 0) {
+            const { data: adminLeagues } = await supabase
+              .from("mini_leagues")
+              .select("id")
+              .in("club_id", adminClubIds);
+            adminLeagueIds = adminLeagues?.map(l => l.id) || [];
+          }
+
+          // Combine both sets of league IDs
+          const allAccessibleLeagueIds = [...new Set([...parentLeagueIds, ...adminLeagueIds])];
+
+          if (allAccessibleLeagueIds.length === 0) {
+            return [] as MiniLeague[];
+          }
+
+          // Fetch the actual league data
+          let query = supabase
+            .from("mini_leagues")
+            .select(`*, club:clubs!club_id(id, name)`)
+            .in("id", allAccessibleLeagueIds)
+            .order("created_at", { ascending: false });
+
+          if (clubIdFromUrl) {
+            query = query.eq("club_id", clubIdFromUrl);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+
+          // Get counts for each league
+          const leaguesWithCounts = await Promise.all(
+            (data || []).map(async (league) => {
+              const [playersResult, sessionsResult] = await Promise.all([
+                supabase.from("mini_league_players").select("id", { count: "exact", head: true }).eq("mini_league_id", league.id),
+                supabase.from("events").select("id", { count: "exact", head: true }).eq("mini_league_id", league.id),
+              ]);
+              return {
+                ...league,
+                _count: {
+                  players: playersResult.count || 0,
+                  sessions: sessionsResult.count || 0,
+                },
+              };
+            })
+          );
+
+          return leaguesWithCounts as MiniLeague[];
+        },
+        icp: async (ctx) => {
+          // ICP: my_leagues() returns every league the caller's principal is
+          // linked to (admin or claimed player); list_mini_leagues_by_club
+          // narrows to a specific club when the page is scoped via ?clubId=.
+          const leagues = clubIdFromUrl
+            ? await listLiveMiniLeaguesByClub(ctx, clubIdFromUrl)
+            : await listMyLiveMiniLeagues(ctx);
+
+          const leaguesWithCounts = await Promise.all(
+            leagues.map(async (league) => {
+              const [players, sessions] = await Promise.all([
+                listLivePlayers(ctx, league.id).catch(() => []),
+                listLiveSessions(ctx, league.id).catch(() => []),
+              ]);
+              return {
+                id: league.id,
+                name: league.name,
+                description: league.description[0] ?? null,
+                team_size: league.team_size,
+                club_id: league.club_id,
+                created_at: new Date(Number(league.created_at_ms)).toISOString(),
+                // Provisional: club display name is not available from
+                // mini_league_domain; club_domain lookup can be added once
+                // membership is fully ICP-routed.
+                club: { id: league.club_id, name: "" },
+                _count: { players: players.length, sessions: sessions.length },
+              } satisfies MiniLeague;
+            })
+          );
+
+          return leaguesWithCounts;
+        },
+      }),
     enabled: !!user,
   });
 
@@ -228,16 +230,34 @@ function SupabaseMiniLeaguesPage() {
 
   // Create mini league mutation
   const createMutation = useMutation({
-    mutationFn: async (data: typeof newLeague) => {
-      const { error } = await supabase.from("mini_leagues").insert({
-        name: data.name,
-        description: data.description || null,
-        team_size: parseInt(data.team_size),
-        club_id: data.club_id,
-        created_by: user!.id,
-      });
-      if (error) throw error;
-    },
+    mutationFn: async (data: typeof newLeague) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("mini_leagues").insert({
+            name: data.name,
+            description: data.description || null,
+            team_size: parseInt(data.team_size),
+            club_id: data.club_id,
+            created_by: user!.id,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await createLiveMiniLeague(ctx, data.club_id, {
+            name: data.name,
+            description: data.description || null,
+            teamSize: parseInt(data.team_size),
+            // Provisional: Supabase only collects team size on create; the
+            // canister requires min_players_per_side/minutes_per_half too,
+            // so default them to sane starting values until the create
+            // drawer collects them explicitly.
+            minPlayersPerSide: parseInt(data.team_size),
+            minutesPerHalf: 20,
+            bibColors: [],
+            showMatchesToMembers: true,
+          });
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-leagues"] });
       setIsCreateOpen(false);

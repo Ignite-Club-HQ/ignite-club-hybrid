@@ -1,0 +1,226 @@
+type PerfSampleInput = 
+ record {
+   cache_hit: bool;
+   duration_ms: nat32;
+   platform: text;
+   source: text;
+   surface: text;
+ };
+type PerfAggregate = 
+ record {
+   avg_ms: float64;
+   count: nat32;
+   p50_ms: nat32;
+   p95_ms: nat32;
+   source: text;
+   surface: text;
+ };
+type FeedbackStatus = 
+ variant {
+   InProgress;
+   Open;
+   Resolved;
+ };
+type Feedback = 
+ record {
+   admin_notes: opt text;
+   created_at_ms: nat64;
+   id: text;
+   kind: text;
+   message: text;
+   page_url: opt text;
+   status: FeedbackStatus;
+   title: opt text;
+   updated_at_ms: nat64;
+   user: principal;
+ };
+type EngagementTotals = 
+ record {
+   active_users: nat32;
+   club_id: text;
+   messages: nat32;
+   rsvps: nat32;
+   sponsor_clicks: nat32;
+   sponsor_impressions: nat32;
+ };
+type EngagementDayPoint = 
+ record {
+   day: text;
+   value: nat32;
+ };
+type EngagementBenchmarks = 
+ record {
+   club_id: text;
+   current: EngagementTotals;
+   previous: EngagementTotals;
+ };
+type AuditLog = 
+ record {
+   action_type: text;
+   actor_id: principal;
+   created_at_ms: nat64;
+   details: text;
+   id: text;
+   table_name: text;
+   target_user_id: opt text;
+   target_user_name: opt text;
+ };
+type AlertStatus = 
+ variant {
+   Open;
+   Resolved;
+ };
+type AdminAlert = 
+ record {
+   alert_type: text;
+   created_at_ms: nat64;
+   details: text;
+   id: text;
+   resolved_at_ms: opt nat64;
+   resolved_by: opt principal;
+   status: AlertStatus;
+ };
+service : {
+  append_audit_log: (action_type: text, table_name: text, target_user_id:
+   opt text, target_user_name: opt text, details: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  club_engagement_active_users: (club_id: text, since_ms: nat64, until_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: vec EngagementDayPoint;
+              }) query;
+  club_engagement_benchmarks: (club_id: text, since_ms: nat64, until_ms:
+   nat64, prev_since_ms: nat64, prev_until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: EngagementBenchmarks;
+    }) query;
+  club_engagement_message_volume: (club_id: text, since_ms: nat64, until_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: vec EngagementDayPoint;
+              }) query;
+  club_engagement_rsvp_completion_series: (club_id: text, since_ms: nat64,
+   until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: vec EngagementDayPoint;
+    }) query;
+  club_engagement_sponsor_performance: (club_id: text, since_ms: nat64,
+   until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok:
+       record {
+         clicks: vec EngagementDayPoint;
+         impressions: vec EngagementDayPoint;
+       };
+    }) query;
+  club_engagement_total_unique_reach: (club_id: text, since_ms: nat64,
+   until_ms: nat64) -> (variant {
+                          Err: text;
+                          Ok: nat32;
+                        }) query;
+  club_engagement_totals: (club_id: text, since_ms: nat64, until_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: EngagementTotals;
+              }) query;
+  create_admin_alert: (alert_type: text, details: text) ->
+   (variant {
+      Err: text;
+      Ok: AdminAlert;
+    });
+  grant_role: ("principal": principal, role: text, club_id: text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  list_admin_alerts: (status: opt AlertStatus) ->
+   (variant {
+      Err: text;
+      Ok: vec AdminAlert;
+    }) query;
+  list_audit_logs: (actor_filter: opt principal, action_type: opt text,
+   table_name: opt text, offset: nat32, limit: nat32) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            items: vec AuditLog;
+            total: nat32;
+          };
+    }) query;
+  list_feedback: (status: opt FeedbackStatus, offset: nat32, limit: nat32) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            items: vec Feedback;
+            total: nat32;
+          };
+    }) query;
+  my_feedback: () -> (vec Feedback) query;
+  perf_aggregate: (surface: text, source: opt text, since_ms: nat64,
+   until_ms: nat64) -> (variant {
+                          Err: text;
+                          Ok: PerfAggregate;
+                        }) query;
+  record_active_user: (club_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  record_message_sent: (club_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  record_perf_sample: (surface: text, source: text, duration_ms: nat32,
+   cache_hit: bool, platform: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+  record_perf_samples_batch: (samples: vec PerfSampleInput) ->
+   (variant {
+      Err: text;
+      Ok: nat32;
+    });
+  record_rsvp_completed: (club_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  record_sponsor_click: (club_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
+  record_sponsor_impression: (club_id: text) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+  record_web_vital: (metric_name: text, metric_value: float64, rating: 
+   text, page_path: text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+  resolve_admin_alert: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: AdminAlert;
+                                      });
+  submit_feedback: (kind: text, title: opt text, message: text, page_url:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: Feedback;
+                 });
+  update_feedback_status: (id: text, status: FeedbackStatus, admin_notes:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: Feedback;
+                 });
+}

@@ -172,7 +172,7 @@ persistent actor {
       case (?value) value;
       case null {
         switch (occurrences) {
-          case (?count) if (count == 0) return #Err("Invalid series") else first_starts_at_ms + step * Nat64.fromNat(Nat32.toNat(count - 1));
+          case (?count) if (count == 0) return #Err("Invalid series") else first_starts_at_ms + step * Nat.toNat64(Nat32.toNat(count - 1));
           case null return #Err("occurrences or until_ms required");
         };
       };

@@ -1,7 +1,16 @@
+type RsvpWithChild = 
+ record {
+   child: opt Child;
+   rsvp: Rsvp;
+ };
 type Rsvp = 
  record {
    account_id: text;
+   child_id: opt text;
    event_id: text;
+   has_paid: opt bool;
+   notes: text;
+   source: text;
    state: text;
    updated_at_ms: nat64;
  };
@@ -69,6 +78,29 @@ type EventSeries =
    title: text;
    until_ms: nat64;
  };
+type EventRoster = 
+ record {
+   guests: vec EventGuest;
+   rsvps: vec RsvpWithChild;
+ };
+type EventGuest = 
+ record {
+   added_by: principal;
+   created_at_ms: nat64;
+   event_id: text;
+   guest_name: text;
+   id: text;
+ };
+type EventAttendance = 
+ record {
+   event_id: text;
+   marked_at_ms: nat64;
+   marked_by: principal;
+   notes: text;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
+ };
 type Event = 
  record {
    cancelled: bool;
@@ -92,6 +124,25 @@ type Duty =
    duty: text;
    event_id: text;
  };
+type ChildGuardian = 
+ record {
+   child_id: text;
+   guardian_id: text;
+   is_primary: bool;
+ };
+type Child = 
+ record {
+   id: text;
+   name: text;
+   parent_id: opt text;
+ };
+type AttendanceInput = 
+ record {
+   notes: text;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
+ };
 type Attendance = 
  record {
    account_id: text;
@@ -105,11 +156,41 @@ service : {
       Err: text;
       Ok;
     });
+  add_event_guest: (event_id: text, guest_name: text) ->
+   (variant {
+      Err: text;
+      Ok: EventGuest;
+    });
   add_lineup: (event_id: text, member: text, slot: text, team_id:
    opt text) -> (variant {
                    Err: text;
                    Ok: LineupEntry;
                  });
+  admin_link_guardian: (child_id: text, guardian_id: text, is_primary:
+   bool) -> (variant {
+               Err: text;
+               Ok: ChildGuardian;
+             });
+  admin_update_rsvp_status: (event_id: text, account_id: text, child_id:
+   opt text, status: text) -> (variant {
+                                 Err: text;
+                                 Ok: Rsvp;
+                               });
+  admin_upsert_child: (id: text, name: text, parent_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: Child;
+    });
+  admin_upsert_rsvp: (event_id: text, account_id: text, child_id: opt text,
+   status: text, notes: text) -> (variant {
+                                    Err: text;
+                                    Ok: Rsvp;
+                                  });
+  child_is_in_event_audience: (child_id: text, event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: bool;
+    }) query;
   complete_duty: (event_id: text, account_id: text) ->
    (variant {
       Err: text;
@@ -121,6 +202,17 @@ service : {
                             Err: text;
                             Ok: Event;
                           });
+  create_recurring_series: (club_id: text, team_id: opt text, title: 
+   text, description: text, event_type: text, location: opt text, frequency:
+   text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, occurrences:
+   opt nat32, until_ms: opt nat64) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            events: vec Event;
+            series: EventSeries;
+          };
+    });
   create_series: (club_id: text, team_id: opt text, title: text, description:
    text, event_type: text, location: opt text, frequency: text,
    first_starts_at_ms: nat64, first_ends_at_ms: nat64, until_ms: nat64) ->
@@ -136,13 +228,26 @@ service : {
       Err: text;
       Ok: nat32;
     });
+  detach_occurrence: (event_id: text) -> (variant {
+                                            Err: text;
+                                            Ok: Event;
+                                          });
+  event_roster: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: EventRoster;
+    }) query;
   export_state: () ->
    (variant {
       Err: text;
       Ok:
        record {
          attendance: vec Attendance;
+         childGuardians: vec ChildGuardian;
+         children: vec Child;
          duties: vec Duty;
+         eventAttendance: vec EventAttendance;
+         eventGuests: vec EventGuest;
          events: vec Event;
          governor: principal;
          lineupSnapshots: vec LineupSnapshot;
@@ -154,6 +259,11 @@ service : {
          schema: nat32;
          series: vec EventSeries;
        };
+    }) query;
+  get_attendance: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec EventAttendance;
     }) query;
   get_event_roster: (event_id: text) ->
    (variant {
@@ -182,6 +292,14 @@ service : {
   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
   list_series: (club_id: opt text, team_id: opt text) ->
    (vec EventSeries) query;
+  mark_attendance: (event_id: text, records: vec AttendanceInput) ->
+   (variant {
+      Err: text;
+      Ok: vec EventAttendance;
+    });
+  my_attendance: (event_id: opt text) -> (vec EventAttendance) query;
+  my_child_rsvps: (event_id: opt text, club_id: opt text) ->
+   (vec RsvpWithChild) query;
   my_rsvps: () -> (vec Rsvp) query;
   removeBulkAccessPrincipal: ("principal": principal) ->
    (variant {
@@ -193,6 +311,10 @@ service : {
       Err: text;
       Ok;
     });
+  remove_event_guest: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
   save_lineup_snapshot: (event_id: text, team_id: opt text, formation:
    opt text, team_size: nat16, ball_x: opt float64, ball_y: opt float64,
    players: vec LineupPlayer) -> (variant {

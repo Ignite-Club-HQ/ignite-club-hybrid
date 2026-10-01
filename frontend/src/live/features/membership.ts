@@ -189,4 +189,7 @@ export {
   softDeleteLiveClub,
   restoreLiveClub,
   deleteLiveClubPermanent,
+  createLiveShellTeamInvite,
+  getLiveShellTeamByToken,
+  claimLiveShellTeam,
 } from "./club";

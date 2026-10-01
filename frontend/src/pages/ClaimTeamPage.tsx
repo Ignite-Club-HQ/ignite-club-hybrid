@@ -7,8 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { claimLiveShellTeam } from "@/live/features/club";
 
 export default function ClaimTeamPage() {
   const [searchParams] = useSearchParams();
@@ -16,19 +16,12 @@ export default function ClaimTeamPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error" | "icp_preview">("idle");
+  const [status, setStatus] = useState<"idle" | "claiming" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
-  const useIcpLab = isFeatureRoutedToIcp("membership");
-  const icpClaimableTeam = getLocalLabClaimableTeam("team-icp-001");
-
   usePageTitle("Claim your team");
 
   useEffect(() => {
-    if (useIcpLab) {
-      setStatus("icp_preview");
-      return;
-    }
     if (!token) {
       setStatus("error");
       setErrorMsg("Missing invite token.");
@@ -43,18 +36,31 @@ export default function ClaimTeamPage() {
     if (status !== "idle") return;
     setStatus("claiming");
     (async () => {
-      const { data, error } = await supabase.rpc("claim_shell_team", { p_token: token });
-      if (error || !data || !(data as any[]).length) {
+      try {
+        const teamId = await withFeatureBackend("membership", {
+          supabase: async () => {
+            const { data, error } = await supabase.rpc("claim_shell_team", { p_token: token });
+            if (error || !data || !(data as any[]).length) {
+              throw new Error(error?.message || "This invite is invalid or already used.");
+            }
+            return (data as any[])[0].team_id as string;
+          },
+          // Provisional: the canister's ClubTeam.id is the shell team's own
+          // record id (no separate Supabase-style claim-row join).
+          icp: async (ctx) => {
+            const team = await claimLiveShellTeam(ctx, token);
+            return (team as { id: string }).id;
+          },
+        });
+        setTeamId(teamId);
+        setStatus("done");
+        toast({ title: "Team claimed", description: "You're now the team admin." });
+      } catch (error) {
         setStatus("error");
-        setErrorMsg(error?.message || "This invite is invalid or already used.");
-        return;
+        setErrorMsg(error instanceof Error ? error.message : "This invite is invalid or already used.");
       }
-      const row: any = (data as any[])[0];
-      setTeamId(row.team_id);
-      setStatus("done");
-      toast({ title: "Team claimed", description: "You're now the team admin." });
     })();
-  }, [useIcpLab, token, authLoading, user, status, navigate, toast]);
+  }, [token, authLoading, user, status, navigate, toast]);
 
   return (
     <div className="container max-w-md mx-auto px-4 py-10">
@@ -64,18 +70,6 @@ export default function ClaimTeamPage() {
             <>
               <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Claiming your team…</p>
-            </>
-          ) : status === "icp_preview" ? (
-            <>
-              <CheckCircle2 className="h-10 w-10 mx-auto text-muted-foreground" />
-              <h1 className="text-lg font-semibold">{icpClaimableTeam.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                Showing a synthetic ICP lab team preview. Claiming and role provisioning are disabled until
-                identity_access invite-linking is wired here.
-              </p>
-              <Button asChild variant="outline">
-                <Link to="/">Back to home</Link>
-              </Button>
             </>
           ) : status === "done" ? (
             <>

@@ -1,0 +1,216 @@
+type UserClubPoints = 
+ record {
+   club_id: text;
+   points: int32;
+   updated_at_ms: nat64;
+   user_id: text;
+ };
+type Subject = 
+ variant {
+   Child: text;
+   User: text;
+ };
+type RoleGrant = 
+ record {
+   club_id: text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type RewardRedemption = 
+ record {
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   id: text;
+   idempotency_key: opt text;
+   points_spent: nat32;
+   redeemed_at_ms: opt nat64;
+   reward_id: text;
+   status: text;
+   user_id: opt text;
+   verified_at_ms: opt nat64;
+   verified_by: opt principal;
+ };
+type PointsHistoryEntry = 
+ record {
+   amount: int32;
+   balance_after: int32;
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: opt principal;
+   description: text;
+   id: text;
+   season_id: opt text;
+   source_id: opt text;
+   source_type: text;
+   user_id: opt text;
+ };
+type PointsCooldown = 
+ record {
+   action_type: text;
+   awarded_date: text;
+   club_id: text;
+   created_at_ms: nat64;
+   id: text;
+   points_awarded: nat32;
+   scope_id: text;
+   user_id: text;
+ };
+type LeaderboardEntry = 
+ record {
+   points: int32;
+   subject_id: text;
+ };
+type HistoryPage = 
+ record {
+   items: vec PointsHistoryEntry;
+   total: nat;
+ };
+type ClubReward = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   description: opt text;
+   id: text;
+   is_active: bool;
+   is_default: bool;
+   logo_url: opt text;
+   name: text;
+   points_required: nat32;
+   qr_code_url: opt text;
+   reward_type: text;
+   show_qr_code: bool;
+   sponsor_id: opt text;
+   team_id: opt text;
+   updated_at_ms: nat64;
+ };
+type ChildClubPoints = 
+ record {
+   child_id: text;
+   club_id: text;
+   points: int32;
+   updated_at_ms: nat64;
+ };
+service : {
+  addBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  approve_redemption: (id: text) ->
+   (variant {
+      Err: text;
+      Ok: RewardRedemption;
+    });
+  award_points: (club_id: text, subject: Subject, action_type: text,
+   scope_id: text, amount: int32, description: text, source_id: opt text,
+   season_id: opt text, daily_cap: opt nat32) ->
+   (variant {
+      Err: text;
+      Ok: PointsHistoryEntry;
+    });
+  cancel_redemption: (id: text) ->
+   (variant {
+      Err: text;
+      Ok: RewardRedemption;
+    });
+  create_reward: (club_id: text, name: text, description: opt text,
+   points_required: nat32, is_default: bool, reward_type: text, logo_url:
+   opt text, show_qr_code: bool, sponsor_id: opt text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: ClubReward;
+    });
+  delete_reward: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok;
+                                });
+  export_state: () ->
+   (variant {
+      Err: text;
+      Ok:
+       record {
+         childClubPoints: vec ChildClubPoints;
+         clubRewards: vec ClubReward;
+         cooldowns: vec PointsCooldown;
+         governor: principal;
+         pointsHistory: vec PointsHistoryEntry;
+         redemptions: vec RewardRedemption;
+         roles: vec RoleGrant;
+         schema: nat32;
+         userClubPoints: vec UserClubPoints;
+       };
+    }) query;
+  fulfill_redemption: (id: text) ->
+   (variant {
+      Err: text;
+      Ok: RewardRedemption;
+    });
+  get_child_points: (club_id: text, child_id: text) ->
+   (variant {
+      Err: text;
+      Ok: int32;
+    }) query;
+  get_leaderboard: (club_id: text, subjectKind: variant {
+                                                  Child;
+                                                  User;
+                                                }, window: text, top_n:
+   nat) -> (variant {
+              Err: text;
+              Ok: vec LeaderboardEntry;
+            }) query;
+  get_user_points: (club_id: text, user_id: text) ->
+   (variant {
+      Err: text;
+      Ok: int32;
+    }) query;
+  grant_role: ("principal": principal, role: text, club_id: text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok;
+                 });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  listBulkAccessPrincipals: () ->
+   (variant {
+      Err: text;
+      Ok: vec principal;
+    }) query;
+  list_points_history: (club_id: text, subject: opt Subject, offset: 
+   nat, limit: nat) -> (variant {
+                          Err: text;
+                          Ok: HistoryPage;
+                        }) query;
+  list_redemptions: (club_id: text, subject: opt Subject) ->
+   (variant {
+      Err: text;
+      Ok: vec RewardRedemption;
+    }) query;
+  list_rewards: (club_id: text, team_id: opt text, active_only: bool) ->
+   (variant {
+      Err: text;
+      Ok: vec ClubReward;
+    }) query;
+  redeem_reward: (club_id: text, subject: Subject, reward_id: text,
+   idempotency_key: opt text) -> (variant {
+                                    Err: text;
+                                    Ok: RewardRedemption;
+                                  });
+  removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  update_reward: (id: text, name: text, description: opt text,
+   points_required: nat32, is_default: bool, is_active: bool, reward_type:
+   text, logo_url: opt text, qr_code_url: opt text, show_qr_code: bool,
+   sponsor_id: opt text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: ClubReward;
+    });
+}

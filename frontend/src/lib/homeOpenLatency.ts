@@ -8,6 +8,8 @@
  * One sample per page open. Any failure is swallowed.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLivePerfSample } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";
 import { mark as coldMark, snapshotStages, logStagesToConsole } from "./coldStartMarks";
 
@@ -81,6 +83,14 @@ export async function logHomeOpenLatency(args: LogArgs): Promise<void> {
     logStagesToConsole(`homeOpen:${args.source}`);
 
     const doInsert = () => {
+      void withFeatureBackend("analytics", {
+        supabase: async () => { supabaseInsert(); },
+        icp: async (ctx) => {
+          await recordLivePerfSample(ctx, "home_open", args.source, tap_to_paint_ms, args.cacheHit, platform);
+        },
+      }).catch(() => {});
+    };
+    const supabaseInsert = () => {
       void (supabase as any).from("home_open_perf").insert({
         user_id: args.userId!,
         source: args.source,

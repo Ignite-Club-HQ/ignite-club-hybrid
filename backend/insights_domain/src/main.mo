@@ -4,7 +4,6 @@ import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
-import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
@@ -21,7 +20,7 @@ persistent actor {
   var feedback : [Types.Feedback];
   var nextId : Nat64;
 
-  let MAX_BATCH = 50;
+  transient let MAX_BATCH = 50;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
@@ -88,7 +87,7 @@ persistent actor {
 
   func percentile(sorted : [Nat32], p : Float) : Nat32 {
     if (sorted.size() == 0) return 0;
-    let rank = Float.toInt(Float.ceil(p * Float.fromInt(sorted.size()))) - 1;
+    let rank = Float.toInt(Float.ceil(p * Int.toFloat(sorted.size()))) - 1;
     let index = Nat.max(0, Nat.min(sorted.size() - 1, Int.abs(rank)));
     sorted[index]
   };
@@ -104,11 +103,11 @@ persistent actor {
     if (matches.size() == 0) return #Ok({ surface; source = switch (source) { case (?s) s; case null "" }; count = 0; avg_ms = 0.0; p50_ms = 0; p95_ms = 0 });
     let durations = matches.map(func(item) = item.duration_ms);
     let sorted = durations.sort(func(a, b) = Nat32.compare(a, b));
-    let total = durations.foldLeft(0.0, func(acc, item) = acc + Float.fromInt(Nat32.toNat(item)));
+    let total = durations.foldLeft(0.0, func(acc, item) = acc + Int.toFloat(Nat32.toNat(item)));
     #Ok({
       surface; source = switch (source) { case (?s) s; case null "" };
       count = Nat.toNat32(matches.size());
-      avg_ms = total / Float.fromInt(matches.size());
+      avg_ms = total / Int.toFloat(matches.size());
       p50_ms = percentile(sorted, 0.5);
       p95_ms = percentile(sorted, 0.95);
     })
@@ -124,12 +123,12 @@ persistent actor {
           case (?user) { if (current.activeUsers.any(func(u) = u == user)) current.activeUsers else current.activeUsers.concat([user]) };
           case null current.activeUsers;
         };
-        let updated = { current with count = current.count + 1; activeUsers };
+        let updated = { current with count = current.count + (1 : Nat32); activeUsers };
         engagementCounters := engagementCounters.map(func(item) = if (item.club_id == club_id and item.day == day and item.kind == kind) updated else item);
       };
       case null {
         let activeUsers = switch (byUser) { case (?user) [user]; case null [] };
-        engagementCounters := engagementCounters.concat([{ club_id; day; kind; count = 1; activeUsers }]);
+        engagementCounters := engagementCounters.concat([{ club_id; day; kind; count = (1 : Nat32); activeUsers }]);
       };
     };
   };
@@ -203,7 +202,6 @@ persistent actor {
     let inRange = engagementCounters.filter(func(item) =
       item.club_id == club_id and kindEq(item.kind, kind) and item.day >= dayKey(since_ms) and item.day <= dayKey(until_ms)
     );
-    let sorted = inRange.sort(func(a, b) = Order.orElse(Nat64.compare(0, 0), Order.equal)); // placeholder, real sort below
     inRange.map(func(item) = { day = item.day; value = item.count }).sort(func(a, b) = if (a.day == b.day) #equal else if (a.day < b.day) #less else #greater)
   };
 
@@ -271,16 +269,16 @@ persistent actor {
   public shared ({ caller }) func append_audit_log(action_type : Text, table_name : Text, target_user_id : ?Text, target_user_name : ?Text, details : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not valid(action_type)) return #Err("Invalid audit log");
-    auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
+    auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor_id = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
     #Ok
   };
 
   // Paginated, optionally filtered by actor and/or action_type/table_name.
-  public query ({ caller }) func list_audit_logs(actor : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
+  public query ({ caller }) func list_audit_logs(actor_filter : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = auditLogs.filter(func(item) =
-      (actor == null or (switch (actor) { case (?a) a.equal(item.actor); case null true }))
+      (actor_filter == null or (switch (actor_filter) { case (?a) a.equal(item.actor_id); case null true }))
         and (action_type == null or action_type == ?item.action_type)
         and (table_name == null or table_name == ?item.table_name)
     );
