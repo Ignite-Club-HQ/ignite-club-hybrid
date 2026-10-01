@@ -333,7 +333,7 @@ export default function MemberSubscriptionPaymentsManager({
         icp: async (ctx) => {
           // Club name from club_domain; reminders fan out through
           // notification_queue with an idempotent prefix per period/tab.
-          const { clubs } = await listLiveClubs(ctx, null, 500);
+          const clubs = await listLiveClubs(ctx, null, 500);
           const clubName = clubs.find((c) => c.id === clubId)?.name || "Your club";
           await fanOutLiveNotifications(ctx, {
             userIds: unpaidParentIds,
