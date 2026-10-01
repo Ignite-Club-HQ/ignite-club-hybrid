@@ -47,7 +47,7 @@ export function AssociationEventsPanel({ associationId, isAdmin, clubs }: Props)
             id: p.id,
             title: p.title,
             event_date: new Date(Number(p.starts_at_ms)).toISOString(),
-            location_name: p.location[0] ?? null,
+            location_name: p.location ?? null,
             club_id: p.association_id,
             association_event_id: null,
             child_event_ids: p.child_event_ids,
