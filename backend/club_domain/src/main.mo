@@ -53,6 +53,7 @@ persistent actor {
   var themePrefs : [(Principal, Text)];
   var clubTerms : [Types.ClubTerm];
   var removedMembers : [Types.RemovedMember];
+  var memberPayments : [Types.MemberPayment];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
