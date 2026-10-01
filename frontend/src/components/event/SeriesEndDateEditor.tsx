@@ -146,10 +146,66 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
     if (!series?.parent || !newEndDate) return;
     setSaving(true);
     try {
-      // NEEDS-CANISTER: this editor trims/extends occurrences with raw
-      // events-table inserts/deletes, which has no events_domain equivalent
-      // (the canister only exposes whole-series create/update/delete).
-      assertSupabaseWritePath("events", "editing a recurring series end date");
+      await withFeatureBackend("events", {
+        supabase: () => applySupabaseChange(),
+        // Wired: trims via delete_event per trimmed occurrence, extends via
+        // add_series_occurrence per new occurrence. recurrence_end_date has
+        // no canister field to sync — the occurrence list itself is the
+        // source of truth under ICP.
+        icp: (ctx) => applyIcpChange(ctx),
+      });
+
+      toast({
+        title: "Series end date updated",
+        description:
+          preview.action === "trim"
+            ? `Removed ${preview.trimCount} future occurrence${preview.trimCount === 1 ? "" : "s"}.`
+            : preview.action === "extend"
+              ? `Added ${preview.extendCount} occurrence${preview.extendCount === 1 ? "" : "s"}.`
+              : "End date saved.",
+      });
+      setConfirmOpen(false);
+      await refetch();
+      onUpdated();
+    } catch (e: any) {
+      toast(friendlyMutationError(e, { description: "Failed to update series end date." }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const applyIcpChange = async (ctx: Parameters<Parameters<typeof withFeatureBackend>[1]["icp"]>[0]) => {
+    if (!series?.parent || !newEndDate) return;
+    const endOfDay = new Date(`${newEndDate}T23:59:59`);
+
+    if (preview.action === "trim") {
+      const toDelete = series.all.filter((e) => new Date(e.event_date) > endOfDay);
+      for (const occ of toDelete) {
+        await deleteLiveEvent(ctx, occ.id);
+      }
+    } else if (preview.action === "extend" && series.all.length >= 2) {
+      const last = series.all[series.all.length - 1];
+      const prev = series.all[series.all.length - 2];
+      const stepMs = new Date(last.event_date).getTime() - new Date(prev.event_date).getTime();
+      const lastStart = new Date(last.event_date);
+      const lastEnd = last.end_time ? new Date(last.end_time) : null;
+      const durMs = lastEnd ? lastEnd.getTime() - lastStart.getTime() : 60 * 60 * 1000;
+
+      let cursor = new Date(lastStart.getTime() + stepMs);
+      let count = 0;
+      while (cursor <= endOfDay && count < 200) {
+        const startsAt = cursor.getTime();
+        const endsAt = startsAt + durMs;
+        await addLiveSeriesOccurrence(ctx, parentEventId, startsAt, endsAt);
+        cursor = new Date(cursor.getTime() + stepMs);
+        count++;
+      }
+    }
+  };
+
+  const applySupabaseChange = async () => {
+    if (!series?.parent || !newEndDate) return;
+    {
       const endOfDay = new Date(`${newEndDate}T23:59:59`);
 
       if (preview.action === "trim") {

@@ -6,6 +6,7 @@ const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-leag
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { removeLivePlayer } from "@/live/features/miniLeagues";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -327,11 +328,12 @@ export function ManagePlayersDialog({
             }
           }
         },
-        // Gated: removing a player cascades into child_mini_league_assignments/
-        // children with no canister equivalent. Disabled under ICP routing
-        // rather than silently touching Supabase from an ICP session.
-        icp: async () => {
-          throw new Error("Removing players isn't available yet on this backend.");
+        // NEEDS-CANISTER: mini_league_domain has no child_mini_league_assignments/
+        // children tables, so the cascade cleanup below has no canister
+        // equivalent — the player row itself is removed on-canister, but the
+        // linked child/assignment rows (Supabase-only) are left untouched.
+        icp: async (ctx) => {
+          await removeLivePlayer(ctx, playerId);
         },
       }),
     onSuccess: () => {
@@ -374,9 +376,12 @@ export function ManagePlayersDialog({
             }
           }
         },
-        // Gated: same child/team assignment cascades as single-player delete.
-        icp: async () => {
-          throw new Error("Removing players isn't available yet on this backend.");
+        // NEEDS-CANISTER: same child/team assignment cascade gap as the
+        // single-player delete above — only the player rows are removed.
+        icp: async (ctx) => {
+          for (const playerId of playerIds) {
+            await removeLivePlayer(ctx, playerId);
+          }
         },
       }),
     onSuccess: () => {
