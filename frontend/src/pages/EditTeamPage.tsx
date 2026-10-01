@@ -660,7 +660,7 @@ export default function EditTeamPage() {
         </CardContent>
       </Card>
 
-      {id && <TeamTrainingPausesCard teamId={id} />}
+      {id && <TeamTrainingPausesCard teamId={id} clubId={team?.club_id} />}
 
       {/* Submit Button */}
       <Button

@@ -16,7 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { moveLiveMemberToTeam, moveLiveChildToTeam } from "@/live/features/club";
+import { Principal } from "@icp-sdk/core/principal";
 
 interface MoveToTeamSheetProps {
   open: boolean;
@@ -65,25 +67,34 @@ export function MoveToTeamSheet({
   const moveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTeamId) throw new Error("No team selected");
-      assertSupabaseWritePath("membership", "move_member_to_team/move_child_to_team RPC has no club_domain counterpart"); // NEEDS-CANISTER: move_member_to_team/move_child_to_team RPC has no club_domain counterpart
-
-      if (memberType === "adult") {
-        const { error } = await supabase.rpc("move_member_to_team", {
-          p_user_id: memberId,
-          p_from_team_id: fromTeamId,
-          p_to_team_id: selectedTeamId,
-          p_club_id: clubId,
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.rpc("move_child_to_team", {
-          p_child_id: memberId,
-          p_from_team_id: fromTeamId,
-          p_to_team_id: selectedTeamId,
-          p_club_id: clubId,
-        });
-        if (error) throw error;
-      }
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          if (memberType === "adult") {
+            await moveLiveMemberToTeam(ctx, clubId, Principal.fromText(memberId), fromTeamId, selectedTeamId);
+          } else {
+            await moveLiveChildToTeam(ctx, memberId, fromTeamId, selectedTeamId);
+          }
+        },
+        supabase: async () => {
+          if (memberType === "adult") {
+            const { error } = await supabase.rpc("move_member_to_team", {
+              p_user_id: memberId,
+              p_from_team_id: fromTeamId,
+              p_to_team_id: selectedTeamId,
+              p_club_id: clubId,
+            });
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.rpc("move_child_to_team", {
+              p_child_id: memberId,
+              p_from_team_id: fromTeamId,
+              p_to_team_id: selectedTeamId,
+              p_club_id: clubId,
+            });
+            if (error) throw error;
+          }
+        },
+      });
     },
     onSuccess: () => {
       const targetTeam = teams.find((t) => t.id === selectedTeamId);

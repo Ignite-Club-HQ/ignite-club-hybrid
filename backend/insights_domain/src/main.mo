@@ -22,6 +22,7 @@ persistent actor {
   var clientPerfSamples : [Types.ClientPerfSample];
   var benchmarks : [Types.Benchmark];
   var sponsorMetrics : [Types.SponsorMetricCounter];
+  var sponsorReach : [Types.SponsorReachCounter];
 
   transient let MAX_BATCH = 50;
 
@@ -373,10 +374,24 @@ persistent actor {
   // computed club_engagement_benchmarks (current vs. previous window) above;
   // these are externally curated reference numbers (industry/org targets).
 
-  public shared ({ caller }) func set_benchmark(metric_key : Text, period : Text, value : Float) : async { #Ok; #Err : Text } {
+  // total_members/dau/wau/mau/posters/read_rate are optional engagement-
+  // analytics fields layered onto the original metric_key/period/value
+  // benchmark row; omit (null) to leave the row's reference-number-only
+  // shape unchanged, matching the pre-existing callers.
+  public shared ({ caller }) func set_benchmark(
+    metric_key : Text,
+    period : Text,
+    value : Float,
+    total_members : ?Nat32,
+    dau : ?Nat32,
+    wau : ?Nat32,
+    mau : ?Nat32,
+    posters : ?Nat32,
+    read_rate : ?Float,
+  ) : async { #Ok; #Err : Text } {
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not valid(metric_key) or not valid(period)) return #Err("Invalid benchmark");
-    let updated : Types.Benchmark = { metric_key; period; value; updated_at_ms = nowMs() };
+    let updated : Types.Benchmark = { metric_key; period; value; updated_at_ms = nowMs(); total_members; dau; wau; mau; posters; read_rate };
     switch (benchmarks.find(func(item) = item.metric_key == metric_key and item.period == period)) {
       case (?_) { benchmarks := benchmarks.map(func(item) = if (item.metric_key == metric_key and item.period == period) updated else item) };
       case null { benchmarks := benchmarks.concat([updated]) };
@@ -396,10 +411,32 @@ persistent actor {
   // repeated small deltas (one per impression/click event) accumulate
   // cheaply instead of requiring a read-modify-write of a large row set.
 
-  public shared ({ caller }) func record_sponsor_metric(sponsor_id : Text, metric : Text, delta : Float) : async { #Ok; #Err : Text } {
+  // account_id is optional and only consumed for metric = "unique_reach":
+  // when present it is added to that sponsor/day's distinct-reach set
+  // instead of accumulating into the plain float counter, so repeat
+  // impressions from the same account count once toward unique_reach.
+  public shared ({ caller }) func record_sponsor_metric(sponsor_id : Text, metric : Text, delta : Float, account_id : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
     let period = dayKey(nowMs());
+    if (metric == "unique_reach") {
+      switch (account_id) {
+        case (?account) {
+          if (not valid(account)) return #Err("Invalid sponsor metric");
+          switch (sponsorReach.find(func(item) = item.sponsor_id == sponsor_id and item.period == period)) {
+            case (?current) {
+              if (not current.accountIds.any(func(a) = a == account)) {
+                let updated = { current with accountIds = current.accountIds.concat([account]) };
+                sponsorReach := sponsorReach.map(func(item) = if (item.sponsor_id == sponsor_id and item.period == period) updated else item);
+              };
+            };
+            case null { sponsorReach := sponsorReach.concat([{ sponsor_id; period; accountIds = [account] }]) };
+          };
+        };
+        case null { return #Err("account_id required for unique_reach") };
+      };
+      return #Ok;
+    };
     switch (sponsorMetrics.find(func(item) = item.sponsor_id == sponsor_id and item.metric == metric and item.period == period)) {
       case (?current) {
         let updated = { current with value = current.value + delta };
@@ -414,5 +451,23 @@ persistent actor {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let matches = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
     #Ok({ sponsor_id; period; metrics = matches.map(func(item) = { metric = item.metric; value = item.value }) })
+  };
+
+  // Per-sponsor performance rows (impressions/clicks summed, distinct
+  // unique_reach, derived ctr) over [since_period, until_period] day-key
+  // strings (see dayKey), for the engagement analytics UI's sponsor table.
+  public query ({ caller }) func get_sponsor_benchmarks(sponsor_ids : [Text], since_period : Text, until_period : Text) : async { #Ok : [Types.SponsorBenchmarkRow]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (sponsor_ids.size() == 0 or sponsor_ids.size() > 100) return #Err("Invalid sponsor list");
+    #Ok(sponsor_ids.map(func(sponsor_id : Text) : Types.SponsorBenchmarkRow {
+      let metricMatches = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period >= since_period and item.period <= until_period);
+      let impressions = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "impressions").foldLeft(0.0, func(acc, item) = acc + item.value))));
+      let clicks = Nat.toNat32(Int.abs(Float.toInt(metricMatches.filter(func(item) = item.metric == "clicks").foldLeft(0.0, func(acc, item) = acc + item.value))));
+      let reachMatches = sponsorReach.filter(func(item) = item.sponsor_id == sponsor_id and item.period >= since_period and item.period <= until_period);
+      let reachSet = reachMatches.foldLeft([] : [Text], func(acc, item) = item.accountIds.foldLeft(acc, func(a, id) = if (a.any(func(x) = x == id)) a else a.concat([id])));
+      let unique_reach = Nat.toNat32(reachSet.size());
+      let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
+      { sponsor_id; impressions; clicks; unique_reach; ctr }
+    }))
   };
 }

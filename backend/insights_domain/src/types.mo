@@ -34,11 +34,38 @@ module {
   public type ClientPerfAggregate = { path : Text; count : Nat32; avg_ms : Float; p50_ms : Nat32; p95_ms : Nat32 };
 
   // ---- Engagement benchmarks (admin-set target/reference values) ----
-  public type Benchmark = { metric_key : Text; period : Text; value : Float; updated_at_ms : Nat64 };
+  // Optional fields added for the engagement analytics UI (total club
+  // membership snapshot, daily/weekly/monthly active users, distinct
+  // posters, and read-rate) alongside the original metric_key/period/value
+  // reference-number shape; null on rows set before these fields existed.
+  public type Benchmark = {
+    metric_key : Text;
+    period : Text;
+    value : Float;
+    updated_at_ms : Nat64;
+    total_members : ?Nat32;
+    dau : ?Nat32;
+    wau : ?Nat32;
+    mau : ?Nat32;
+    posters : ?Nat32;
+    read_rate : ?Float;
+  };
 
   // ---- Sponsor performance rollups ----
   public type SponsorMetricCounter = { sponsor_id : Text; metric : Text; period : Text; value : Float };
   public type SponsorPerformance = { sponsor_id : Text; period : Text; metrics : [{ metric : Text; value : Float }] };
+
+  // Per-(sponsor, day) distinct-reach set, mirroring EngagementCounter's
+  // activeUsers pattern: record_sponsor_metric appends account_id here when
+  // called with metric = "unique_reach" instead of accumulating a plain
+  // float delta, so repeated impressions by the same account count once.
+  public type SponsorReachCounter = { sponsor_id : Text; period : Text; accountIds : [Text] };
+
+  // Per-sponsor performance row for the engagement analytics UI: summed
+  // impressions/clicks over the requested period range, the distinct
+  // unique_reach count, and the derived click-through rate (0 when there
+  // were no impressions).
+  public type SponsorBenchmarkRow = { sponsor_id : Text; impressions : Nat32; clicks : Nat32; unique_reach : Nat32; ctr : Float };
 
   public type State = {
     var governor : Principal;
@@ -53,5 +80,6 @@ module {
     var clientPerfSamples : [ClientPerfSample];
     var benchmarks : [Benchmark];
     var sponsorMetrics : [SponsorMetricCounter];
+    var sponsorReach : [SponsorReachCounter];
   };
 }

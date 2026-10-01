@@ -8,7 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Trash2, Loader2, CalendarOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import {
+  createLiveTeamTrainingPause,
+  deleteLiveTeamTrainingPause,
+  listLiveTeamTrainingPauses,
+} from "@/live/features/events";
 
 interface Pause {
   id: string;
@@ -21,7 +27,7 @@ interface Pause {
  * Manage holiday / break windows during which the team's training default
  * RSVPs do NOT auto-apply (Phase 3 of recurring RSVP).
  */
-export default function TeamTrainingPausesCard({ teamId }: { teamId: string }) {
+export default function TeamTrainingPausesCard({ teamId, clubId }: { teamId: string; clubId?: string | null }) {
   const qc = useQueryClient();
   const [starts, setStarts] = useState("");
   const [ends, setEnds] = useState("");
@@ -29,22 +35,54 @@ export default function TeamTrainingPausesCard({ teamId }: { teamId: string }) {
 
   const { data: pauses = [], isLoading } = useQuery({
     queryKey: ["team-training-pauses", teamId],
-    queryFn: async (): Promise<Pause[]> => {
-      const { data, error } = await supabase
-        .from("team_training_pauses")
-        .select("id, starts_at, ends_at, label")
-        .eq("team_id", teamId)
-        .order("starts_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Pause[];
-    },
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_training_pauses")
+            .select("id, starts_at, ends_at, label")
+            .eq("team_id", teamId)
+            .order("starts_at", { ascending: true });
+          if (error) throw error;
+          return (data ?? []) as Pause[];
+        },
+        icp: async (ctx) => {
+          if (!clubId) return [] as Pause[];
+          const rows = await listLiveTeamTrainingPauses(ctx, clubId, teamId);
+          return rows
+            .map((p: any) => ({
+              id: p.id,
+              starts_at: new Date(Number(p.starts_at)).toISOString(),
+              ends_at: new Date(Number(p.ends_at)).toISOString(),
+              label: p.reason || null,
+            }))
+            .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+        },
+      }),
     enabled: !!teamId,
   });
 
   const add = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("events", "team_training_pauses insert has no events_domain counterpart"); // NEEDS-CANISTER: team_training_pauses insert has no events_domain counterpart
       if (!starts || !ends) throw new Error("Pick start and end dates");
+
+      const createdOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!clubId) throw new Error("Missing club ID");
+          await createLiveTeamTrainingPause(
+            ctx,
+            clubId,
+            teamId,
+            new Date(starts),
+            new Date(ends),
+            label.trim(),
+          );
+          return true;
+        },
+      });
+      if (createdOnIcp) return;
+
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from("team_training_pauses").insert({
         team_id: teamId,
@@ -65,7 +103,15 @@ export default function TeamTrainingPausesCard({ teamId }: { teamId: string }) {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      assertSupabaseWritePath("events", "team_training_pauses delete has no events_domain counterpart"); // NEEDS-CANISTER: team_training_pauses delete has no events_domain counterpart
+      const removedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await deleteLiveTeamTrainingPause(ctx, id);
+          return true;
+        },
+      });
+      if (removedOnIcp) return;
+
       const { error } = await supabase.from("team_training_pauses").delete().eq("id", id);
       if (error) throw error;
     },

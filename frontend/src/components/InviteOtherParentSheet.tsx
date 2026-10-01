@@ -19,7 +19,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { linkLiveGuardian, createLivePendingInvite, getLiveTeam } from "@/live/features/club";
 
 interface InviteOtherParentSheetProps {
   open: boolean;
@@ -101,15 +102,22 @@ export default function InviteOtherParentSheet({
   // Direct link existing user as guardian (no invite needed)
   const linkExistingGuardian = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "direct guardian link (child_guardians insert) has no club_domain counterpart"); // NEEDS-CANISTER: direct guardian link (child_guardians insert) has no club_domain counterpart
       if (!selectedUser) return;
-      const { error } = await supabase.from("child_guardians").insert({
-        child_id: childId,
-        guardian_id: selectedUser.id,
-        relationship_type: "parent",
-        is_primary: false,
-      } as any);
-      if (error && !error.message?.includes("duplicate")) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("child_guardians").insert({
+            child_id: childId,
+            guardian_id: selectedUser.id,
+            relationship_type: "parent",
+            is_primary: false,
+          } as any);
+          if (error && !error.message?.includes("duplicate")) throw error;
+        },
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          await linkLiveGuardian(ctx, childId, Principal.fromText(selectedUser.id));
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
@@ -125,11 +133,73 @@ export default function InviteOtherParentSheet({
 
   const sendInvite = useMutation({
     mutationFn: async (requestedDelivery?: "email" | "share") => {
-      assertSupabaseWritePath("membership", "guardian pending_invites row + send-email invoke has no club_domain parent-invite equivalent wired here"); // NEEDS-CANISTER: guardian pending_invites row + send-email invoke has no club_domain parent-invite equivalent wired here
       const effectiveDelivery = requestedDelivery ?? deliveryMethod;
       if (!user || !parentName.trim()) return;
       if (effectiveDelivery === "email" && !parentEmail.trim()) return;
 
+      return withFeatureBackend("membership", {
+        supabase: () => sendInviteSupabase(effectiveDelivery),
+        icp: (ctx) => sendInviteIcp(ctx, effectiveDelivery),
+      });
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      setInviteLink(data.link || null);
+      setEmailDelivery(data.delivery);
+      setSentToEmail(data.email);
+      setSent(true);
+    },
+    onError: (error: Error) => {
+      console.error("[InviteOtherParent] Error:", error);
+      setEmailDelivery("not_requested");
+      if (error instanceof InviteScopeResolutionError) {
+        toast({ title: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Failed to create invite", variant: "destructive" });
+      }
+    },
+  });
+
+  /** ICP path: create the pending_invite record on club_domain. No canister
+   * accept_pending_invite method exists yet (PendingInvite has no accept
+   * flow — see club.ts), so this persists the invite for admin visibility
+   * but the recipient cannot yet self-accept via the shared link on ICP.
+   * NEEDS-CANISTER: accept_pending_invite (or equivalent) for PendingInvite. */
+  const sendInviteIcp = async (
+    ctx: FeatureBackendContext,
+    effectiveDelivery: "email" | "share",
+  ) => {
+    let clubId: string | null = null;
+    const teamId = teamIds[0] ?? null;
+    if (teamId) {
+      const team = await getLiveTeam(ctx, teamId);
+      clubId = (team as any)?.club_id ?? null;
+      if (!clubId) throw new InviteScopeResolutionError();
+    }
+    if (!clubId) throw new InviteScopeResolutionError();
+
+    const trimmedEmail = parentEmail.trim().toLowerCase();
+    const { invite } = await createLivePendingInvite(
+      ctx,
+      clubId,
+      trimmedEmail,
+      teamId,
+      "parent",
+      parentName.trim(),
+      `guardian_child_id:${childId}`,
+    );
+
+    setResolvedClubName("Your Club");
+    setResolvedTeamName("");
+
+    const link = `${window.location.origin}/join/p/${invite.id}`;
+    const delivery: EmailDeliveryState = effectiveDelivery === "email" && trimmedEmail ? "not_requested" : "not_requested";
+    return { link, delivery, email: trimmedEmail || null };
+  };
+
+  const sendInviteSupabase = async (effectiveDelivery: "email" | "share") => {
       const inviteToken = crypto.randomUUID();
 
       // ---- Authoritative scope resolution (fail closed) --------------------
@@ -264,26 +334,7 @@ export default function InviteOtherParentSheet({
       }
 
       return { link, delivery, email: trimmedEmail || null };
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
-      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
-      setInviteLink(data.link || null);
-      setEmailDelivery(data.delivery);
-      setSentToEmail(data.email);
-      setSent(true);
-    },
-    onError: (error: Error) => {
-      console.error("[InviteOtherParent] Error:", error);
-      setEmailDelivery("not_requested");
-      if (error instanceof InviteScopeResolutionError) {
-        toast({ title: error.message, variant: "destructive" });
-      } else {
-        toast({ title: "Failed to create invite", variant: "destructive" });
-      }
-    },
-  });
+  };
 
   const handleClose = (open: boolean) => {
     if (!open) {

@@ -13,7 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/integrations/supabase/types";
 import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { approveLiveTeamCreationRequest, rejectLiveTeamCreationRequest } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -56,8 +57,16 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
   });
 
   const approveMutation = useMutation({
-    mutationFn: async (request: (typeof requests)[0]) => {
-      assertSupabaseWritePath("membership", "team creation request approval (team + role grant + notification) has no club_domain counterpart"); // NEEDS-CANISTER: team creation request approval (team + role grant + notification) has no club_domain counterpart
+    mutationFn: async (request: (typeof requests)[0]) =>
+      withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: approval only flips request status on club_domain —
+          // team creation, role grant and notification still have no
+          // canister counterpart, so they stay Supabase-only even once this
+          // request record is routed to ICP.
+          return approveLiveTeamCreationRequest(ctx, request.id);
+        },
+        supabase: async () => {
       // Create the team
       const { data: team, error: teamError } = await supabase
         .from("teams")
@@ -110,7 +119,8 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
       });
 
       return team;
-    },
+        },
+      }),
     onSuccess: (team, request) => {
       toast({
         title: "Team Approved!",
@@ -130,28 +140,35 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
-      assertSupabaseWritePath("membership", "team creation request rejection + notification has no club_domain counterpart"); // NEEDS-CANISTER: team creation request rejection + notification has no club_domain counterpart
-      const request = requests.find(r => r.id === requestId);
+    mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) =>
+      withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: rejection + notification has no club_domain counterpart yet
+          // beyond flipping the request's status.
+          await rejectLiveTeamCreationRequest(ctx, requestId);
+        },
+        supabase: async () => {
+          const request = requests.find(r => r.id === requestId);
 
-      await supabase
-        .from("team_creation_requests")
-        .update({
-          status: "rejected",
-          rejection_reason: reason || null,
-          reviewed_by: user!.id,
-          reviewed_at: new Date().toISOString(),
-        } as any)
-        .eq("id", requestId);
+          await supabase
+            .from("team_creation_requests")
+            .update({
+              status: "rejected",
+              rejection_reason: reason || null,
+              reviewed_by: user!.id,
+              reviewed_at: new Date().toISOString(),
+            } as any)
+            .eq("id", requestId);
 
-      if (request) {
-        await supabase.from("notifications").insert({
-          user_id: request.requested_by,
-          type: "team_rejected",
-          message: `Your team request "${request.name}" was declined.${reason ? ` Reason: ${reason}` : ''}`,
-        });
-      }
-    },
+          if (request) {
+            await supabase.from("notifications").insert({
+              user_id: request.requested_by,
+              type: "team_rejected",
+              message: `Your team request "${request.name}" was declined.${reason ? ` Reason: ${reason}` : ''}`,
+            });
+          }
+        },
+      }),
     onSuccess: () => {
       toast({ title: "Request declined" });
       setRejectingId(null);

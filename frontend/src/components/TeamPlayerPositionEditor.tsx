@@ -10,7 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Target, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTeamPlayerPositions, setLiveTeamPlayerPosition } from "@/live/features/club";
 import { cn } from "@/lib/utils";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -70,56 +71,85 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
   // Fetch existing positions for all team members
   const { data: playerPositions, isLoading } = useQuery({
     queryKey: ["team-player-positions", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_player_positions")
-        .select("*")
-        .eq("team_id", teamId);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_player_positions")
+            .select("*")
+            .eq("team_id", teamId);
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const positions = await getLiveTeamPlayerPositions(ctx, teamId);
+          // Canister shape is per-position rows keyed by a single member_id
+          // (member or child) with one position string — map it onto the
+          // richer Supabase row shape (preferred_positions array, jersey
+          // number) consumed below, since those fields have no canister
+          // counterpart yet.
+          // NEEDS-CANISTER: jersey_number + multi preferred_positions per player
+          return positions.map((p) => ({
+            id: `${p.team_id}:${p.member_id}`,
+            team_id: p.team_id,
+            user_id: p.member_id,
+            child_id: null as string | null,
+            position: p.position,
+            preferred_positions: [p.position],
+            jersey_number: null as number | null,
+          }));
+        },
+      }),
     enabled: open,
   });
 
   const upsertPositionMutation = useMutation({
     mutationFn: async ({ playerId, playerType, positions, number }: { playerId: string; playerType: "member" | "child"; positions: PitchPosition[]; number: number | null }) => {
-      assertSupabaseWritePath("membership", "team_player_positions upsert has no club_domain counterpart"); // NEEDS-CANISTER: team_player_positions upsert has no club_domain counterpart
-      const payload: any = {
-        team_id: teamId,
-        position: positions[0] || 'MID',
-        preferred_positions: positions,
-        jersey_number: number,
-      };
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const payload: any = {
+            team_id: teamId,
+            position: positions[0] || 'MID',
+            preferred_positions: positions,
+            jersey_number: number,
+          };
 
-      if (playerType === "child") {
-        payload.child_id = playerId;
-        payload.user_id = null;
-      } else {
-        payload.user_id = playerId;
-        payload.child_id = null;
-      }
+          if (playerType === "child") {
+            payload.child_id = playerId;
+            payload.user_id = null;
+          } else {
+            payload.user_id = playerId;
+            payload.child_id = null;
+          }
 
-      // Try to find existing record
-      let query = supabase.from("team_player_positions").select("id").eq("team_id", teamId);
-      if (playerType === "child") {
-        query = query.eq("child_id", playerId);
-      } else {
-        query = query.eq("user_id", playerId);
-      }
-      const { data: existing } = await query.maybeSingle();
+          // Try to find existing record
+          let query = supabase.from("team_player_positions").select("id").eq("team_id", teamId);
+          if (playerType === "child") {
+            query = query.eq("child_id", playerId);
+          } else {
+            query = query.eq("user_id", playerId);
+          }
+          const { data: existing } = await query.maybeSingle();
 
-      if (existing) {
-        const { error } = await supabase
-          .from("team_player_positions")
-          .update(payload)
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("team_player_positions")
-          .insert(payload);
-        if (error) throw error;
-      }
+          if (existing) {
+            const { error } = await supabase
+              .from("team_player_positions")
+              .update(payload)
+              .eq("id", existing.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from("team_player_positions")
+              .insert(payload);
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: jersey_number + multi preferred_positions per player — only the
+          // single primary position persists on club_domain today.
+          await setLiveTeamPlayerPosition(ctx, teamId, playerId, positions[0] || "MID");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-player-positions", teamId] });

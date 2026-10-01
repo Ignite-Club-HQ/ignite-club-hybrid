@@ -22,7 +22,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveTeamInviteLink, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink } from "@/live/features/club";
 
 const APP_URL = "https://reference.invalid";
 const DEFAULT_EXPIRY_DAYS = 30;
@@ -168,32 +169,50 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
   const link = links?.[activeRole] ?? null;
 
   const createOrRotate = useMutation({
-    mutationFn: async ({ rotate, role }: { rotate: boolean; role: RoleVariant }) => {
-      assertSupabaseWritePath("membership", "team_invites shareable-link create/rotate has no club_domain counterpart"); // NEEDS-CANISTER: team_invites shareable-link create/rotate has no club_domain counterpart
-      if (!user) throw new Error("Not signed in");
-      const existing = links?.[role];
-      if (rotate && existing) {
-        await supabase.from("team_invites").delete().eq("id", existing.id);
-      }
-      const token = generateShortToken();
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + DEFAULT_EXPIRY_DAYS);
-      const { data, error } = await supabase
-        .from("team_invites")
-        .insert({
-          team_id: teamId,
-          token,
-          role,
-          created_by: user.id,
-          expires_at: expiresAt.toISOString(),
-          max_uses: null,
-          metadata: { kind: TOKEN_METADATA_KIND, role_variant: role },
-        })
-        .select("id, token, expires_at, uses_count, max_uses, created_at, metadata")
-        .single();
-      if (error) throw error;
-      return { role, row: data as JoinLinkRow };
-    },
+    mutationFn: async ({ rotate, role }: { rotate: boolean; role: RoleVariant }) =>
+      withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const existing = links?.[role];
+          const link = rotate && existing
+            ? await rotateLiveTeamInviteLink(ctx, existing.id)
+            : await createLiveTeamInviteLink(ctx, teamId, role, "team_admin");
+          const row: JoinLinkRow = {
+            id: link.id,
+            token: link.token,
+            expires_at: null,
+            uses_count: 0,
+            max_uses: null,
+            created_at: new Date().toISOString(),
+            metadata: { kind: TOKEN_METADATA_KIND, role_variant: role },
+          };
+          return { role, row };
+        },
+        supabase: async () => {
+          if (!user) throw new Error("Not signed in");
+          const existing = links?.[role];
+          if (rotate && existing) {
+            await supabase.from("team_invites").delete().eq("id", existing.id);
+          }
+          const token = generateShortToken();
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + DEFAULT_EXPIRY_DAYS);
+          const { data, error } = await supabase
+            .from("team_invites")
+            .insert({
+              team_id: teamId,
+              token,
+              role,
+              created_by: user.id,
+              expires_at: expiresAt.toISOString(),
+              max_uses: null,
+              metadata: { kind: TOKEN_METADATA_KIND, role_variant: role },
+            })
+            .select("id, token, expires_at, uses_count, max_uses, created_at, metadata")
+            .single();
+          if (error) throw error;
+          return { role, row: data as JoinLinkRow };
+        },
+      }),
     onSuccess: ({ role }) => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Join link ready", description: `Share it with anyone joining as ${ALL_ROLE_OPTIONS.find(r => r.value === role)?.label.toLowerCase()}.` });
@@ -219,14 +238,21 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
   }, [autoCreateLink, isLoading, links, isAdmin, activeRole, createOrRotate.isPending]);
 
   const revoke = useMutation({
-    mutationFn: async (role: RoleVariant) => {
-      assertSupabaseWritePath("membership", "team_invites shareable-link revoke has no club_domain counterpart"); // NEEDS-CANISTER: team_invites shareable-link revoke has no club_domain counterpart
-      const existing = links?.[role];
-      if (!existing) return role;
-      const { error } = await supabase.from("team_invites").delete().eq("id", existing.id);
-      if (error) throw error;
-      return role;
-    },
+    mutationFn: async (role: RoleVariant) =>
+      withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const existing = links?.[role];
+          if (existing) await revokeLiveTeamInviteLink(ctx, existing.id);
+          return role;
+        },
+        supabase: async () => {
+          const existing = links?.[role];
+          if (!existing) return role;
+          const { error } = await supabase.from("team_invites").delete().eq("id", existing.id);
+          if (error) throw error;
+          return role;
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
       toast({ title: "Link revoked", description: "The previous link no longer works." });

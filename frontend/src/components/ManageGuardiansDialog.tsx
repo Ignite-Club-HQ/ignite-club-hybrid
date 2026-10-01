@@ -23,7 +23,9 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { linkLiveGuardian, unlinkLiveGuardian } from "@/live/features/club";
+import { Principal } from "@icp-sdk/core/principal";
 
 interface Guardian {
   id: string;
@@ -127,15 +129,23 @@ export default function ManageGuardiansDialog({
   // Add guardian mutation
   const addGuardian = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "child_guardians insert has no club_domain counterpart"); // NEEDS-CANISTER: child_guardians insert has no club_domain counterpart
       if (!selectedUserId) return;
-      const { error } = await supabase.from("child_guardians").insert({
-        child_id: childId,
-        guardian_id: selectedUserId,
-        relationship_type: relationshipType,
-        is_primary: false,
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: link_guardian has no relationship_type/is_primary
+          // fields yet — only the principal link itself persists.
+          await linkLiveGuardian(ctx, childId, Principal.fromText(selectedUserId));
+        },
+        supabase: async () => {
+          const { error } = await supabase.from("child_guardians").insert({
+            child_id: childId,
+            guardian_id: selectedUserId,
+            relationship_type: relationshipType,
+            is_primary: false,
+          });
+          if (error) throw error;
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });
@@ -156,12 +166,20 @@ export default function ManageGuardiansDialog({
   // Remove guardian mutation
   const removeGuardian = useMutation({
     mutationFn: async (guardianRecordId: string) => {
-      assertSupabaseWritePath("membership", "child_guardians delete has no club_domain counterpart"); // NEEDS-CANISTER: child_guardians delete has no club_domain counterpart
-      const { error } = await supabase
-        .from("child_guardians")
-        .delete()
-        .eq("id", guardianRecordId);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const guardian = guardians?.find((g) => g.id === guardianRecordId);
+          if (!guardian) return;
+          await unlinkLiveGuardian(ctx, childId, Principal.fromText(guardian.guardian_id));
+        },
+        supabase: async () => {
+          const { error } = await supabase
+            .from("child_guardians")
+            .delete()
+            .eq("id", guardianRecordId);
+          if (error) throw error;
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["child_guardians", childId] });

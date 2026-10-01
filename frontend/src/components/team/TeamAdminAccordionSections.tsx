@@ -53,7 +53,7 @@ export function TeamAdminAccordionSection({
 
           {/* Captain (senior / mixed teams only) — same management rights as a team admin */}
           {["senior", "mixed"].includes(String(teamType || "mixed").toLowerCase()) && (
-            <TeamCaptainCard teamId={teamId} teamName={teamName} members={members} canManage={canManageCaptains} />
+            <TeamCaptainCard teamId={teamId} teamName={teamName} clubId={clubId} members={members} canManage={canManageCaptains} />
           )}
 
           {/* PlayHQ Link */}
