@@ -148,7 +148,11 @@ export function TermsManager({ clubId }: TermsManagerProps) {
             end_date: payload.end_date,
             is_active: editingTerm ? editingTerm.is_active : true,
             status: editingTerm?.status ?? "active",
-            created_at_ms: BigInt(editingTerm?.created_at_ms ?? 0),
+            // Preserve the original creation timestamp on edit (0 = canister
+            // assigns one on create).
+            created_at_ms: BigInt(
+              editingTerm?.created_at ? Date.parse(editingTerm.created_at) : 0,
+            ),
           };
           await saveLiveClubTerm(ctx, term);
         },
@@ -212,7 +216,9 @@ export function TermsManager({ clubId }: TermsManagerProps) {
           const { error } = await supabase.from("terms").delete().eq("id", id);
           if (error) throw error;
         },
-        icp: (ctx) => deleteLiveClubTerm(ctx, id),
+        icp: async (ctx) => {
+          await deleteLiveClubTerm(ctx, id);
+        },
       });
     },
     onSuccess: () => {
