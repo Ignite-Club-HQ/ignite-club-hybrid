@@ -567,6 +567,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     unread_count(conversation_id: string): Promise<{
         __kind__: "Ok";
         Ok: Unread;
@@ -1067,6 +1074,16 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.toggle_reaction(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
         return from_candid_variant_n1(result);
     }
     async unread_count(arg0: string): Promise<{

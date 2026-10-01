@@ -185,6 +185,13 @@ persistent actor {
     };
   };
 
+  public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (new_governor.equal(Principal.anonymous())) { return #Err("New governor cannot be anonymous") };
+    governor := ?new_governor;
+    #Ok
+  };
+
   public shared ({ caller }) func grant_worker(principal : Principal) : async { #Ok; #Err : Text } {
     authenticated(caller);
     switch (governor) {

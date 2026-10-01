@@ -128,7 +128,6 @@ import { logChatOpenLatency } from "@/lib/chatOpenLatency";
 import { useChatPerfMarks } from "@/hooks/useChatPerfMarks";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
-import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";

@@ -127,6 +127,14 @@ persistent actor {
     #Ok
   };
 
+  public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Only governor can transfer governorship");
+    if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
+    governor := new_governor;
+    #Ok
+  };
+
   public shared ({ caller }) func register_workload(
     workload_principal : Principal,
     workload_name : Text,

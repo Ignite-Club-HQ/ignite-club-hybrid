@@ -247,6 +247,11 @@ export interface _SERVICE {
     ],
     ScheduledResult
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'upsert_preferences' : ActorMethod<
     [string, PreferencesInput],
     PreferencesResult

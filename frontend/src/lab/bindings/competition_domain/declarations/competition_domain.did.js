@@ -294,6 +294,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'trim_rounds' : IDL.Func(
         [IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],

@@ -739,6 +739,11 @@ export interface _SERVICE {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'unarchive_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |

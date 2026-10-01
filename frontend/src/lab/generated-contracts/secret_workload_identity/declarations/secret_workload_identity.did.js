@@ -75,6 +75,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'update_workload_scopes' : IDL.Func(
         [IDL.Principal, IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : WorkloadIdentity, 'Err' : IDL.Text })],

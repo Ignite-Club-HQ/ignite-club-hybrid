@@ -147,6 +147,11 @@ export interface _SERVICE {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'trash_file' : ActorMethod<
     [string],
     { 'Ok' : VaultFile } |

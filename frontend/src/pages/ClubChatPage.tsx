@@ -105,7 +105,6 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 
-import { resolveAuthBackend } from "@/live/authBackendMode";
 const MESSAGES_PER_PAGE = 30;
 
 interface Message {

@@ -98,6 +98,14 @@ persistent actor {
     #Ok
   };
 
+  public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Only governor can transfer governorship");
+    if (new_governor.equal(Principal.anonymous())) return #Err("New governor cannot be anonymous");
+    governor := new_governor;
+    #Ok
+  };
+
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, club_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
     auth(caller); if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not valid(role) or not valid(club_id)) return #Err("Invalid role assignment");

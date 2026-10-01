@@ -205,6 +205,11 @@ service : {
       Err: text;
       Ok;
     });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   update_reward: (id: text, name: text, description: opt text,
    points_required: nat32, is_default: bool, is_active: bool, reward_type:
    text, logo_url: opt text, qr_code_url: opt text, show_qr_code: bool,

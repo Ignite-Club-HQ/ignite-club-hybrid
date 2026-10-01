@@ -282,6 +282,11 @@ export interface _SERVICE {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'trim_rounds' : ActorMethod<
     [string, number],
     { 'Ok' : bigint } |

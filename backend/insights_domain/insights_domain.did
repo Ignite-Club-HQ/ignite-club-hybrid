@@ -301,6 +301,11 @@ service : {
                    Err: text;
                    Ok: Feedback;
                  });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   update_feedback_status: (id: text, status: FeedbackStatus, admin_notes:
    opt text) -> (variant {
                    Err: text;

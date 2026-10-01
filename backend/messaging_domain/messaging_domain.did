@@ -464,6 +464,11 @@ service : {
       Err: text;
       Ok;
     });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   unread_count: (conversation_id: text) ->
    (variant {
       Err: text;

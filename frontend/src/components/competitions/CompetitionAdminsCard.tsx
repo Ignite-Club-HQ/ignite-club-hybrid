@@ -153,7 +153,7 @@ export function CompetitionAdminsCard({
             related_id: competitionId,
           });
         },
-        icp: (ctx) => addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin"),
+        icp: async (ctx) => { await addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin"); },
       });
       return target;
     },

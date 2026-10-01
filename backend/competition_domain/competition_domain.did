@@ -288,6 +288,11 @@ service : {
                 Err: text;
                 Ok: Season;
               });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   trim_rounds: (competition_id: text, max_round: nat16) ->
    (variant {
       Err: text;

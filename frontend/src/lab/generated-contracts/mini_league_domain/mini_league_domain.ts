@@ -407,6 +407,13 @@ export interface mini_league_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     unassign_player_from_group(group_id: string, player_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -797,6 +804,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.set_session_status(arg0, arg1);
         return from_candid_variant_n15(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n37(result);
     }
     async unassign_player_from_group(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

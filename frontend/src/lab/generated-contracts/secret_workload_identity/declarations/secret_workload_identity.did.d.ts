@@ -73,6 +73,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'update_workload_scopes' : ActorMethod<
     [Principal, Array<string>],
     { 'Ok' : WorkloadIdentity } |

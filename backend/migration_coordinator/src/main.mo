@@ -176,6 +176,12 @@ persistent actor {
     };
   };
 
+  public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async () {
+    requireGovernor(caller);
+    if (new_governor.equal(Principal.anonymous())) { Runtime.trap("New governor cannot be anonymous") };
+    governor := ?new_governor;
+  };
+
   public query func status() : async (?Types.Migration, [Types.Migration]) {
     (active, completed)
   };

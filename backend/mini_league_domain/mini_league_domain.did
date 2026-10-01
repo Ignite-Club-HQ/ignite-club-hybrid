@@ -299,6 +299,11 @@ service : {
       Err: text;
       Ok: MiniLeagueSession;
     });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   unassign_player_from_group: (group_id: text, player_id: text) ->
    (variant {
       Err: text;

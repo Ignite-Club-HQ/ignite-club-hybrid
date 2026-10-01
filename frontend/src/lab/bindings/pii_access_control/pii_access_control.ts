@@ -235,6 +235,13 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
 }
 import type { AuditFilter as _AuditFilter, DecryptedPii as _DecryptedPii, EncryptedPii as _EncryptedPii, KeyMetadata as _KeyMetadata, KeyRotationResult as _KeyRotationResult, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
 export class Pii_access_control implements pii_access_controlInterface {
@@ -380,6 +387,16 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.rotate_key(arg0);
         return from_candid_variant_n14(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n1(result);
     }
 }
 function from_candid_KeyMetadata_n10(value: _KeyMetadata): KeyMetadata {
