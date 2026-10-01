@@ -10,6 +10,19 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AssociationEvent {
+  'id' : string,
+  'title' : string,
+  'deleted' : boolean,
+  'association_id' : string,
+  'description' : string,
+  'created_by' : Principal,
+  'starts_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'ends_at_ms' : bigint,
+  'child_event_ids' : Array<string>,
+  'location' : [] | [string],
+}
 export interface Attendance {
   'account_id' : string,
   'present' : boolean,
@@ -467,6 +480,11 @@ export interface _SERVICE {
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_association_events' : ActorMethod<
+    [string],
+    { 'Ok' : Array<AssociationEvent> } |
       { 'Err' : string }
   >,
   'list_event_groups' : ActorMethod<
