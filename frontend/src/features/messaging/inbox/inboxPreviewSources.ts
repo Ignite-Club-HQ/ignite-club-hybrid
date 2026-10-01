@@ -41,7 +41,9 @@ type InboxPreview = {
 
 interface InboxDataClient {
   from: (table: string) => any;
-  rpc: (functionName: string, parameters: Record<string, unknown>) => Promise<any>;
+  // PromiseLike: SupabaseClient.rpc returns a PostgREST builder (thenable),
+  // not a native Promise.
+  rpc: (functionName: string, parameters: Record<string, unknown>) => PromiseLike<any>;
 }
 
 export async function fetchMemberClubsWithMessages(

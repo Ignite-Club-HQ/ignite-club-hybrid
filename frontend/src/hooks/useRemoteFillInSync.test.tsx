@@ -44,12 +44,14 @@ describe("useRemoteFillInSync", () => {
     expect(from).toHaveBeenCalledWith("active_games");
   });
 
-  it.each([
+  type ActiveGameRow = { pitch_state: unknown; timer_state: unknown; updated_at: string; is_active: boolean };
+  const rejectedRows: Array<[ActiveGameRow, string]> = [
     [{ ...freshRow, updated_at: new Date(now - 12 * 60 * 60 * 1000 - 1).toISOString() }, "stale row"],
     [{ ...freshRow, timer_state: { is_game_finished: true, lastUpdateTime: now } }, "snake-case finished timer"],
     [{ ...freshRow, timer_state: { isGameFinished: true, lastUpdateTime: now } }, "camel-case finished timer"],
     [{ ...freshRow, timer_state: { lastUpdateTime: now - 12 * 60 * 60 * 1000 - 1 } }, "stale timer"],
-  ])("rejects fill-ins from a %s", async (row) => {
+  ];
+  it.each(rejectedRows)("rejects fill-ins from a %s", async (row) => {
     fetchState.data = row;
     const { result } = renderHook(() => useRemoteFillInSync("team-1", true));
     await act(async () => { await Promise.resolve(); });

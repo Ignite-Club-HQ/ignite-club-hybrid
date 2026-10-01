@@ -28,6 +28,18 @@ export interface EventLineupSnapshot {
   version: 1;
 }
 
+// Canister lineups store team size as a number; the board uses the string
+// union. Validate rather than cast so a malformed snapshot can't smuggle an
+// unsupported size into formation math.
+function toTeamSize(value: number): TeamSize {
+  const asText = String(value);
+  return asText === "3" || asText === "4" || asText === "5" || asText === "6"
+    || asText === "7" || asText === "8" || asText === "9" || asText === "10"
+    || asText === "11"
+    ? asText
+    : "11";
+}
+
 export interface EventLineupRecord {
   snapshot: EventLineupSnapshot;
   updatedAt: number;
@@ -102,7 +114,7 @@ export async function fetchEventLineup(
               : undefined,
             number: p.number[0] !== undefined ? p.number[0] : undefined,
           })) as unknown as Player[],
-          teamSize: Number(snap.team_size) as TeamSize,
+          teamSize: toTeamSize(snap.team_size),
           selectedFormation: Number(snap.formation[0] ?? 0),
           ballPosition: snap.ball_x[0] !== undefined && snap.ball_y[0] !== undefined
             ? { x: snap.ball_x[0], y: snap.ball_y[0] }

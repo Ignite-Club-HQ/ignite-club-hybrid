@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getEffectiveBackendForFeature: vi.fn<[string], "supabase" | "icp">(),
+  getEffectiveBackendForFeature: vi.fn<(feature: string) => "supabase" | "icp">(),
   getCurrentInternetIdentity: vi.fn(),
   getActiveIcpTarget: vi.fn(() => ({ alias: "test-target" })),
 }));

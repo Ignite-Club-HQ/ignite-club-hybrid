@@ -141,7 +141,7 @@ export async function logInboxOpenLatency(args: LogArgs): Promise<void> {
       void withFeatureBackend("analytics", {
         supabase: async () => { supabaseInsert(); },
         icp: async (ctx) => {
-          await recordLivePerfSample(ctx, "inbox_open", args.source, tap_to_paint_ms, args.fromCache ?? args.cacheHit, platform);
+          await recordLivePerfSample(ctx, "inbox_open", args.source, tap_to_paint_ms, args.cacheHit, platform);
         },
       }).catch(() => {});
     };

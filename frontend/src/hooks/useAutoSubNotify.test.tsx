@@ -52,7 +52,7 @@ const makeChain = (table: string) => {
 };
 
 
-const invokeSpy = vi.fn(async () => ({ data: null, error: null }));
+const invokeSpy = vi.fn(async (_fnName?: string, _payload?: { body?: { userId?: string } }) => ({ data: null, error: null }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {

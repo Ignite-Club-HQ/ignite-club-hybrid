@@ -193,7 +193,6 @@ describe("React Router v7 future behaviour on the v6 control version", () => {
     render(
       <MemoryRouter
         initialEntries={["/files/club-7/season-2"]}
-        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Routes>
           <Route
@@ -227,7 +226,6 @@ describe("React Router v7 future behaviour on the v6 control version", () => {
     render(
       <MemoryRouter
         initialEntries={["/current"]}
-        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
       >
         <Suspense fallback={<div>loading destination</div>}>
           <Routes>

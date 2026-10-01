@@ -184,8 +184,7 @@ export default function ClubRewardsReportPage() {
               child_id,
               user_id,
               club_rewards (id, name, reward_type),
-              children (id, name),
-              profiles:user_id (id, display_name)
+              children (id, name)
             `)
             .eq("club_id", clubId!)
             .gte("redeemed_at", startDate.toISOString())
@@ -195,19 +194,42 @@ export default function ClubRewardsReportPage() {
           const { data, error } = await query;
           if (error) throw error;
 
-          const mapRow = (r: NonNullable<typeof data>[number]): ReportRedemption => ({
-            id: r.id,
-            points_spent: r.points_spent,
-            status: r.status,
-            redeemed_at: r.redeemed_at,
-            child_id: r.child_id,
-            user_id: r.user_id,
-            club_rewards: r.club_rewards
-              ? { name: r.club_rewards.name, reward_type: r.club_rewards.reward_type }
-              : null,
-            children: r.children ? { name: r.children.name } : null,
-            profiles: r.profiles ? { display_name: r.profiles.display_name } : null,
-          });
+          // No FK exists between reward_redemptions.user_id and profiles, so
+          // a join can't resolve display names — fetch them in a second query.
+          const redeemerIds = [
+            ...new Set(
+              (data ?? [])
+                .map((r) => r.user_id)
+                .filter((id): id is string => typeof id === "string" && id.length > 0),
+            ),
+          ];
+          const displayNameById = new Map<string, string>();
+          if (redeemerIds.length > 0) {
+            const { data: profileRows } = await supabase
+              .from("profiles")
+              .select("id, display_name")
+              .in("id", redeemerIds);
+            for (const profile of profileRows ?? []) {
+              if (profile.display_name) displayNameById.set(profile.id, profile.display_name);
+            }
+          }
+
+          const mapRow = (r: NonNullable<typeof data>[number]): ReportRedemption => {
+            const displayName = r.user_id ? displayNameById.get(r.user_id) : undefined;
+            return {
+              id: r.id,
+              points_spent: r.points_spent,
+              status: r.status,
+              redeemed_at: r.redeemed_at,
+              child_id: r.child_id,
+              user_id: r.user_id,
+              club_rewards: r.club_rewards
+                ? { name: r.club_rewards.name, reward_type: r.club_rewards.reward_type }
+                : null,
+              children: r.children ? { name: r.children.name } : null,
+              profiles: displayName ? { display_name: displayName } : null,
+            };
+          };
 
           // If filtering by team, we need to filter users who are members of that team
           if (selectedTeamId !== "all" && data) {
@@ -267,7 +289,8 @@ export default function ClubRewardsReportPage() {
   });
 
   // Aggregate data by reward type
-  const aggregatedData = redemptions.reduce((acc, redemption) => {
+  const redemptionRows: ReportRedemption[] = redemptions;
+  const aggregatedData = redemptionRows.reduce((acc, redemption) => {
     const rewardName = redemption.club_rewards?.name || "Unknown Reward";
     const rewardType = redemption.club_rewards?.reward_type || "custom";
     

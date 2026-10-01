@@ -659,7 +659,18 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
         .select("*")
         .eq("team_id", teamId);
       if (error) throw error;
-      return data || [];
+      // DB stores preferred_positions as a free-text array; keep only the
+      // four canonical pitch positions so downstream consumers get a typed
+      // PitchPosition[] regardless of legacy row contents.
+      const validPositions: readonly string[] = ["GK", "DEF", "MID", "FWD"];
+      return (data || []).map((row) => ({
+        user_id: row.user_id,
+        child_id: row.child_id,
+        preferred_positions: (row.preferred_positions ?? []).filter(
+          (position): position is PitchPosition => validPositions.includes(position),
+        ),
+        jersey_number: row.jersey_number,
+      }));
     },
     staleTime: 30 * 1000, // Refetch after 30s to pick up jersey/position changes
     gcTime: 10 * 60 * 1000,

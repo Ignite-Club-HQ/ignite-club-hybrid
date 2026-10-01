@@ -294,7 +294,7 @@ export default function CreateTeamPage() {
     // id/name/division/gender/is_active/club_id/age_group — description,
     // logo, folder, team_type, class and RSVP-audience fields stay
     // Supabase-only; verify against the deployed canister).
-    const { data: team, error: teamError } = await withFeatureBackend<{ data: { id: string } | null; error: { code?: string } | null }>("membership", {
+    const { data: team, error: teamError } = await withFeatureBackend<{ data: { id: string; name?: string } | null; error: { code?: string } | null }>("membership", {
       supabase: async () => supabase
       .from("teams")
       .insert({
@@ -344,7 +344,7 @@ export default function CreateTeamPage() {
             shell_claimed_by: [],
             deleted_at_ms: [],
           });
-          return { data: { id }, error: null };
+          return { data: { id, name: name.trim() }, error: null };
         } catch (error) {
           return { data: null, error: error as { code?: string } };
         }

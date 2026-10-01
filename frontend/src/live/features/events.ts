@@ -800,10 +800,10 @@ export async function createLiveEventGroup(
     actor.create_event_group(
       eventId,
       name,
-      teamLetter ?? null,
-      colour ?? null,
-      abilityBand ?? null,
-      pitchName ?? null,
+      candidOpt(teamLetter),
+      candidOpt(colour),
+      candidOpt(abilityBand),
+      candidOpt(pitchName),
     ),
     "Create event group",
   );
@@ -836,7 +836,7 @@ export async function addLiveGroupPlayer(
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.add_group_player(groupId, accountId, teamLetter ?? null),
+    actor.add_group_player(groupId, accountId, candidOpt(teamLetter)),
     "Add group player",
   );
 }

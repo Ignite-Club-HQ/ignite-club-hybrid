@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   backend: "supabase" as "supabase" | "icp",
   icpIdentity: { principal: "principal-a" } as unknown,
   icpAcceptance: null as { termsVersion: number } | null,
-  setIcpTermsAcceptance: vi.fn(async () => ({})),
+  setIcpTermsAcceptance: vi.fn(async (_identity?: unknown, _termsVersion?: number, _target?: unknown) => ({})),
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
