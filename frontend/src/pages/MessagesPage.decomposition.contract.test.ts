@@ -39,7 +39,7 @@ describe("MessagesPage decomposition contract", () => {
   });
 
   it("keeps the provider, authorization, cache, and realtime responsibilities route-local", () => {
-    expect(messagesPageSource).toContain("resolveLocalAuthMode");
+    expect(messagesPageSource).toContain('isFeatureRoutedToIcp("messaging")');
     expect(messagesPageSource).toContain("useAuthorizedScopes");
     expect(messagesPageSource).toContain("registerChannel");
     expect(messagesPageSource).toContain("queryClient.invalidateQueries");
