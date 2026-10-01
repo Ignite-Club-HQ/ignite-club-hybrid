@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   enabledRoleListFromFlags,
   loadPitchNotifyFlags,
@@ -45,6 +46,11 @@ export function usePitchBoardEventLink({
 
       // Only send email notifications when linking (not unlinking) and event is different
       if (!eventId || eventId === previousLinkedEventId || !userId) return;
+      // NEEDS-CANISTER: this notification fan-out reads event_group_duties /
+      // user_roles / duties and calls the send_pitch_board_notification_email_rpc
+      // Supabase RPC — none of which have an events_domain equivalent, and II
+      // sessions have no Supabase session to authenticate the RPC with anyway.
+      if (resolveAuthBackend() === "icp") return;
 
       try {
         const isEventGroup = teamId.startsWith("event-group-");

@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Users, UserX } from "lucide-react";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface Props {
   open: boolean;
@@ -88,13 +89,22 @@ export function BulkRolloverDialog({
   const rollMut = useMutation({
     mutationFn: async () => {
       if (selectedPlayerIds.length === 0) return 0;
-      const { data, error } = await supabase.rpc("carry_over_players", {
-        _source_season_id: sourceSeasonId,
-        _target_season_id: targetSeasonId,
-        _club_player_ids: selectedPlayerIds,
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("carry_over_players", {
+            _source_season_id: sourceSeasonId,
+            _target_season_id: targetSeasonId,
+            _club_player_ids: selectedPlayerIds,
+          });
+          if (error) throw error;
+          return data ?? 0;
+        },
+        // NEEDS-CANISTER: competition_domain has no roster/team-membership
+        // carry-over concept — team_memberships has no canister equivalent.
+        icp: async () => {
+          throw new Error("Rolling over players isn't available on this backend yet.");
+        },
       });
-      if (error) throw error;
-      return data ?? 0;
     },
     onSuccess: (count) => {
       toast.success(

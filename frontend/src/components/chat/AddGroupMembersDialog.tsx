@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ResponsiveDialog,
@@ -171,6 +172,12 @@ export function AddGroupMembersDialog({
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!user || selected.length === 0) return;
+      // No canister method exists to add members to an existing group's roster.
+      // NEEDS-CANISTER: messaging_domain add-group-members call.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Adding chat group members isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const inserts = selected.map(s => ({
         group_id: groupId,
         user_id: s.id,

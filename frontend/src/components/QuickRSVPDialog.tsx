@@ -20,6 +20,8 @@ import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { resolveRsvpAudience, shouldPromptPlayer, shouldPromptSelf } from "@/lib/rsvpAudience";
 import { useViewerIsAdultPlayer } from "@/hooks/useViewerIsAdultPlayer";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
 
 
 
@@ -178,6 +180,15 @@ export function QuickRSVPDialog({
   // RSVP mutation for self
   const rsvpMutation = useMutation({
     mutationFn: async (status: RsvpStatus) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveEventRsvp(ctx, eventId, user!.id, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       let rsvpId: string | null = null;
       
       if (myRsvp) {
@@ -236,6 +247,15 @@ export function QuickRSVPDialog({
   // RSVP mutation for child
   const childRsvpMutation = useMutation({
     mutationFn: async ({ childId, status }: { childId: string; status: RsvpStatus }) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await adminUpsertLiveRsvp(ctx, eventId, user!.id, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const existingChildRsvp = existingRsvps?.find(r => r.child_id === childId);
       let rsvpId: string | null = null;
       

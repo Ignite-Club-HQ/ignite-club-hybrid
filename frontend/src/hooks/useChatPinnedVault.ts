@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { toast } from "sonner";
 
 export type PinnedVaultChatType = "team" | "club" | "group";
@@ -79,6 +80,8 @@ export function useChatPinnedVault(
   const save = useMutation({
     mutationFn: async (input: PinnedVaultTarget & { enabled?: boolean }) => {
       if (!chatId) throw new Error("Missing chat id");
+      // NEEDS-CANISTER: chat_pinned_vault has no vault_domain equivalent.
+      if (isFeatureRoutedToIcp("vault")) throw new Error("Pinning a vault is not yet available for Internet Identity accounts.");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
@@ -110,6 +113,7 @@ export function useChatPinnedVault(
   const toggleEnabled = useMutation({
     mutationFn: async (enabled: boolean) => {
       if (!chatId) throw new Error("Missing chat id");
+      if (isFeatureRoutedToIcp("vault")) throw new Error("Pinning a vault is not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("chat_pinned_vault")
         .update({ enabled })
@@ -128,6 +132,7 @@ export function useChatPinnedVault(
   const remove = useMutation({
     mutationFn: async () => {
       if (!chatId) throw new Error("Missing chat id");
+      if (isFeatureRoutedToIcp("vault")) throw new Error("Removing a pinned vault is not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("chat_pinned_vault")
         .delete()

@@ -3,6 +3,7 @@ import { Check, X, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -53,6 +54,11 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
 
   const approveMutation = useMutation({
     mutationFn: async (requestId: string) => {
+      // NEEDS-CANISTER: messaging_domain approve-join-request call.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Approving join requests isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const { error } = await (supabase as any).rpc("approve_chat_group_join_request", {
         _request_id: requestId,
       });

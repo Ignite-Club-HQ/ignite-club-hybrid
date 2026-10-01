@@ -11,6 +11,7 @@ import {
   permanentlyDeleteLiveVaultFile,
   renameLiveVaultFile,
   restoreLiveVaultFile,
+  registerLiveVaultFile,
   trashLiveVaultFile,
   updateLiveVaultFolder,
 } from "@/live/features/vault";
@@ -149,20 +150,48 @@ export async function createVaultLinkFile(
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
   const scope = getVaultScope(options.view);
-  const insert: any = {
-    file_url: options.url,
-    uploaded_by: options.userId,
-    name: options.name,
-    folder_id: options.folderId,
-    is_external_link: true,
-    file_size: 0,
-  };
-  if (scope.clubId) insert.club_id = scope.clubId;
-  if (scope.teamId) insert.team_id = scope.teamId;
-  if (scope.miniLeagueId) insert.mini_league_id = scope.miniLeagueId;
 
-  const { error } = await client.from("vault_files").insert(insert);
-  if (error) throw error;
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const insert: any = {
+        file_url: options.url,
+        uploaded_by: options.userId,
+        name: options.name,
+        folder_id: options.folderId,
+        is_external_link: true,
+        file_size: 0,
+      };
+      if (scope.clubId) insert.club_id = scope.clubId;
+      if (scope.teamId) insert.team_id = scope.teamId;
+      if (scope.miniLeagueId) insert.mini_league_id = scope.miniLeagueId;
+
+      const { error } = await client.from("vault_files").insert(insert);
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      // Provisional mapping: mini-league views pass a placeholder club id
+      // (the canister scopes by mini_league_id) — verify against the live
+      // canister post-deploy, matching createVaultFolder's convention above.
+      const clubId = options.view.type === "club" || options.view.type === "team"
+        ? options.view.clubId
+        : "";
+      const teamId = options.view.type === "team" ? options.view.teamId : null;
+      await registerLiveVaultFile(
+        ctx,
+        crypto.randomUUID(),
+        options.folderId ?? "",
+        clubId,
+        teamId,
+        options.name,
+        options.url,
+        0,
+        "link/external",
+        true,
+        null,
+        options.view.type === "mini-league" ? options.view.miniLeagueId : null,
+      );
+    },
+  });
 }
 
 export async function deleteVaultFolder(

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * One-way sync: media gallery photo upload → vault_files.
@@ -33,6 +34,9 @@ export async function syncGalleryPhotoToVault({
   teamId?: string | null;
   miniLeagueId?: string | null;
 }) {
+  // NEEDS-CANISTER: this one-way gallery->vault mirror writes vault_files
+  // directly outside the typed vault_domain wrappers. Skip under ICP.
+  if (isFeatureRoutedToIcp("vault")) return;
   try {
     if (!clubId || !fileUrl) return;
 

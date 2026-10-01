@@ -10,6 +10,7 @@ import { Copy, ExternalLink, ClipboardList } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { buildPublicEoiUrl, slugifyClubName } from "@/lib/eoiUtils";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface Props {
   seasonId: string;
@@ -69,26 +70,34 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
   }, [seasonId, season]);
 
   const saveMut = useMutation({
-    mutationFn: async () => {
-      const finalSlug = slug.trim() || null;
-      const payload = {
-        eoi_enabled: enabled,
-        eoi_slug: finalSlug,
-        eoi_opens_at: opensAt ? new Date(opensAt).toISOString() : null,
-        eoi_closes_at: closesAt ? new Date(closesAt + "T23:59:59").toISOString() : null,
-        eoi_welcome_message: welcome.trim() || null,
-        eoi_thank_you_message: thankYou.trim() || null,
-        eoi_thank_you_redirect_url: redirectUrl.trim() || null,
-        eoi_require_dob: requireDob,
-        eoi_require_gender: requireGender,
-        eoi_ask_preferences: askPrefs,
-        eoi_ask_availability: askAvail,
-        eoi_ask_skill_level: askSkill,
-        eoi_ask_position: askPos,
-      };
-      const { error } = await supabase.from("seasons").update(payload).eq("id", seasonId);
-      if (error) throw error;
-    },
+    mutationFn: async () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const finalSlug = slug.trim() || null;
+          const payload = {
+            eoi_enabled: enabled,
+            eoi_slug: finalSlug,
+            eoi_opens_at: opensAt ? new Date(opensAt).toISOString() : null,
+            eoi_closes_at: closesAt ? new Date(closesAt + "T23:59:59").toISOString() : null,
+            eoi_welcome_message: welcome.trim() || null,
+            eoi_thank_you_message: thankYou.trim() || null,
+            eoi_thank_you_redirect_url: redirectUrl.trim() || null,
+            eoi_require_dob: requireDob,
+            eoi_require_gender: requireGender,
+            eoi_ask_preferences: askPrefs,
+            eoi_ask_availability: askAvail,
+            eoi_ask_skill_level: askSkill,
+            eoi_ask_position: askPos,
+          };
+          const { error } = await supabase.from("seasons").update(payload).eq("id", seasonId);
+          if (error) throw error;
+        },
+        // NEEDS-CANISTER: EOI configuration fields on `seasons` have no
+        // canister equivalent — competition_domain has no EOI concept.
+        icp: async () => {
+          throw new Error("EOI settings aren't available on this backend yet.");
+        },
+      }),
     onSuccess: () => {
       toast.success("EOI settings saved");
       qc.invalidateQueries({ queryKey: ["season", seasonId] });

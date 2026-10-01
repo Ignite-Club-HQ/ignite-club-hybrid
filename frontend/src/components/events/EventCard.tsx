@@ -38,6 +38,10 @@ import { formatEventTitle } from "@/lib/eventTitle";
 import { getEventDisplay } from "@/lib/eventDisplay";
 import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled } from "@/live/features/events";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 import { buildPersonalRsvpLine } from "@/lib/personalRsvpLine";
 import { useEventMembership } from "@/hooks/useEventMembership";
@@ -392,6 +396,17 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   // Self RSVP (parent attending too)
   const selfRsvpMutation = useMutation({
     mutationFn: async (status: RsvpStatus) => {
+      // Hybrid routing: when the events feature resolves to ICP, write the
+      // RSVP to the events_domain canister (mirrors useEventRsvpMutations).
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveEventRsvp(ctx, event.id, user!.id, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       let rsvpId: string | null = null;
       if (myRsvp) {
         const { error } = await supabase.from("rsvps").update({ status }).eq("id", myRsvp.id);
@@ -423,6 +438,20 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   // Per-child RSVP
   const childRsvpMutation = useMutation({
     mutationFn: async ({ childId, status }: { childId: string; status: RsvpStatus }) => {
+      // Hybrid routing: child RSVP upsert reuses the admin_upsert_rsvp
+      // canister method (account + optional child + status) — the canister
+      // has no separate "self, on behalf of my own child" shape, so the
+      // parent's own account id is used as the acting account (mirrors the
+      // child RSVP write in useEventRsvpMutations).
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await adminUpsertLiveRsvp(ctx, event.id, user!.id, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const existing = (householdChildren || []).find((c) => c.child_id === childId)?.rsvp;
       let rsvpId: string | null = null;
       if (existing) {
@@ -483,6 +512,33 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
 
   const cancelEventMutation = useMutation({
     mutationFn: async ({ cancelType, customMessage, sendPushNotification }: { cancelType: "single" | "series"; customMessage?: string; sendPushNotification?: boolean }) => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: () => 0,
+          icp: async (ctx) => {
+            // Cancel the single occurrence via the canister's dedicated
+            // cancellation method. NEEDS-CANISTER: there is no bulk
+            // "cancel series" method on events_domain yet, so a
+            // cancelType === "series" request only cancels the anchor
+            // event here (parent, or this event if it's the parent) —
+            // sibling occurrences are not individually cancelled until
+            // that method exists.
+            const targetId =
+              cancelType === "series" && event.parent_event_id
+                ? event.parent_event_id
+                : event.id;
+            await setLiveEventCancelled(ctx, targetId, true);
+            // NEEDS-CANISTER: posting the cancellation announcement to
+            // chat (club_messages/team_messages/group_messages) has no
+            // verified messaging_domain conversation-id mapping for
+            // event-scoped club/team/mini-league chats, so it is skipped
+            // under ICP routing rather than writing to Supabase chat
+            // tables ICP users' clients never read.
+            return 0;
+          },
+        });
+      }
+
       if (cancelType === "series" && event.parent_event_id) {
         await supabase.from("events").update({ is_cancelled: true, chat_cancel_post_handled: true }).eq("parent_event_id", event.parent_event_id);
         await supabase.from("events").update({ is_cancelled: true, chat_cancel_post_handled: true }).eq("id", event.parent_event_id);
@@ -563,14 +619,29 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
       const existingNotificationUserIds = existingNotifications?.map((n) => n.user_id) || [];
       const membersToNotify = nonRsvpMembers.filter((id) => !existingNotificationUserIds.includes(id));
       if (membersToNotify.length === 0) throw new Error("All members have already been reminded!");
-      const notifications = membersToNotify.map((userId) => ({
-        user_id: userId,
-        type: "event_reminder",
-        message: `Reminder: Please RSVP for "${event.title}"`,
-        related_id: event.id,
-      }));
-      const { error } = await supabase.from("notifications").insert(notifications);
-      if (error) throw error;
+      const reminderMessage = `Reminder: Please RSVP for "${event.title}"`;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const notifications = membersToNotify.map((userId) => ({
+            user_id: userId,
+            type: "event_reminder",
+            message: reminderMessage,
+            related_id: event.id,
+          }));
+          const { error } = await supabase.from("notifications").insert(notifications);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await fanOutLiveNotifications(ctx, {
+            userIds: membersToNotify,
+            clubId: event.club_id,
+            kind: "event_reminder",
+            body: reminderMessage,
+            idempotencyKeyPrefix: `event-reminder-${event.id}-${crypto.randomUUID()}`,
+            relatedId: event.id,
+          });
+        },
+      });
       return membersToNotify.length;
     },
     onError: (error: Error) => {

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 export type EoiTeamSuggestion = {
   age_group: string;
@@ -37,13 +38,20 @@ export function useAllocateEoiToTeam() {
     }: {
       submissionId: string;
       teamId: string | null;
-    }) => {
-      const { error } = await supabase.rpc("allocate_eoi_to_team", {
-        _submission_id: submissionId,
-        _team_id: teamId,
-      });
-      if (error) throw error;
-    },
+    }) =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.rpc("allocate_eoi_to_team", {
+            _submission_id: submissionId,
+            _team_id: teamId,
+          });
+          if (error) throw error;
+        },
+        // NEEDS-CANISTER: no canister concept of EOI-to-team allocation.
+        icp: async () => {
+          throw new Error("Allocating EOI submissions to a team isn't available on this backend yet.");
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });
@@ -61,15 +69,22 @@ export function useAllocateEoisBulk() {
     }: {
       submissionIds: string[];
       teamId: string;
-    }) => {
-      for (const id of submissionIds) {
-        const { error } = await supabase.rpc("allocate_eoi_to_team", {
-          _submission_id: id,
-          _team_id: teamId,
-        });
-        if (error) throw error;
-      }
-    },
+    }) =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          for (const id of submissionIds) {
+            const { error } = await supabase.rpc("allocate_eoi_to_team", {
+              _submission_id: id,
+              _team_id: teamId,
+            });
+            if (error) throw error;
+          }
+        },
+        // NEEDS-CANISTER: see useAllocateEoiToTeam above.
+        icp: async () => {
+          throw new Error("Allocating EOI submissions to a team isn't available on this backend yet.");
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["eoi-submissions"] });
       qc.invalidateQueries({ queryKey: ["eoi-stats"] });

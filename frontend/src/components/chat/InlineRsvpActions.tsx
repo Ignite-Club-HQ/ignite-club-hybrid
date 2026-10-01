@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Loader2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { toast } from "@/hooks/use-toast";
 import { hapticImpactLight } from "@/lib/haptics";
 import { RsvpNoteSheet } from "@/components/rsvp/RsvpNoteSheet";
@@ -66,6 +67,13 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
     setSubmitting(status);
     hapticImpactLight();
     try {
+      // Quick RSVP from a chat message writes rsvps rows via an RPC with no
+      // canister equivalent.
+      // NEEDS-CANISTER: events_domain quick-rsvp-from-message call.
+      if (isFeatureRoutedToIcp("events")) {
+        throw new Error("RSVP isn't available yet on the Internet Identity events backend.");
+      }
+
       const { data, error } = await supabase.rpc("quick_rsvp_from_dm", {
         _event_id: eventId,
         _status: status,

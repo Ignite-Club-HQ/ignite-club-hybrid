@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 type InviteRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -115,59 +116,74 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
         }
       }
 
-      const inviteToken = crypto.randomUUID();
-      const { error: insErr } = await supabase.from("pending_invites").insert({
-        club_id: clubId,
-        team_id: row.teamId,
-        role: row.role as never,
-        invited_user_id: null,
-        invited_by_user_id: user?.id ?? null,
-        invited_label: row.name.trim() || row.email.trim(),
-        invited_email: row.email.trim().toLowerCase() || null,
-        invite_token: inviteToken,
-      } as never);
-      if (insErr) throw insErr;
+      const { link, emailFailed, emailErrorMsg } = await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const inviteToken = crypto.randomUUID();
+          const { error: insErr } = await supabase.from("pending_invites").insert({
+            club_id: clubId,
+            team_id: row.teamId,
+            role: row.role as never,
+            invited_user_id: null,
+            invited_by_user_id: user?.id ?? null,
+            invited_label: row.name.trim() || row.email.trim(),
+            invited_email: row.email.trim().toLowerCase() || null,
+            invite_token: inviteToken,
+          } as never);
+          if (insErr) throw insErr;
 
-      const link = `${window.location.origin}/join/p/${inviteToken}`;
+          const inviteLink = `${window.location.origin}/join/p/${inviteToken}`;
 
-      if (row.email.trim()) {
-        try {
-          const { data: res, error: fnErr } = await supabase.functions.invoke("send-email", {
-            body: {
-              to: row.email.trim(),
-              subject: `You're invited to ${club?.name ?? "our club"} for ${seasonName}`,
-              template: "team-invite",
-              senderName: club?.name || undefined,
-              replyTo: club?.contact_email || undefined,
-              templateData: {
-                recipientName: row.name.trim(),
-                invitedEmail: row.email.trim(),
-                teamName: teams.find((t) => t.id === row.teamId)?.name ?? club?.name,
-                clubName: club?.name,
-                roleName: ROLE_LABEL[row.role],
-                inviteLink: link,
-                clubLogoUrl: club?.logo_url || undefined,
-              },
-            },
-          });
-          if (fnErr) throw fnErr;
-          if (!(res?.verified && res?.success)) throw new Error(res?.error || "Email not verified");
-          await supabase
-            .from("pending_invites")
-            .update({ email_sent_at: new Date().toISOString(), email_id: res.emailId } as never)
-            .eq("invite_token", inviteToken);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Email failed";
-          await supabase
-            .from("pending_invites")
-            .update({ email_error: msg } as never)
-            .eq("invite_token", inviteToken);
-          patch(row.tempId, { status: "sent", link, errorMsg: msg });
-          toast.message("Invite created — email failed", {
-            description: "Share the link manually instead.",
-          });
-          return;
-        }
+          if (row.email.trim()) {
+            try {
+              const { data: res, error: fnErr } = await supabase.functions.invoke("send-email", {
+                body: {
+                  to: row.email.trim(),
+                  subject: `You're invited to ${club?.name ?? "our club"} for ${seasonName}`,
+                  template: "team-invite",
+                  senderName: club?.name || undefined,
+                  replyTo: club?.contact_email || undefined,
+                  templateData: {
+                    recipientName: row.name.trim(),
+                    invitedEmail: row.email.trim(),
+                    teamName: teams.find((t) => t.id === row.teamId)?.name ?? club?.name,
+                    clubName: club?.name,
+                    roleName: ROLE_LABEL[row.role],
+                    inviteLink,
+                    clubLogoUrl: club?.logo_url || undefined,
+                  },
+                },
+              });
+              if (fnErr) throw fnErr;
+              if (!(res?.verified && res?.success)) throw new Error(res?.error || "Email not verified");
+              await supabase
+                .from("pending_invites")
+                .update({ email_sent_at: new Date().toISOString(), email_id: res.emailId } as never)
+                .eq("invite_token", inviteToken);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Email failed";
+              await supabase
+                .from("pending_invites")
+                .update({ email_error: msg } as never)
+                .eq("invite_token", inviteToken);
+              return { link: inviteLink, emailFailed: true, emailErrorMsg: msg };
+            }
+          }
+
+          return { link: inviteLink, emailFailed: false, emailErrorMsg: undefined as string | undefined };
+        },
+        // NEEDS-CANISTER: pending_invites (season/team invite) has no
+        // canister equivalent on competition_domain.
+        icp: async () => {
+          throw new Error("Sending season invites isn't available on this backend yet.");
+        },
+      });
+
+      if (emailFailed) {
+        patch(row.tempId, { status: "sent", link, errorMsg: emailErrorMsg });
+        toast.message("Invite created — email failed", {
+          description: "Share the link manually instead.",
+        });
+        return;
       }
 
       patch(row.tempId, { status: "sent", link });

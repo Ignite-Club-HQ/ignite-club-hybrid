@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, MessageCircle, Loader2, Crown, Lock, Check, X, Users, SlidersHorizontal, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   Select,
   SelectContent,
@@ -484,6 +485,13 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
   // Start single DM mutation
   const startDMMutation = useMutation({
     mutationFn: async (otherUserId: string) => {
+      // NEEDS-CANISTER: this uses canLiveDmUser already for ACL, but DM
+      // conversation creation/lookup itself (get_or_create_dm_conversation)
+      // has no messaging_domain equivalent wired here yet.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Starting direct messages isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const { data, error } = await supabase.rpc("get_or_create_dm_conversation", {
         other_user_id: otherUserId,
       });

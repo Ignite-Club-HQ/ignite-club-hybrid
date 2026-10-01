@@ -55,6 +55,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { usePitchBoardNotifications } from "@/hooks/usePitchBoardNotifications";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useIsLandscape } from "@/hooks/useIsLandscape";
 import { useEventGroupSync } from "@/hooks/useEventGroupSync";
 
@@ -1241,6 +1242,10 @@ function PitchBoardInner({ teamId, teamName, members, onClose, disableAutoSubs =
   ) => {
     // Notify whenever formation changes (during setup or active game), skip only for read-only or finished games
     if (!user?.id || readOnly || gameTimerRef.current?.isGameFinished()) return;
+    // NEEDS-CANISTER: reads event_group_duties/user_roles/duties and calls the
+    // notify_formation_change RPC; no events_domain equivalent, and no Supabase
+    // session under ICP.
+    if (resolveAuthBackend() === "icp") return;
     try {
       const recipientIds = new Set<string>();
       // Always include the current user so they get a record of the change

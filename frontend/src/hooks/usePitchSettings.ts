@@ -10,6 +10,7 @@ import { useState, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { TeamSize, FORMATIONS } from "@/components/pitch/types";
 
 export interface PitchSettingsState {
@@ -88,6 +89,9 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
   const persistSetting = useCallback(
     async (overrides?: Record<string, unknown>) => {
       if (readOnly) return;
+      // NEEDS-CANISTER: team_subscriptions (pitch board settings) has no
+      // club_domain/events_domain equivalent; skip under ICP.
+      if (resolveAuthBackend() === "icp") return;
       try {
         const { error } = await supabase
           .from("team_subscriptions")
@@ -186,6 +190,9 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
   /** Save all settings at once (used by settings dialog save button). */
   const handleSaveSettings = useCallback(async () => {
     if (readOnly) return;
+    // NEEDS-CANISTER: team_subscriptions (pitch board settings) has no
+    // club_domain/events_domain equivalent; skip under ICP.
+    if (resolveAuthBackend() === "icp") return;
 
     setIsSavingSettings(true);
     try {

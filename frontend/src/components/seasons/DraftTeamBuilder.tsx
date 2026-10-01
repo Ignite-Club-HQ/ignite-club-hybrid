@@ -34,6 +34,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 const UNASSIGNED_ID = "__unassigned__";
 const TEAM_MIN = 8;
@@ -144,36 +145,44 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
 
   // ---- Mutations ----
   const moveMut = useMutation({
-    mutationFn: async ({ player, newTeamId }: { player: PlayerRow; newTeamId: string | null }) => {
-      if (player.membership_id) {
-        if (newTeamId === null) {
-          // Move to unassigned = remove from team but keep in season? We treat unassigned as removed=status active w/o team.
-          // Schema requires team_id NOT NULL on team_memberships, so unassigned means: delete the row.
-          const { error } = await supabase
-            .from("team_memberships")
-            .update({ status: "removed", removed_at: new Date().toISOString() })
-            .eq("id", player.membership_id);
-          if (error) throw error;
-        } else {
-          // Update team_id directly. Use upsert pattern: try update, on unique conflict treat as already there.
-          const { error } = await supabase
-            .from("team_memberships")
-            .update({ team_id: newTeamId })
-            .eq("id", player.membership_id);
-          if (error) throw error;
-        }
-      } else if (newTeamId) {
-        // Adding from club roster
-        const { error } = await supabase.from("team_memberships").insert({
-          club_player_id: player.club_player_id,
-          team_id: newTeamId,
-          season_id: seasonId,
-          role: "player",
-          status: "active",
-        });
-        if (error) throw error;
-      }
-    },
+    mutationFn: async ({ player, newTeamId }: { player: PlayerRow; newTeamId: string | null }) =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          if (player.membership_id) {
+            if (newTeamId === null) {
+              // Move to unassigned = remove from team but keep in season? We treat unassigned as removed=status active w/o team.
+              // Schema requires team_id NOT NULL on team_memberships, so unassigned means: delete the row.
+              const { error } = await supabase
+                .from("team_memberships")
+                .update({ status: "removed", removed_at: new Date().toISOString() })
+                .eq("id", player.membership_id);
+              if (error) throw error;
+            } else {
+              // Update team_id directly. Use upsert pattern: try update, on unique conflict treat as already there.
+              const { error } = await supabase
+                .from("team_memberships")
+                .update({ team_id: newTeamId })
+                .eq("id", player.membership_id);
+              if (error) throw error;
+            }
+          } else if (newTeamId) {
+            // Adding from club roster
+            const { error } = await supabase.from("team_memberships").insert({
+              club_player_id: player.club_player_id,
+              team_id: newTeamId,
+              season_id: seasonId,
+              role: "player",
+              status: "active",
+            });
+            if (error) throw error;
+          }
+        },
+        // NEEDS-CANISTER: team_memberships (draft team assignment) has no
+        // canister equivalent on competition_domain.
+        icp: async () => {
+          throw new Error("Moving players between teams isn't available on this backend yet.");
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["draft-builder-memberships", seasonId] });
       qc.invalidateQueries({ queryKey: ["season-team-player-counts", seasonId] });
@@ -185,14 +194,21 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
   });
 
   const removeMut = useMutation({
-    mutationFn: async (player: PlayerRow) => {
-      if (!player.membership_id) return;
-      const { error } = await supabase
-        .from("team_memberships")
-        .update({ status: "removed", removed_at: new Date().toISOString() })
-        .eq("id", player.membership_id);
-      if (error) throw error;
-    },
+    mutationFn: async (player: PlayerRow) =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          if (!player.membership_id) return;
+          const { error } = await supabase
+            .from("team_memberships")
+            .update({ status: "removed", removed_at: new Date().toISOString() })
+            .eq("id", player.membership_id);
+          if (error) throw error;
+        },
+        // NEEDS-CANISTER: see moveMut above.
+        icp: async () => {
+          throw new Error("Removing a player from the season isn't available on this backend yet.");
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["draft-builder-memberships", seasonId] });
       qc.invalidateQueries({ queryKey: ["season-team-player-counts", seasonId] });

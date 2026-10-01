@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { savePitchState } from "../pitchStateUtils";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { buildEventLineupSnapshot, lineupSignature, saveEventLineup } from "../eventLineupRepository";
 import type { Player, TeamSize, SubstitutionEvent, Goal } from "../types";
 
@@ -105,6 +106,11 @@ export function usePitchBoardPersistence({
   useEffect(() => {
     if (!hasInitialized || !userId || !teamId || isEventGroup) return;
     if (!autoSubActive) return;
+    // NEEDS-CANISTER: active_games.pitch_state auto-sub-plan mirror (feeds the
+    // GlobalSubMonitor cron) has no events_domain equivalent. II sessions have
+    // no Supabase session, so skip this write under ICP rather than letting it
+    // silently fail/land in a table ICP users can't read back.
+    if (resolveAuthBackend() === "icp") return;
 
     const signature = JSON.stringify({
       n: autoSubPlan.length,

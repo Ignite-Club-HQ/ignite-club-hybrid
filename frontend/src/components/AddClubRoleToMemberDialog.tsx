@@ -11,6 +11,7 @@ import {
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { useToast } from "@/hooks/use-toast";
 import { RoleSelectionList, type RoleSelectionOption } from "./RoleSelectionList";
 
@@ -58,6 +59,7 @@ export default function AddClubRoleToMemberDialog({
 
   const addRolesMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "bulk club role grants + notification; use addLiveRoleGrant per role once wired"); // NEEDS-CANISTER: bulk club role grants + notification; use addLiveRoleGrant per role once wired
       if (selectedRoles.length === 0) return;
 
       const rolesToInsert = selectedRoles.map((role) => ({

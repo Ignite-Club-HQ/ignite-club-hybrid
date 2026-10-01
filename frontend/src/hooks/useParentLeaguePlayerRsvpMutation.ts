@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
 
@@ -23,6 +24,14 @@ export function useParentLeaguePlayerRsvpMutation(params: UseParentLeaguePlayerR
 
   const parentLeaguePlayerRsvpMutation = useMutation({
     mutationFn: async ({ playerId, status }: { playerId: string; status: RsvpStatus }) => {
+      // NEEDS-CANISTER: events_domain has no mini-league-player RSVP shape
+      // (set_rsvp/admin_upsert_rsvp are keyed by account/child, not
+      // mini_league_player_id). Block under ICP routing instead of writing
+      // to a Supabase row ICP users' canister state never reflects.
+      if (isFeatureRoutedToIcp("events")) {
+        throw new Error("RSVPing for a mini-league player isn't available yet on this backend.");
+      }
+
       const existing = rsvps?.find((r) => r.mini_league_player_id === playerId);
       if (existing) {
         const { error } = await supabase

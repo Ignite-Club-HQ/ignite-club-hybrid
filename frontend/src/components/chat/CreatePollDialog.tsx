@@ -4,6 +4,7 @@ import { Crown, Loader2, Plus, Trash2, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,12 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
   const create = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not signed in");
+      // Polls (polls/poll_options rows) have no canister counterpart yet.
+      // NEEDS-CANISTER: messaging_domain (or a dedicated polls canister) create-poll call.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Creating polls isn't available yet on the Internet Identity messaging backend.");
+      }
+
 
       const currentValidation = validatePoll(question, options);
       if (currentValidation.questionError) throw new Error(currentValidation.questionError);
