@@ -389,15 +389,33 @@ function SupabaseEditEventPage() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event-edit", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("events")
-        .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name), mini_leagues (id, name)")
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("events")
+            .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name), mini_leagues (id, name)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // The event row itself stays on Supabase here (events routing is a
+          // separate feature area); only the mini_leagues join is replaced
+          // with a canister lookup so the page has no mini_league_* dependency.
+          const { data, error } = await supabase
+            .from("events")
+            .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          const miniLeagueId = (data as any).mini_league_id as string | null | undefined;
+          if (!miniLeagueId) return data;
+          const league = await getLiveMiniLeague(ctx, miniLeagueId) as any;
+          return { ...data, mini_leagues: league ? { id: league.id, name: league.name } : null };
+        },
+      }),
     enabled: !!id,
   });
 
