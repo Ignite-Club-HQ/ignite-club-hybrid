@@ -39,6 +39,7 @@ import {
 } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   clearLiveInbox,
@@ -1035,11 +1036,24 @@ export default function NotificationsPage() {
       case "member_joined": {
         // related_id could be mini_league_id, team_id, or club_id — check which one
         if (relatedId) {
-          const { data: miniLeagueCheck } = await supabase
-            .from("mini_leagues")
-            .select("id")
-            .eq("id", relatedId)
-            .maybeSingle();
+          const miniLeagueCheck = await withFeatureBackend("mini_leagues", {
+            supabase: async () => {
+              const { data } = await supabase
+                .from("mini_leagues")
+                .select("id")
+                .eq("id", relatedId)
+                .maybeSingle();
+              return data;
+            },
+            icp: async (ctx) => {
+              try {
+                const league = await getLiveMiniLeague(ctx, relatedId);
+                return { id: league.id };
+              } catch {
+                return null;
+              }
+            },
+          });
           if (miniLeagueCheck) {
             navigate(`/mini-leagues/${relatedId}`);
           } else {

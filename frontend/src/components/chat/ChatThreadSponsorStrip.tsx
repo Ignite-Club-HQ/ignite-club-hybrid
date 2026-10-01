@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubSettings } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -104,13 +106,22 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
     enabled: !!clubId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, chat_thread_ads_enabled")
-        .eq("id", clubId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      const enabled = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, chat_thread_ads_enabled")
+            .eq("id", clubId!)
+            .maybeSingle();
+          if (error) throw error;
+          return !!(data as any)?.chat_thread_ads_enabled;
+        },
+        icp: async (ctx) => {
+          const settingsOpt = await getLiveClubSettings(ctx, clubId!);
+          return !!settingsOpt[0]?.chat_thread_ads_enabled;
+        },
+      });
+      return { chat_thread_ads_enabled: enabled };
     },
   });
 

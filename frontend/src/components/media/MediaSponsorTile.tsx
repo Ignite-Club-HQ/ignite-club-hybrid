@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubSettings } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
@@ -67,12 +69,21 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
     enabled: !!resolvedClubId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, media_sponsors_enabled")
-        .eq("id", resolvedClubId!)
-        .maybeSingle();
-      if (error) throw error;
+      const enabled = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, media_sponsors_enabled")
+            .eq("id", resolvedClubId!)
+            .maybeSingle();
+          if (error) throw error;
+          return !!(data as any)?.media_sponsors_enabled;
+        },
+        icp: async (ctx) => {
+          const settingsOpt = await getLiveClubSettings(ctx, resolvedClubId!);
+          return !!settingsOpt[0]?.media_sponsors_enabled;
+        },
+      });
 
       const { data: sub } = await supabase
         .from("club_subscriptions")
@@ -80,7 +91,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
         .eq("club_id", resolvedClubId!)
         .maybeSingle();
 
-      return { enabled: !!(data as any)?.media_sponsors_enabled, isPro: !!sub?.is_pro };
+      return { enabled, isPro: !!sub?.is_pro };
     },
   });
 

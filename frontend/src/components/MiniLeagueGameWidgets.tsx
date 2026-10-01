@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Timer, ExternalLink, LayoutGrid, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -66,7 +67,9 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
   // Fetch user's mini league memberships (as parent or admin)
   const { data: userLeagueMemberships } = useQuery({
     queryKey: ["user-league-memberships", user?.id],
-    queryFn: async () => {
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
       // Get leagues where user is a parent
       const { data: playerLeagues } = await supabase
         .from("mini_league_players")
@@ -96,13 +99,24 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
       const parentLeagueIds = playerLeagues?.map(p => p.mini_league_id) || [];
       const allLeagueIds = [...new Set([...parentLeagueIds, ...adminLeagueIds])];
 
-      return {
-        parentLeagueIds,
-        adminLeagueIds,
-        allLeagueIds,
-        isAppAdmin,
-      };
-    },
+          return {
+            parentLeagueIds,
+            adminLeagueIds,
+            allLeagueIds,
+            isAppAdmin,
+          };
+        },
+        // Gated: membership resolution joins user_roles (club_admin/
+        // league_admin/coach/app_admin) and mini_league_players by Supabase
+        // uuid, with no canister equivalent. ICP-routed sessions see no
+        // memberships here rather than invented data.
+        icp: async () => ({
+          parentLeagueIds: [] as string[],
+          adminLeagueIds: [] as string[],
+          allLeagueIds: [] as string[],
+          isAppAdmin: false,
+        }),
+      }),
     enabled: !!user,
     staleTime: 30000,
   });

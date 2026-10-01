@@ -73,6 +73,16 @@ import { cn } from "@/lib/utils";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubEngagementAnalytics } from "@/lab/fixtureDataLayer";
 import { CommunicationEngagementSection } from "@/components/club/CommunicationEngagementSection";
+import { withFeatureBackend } from "@/live/featureRouter";
+import type { FeatureBackendContext } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import {
+  getLiveClubEngagementActiveUsers,
+  getLiveClubEngagementTotals,
+  getLiveClubEngagementMessageVolume,
+  getLiveClubEngagementRsvpCompletionSeries,
+  getLiveClubEngagementTotalUniqueReach,
+} from "@/live/features/insights";
 
 const ALL_TEAMS = "__all__";
 const RANGE_PRESETS = [
@@ -162,6 +172,32 @@ function SupabaseClubEngagementAnalyticsPage({
     start: startOfDay(subDays(range.start, rangeDays)),
     end: endOfDay(subDays(range.end, rangeDays)),
   }), [range, rangeDays]);
+
+  const isIcpAnalytics = isFeatureRoutedToIcp("analytics");
+
+  /**
+   * Provisional ICP mappings for the honest club_engagement_* mirrors only.
+   * The canister has no concept of "platform-wide" aggregation (every call
+   * takes a single club_id), so these throw rather than fabricate a
+   * platform rollup when in "platform" mode.
+   */
+  function requireIcpClubId(): string {
+    if (!clubId) {
+      throw new Error("Engagement analytics on the Internet Computer backend require a specific club.");
+    }
+    return clubId;
+  }
+
+  async function icpActiveUserRows(ctx: FeatureBackendContext, start: Date, end: Date) {
+    const points = await getLiveClubEngagementActiveUsers(ctx, requireIcpClubId(), start.getTime(), end.getTime());
+    // The canister returns a per-day aggregate count, not per-user ids, so
+    // multi-day distinct totals become a day-sum upper bound here rather
+    // than a true distinct-user count. Synthetic ids are scoped per-day so
+    // we never invent a real user identity.
+    return points.flatMap((p) =>
+      Array.from({ length: Number(p.value) }, (_, i) => ({ day: p.day, user_id: `${p.day}#${i}` }))
+    );
+  }
 
   const queryReady = isPlatform || !!clubId;
 
