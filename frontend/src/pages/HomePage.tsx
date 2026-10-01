@@ -37,6 +37,7 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
@@ -428,9 +429,28 @@ export default function HomePage() {
         teamIds.length > 0
           ? supabase.from("teams").select("id, club_id").in("id", teamIds).is("deleted_at", null)
           : Promise.resolve({ data: [] as { id: string; club_id: string }[], error: null as any }),
-        supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
+        withFeatureBackend("mini_leagues", {
+          supabase: () => supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
+          icp: async (ctx) => {
+            // Provisional: ICP has no "players claimed by this principal"
+            // list query distinct from my_leagues(); my_leagues() already
+            // returns every league the caller is linked to (admin or
+            // claimed player), so we reuse it here and let the merge below
+            // de-duplicate against adminLeaguesResult.
+            const leagues = await listMyLiveMiniLeagues(ctx);
+            return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
+          },
+        }),
         leagueAdminArr.length > 0
-          ? supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr)
+          ? withFeatureBackend("mini_leagues", {
+              supabase: () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
+              icp: async (ctx) => {
+                const leagues = (
+                  await Promise.all(leagueAdminArr.map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)))
+                ).flat();
+                return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
+              },
+            })
           : Promise.resolve({ data: [] as { id: string }[], error: null as any }),
         // Filter out soft-deleted clubs from role-derived memberships. Without
         // this, deleting a club leaves orphan user_roles rows that still make
@@ -1240,19 +1260,29 @@ export default function HomePage() {
 
   const { data: miniLeagues, error: miniLeaguesError } = useQuery({
     queryKey: ["all-mini-leagues"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_leagues")
-        .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
-        .is("clubs.deleted_at", null)
-        .is("clubs.purged_at", null)
-        .not("clubs.name", "ilike", "%test%")
-        .not("clubs.name", "ilike", "%demo%")
-        .not("clubs.name", "ilike", "%sample%")
-        .order("name");
-      if (error) throw error;
-      return data as MiniLeague[];
-    },
+    queryFn: async () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
+            .is("clubs.deleted_at", null)
+            .is("clubs.purged_at", null)
+            .not("clubs.name", "ilike", "%test%")
+            .not("clubs.name", "ilike", "%demo%")
+            .not("clubs.name", "ilike", "%sample%")
+            .order("name");
+          if (error) throw error;
+          return data as MiniLeague[];
+        },
+        // Provisional: this directory browses every mini-league across every
+        // club (for the "join a team" picker), which has no canister
+        // equivalent — mini_league_domain only exposes per-club
+        // (list_mini_leagues_by_club) and per-caller (my_leagues) listings,
+        // not a global cross-club directory with joined club metadata. Leave
+        // empty under ICP until a club directory canister can supply this.
+        icp: async () => [] as MiniLeague[],
+      }),
     enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
