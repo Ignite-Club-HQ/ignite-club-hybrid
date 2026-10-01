@@ -24,3 +24,10 @@
 - Candid drift check: 17/17 green.
 - `backend/AGENTS.md` updated with a hard rule: deploy script must call `initialize()` immediately after canister creation, naming the deployer principal as governor (mitigates the first-caller-wins race).
 - `docs/icp-audit-2026-10-01-deep-round2.md` governor finding marked FIXED.
+
+## Typecheck ratchet cleanup (completed 2026-10-01)
+- All 60 errors from this round fixed with real boundary validation (no suppressions); product type gate reports 0 errors, 48 resolved since baseline.
+- Fixes covered: pitch-board lineup position filtering, event lineup team-size mapping, club rewards report row typing, team creation result widening, event duty recipient typing, chat virtualization channel typing, inbox open-latency arg, messages inbox cache normalization, and 9 test-file mock retypes.
+- Contract test `CreateTeamPage.icpMembership.contract.test.ts` updated to match the widened `withFeatureBackend` generic.
+- Real bug found via `JoinTeamPage.icp.test.tsx`: the provisional ICP invite mapping dropped `metadata`, so the mini-league join block for II accounts could never fire; mapping now defensively passes `metadata` (incl. `mini_league_id`) through.
+- Full suite green: shard 1/3 (1,764), 2/3 (1,423), 3/3 (1,519). Note: `EventGroupsManager.characterization` and `CreateCompetitionPage` tests are load-flaky under full shards — they pass in isolation.

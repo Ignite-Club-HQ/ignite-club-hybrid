@@ -21,6 +21,6 @@ describe("CreateTeamPage ICP membership wiring", () => {
   });
 
   it("still creates the Supabase team row unconditionally via withFeatureBackend", () => {
-    expect(source).toContain('const { data: team, error: teamError } = await withFeatureBackend("membership", {');
+    expect(source).toContain('const { data: team, error: teamError } = await withFeatureBackend<{ data: { id: string; name?: string } | null; error: { code?: string } | null }>("membership", {');
   });
 });
