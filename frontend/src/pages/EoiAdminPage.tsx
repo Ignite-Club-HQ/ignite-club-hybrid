@@ -48,6 +48,7 @@ import { EoiTeamSuggestions } from "@/components/eoi/EoiTeamSuggestions";
 import { exportEoisCSV } from "@/lib/exportEois";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
 
 export default function EoiAdminPage() {

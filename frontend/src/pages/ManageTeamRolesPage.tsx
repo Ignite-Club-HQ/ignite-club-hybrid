@@ -9,6 +9,7 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { RoleRequestsList } from "@/components/members/RoleRequestsList";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabTeamRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { membershipKeys } from "@/lab/membershipQueryKeys";

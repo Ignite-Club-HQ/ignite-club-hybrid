@@ -29,6 +29,7 @@ import { BulkRolloverDialog } from "@/components/seasons/BulkRolloverDialog";
 import { SeasonEoiConfigCard } from "@/components/seasons/SeasonEoiConfigCard";
 import { EoiEmbedCard } from "@/components/eoi/EoiEmbedCard";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabSeasonDetail } from "@/lab/fixtureDataLayer";
 
 export default function SeasonDetailPage() {

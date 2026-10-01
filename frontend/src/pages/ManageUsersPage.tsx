@@ -87,6 +87,7 @@ interface UserProfile {
   roles: any[];
 }
 
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabUserDirectory } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 

@@ -14,6 +14,7 @@ import { AppStoreDownloadGuide } from "@/components/AppStoreDownloadGuide";
 import { setInviteFlowContext, getInviteFlowContext, clearInviteFlowContext } from "@/components/InviteFlowProgress";
 import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStorage";
 import type { Database } from "@/integrations/supabase/types";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 
 type AppRole = Database["public"]["Enums"]["app_role"];

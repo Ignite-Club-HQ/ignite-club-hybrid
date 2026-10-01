@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubList } from "@/lab/fixtureDataLayer";
 
 

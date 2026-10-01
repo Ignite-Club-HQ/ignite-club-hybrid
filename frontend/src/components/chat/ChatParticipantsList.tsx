@@ -25,7 +25,7 @@ import AddRoleToMemberDialog from "@/components/AddRoleToMemberDialog";
 import { ParticipantProfileSheet, type ParticipantRoleEntry } from "@/components/chat/ParticipantProfileSheet";
 import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   refreshChatManagedTeamMembership,
@@ -120,7 +120,7 @@ export function ChatParticipantsList({
 }: ChatParticipantsListProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const navigate = useNavigate();
   const previousCountRef = useRef<number | null>(null);
   const cacheKey = `chat-members-count-${chatType}-${chatId}`;

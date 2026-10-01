@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabSeasonCompare } from "@/lab/fixtureDataLayer";
 
 export default function SeasonComparePage() {

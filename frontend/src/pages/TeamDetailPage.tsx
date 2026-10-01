@@ -42,6 +42,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { eventKeys } from "@/lab/eventQueryKeys";
 const PitchBoard = lazyWithRetry(() => import("@/components/pitch/PitchBoard"));
 // NetballBoard / BasketballBoard archived — football-only build (see archive/sports/)

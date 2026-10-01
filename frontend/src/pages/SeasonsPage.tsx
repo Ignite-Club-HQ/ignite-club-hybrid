@@ -16,6 +16,7 @@ import { OrphanEventsCard } from "@/components/seasons/OrphanEventsCard";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { format } from "date-fns";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabSeasons } from "@/lab/fixtureDataLayer";
 
 const STATUS_META: Record<SeasonStatus, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "outline" }> = {
