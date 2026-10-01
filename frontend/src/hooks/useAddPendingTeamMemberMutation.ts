@@ -9,7 +9,8 @@ import {
 } from "@/features/membership/secondParentInvite";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { createLivePendingInvite, bulkAddLiveTeamMembers } from "@/live/features/club";
 
 type Args = {
   supabase: any;
@@ -70,10 +71,87 @@ export function useAddPendingTeamMemberMutation({
   setCustomEmail,
   setIsSendingNotification,
 }: Args) {
+  /**
+   * ICP path: composes what club_domain actually supports —
+   * `bulk_add_team_members` (role grant) for an existing-user match, or
+   * `create_pending_invite` for a fresh invite. Second-parent linking and
+   * email delivery have no club_domain counterpart (second-parent invite
+   * creation, email sending) and in-app notifications stay Supabase-only
+   * (push/notifications table), so those stay skipped/omitted on this path.
+   * NEEDS-CANISTER: second-parent invite composition + in-app notification
+   * write for pending/bulk team-member adds.
+   */
+  const mutationIcp = async (ctx: FeatureBackendContext) => {
+    if (!nameInput.trim()) throw new Error("Please enter a name");
+    const { Principal } = await import("@icp-sdk/core/principal");
+
+    const dedupeEmail = customEmail.trim().toLowerCase();
+    if (dedupeEmail) {
+      const { lookupInvitableUserByEmail } = await import("@/lib/inviteEmailDedupe");
+      const match = await lookupInvitableUserByEmail({
+        email: dedupeEmail,
+        clubId,
+        teamId,
+      });
+      if (match?.already_in_team && selectedRole !== "parent") {
+        throw new Error(`${match.display_name || dedupeEmail} is already on this team.`);
+      }
+      if (match) {
+        await bulkAddLiveTeamMembers(ctx, clubId, teamId, selectedRole, [
+          Principal.fromText(match.user_id),
+        ]);
+        return {
+          link: "",
+          shareLink: "",
+          email: "",
+          childrenCount: 0,
+          childrenNames: [] as string[],
+          secondParentLink: null,
+          secondParentEmail: "",
+          secondParentName: "",
+          secondParentAddedDirectly: false,
+          secondParentStatus: "skipped" as const,
+          secondParentLabel: null as string | null,
+          secondParentFailure: null as string | null,
+          existingUserAdded: {
+            name: match.display_name || dedupeEmail,
+            notificationFailed: false,
+            notificationError: null as string | null,
+          },
+        };
+      }
+    }
+
+    const { invite } = await createLivePendingInvite(
+      ctx,
+      clubId,
+      customEmail.trim().toLowerCase(),
+      teamId,
+      selectedRole,
+      nameInput.trim(),
+    );
+    const link = `${window.location.origin}/join/p/${invite.id}`;
+    return {
+      link,
+      shareLink: link,
+      email: customEmail.trim(),
+      childrenCount: 0,
+      childrenNames: [] as string[],
+      secondParentLink: null,
+      secondParentEmail: "",
+      secondParentName: "",
+      secondParentAddedDirectly: false,
+      secondParentStatus: "skipped" as const,
+      secondParentLabel: null as string | null,
+      secondParentFailure: null as string | null,
+    };
+  };
+
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async () => withFeatureBackend("membership", {
+      icp: mutationIcp,
+      supabase: async () => {
       if (!nameInput.trim()) throw new Error("Please enter a name");
-      assertSupabaseWritePath("membership", "pending team invite (pending_invites row + second-parent + email) has no club_domain counterpart"); // NEEDS-CANISTER: pending team invite (pending_invites row + second-parent + email) has no club_domain counterpart
 
       // Email dedupe: if the inviter typed an email and it belongs to an
       // existing in-scope user, attach the role directly instead of
@@ -278,7 +356,8 @@ export function useAddPendingTeamMemberMutation({
         secondParentLabel: secondParent.label,
         secondParentFailure,
       };
-    },
+      },
+    }),
     onSuccess: async (result) => {
       const {
         link,

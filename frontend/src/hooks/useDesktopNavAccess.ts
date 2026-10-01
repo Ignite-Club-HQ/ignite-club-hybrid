@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 
 
@@ -29,12 +32,23 @@ export function useDesktopNavAccess() {
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data: roles, error } = await supabase
-        .from("user_roles")
-        .select("role, club_id, team_id")
-        .eq("user_id", user!.id);
-      if (error) throw error;
-      const rows = (roles || []) as Array<{ role: string; club_id: string | null; team_id: string | null }>;
+      let rows: Array<{ role: string; club_id: string | null; team_id: string | null }>;
+      if (isFeatureRoutedToIcp("membership")) {
+        // Internet Identity users: the canister's caller-scoped role-grant
+        // list replaces the Supabase `user_roles` read.
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
+        });
+        rows = grants.map((g) => ({ role: g.role, club_id: g.club ?? null, team_id: g.team ?? null }));
+      } else {
+        const { data: roles, error } = await supabase
+          .from("user_roles")
+          .select("role, club_id, team_id")
+          .eq("user_id", user!.id);
+        if (error) throw error;
+        rows = (roles || []) as Array<{ role: string; club_id: string | null; team_id: string | null }>;
+      }
 
       const teamIds = Array.from(new Set(rows.map((r) => r.team_id).filter(Boolean) as string[]));
 
