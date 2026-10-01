@@ -20,7 +20,7 @@ persistent actor {
   var feedback : [Types.Feedback];
   var nextId : Nat64;
 
-  let MAX_BATCH = 50;
+  transient let MAX_BATCH = 50;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
@@ -87,7 +87,7 @@ persistent actor {
 
   func percentile(sorted : [Nat32], p : Float) : Nat32 {
     if (sorted.size() == 0) return 0;
-    let rank = Float.toInt(Float.ceil(p * Float.fromInt(sorted.size()))) - 1;
+    let rank = Float.toInt(Float.ceil(p * Int.toFloat(sorted.size()))) - 1;
     let index = Nat.max(0, Nat.min(sorted.size() - 1, Int.abs(rank)));
     sorted[index]
   };
@@ -103,11 +103,11 @@ persistent actor {
     if (matches.size() == 0) return #Ok({ surface; source = switch (source) { case (?s) s; case null "" }; count = 0; avg_ms = 0.0; p50_ms = 0; p95_ms = 0 });
     let durations = matches.map(func(item) = item.duration_ms);
     let sorted = durations.sort(func(a, b) = Nat32.compare(a, b));
-    let total = durations.foldLeft(0.0, func(acc, item) = acc + Float.fromInt(Nat32.toNat(item)));
+    let total = durations.foldLeft(0.0, func(acc, item) = acc + Int.toFloat(Nat32.toNat(item)));
     #Ok({
       surface; source = switch (source) { case (?s) s; case null "" };
       count = Nat.toNat32(matches.size());
-      avg_ms = total / Float.fromInt(matches.size());
+      avg_ms = total / Int.toFloat(matches.size());
       p50_ms = percentile(sorted, 0.5);
       p95_ms = percentile(sorted, 0.95);
     })
@@ -123,12 +123,12 @@ persistent actor {
           case (?user) { if (current.activeUsers.any(func(u) = u == user)) current.activeUsers else current.activeUsers.concat([user]) };
           case null current.activeUsers;
         };
-        let updated = { current with count = current.count + 1; activeUsers };
+        let updated = { current with count = current.count + (1 : Nat32); activeUsers };
         engagementCounters := engagementCounters.map(func(item) = if (item.club_id == club_id and item.day == day and item.kind == kind) updated else item);
       };
       case null {
         let activeUsers = switch (byUser) { case (?user) [user]; case null [] };
-        engagementCounters := engagementCounters.concat([{ club_id; day; kind; count = 1; activeUsers }]);
+        engagementCounters := engagementCounters.concat([{ club_id; day; kind; count = (1 : Nat32); activeUsers }]);
       };
     };
   };
