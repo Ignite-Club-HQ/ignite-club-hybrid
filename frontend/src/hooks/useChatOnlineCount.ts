@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { liveOnlineCount, livePresenceHeartbeat } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import type { Database } from "@/integrations/supabase/types";
@@ -42,10 +44,37 @@ export function useChatOnlineCount(
   const { user } = useAuth();
   const { teamId, clubId, miniLeagueId, groupAllowedRoles, enabled = true } = opts;
 
-  // Presence has no canister equivalent: when messaging is routed to ICP the
-  // online count degrades to hidden (both sources are Supabase-only) rather
-  // than firing queries that can never succeed.
-  const presenceAvailable = !isFeatureRoutedToIcp("messaging");
+  const routedToIcp = isFeatureRoutedToIcp("messaging");
+  const presenceAvailable = !routedToIcp;
+
+  // ICP path: heartbeat on an interval so the canister sees us as online,
+  // then poll the canister's online_count for the conversation. The
+  // team/club/group id doubles as the conversation id (provisional mapping,
+  // same convention as the message send/read paths).
+  useEffect(() => {
+    if (!routedToIcp || !enabled || !chatId) return;
+    const beat = () => {
+      withFeatureBackend("messaging", {
+        supabase: async () => {},
+        icp: (ctx) => livePresenceHeartbeat(ctx),
+      }).catch(() => {});
+    };
+    beat();
+    const timer = setInterval(beat, 45 * 1000);
+    return () => clearInterval(timer);
+  }, [routedToIcp, enabled, chatId]);
+
+  const { data: icpOnlineCount } = useQuery({
+    queryKey: ["chat-online-count-icp", chatId],
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async () => 0,
+        icp: (ctx) => liveOnlineCount(ctx, chatId!),
+      }),
+    enabled: routedToIcp && enabled && !!chatId,
+    staleTime: 30 * 1000,
+    refetchInterval: 45 * 1000,
+  });
 
   const { data: memberIds } = useQuery({
     queryKey: [
@@ -157,6 +186,8 @@ export function useChatOnlineCount(
     staleTime: 30 * 1000,
     refetchInterval: 45 * 1000,
   });
+
+  if (routedToIcp) return icpOnlineCount ?? 0;
 
   // Union the two sources (mirrors the green-dot logic in
   // ChatParticipantsList so the header count and the per-member dots

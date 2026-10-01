@@ -1,7 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Principal } from "@icp-sdk/core/principal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  liveBlockUser,
+  liveListBlockedUsers,
+  liveUnblockUser,
+} from "@/live/features/messaging";
 import { useCallback } from "react";
 
 export function useBlockedUsers() {
@@ -13,7 +20,12 @@ export function useBlockedUsers() {
   const { data: blockedUserIds = [], isLoading } = useQuery({
     queryKey: ["blocked-users", user?.id],
     queryFn: async () => {
-      if (isIcp) return [];
+      if (isIcp) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => [] as string[],
+          icp: (ctx) => liveListBlockedUsers(ctx),
+        });
+      }
       const { data, error } = await supabase
         .from("blocked_users")
         .select("blocked_id")
@@ -21,13 +33,19 @@ export function useBlockedUsers() {
       if (error) throw error;
       return data.map((row) => row.blocked_id);
     },
-    enabled: !!user?.id && !isIcp,
+    enabled: !!user?.id,
     staleTime: 1000 * 60 * 5,
   });
 
   const blockUser = useMutation({
     mutationFn: async ({ blockedId, reason }: { blockedId: string; reason?: string }) => {
-      if (isIcp) return; // no-op in ICP mode: blocking is Supabase-only for now
+      if (isIcp) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: (ctx) => liveBlockUser(ctx, Principal.fromText(blockedId)),
+        });
+        return;
+      }
       const { error } = await supabase
         .from("blocked_users")
         .insert({ blocker_id: user!.id, blocked_id: blockedId, reason });
@@ -40,7 +58,13 @@ export function useBlockedUsers() {
 
   const unblockUser = useMutation({
     mutationFn: async (blockedId: string) => {
-      if (isIcp) return; // no-op in ICP mode: blocking is Supabase-only for now
+      if (isIcp) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: (ctx) => liveUnblockUser(ctx, Principal.fromText(blockedId)),
+        });
+        return;
+      }
       const { error } = await supabase
         .from("blocked_users")
         .delete()

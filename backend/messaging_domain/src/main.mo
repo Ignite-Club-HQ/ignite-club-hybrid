@@ -41,6 +41,8 @@ persistent actor {
   // See Types.RecapConfig: api_key is visible to node providers hosting this
   // canister; only a scoped/limited key should ever be stored here.
   var recapConfig : ?Types.RecapConfig;
+  var presence : [Types.PresencePing];
+  var blockedUsers : [Types.BlockedUser];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -145,6 +147,14 @@ persistent actor {
   func sharesClub(a : Principal, b : Principal) : Bool {
     let clubsOfA = clubMemberships.filter(func(m) = m.user.equal(a));
     clubsOfA.any(func(ma) = clubMemberships.any(func(mb) = mb.user.equal(b) and mb.club_id == ma.club_id))
+  };
+
+  // True when a has blocked b or b has blocked a.
+  func isBlockedPair(a : Principal, b : Principal) : Bool {
+    blockedUsers.any(func(entry) =
+      (entry.blocker.equal(a) and entry.blocked.equal(b)) or
+      (entry.blocker.equal(b) and entry.blocked.equal(a))
+    )
   };
 
   func inferConversationKind(conversation : Types.Conversation) : Text {
@@ -261,6 +271,14 @@ persistent actor {
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    // DM blocking: refuse to post when either party has blocked the other.
+    for (c in conversations.values()) {
+      if (c.id == conversation_id and c.club_id == "dm") {
+        for (p in c.participants.values()) {
+          if (not p.equal(caller) and isBlockedPair(caller, p)) return #Err("Direct message blocked");
+        };
+      };
+    };
     if (not valid(body) or not valid(idempotency_key)) return #Err("Invalid message");
     switch (attachment) { case (?a) { if (not validAttachment(a)) return #Err("Invalid attachment") }; case null {} };
     switch (getGroupMetadataFor(conversation_id)) {
@@ -557,6 +575,7 @@ persistent actor {
   public query ({ caller }) func can_dm_user(other : Principal) : async Bool {
     if (caller.equal(Principal.anonymous()) or other.equal(Principal.anonymous())) return false;
     if (caller.equal(other)) return false;
+    if (isBlockedPair(caller, other)) return false;
     sharesClub(caller, other)
   };
 
@@ -913,6 +932,7 @@ persistent actor {
   public shared ({ caller }) func get_or_create_dm(other : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
     auth(caller);
     if (other.equal(Principal.anonymous()) or other.equal(caller)) return #Err("Invalid DM target");
+    if (isBlockedPair(caller, other)) return #Err("Direct message blocked");
     let aText = Principal.toText(caller);
     let bText = Principal.toText(other);
     let (loText, loP, hiP) = if (aText < bText) { (aText, caller, other) } else { (bText, other, caller) };
@@ -1274,5 +1294,71 @@ persistent actor {
       // Outcall timeouts and rejects surface as catchable errors — never trap.
       #Err("Recap request failed: " # Error.message(e))
     }
+  };
+
+  // ===================== Presence (online count) =====================
+
+  // Record the caller's heartbeat. The frontend calls this on an interval;
+  // online counts are derived at read time from last_seen_ms.
+  public shared ({ caller }) func presence_heartbeat() : async { #Ok; #Err : Text } {
+    auth(caller);
+    let now = nowMs();
+    presence := presence.filter(func(entry) = not entry.user.equal(caller));
+    presence := presence.concat([{ user = caller; last_seen_ms = now }]);
+    #Ok
+  };
+
+  // How many participants of the conversation (excluding the caller) sent a
+  // heartbeat within the last 90 seconds. Mirrors the Supabase presence
+  // window so both backends report comparable numbers.
+  public query ({ caller }) func online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    let now = nowMs();
+    let windowMs : Nat64 = 90_000;
+    var count : Nat64 = 0;
+    for (c in conversations.values()) {
+      if (c.id == conversation_id) {
+        for (p in c.participants.values()) {
+          if (not p.equal(caller)) {
+            let online = presence.any(func(entry) =
+              entry.user.equal(p) and entry.last_seen_ms + windowMs >= now
+            );
+            if (online) { count += 1 };
+          };
+        };
+      };
+    };
+    #Ok(count)
+  };
+
+  // ===================== User blocking =====================
+
+  public shared ({ caller }) func block_user(user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (user.equal(Principal.anonymous()) or user.equal(caller)) return #Err("Invalid block target");
+    let exists = blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user));
+    if (not exists) {
+      blockedUsers := blockedUsers.concat([{ blocker = caller; blocked = user; created_at_ms = nowMs() }]);
+    };
+    #Ok
+  };
+
+  public shared ({ caller }) func unblock_user(user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    blockedUsers := blockedUsers.filter(func(entry) = not (entry.blocker.equal(caller) and entry.blocked.equal(user)));
+    #Ok
+  };
+
+  // Principals the caller has blocked (one direction — what the block list UI shows).
+  public query ({ caller }) func list_blocked_users() : async [Principal] {
+    if (caller.equal(Principal.anonymous())) return [];
+    let mine = blockedUsers.filter(func(entry) = entry.blocker.equal(caller));
+    Array.map<Types.BlockedUser, Principal>(mine, func(entry) = entry.blocked)
+  };
+
+  // Whether the caller has blocked this user (their own setting only).
+  public query ({ caller }) func has_blocked(user : Principal) : async Bool {
+    blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
   };
 };

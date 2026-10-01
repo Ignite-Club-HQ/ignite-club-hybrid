@@ -289,6 +289,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    block_user(user: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     broadcast_announcement(club_id: string, team_ids: Array<string>, include_club_chat: boolean, body: string, idempotency_key: string): Promise<{
         __kind__: "Ok";
         Ok: BroadcastResult;
@@ -399,6 +406,7 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    has_blocked(user: Principal): Promise<boolean>;
     initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -421,6 +429,7 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_blocked_users(): Promise<Array<Principal>>;
     list_join_requests(conversation_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<JoinRequest>;
@@ -451,6 +460,20 @@ export interface messaging_domainInterface {
         Err: string;
     }>;
     my_unread_counts(): Promise<Array<UnreadSummary>>;
+    online_count(conversation_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    presence_heartbeat(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     recapTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -574,6 +597,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    unblock_user(user: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     unread_count(conversation_id: string): Promise<{
         __kind__: "Ok";
         Ok: Unread;
@@ -655,6 +685,16 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.approve_join_request(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
+    async block_user(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.block_user(arg0);
         return from_candid_variant_n1(result);
     }
     async broadcast_announcement(arg0: string, arg1: Array<string>, arg2: boolean, arg3: string, arg4: string): Promise<{
@@ -827,6 +867,10 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n10(arg2), to_candid_opt_n10(arg3));
         return from_candid_variant_n1(result);
     }
+    async has_blocked(arg0: Principal): Promise<boolean> {
+        const result = await this.actor.has_blocked(arg0);
+        return result;
+    }
     async initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -860,6 +904,10 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
         return from_candid_variant_n41(result);
+    }
+    async list_blocked_users(): Promise<Array<Principal>> {
+        const result = await this.actor.list_blocked_users();
+        return result;
     }
     async list_join_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -909,6 +957,26 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.my_unread_counts();
         return result;
     }
+    async online_count(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: bigint;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.online_count(arg0);
+        return from_candid_variant_n52(result);
+    }
+    async presence_heartbeat(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.presence_heartbeat();
+        return from_candid_variant_n1(result);
+    }
     async recapTransform(arg0: {
         context: Uint8Array;
         response: HttpRequestResult;
@@ -924,7 +992,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.recent_conversations(arg0, arg1);
-        return from_candid_variant_n52(result);
+        return from_candid_variant_n53(result);
     }
     async register_attachment_metadata(arg0: string, arg1: string | null, arg2: string, arg3: string, arg4: string | null, arg5: bigint | null): Promise<{
         __kind__: "Ok";
@@ -934,7 +1002,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.register_attachment_metadata(arg0, to_candid_opt_n10(arg1), arg2, arg3, to_candid_opt_n10(arg4), to_candid_opt_n43(arg5));
-        return from_candid_variant_n56(result);
+        return from_candid_variant_n57(result);
     }
     async register_scheduled_message(arg0: string, arg1: string, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -944,7 +1012,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.register_scheduled_message(arg0, arg1, arg2);
-        return from_candid_variant_n57(result);
+        return from_candid_variant_n58(result);
     }
     async reject_join_request(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
@@ -984,7 +1052,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.replay_scheduled_message(arg0);
-        return from_candid_variant_n57(result);
+        return from_candid_variant_n58(result);
     }
     async request_join_group(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1003,7 +1071,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n58(arg3));
+        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n59(arg3));
         return from_candid_variant_n14(result);
     }
     async set_club_dm_settings(arg0: string, arg1: boolean, arg2: boolean): Promise<{
@@ -1043,7 +1111,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_recap_config(to_candid_opt_n61(arg0));
+        const result = await this.actor.set_recap_config(to_candid_opt_n62(arg0));
         return from_candid_variant_n1(result);
     }
     async set_user_messaging_settings(arg0: boolean, arg1: boolean): Promise<{
@@ -1086,6 +1154,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.transfer_governorship(arg0);
         return from_candid_variant_n1(result);
     }
+    async unblock_user(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.unblock_user(arg0);
+        return from_candid_variant_n1(result);
+    }
     async unread_count(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Unread;
@@ -1094,7 +1172,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.unread_count(arg0);
-        return from_candid_variant_n62(result);
+        return from_candid_variant_n63(result);
     }
     async unread_count_by_club(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1104,7 +1182,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.unread_count_by_club(arg0);
-        return from_candid_variant_n63(result);
+        return from_candid_variant_n64(result);
     }
     async update_group(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: boolean | null): Promise<{
         __kind__: "Ok";
@@ -1113,7 +1191,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_group(arg0, to_candid_opt_n10(arg1), to_candid_opt_n10(arg2), to_candid_opt_n10(arg3), to_candid_opt_n64(arg4));
+        const result = await this.actor.update_group(arg0, to_candid_opt_n10(arg1), to_candid_opt_n10(arg2), to_candid_opt_n10(arg3), to_candid_opt_n65(arg4));
         return from_candid_variant_n2(result);
     }
     async update_message(arg0: string, arg1: string): Promise<{
@@ -1184,8 +1262,8 @@ function from_candid_PollResults_n39(value: _PollResults): PollResults {
 function from_candid_Poll_n8(value: _Poll): Poll {
     return from_candid_record_n9(value);
 }
-function from_candid_RecentConversation_n54(value: _RecentConversation): RecentConversation {
-    return from_candid_record_n55(value);
+function from_candid_RecentConversation_n55(value: _RecentConversation): RecentConversation {
+    return from_candid_record_n56(value);
 }
 function from_candid_RoleGrant_n35(value: _RoleGrant): RoleGrant {
     return from_candid_record_n36(value);
@@ -1508,7 +1586,7 @@ function from_candid_record_n51(value: {
         reactions: value.reactions
     };
 }
-function from_candid_record_n55(value: {
+function from_candid_record_n56(value: {
     last_message_sequence: bigint;
     conversation_id: string;
     kind: string;
@@ -1785,6 +1863,25 @@ function from_candid_variant_n48(value: {
     } : value;
 }
 function from_candid_variant_n52(value: {
+    Ok: bigint;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n53(value: {
     Ok: Array<_RecentConversation>;
 } | {
     Err: string;
@@ -1797,13 +1894,13 @@ function from_candid_variant_n52(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n53(value.Ok)
+        Ok: from_candid_vec_n54(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n57(value: {
     Ok: _AttachmentMetadata;
 } | {
     Err: string;
@@ -1822,7 +1919,7 @@ function from_candid_variant_n56(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n57(value: {
+function from_candid_variant_n58(value: {
     Ok: _ScheduledMessage;
 } | {
     Err: string;
@@ -1860,7 +1957,7 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n62(value: {
+function from_candid_variant_n63(value: {
     Ok: _Unread;
 } | {
     Err: string;
@@ -1879,7 +1976,7 @@ function from_candid_variant_n62(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n63(value: {
+function from_candid_variant_n64(value: {
     Ok: Array<_ClubUnreadSummary>;
 } | {
     Err: string;
@@ -1941,11 +2038,11 @@ function from_candid_vec_n34(value: Array<_RoleGrant>): Array<RoleGrant> {
 function from_candid_vec_n49(value: Array<_MessageWithReactions>): Array<MessageWithReactions> {
     return value.map((x)=>from_candid_MessageWithReactions_n50(x));
 }
-function from_candid_vec_n53(value: Array<_RecentConversation>): Array<RecentConversation> {
-    return value.map((x)=>from_candid_RecentConversation_n54(x));
+function from_candid_vec_n54(value: Array<_RecentConversation>): Array<RecentConversation> {
+    return value.map((x)=>from_candid_RecentConversation_n55(x));
 }
-function to_candid_Attachment_n59(value: Attachment): _Attachment {
-    return to_candid_record_n60(value);
+function to_candid_Attachment_n60(value: Attachment): _Attachment {
+    return to_candid_record_n61(value);
 }
 function to_candid_opt_n10(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
@@ -1953,16 +2050,16 @@ function to_candid_opt_n10(value: string | null): [] | [string] {
 function to_candid_opt_n43(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n58(value: Attachment | null): [] | [_Attachment] {
-    return value === null ? candid_none() : candid_some(to_candid_Attachment_n59(value));
+function to_candid_opt_n59(value: Attachment | null): [] | [_Attachment] {
+    return value === null ? candid_none() : candid_some(to_candid_Attachment_n60(value));
 }
-function to_candid_opt_n61(value: RecapConfig | null): [] | [_RecapConfig] {
+function to_candid_opt_n62(value: RecapConfig | null): [] | [_RecapConfig] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n64(value: boolean | null): [] | [boolean] {
+function to_candid_opt_n65(value: boolean | null): [] | [boolean] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_record_n60(value: {
+function to_candid_record_n61(value: {
     url?: string;
     kind: string;
     ref_id: string;
