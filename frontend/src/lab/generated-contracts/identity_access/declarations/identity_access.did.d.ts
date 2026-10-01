@@ -72,6 +72,16 @@ export interface Profile {
   'updated_at_ns' : bigint,
   'display_name' : string,
 }
+/**
+ * One row of a `search_profiles` result: the profile plus the account's
+ * first principal (needed by callers to grant roles).
+ */
+export interface ProfileSearchResult {
+  'account_id' : string,
+  'principal' : Principal,
+  'avatar_ref' : [] | [string],
+  'display_name' : string,
+}
 export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
@@ -82,9 +92,11 @@ export type Result_11 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
 export type Result_12 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : PrivacyConsent } |
+export type Result_13 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : TermsAcceptance } |
+export type Result_14 = { 'Ok' : PrivacyConsent } |
+  { 'Err' : string };
+export type Result_15 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
@@ -239,6 +251,15 @@ export interface _SERVICE {
   'remove_verifier' : ActorMethod<[Principal], Result_2>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
   /**
+   * Case-insensitive substring search over display names — the ICP-mode
+   * counterpart of the Supabase `search_invitable_profiles` RPC, used by the
+   * "add an existing member" pickers. Returns at most `limit` (capped at 25)
+   * matches; each result carries the account's first principal so the caller
+   * can grant roles without a second lookup. Profiles without an account or
+   * with a blank name are skipped.
+   */
+  'search_profiles' : ActorMethod<[string, number], Result_13>,
+  /**
    * Governor-only: sets (or rotates) the shared HMAC secret used to verify
    * `redeem_entitlement` attestations. Must match the secret held by the
    * session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
@@ -259,7 +280,7 @@ export interface _SERVICE {
     Result_2
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_13>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_14>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
@@ -271,7 +292,7 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_14>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_15>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
