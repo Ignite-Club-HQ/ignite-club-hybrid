@@ -382,9 +382,28 @@ export async function setLiveBenchmark(
   metricKey: string,
   period: string,
   value: number,
+  totalMembers?: number | null,
+  dau?: number | null,
+  wau?: number | null,
+  mau?: number | null,
+  posters?: number | null,
+  readRate?: number | null,
 ) {
   const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.set_benchmark(metricKey, period, value), "Set benchmark");
+  return unwrapCandid(
+    actor.set_benchmark(
+      metricKey,
+      period,
+      value,
+      totalMembers ?? null,
+      dau ?? null,
+      wau ?? null,
+      mau ?? null,
+      posters ?? null,
+      readRate ?? null,
+    ),
+    "Set benchmark",
+  );
 }
 
 export async function getLiveBenchmarks(ctx: FeatureBackendContext, metricKeys: string[]) {
@@ -399,10 +418,11 @@ export async function recordLiveSponsorMetric(
   sponsorId: string,
   metric: string,
   delta: number,
+  accountId?: string | null,
 ) {
   const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.record_sponsor_metric(sponsorId, metric, delta),
+    actor.record_sponsor_metric(sponsorId, metric, delta, accountId ?? null),
     "Record sponsor metric",
   );
 }

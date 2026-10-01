@@ -810,7 +810,7 @@ export default function ClubDetailPage() {
           // trigger (which includes the requester's name). No client-side
           // insert needed.
         },
-        icp: (ctx) => requestLiveRole(ctx, id!, selectedRole),
+        icp: async (ctx) => { await requestLiveRole(ctx, id!, selectedRole); },
       });
     },
     onSuccess: () => {

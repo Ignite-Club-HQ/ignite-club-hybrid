@@ -126,7 +126,7 @@ export function MatchDutiesDialog({
         // league_admin roles (user_roles) and Supabase profile rows by uuid,
         // neither of which has a canister equivalent. Rather than invent
         // data, ICP-routed sessions see an empty assignee list here.
-        icp: async () => [] as Array<{ id: string; display_name: string | null }>,
+        icp: async () => [] as Array<{ id: string; display_name: string | null; avatar_url: string | null }>,
       }),
     enabled: open && !!miniLeagueId,
   });

@@ -293,6 +293,16 @@ export default function EditTeamPage() {
             logo_url: logoUrl ? [logoUrl] : [],
             team_type: teamType ? [teamType] : [],
             // Folder, class-mode and auto-RSVP DM fields stay Supabase-only.
+            // Shell-team claim fields are not editable from this flow.
+            archived: !isActive,
+            is_shell: false,
+            shell_invited_by: [],
+            shell_contact_name: [],
+            shell_claim_token: [],
+            shell_claimed_at_ms: [],
+            shell_contact_email: [],
+            shell_claimed_by: [],
+            deleted_at_ms: [],
           });
           return null;
         } catch (error) {

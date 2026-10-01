@@ -22,8 +22,9 @@ describe("buildDirectMessageCachePayload", () => {
   };
 
   it("keeps only the established persistent conversation metadata", () => {
+    const withTransient = { ...base, transient: "not persisted", last_message: null };
     const payload = buildDirectMessageCachePayload({
-      conversations: [{ ...base, transient: "not persisted", last_message: null }],
+      conversations: [withTransient],
       currentUserId: "me",
     });
     expect(payload.dmConversations).toEqual([{

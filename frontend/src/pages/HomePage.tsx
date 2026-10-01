@@ -433,8 +433,8 @@ export default function HomePage() {
         teamIds.length > 0
           ? supabase.from("teams").select("id, club_id").in("id", teamIds).is("deleted_at", null)
           : Promise.resolve({ data: [] as { id: string; club_id: string }[], error: null as any }),
-        withFeatureBackend("mini_leagues", {
-          supabase: () => supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
+        withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
+          supabase: async () => supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
           icp: async (ctx) => {
             // Provisional: ICP has no "players claimed by this principal"
             // list query distinct from my_leagues(); my_leagues() already
@@ -446,8 +446,8 @@ export default function HomePage() {
           },
         }),
         leagueAdminArr.length > 0
-          ? withFeatureBackend("mini_leagues", {
-              supabase: () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
+          ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
+              supabase: async () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
               icp: async (ctx) => {
                 const leagues = (
                   await Promise.all(leagueAdminArr.map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)))

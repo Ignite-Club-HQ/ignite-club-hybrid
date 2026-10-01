@@ -51,7 +51,9 @@ export function renameVaultItem(
 ): Promise<void> {
   return withFeatureBackend("vault", {
     supabase: () => updateName("vault_files", fileId, newName, client),
-    icp: (ctx) => renameLiveVaultFile(ctx, fileId, newName),
+    icp: async (ctx) => {
+      await renameLiveVaultFile(ctx, fileId, newName);
+    },
   });
 }
 

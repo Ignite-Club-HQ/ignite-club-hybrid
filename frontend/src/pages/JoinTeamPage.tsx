@@ -254,26 +254,26 @@ function SupabaseJoinTeamPage() {
           // fields it needs and falls back to sane defaults. The `token`
           // route param is treated as the canister invite id — there is no
           // separate short-token lookup on the canister side yet.
-          const raw = (await getLiveTeamInvite(ctx, token!)) as Record<string, unknown> | null;
+          const raw = await getLiveTeamInvite(ctx, token!);
           if (!raw) return null;
           return {
-            id: (raw.id as string) ?? token!,
-            team_id: (raw.team_id as string) ?? null,
-            role: (raw.role as string) ?? null,
+            id: raw.id ?? token!,
+            team_id: raw.team_id ?? null,
+            role: raw.role ?? null,
             token: token,
-            uses_count: (raw.uses_count as number) ?? 0,
-            max_uses: (raw.max_uses as number | null) ?? null,
-            expires_at: (raw.expires_at as string | null) ?? null,
-            created_at: (raw.created_at as string | null) ?? null,
-            created_by: (raw.created_by as string | null) ?? null,
-            metadata: (raw.metadata as { child_name?: string; child_year_of_birth?: number } | null) ?? null,
+            uses_count: 0,
+            max_uses: null as number | null,
+            expires_at: raw.expires_at_ms != null ? new Date(Number(raw.expires_at_ms)).toISOString() : null,
+            created_at: raw.created_at_ms != null ? new Date(Number(raw.created_at_ms)).toISOString() : null,
+            created_by: raw.invited_by?.toText() ?? null,
+            metadata: null as { child_name?: string; child_year_of_birth?: number } | null,
             teams: {
-              id: (raw.team_id as string) ?? null,
-              name: (raw.team_name as string) ?? "",
-              logo_url: (raw.team_logo_url as string | null) ?? null,
-              club_id: (raw.club_id as string) ?? null,
+              id: raw.team_id ?? null,
+              name: "",
+              logo_url: null as string | null,
+              club_id: raw.club_id ?? null,
               clubs: {
-                name: (raw.club_name as string) ?? "",
+                name: "",
                 logo_url: undefined as string | undefined,
               },
             },

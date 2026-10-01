@@ -191,7 +191,7 @@ export default function SettingsPage() {
             .single();
 
           if (data) {
-            const preferenceData = data as Record<string, boolean | null | undefined>;
+            const preferenceData = data;
             setPreferences({
               messages_enabled: Boolean(preferenceData.messages_enabled),
               events_enabled: Boolean(preferenceData.events_enabled),

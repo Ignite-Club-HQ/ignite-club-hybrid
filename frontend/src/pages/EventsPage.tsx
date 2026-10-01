@@ -362,8 +362,8 @@ export default function EventsPage() {
       // OR league_admin/app_admin for that club (covers every league in the club).
       step = performance.now();
       const [playerLeaguesRes, mlaRes, adminLeaguesRes] = await Promise.all([
-        withFeatureBackend("mini_leagues", {
-          supabase: () =>
+        withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
+          supabase: async () =>
             supabase
               .from("mini_league_players")
               .select("mini_league_id")
@@ -376,8 +376,8 @@ export default function EventsPage() {
             return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
           },
         }),
-        withFeatureBackend("mini_leagues", {
-          supabase: () =>
+        withFeatureBackend<{ data: { mini_league_id: string }[] | null; error: any }>("mini_leagues", {
+          supabase: async () =>
             supabase
               .from("mini_league_admins")
               .select("mini_league_id")
@@ -385,8 +385,8 @@ export default function EventsPage() {
           icp: async () => ({ data: [] as { mini_league_id: string }[], error: null as any }),
         }),
         leagueAdminClubIds.size > 0
-          ? withFeatureBackend("mini_leagues", {
-              supabase: () =>
+          ? withFeatureBackend<{ data: { id: string }[] | null; error: any }>("mini_leagues", {
+              supabase: async () =>
                 supabase
                   .from("mini_leagues")
                   .select("id")

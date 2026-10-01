@@ -10,6 +10,7 @@ import {
   isVaultImage,
   partitionVaultItems,
   searchVaultContents,
+  type VaultFolderTreeRow,
 } from "./vaultReadRepository";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -336,7 +337,7 @@ describe("Vault active-item read model", () => {
 });
 
 describe("Vault recursive folder tree", () => {
-  const rows = [
+  const rows: VaultFolderTreeRow[] = [
     { id: "public", name: "Public", parent_id: null, restricted_roles: null },
     { id: "nested", name: "Nested", parent_id: "public", restricted_roles: null },
     { id: "coach", name: "Coaches", parent_id: null, restricted_roles: ["coach"] },
