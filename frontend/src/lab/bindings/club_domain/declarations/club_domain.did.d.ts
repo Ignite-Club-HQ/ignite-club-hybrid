@@ -280,6 +280,11 @@ export interface _SERVICE {
     { 'Ok' : ParentInvite } |
       { 'Err' : string }
   >,
+  'accept_pending_invite' : ActorMethod<
+    [string],
+    { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
   'accept_team_invite' : ActorMethod<
     [string],
     { 'Ok' : TeamInvite } |

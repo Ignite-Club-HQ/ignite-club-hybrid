@@ -1196,6 +1196,73 @@ persistent actor {
     }
   };
 
+  // Self-accept: the invited principal redeems a PendingInvite directly
+  // (no admin-issued share token flow like ParentInvite — PendingInvite
+  // kind "team"/"club"/"guardian" is looked up by id). Grants the role
+  // (team/club scoped per the invite), and for "guardian" invites also
+  // links the guardian/child the same way accept_parent_invite does.
+  public shared ({ caller }) func accept_pending_invite(id : Text) : async { #Ok : Types.PendingInvite; #Err : Text } {
+    auth(caller);
+    switch (pendingInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.status == "accepted") return #Err("Invite already accepted");
+        if (invite.status == "revoked") return #Err("Invite revoked");
+        if (isExcluded(caller, invite.club_id)) return #Err("Forbidden");
+        if (invite.kind == "guardian") {
+          switch (invite.child_id) {
+            case (?childId) {
+              switch (invite.team_id) {
+                case (?team) {
+                  switch (acl.children.find(func(c) = c.id == childId)) {
+                    case null {
+                      let child : Types.Child = { id = childId; teams = [team]; parent = null };
+                      acl := { acl with children = acl.children.concat([child]) };
+                    };
+                    case (?child) {
+                      if (not child.teams.any(func(t) = t == team)) {
+                        let updatedChild : Types.Child = { child with teams = child.teams.concat([team]) };
+                        acl := { acl with children = acl.children.map(func(c) = if (c.id == childId) updatedChild else c) };
+                      };
+                    };
+                  };
+                };
+                case null {};
+              };
+              if (not acl.guardians.any(func(g) = g.child == childId and g.user.equal(caller))) {
+                acl := { acl with guardians = acl.guardians.concat([{ child = childId; user = caller }]) };
+              };
+              switch (accountFor(caller)) {
+                case (?account) {
+                  if (not accountFamilies.any(func(fam) = fam.account_id == account.id and fam.child_id == childId)) {
+                    accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = childId }]);
+                  };
+                };
+                case null {};
+              };
+            };
+            case null {};
+          };
+        } else {
+          // "team" / "club" invites grant the stated role, scoped to the
+          // team when present, else club-wide.
+          switch (invite.role) {
+            case (?role) {
+              if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == role and g.club == ?invite.club_id and g.team == invite.team_id)) {
+                let grant : Types.RoleGrant = { user = caller; role; club = ?invite.club_id; team = invite.team_id };
+                acl := { acl with roles = acl.roles.concat([grant]) };
+              };
+            };
+            case null {};
+          };
+        };
+        let accepted : Types.PendingInvite = { invite with status = "accepted" };
+        pendingInvites := pendingInvites.map(func(i) = if (i.id == id) accepted else i);
+        #Ok(accepted)
+      };
+    }
+  };
+
   // ---- Guardian link/unlink + admin-assisted child/parent linking ----
 
   func childClubIds(child_id : Text) : [Text] {

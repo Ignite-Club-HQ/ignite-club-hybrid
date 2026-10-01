@@ -71,16 +71,24 @@ export interface EventAttendance {
 }
 export interface EventGroup {
   'id' : string,
+  'pitch_name' : [] | [string],
   'name' : string,
   'created_at_ms' : bigint,
+  'team_letter' : [] | [string],
+  'ability_band' : [] | [string],
   'event_id' : string,
+  'colour' : [] | [string],
 }
 export interface EventGroupDuty {
   'account_id' : [] | [string],
   'duty' : string,
   'group_id' : string,
 }
-export interface EventGroupPlayer { 'account_id' : string, 'group_id' : string }
+export interface EventGroupPlayer {
+  'account_id' : string,
+  'group_id' : string,
+  'team_letter' : [] | [string],
+}
 export interface EventGuest {
   'id' : string,
   'added_by' : Principal,
@@ -215,7 +223,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'add_group_player' : ActorMethod<
-    [string, string],
+    [string, string, [] | [string]],
     { 'Ok' : EventGroupPlayer } |
       { 'Err' : string }
   >,
@@ -279,7 +287,14 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'create_event_group' : ActorMethod<
-    [string, string],
+    [
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+    ],
     { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
@@ -416,6 +431,11 @@ export interface _SERVICE {
     { 'Ok' : [] | [boolean] } |
       { 'Err' : string }
   >,
+  'get_reminder_log' : ActorMethod<
+    [string],
+    { 'Ok' : { 'sent_at_ms' : [] | [bigint], 'recipients_count' : number } } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -425,6 +445,11 @@ export interface _SERVICE {
   'is_guardian_of' : ActorMethod<[Principal, string], boolean>,
   'is_paused' : ActorMethod<
     [string, string, bigint],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'is_reachable' : ActorMethod<
+    [string],
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,
@@ -468,6 +493,20 @@ export interface _SERVICE {
   'list_series' : ActorMethod<
     [[] | [string], [] | [string]],
     Array<EventSeries>
+  >,
+  'list_series_occurrences' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          {
+            'id' : string,
+            'deleted' : boolean,
+            'starts_at_ms' : bigint,
+            'ends_at_ms' : bigint,
+          }
+        >
+      } |
+      { 'Err' : string }
   >,
   'list_team_training_pauses' : ActorMethod<
     [string, string],
@@ -561,6 +600,11 @@ export interface _SERVICE {
   'set_event_cancelled' : ActorMethod<
     [string, boolean],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'set_event_group_appearance' : ActorMethod<
+    [string, [] | [string], [] | [string], [] | [string], [] | [string]],
+    { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
   'set_group_duty' : ActorMethod<

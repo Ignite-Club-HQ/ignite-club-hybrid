@@ -15,7 +15,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { updateLiveGroup } from "@/live/features/messaging";
+import { myLiveRoleGrants } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -106,47 +108,67 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
     queryKey: ["edit-group-permission", group.id, user?.id, group.club_id, group.team_id],
     queryFn: async () => {
       if (!user) return false;
-      const { data: appAdmin } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      if (appAdmin) return true;
-
-      if (isClubScopedGroup && group.club_id) {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("club_id", group.club_id)
-          .eq("role", "club_admin")
-          .maybeSingle();
-        return !!data;
-      }
-
-      if (group.team_id) {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .eq("team_id", group.team_id)
-          .eq("role", "team_admin")
-          .maybeSingle();
-        if (data) return true;
-        // Also allow club admins of the parent club
-        if (group.club_id) {
-          const { data: ca } = await supabase
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: appAdmin } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", user.id)
-            .eq("club_id", group.club_id)
-            .eq("role", "club_admin")
+            .eq("role", "app_admin")
             .maybeSingle();
-          return !!ca;
-        }
-      }
-      return false;
+          if (appAdmin) return true;
+
+          if (isClubScopedGroup && group.club_id) {
+            const { data } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user.id)
+              .eq("club_id", group.club_id)
+              .eq("role", "club_admin")
+              .maybeSingle();
+            return !!data;
+          }
+
+          if (group.team_id) {
+            const { data } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user.id)
+              .eq("team_id", group.team_id)
+              .eq("role", "team_admin")
+              .maybeSingle();
+            if (data) return true;
+            // Also allow club admins of the parent club
+            if (group.club_id) {
+              const { data: ca } = await supabase
+                .from("user_roles")
+                .select("role")
+                .eq("user_id", user.id)
+                .eq("club_id", group.club_id)
+                .eq("role", "club_admin")
+                .maybeSingle();
+              return !!ca;
+            }
+          }
+          return false;
+        },
+        icp: async (ctx) => {
+          const grants = await myLiveRoleGrants(ctx);
+          if (grants.some((g) => g.role === "app_admin")) return true;
+
+          if (isClubScopedGroup && group.club_id) {
+            return grants.some((g) => g.role === "club_admin" && g.club[0] === group.club_id);
+          }
+
+          if (group.team_id) {
+            if (grants.some((g) => g.role === "team_admin" && g.team[0] === group.team_id)) return true;
+            if (group.club_id) {
+              return grants.some((g) => g.role === "club_admin" && g.club[0] === group.club_id);
+            }
+          }
+          return false;
+        },
+      });
     },
     enabled: !!user && open,
     staleTime: 5 * 60 * 1000,
@@ -155,25 +177,27 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
   const updateGroupMutation = useMutation({
     mutationFn: async () => {
       if (!canEdit) throw new Error("You do not have permission to edit this group");
-      // Edits allowed_roles/join_policy/allow_forwarding — fields the canister's
-      // upsert_group_metadata does not model.
-      // NEEDS-CANISTER: messaging_domain update-group-settings call for roles/join policy/forwarding.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Editing chat group settings isn't available yet on the Internet Identity messaging backend.");
-      }
 
-      const updates: { name: string; allowed_roles?: AppRole[]; join_policy?: string; allow_forwarding?: boolean } = { name };
-      if (!isManual) updates.allowed_roles = selectedRoles;
-      if (qualifiesForOpenJoin) {
-        updates.join_policy = joinPolicy;
-      }
-      updates.allow_forwarding = allowForwarding;
-      const { error } = await supabase
-        .from("chat_groups")
-        .update(updates as any)
-        .eq("id", group.id);
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const updates: { name: string; allowed_roles?: AppRole[]; join_policy?: string; allow_forwarding?: boolean } = { name };
+          if (!isManual) updates.allowed_roles = selectedRoles;
+          if (qualifiesForOpenJoin) {
+            updates.join_policy = joinPolicy;
+          }
+          updates.allow_forwarding = allowForwarding;
+          const { error } = await supabase
+            .from("chat_groups")
+            .update(updates as any)
+            .eq("id", group.id);
 
-      if (error) throw error;
+          if (error) throw error;
+        },
+        // NEEDS-CANISTER: messaging_domain's update_group only models
+        // name/description/avatar — allowed_roles/join_policy/allow_forwarding
+        // have no canister field yet, so only the name edit is sent here.
+        icp: (ctx) => updateLiveGroup(ctx, group.id, name, null, null),
+      });
     },
     onSuccess: () => {
       toast({ title: "Group updated successfully" });

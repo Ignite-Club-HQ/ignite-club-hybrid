@@ -261,8 +261,11 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           const { error } = await supabase.from("mini_leagues").delete().eq("id", league.id);
           if (error) throw error;
         },
+        // NEEDS-CANISTER: mini_league_domain has no delete_mini_league method
+        // (only create/update/set_status) — deletion stays Supabase-only until
+        // one is added.
         icp: async () => {
-          throw new Error("Deleting leagues isn't available yet on this backend.");
+          throw new Error("Deleting leagues on this backend requires a canister delete method that doesn't exist yet.");
         },
       }),
     onSuccess: () => {
@@ -312,10 +315,11 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
 
           return newLeague.id;
         },
-        // Gated: duplication also depends on Supabase `created_by` (uuid)
-        // and copies player rows directly; no canister equivalent.
+        // NEEDS-CANISTER: mini_league_domain has no duplicate/clone method and
+        // duplication also depends on Supabase `created_by` (uuid); no
+        // canister equivalent to wire this to.
         icp: async () => {
-          throw new Error("Duplicating leagues isn't available yet on this backend.");
+          throw new Error("Duplicating leagues on this backend requires a canister method that doesn't exist yet.");
         },
       }),
     onSuccess: (newId) => {

@@ -147,6 +147,7 @@ type EventGroupPlayer =
  record {
    account_id: text;
    group_id: text;
+   team_letter: opt text;
  };
 type EventGroupDuty = 
  record {
@@ -156,10 +157,14 @@ type EventGroupDuty =
  };
 type EventGroup = 
  record {
+   ability_band: opt text;
+   colour: opt text;
    created_at_ms: nat64;
    event_id: text;
    id: text;
    name: text;
+   pitch_name: opt text;
+   team_letter: opt text;
  };
 type EventAttendance = 
  record {
@@ -239,11 +244,11 @@ service : {
       Err: text;
       Ok: EventGuest;
     });
-  add_group_player: (group_id: text, account_id: text) ->
-   (variant {
-      Err: text;
-      Ok: EventGroupPlayer;
-    });
+  add_group_player: (group_id: text, account_id: text, team_letter:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: EventGroupPlayer;
+                 });
   add_lineup: (event_id: text, member: text, slot: text, team_id:
    opt text) -> (variant {
                    Err: text;
@@ -295,7 +300,8 @@ service : {
                             Err: text;
                             Ok: Event;
                           });
-  create_event_group: (event_id: text, name: text) ->
+  create_event_group: (event_id: text, name: text, team_letter: opt text,
+   colour: opt text, ability_band: opt text, pitch_name: opt text) ->
    (variant {
       Err: text;
       Ok: EventGroup;
@@ -421,6 +427,14 @@ service : {
       Err: text;
       Ok: opt bool;
     }) query;
+  get_reminder_log: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            recipients_count: nat32;
+            sent_at_ms: opt nat64;
+          };
+    }) query;
   grant_role: ("principal": principal, role: text, club_id: text, team_id:
    opt text) -> (variant {
                    Err: text;
@@ -436,6 +450,10 @@ service : {
       Err: text;
       Ok: bool;
     }) query;
+  is_reachable: (account_id: text) -> (variant {
+                                         Err: text;
+                                         Ok: bool;
+                                       }) query;
   is_team_member: ("principal": principal, club_id: text, team_id: text) ->
    (bool) query;
   listBulkAccessPrincipals: () ->
@@ -476,6 +494,18 @@ service : {
     }) query;
   list_series: (club_id: opt text, team_id: opt text) ->
    (vec EventSeries) query;
+  list_series_occurrences: (series_id: text) ->
+   (variant {
+      Err: text;
+      Ok:
+       vec
+        record {
+          deleted: bool;
+          ends_at_ms: nat64;
+          id: text;
+          starts_at_ms: nat64;
+        };
+    }) query;
   list_team_training_pauses: (club_id: text, team_id: text) ->
    (variant {
       Err: text;
@@ -558,6 +588,12 @@ service : {
    (variant {
       Err: text;
       Ok: Event;
+    });
+  set_event_group_appearance: (group_id: text, team_letter: opt text, colour:
+   opt text, ability_band: opt text, pitch_name: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EventGroup;
     });
   set_group_duty: (group_id: text, duty: text, account_id: opt text) ->
    (variant {

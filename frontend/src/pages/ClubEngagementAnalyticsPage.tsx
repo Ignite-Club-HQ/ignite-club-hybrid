@@ -73,6 +73,7 @@ import { cn } from "@/lib/utils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubEngagementAnalytics } from "@/lab/fixtureDataLayer";
 import { CommunicationEngagementSection } from "@/components/club/CommunicationEngagementSection";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { withFeatureBackend } from "@/live/featureRouter";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -84,6 +85,7 @@ import {
   getLiveClubEngagementTotalUniqueReach,
   getLiveClubEngagementBenchmarks,
   getLiveClubEngagementSponsorPerformance,
+  getLiveSponsorBenchmarks,
 } from "@/live/features/insights";
 import type { EngagementBenchmarks as IcpEngagementBenchmarks, EngagementDayPoint } from "@/lab/bindings/insights_domain/declarations/insights_domain.did.js";
 
@@ -746,6 +748,34 @@ function SupabaseClubEngagementAnalyticsPage({
     enabled: queryReady && !!access?.isAdmin && isIcpAnalytics,
   });
 
+  // Per-sponsor benchmark rows (get_sponsor_benchmarks) for the ICP sponsor
+  // performance table — keyed by the same sponsor ids listed for this club.
+  const { data: icpSponsorBenchmarkRows } = useQuery({
+    queryKey: ["club-engagement-icp-sponsor-benchmarks", clubId, sponsorRows.map((s) => s.id).join(","), range.start.toISOString(), range.end.toISOString()],
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const ids = sponsorRows.map((s) => s.id);
+          if (ids.length === 0) return [];
+          const rows = await getLiveSponsorBenchmarks(
+            ctx,
+            ids,
+            String(range.start.getTime()),
+            String(range.end.getTime()),
+          );
+          return rows.map((r: any) => ({
+            sponsor_id: r.sponsor_id,
+            impressions: Number(r.impressions ?? 0),
+            clicks: Number(r.clicks ?? 0),
+            unique_reach: Number(r.unique_reach ?? 0),
+            ctr: Number(r.impressions) ? Math.round((Number(r.clicks) / Number(r.impressions)) * 1000) / 10 : 0,
+          }));
+        },
+      }),
+    enabled: queryReady && !!access?.isAdmin && isIcpAnalytics && sponsorRows.length > 0,
+  });
+
   // ---------- Sponsor performance (unique reach + CTR per sponsor) ----------
   const { data: sponsorPerf = [] } = useQuery({
     queryKey: ["club-engagement-sponsor-perf", clubId, mode, range.start.toISOString(), range.end.toISOString()],
@@ -1280,7 +1310,7 @@ function SupabaseClubEngagementAnalyticsPage({
 
       {/* Section 6: Sponsor Performance */}
       <SectionHeader icon={Trophy} title="Sponsor Performance" description={isIcpAnalytics ? "Aggregate sponsor impressions & clicks over time" : "Unique reach, profile views, clicks and CTR"} />
-      {isIcpAnalytics ? <IcpSponsorPerformanceCard series={icpSponsorSeries} totalUniqueReach={totalUniqueReach} /> : <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />}
+      {isIcpAnalytics ? <IcpSponsorPerformanceCard series={icpSponsorSeries} totalUniqueReach={totalUniqueReach} sponsorRows={icpSponsorBenchmarkRows} /> : <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />}
 
       {/* Section 6b: In-app Ad Performance (platform-wide only — house ads served to Free clubs).
           AdMob-mediated impressions/revenue are reported separately in the Google AdMob console. */}

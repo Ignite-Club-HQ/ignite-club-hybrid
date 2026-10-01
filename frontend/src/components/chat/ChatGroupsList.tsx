@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { softDeleteLiveGroup } from "@/live/features/messaging";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,19 +53,19 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
       // Soft-delete so app admins can restore if the removal was a mistake.
-      // NEEDS-CANISTER: messaging_domain soft-delete-group call.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Deleting chat groups isn't available yet on the Internet Identity messaging backend.");
-      }
-
-      const { error } = await supabase
-        .from("chat_groups")
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user?.id ?? null,
-        } as any)
-        .eq("id", groupId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("chat_groups")
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: user?.id ?? null,
+            } as any)
+            .eq("id", groupId);
+          if (error) throw error;
+        },
+        icp: (ctx) => softDeleteLiveGroup(ctx, groupId),
+      });
     },
     onSuccess: () => {
       toast.success("Chat removed. An app admin can restore it if needed.");

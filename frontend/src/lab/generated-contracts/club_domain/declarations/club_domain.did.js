@@ -25,6 +25,19 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
+  const PendingInvite = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'kind' : IDL.Text,
+    'resent_at_ms' : IDL.Opt(IDL.Nat64),
+    'role' : IDL.Opt(IDL.Text),
+    'team_id' : IDL.Opt(IDL.Text),
+    'email' : IDL.Text,
+    'child_id' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'invited_by' : IDL.Principal,
+    'club_id' : IDL.Text,
+  });
   const TeamInvite = IDL.Record({
     'id' : IDL.Text,
     'revoked' : IDL.Bool,
@@ -127,19 +140,6 @@ export const idlFactory = ({ IDL }) => {
     'created_by' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
     'revision' : IDL.Nat64,
-    'club_id' : IDL.Text,
-  });
-  const PendingInvite = IDL.Record({
-    'id' : IDL.Text,
-    'status' : IDL.Text,
-    'kind' : IDL.Text,
-    'resent_at_ms' : IDL.Opt(IDL.Nat64),
-    'role' : IDL.Opt(IDL.Text),
-    'team_id' : IDL.Opt(IDL.Text),
-    'email' : IDL.Text,
-    'child_id' : IDL.Opt(IDL.Text),
-    'created_at_ms' : IDL.Nat64,
-    'invited_by' : IDL.Principal,
     'club_id' : IDL.Text,
   });
   const InvitePayload = IDL.Record({
@@ -290,6 +290,11 @@ export const idlFactory = ({ IDL }) => {
     'accept_parent_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'accept_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
         [],
       ),
     'accept_team_invite' : IDL.Func(

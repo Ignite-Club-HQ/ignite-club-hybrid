@@ -2,7 +2,8 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { NavigateFunction } from "react-router-dom";
 import type { GroupChatSupabaseClient } from "@/features/messaging/thread/groupChatData";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { softDeleteLiveGroup } from "@/live/features/messaging";
 
 interface UseGroupDeleteChatOptions {
   groupId?: string;
@@ -27,20 +28,24 @@ export const useGroupDeleteChat = ({
 }: UseGroupDeleteChatOptions) =>
   useMutation({
     mutationFn: async () => {
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Chat deletion isn't available yet on the Internet Identity messaging backend.");
-      }
       if (useIcpLab) return;
 
-      // Soft-delete: keep the row so app admins can restore within the retention window.
-      const { error } = await supabaseClient
-        .from("chat_groups")
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: userId ?? null,
-        } as any)
-        .eq("id", groupId!);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          // Soft-delete: keep the row so app admins can restore within the retention window.
+          const { error } = await supabaseClient
+            .from("chat_groups")
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: userId ?? null,
+            } as any)
+            .eq("id", groupId!);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await softDeleteLiveGroup(ctx, groupId!);
+        },
+      });
     },
     onSuccess: () => {
       if (useIcpLab) {

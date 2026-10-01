@@ -15,6 +15,7 @@ import {
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { acceptPendingLiveInvite } from "@/live/features/club";
 
 /** Best-effort "child added" email for a second parent. Never blocks acceptance. */
 async function notifySecondParent(
@@ -524,10 +525,9 @@ export function PendingInviteWelcomeDialog() {
                 // sends an email — none of that is mirrored on the canister,
                 // so under ICP routing we skip it rather than partially
                 // write to the canister.
-                icp: async () => {
-                  console.warn(
-                    "[InviteAutoAccept] Mini-league invite acceptance isn't available yet on this backend.",
-                  );
+                icp: async (ctx) => {
+                  await acceptPendingLiveInvite(ctx, invite.id);
+                  console.log("[InviteAutoAccept] Accepted mini-league invite via canister:", invite.id);
                 },
               });
 

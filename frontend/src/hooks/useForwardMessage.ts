@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { forwardLiveMessage } from "@/live/features/messaging";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -73,6 +74,12 @@ export interface ForwardSourceMessage {
   authorId: string;
   /** Optional short label such as "Committee" — shown above the forwarded copy. */
   sourceLabel?: string | null;
+  /**
+   * Canister message id of the original message. Required for the ICP
+   * forwarding branch (forward_message copies by id); the Supabase branch
+   * ignores it and copies the text/image fields directly.
+   */
+  messageId?: string | null;
 }
 
 /**
@@ -91,15 +98,25 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
       destinationGroupIds: string[];
     }) => {
       if (!currentUserId) throw new Error("Not signed in");
-      // Forwarding writes new group_messages rows directly; messaging_domain has
-      // no forward/copy-message method yet.
-      // NEEDS-CANISTER: messaging_domain forward-message call (copy into N conversations).
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Forwarding messages isn't available yet on the Internet Identity messaging backend.");
-      }
 
       const { source, destinationGroupIds } = args;
       if (destinationGroupIds.length === 0) return { forwarded: 0 };
+
+      const forwardedViaIcp = await withFeatureBackend("messaging", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!source.messageId) {
+            throw new Error("Missing original message id — can't forward this message.");
+          }
+          for (const toConversationId of destinationGroupIds) {
+            await forwardLiveMessage(ctx, source.messageId, toConversationId);
+          }
+          return true;
+        },
+      });
+      if (forwardedViaIcp) {
+        return { forwarded: destinationGroupIds.length };
+      }
 
       const now = new Date().toISOString();
       const rows = destinationGroupIds.map((groupId) => ({

@@ -60,8 +60,8 @@ module {
   public type PushReachability = { user : Principal; reachable : Bool; updated_at_ms : Nat64 };
 
   // ---- Event groups / players / duties (NEEDS-CANISTER #5) ----
-  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64 };
-  public type EventGroupPlayer = { group_id : Text; account_id : Text };
+  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64; team_letter : ?Text; colour : ?Text; ability_band : ?Text; pitch_name : ?Text };
+  public type EventGroupPlayer = { group_id : Text; account_id : Text; team_letter : ?Text };
   // account_id = null -> open duty within a group, same convention as
   // OpenDuty below.
   public type EventGroupDuty = { group_id : Text; duty : Text; account_id : ?Text };

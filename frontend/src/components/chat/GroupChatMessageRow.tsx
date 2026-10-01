@@ -749,6 +749,7 @@ export const GroupChatMessageRow = memo(function GroupChatMessageRow({
           imageUrl: msg.image_url,
           authorId: msg.author_id,
           sourceLabel: groupName ?? null,
+          messageId: msg.id,
         }}
       />
       {showFullscreenImage && msg.image_url && (
