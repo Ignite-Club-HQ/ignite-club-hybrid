@@ -1,6 +1,8 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveClubProAccess } from "@/lib/proEntitlement";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIcpEntitlements } from "@/hooks/useIcpProAccess";
 
 export { resolveClubProAccess, type ClubSubscriptionEntitlements } from "@/lib/proEntitlement";
 
@@ -23,9 +25,13 @@ export function useClubProAccess(
   options?: { enabled?: boolean },
 ) {
   const enabled = (options?.enabled ?? true) && !!clubId;
+  const isIcp = resolveAuthBackend() === "icp";
+  // See useIcpProAccess.ts for the club→product simplification note:
+  // ICP has no per-club product mapping, so any active entitlement counts.
+  const icp = useIcpEntitlements({ enabled: enabled && isIcp });
   const { data, isLoading, isFetched } = useQuery({
     queryKey: ["club-pro-access", clubId],
-    enabled,
+    enabled: enabled && !isIcp,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -45,6 +51,14 @@ export function useClubProAccess(
   // With `keepPreviousData`, `data` can belong to a previously requested club
   // while the new club's fetch is in flight. Treat that as "not resolved yet"
   // so callers never render a lock/upgrade state based on the old club.
+  if (isIcp) {
+    return {
+      hasPro: icp.isPro,
+      hasProFootball: icp.hasProFootball,
+      isLoading: icp.isLoading,
+    };
+  }
+
   const isStaleClub = !!data && !!clubId && data.clubId !== clubId;
 
   return {

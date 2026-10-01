@@ -1,6 +1,33 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { NavigateFunction } from "react-router-dom";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+const ICP_SESSION_KEY = "ignite_icp_internet_identity_session";
+
+/**
+ * SIMPLIFICATION: no club→product mapping exists on the identity_access
+ * canister, so ICP share-gating uses "does this principal hold any active
+ * entitlement" rather than the exact club/team scope. Revisit once ICP
+ * club-scoped products exist.
+ */
+async function checkIcpProForShare(): Promise<boolean> {
+  try {
+    const raw = localStorage.getItem(ICP_SESSION_KEY);
+    if (!raw) return false;
+    const principal = (JSON.parse(raw) as { principal?: string })?.principal;
+    if (!principal) return false;
+    const [{ getCurrentInternetIdentity }, { isIcpPrincipalPro }] = await Promise.all([
+      import("@/live/internetIdentityAuth"),
+      import("@/live/identityEntitlements"),
+    ]);
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) return false;
+    return await isIcpPrincipalPro(identity, principal);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Async Pro check used to gate share actions (photos, events).
@@ -18,6 +45,11 @@ export async function checkProForShare(opts: {
 }): Promise<{ allowed: boolean; clubId: string | null }> {
   const { teamId, clubId: rawClubId } = opts;
   let clubId = rawClubId ?? null;
+
+  if (resolveAuthBackend() === "icp") {
+    const allowed = await checkIcpProForShare();
+    return { allowed, clubId };
+  }
 
   try {
     if (teamId) {
