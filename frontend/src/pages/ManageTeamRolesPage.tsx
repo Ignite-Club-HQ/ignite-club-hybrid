@@ -9,7 +9,6 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { RoleRequestsList } from "@/components/members/RoleRequestsList";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabTeamRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
@@ -46,7 +45,7 @@ const roleColors: Record<TeamRole, string> = {
 };
 
 export default function ManageTeamRolesPage() {
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabManageTeamRolesPage />;
   }

@@ -1,4 +1,4 @@
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
 import { useEventDutyMutations } from "@/hooks/useEventDutyMutations";
@@ -116,7 +116,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile, refreshProfile } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("events");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Production ICP-mode gate (distinct from the useIcpLab dev/testing flag
   // above). events.ts has no canister shape for the children/guardian roster
   // reads below, so these fall back to empty results in ICP mode.

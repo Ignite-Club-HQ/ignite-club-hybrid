@@ -1,4 +1,4 @@
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,7 +36,7 @@ export default function CreateCompetitionPage() {
   usePageTitle("New competition");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpCreateCompetitionPage preselectedOrganizer={searchParams.get("organizer")} />;

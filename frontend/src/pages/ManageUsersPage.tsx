@@ -87,12 +87,12 @@ interface UserProfile {
   roles: any[];
 }
 
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabUserDirectory } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 
 export default function ManageUsersPage() {
-  if (isFeatureRoutedToIcp("membership")) {
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  if (useIcpLab) {
     return <IcpLabManageUsersPage />;
   }
   return <SupabaseManageUsersPage />;

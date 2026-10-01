@@ -17,12 +17,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabSeasonCompare } from "@/lab/fixtureDataLayer";
 
 export default function SeasonComparePage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const compare = getLocalLabSeasonCompare("club-icp-001");
     return (

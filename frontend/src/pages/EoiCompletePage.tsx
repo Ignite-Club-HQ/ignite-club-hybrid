@@ -13,7 +13,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";
 import { EOI_STATUS_LABELS } from "@/lib/eoiUtils";
 import { toast } from "sonner";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
 
 /**
@@ -24,7 +23,7 @@ import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
  */
 export default function EoiCompletePage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const [eoi] = getLocalLabEoiSubmissions("club-icp-001");
     return (

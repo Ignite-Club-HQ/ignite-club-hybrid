@@ -131,6 +131,7 @@ import { queueMessage } from "@/lib/messageQueue";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";

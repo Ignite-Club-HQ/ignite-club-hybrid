@@ -94,7 +94,7 @@ const fixedRoles: AppRole[] = ["club_admin", "team_admin", "app_admin"];
 
 export default function JoinTeamPage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const team = getLocalLabClaimableTeam("team-icp-001");

@@ -144,9 +144,9 @@ const getCachedClubAdminMessages = (conversationId: string): ClubAdminMessage[] 
   }));
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabAdminChatMessages } from "@/lab/fixtureDataLayer";
 
-import { resolveAuthBackend } from "@/live/authBackendMode";
 export default function ClubAdminChatPage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {

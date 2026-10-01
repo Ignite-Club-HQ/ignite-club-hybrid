@@ -1,4 +1,4 @@
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
@@ -21,7 +21,7 @@ import { getLocalLabPublishableChatPhotos } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function PublishChatPhotosPage() {
-  const useIcpLab = isFeatureRoutedToIcp("media");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabPublishChatPhotosPage />;
   }

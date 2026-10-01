@@ -16,7 +16,6 @@ import { OrphanEventsCard } from "@/components/seasons/OrphanEventsCard";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { format } from "date-fns";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabSeasons } from "@/lab/fixtureDataLayer";
 
 const STATUS_META: Record<SeasonStatus, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "outline" }> = {
@@ -28,7 +27,7 @@ const STATUS_META: Record<SeasonStatus, { label: string; icon: typeof Clock; var
 
 export default function SeasonsPage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const seasons = getLocalLabSeasons("club-icp-001");
     return (

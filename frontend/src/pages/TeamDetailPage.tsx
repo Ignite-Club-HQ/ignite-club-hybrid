@@ -123,7 +123,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
   // has no club_domain canister shape yet, so these actions are gated off entirely
   // in ICP mode rather than falling through to Supabase against a principal id.

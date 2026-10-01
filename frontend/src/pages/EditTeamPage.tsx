@@ -30,7 +30,6 @@ import { DEFAULT_TEAM_RSVP_AUDIENCE, type RsvpAudience } from "@/lib/rsvpAudienc
 import { shouldUseNativePicker, pickNativePhoto } from "@/lib/nativePhotoPicker";
 import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamDetail } from "@/lab/fixtureDataLayer";
 
 export default function EditTeamPage() {
@@ -38,7 +37,7 @@ export default function EditTeamPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const providerKey = useIcpLab ? "icp" : "supabase";
 
   const [name, setName] = useState("");

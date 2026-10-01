@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSectionSnapshot";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveNews, listLiveNewsMulti } from "@/live/features/club";
@@ -62,7 +62,7 @@ const NEWS_COLUMNS =
 
 export function useClubNewsFeed(clubId?: string | null, limit = 50) {
   const snapshotScope = `${clubId ?? "all"}_${limit}`;
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<ClubNewsRow[]>({
     queryKey: ["club-news", clubId ?? "all", limit],
     queryFn: async () => {
@@ -126,7 +126,7 @@ export function useLatestClubNews(clubId?: string | null) {
 }
 
 export function useClubNewsPost(newsId?: string | null) {
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<ClubNewsRow | null>({
     queryKey: ["club-news-post", newsId],
     queryFn: async () => {
@@ -165,7 +165,7 @@ export function useClubNewsPost(newsId?: string | null) {
  */
 export function useNewsPublishableClubs() {
   const { user } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["news-publishable-clubs", user?.id],
     queryFn: async () => {
@@ -193,7 +193,7 @@ export function useNewsPublishableClubs() {
 }
 
 export function useClubTeamsForNews(clubId?: string | null) {
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["club-teams-for-news", clubId],
     queryFn: async () => {
@@ -222,7 +222,7 @@ export function useClubTeamsForNews(clubId?: string | null) {
  */
 export function useTeamNamesByIds(teamIds?: string[] | null) {
   const ids = Array.from(new Set((teamIds || []).filter(Boolean)));
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   return useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["news-team-names", ids.slice().sort().join(",")],
     queryFn: async () => {

@@ -1,4 +1,4 @@
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useQuery, useQueryClient, onlineManager } from "@tanstack/react-query";
@@ -87,7 +87,7 @@ export default function EventsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activeClubFilter } = useClubTheme();
-  const useIcpLab = isFeatureRoutedToIcp("events");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Production ICP-mode gate — no canister equivalent for these
   // child_guardians/children parent-filter lookups yet.
   const isIcpAuthBackend = resolveAuthBackend() === "icp";
