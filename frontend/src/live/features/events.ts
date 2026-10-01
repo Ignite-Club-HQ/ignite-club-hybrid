@@ -134,6 +134,21 @@ export async function createLiveAssociationEvent(
 }
 
 /**
+ * Association panel read (Phase 3, F5): parent records for one association,
+ * each carrying child_event_ids so the panel can show fan-out counts.
+ */
+export async function listLiveAssociationEvents(
+  ctx: FeatureBackendContext,
+  associationId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_association_events(associationId),
+    "List association events",
+  );
+}
+
+/**
  * Child display record for award flows (Phase 3, F8): events_domain
  * `get_event_child`, gated canister-side to managers of the event.
  */
