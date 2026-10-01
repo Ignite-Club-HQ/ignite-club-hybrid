@@ -58,6 +58,8 @@ import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
 import { SeriesEndDateEditor } from "@/components/event/SeriesEndDateEditor";
 import { EventEditScheduleSection } from "@/components/event/EventEditScheduleSection";
 import { eventKeys } from "@/lab/eventQueryKeys";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague, listLiveAdmins } from "@/live/features/miniLeagues";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalEvent, setLocalEventRecurrence, updateLocalEvent } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -387,15 +389,33 @@ function SupabaseEditEventPage() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event-edit", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("events")
-        .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name), mini_leagues (id, name)")
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("events")
+            .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name), mini_leagues (id, name)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // The event row itself stays on Supabase here (events routing is a
+          // separate feature area); only the mini_leagues join is replaced
+          // with a canister lookup so the page has no mini_league_* dependency.
+          const { data, error } = await supabase
+            .from("events")
+            .select("*, teams (name, default_match_arrival_minutes, default_rsvp_audience), clubs!club_id (name)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          const miniLeagueId = (data as any).mini_league_id as string | null | undefined;
+          if (!miniLeagueId) return data;
+          const league = await getLiveMiniLeague(ctx, miniLeagueId) as any;
+          return { ...data, mini_leagues: league ? { id: league.id, name: league.name } : null };
+        },
+      }),
     enabled: !!id,
   });
 
@@ -443,24 +463,36 @@ function SupabaseEditEventPage() {
 
       // For mini-league (Match Day) events, league admins can edit
       if ((event as any).mini_league_id) {
-        // Check mini_league_admins table (per-league admins)
-        const { data: leagueAdmin } = await supabase
-          .from("mini_league_admins")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("mini_league_id", (event as any).mini_league_id)
-          .maybeSingle();
-        if (leagueAdmin) return true;
+        const isLeagueAdmin = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            // Check mini_league_admins table (per-league admins)
+            const { data: leagueAdmin } = await supabase
+              .from("mini_league_admins")
+              .select("id")
+              .eq("user_id", user!.id)
+              .eq("mini_league_id", (event as any).mini_league_id)
+              .maybeSingle();
+            if (leagueAdmin) return true;
 
-        // Check club-scoped league_admin role (matches events RLS)
-        const { data: clubLeagueAdmin } = await supabase
-          .from("user_roles")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("club_id", event.club_id)
-          .eq("role", "league_admin")
-          .maybeSingle();
-        if (clubLeagueAdmin) return true;
+            // Check club-scoped league_admin role (matches events RLS)
+            const { data: clubLeagueAdmin } = await supabase
+              .from("user_roles")
+              .select("id")
+              .eq("user_id", user!.id)
+              .eq("club_id", event.club_id)
+              .eq("role", "league_admin")
+              .maybeSingle();
+            return !!clubLeagueAdmin;
+          },
+          icp: async (ctx) => {
+            // Per-league admin check via the canister; the club-scoped
+            // league_admin role has no canister equivalent yet.
+            const admins = await listLiveAdmins(ctx, (event as any).mini_league_id) as any[];
+            const myPrincipal = ctx.identity.getPrincipal().toText();
+            return admins.some((a) => a.user_id?.toText?.() === myPrincipal || String(a.user_id) === myPrincipal);
+          },
+        });
+        if (isLeagueAdmin) return true;
       }
 
       return false;

@@ -18,6 +18,7 @@ import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveEventDuty, removeLiveEventDuty } from "@/live/features/events";
+import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 // Lazy load PitchBoard for performance
 const PitchBoard = lazyWithRetry(() => import("@/components/pitch/PitchBoard"));
@@ -129,13 +130,23 @@ function SupabaseEventGroupPitchPage() {
       if (gpError) throw gpError;
       
       if (!groupPlayers?.length) return [];
-      
-      const { data: playersData, error: playersError } = await supabase
-        .from("mini_league_players")
-        .select("id, name, ability_rating")
-        .in("id", groupPlayers.map(gp => gp.player_id));
-      if (playersError) throw playersError;
-      
+
+      const playersData = await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .select("id, name, ability_rating")
+            .in("id", groupPlayers.map(gp => gp.player_id));
+          if (error) throw error;
+          return data;
+        },
+        // Gated: looking up player names/ratings for an arbitrary subset of
+        // ids has no canister equivalent (see EventGroupsManager for the
+        // same gate). ICP-routed sessions see empty names rather than
+        // invented data.
+        icp: async () => [] as { id: string; name: string; ability_rating: number | null }[],
+      });
+
       return (playersData || []).map(p => ({
         ...p,
         ability_rating: p.ability_rating || 3,
@@ -163,15 +174,29 @@ function SupabaseEventGroupPitchPage() {
   // Fetch league settings for pitch board defaults
   const { data: leagueSettings } = useQuery({
     queryKey: ["mini-league-pitch-settings", group?.event?.mini_league_id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_leagues")
-        .select("minutes_per_half, club_id, clubs:clubs!mini_leagues_club_id_fkey(sport)")
-        .eq("id", group!.event!.mini_league_id!)
-        .single();
-      if (error) throw error;
-      return data as unknown as { minutes_per_half: number; club_id: string; clubs: { sport: string | null } | null };
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("minutes_per_half, club_id, clubs:clubs!mini_leagues_club_id_fkey(sport)")
+            .eq("id", group!.event!.mini_league_id!)
+            .single();
+          if (error) throw error;
+          return data as unknown as { minutes_per_half: number; club_id: string; clubs: { sport: string | null } | null };
+        },
+        // Wired: the canister's MiniLeague record matches these fields 1:1.
+        // `clubs.sport` has no canister equivalent (no club join), so the
+        // pitch board sport gate defaults to unsupported rather than guessing.
+        icp: async (ctx) => {
+          const league = await getLiveMiniLeague(ctx, group!.event!.mini_league_id!);
+          return {
+            minutes_per_half: league.minutes_per_half,
+            club_id: league.club_id,
+            clubs: null as { sport: string | null } | null,
+          };
+        },
+      }),
     enabled: !!group?.event?.mini_league_id,
   });
 
@@ -247,47 +272,55 @@ function SupabaseEventGroupPitchPage() {
   // Fetch league members for duty assignment (parents, admins, coaches - not players)
   const { data: leagueMembers } = useQuery({
     queryKey: ["mini-league-duty-assignees", group?.event?.mini_league_id],
-    queryFn: async () => {
-      const miniLeagueId = group!.event!.mini_league_id!;
-      
-      // Get mini league to find the club_id
-      const { data: league, error: leagueError } = await supabase
-        .from("mini_leagues")
-        .select("club_id")
-        .eq("id", miniLeagueId)
-        .single();
-      if (leagueError) throw leagueError;
-      
-      // Get all parent user IDs from mini league players
-      const { data: playersData, error: playersError } = await supabase
-        .from("mini_league_players")
-        .select("parent_user_id")
-        .eq("mini_league_id", miniLeagueId)
-        .not("parent_user_id", "is", null);
-      if (playersError) throw playersError;
-      
-      const parentIds = [...new Set(playersData?.map(p => p.parent_user_id).filter(Boolean) as string[])];
-      
-      // Get club admins, league admins, and coaches from user_roles
-      const { data: adminRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", league.club_id)
-        .in("role", ["club_admin", "league_admin", "coach"]);
-      if (rolesError) throw rolesError;
-      
-      const adminIds = adminRoles?.map(r => r.user_id) || [];
-      
-      // Combine all unique IDs
-      const allUserIds = [...new Set([...parentIds, ...adminIds])];
-      if (!allUserIds.length) return [];
-      
-      // Fetch profiles for all these users
-      const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(allUserIds);
-      if (profilesError) throw profilesError;
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const miniLeagueId = group!.event!.mini_league_id!;
 
-      return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
-    },
+          // Get mini league to find the club_id
+          const { data: league, error: leagueError } = await supabase
+            .from("mini_leagues")
+            .select("club_id")
+            .eq("id", miniLeagueId)
+            .single();
+          if (leagueError) throw leagueError;
+
+          // Get all parent user IDs from mini league players
+          const { data: playersData, error: playersError } = await supabase
+            .from("mini_league_players")
+            .select("parent_user_id")
+            .eq("mini_league_id", miniLeagueId)
+            .not("parent_user_id", "is", null);
+          if (playersError) throw playersError;
+
+          const parentIds = [...new Set(playersData?.map(p => p.parent_user_id).filter(Boolean) as string[])];
+
+          // Get club admins, league admins, and coaches from user_roles
+          const { data: adminRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("club_id", league.club_id)
+            .in("role", ["club_admin", "league_admin", "coach"]);
+          if (rolesError) throw rolesError;
+
+          const adminIds = adminRoles?.map(r => r.user_id) || [];
+
+          // Combine all unique IDs
+          const allUserIds = [...new Set([...parentIds, ...adminIds])];
+          if (!allUserIds.length) return [];
+
+          // Fetch profiles for all these users
+          const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(allUserIds);
+          if (profilesError) throw profilesError;
+
+          return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+        },
+        // Gated: resolving duty-assignee candidates requires joining
+        // mini_league_players.parent_user_id onto Supabase profiles and
+        // club user_roles — no canister equivalent. ICP-routed sessions see
+        // an empty assignee list rather than a partial/incorrect one.
+        icp: async () => [] as { id: string; display_name: string | null }[],
+      }),
     enabled: !!group?.event?.mini_league_id,
   });
 

@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -326,34 +327,47 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
 
         const abilityRatingValue = player.abilityRating ? parseInt(player.abilityRating) : null;
 
-        const { error: assignmentError } = await supabase
-          .from("child_mini_league_assignments")
-          .insert({
-            child_id: childId!,
-            mini_league_id: miniLeagueId,
-            ability_rating: abilityRatingValue,
-          });
+        const newPlayer = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            const { error: assignmentError } = await supabase
+              .from("child_mini_league_assignments")
+              .insert({
+                child_id: childId!,
+                mini_league_id: miniLeagueId,
+                ability_rating: abilityRatingValue,
+              });
 
-        if (assignmentError) {
-          console.error("Failed to create league assignment:", player.name, assignmentError);
-          throw new Error(`Couldn't assign ${player.name}: ${assignmentError.message}`);
-        }
+            if (assignmentError) {
+              console.error("Failed to create league assignment:", player.name, assignmentError);
+              throw new Error(`Couldn't assign ${player.name}: ${assignmentError.message}`);
+            }
 
-        const { data: newPlayer, error: playerError } = await supabase
-          .from("mini_league_players")
-          .insert({
-            mini_league_id: miniLeagueId,
-            name: player.name.trim(),
-            ability_rating: abilityRatingValue,
-            child_id: childId!,
-            parent_user_id: player.existingParentUserId || null,
-          })
-          .select()
-          .single();
+            const { data, error: playerError } = await supabase
+              .from("mini_league_players")
+              .insert({
+                mini_league_id: miniLeagueId,
+                name: player.name.trim(),
+                ability_rating: abilityRatingValue,
+                child_id: childId!,
+                parent_user_id: player.existingParentUserId || null,
+              })
+              .select()
+              .single();
 
-        if (playerError) {
-          console.warn("Failed to create legacy player record:", player.name, playerError);
-        }
+            if (playerError) {
+              console.warn("Failed to create legacy player record:", player.name, playerError);
+            }
+            return data;
+          },
+          // Gated: this bulk-add flow also creates the Supabase-only `children`
+          // row above and relies on child_mini_league_assignments mirroring —
+          // neither has a canister equivalent, so adding players this way is
+          // disabled under ICP routing rather than partially writing to the
+          // canister.
+          icp: async () => {
+            throw new Error("Adding players isn't available yet on this backend.");
+          },
+        });
 
         let sent = false;
 

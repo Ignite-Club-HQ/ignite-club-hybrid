@@ -11,6 +11,7 @@ import {
   ResponsiveDialogDescription,
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { getCachedRoles } from "@/lib/rolesCache";
@@ -90,8 +91,21 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
         ),
       ] as string[];
 
-      const [scopedAdminsRes, compRolesRes] = await Promise.all([
-        supabase.from("mini_league_admins").select("mini_league_id").eq("user_id", user!.id),
+      const [scopedLeagueIds, compRolesRes] = await Promise.all([
+        withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            const { data } = await supabase
+              .from("mini_league_admins")
+              .select("mini_league_id")
+              .eq("user_id", user!.id);
+            return (data || []).map((r: any) => r.mini_league_id).filter(Boolean) as string[];
+          },
+          // Gated: this combined invite-target query mixes mini-league scoped
+          // admin ids with unrelated teams/competitions lookups in the same
+          // round trip — no canister equivalent for that shape. ICP-routed
+          // sessions see no scoped leagues rather than a partial result.
+          icp: async () => [] as string[],
+        }),
         supabase
           .from("competition_roles")
           .select("competition_id")
@@ -99,9 +113,6 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
           .in("role", ["owner", "admin"]),
       ]);
 
-      const scopedLeagueIds = (scopedAdminsRes.data || [])
-        .map((r: any) => r.mini_league_id)
-        .filter(Boolean) as string[];
       const scopedCompetitionIds = (compRolesRes.data || [])
         .map((r: any) => r.competition_id)
         .filter(Boolean) as string[];
@@ -118,16 +129,30 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
           ? supabase.from("clubs").select("id, name").in("id", allClubIds)
           : Promise.resolve({ data: [] as any[] }),
         leagueAdminClubIds.length
-          ? supabase
-              .from("mini_leagues")
-              .select("id, name, club_id")
-              .in("club_id", leagueAdminClubIds)
+          ? withFeatureBackend("mini_leagues", {
+              supabase: async () => {
+                const { data } = await supabase
+                  .from("mini_leagues")
+                  .select("id, name, club_id")
+                  .in("club_id", leagueAdminClubIds);
+                return { data };
+              },
+              // Gated: same combined-query reasoning as above.
+              icp: async () => ({ data: [] as any[] }),
+            })
           : Promise.resolve({ data: [] as any[] }),
         scopedLeagueIds.length
-          ? supabase
-              .from("mini_leagues")
-              .select("id, name, club_id")
-              .in("id", scopedLeagueIds)
+          ? withFeatureBackend("mini_leagues", {
+              supabase: async () => {
+                const { data } = await supabase
+                  .from("mini_leagues")
+                  .select("id, name, club_id")
+                  .in("id", scopedLeagueIds);
+                return { data };
+              },
+              // Gated: same combined-query reasoning as above.
+              icp: async () => ({ data: [] as any[] }),
+            })
           : Promise.resolve({ data: [] as any[] }),
         // Competitions organised by clubs the user admins (or all if app_admin)
         isAppAdmin
