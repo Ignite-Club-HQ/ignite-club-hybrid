@@ -272,6 +272,11 @@ export interface _SERVICE {
     { 'Ok' : Duty } |
       { 'Err' : string }
   >,
+  'create_association_event' : ActorMethod<
+    [string, Array<string>, string, string, [] | [string], bigint, bigint],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'create_event' : ActorMethod<
     [
       string,
@@ -409,6 +414,11 @@ export interface _SERVICE {
   'get_coach_note' : ActorMethod<
     [string],
     { 'Ok' : [] | [CoachNote] } |
+      { 'Err' : string }
+  >,
+  'get_event_child' : ActorMethod<
+    [string, string],
+    { 'Ok' : Child } |
       { 'Err' : string }
   >,
   'get_event_roster' : ActorMethod<

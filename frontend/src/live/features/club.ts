@@ -720,3 +720,56 @@ export async function createLiveChildForParentInClub(
     "Create child for parent in club",
   );
 }
+
+/**
+ * Manual member payment ledger (Phase 3, F6) — "mark paid" bookkeeping for
+ * member subscription/uniform fees, mirroring the Supabase
+ * member_subscription_payments table. Bookkeeping only: online payments
+ * stay Supabase/Stripe-gated per the payments rule.
+ */
+export interface LiveMemberPaymentInput {
+  clubId: string;
+  userId: string;
+  childId?: string | null;
+  paymentPeriod: string;
+  paymentType: string;
+  amount: number;
+  notes?: string | null;
+}
+
+export async function listLiveMemberPayments(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  paymentPeriod: string,
+  paymentType: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_member_payments(clubId, paymentPeriod, paymentType),
+    "List member payments",
+  );
+}
+
+export async function markLiveMemberPaid(
+  ctx: FeatureBackendContext,
+  input: LiveMemberPaymentInput,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.mark_member_paid(
+      input.clubId,
+      input.userId,
+      candidOpt(input.childId),
+      input.paymentPeriod,
+      input.paymentType,
+      input.amount,
+      candidOpt(input.notes),
+    ),
+    "Mark member paid",
+  );
+}
+
+export async function unmarkLiveMemberPaid(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unmark_member_paid(id), "Unmark member paid");
+}

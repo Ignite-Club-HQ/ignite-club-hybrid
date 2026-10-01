@@ -169,6 +169,18 @@ export interface Link {
   'club_id' : string,
 }
 export interface Listing { 'links' : Array<Link>, 'revision' : bigint }
+export interface MemberPayment {
+  'id' : string,
+  'payment_type' : string,
+  'marked_by' : Principal,
+  'user_id' : string,
+  'child_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'notes' : [] | [string],
+  'payment_period' : string,
+  'amount' : number,
+  'club_id' : string,
+}
 export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
 export interface NewsPost {
   'id' : string,
@@ -552,6 +564,11 @@ export interface _SERVICE {
     { 'Ok' : Listing } |
       { 'Err' : string }
   >,
+  'list_member_payments' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : Array<MemberPayment> } |
+      { 'Err' : string }
+  >,
   'list_news' : ActorMethod<
     [string],
     { 'Ok' : Array<NewsPost> } |
@@ -605,6 +622,11 @@ export interface _SERVICE {
   'list_teams' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'mark_member_paid' : ActorMethod<
+    [string, string, [] | [string], string, string, number, [] | [string]],
+    { 'Ok' : MemberPayment } |
       { 'Err' : string }
   >,
   'move_child_to_team' : ActorMethod<
@@ -801,6 +823,11 @@ export interface _SERVICE {
   >,
   'unlink_guardian' : ActorMethod<
     [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'unmark_member_paid' : ActorMethod<
+    [string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

@@ -167,6 +167,7 @@ persistent actor {
     else if (Text.startsWith(kind, #text "admin")) { prefs.admin_enabled }
     else if (Text.startsWith(kind, #text "reward")) { prefs.rewards_enabled }
     else if (Text.startsWith(kind, #text "pom")) { prefs.pom_enabled }
+    else if (Text.startsWith(kind, #text "player_of_match")) { prefs.pom_enabled }
     else { true }
   };
 

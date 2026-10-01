@@ -88,6 +88,23 @@ module {
     status : Text;
     created_at_ms : Nat64;
   };
+  // Manual "mark paid" bookkeeping for member subscription/uniform fees —
+  // mirrors the Supabase member_subscription_payments table. Bookkeeping
+  // only: no money moves through the canister (online payments stay
+  // Stripe/Supabase-gated per the payments rule). user_id is the member's
+  // account/principal text; child_id is set when the fee is per-child.
+  public type MemberPayment = {
+    id : Text;
+    club_id : Text;
+    user_id : Text;
+    child_id : ?Text;
+    payment_period : Text;
+    payment_type : Text;
+    amount : Float;
+    notes : ?Text;
+    marked_by : Principal;
+    created_at_ms : Nat64;
+  };
   // Sponsor-strip display toggles mirror the Supabase `clubs` columns of
   // the same name: whether the media gallery strip, the media header
   // strip, the events page strip, and in-chat-thread ad slots show

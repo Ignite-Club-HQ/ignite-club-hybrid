@@ -143,6 +143,45 @@ persistent actor {
     events := events.concat([created]); #Ok(created)
   };
 
+  // Association-scoped fan-out (Phase 3, F5): an association admin creates
+  // the same social event in every selected member club in one call — the
+  // canister counterpart of the Supabase association-create-club-event edge
+  // function. association_id is the organising club's own id; the caller
+  // must be its club admin (or governor/bulk access). Returns the number of
+  // clubs the event was created for.
+  public shared ({ caller }) func create_association_event(association_id : Text, club_ids : [Text], title : Text, description : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Nat16; #Err : Text } {
+    auth(caller);
+    if (not valid(association_id) or not valid(title) or not valid(description) or not validLocation(location) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+    if (club_ids.size() == 0 or club_ids.any(func(id) = not valid(id))) return #Err("Select at least one club");
+    let allowed = isGovernor(caller) or hasBulkAccess(caller) or hasRole(caller, "club_admin", association_id, null);
+    if (not allowed) return #Err("Association admin required");
+    var created : [Types.Event] = [];
+    var index = 0;
+    for (club_id in club_ids.values()) {
+      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false } : Types.Event)]);
+      index += 1;
+    };
+    events := events.concat(created);
+    #Ok(Nat.toNat16(created.size()))
+  };
+
+  // Child display record for award flows (Phase 3, F8): the awarding
+  // coach/admin needs the child's name + parent for the player-of-the-match
+  // notification. Gated to managers of the event, who can already see the
+  // full roster (including children) via event_roster.
+  public query ({ caller }) func get_event_child(event_id : Text, child_id : Text) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(err)) { #Err(err) };
+      case (#Ok(_)) {
+        switch (children.find(func(c) = c.id == child_id)) {
+          case null { #Err("Child not found") };
+          case (?child) { #Ok(child) };
+        };
+      };
+    };
+  };
+
   // Creates a recurring series plus all child occurrences up to until_ms.
   // One call replaces the Supabase create_event_with_duties recurring
   // expansion; child events are ordinary events linked by series_id.

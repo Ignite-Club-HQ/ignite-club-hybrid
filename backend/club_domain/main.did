@@ -163,6 +163,19 @@ type Mutation =
    link: opt Link;
    revision: nat64;
  };
+type MemberPayment = 
+ record {
+   amount: float64;
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   id: text;
+   marked_by: principal;
+   notes: opt text;
+   payment_period: text;
+   payment_type: text;
+   user_id: text;
+ };
 type Listing = 
  record {
    links: vec Link;
@@ -612,6 +625,11 @@ service : {
       Err: text;
       Ok: Listing;
     }) query;
+  list_member_payments: (club_id: text, payment_period: text, payment_type:
+   text) -> (variant {
+               Err: text;
+               Ok: vec MemberPayment;
+             }) query;
   list_news: (club_id: text) -> (variant {
                                    Err: text;
                                    Ok: vec NewsPost;
@@ -666,6 +684,12 @@ service : {
       Err: text;
       Ok: vec ClubTeam;
     }) query;
+  mark_member_paid: (club_id: text, user_id: text, child_id: opt text,
+   payment_period: text, payment_type: text, amount: float64, notes:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: MemberPayment;
+                 });
   move_child_to_team: (child_id: text, from_team: opt text, to_team: 
    text) -> (variant {
                Err: text;
@@ -855,6 +879,10 @@ service : {
       Err: text;
       Ok;
     });
+  unmark_member_paid: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
   update_news_post: (id: text, title: text, body: text, status: text,
    expected_revision: nat64) -> (variant {
                                    Err: text;
