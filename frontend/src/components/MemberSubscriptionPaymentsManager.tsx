@@ -32,7 +32,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveClubs,
+  listLiveMemberPayments,
+  markLiveMemberPaid,
+  unmarkLiveMemberPaid,
+} from "@/live/features/club";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Capacitor } from "@capacitor/core";
 
 type PaymentType = "subscription" | "uniform";
@@ -154,15 +161,27 @@ export default function MemberSubscriptionPaymentsManager({
     queryKey: ["member-subscription-payments", clubId, payableEntries.map(e => e.id).join(","), paymentPeriod, activeTab],
     queryFn: async () => {
       if (allUserIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("member_subscription_payments")
-        .select("*")
-        .eq("club_id", clubId)
-        .eq("payment_period", paymentPeriod)
-        .eq("payment_type", activeTab)
-        .in("user_id", allUserIds);
-      if (error) throw error;
-      return data || [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("member_subscription_payments")
+            .select("*")
+            .eq("club_id", clubId)
+            .eq("payment_period", paymentPeriod)
+            .eq("payment_type", activeTab)
+            .in("user_id", allUserIds);
+          if (error) throw error;
+          return data || [];
+        },
+        // ICP: manual payment ledger lives in club_domain (admin-gated;
+        // also returns the caller's own rows). No money moves through the
+        // canister — bookkeeping only.
+        icp: async (ctx) => {
+          const rows = await listLiveMemberPayments(ctx, clubId, paymentPeriod, activeTab);
+          const wanted = new Set(allUserIds);
+          return rows.filter((p) => wanted.has(p.user_id));
+        },
+      });
     },
     enabled: allUserIds.length > 0,
   });
@@ -204,27 +223,37 @@ export default function MemberSubscriptionPaymentsManager({
 
   const markPaidMutation = useMutation({
     mutationFn: async () => {
-      // Non-IAP payments are Supabase-only by design; manual "Mark Paid"
-      // bookkeeping writes directly to member_subscription_payments with no
-      // club_points_domain/club_domain counterpart.
-      // NEEDS-CANISTER: manual payment ledger (member_subscription_payments)
-      // has no canister equivalent.
-      assertSupabaseWritePath("membership", "manual 'Mark Paid' bookkeeping (member_subscription_payments) has no canister equivalent");
       if (!selectedMember) return;
-      const insertData: any = {
-        user_id: selectedMember.isChild ? selectedMember.parentUserId : selectedMember.userId,
-        club_id: clubId,
-        payment_period: paymentPeriod,
-        payment_type: activeTab,
-        amount: amount ? parseFloat(amount) : 0,
-        notes: notes.trim() || null,
-        marked_by: user!.id,
-      };
-      if (selectedMember.isChild && selectedMember.childId) {
-        insertData.child_id = selectedMember.childId;
-      }
-      const { error } = await supabase.from("member_subscription_payments").insert(insertData);
-      if (error) throw error;
+      const targetUserId = selectedMember.isChild ? selectedMember.parentUserId : selectedMember.userId;
+      if (!targetUserId) throw new Error("No account linked for this member");
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const insertData: any = {
+            user_id: targetUserId,
+            club_id: clubId,
+            payment_period: paymentPeriod,
+            payment_type: activeTab,
+            amount: amount ? parseFloat(amount) : 0,
+            notes: notes.trim() || null,
+            marked_by: user!.id,
+          };
+          if (selectedMember.isChild && selectedMember.childId) {
+            insertData.child_id = selectedMember.childId;
+          }
+          const { error } = await supabase.from("member_subscription_payments").insert(insertData);
+          if (error) throw error;
+        },
+        icp: (ctx) =>
+          markLiveMemberPaid(ctx, {
+            clubId,
+            userId: targetUserId,
+            childId: selectedMember.isChild ? selectedMember.childId ?? null : null,
+            paymentPeriod,
+            paymentType: activeTab,
+            amount: amount ? parseFloat(amount) : 0,
+            notes: notes.trim() || null,
+          }),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-subscription-payments", clubId] });
@@ -245,11 +274,16 @@ export default function MemberSubscriptionPaymentsManager({
 
   const deletePaymentMutation = useMutation({
     mutationFn: async (paymentId: string) => {
-      const { error } = await supabase
-        .from("member_subscription_payments")
-        .delete()
-        .eq("id", paymentId);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("member_subscription_payments")
+            .delete()
+            .eq("id", paymentId);
+          if (error) throw error;
+        },
+        icp: (ctx) => unmarkLiveMemberPaid(ctx, paymentId),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["member-subscription-payments", clubId] });
@@ -264,10 +298,6 @@ export default function MemberSubscriptionPaymentsManager({
   // Bulk send fee payment reminder notifications
   const sendReminderMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: fee-payment-reminder notifications write directly to
-      // the Supabase `notifications` table; notification_queue has no
-      // equivalent "bulk fee reminder" insert yet.
-      assertSupabaseWritePath("membership", "bulk fee-payment reminder notifications have no canister equivalent");
       // Get unpaid entries - for children, notify the parent
       const unpaidParentIds = [...new Set(
         payableEntries
@@ -280,28 +310,42 @@ export default function MemberSubscriptionPaymentsManager({
         throw new Error("All members have already paid");
       }
 
-      // Get club name
-      const { data: clubData } = await supabase
-        .from("clubs")
-        .select("name")
-        .eq("id", clubId)
-        .single();
-
-      const clubName = clubData?.name || "Your club";
       const feeLabel = activeTab === "subscription" ? "subscription" : "uniform";
 
-      // Insert notifications for all unpaid members/parents
-      const notifications = unpaidParentIds.map(userId => ({
-        user_id: userId,
-        type: "fee_payment_request",
-        message: `${clubName} is requesting payment of ${feeLabel} fees for ${paymentPeriod}`,
-        related_id: clubId,
-      }));
-
-      const { error } = await supabase.from("notifications").insert(notifications);
-      if (error) throw error;
-
-      return unpaidParentIds.length;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubData } = await supabase
+            .from("clubs")
+            .select("name")
+            .eq("id", clubId)
+            .single();
+          const clubName = clubData?.name || "Your club";
+          const notifications = unpaidParentIds.map(userId => ({
+            user_id: userId,
+            type: "fee_payment_request",
+            message: `${clubName} is requesting payment of ${feeLabel} fees for ${paymentPeriod}`,
+            related_id: clubId,
+          }));
+          const { error } = await supabase.from("notifications").insert(notifications);
+          if (error) throw error;
+          return unpaidParentIds.length;
+        },
+        icp: async (ctx) => {
+          // Club name from club_domain; reminders fan out through
+          // notification_queue with an idempotent prefix per period/tab.
+          const { clubs } = await listLiveClubs(ctx, null, 500);
+          const clubName = clubs.find((c) => c.id === clubId)?.name || "Your club";
+          await fanOutLiveNotifications(ctx, {
+            userIds: unpaidParentIds,
+            clubId,
+            kind: "fee_payment_request",
+            body: `${clubName} is requesting payment of ${feeLabel} fees for ${paymentPeriod}`,
+            idempotencyKeyPrefix: `fee-reminder-${clubId}-${activeTab}-${paymentPeriod}`,
+            relatedId: clubId,
+          });
+          return unpaidParentIds.length;
+        },
+      });
     },
     onSuccess: (count) => {
       toast({
