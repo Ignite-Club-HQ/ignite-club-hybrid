@@ -249,6 +249,7 @@ export default function EditClubPage() {
                 secondary_color: [],
                 is_active: true,
                 created_at_ms: BigInt(Date.now()),
+                deleted_at_ms: [],
               };
           await saveLiveClubProfile(ctx, profile);
 
@@ -274,6 +275,13 @@ export default function EditClubPage() {
                 media_header_sponsors_enabled: false,
                 events_sponsor_strip_enabled: false,
                 chat_thread_ads_enabled: false,
+                invite_email_style: [],
+                theme_primary_color: [],
+                theme_secondary_color: [],
+                theme_accent_color: [],
+                club_switcher_hint: [],
+                header_logo_enabled: false,
+                header_club_name_enabled: false,
               };
           await saveLiveClubSettings(ctx, settings);
         },
