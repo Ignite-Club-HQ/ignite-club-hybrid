@@ -284,3 +284,275 @@ export async function myLiveUnreadCounts(ctx: FeatureBackendContext): Promise<Li
   const raw = await actor.my_unread_counts();
   return raw.map((r) => ({ conversationId: r.conversation_id, kind: r.kind, count: Number(r.count) }));
 }
+
+// ---------------------------------------------------------------------------
+// Groups with roles, membership, and lifecycle.
+// ---------------------------------------------------------------------------
+
+export async function createLiveGroupWithRoles(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string | null | undefined,
+  name: string,
+  kind: string,
+  roleEntries: Array<[Principal, string]>,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_group_with_roles(clubId, candidOpt(teamId), name, kind, roleEntries),
+    "Create group",
+  );
+}
+
+export async function updateLiveGroup(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  name?: string | null,
+  description?: string | null,
+  avatar?: string | null,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_group(conversationId, candidOpt(name), candidOpt(description), candidOpt(avatar)),
+    "Update group",
+  );
+}
+
+export async function addLiveGroupMembers(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  members: Principal[],
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_group_members(conversationId, members), "Add group members");
+}
+
+export async function softDeleteLiveGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.soft_delete_group(conversationId), "Delete group");
+}
+
+// ---------------------------------------------------------------------------
+// Join requests.
+// ---------------------------------------------------------------------------
+
+export async function requestLiveJoinGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.request_join_group(conversationId), "Request to join group");
+}
+
+export async function approveLiveJoinRequest(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  user: Principal,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.approve_join_request(conversationId, user), "Approve join request");
+}
+
+export async function rejectLiveJoinRequest(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  user: Principal,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.reject_join_request(conversationId, user), "Reject join request");
+}
+
+export async function listLiveJoinRequests(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_join_requests(conversationId), "List join requests");
+}
+
+// ---------------------------------------------------------------------------
+// Polls.
+// ---------------------------------------------------------------------------
+
+export async function createLivePoll(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  messageId: string | null | undefined,
+  question: string,
+  options: string[],
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_poll(conversationId, candidOpt(messageId), question, options),
+    "Create poll",
+  );
+}
+
+export async function voteLivePoll(ctx: FeatureBackendContext, pollId: string, optionIndex: number) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.vote_poll(pollId, optionIndex), "Vote poll");
+}
+
+export async function closeLivePoll(ctx: FeatureBackendContext, pollId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.close_poll(pollId), "Close poll");
+}
+
+export async function getLivePollResults(ctx: FeatureBackendContext, pollId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_poll_results(pollId), "Get poll results");
+}
+
+// ---------------------------------------------------------------------------
+// Mute preferences.
+// ---------------------------------------------------------------------------
+
+export async function setLiveMutePreference(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  muted: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_mute_preference(conversationId, muted), "Set mute preference");
+}
+
+export async function getLiveMutePreference(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.get_mute_preference(conversationId);
+}
+
+// ---------------------------------------------------------------------------
+// Direct messages and message forwarding.
+// ---------------------------------------------------------------------------
+
+export async function getOrCreateLiveDm(ctx: FeatureBackendContext, other: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_or_create_dm(other), "Get or create DM");
+}
+
+export async function forwardLiveMessage(
+  ctx: FeatureBackendContext,
+  messageId: string,
+  toConversationId: string,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.forward_message(messageId, toConversationId), "Forward message");
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled messages — canister-side register/replay, distinct from the
+// notification_queue's schedule_message/list_scheduled/cancel_scheduled.
+// ---------------------------------------------------------------------------
+
+export async function registerLiveScheduledMessage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  body: string,
+  scheduledAtMs: number,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.register_scheduled_message(conversationId, body, BigInt(Math.trunc(scheduledAtMs))),
+    "Register scheduled message",
+  );
+}
+
+export async function replayLiveScheduledMessage(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.replay_scheduled_message(id), "Replay scheduled message");
+}
+
+// ---------------------------------------------------------------------------
+// Attachments and reactions.
+// ---------------------------------------------------------------------------
+
+export async function registerLiveAttachmentMetadata(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  messageId: string | null | undefined,
+  kind: string,
+  refId: string,
+  url?: string | null,
+  sizeBytes?: number | null,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.register_attachment_metadata(
+      conversationId,
+      candidOpt(messageId),
+      kind,
+      refId,
+      candidOpt(url),
+      candidOpt(sizeBytes === null || sizeBytes === undefined ? undefined : BigInt(Math.trunc(sizeBytes))),
+    ),
+    "Register attachment metadata",
+  );
+}
+
+export async function toggleLiveReaction(ctx: FeatureBackendContext, messageId: string, emoji: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.toggle_reaction(messageId, emoji), "Toggle reaction");
+}
+
+// ---------------------------------------------------------------------------
+// Messages since / unread-by-club / recent conversations.
+// ---------------------------------------------------------------------------
+
+export async function messagesLiveSince(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  sinceMs: number,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.messages_since(conversationId, BigInt(Math.trunc(sinceMs))),
+    "Messages since",
+  );
+}
+
+export async function unreadLiveCountByClub(ctx: FeatureBackendContext, principal: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unread_count_by_club(principal), "Unread count by club");
+}
+
+export async function recentLiveConversations(
+  ctx: FeatureBackendContext,
+  principal: Principal,
+  limit: number,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.recent_conversations(principal, limit), "Recent conversations");
+}
+
+// ---------------------------------------------------------------------------
+// Club DM settings and per-user messaging settings.
+// ---------------------------------------------------------------------------
+
+export async function getLiveClubDmSettings(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.get_club_dm_settings(clubId);
+}
+
+export async function setLiveClubDmSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  dmDisabled: boolean,
+  attachmentsDisabled: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_dm_settings(clubId, dmDisabled, attachmentsDisabled),
+    "Set club DM settings",
+  );
+}
+
+export async function getLiveUserMessagingSettings(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return actor.get_user_messaging_settings();
+}
+
+export async function setLiveUserMessagingSettings(
+  ctx: FeatureBackendContext,
+  hideMessagePreview: boolean,
+  aiCatchupEnabled: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_user_messaging_settings(hideMessagePreview, aiCatchupEnabled),
+    "Set user messaging settings",
+  );
+}

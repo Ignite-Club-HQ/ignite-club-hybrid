@@ -684,3 +684,346 @@ export async function adminUpdateLiveRsvpStatus(
     "Admin update RSVP status",
   );
 }
+
+// ============================================================================
+// Further events_domain surfaces: hard delete / soft-delete series, coach
+// notes, series occurrences, event views, reminder logs, push reachability,
+// event groups + group players/duties, team training pauses, membership
+// checks, open duties, and mini-league RSVPs. All provisional until verified
+// against a deployed canister.
+// ============================================================================
+
+/** Hard delete of an event row (distinct from set_event_cancelled's soft flag). */
+export async function deleteLiveEvent(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_event(eventId), "Delete event");
+}
+
+/** Soft-delete a series record itself (distinct from delete_series, which truncates future child events). */
+export async function softDeleteLiveEventSeries(ctx: FeatureBackendContext, seriesId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.soft_delete_series(seriesId), "Delete event series");
+}
+
+/** Coach-only note attached to an event. Counterpart of a Supabase coach-notes field, read side. */
+export async function getLiveCoachNote(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_coach_note(eventId), "Get coach note");
+}
+
+export async function setLiveCoachNote(ctx: FeatureBackendContext, eventId: string, note: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_coach_note(eventId, note), "Set coach note");
+}
+
+/**
+ * Append a single occurrence to an existing series without rewriting the
+ * whole future tail (distinct from create_series/update_series).
+ */
+export async function addLiveSeriesOccurrence(
+  ctx: FeatureBackendContext,
+  seriesId: string,
+  startsAtMs: number | Date,
+  endsAtMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.add_series_occurrence(seriesId, toNat64(startsAtMs), toNat64(endsAtMs)),
+    "Add series occurrence",
+  );
+}
+
+/** Record that the caller viewed an event (analytics). */
+export async function recordLiveEventView(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_event_view(eventId), "Record event view");
+}
+
+export async function getLiveEventViewCount(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_view_count(eventId), "Get event view count");
+}
+
+/** Reminder-send audit log (e.g. "RSVP reminder sent to X via push"). */
+export async function recordLiveReminderSent(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  channel: string,
+  recipient: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.record_reminder_sent(eventId, channel, recipient),
+    "Record reminder sent",
+  );
+}
+
+export async function listLiveReminders(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_reminders(eventId), "List reminders");
+}
+
+/**
+ * Per-principal push reachability flag (whether push notifications can reach
+ * the signed-in caller's device). `get_push_reachable` takes a Principal, not
+ * an account id string.
+ */
+export async function setLivePushReachable(ctx: FeatureBackendContext, reachable: boolean) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_push_reachable(reachable), "Set push reachability");
+}
+
+export async function getLivePushReachable(
+  ctx: FeatureBackendContext,
+  principal: import("@icp-sdk/core/principal").Principal,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_push_reachable(principal), "Get push reachability");
+}
+
+/**
+ * Event groups (e.g. training squads/pods within an event) and their player
+ * membership + per-group duties. Counterpart of a Supabase event-groups
+ * feature with no direct RPC equivalent today.
+ */
+export async function createLiveEventGroup(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  name: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_event_group(eventId, name), "Create event group");
+}
+
+export async function renameLiveEventGroup(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  name: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.rename_event_group(groupId, name), "Rename event group");
+}
+
+export async function deleteLiveEventGroup(ctx: FeatureBackendContext, groupId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_event_group(groupId), "Delete event group");
+}
+
+export async function listLiveEventGroups(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_event_groups(eventId), "List event groups");
+}
+
+export async function addLiveGroupPlayer(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_group_player(groupId, accountId), "Add group player");
+}
+
+export async function removeLiveGroupPlayer(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_group_player(groupId, accountId), "Remove group player");
+}
+
+export async function listLiveGroupPlayers(ctx: FeatureBackendContext, groupId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_group_players(groupId), "List group players");
+}
+
+export async function moveLiveGroupPlayer(
+  ctx: FeatureBackendContext,
+  fromGroupId: string,
+  toGroupId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.move_group_player(fromGroupId, toGroupId, accountId),
+    "Move group player",
+  );
+}
+
+export async function swapLiveGroupPlayers(
+  ctx: FeatureBackendContext,
+  groupA: string,
+  accountA: string,
+  groupB: string,
+  accountB: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.swap_group_players(groupA, accountA, groupB, accountB),
+    "Swap group players",
+  );
+}
+
+export async function setLiveGroupDuty(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  duty: string,
+  accountId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_group_duty(groupId, duty, candidOpt(accountId)),
+    "Set group duty",
+  );
+}
+
+export async function removeLiveGroupDuty(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  duty: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_group_duty(groupId, duty), "Remove group duty");
+}
+
+export async function listLiveGroupDuties(ctx: FeatureBackendContext, groupId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_group_duties(groupId), "List group duties");
+}
+
+/**
+ * Team training pauses (e.g. holiday breaks) — counterpart of a Supabase
+ * `team_training_pauses` table used to suppress auto-generated training
+ * events for a date range.
+ */
+export async function createLiveTeamTrainingPause(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  startsAtMs: number | Date,
+  endsAtMs: number | Date,
+  reason: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_team_training_pause(
+      clubId,
+      teamId,
+      toNat64(startsAtMs),
+      toNat64(endsAtMs),
+      reason,
+    ),
+    "Create team training pause",
+  );
+}
+
+export async function listLiveTeamTrainingPauses(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_team_training_pauses(clubId, teamId),
+    "List team training pauses",
+  );
+}
+
+export async function deleteLiveTeamTrainingPause(ctx: FeatureBackendContext, pauseId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_team_training_pause(pauseId), "Delete team training pause");
+}
+
+export async function isLiveTeamTrainingPaused(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  atMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.is_paused(clubId, teamId, toNat64(atMs)), "Check training pause");
+}
+
+/**
+ * Membership/guardianship checks against the events_domain role table.
+ * Plain boolean query results (no Ok/Err variant) — the canister never
+ * errors on these, it just reports false for principals with no matching
+ * grant/link.
+ */
+export async function isLiveTeamMember(
+  ctx: FeatureBackendContext,
+  principal: import("@icp-sdk/core/principal").Principal,
+  clubId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.is_team_member(principal, clubId, teamId);
+}
+
+export async function isLiveGuardianOf(
+  ctx: FeatureBackendContext,
+  principal: import("@icp-sdk/core/principal").Principal,
+  childId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.is_guardian_of(principal, childId);
+}
+
+/**
+ * Open (unassigned) duties — distinct from the assignee-keyed duties above,
+ * these can be claimed/unclaimed by any eligible account. Counterpart of a
+ * Supabase "duty board" flow with no assignee until claimed.
+ */
+export async function createLiveOpenDuty(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  duty: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_open_duty(eventId, duty), "Create open duty");
+}
+
+export async function claimLiveOpenDuty(
+  ctx: FeatureBackendContext,
+  dutyId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.claim_open_duty(dutyId, accountId), "Claim open duty");
+}
+
+export async function unclaimLiveOpenDuty(ctx: FeatureBackendContext, dutyId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unclaim_open_duty(dutyId), "Unclaim open duty");
+}
+
+export async function listLiveOpenDuties(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_open_duties(eventId), "List open duties");
+}
+
+/**
+ * Mini-league RSVP subject — either a registered account or a
+ * mini-league-only player record (no Supabase account/profile row). Mirrors
+ * the raw candid `RsvpSubject` variant shape (`{ account }` /
+ * `{ mini_league_player }`), not the bindgen `__kind__` wrapper.
+ */
+export type LiveRsvpSubject = { account: string } | { mini_league_player: string };
+
+export async function setLiveMiniLeagueRsvp(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  subject: LiveRsvpSubject,
+  state: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_mini_league_rsvp(eventId, subject, state),
+    "Set mini-league RSVP",
+  );
+}
+
+export async function listLiveMiniLeagueRsvps(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_mini_league_rsvps(eventId), "List mini-league RSVPs");
+}

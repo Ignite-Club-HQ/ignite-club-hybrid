@@ -138,7 +138,7 @@ module {
         edited_at_ms = m.edited_at_ms;
         attachment = m.attachment;
         created_at_ms = 0;
-      }));
+      });
       var receipts = old.receipts;
       var unread = old.unread;
       var bulkAccessPrincipals = old.bulkAccessPrincipals;
@@ -153,7 +153,7 @@ module {
         avatar = null;
         description = null;
         deleted = false;
-      }));
+      });
       var clubMemberships = old.clubMemberships;
       var competitionAdmins = old.competitionAdmins;
       var dmAttachmentsDisabled = old.dmAttachmentsDisabled;

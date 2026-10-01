@@ -67,30 +67,24 @@ export function useInAppPurchase(): UseInAppPurchaseReturn {
         return false;
       }
 
-      // NEEDS-DECISION: in-app purchases move real money through Stripe/App
-      // Store/Play billing and cannot be mirrored to an ICP canister. II
-      // sessions have no Supabase session to verify the receipt against, so
-      // block here instead of throwing session_expired deep in the call.
-      if (resolveAuthBackend() === "icp") {
-        setError("Purchases are not available for this sign-in method yet.");
-        setPurchaseState("error");
-        return false;
-      }
+      const isIcp = resolveAuthBackend() === "icp";
 
       setPurchaseState("loading");
       setError(null);
 
       try {
-        // Pre-validate authorization before triggering native payment
-        const { data: authCheck, error: authCheckError } = await supabase.functions.invoke(
-          "check-iap-authorization",
-          {
-            body: { productId, entityId, entityType },
-          }
-        );
+        if (!isIcp) {
+          // Pre-validate authorization before triggering native payment
+          const { data: authCheck, error: authCheckError } = await supabase.functions.invoke(
+            "check-iap-authorization",
+            {
+              body: { productId, entityId, entityType },
+            }
+          );
 
-        if (authCheckError || authCheck?.error) {
-          throw new Error(authCheck?.error || authCheckError?.message || "You don't have permission to make this purchase");
+          if (authCheckError || authCheck?.error) {
+            throw new Error(authCheck?.error || authCheckError?.message || "You don't have permission to make this purchase");
+          }
         }
 
         const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
@@ -119,23 +113,65 @@ export function useInAppPurchase(): UseInAppPurchaseReturn {
 
         // Verify receipt on server
         setPurchaseState("verifying");
-        const platform = Capacitor.getPlatform();
-        const { data, error: verifyError } = await supabase.functions.invoke(
-          "verify-iap-receipt",
-          {
-            body: {
-              platform,
-              transactionId: purchaseResult.transactionId,
-              productId,
-              entityId,
-              entityType,
-              receipt: purchaseResult.receipt || purchaseResult.purchaseToken || purchaseResult.transactionId,
-            },
-          }
-        );
+        const receiptData = purchaseResult.receipt || purchaseResult.purchaseToken || purchaseResult.transactionId;
 
-        if (verifyError || data?.error) {
-          throw new Error(data?.error || verifyError?.message || "Receipt verification failed");
+        if (isIcp) {
+          // Internet Identity users have no Supabase session — use the
+          // session-free ICP attestation function, then submit the
+          // attestation to the identity_access canister for redemption.
+          const principal = user.id;
+          const { data, error: verifyError } = await supabase.functions.invoke(
+            "verify-iap-receipt-icp",
+            {
+              body: {
+                principal,
+                product_id: productId,
+                transaction_id: purchaseResult.transactionId,
+                receipt_data: receiptData,
+              },
+            }
+          );
+
+          if (verifyError || data?.error) {
+            throw new Error(data?.error || verifyError?.message || "Receipt verification failed");
+          }
+
+          const [{ getCurrentInternetIdentity }, { redeemIcpEntitlement }] = await Promise.all([
+            import("@/live/internetIdentityAuth"),
+            import("@/live/identityEntitlements"),
+          ]);
+          const identity = await getCurrentInternetIdentity();
+          if (!identity) {
+            throw new Error("No Internet Identity session available.");
+          }
+          // Submits the attestation to the canister and refreshes/caches the
+          // entitlement summary (see identityEntitlements.ts).
+          await redeemIcpEntitlement(identity, principal, {
+            productId,
+            transactionId: purchaseResult.transactionId,
+            expiresAtMs: Number(data.expires_at_ms),
+            source: String(data.source),
+            signatureHex: String(data.signature_hex),
+          });
+        } else {
+          const platform = Capacitor.getPlatform();
+          const { data, error: verifyError } = await supabase.functions.invoke(
+            "verify-iap-receipt",
+            {
+              body: {
+                platform,
+                transactionId: purchaseResult.transactionId,
+                productId,
+                entityId,
+                entityType,
+                receipt: receiptData,
+              },
+            }
+          );
+
+          if (verifyError || data?.error) {
+            throw new Error(data?.error || verifyError?.message || "Receipt verification failed");
+          }
         }
 
         // NativePurchases auto-acknowledges purchases by default

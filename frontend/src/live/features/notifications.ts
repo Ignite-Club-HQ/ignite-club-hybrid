@@ -632,3 +632,58 @@ export async function upsertLivePushAlertSettings(
   });
   return pushAlertSettingsFromCandid(row);
 }
+
+// ---------------------------------------------------------------------------
+// Chat notification fan-out batch and per-club preference listing.
+// ---------------------------------------------------------------------------
+
+export interface LiveChatNotifyBatchInput {
+  messageId: string;
+  conversationId: string;
+  sender: string;
+  preview: string;
+  recipients: string[];
+  muteList: string[];
+}
+
+/**
+ * Idempotent per-message notify fan-out: one call per sent chat message,
+ * skipping recipients in `muteList`. Returns the number of notifications
+ * actually enqueued.
+ */
+export async function recordLiveChatNotifyBatch(
+  ctx: FeatureBackendContext,
+  input: LiveChatNotifyBatchInput,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.record_chat_notify_batch(
+      input.messageId,
+      input.conversationId,
+      input.sender,
+      input.preview,
+      input.recipients,
+      input.muteList,
+    ),
+    "Record chat notify batch",
+  );
+}
+
+/**
+ * Paged notification-preferences listing. NOTE: `clubId` is accepted for
+ * API symmetry but is currently a no-op canister-side — `Preferences` has
+ * no club column, so this returns the full preferences page regardless of
+ * the club filter.
+ */
+export async function listLivePreferencesByClub(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  limit: number,
+  offset: number,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_preferences_by_club(clubId, limit, offset),
+    "List preferences by club",
+  );
+}

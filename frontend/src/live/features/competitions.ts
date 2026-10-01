@@ -1,6 +1,6 @@
 import { connectLiveCompetitionDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
-import { toNat64, unwrapCandid } from "./candid";
+import { candidOpt, toNat64, unwrapCandid } from "./candid";
 
 /**
  * Competitions feature -> competition_domain canister.
@@ -224,4 +224,148 @@ export async function isLiveCompetitionAdmin(
     actor.is_competition_admin(competitionId),
     "Check competition admin",
   );
+}
+
+/**
+ * Competition roles — per-competition RBAC grants (add/remove/list),
+ * counterpart of the club_domain `*_team_captain`/ACL style wrappers above.
+ */
+export async function addLiveCompetitionRole(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  principal: Parameters<Awaited<ReturnType<typeof connectLiveCompetitionDomain>>["actor"]["add_competition_role"]>[1],
+  role: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.add_competition_role(competitionId, principal, role, candidOpt(teamId)),
+    "Add competition role",
+  );
+}
+
+export async function removeLiveCompetitionRole(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  principal: Parameters<Awaited<ReturnType<typeof connectLiveCompetitionDomain>>["actor"]["remove_competition_role"]>[1],
+  role: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_competition_role(competitionId, principal, role, candidOpt(teamId)),
+    "Remove competition role",
+  );
+}
+
+export async function listLiveCompetitionRoles(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_competition_roles(competitionId), "List competition roles");
+}
+
+/**
+ * Competition chat settings (enable/disable chat for a competition).
+ */
+export async function getLiveCompetitionChatSettings(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_chat_settings(competitionId), "Get chat settings");
+}
+
+export async function setLiveCompetitionChatSettings(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  chatEnabled: boolean,
+  expectedRevision: number,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_chat_settings(competitionId, chatEnabled, BigInt(expectedRevision)),
+    "Set chat settings",
+  );
+}
+
+/**
+ * Competition invites — single-use invites targeted at a specific
+ * principal, distinct from the shareable join links below.
+ */
+export async function createLiveCompetitionInvite(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  invitee: Parameters<Awaited<ReturnType<typeof connectLiveCompetitionDomain>>["actor"]["create_competition_invite"]>[1],
+  role: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_competition_invite(competitionId, invitee, role, candidOpt(teamId)),
+    "Create competition invite",
+  );
+}
+
+export async function acceptLiveCompetitionInvite(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_competition_invite(inviteId), "Accept competition invite");
+}
+
+export async function declineLiveCompetitionInvite(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.decline_competition_invite(inviteId), "Decline competition invite");
+}
+
+export async function listLiveCompetitionInvites(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_competition_invites(competitionId), "List competition invites");
+}
+
+export async function listLiveCompetitionInvitesByInvitee(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_invites_by_invitee(), "List competition invites");
+}
+
+/**
+ * Competition join links — shareable rotating-token links, counterpart of
+ * the club_domain team invite links above.
+ */
+export async function createLiveCompetitionJoinLink(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  role: string,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_competition_join_link(competitionId, role, candidOpt(teamId)),
+    "Create competition join link",
+  );
+}
+
+export async function rotateLiveCompetitionJoinLink(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.rotate_competition_join_link(competitionId), "Rotate competition join link");
+}
+
+export async function revokeLiveCompetitionJoinLink(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_competition_join_link(competitionId), "Revoke competition join link");
+}
+
+export async function joinLiveCompetitionByToken(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.join_competition_by_token(token), "Join competition");
+}
+
+/** Removes a recorded match (distinct from editing its details). */
+export async function deleteLiveMatch(ctx: FeatureBackendContext, matchId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_match(matchId), "Delete match");
+}
+
+/** Drops rounds above `maxRound` — counterpart of the Supabase round-trim admin action. */
+export async function trimLiveCompetitionRounds(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  maxRound: number,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.trim_rounds(competitionId, maxRound), "Trim rounds");
 }

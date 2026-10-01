@@ -22,6 +22,21 @@ export interface Account {
   'version' : bigint,
   'principals' : Array<Principal>,
 }
+/**
+ * A Pro entitlement granted to a principal from an IAP (App Store) receipt
+ * or a governor/verifier write. `transaction_id` is the Apple transaction
+ * id (or empty for non-IAP grants) and is the replay-protection key: once a
+ * transaction id has been redeemed, only the same principal may redeem it
+ * again (idempotent re-verification), never a different one.
+ */
+export interface Entitlement {
+  'transaction_id' : string,
+  'principal' : Principal,
+  'product_id' : string,
+  'source' : string,
+  'granted_at_ms' : bigint,
+  'expires_at_ms' : bigint,
+}
 export interface Exclusion {
   'account_id' : string,
   'club' : string,
@@ -61,25 +76,29 @@ export type Result = { 'Ok' : Account } |
   { 'Err' : string };
 export type Result_1 = { 'Ok' : Access } |
   { 'Err' : string };
-export type Result_10 = { 'Ok' : Array<RoleGrant> } |
+export type Result_10 = { 'Ok' : [] | [TermsAcceptance] } |
   { 'Err' : string };
-export type Result_11 = { 'Ok' : TermsAcceptance } |
+export type Result_11 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
-export type Result_12 = { 'Ok' : [] | [TermsAcceptance] } |
+export type Result_12 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_2 = { 'Ok' : LinkChallenge } |
+export type Result_13 = { 'Ok' : PrivacyConsent } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : State } |
+export type Result_14 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : null } |
+export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : ExternalSiteBinding } |
+export type Result_3 = { 'Ok' : LinkChallenge } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : Array<ExternalSiteBinding> } |
+export type Result_4 = { 'Ok' : ExternalSiteBinding } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : PrivacyConsent } |
+export type Result_5 = { 'Ok' : boolean } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : boolean } |
+export type Result_6 = { 'Ok' : State } |
+  { 'Err' : string };
+export type Result_7 = { 'Ok' : Array<ExternalSiteBinding> } |
+  { 'Err' : string };
+export type Result_8 = { 'Ok' : Array<Entitlement> } |
   { 'Err' : string };
 export type Result_9 = { 'Ok' : Profile } |
   { 'Err' : string };
@@ -93,14 +112,42 @@ export interface RoleGrant {
 export interface State {
   'privacy_consents' : Array<PrivacyConsent>,
   'schema' : number,
+  /**
+   * Principals (in addition to the governor) allowed to call
+   * `set_entitlement` directly — e.g. a server-side receipt verifier
+   * identity. Empty by default; only the governor can grow this list.
+   */
+  'verifiers' : Array<Principal>,
+  /**
+   * Shared HMAC secret used to verify `redeem_entitlement` attestations
+   * minted by the session-free IAP verification endpoint. Empty until the
+   * governor calls `set_attestation_secret`; redemption is rejected while
+   * empty.
+   */
+  'attestation_secret' : Uint8Array,
   'accounts' : Array<Account>,
   'governor' : Principal,
   'exclusions' : Array<Exclusion>,
   'external_bindings' : Array<ExternalSiteBinding>,
+  /**
+   * Pro entitlements granted via IAP receipt verification or governor/
+   * verifier writes (schema 4+); empty on older blobs via serde default.
+   */
+  'entitlements' : Array<Entitlement>,
   'families' : Array<FamilyLink>,
   'challenges' : Array<LinkChallenge>,
+  /**
+   * One profile per account. `#[serde(default)]` keeps schema-1 stable
+   * blobs (written before profiles existed) decodable; post_upgrade bumps
+   * the schema marker once decoded.
+   */
   'profiles' : Array<Profile>,
   'roles' : Array<RoleGrant>,
+  /**
+   * Per-account terms/privacy re-acceptance records (schema 3+); empty
+   * on schema-2 blobs via serde default, decoded then bumped in
+   * post_upgrade. Wiped by erase_account.
+   */
   'terms_acceptances' : Array<TermsAcceptance>,
   'next_challenge' : bigint,
 }
@@ -119,36 +166,112 @@ export interface _SERVICE {
     [[] | [string], [] | [string], [] | [string], [] | [string]],
     Result_1
   >,
-  'begin_link' : ActorMethod<[Principal], Result_2>,
-  'bind_external_site' : ActorMethod<[string, string, string], Result_5>,
-  'check_field_access' : ActorMethod<[string, string], Result_8>,
-  'erase_account' : ActorMethod<[string], Result_4>,
-  'export_state' : ActorMethod<[], Result_3>,
-  'get_external_bindings' : ActorMethod<[string], Result_6>,
-  'get_privacy_consent' : ActorMethod<[string, string], Result_8>,
+  /**
+   * Governor-only: grants an additional verifier principal permitted to call
+   * `set_entitlement` directly (e.g. a trusted server-side receipt verifier
+   * identity, once one is established).
+   */
+  'add_verifier' : ActorMethod<[Principal], Result_2>,
+  'begin_link' : ActorMethod<[Principal], Result_3>,
+  'bind_external_site' : ActorMethod<[string, string, string], Result_4>,
+  'check_field_access' : ActorMethod<[string, string], Result_5>,
+  'erase_account' : ActorMethod<[string], Result_2>,
+  'export_state' : ActorMethod<[], Result_6>,
+  'get_external_bindings' : ActorMethod<[string], Result_7>,
+  /**
+   * The caller's own entitlement records (active and expired).
+   */
+  'get_my_entitlements' : ActorMethod<[], Result_8>,
+  'get_privacy_consent' : ActorMethod<[string, string], Result_5>,
+  /**
+   * The caller's own profile, or an error when none has been set yet.
+   */
   'get_profile' : ActorMethod<[], Result_9>,
-  'get_terms_acceptance' : ActorMethod<[string], Result_12>,
+  /**
+   * The terms acceptance record for an arbitrary account: the account owner
+   * or the governor only.
+   */
+  'get_terms_acceptance' : ActorMethod<[string], Result_10>,
   'grant_role' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
-    Result_4
+    Result_2
   >,
   'grant_role_scoped' : ActorMethod<
     [string, string, [] | [string], [] | [string], [] | [string]],
-    Result_4
+    Result_2
   >,
-  'my_roles' : ActorMethod<[], Result_10>,
-  'my_terms_acceptance' : ActorMethod<[], Result_12>,
+  /**
+   * True when `principal` holds any non-expired Pro entitlement. Callable by
+   * any authenticated principal (boolean only, no entitlement detail leaked).
+   */
+  'is_pro' : ActorMethod<[Principal], Result_5>,
+  /**
+   * Every role grant held by the caller, across all clubs/teams.
+   */
+  'my_roles' : ActorMethod<[], Result_11>,
+  /**
+   * The caller's own terms acceptance record, or `None` when they have never
+   * accepted (used by the legal re-acceptance gate for Internet Identity
+   * users).
+   */
+  'my_terms_acceptance' : ActorMethod<[], Result_10>,
+  /**
+   * Caller-authenticated: redeems a signed attestation minted by the
+   * session-free IAP verification endpoint after it confirms an Apple
+   * receipt/transaction with the App Store. The endpoint has no Internet
+   * Identity session and cannot act as the caller, so instead of writing the
+   * entitlement itself it signs `{principal}|{product_id}|{transaction_id}|
+   * {expires_at_ms}|{source}` with the shared secret and returns that
+   * signature to the client; the client (already authenticated as `principal`
+   * via II) submits it here, where the signature over its *own* principal is
+   * verified before the entitlement is written. A different principal cannot
+   * replay the signature because it is bound to the principal that produced
+   * it (changing the principal changes the signed message).
+   */
+  'redeem_entitlement' : ActorMethod<
+    [string, string, bigint, string, string],
+    Result_12
+  >,
   'register_account' : ActorMethod<[], Result>,
+  /**
+   * Governor-only: revokes a verifier principal.
+   */
+  'remove_verifier' : ActorMethod<[Principal], Result_2>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
-  'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_4>,
+  /**
+   * Governor-only: sets (or rotates) the shared HMAC secret used to verify
+   * `redeem_entitlement` attestations. Must match the secret held by the
+   * session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
+   */
+  'set_attestation_secret' : ActorMethod<[Uint8Array], Result_2>,
+  /**
+   * Governor- or verifier-only: records a Pro entitlement for an arbitrary
+   * principal. Used by a trusted server-side writer; client-submitted IAP
+   * receipts instead go through `redeem_entitlement` below.
+   */
+  'set_entitlement' : ActorMethod<
+    [Principal, string, string, bigint, string],
+    Result_12
+  >,
+  'set_exclusion' : ActorMethod<[string, string, [] | [string]], Result_2>,
   'set_exclusion_scoped' : ActorMethod<
     [string, [] | [string], string, [] | [string]],
-    Result_4
+    Result_2
   >,
-  'set_family' : ActorMethod<[string, string], Result_4>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_7>,
+  'set_family' : ActorMethod<[string, string], Result_2>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_13>,
+  /**
+   * Sets (or replaces) the caller's profile. The account must already exist —
+   * sign-in provisioning calls register_account first.
+   */
   'set_profile' : ActorMethod<[string, [] | [string]], Result_9>,
-  'set_terms_acceptance' : ActorMethod<[number], Result_11>,
+  /**
+   * Sets (records) the caller's acceptance of the current terms/privacy
+   * version. Monotonic per-account: a version lower than (or equal to) the
+   * caller's currently recorded version is rejected, so a stale client can
+   * never roll the recorded acceptance backwards.
+   */
+  'set_terms_acceptance' : ActorMethod<[number], Result_14>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

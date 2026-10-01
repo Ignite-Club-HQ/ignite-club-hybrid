@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIcpEntitlements } from "@/hooks/useIcpProAccess";
 
 /**
  * Returns whether the current user has active Pro (or Pro Football) access
@@ -23,10 +25,12 @@ import { useAuth } from "@/hooks/useAuth";
 // left as-is (no behavior change) until that's decided.
 export function useUserHasAnyClubPro() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
+  const icp = useIcpEntitlements({ enabled: isIcp });
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["user-has-any-club-pro", user?.id],
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isIcp,
     staleTime: 60_000,
     // React Query default retry (3x with exponential backoff) covers
     // transient network / RLS blips.
@@ -73,6 +77,15 @@ export function useUserHasAnyClubPro() {
   // existing `!isLoading && !hasAnyClubPro` gates continue to fail closed
   // during errors — the user won't see a definitive Free banner while the
   // entitlement is truly unknown.
+  if (isIcp) {
+    return {
+      hasAnyClubPro: icp.isPro,
+      isLoading: icp.isLoading,
+      isError: icp.isError,
+      error: null,
+    };
+  }
+
   const isUnknown = isLoading || isError;
 
   return {

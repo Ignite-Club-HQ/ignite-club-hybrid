@@ -58,25 +58,26 @@ export interface Account {
 }
 export type Result_2 = {
     __kind__: "Ok";
-    Ok: LinkChallenge;
+    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type Result_12 = {
+export type Result_13 = {
     __kind__: "Ok";
-    Ok: TermsAcceptance | null;
+    Ok: PrivacyConsent;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type Result_6 = {
-    __kind__: "Ok";
-    Ok: Array<ExternalSiteBinding>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
+export interface Entitlement {
+    transaction_id: string;
+    principal: Principal;
+    product_id: string;
+    source: string;
+    granted_at_ms: bigint;
+    expires_at_ms: bigint;
+}
 export interface LinkChallenge {
     id: bigint;
     account_id: string;
@@ -113,66 +114,34 @@ export interface TermsAcceptance {
     terms_version: number;
     accepted_at_ms: bigint;
 }
-export interface FamilyLink {
-    account_id: string;
-    child_id: string;
-}
-export type Result_4 = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export type Result_5 = {
-    __kind__: "Ok";
-    Ok: ExternalSiteBinding;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_9 = {
-    __kind__: "Ok";
-    Ok: Profile;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result = {
-    __kind__: "Ok";
-    Ok: Account;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_3 = {
-    __kind__: "Ok";
-    Ok: State;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface Access {
-    account_id: string;
-    app_admin: boolean;
-    club_admin: boolean;
-    guardian: boolean;
-    team_member: boolean;
-}
-export type Result_10 = {
-    __kind__: "Ok";
-    Ok: Array<RoleGrant>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_8 = {
     __kind__: "Ok";
     Ok: boolean;
 } | {
     __kind__: "Err";
     Err: string;
 };
+export type Result_11 = {
+    __kind__: "Ok";
+    Ok: Array<RoleGrant>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_4 = {
+    __kind__: "Ok";
+    Ok: ExternalSiteBinding;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface RoleGrant {
+    account_id: string;
+    club?: string;
+    role: string;
+    team?: string;
+    site_id?: string;
+}
 export interface Exclusion {
     account_id: string;
     club: string;
@@ -181,12 +150,12 @@ export interface Exclusion {
 }
 export type Result_7 = {
     __kind__: "Ok";
-    Ok: PrivacyConsent;
+    Ok: Array<ExternalSiteBinding>;
 } | {
     __kind__: "Err";
     Err: string;
 };
-export type Result_11 = {
+export type Result_14 = {
     __kind__: "Ok";
     Ok: TermsAcceptance;
 } | {
@@ -199,55 +168,143 @@ export interface ExternalSiteBinding {
     linked_at_ns: bigint;
     site_id: string;
 }
-export interface RoleGrant {
-    account_id: string;
-    club?: string;
-    role: string;
-    team?: string;
-    site_id?: string;
-}
 export interface State {
     privacy_consents: Array<PrivacyConsent>;
     schema: number;
+    /**
+     * Principals (in addition to the governor) allowed to call
+     * `set_entitlement` directly — e.g. a server-side receipt verifier
+     * identity. Empty by default; only the governor can grow this list.
+     */
+    verifiers: Array<Principal>;
+    /**
+     * Shared HMAC secret used to verify `redeem_entitlement` attestations
+     * minted by the session-free IAP verification endpoint. Empty until the
+     * governor calls `set_attestation_secret`; redemption is rejected while
+     * empty.
+     */
+    attestation_secret: Uint8Array;
     accounts: Array<Account>;
     governor: Principal;
     exclusions: Array<Exclusion>;
     external_bindings: Array<ExternalSiteBinding>;
+    /**
+     * Pro entitlements granted via IAP receipt verification or governor/
+     * verifier writes (schema 4+); empty on older blobs via serde default.
+     */
+    entitlements: Array<Entitlement>;
     families: Array<FamilyLink>;
     challenges: Array<LinkChallenge>;
+    /**
+     * One profile per account. `#[serde(default)]` keeps schema-1 stable
+     * blobs (written before profiles existed) decodable; post_upgrade bumps
+     * the schema marker once decoded.
+     */
     profiles: Array<Profile>;
     roles: Array<RoleGrant>;
+    /**
+     * Per-account terms/privacy re-acceptance records (schema 3+); empty
+     * on schema-2 blobs via serde default, decoded then bumped in
+     * post_upgrade. Wiped by erase_account.
+     */
     terms_acceptances: Array<TermsAcceptance>;
     next_challenge: bigint;
 }
+export type Result_6 = {
+    __kind__: "Ok";
+    Ok: State;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_12 = {
+    __kind__: "Ok";
+    Ok: Entitlement;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_9 = {
+    __kind__: "Ok";
+    Ok: Profile;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface FamilyLink {
+    account_id: string;
+    child_id: string;
+}
+export type Result = {
+    __kind__: "Ok";
+    Ok: Account;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_10 = {
+    __kind__: "Ok";
+    Ok: TermsAcceptance | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Access {
+    account_id: string;
+    app_admin: boolean;
+    club_admin: boolean;
+    guardian: boolean;
+    team_member: boolean;
+}
+export type Result_3 = {
+    __kind__: "Ok";
+    Ok: LinkChallenge;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_8 = {
+    __kind__: "Ok";
+    Ok: Array<Entitlement>;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface identity_accessInterface {
     accept_link(arg0: bigint): Promise<Result>;
     access(arg0: string | null, arg1: string | null, arg2: string | null): Promise<Result_1>;
     access_scoped(arg0: string | null, arg1: string | null, arg2: string | null, arg3: string | null): Promise<Result_1>;
-    begin_link(arg0: Principal): Promise<Result_2>;
-    bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_5>;
-    check_field_access(arg0: string, arg1: string): Promise<Result_8>;
-    erase_account(arg0: string): Promise<Result_4>;
-    export_state(): Promise<Result_3>;
-    get_external_bindings(arg0: string): Promise<Result_6>;
-    get_privacy_consent(arg0: string, arg1: string): Promise<Result_8>;
+    add_verifier(arg0: Principal): Promise<Result_2>;
+    begin_link(arg0: Principal): Promise<Result_3>;
+    bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_4>;
+    check_field_access(arg0: string, arg1: string): Promise<Result_5>;
+    erase_account(arg0: string): Promise<Result_2>;
+    export_state(): Promise<Result_6>;
+    get_external_bindings(arg0: string): Promise<Result_7>;
+    get_my_entitlements(): Promise<Result_8>;
+    get_privacy_consent(arg0: string, arg1: string): Promise<Result_5>;
     get_profile(): Promise<Result_9>;
-    get_terms_acceptance(arg0: string): Promise<Result_12>;
-    grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_4>;
-    grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_4>;
-    my_roles(): Promise<Result_10>;
-    my_terms_acceptance(): Promise<Result_12>;
+    get_terms_acceptance(arg0: string): Promise<Result_10>;
+    grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
+    grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
+    is_pro(arg0: Principal): Promise<Result_5>;
+    my_roles(): Promise<Result_11>;
+    my_terms_acceptance(): Promise<Result_10>;
+    redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
     register_account(): Promise<Result>;
+    remove_verifier(arg0: Principal): Promise<Result_2>;
     revoke(arg0: Principal, arg1: bigint): Promise<Result>;
-    set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_4>;
-    set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_4>;
-    set_family(arg0: string, arg1: string): Promise<Result_4>;
-    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_7>;
+    set_attestation_secret(arg0: Uint8Array): Promise<Result_2>;
+    set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12>;
+    set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2>;
+    set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_2>;
+    set_family(arg0: string, arg1: string): Promise<Result_2>;
+    set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_13>;
     set_profile(arg0: string, arg1: string | null): Promise<Result_9>;
-    set_terms_acceptance(arg0: number): Promise<Result_11>;
+    set_terms_acceptance(arg0: number): Promise<Result_14>;
     whoami(): Promise<Result>;
 }
-import type { Access as _Access, Account as _Account, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
+import type { Access as _Access, Account as _Account, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
 export class Identity_access implements identity_accessInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_link(arg0: bigint): Promise<Result> {
@@ -262,89 +319,117 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.access_scoped(to_candid_opt_n3(arg0), to_candid_opt_n3(arg1), to_candid_opt_n3(arg2), to_candid_opt_n3(arg3));
         return from_candid_Result_1_n4(result);
     }
-    async begin_link(arg0: Principal): Promise<Result_2> {
-        const result = await this.actor.begin_link(arg0);
+    async add_verifier(arg0: Principal): Promise<Result_2> {
+        const result = await this.actor.add_verifier(arg0);
         return from_candid_Result_2_n6(result);
     }
-    async bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_5> {
+    async begin_link(arg0: Principal): Promise<Result_3> {
+        const result = await this.actor.begin_link(arg0);
+        return from_candid_Result_3_n8(result);
+    }
+    async bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_4> {
         const result = await this.actor.bind_external_site(arg0, arg1, arg2);
-        return from_candid_Result_5_n8(result);
+        return from_candid_Result_4_n10(result);
     }
-    async check_field_access(arg0: string, arg1: string): Promise<Result_8> {
+    async check_field_access(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.check_field_access(arg0, arg1);
-        return from_candid_Result_8_n10(result);
+        return from_candid_Result_5_n12(result);
     }
-    async erase_account(arg0: string): Promise<Result_4> {
+    async erase_account(arg0: string): Promise<Result_2> {
         const result = await this.actor.erase_account(arg0);
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async export_state(): Promise<Result_3> {
+    async export_state(): Promise<Result_6> {
         const result = await this.actor.export_state();
-        return from_candid_Result_3_n14(result);
+        return from_candid_Result_6_n14(result);
     }
-    async get_external_bindings(arg0: string): Promise<Result_6> {
+    async get_external_bindings(arg0: string): Promise<Result_7> {
         const result = await this.actor.get_external_bindings(arg0);
-        return from_candid_Result_6_n28(result);
+        return from_candid_Result_7_n28(result);
     }
-    async get_privacy_consent(arg0: string, arg1: string): Promise<Result_8> {
+    async get_my_entitlements(): Promise<Result_8> {
+        const result = await this.actor.get_my_entitlements();
+        return from_candid_Result_8_n30(result);
+    }
+    async get_privacy_consent(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.get_privacy_consent(arg0, arg1);
-        return from_candid_Result_8_n10(result);
+        return from_candid_Result_5_n12(result);
     }
     async get_profile(): Promise<Result_9> {
         const result = await this.actor.get_profile();
-        return from_candid_Result_9_n30(result);
+        return from_candid_Result_9_n32(result);
     }
-    async get_terms_acceptance(arg0: string): Promise<Result_12> {
+    async get_terms_acceptance(arg0: string): Promise<Result_10> {
         const result = await this.actor.get_terms_acceptance(arg0);
-        return from_candid_Result_12_n32(result);
+        return from_candid_Result_10_n34(result);
     }
-    async grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_4> {
+    async grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2> {
         const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3));
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_4> {
+    async grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2> {
         const result = await this.actor.grant_role_scoped(arg0, arg1, to_candid_opt_n3(arg2), to_candid_opt_n3(arg3), to_candid_opt_n3(arg4));
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async my_roles(): Promise<Result_10> {
+    async is_pro(arg0: Principal): Promise<Result_5> {
+        const result = await this.actor.is_pro(arg0);
+        return from_candid_Result_5_n12(result);
+    }
+    async my_roles(): Promise<Result_11> {
         const result = await this.actor.my_roles();
-        return from_candid_Result_10_n35(result);
+        return from_candid_Result_11_n37(result);
     }
-    async my_terms_acceptance(): Promise<Result_12> {
+    async my_terms_acceptance(): Promise<Result_10> {
         const result = await this.actor.my_terms_acceptance();
-        return from_candid_Result_12_n32(result);
+        return from_candid_Result_10_n34(result);
+    }
+    async redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12> {
+        const result = await this.actor.redeem_entitlement(arg0, arg1, arg2, arg3, arg4);
+        return from_candid_Result_12_n39(result);
     }
     async register_account(): Promise<Result> {
         const result = await this.actor.register_account();
         return from_candid_Result_n1(result);
     }
+    async remove_verifier(arg0: Principal): Promise<Result_2> {
+        const result = await this.actor.remove_verifier(arg0);
+        return from_candid_Result_2_n6(result);
+    }
     async revoke(arg0: Principal, arg1: bigint): Promise<Result> {
         const result = await this.actor.revoke(arg0, arg1);
         return from_candid_Result_n1(result);
     }
-    async set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_4> {
+    async set_attestation_secret(arg0: Uint8Array): Promise<Result_2> {
+        const result = await this.actor.set_attestation_secret(arg0);
+        return from_candid_Result_2_n6(result);
+    }
+    async set_entitlement(arg0: Principal, arg1: string, arg2: string, arg3: bigint, arg4: string): Promise<Result_12> {
+        const result = await this.actor.set_entitlement(arg0, arg1, arg2, arg3, arg4);
+        return from_candid_Result_12_n39(result);
+    }
+    async set_exclusion(arg0: string, arg1: string, arg2: string | null): Promise<Result_2> {
         const result = await this.actor.set_exclusion(arg0, arg1, to_candid_opt_n3(arg2));
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_4> {
+    async set_exclusion_scoped(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<Result_2> {
         const result = await this.actor.set_exclusion_scoped(arg0, to_candid_opt_n3(arg1), arg2, to_candid_opt_n3(arg3));
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async set_family(arg0: string, arg1: string): Promise<Result_4> {
+    async set_family(arg0: string, arg1: string): Promise<Result_2> {
         const result = await this.actor.set_family(arg0, arg1);
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_2_n6(result);
     }
-    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_7> {
+    async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_13> {
         const result = await this.actor.set_privacy_consent(arg0, arg1, arg2);
-        return from_candid_Result_7_n37(result);
+        return from_candid_Result_13_n41(result);
     }
     async set_profile(arg0: string, arg1: string | null): Promise<Result_9> {
         const result = await this.actor.set_profile(arg0, to_candid_opt_n3(arg1));
-        return from_candid_Result_9_n30(result);
+        return from_candid_Result_9_n32(result);
     }
-    async set_terms_acceptance(arg0: number): Promise<Result_11> {
+    async set_terms_acceptance(arg0: number): Promise<Result_14> {
         const result = await this.actor.set_terms_acceptance(arg0);
-        return from_candid_Result_11_n39(result);
+        return from_candid_Result_14_n43(result);
     }
     async whoami(): Promise<Result> {
         const result = await this.actor.whoami();
@@ -357,14 +442,20 @@ function from_candid_Exclusion_n19(value: _Exclusion): Exclusion {
 function from_candid_Profile_n23(value: _Profile): Profile {
     return from_candid_record_n24(value);
 }
-function from_candid_Result_10_n35(value: _Result_10): Result_10 {
-    return from_candid_variant_n36(value);
+function from_candid_Result_10_n34(value: _Result_10): Result_10 {
+    return from_candid_variant_n35(value);
 }
-function from_candid_Result_11_n39(value: _Result_11): Result_11 {
+function from_candid_Result_11_n37(value: _Result_11): Result_11 {
+    return from_candid_variant_n38(value);
+}
+function from_candid_Result_12_n39(value: _Result_12): Result_12 {
     return from_candid_variant_n40(value);
 }
-function from_candid_Result_12_n32(value: _Result_12): Result_12 {
-    return from_candid_variant_n33(value);
+function from_candid_Result_13_n41(value: _Result_13): Result_13 {
+    return from_candid_variant_n42(value);
+}
+function from_candid_Result_14_n43(value: _Result_14): Result_14 {
+    return from_candid_variant_n44(value);
 }
 function from_candid_Result_1_n4(value: _Result_1): Result_1 {
     return from_candid_variant_n5(value);
@@ -372,26 +463,26 @@ function from_candid_Result_1_n4(value: _Result_1): Result_1 {
 function from_candid_Result_2_n6(value: _Result_2): Result_2 {
     return from_candid_variant_n7(value);
 }
-function from_candid_Result_3_n14(value: _Result_3): Result_3 {
-    return from_candid_variant_n15(value);
-}
-function from_candid_Result_4_n12(value: _Result_4): Result_4 {
-    return from_candid_variant_n13(value);
-}
-function from_candid_Result_5_n8(value: _Result_5): Result_5 {
+function from_candid_Result_3_n8(value: _Result_3): Result_3 {
     return from_candid_variant_n9(value);
 }
-function from_candid_Result_6_n28(value: _Result_6): Result_6 {
-    return from_candid_variant_n29(value);
-}
-function from_candid_Result_7_n37(value: _Result_7): Result_7 {
-    return from_candid_variant_n38(value);
-}
-function from_candid_Result_8_n10(value: _Result_8): Result_8 {
+function from_candid_Result_4_n10(value: _Result_4): Result_4 {
     return from_candid_variant_n11(value);
 }
-function from_candid_Result_9_n30(value: _Result_9): Result_9 {
+function from_candid_Result_5_n12(value: _Result_5): Result_5 {
+    return from_candid_variant_n13(value);
+}
+function from_candid_Result_6_n14(value: _Result_6): Result_6 {
+    return from_candid_variant_n15(value);
+}
+function from_candid_Result_7_n28(value: _Result_7): Result_7 {
+    return from_candid_variant_n29(value);
+}
+function from_candid_Result_8_n30(value: _Result_8): Result_8 {
     return from_candid_variant_n31(value);
+}
+function from_candid_Result_9_n32(value: _Result_9): Result_9 {
+    return from_candid_variant_n33(value);
 }
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
@@ -405,16 +496,19 @@ function from_candid_State_n16(value: _State): State {
 function from_candid_opt_n21(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n34(value: [] | [_TermsAcceptance]): TermsAcceptance | null {
+function from_candid_opt_n36(value: [] | [_TermsAcceptance]): TermsAcceptance | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n17(value: {
     privacy_consents: Array<_PrivacyConsent>;
     schema: number;
+    verifiers: Array<Principal>;
+    attestation_secret: Uint8Array;
     accounts: Array<_Account>;
     governor: Principal;
     exclusions: Array<_Exclusion>;
     external_bindings: Array<_ExternalSiteBinding>;
+    entitlements: Array<_Entitlement>;
     families: Array<_FamilyLink>;
     challenges: Array<_LinkChallenge>;
     profiles: Array<_Profile>;
@@ -424,10 +518,13 @@ function from_candid_record_n17(value: {
 }): {
     privacy_consents: Array<PrivacyConsent>;
     schema: number;
+    verifiers: Array<Principal>;
+    attestation_secret: Uint8Array;
     accounts: Array<Account>;
     governor: Principal;
     exclusions: Array<Exclusion>;
     external_bindings: Array<ExternalSiteBinding>;
+    entitlements: Array<Entitlement>;
     families: Array<FamilyLink>;
     challenges: Array<LinkChallenge>;
     profiles: Array<Profile>;
@@ -438,10 +535,13 @@ function from_candid_record_n17(value: {
     return {
         privacy_consents: value.privacy_consents,
         schema: value.schema,
+        verifiers: value.verifiers,
+        attestation_secret: value.attestation_secret,
         accounts: value.accounts,
         governor: value.governor,
         exclusions: from_candid_vec_n18(value.exclusions),
         external_bindings: value.external_bindings,
+        entitlements: value.entitlements,
         families: value.families,
         challenges: value.challenges,
         profiles: from_candid_vec_n22(value.profiles),
@@ -508,12 +608,12 @@ function from_candid_record_n27(value: {
     };
 }
 function from_candid_variant_n11(value: {
-    Ok: boolean;
+    Ok: _ExternalSiteBinding;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: boolean;
+    Ok: ExternalSiteBinding;
 } | {
     __kind__: "Err";
     Err: string;
@@ -527,12 +627,12 @@ function from_candid_variant_n11(value: {
     } : value;
 }
 function from_candid_variant_n13(value: {
-    Ok: null;
+    Ok: boolean;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: null;
+    Ok: boolean;
 } | {
     __kind__: "Err";
     Err: string;
@@ -603,6 +703,25 @@ function from_candid_variant_n29(value: {
     } : value;
 }
 function from_candid_variant_n31(value: {
+    Ok: Array<_Entitlement>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<Entitlement>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n33(value: {
     Ok: _Profile;
 } | {
     Err: string;
@@ -621,7 +740,7 @@ function from_candid_variant_n31(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n33(value: {
+function from_candid_variant_n35(value: {
     Ok: [] | [_TermsAcceptance];
 } | {
     Err: string;
@@ -634,13 +753,13 @@ function from_candid_variant_n33(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n34(value.Ok)
+        Ok: from_candid_opt_n36(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n38(value: {
     Ok: Array<_RoleGrant>;
 } | {
     Err: string;
@@ -659,7 +778,26 @@ function from_candid_variant_n36(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n38(value: {
+function from_candid_variant_n40(value: {
+    Ok: _Entitlement;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Entitlement;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n42(value: {
     Ok: _PrivacyConsent;
 } | {
     Err: string;
@@ -678,7 +816,7 @@ function from_candid_variant_n38(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n40(value: {
+function from_candid_variant_n44(value: {
     Ok: _TermsAcceptance;
 } | {
     Err: string;
@@ -717,12 +855,12 @@ function from_candid_variant_n5(value: {
     } : value;
 }
 function from_candid_variant_n7(value: {
-    Ok: _LinkChallenge;
+    Ok: null;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: LinkChallenge;
+    Ok: null;
 } | {
     __kind__: "Err";
     Err: string;
@@ -736,12 +874,12 @@ function from_candid_variant_n7(value: {
     } : value;
 }
 function from_candid_variant_n9(value: {
-    Ok: _ExternalSiteBinding;
+    Ok: _LinkChallenge;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: ExternalSiteBinding;
+    Ok: LinkChallenge;
 } | {
     __kind__: "Err";
     Err: string;

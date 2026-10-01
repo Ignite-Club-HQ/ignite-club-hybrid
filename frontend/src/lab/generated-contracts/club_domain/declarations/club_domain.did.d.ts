@@ -45,6 +45,15 @@ export interface Child {
   'teams' : Array<string>,
   'parent' : [] | [Principal],
 }
+export interface ClubJoinRequest {
+  'id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'user' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+  'decided_by' : [] | [Principal],
+}
 export interface ClubProfile {
   'id' : string,
   'secondary_color' : [] | [string],
@@ -58,12 +67,19 @@ export interface ClubProfile {
   'deleted_at_ms' : [] | [bigint],
 }
 export interface ClubSettings {
+  'invite_email_style' : [] | [string],
+  'theme_primary_color' : [] | [string],
   'events_sponsor_strip_enabled' : boolean,
+  'header_logo_enabled' : boolean,
   'chat_thread_ads_enabled' : boolean,
+  'theme_accent_color' : [] | [string],
   'contact_email' : [] | [string],
+  'club_switcher_hint' : [] | [string],
+  'header_club_name_enabled' : boolean,
   'membership_open' : boolean,
   'announcement' : [] | [string],
   'public_directory' : boolean,
+  'theme_secondary_color' : [] | [string],
   'media_header_sponsors_enabled' : boolean,
   'media_sponsors_enabled' : boolean,
   'club_id' : string,
@@ -98,6 +114,7 @@ export interface ClubTeam {
   'shell_contact_email' : [] | [string],
   'shell_claimed_by' : [] | [Principal],
   'club_id' : string,
+  'archived' : boolean,
   'age_group' : [] | [string],
   'deleted_at_ms' : [] | [bigint],
 }
@@ -118,6 +135,11 @@ export interface Draft {
 export interface Exclusion { 'club' : string, 'user' : Principal }
 export interface Family { 'account_id' : string, 'child_id' : string }
 export interface Guardian { 'child' : string, 'user' : Principal }
+export interface InvitePayload {
+  'to' : string,
+  'subject' : string,
+  'body' : string,
+}
 export interface Link {
   'id' : string,
   'sort_order' : number,
@@ -153,6 +175,19 @@ export interface ParentInvite {
   'invited_by' : Principal,
   'club_id' : string,
   'expires_at_ms' : bigint,
+}
+export interface PendingInvite {
+  'id' : string,
+  'status' : string,
+  'kind' : string,
+  'resent_at_ms' : [] | [bigint],
+  'role' : [] | [string],
+  'team_id' : [] | [string],
+  'email' : string,
+  'child_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
 }
 export interface Request {
   'request_id' : string,
@@ -192,6 +227,20 @@ export interface State {
   'next_challenge' : bigint,
 }
 export interface Team { 'id' : string, 'club' : string }
+export interface TeamCaptain { 'user' : Principal, 'team_id' : string }
+export interface TeamCreationRequest {
+  'id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'name' : string,
+  'division' : [] | [string],
+  'team_id' : [] | [string],
+  'requested_by' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+  'decided_by' : [] | [Principal],
+  'age_group' : [] | [string],
+}
 export interface TeamInvite {
   'id' : string,
   'revoked' : boolean,
@@ -203,6 +252,22 @@ export interface TeamInvite {
   'invited_by' : Principal,
   'club_id' : string,
   'expires_at_ms' : bigint,
+}
+export interface TeamInviteLink {
+  'id' : string,
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'rotated_at_ms' : [] | [bigint],
+  'team_id' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+}
+export interface TeamPlayerPosition {
+  'team_id' : string,
+  'member_id' : string,
+  'position' : string,
 }
 export interface _SERVICE {
   'accept_identity_link' : ActorMethod<
@@ -225,9 +290,34 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'add_team_captain' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'admin_link_child_to_parent' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'approve_club_join_request' : ActorMethod<
+    [string],
+    { 'Ok' : ClubJoinRequest } |
+      { 'Err' : string }
+  >,
   'approve_role_request' : ActorMethod<
     [string],
     { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'approve_team_creation_request' : ActorMethod<
+    [string],
+    { 'Ok' : TeamCreationRequest } |
+      { 'Err' : string }
+  >,
+  'archive_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
   'begin_identity_link' : ActorMethod<
@@ -235,9 +325,24 @@ export interface _SERVICE {
     { 'Ok' : Challenge } |
       { 'Err' : string }
   >,
+  'bulk_add_team_members' : ActorMethod<
+    [string, string, string, Array<Principal>],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'claim_shell_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'create_child_for_parent_on_team' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'create_club' : ActorMethod<
+    [string, string, string, [] | [string]],
+    { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
   'create_news_post' : ActorMethod<
@@ -250,6 +355,11 @@ export interface _SERVICE {
     { 'Ok' : ParentInvite } |
       { 'Err' : string }
   >,
+  'create_pending_invite' : ActorMethod<
+    [string, string, [] | [string], [] | [string], string, [] | [string]],
+    { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
+      { 'Err' : string }
+  >,
   'create_shell_team_invite' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     { 'Ok' : ClubTeam } |
@@ -258,6 +368,11 @@ export interface _SERVICE {
   'create_team_invite' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : TeamInvite } |
+      { 'Err' : string }
+  >,
+  'create_team_invite_link' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
   'delete_club_permanent' : ActorMethod<
@@ -308,6 +423,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_my_theme_preference' : ActorMethod<
+    [],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'get_parent_invite' : ActorMethod<
     [string],
     { 'Ok' : ParentInvite } |
@@ -333,6 +453,16 @@ export interface _SERVICE {
     { 'Ok' : TeamInvite } |
       { 'Err' : string }
   >,
+  'get_team_invite_link_by_token' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInviteLink } |
+      { 'Err' : string }
+  >,
+  'get_team_player_positions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamPlayerPosition> } |
+      { 'Err' : string }
+  >,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |
@@ -344,9 +474,19 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'link_guardian' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'list_children' : ActorMethod<
     [],
     { 'Ok' : Array<Child> } |
+      { 'Err' : string }
+  >,
+  'list_club_join_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubJoinRequest> } |
       { 'Err' : string }
   >,
   'list_clubs' : ActorMethod<
@@ -369,6 +509,11 @@ export interface _SERVICE {
     { 'Ok' : Array<NewsPost> } |
       { 'Err' : string }
   >,
+  'list_pending_invites_by_club' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PendingInvite> } |
+      { 'Err' : string }
+  >,
   'list_role_grants' : ActorMethod<
     [string],
     { 'Ok' : Array<AccountRole> } |
@@ -384,6 +529,16 @@ export interface _SERVICE {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_team_captains' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamCaptain> } |
+      { 'Err' : string }
+  >,
+  'list_team_creation_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamCreationRequest> } |
+      { 'Err' : string }
+  >,
   'list_team_invites' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : Array<TeamInvite> } |
@@ -394,10 +549,30 @@ export interface _SERVICE {
     { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
+  'move_child_to_team' : ActorMethod<
+    [string, [] | [string], string],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'move_member_to_team' : ActorMethod<
+    [string, Principal, [] | [string], string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
+  'reject_club_join_request' : ActorMethod<
+    [string],
+    { 'Ok' : ClubJoinRequest } |
+      { 'Err' : string }
+  >,
   'reject_role_request' : ActorMethod<
     [string],
     { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'reject_team_creation_request' : ActorMethod<
+    [string],
+    { 'Ok' : TeamCreationRequest } |
       { 'Err' : string }
   >,
   'remove_member' : ActorMethod<
@@ -410,14 +585,34 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_team_captain' : ActorMethod<
+    [string, string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'replace_acl' : ActorMethod<
     [bigint, Acl],
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'request_club_join' : ActorMethod<
+    [string],
+    { 'Ok' : ClubJoinRequest } |
+      { 'Err' : string }
+  >,
   'request_role' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : RoleRequest } |
+      { 'Err' : string }
+  >,
+  'request_team_creation' : ActorMethod<
+    [string, string, [] | [string], [] | [string]],
+    { 'Ok' : TeamCreationRequest } |
+      { 'Err' : string }
+  >,
+  'resend_pending_invite' : ActorMethod<
+    [string],
+    { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
       { 'Err' : string }
   >,
   'restore_club' : ActorMethod<
@@ -435,9 +630,24 @@ export interface _SERVICE {
     { 'Ok' : Account } |
       { 'Err' : string }
   >,
+  'revoke_pending_invite' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'revoke_team_invite' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'revoke_team_invite_link' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'rotate_team_invite_link' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
   'save_club_profile' : ActorMethod<
@@ -460,6 +670,36 @@ export interface _SERVICE {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'set_club_header_toggles' : ActorMethod<
+    [string, boolean, boolean],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_invite_email_style' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_switcher_hint' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_theme_palette' : ActorMethod<
+    [string, [] | [string], [] | [string], [] | [string]],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_team_player_position' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_theme_preference' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'soft_delete_club' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubProfile } |
@@ -470,8 +710,18 @@ export interface _SERVICE {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'unarchive_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
   'unfreeze_club' : ActorMethod<
     [string, bigint],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'unlink_guardian' : ActorMethod<
+    [string, Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
