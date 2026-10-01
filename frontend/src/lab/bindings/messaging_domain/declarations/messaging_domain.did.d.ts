@@ -15,11 +15,28 @@ export interface Attachment {
   'kind' : string,
   'ref_id' : string,
 }
+export interface AttachmentMetadata {
+  'id' : string,
+  'url' : [] | [string],
+  'conversation_id' : string,
+  'kind' : string,
+  'size_bytes' : [] | [bigint],
+  'created_at_ms' : bigint,
+  'uploader' : Principal,
+  'message_id' : [] | [string],
+  'ref_id' : string,
+}
 export interface BroadcastResult {
   'skipped' : Array<string>,
   'delivered' : number,
 }
+export interface ClubDmSettings {
+  'attachments_disabled' : boolean,
+  'club_id' : string,
+  'dm_disabled' : boolean,
+}
 export interface ClubMembership { 'user' : Principal, 'club_id' : string }
+export interface ClubUnreadSummary { 'count' : bigint, 'club_id' : string }
 export interface CompetitionAdmin {
   'conversation_id' : string,
   'user' : Principal,
@@ -31,20 +48,47 @@ export interface Conversation {
   'next_sequence' : bigint,
   'club_id' : string,
 }
+export interface DmLink {
+  'a' : Principal,
+  'b' : Principal,
+  'conversation_id' : string,
+}
+export interface ForwardRecord {
+  'to_conversation_id' : string,
+  'original_sender' : Principal,
+  'message_id' : string,
+  'from_conversation_id' : string,
+  'from_message_id' : string,
+}
 export interface GroupMetadata {
+  'deleted' : boolean,
   'members' : Array<Principal>,
   'conversation_id' : string,
   'kind' : string,
   'name' : string,
   'team_id' : [] | [string],
+  'description' : [] | [string],
   'created_at_ms' : bigint,
   'club_id' : [] | [string],
+  'avatar' : [] | [string],
+}
+export interface GroupRole {
+  'conversation_id' : string,
+  'role' : string,
+  'user' : Principal,
+}
+export interface JoinRequest {
+  'status' : string,
+  'conversation_id' : string,
+  'user' : Principal,
+  'created_at_ms' : bigint,
 }
 export interface Message {
   'id' : string,
   'conversation_id' : string,
   'body' : string,
   'sender' : Principal,
+  'created_at_ms' : bigint,
   'edited_at_ms' : [] | [bigint],
   'attachment' : [] | [Attachment],
   'sequence' : bigint,
@@ -55,11 +99,52 @@ export interface MessagePage {
   'latest_sequence' : bigint,
   'next_sequence' : [] | [bigint],
 }
+export interface MessageWithReactions {
+  'message' : Message,
+  'reactions' : Array<ReactionSummary>,
+}
+export interface MutePreference {
+  'muted' : boolean,
+  'conversation_id' : string,
+  'user' : Principal,
+}
+export interface Poll {
+  'id' : string,
+  'closed' : boolean,
+  'creator' : Principal,
+  'question' : string,
+  'conversation_id' : string,
+  'created_at_ms' : bigint,
+  'message_id' : [] | [string],
+  'options' : Array<string>,
+}
+export interface PollResults {
+  'poll' : Poll,
+  'total_votes' : number,
+  'counts' : Uint32Array,
+}
+export interface PollVote {
+  'poll_id' : string,
+  'user' : Principal,
+  'option_index' : number,
+}
+export interface Reaction {
+  'user' : Principal,
+  'emoji' : string,
+  'message_id' : string,
+}
+export interface ReactionSummary { 'count' : number, 'emoji' : string }
 export interface Receipt {
   'conversation_id' : string,
   'read' : boolean,
   'user' : Principal,
   'message_id' : string,
+}
+export interface RecentConversation {
+  'last_message_sequence' : bigint,
+  'conversation_id' : string,
+  'kind' : string,
+  'last_message_at_ms' : [] | [bigint],
 }
 export interface RoleGrant {
   'role' : string,
@@ -67,16 +152,37 @@ export interface RoleGrant {
   'team_id' : [] | [string],
   'club_id' : [] | [string],
 }
+export interface ScheduledMessage {
+  'id' : string,
+  'replayed_message_id' : [] | [string],
+  'conversation_id' : string,
+  'body' : string,
+  'sender' : Principal,
+  'scheduled_at_ms' : bigint,
+  'replayed_at_ms' : [] | [bigint],
+}
 export interface State {
+  'forwardRecords' : Array<ForwardRecord>,
+  'joinRequests' : Array<JoinRequest>,
+  'scheduledMessages' : Array<ScheduledMessage>,
   'messages' : Array<Message>,
   'schema' : number,
+  'mutePreferences' : Array<MutePreference>,
   'dmAttachmentsDisabled' : Array<Principal>,
+  'clubDmSettings' : Array<ClubDmSettings>,
+  'groupRoles' : Array<GroupRole>,
   'unread' : Array<Unread>,
   'groupMetadata' : Array<GroupMetadata>,
   'clubMemberships' : Array<ClubMembership>,
+  'pollVotes' : Array<PollVote>,
   'governor' : Principal,
   'conversations' : Array<Conversation>,
+  'polls' : Array<Poll>,
+  'attachmentMetadata' : Array<AttachmentMetadata>,
+  'dmLinks' : Array<DmLink>,
+  'userMessagingSettings' : Array<UserMessagingSettings>,
   'receipts' : Array<Receipt>,
+  'reactions' : Array<Reaction>,
   'roles' : Array<RoleGrant>,
   'competitionAdmins' : Array<CompetitionAdmin>,
 }
@@ -91,9 +197,24 @@ export interface UnreadSummary {
   'kind' : string,
   'count' : bigint,
 }
+export interface UserMessagingSettings {
+  'ai_catchup_enabled' : boolean,
+  'user' : Principal,
+  'hide_message_preview' : boolean,
+}
 export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'add_group_members' : ActorMethod<
+    [string, Array<Principal>],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'approve_join_request' : ActorMethod<
+    [string, Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -103,9 +224,20 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'can_dm_user' : ActorMethod<[Principal], boolean>,
+  'close_poll' : ActorMethod<[string], { 'Ok' : Poll } | { 'Err' : string }>,
   'create_conversation' : ActorMethod<
     [string, [] | [string], Array<Principal>],
     { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
+  'create_group_with_roles' : ActorMethod<
+    [string, [] | [string], string, string, Array<[Principal, string]>],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'create_poll' : ActorMethod<
+    [string, [] | [string], string, Array<string>],
+    { 'Ok' : Poll } |
       { 'Err' : string }
   >,
   'delete_message' : ActorMethod<
@@ -115,11 +247,29 @@ export interface _SERVICE {
   >,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
+  'forward_message' : ActorMethod<
+    [string, string],
+    { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
+  'get_club_dm_settings' : ActorMethod<[string], ClubDmSettings>,
   'get_group_metadata' : ActorMethod<
     [string],
     { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
+  'get_mute_preference' : ActorMethod<[string], boolean>,
+  'get_or_create_dm' : ActorMethod<
+    [Principal],
+    { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
+  'get_poll_results' : ActorMethod<
+    [string],
+    { 'Ok' : PollResults } |
+      { 'Err' : string }
+  >,
+  'get_user_messaging_settings' : ActorMethod<[], UserMessagingSettings>,
   'grant_competition_admin' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -137,6 +287,11 @@ export interface _SERVICE {
     { 'Ok' : Array<Principal> } |
       { 'Err' : string }
   >,
+  'list_join_requests' : ActorMethod<
+    [string],
+    { 'Ok' : Array<JoinRequest> } |
+      { 'Err' : string }
+  >,
   'list_messages' : ActorMethod<[string, [] | [bigint]], Array<Message>>,
   'list_messages_page' : ActorMethod<
     [string, [] | [bigint], number],
@@ -148,9 +303,44 @@ export interface _SERVICE {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'messages_since' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : Array<MessageWithReactions> } |
+      { 'Err' : string }
+  >,
   'my_unread_counts' : ActorMethod<[], Array<UnreadSummary>>,
+  'recent_conversations' : ActorMethod<
+    [Principal, number],
+    { 'Ok' : Array<RecentConversation> } |
+      { 'Err' : string }
+  >,
+  'register_attachment_metadata' : ActorMethod<
+    [string, [] | [string], string, string, [] | [string], [] | [bigint]],
+    { 'Ok' : AttachmentMetadata } |
+      { 'Err' : string }
+  >,
+  'register_scheduled_message' : ActorMethod<
+    [string, string, bigint],
+    { 'Ok' : ScheduledMessage } |
+      { 'Err' : string }
+  >,
+  'reject_join_request' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'replay_scheduled_message' : ActorMethod<
+    [string],
+    { 'Ok' : ScheduledMessage } |
+      { 'Err' : string }
+  >,
+  'request_join_group' : ActorMethod<
+    [string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -159,14 +349,49 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'set_club_dm_settings' : ActorMethod<
+    [string, boolean, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_dm_attachments_disabled' : ActorMethod<
     [Principal, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_mute_preference' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_user_messaging_settings' : ActorMethod<
+    [boolean, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'soft_delete_group' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'toggle_reaction' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'unread_count' : ActorMethod<
     [string],
     { 'Ok' : Unread } |
+      { 'Err' : string }
+  >,
+  'unread_count_by_club' : ActorMethod<
+    [Principal],
+    { 'Ok' : Array<ClubUnreadSummary> } |
+      { 'Err' : string }
+  >,
+  'update_group' : ActorMethod<
+    [string, [] | [string], [] | [string], [] | [string]],
+    { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
   'update_message' : ActorMethod<
@@ -182,6 +407,11 @@ export interface _SERVICE {
   'upsert_group_metadata' : ActorMethod<
     [string, string, string, [] | [string], [] | [string], Array<Principal>],
     { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'vote_poll' : ActorMethod<
+    [string, number],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
 }

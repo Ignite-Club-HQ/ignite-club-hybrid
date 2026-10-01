@@ -9,9 +9,31 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const GroupMetadata = IDL.Record({
+    'deleted' : IDL.Bool,
+    'members' : IDL.Vec(IDL.Principal),
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Opt(IDL.Text),
+    'avatar' : IDL.Opt(IDL.Text),
+  });
   const BroadcastResult = IDL.Record({
     'skipped' : IDL.Vec(IDL.Text),
     'delivered' : IDL.Nat32,
+  });
+  const Poll = IDL.Record({
+    'id' : IDL.Text,
+    'closed' : IDL.Bool,
+    'creator' : IDL.Principal,
+    'question' : IDL.Text,
+    'conversation_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'message_id' : IDL.Opt(IDL.Text),
+    'options' : IDL.Vec(IDL.Text),
   });
   const Conversation = IDL.Record({
     'id' : IDL.Text,
@@ -30,10 +52,48 @@ export const idlFactory = ({ IDL }) => {
     'conversation_id' : IDL.Text,
     'body' : IDL.Text,
     'sender' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
     'edited_at_ms' : IDL.Opt(IDL.Nat64),
     'attachment' : IDL.Opt(Attachment),
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
+  });
+  const ForwardRecord = IDL.Record({
+    'to_conversation_id' : IDL.Text,
+    'original_sender' : IDL.Principal,
+    'message_id' : IDL.Text,
+    'from_conversation_id' : IDL.Text,
+    'from_message_id' : IDL.Text,
+  });
+  const JoinRequest = IDL.Record({
+    'status' : IDL.Text,
+    'conversation_id' : IDL.Text,
+    'user' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+  });
+  const ScheduledMessage = IDL.Record({
+    'id' : IDL.Text,
+    'replayed_message_id' : IDL.Opt(IDL.Text),
+    'conversation_id' : IDL.Text,
+    'body' : IDL.Text,
+    'sender' : IDL.Principal,
+    'scheduled_at_ms' : IDL.Nat64,
+    'replayed_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const MutePreference = IDL.Record({
+    'muted' : IDL.Bool,
+    'conversation_id' : IDL.Text,
+    'user' : IDL.Principal,
+  });
+  const ClubDmSettings = IDL.Record({
+    'attachments_disabled' : IDL.Bool,
+    'club_id' : IDL.Text,
+    'dm_disabled' : IDL.Bool,
+  });
+  const GroupRole = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'role' : IDL.Text,
+    'user' : IDL.Principal,
   });
   const Unread = IDL.Record({
     'conversation_id' : IDL.Text,
@@ -41,23 +101,45 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'last_read_sequence' : IDL.Nat64,
   });
-  const GroupMetadata = IDL.Record({
-    'members' : IDL.Vec(IDL.Principal),
-    'conversation_id' : IDL.Text,
-    'kind' : IDL.Text,
-    'name' : IDL.Text,
-    'team_id' : IDL.Opt(IDL.Text),
-    'created_at_ms' : IDL.Nat64,
-    'club_id' : IDL.Opt(IDL.Text),
-  });
   const ClubMembership = IDL.Record({
     'user' : IDL.Principal,
     'club_id' : IDL.Text,
+  });
+  const PollVote = IDL.Record({
+    'poll_id' : IDL.Text,
+    'user' : IDL.Principal,
+    'option_index' : IDL.Nat32,
+  });
+  const AttachmentMetadata = IDL.Record({
+    'id' : IDL.Text,
+    'url' : IDL.Opt(IDL.Text),
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'size_bytes' : IDL.Opt(IDL.Nat64),
+    'created_at_ms' : IDL.Nat64,
+    'uploader' : IDL.Principal,
+    'message_id' : IDL.Opt(IDL.Text),
+    'ref_id' : IDL.Text,
+  });
+  const DmLink = IDL.Record({
+    'a' : IDL.Principal,
+    'b' : IDL.Principal,
+    'conversation_id' : IDL.Text,
+  });
+  const UserMessagingSettings = IDL.Record({
+    'ai_catchup_enabled' : IDL.Bool,
+    'user' : IDL.Principal,
+    'hide_message_preview' : IDL.Bool,
   });
   const Receipt = IDL.Record({
     'conversation_id' : IDL.Text,
     'read' : IDL.Bool,
     'user' : IDL.Principal,
+    'message_id' : IDL.Text,
+  });
+  const Reaction = IDL.Record({
+    'user' : IDL.Principal,
+    'emoji' : IDL.Text,
     'message_id' : IDL.Text,
   });
   const RoleGrant = IDL.Record({
@@ -71,32 +153,77 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
   });
   const State = IDL.Record({
+    'forwardRecords' : IDL.Vec(ForwardRecord),
+    'joinRequests' : IDL.Vec(JoinRequest),
+    'scheduledMessages' : IDL.Vec(ScheduledMessage),
     'messages' : IDL.Vec(Message),
     'schema' : IDL.Nat32,
+    'mutePreferences' : IDL.Vec(MutePreference),
     'dmAttachmentsDisabled' : IDL.Vec(IDL.Principal),
+    'clubDmSettings' : IDL.Vec(ClubDmSettings),
+    'groupRoles' : IDL.Vec(GroupRole),
     'unread' : IDL.Vec(Unread),
     'groupMetadata' : IDL.Vec(GroupMetadata),
     'clubMemberships' : IDL.Vec(ClubMembership),
+    'pollVotes' : IDL.Vec(PollVote),
     'governor' : IDL.Principal,
     'conversations' : IDL.Vec(Conversation),
+    'polls' : IDL.Vec(Poll),
+    'attachmentMetadata' : IDL.Vec(AttachmentMetadata),
+    'dmLinks' : IDL.Vec(DmLink),
+    'userMessagingSettings' : IDL.Vec(UserMessagingSettings),
     'receipts' : IDL.Vec(Receipt),
+    'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
     'competitionAdmins' : IDL.Vec(CompetitionAdmin),
+  });
+  const PollResults = IDL.Record({
+    'poll' : Poll,
+    'total_votes' : IDL.Nat32,
+    'counts' : IDL.Vec(IDL.Nat32),
   });
   const MessagePage = IDL.Record({
     'messages' : IDL.Vec(Message),
     'latest_sequence' : IDL.Nat64,
     'next_sequence' : IDL.Opt(IDL.Nat64),
   });
+  const ReactionSummary = IDL.Record({
+    'count' : IDL.Nat32,
+    'emoji' : IDL.Text,
+  });
+  const MessageWithReactions = IDL.Record({
+    'message' : Message,
+    'reactions' : IDL.Vec(ReactionSummary),
+  });
   const UnreadSummary = IDL.Record({
     'conversation_id' : IDL.Text,
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
+  const RecentConversation = IDL.Record({
+    'last_message_sequence' : IDL.Nat64,
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'last_message_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const ClubUnreadSummary = IDL.Record({
+    'count' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
   
   return IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'add_group_members' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
+    'approve_join_request' : IDL.Func(
+        [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -106,9 +233,30 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'can_dm_user' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
+    'close_poll' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Poll, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_group_with_roles' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Tuple(IDL.Principal, IDL.Text)),
+        ],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_poll' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : Poll, 'Err' : IDL.Text })],
         [],
       ),
     'delete_message' : IDL.Func(
@@ -126,9 +274,31 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'forward_message' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_club_dm_settings' : IDL.Func([IDL.Text], [ClubDmSettings], ['query']),
     'get_group_metadata' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'get_or_create_dm' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_poll_results' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PollResults, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_user_messaging_settings' : IDL.Func(
+        [],
+        [UserMessagingSettings],
         ['query'],
       ),
     'grant_competition_admin' : IDL.Func(
@@ -152,6 +322,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_join_requests' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_messages' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Vec(Message)],
@@ -167,9 +342,56 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
         [],
       ),
+    'messages_since' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(MessageWithReactions),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], ['query']),
+    'recent_conversations' : IDL.Func(
+        [IDL.Principal, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RecentConversation), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'register_attachment_metadata' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat64),
+        ],
+        [IDL.Variant({ 'Ok' : AttachmentMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
+    'register_scheduled_message' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : ScheduledMessage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'reject_join_request' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'replay_scheduled_message' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ScheduledMessage, 'Err' : IDL.Text })],
+        [],
+      ),
+    'request_join_group' : IDL.Func(
+        [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -178,8 +400,33 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_dm_settings' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_dm_attachments_disabled' : IDL.Func(
         [IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_mute_preference' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_user_messaging_settings' : IDL.Func(
+        [IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'soft_delete_group' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'toggle_reaction' : IDL.Func(
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -187,6 +434,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Unread, 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'unread_count_by_club' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubUnreadSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'update_group' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
       ),
     'update_message' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -208,6 +465,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Vec(IDL.Principal),
         ],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
+    'vote_poll' : IDL.Func(
+        [IDL.Text, IDL.Nat32],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
   });
