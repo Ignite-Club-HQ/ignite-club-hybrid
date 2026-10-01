@@ -1185,6 +1185,7 @@ function ChatMessageInner({
                     : messageType === "broadcast"
                       ? "Broadcast"
                       : null,
+            messageId: id,
           }}
         />
         {/* Fullscreen image viewer triggered from action sheet */}

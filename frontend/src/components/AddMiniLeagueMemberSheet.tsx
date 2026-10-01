@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { addLivePlayer } from "@/live/features/miniLeagues";
+import { createLivePendingInvite } from "@/live/features/club";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -301,34 +303,33 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
 
       for (const player of validPlayers) {
         let childId = player.existingChildId;
-
-        if (!childId) {
-          // Pre-generate the id so we don't need to read the row back
-          // (reading back requires SELECT visibility on the new child,
-          // which an admin may not have until the league assignment exists)
-          const newChildId = crypto.randomUUID();
-          const { error: childError } = await supabase
-            .from("children")
-            .insert({
-              id: newChildId,
-              // Only attach parent_id if a real parent account exists. Otherwise
-              // leave NULL until the parent claims their invite — never fall back
-              // to the inviter, or the league admin becomes the legal parent.
-              parent_id: player.existingParentUserId || null,
-              name: player.name.trim(),
-            });
-
-          if (childError) {
-            console.error("Failed to create child:", player.name, childError);
-            throw new Error(`Couldn't add ${player.name}: ${childError.message}`);
-          }
-          childId = newChildId;
-        }
-
         const abilityRatingValue = player.abilityRating ? parseInt(player.abilityRating) : null;
 
-        const newPlayer = await withFeatureBackend("mini_leagues", {
+        const addedResult = await withFeatureBackend("mini_leagues", {
           supabase: async () => {
+            if (!childId) {
+              // Pre-generate the id so we don't need to read the row back
+              // (reading back requires SELECT visibility on the new child,
+              // which an admin may not have until the league assignment exists)
+              const newChildId = crypto.randomUUID();
+              const { error: childError } = await supabase
+                .from("children")
+                .insert({
+                  id: newChildId,
+                  // Only attach parent_id if a real parent account exists. Otherwise
+                  // leave NULL until the parent claims their invite — never fall back
+                  // to the inviter, or the league admin becomes the legal parent.
+                  parent_id: player.existingParentUserId || null,
+                  name: player.name.trim(),
+                });
+
+              if (childError) {
+                console.error("Failed to create child:", player.name, childError);
+                throw new Error(`Couldn't add ${player.name}: ${childError.message}`);
+              }
+              childId = newChildId;
+            }
+
             const { error: assignmentError } = await supabase
               .from("child_mini_league_assignments")
               .insert({
@@ -342,7 +343,7 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
               throw new Error(`Couldn't assign ${player.name}: ${assignmentError.message}`);
             }
 
-            const { data, error: playerError } = await supabase
+            const { data: newPlayer, error: playerError } = await supabase
               .from("mini_league_players")
               .insert({
                 mini_league_id: miniLeagueId,
@@ -357,85 +358,104 @@ export function AddMiniLeagueMemberSheet({ miniLeagueId, miniLeagueName, clubId,
             if (playerError) {
               console.warn("Failed to create legacy player record:", player.name, playerError);
             }
-            return data;
-          },
-          // Gated: this bulk-add flow also creates the Supabase-only `children`
-          // row above and relies on child_mini_league_assignments mirroring —
-          // neither has a canister equivalent, so adding players this way is
-          // disabled under ICP routing rather than partially writing to the
-          // canister.
-          icp: async () => {
-            throw new Error("Adding players isn't available yet on this backend.");
-          },
-        });
 
-        let sent = false;
+            let sent = false;
+            if (player.parentEmail.trim() && !player.existingParentUserId) {
+              const inviteToken = crypto.randomUUID();
+              const inviteMetadata: Json = {
+                mini_league_id: miniLeagueId,
+                child_id: childId,
+                player_id: newPlayer?.id,
+                player_name: player.name.trim(),
+                children: [{ name: player.name.trim(), yearOfBirth: null }],
+              };
+              const invitePayload: Database["public"]["Tables"]["pending_invites"]["Insert"] = {
+                club_id: clubId,
+                role: "parent",
+                invited_user_id: null,
+                invited_by_user_id: user!.id,
+                invited_label: player.parentName.trim() || player.parentEmail.trim(),
+                invited_email: player.parentEmail.trim().toLowerCase(),
+                invite_token: inviteToken,
+                metadata: inviteMetadata,
+              };
+              const { error: inviteError } = await supabase.from("pending_invites").insert(invitePayload);
 
-        if (player.parentEmail.trim() && !player.existingParentUserId) {
-          const inviteToken = crypto.randomUUID();
-          const inviteMetadata: Json = {
-            mini_league_id: miniLeagueId,
-            child_id: childId,
-            player_id: newPlayer?.id,
-            player_name: player.name.trim(),
-            children: [{ name: player.name.trim(), yearOfBirth: null }],
-          };
-          const invitePayload: Database["public"]["Tables"]["pending_invites"]["Insert"] = {
-            club_id: clubId,
-            role: "parent",
-            invited_user_id: null,
-            invited_by_user_id: user!.id,
-            invited_label: player.parentName.trim() || player.parentEmail.trim(),
-            invited_email: player.parentEmail.trim().toLowerCase(),
-            invite_token: inviteToken,
-            metadata: inviteMetadata,
-          };
-          const { error: inviteError } = await supabase.from("pending_invites").insert(invitePayload);
+              if (!inviteError) {
+                try {
+                  const link = `${window.location.origin}/join/p/${inviteToken}`;
+                  const { data: emailResult, error: funcError } = await supabase.functions.invoke("send-email", {
+                    body: {
+                      to: player.parentEmail.trim(),
+                      subject: `You're invited to ${miniLeagueName}`,
+                      template: "team-invite",
+                      senderName: clubBranding?.name || undefined,
+                      replyTo: clubBranding?.contact_email || undefined,
+                      templateData: {
+                        recipientName: player.parentName.trim() || player.parentEmail.trim(),
+                        teamName: miniLeagueName,
+                        clubName: clubBranding?.name || "The Club",
+                        roleName: "Parent",
+                        inviteLink: link,
+                        clubLogoUrl: clubBranding?.logo_url || undefined,
+                        childrenNames: [player.name.trim()],
+                        isMiniLeague: true,
+                      },
+                    },
+                  });
 
-          if (!inviteError) {
-            try {
-              const link = `${window.location.origin}/join/p/${inviteToken}`;
-              const { data: emailResult, error: funcError } = await supabase.functions.invoke("send-email", {
-                body: {
-                  to: player.parentEmail.trim(),
-                  subject: `You're invited to ${miniLeagueName}`,
-                  template: "team-invite",
-                  senderName: clubBranding?.name || undefined,
-                  replyTo: clubBranding?.contact_email || undefined,
-                  templateData: {
-                    recipientName: player.parentName.trim() || player.parentEmail.trim(),
-                    teamName: miniLeagueName,
-                    clubName: clubBranding?.name || "The Club",
-                    roleName: "Parent",
-                    inviteLink: link,
-                    clubLogoUrl: clubBranding?.logo_url || undefined,
-                    childrenNames: [player.name.trim()],
-                    isMiniLeague: true,
-                  },
-                },
-              });
+                  sent = !funcError && emailResult?.verified && emailResult?.success;
 
-              sent = !funcError && emailResult?.verified && emailResult?.success;
-
-              await supabase
-                .from("pending_invites")
-                .update({
-                  email_sent_at: sent ? new Date().toISOString() : null,
-                  email_id: emailResult?.emailId || null,
-                  email_error: funcError?.message || (!sent ? "Email not verified" : null),
-                } satisfies Database["public"]["Tables"]["pending_invites"]["Update"])
-                .eq("invite_token", inviteToken);
-            } catch (error) {
-              console.error("Failed to send email:", error);
+                  await supabase
+                    .from("pending_invites")
+                    .update({
+                      email_sent_at: sent ? new Date().toISOString() : null,
+                      email_id: emailResult?.emailId || null,
+                      email_error: funcError?.message || (!sent ? "Email not verified" : null),
+                    } satisfies Database["public"]["Tables"]["pending_invites"]["Update"])
+                    .eq("invite_token", inviteToken);
+                } catch (error) {
+                  console.error("Failed to send email:", error);
+                }
+              }
             }
-          }
-        }
 
-        addedResults.push({
-          playerName: player.name.trim(),
-          parentEmail: player.parentEmail.trim(),
-          sent,
+            return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent };
+          },
+          // Mini league players live entirely on the mini_league_domain
+          // canister under ICP — no Supabase `children` row or
+          // child_mini_league_assignments mirror is created. Invites go
+          // through club_domain's pending-invite record; there is no
+          // canister email-delivery channel, so `sent` is always false and
+          // the invite link must be shared manually.
+          icp: async (ctx) => {
+            await addLivePlayer(
+              ctx,
+              miniLeagueId,
+              player.name.trim(),
+              null,
+              player.existingParentUserId || null,
+              abilityRatingValue,
+              null,
+            );
+
+            if (player.parentEmail.trim() && !player.existingParentUserId) {
+              await createLivePendingInvite(
+                ctx,
+                clubId,
+                player.parentEmail.trim().toLowerCase(),
+                null,
+                "parent",
+                player.parentName.trim() || player.parentEmail.trim(),
+                `mini_league_id:${miniLeagueId}`,
+              );
+            }
+
+            return { playerName: player.name.trim(), parentEmail: player.parentEmail.trim(), sent: false };
+          },
         });
+
+        addedResults.push(addedResult);
       }
 
       return addedResults;
