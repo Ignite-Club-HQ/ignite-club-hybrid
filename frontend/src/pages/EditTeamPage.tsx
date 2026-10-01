@@ -303,6 +303,12 @@ export default function EditTeamPage() {
             shell_contact_email: [],
             shell_claimed_by: [],
             deleted_at_ms: [],
+            // PlayHQ link fields are managed by PlayHQTeamLinkCard —
+            // round-trip the existing values so a profile-only save keeps
+            // the link intact.
+            playhq_team_id: team!.playhq_team_id,
+            playhq_competition_id: team!.playhq_competition_id,
+            playhq_auto_create_events: team!.playhq_auto_create_events,
           });
           return null;
         } catch (error) {
