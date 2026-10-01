@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveSponsorBenchmarks, getLiveBenchmarks } from "@/live/features/insights";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Eye, MousePointer, TrendingUp } from "lucide-react";
+import { ArrowLeft, Eye, MousePointer, TrendingUp, Users } from "lucide-react";
 import { subDays, startOfDay } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
@@ -44,28 +46,251 @@ interface ContextBreakdown {
 }
 
 export default function SponsorAnalyticsPage() {
-  const navigate = useNavigate();
   const useIcpLab = isFeatureRoutedToIcp("analytics");
   if (useIcpLab) {
+    return <IcpSponsorAnalyticsPage />;
+  }
+
+  return <SupabaseSponsorAnalyticsPage />;
+}
+
+/**
+ * ICP-routed sponsor analytics. Reads the canister's `get_sponsor_benchmarks`
+ * (per-sponsor impressions/clicks/unique_reach/ctr) and `get_benchmarks`
+ * (platform-wide metric snapshots) directly — there is no Supabase fallback
+ * in this branch.
+ *
+ * PROVISIONAL: sponsor id -> name/club/logo resolution has no canister
+ * equivalent (the canister only knows sponsor ids), so this page still reads
+ * `sponsors`/`clubs` from Supabase for display-only metadata while the
+ * numeric metrics themselves come from the canister.
+ */
+function IcpSponsorAnalyticsPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [selectedClub, setSelectedClub] = useState<string>("all");
+
+  const { data: isAppAdmin, isLoading: checkingAdmin } = useQuery({
+    queryKey: ["is-app-admin", user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("role", "app_admin")
+        .maybeSingle();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  const { data: clubs } = useQuery({
+    queryKey: ["all-clubs-for-filter"],
+    queryFn: async () => {
+      const { data } = await supabase.from("clubs").select("id, name").order("name");
+      return data || [];
+    },
+    enabled: isAppAdmin === true,
+  });
+
+  const { data: sponsors } = useQuery({
+    queryKey: ["all-sponsors-for-icp-analytics", selectedClub],
+    queryFn: async () => {
+      let q = supabase.from("sponsors").select("id, name, logo_url, club_id, clubs!club_id(name)");
+      if (selectedClub !== "all") q = q.eq("club_id", selectedClub);
+      const { data } = await q;
+      return data || [];
+    },
+    enabled: isAppAdmin === true,
+  });
+
+  const sponsorIds = (sponsors ?? []).map((s) => s.id);
+
+  const { data: benchmarkRows, isLoading: rowsLoading } = useQuery({
+    queryKey: ["icp-sponsor-benchmarks", sponsorIds],
+    queryFn: () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => [],
+        icp: (ctx) => getLiveSponsorBenchmarks(ctx, sponsorIds, "current", "previous"),
+      }),
+    enabled: isAppAdmin === true && sponsorIds.length > 0,
+  });
+
+  const { data: platformBenchmarks } = useQuery({
+    queryKey: ["icp-platform-sponsor-benchmarks"],
+    queryFn: () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => [],
+        icp: (ctx) => getLiveBenchmarks(ctx, ["sponsor_impressions", "sponsor_clicks"]),
+      }),
+    enabled: isAppAdmin === true,
+  });
+
+  const sponsorStats: SponsorStats[] = (sponsors ?? []).map((sponsor) => {
+    const row = (benchmarkRows ?? []).find((r) => r.sponsor_id === sponsor.id);
+    return {
+      sponsor_id: sponsor.id,
+      sponsor_name: sponsor.name,
+      club_name: (sponsor.clubs as any)?.name || null,
+      logo_url: sponsor.logo_url,
+      total_views: Number(row?.impressions ?? 0),
+      total_clicks: Number(row?.clicks ?? 0),
+      click_rate: row ? Number(row.ctr) : 0,
+    };
+  }).sort((a, b) => b.total_views - a.total_views);
+
+  const totals = sponsorStats.reduce(
+    (acc, stat) => ({ views: acc.views + stat.total_views, clicks: acc.clicks + stat.total_clicks }),
+    { views: 0, clicks: 0 },
+  );
+  const totalUniqueReach = (benchmarkRows ?? []).reduce((sum, r) => sum + Number(r.unique_reach ?? 0), 0);
+
+  if (checkingAdmin) {
     return (
-      <div className="container max-w-3xl mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-4 text-center">
-            <Eye className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Sponsor analytics are unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Sponsor views, clicks, and reporting aggregates are not connected to an ICP service yet.
-            </p>
-            <Button variant="outline" onClick={() => navigate(-1)}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Go back
-            </Button>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!isAppAdmin) {
+    return (
+      <div className="container max-w-4xl mx-auto px-4 py-8">
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">You don't have permission to view this page.</p>
+            <Button className="mt-4" onClick={() => navigate("/")}>Go Home</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  return <SupabaseSponsorAnalyticsPage />;
+  return (
+    <div className="container max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">Sponsor Analytics</h1>
+          <p className="text-sm text-muted-foreground">
+            Live per-sponsor impressions, clicks and reach from the Internet Computer insights canister
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Club:</span>
+        <Select value={selectedClub} onValueChange={setSelectedClub}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="All clubs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All clubs</SelectItem>
+            {clubs?.map((club) => (
+              <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Eye className="h-4 w-4" /> Total Impressions
+            </CardTitle>
+          </CardHeader>
+          <CardContent><p className="text-3xl font-bold">{totals.views.toLocaleString()}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <MousePointer className="h-4 w-4" /> Total Clicks
+            </CardTitle>
+          </CardHeader>
+          <CardContent><p className="text-3xl font-bold">{totals.clicks.toLocaleString()}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" /> CTR
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{totals.views > 0 ? ((totals.clicks / totals.views) * 100).toFixed(1) : "0"}%</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Users className="h-4 w-4" /> Unique Reach
+            </CardTitle>
+          </CardHeader>
+          <CardContent><p className="text-3xl font-bold">{totalUniqueReach.toLocaleString()}</p></CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle>Sponsor Performance</CardTitle></CardHeader>
+        <CardContent>
+          {rowsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : sponsorStats.length === 0 ? (
+            <p className="text-center py-8 text-muted-foreground">No sponsors found for this filter.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead>Club</TableHead>
+                  <TableHead className="text-right">Impressions</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
+                  <TableHead className="text-right">CTR</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sponsorStats.map((stat) => (
+                  <TableRow key={stat.sponsor_id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {stat.logo_url && (
+                          <img src={stat.logo_url} alt={stat.sponsor_name} className="h-8 w-8 object-contain rounded" />
+                        )}
+                        <span className="font-medium">{stat.sponsor_name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{stat.club_name || "-"}</TableCell>
+                    <TableCell className="text-right">{stat.total_views.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{stat.total_clicks.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{stat.click_rate.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {platformBenchmarks && platformBenchmarks.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-lg">Platform Benchmarks</CardTitle></CardHeader>
+          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {platformBenchmarks.map((b) => (
+              <div key={`${b.metric_key}:${b.period}`} className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">{b.metric_key} ({b.period})</p>
+                <p className="text-xl font-semibold">{b.value.toLocaleString()}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 function SupabaseSponsorAnalyticsPage() {
