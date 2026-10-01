@@ -32,7 +32,6 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
 
 type AppRole = Database["public"]["Enums"]["app_role"];

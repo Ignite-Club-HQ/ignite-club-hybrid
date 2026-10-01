@@ -29,7 +29,6 @@ import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
 import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 // TeamAdminInviteDialog now shown on TeamDetailPage via navigation state
 import type { Database } from "@/integrations/supabase/types";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
