@@ -12,6 +12,7 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc: mocks.rpc } 
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("@/hooks/use-toast", () => ({ toast: mocks.toast }));
 vi.mock("@/lib/haptics", () => ({ hapticImpactLight: mocks.haptic }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "11111111-1111-4111-8111-111111111111" } }) }));
 
 import { InlineRsvpActions } from "./InlineRsvpActions";
 

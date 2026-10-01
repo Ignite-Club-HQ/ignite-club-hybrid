@@ -205,8 +205,7 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
 
   const applySupabaseChange = async () => {
     if (!series?.parent || !newEndDate) return;
-    {
-      const endOfDay = new Date(`${newEndDate}T23:59:59`);
+    const endOfDay = new Date(`${newEndDate}T23:59:59`);
 
       if (preview.action === "trim") {
         const toDelete = series.all
@@ -279,24 +278,6 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
         .update({ recurrence_end_date: newEndDate })
         .eq("parent_event_id", series.parent.id);
       if (childErr) throw childErr;
-
-      toast({
-        title: "Series end date updated",
-        description:
-          preview.action === "trim"
-            ? `Removed ${preview.trimCount} future occurrence${preview.trimCount === 1 ? "" : "s"}.`
-            : preview.action === "extend"
-              ? `Added ${preview.extendCount} occurrence${preview.extendCount === 1 ? "" : "s"}.`
-              : "End date saved.",
-      });
-      setConfirmOpen(false);
-      await refetch();
-      onUpdated();
-    } catch (e: any) {
-      toast(friendlyMutationError(e, { description: "Failed to update series end date." }));
-    } finally {
-      setSaving(false);
-    }
   };
 
   const isChanged =
