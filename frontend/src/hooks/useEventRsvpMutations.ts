@@ -6,6 +6,7 @@ import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus } from "@/live/features/events";
+import { recordLiveRsvpCompleted } from "@/live/features/insights";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
 
@@ -83,6 +84,11 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
         icp: async (ctx) => {
           if (!id || !user?.id) throw new Error("Missing event or user ID");
           await setLiveEventRsvp(ctx, id, user.id, status);
+          try {
+            await recordLiveRsvpCompleted(ctx, event?.club_id ?? id, user.id);
+          } catch {
+            // best-effort engagement counter; must never block RSVP confirmation
+          }
           return true;
         },
       });

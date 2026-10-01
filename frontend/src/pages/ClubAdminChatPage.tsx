@@ -84,6 +84,7 @@ import { Capacitor } from "@capacitor/core";
 
 import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { noteChatMount, noteChatUnmount } from "@/lib/chatPerfDiagnostics";
 import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealtimeChannelLifecycle";
@@ -840,6 +841,11 @@ function SupabaseClubAdminChatPage() {
                 return null;
               })();
           inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, conversationId!, user!.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
       return { ...inserted, ...deliveredSend() };

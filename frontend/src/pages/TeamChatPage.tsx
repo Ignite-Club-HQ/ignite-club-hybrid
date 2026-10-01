@@ -113,6 +113,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const PinVaultSheet = lazyWithRetry(() => import("@/components/chat/PinVaultSheet").then(m => ({ default: m.PinVaultSheet })));
 import {
@@ -1530,6 +1531,11 @@ export default function TeamChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, teamId!, user!.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
       return deliveredSend();

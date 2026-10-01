@@ -43,6 +43,8 @@ import { downloadTextReport } from "@/lib/reportExport";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubDetail, getLocalLabRewardRedemptions, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveRedemptions } from "@/live/features/points";
 
 export default function ClubRewardsReportPage() {
   const { clubId } = useParams<{ clubId: string }>();
@@ -157,52 +159,81 @@ export default function ClubRewardsReportPage() {
           return redeemedAt >= startDate && redeemedAt <= endDate;
         });
       }
-      // First, get redemptions within date range
-      let query = supabase
-        .from("reward_redemptions")
-        .select(`
-          id,
-          points_spent,
-          status,
-          redeemed_at,
-          child_id,
-          user_id,
-          club_rewards (id, name, reward_type),
-          children (id, name),
-          profiles:user_id (id, display_name)
-        `)
-        .eq("club_id", clubId!)
-        .gte("redeemed_at", startDate.toISOString())
-        .lte("redeemed_at", endDate.toISOString())
-        .order("redeemed_at", { ascending: false });
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          // First, get redemptions within date range
+          let query = supabase
+            .from("reward_redemptions")
+            .select(`
+              id,
+              points_spent,
+              status,
+              redeemed_at,
+              child_id,
+              user_id,
+              club_rewards (id, name, reward_type),
+              children (id, name),
+              profiles:user_id (id, display_name)
+            `)
+            .eq("club_id", clubId!)
+            .gte("redeemed_at", startDate.toISOString())
+            .lte("redeemed_at", endDate.toISOString())
+            .order("redeemed_at", { ascending: false });
 
-      const { data, error } = await query;
-      if (error) throw error;
+          const { data, error } = await query;
+          if (error) throw error;
 
-      // If filtering by team, we need to filter users who are members of that team
-      if (selectedTeamId !== "all" && data) {
-        const { data: teamMembers } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .eq("team_id", selectedTeamId);
+          // If filtering by team, we need to filter users who are members of that team
+          if (selectedTeamId !== "all" && data) {
+            const { data: teamMembers } = await supabase
+              .from("user_roles")
+              .select("user_id")
+              .eq("team_id", selectedTeamId);
 
-        const teamMemberIds = new Set(teamMembers?.map(m => m.user_id) || []);
-        
-        // Also get children assigned to this team
-        const { data: childAssignments } = await supabase
-          .from("child_team_assignments")
-          .select("child_id")
-          .eq("team_id", selectedTeamId);
-        
-        const teamChildIds = new Set(childAssignments?.map(c => c.child_id) || []);
+            const teamMemberIds = new Set(teamMembers?.map(m => m.user_id) || []);
 
-        return data.filter(r => 
-          teamMemberIds.has(r.user_id) || 
-          (r.child_id && teamChildIds.has(r.child_id))
-        );
-      }
+            // Also get children assigned to this team
+            const { data: childAssignments } = await supabase
+              .from("child_team_assignments")
+              .select("child_id")
+              .eq("team_id", selectedTeamId);
 
-      return data || [];
+            const teamChildIds = new Set(childAssignments?.map(c => c.child_id) || []);
+
+            return data.filter(r =>
+              teamMemberIds.has(r.user_id) ||
+              (r.child_id && teamChildIds.has(r.child_id))
+            );
+          }
+
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // `list_redemptions` has no reward/child/profile display-name joins
+          // and no `user_roles`/`child_team_assignments` equivalent for team
+          // filtering — ICP-routed reports render with neutral fallback
+          // names ("Unknown Reward" etc., already handled downstream) and
+          // ignore the team filter (ungated: ICP has no cross-table team
+          // membership lookup to apply it against).
+          const redemptions = await listLiveRedemptions(ctx, clubId!, null);
+          return redemptions
+            .filter((r) => {
+              const redeemedAt = r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])) : new Date(Number(r.created_at_ms));
+              return redeemedAt >= startDate && redeemedAt <= endDate;
+            })
+            .map((r) => ({
+              id: r.id,
+              points_spent: r.points_spent,
+              status: r.status,
+              redeemed_at: r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])).toISOString() : null,
+              child_id: r.child_id[0] ?? null,
+              user_id: r.user_id[0] ?? null,
+              club_rewards: null,
+              children: null,
+              profiles: null,
+            }));
+        },
+      });
     },
     enabled: !!clubId,
   });

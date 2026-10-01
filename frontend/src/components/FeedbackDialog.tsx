@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { submitLiveFeedback } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
@@ -33,26 +35,37 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
 
     setIsSubmitting(true);
     try {
-      const { error: feedbackError } = await supabase.from("feedback").insert({
-        user_id: user.id,
-        type,
-        message: title.trim(),
-        title: title.trim(),
-        description: description.trim() || null,
-      });
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error: feedbackError } = await supabase.from("feedback").insert({
+            user_id: user.id,
+            type,
+            message: title.trim(),
+            title: title.trim(),
+            description: description.trim() || null,
+          });
 
-      if (feedbackError) throw feedbackError;
+          if (feedbackError) throw feedbackError;
 
-      // Send email notification (fire-and-forget)
-      supabase.functions.invoke("send-feedback-email", {
-        body: {
-          type,
-          title: title.trim(),
-          description: description.trim() || null,
-          userEmail: user.email,
-          userName: user.user_metadata?.display_name || user.email,
+          // Send email notification (fire-and-forget)
+          supabase.functions.invoke("send-feedback-email", {
+            body: {
+              type,
+              title: title.trim(),
+              description: description.trim() || null,
+              userEmail: user.email,
+              userName: user.user_metadata?.display_name || user.email,
+            },
+          }).catch((err) => console.error("Failed to send feedback email:", err));
         },
-      }).catch((err) => console.error("Failed to send feedback email:", err));
+        icp: async (ctx) => {
+          // Provisional mapping: `type` -> feedback kind, `title` doubles as
+          // the canister's required `message`; description rides along as
+          // the optional title field so neither field is dropped. Email
+          // notification has no canister equivalent and is Supabase-only.
+          await submitLiveFeedback(ctx, type, description.trim() || null, title.trim(), null);
+        },
+      });
 
       toast.success("Thanks for your feedback!");
       onOpenChange(false);

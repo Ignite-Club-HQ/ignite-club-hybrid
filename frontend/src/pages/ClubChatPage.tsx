@@ -102,6 +102,7 @@ import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
@@ -1330,6 +1331,11 @@ export default function ClubChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, clubId!, user!.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
       return deliveredSend();

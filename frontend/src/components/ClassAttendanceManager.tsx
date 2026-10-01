@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MobileSelect } from "@/components/ui/mobile-select";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +17,17 @@ interface ClassAttendanceManagerProps {
 }
 
 type AttendanceStatus = "present" | "absent" | "late";
+
+/**
+ * This surface is keyed by (term_id, team_id, session_date) — a weekly class
+ * schedule slot on the `teams`/`terms` tables — not a Supabase `events` row,
+ * so there is no real event id to hand the events_domain canister's
+ * mark_attendance/get_attendance calls (see live/features/events.ts). Until
+ * class sessions are mapped onto canister events, the ICP branch reports
+ * attendance tracking as unavailable rather than inventing a synthetic
+ * event id.
+ */
+const ATTENDANCE_NOT_AVAILABLE_ON_ICP = "attendance-not-available-on-icp" as const;
 
 export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) {
   const { user } = useAuth();
@@ -97,21 +109,29 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
   });
 
   // Fetch existing attendance for this session
-  const { data: attendance = [], isLoading: attendanceLoading } = useQuery({
+  const { data: attendanceResult = [], isLoading: attendanceLoading } = useQuery({
     queryKey: ["class-attendance", termId, classId, sessionDate],
     queryFn: async () => {
       if (!termId || !classId || !sessionDate) return [];
-      const { data, error } = await supabase
-        .from("class_attendance")
-        .select("*")
-        .eq("term_id", termId)
-        .eq("team_id", classId)
-        .eq("session_date", sessionDate);
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("attendance", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("class_attendance")
+            .select("*")
+            .eq("term_id", termId)
+            .eq("team_id", classId)
+            .eq("session_date", sessionDate);
+          if (error) throw error;
+          return data;
+        },
+        icp: async () => ATTENDANCE_NOT_AVAILABLE_ON_ICP,
+      });
     },
     enabled: !!termId && !!classId && !!sessionDate,
   });
+
+  const attendanceUnavailable = attendanceResult === ATTENDANCE_NOT_AVAILABLE_ON_ICP;
+  const attendance = attendanceUnavailable ? [] : attendanceResult;
 
   const getAttendanceStatus = (
     childId: string | null,
@@ -137,22 +157,29 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
     }) => {
       if (!termId || !classId || !sessionDate) throw new Error("Missing data");
 
-      const record: any = {
-        term_id: termId,
-        team_id: classId,
-        session_date: sessionDate,
-        status,
-        marked_by: user?.id,
-      };
-      if (childId) record.child_id = childId;
-      if (userId) record.user_id = userId;
+      return withFeatureBackend("attendance", {
+        supabase: async () => {
+          const record: any = {
+            term_id: termId,
+            team_id: classId,
+            session_date: sessionDate,
+            status,
+            marked_by: user?.id,
+          };
+          if (childId) record.child_id = childId;
+          if (userId) record.user_id = userId;
 
-      const { error } = await supabase.from("class_attendance").upsert(record, {
-        onConflict: childId
-          ? "term_id,team_id,session_date,child_id"
-          : "term_id,team_id,session_date,user_id",
+          const { error } = await supabase.from("class_attendance").upsert(record, {
+            onConflict: childId
+              ? "term_id,team_id,session_date,child_id"
+              : "term_id,team_id,session_date,user_id",
+          });
+          if (error) throw error;
+        },
+        icp: async () => {
+          throw new Error("Attendance tracking isn't available on this backend yet.");
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -187,6 +214,11 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
 
   return (
     <div className="space-y-4">
+      {attendanceUnavailable && (
+        <p className="text-sm text-muted-foreground text-center py-2 italic">
+          Attendance tracking isn't available on this backend yet.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-3">
         {terms.length > 1 ? (
@@ -235,7 +267,7 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
               variant="outline"
               size="sm"
               className="w-full gap-1.5 border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
-              disabled={markAttendanceMutation.isPending}
+              disabled={markAttendanceMutation.isPending || attendanceUnavailable}
               onClick={() => {
                 enrolledMembers.forEach((member: any) => {
                   const current = getAttendanceStatus(member.child_id, member.user_id);
@@ -308,7 +340,7 @@ export function ClassAttendanceManager({ clubId }: ClassAttendanceManagerProps) 
                                   status: s,
                                 })
                               }
-                              disabled={markAttendanceMutation.isPending}
+                              disabled={markAttendanceMutation.isPending || attendanceUnavailable}
                               aria-label={`Mark ${member._name} as ${s}`}
                             >
                               {s === "present" ? "✓" : s === "late" ? "L" : "✗"}

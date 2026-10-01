@@ -132,6 +132,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { NotificationNudgeBanner } from "@/components/NotificationNudgeBanner";
@@ -1086,6 +1087,11 @@ export default function GroupChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, groupId, user.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
       return deliveredSend();

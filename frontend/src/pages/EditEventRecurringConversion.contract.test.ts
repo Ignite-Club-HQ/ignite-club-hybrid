@@ -63,7 +63,7 @@ describe("single event -> recurring series conversion is atomic", () => {
     // the workflow picks the branch at runtime instead of falling back to
     // Supabase unconditionally.
     expect(workflowConversion).toContain("withFeatureBackend");
-    expect(workflowConversion).toContain("createLiveEventSeries");
+    expect(workflowConversion).toContain("createLiveRecurringEventSeries");
   });
 
   it("threads the user-selected recurrence pattern from EditEventPage into the workflow call", () => {
