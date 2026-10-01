@@ -351,3 +351,70 @@ export async function updateLiveFeedbackStatus(
     "Update feedback status",
   );
 }
+
+// ---------------- Client perf (client-side perf entries/aggregate) ----------------
+
+export type LiveClientPerfEntry = Parameters<InsightsDomainActor["record_client_perf"]>[0][number];
+
+export async function recordLiveClientPerf(ctx: FeatureBackendContext, entries: LiveClientPerfEntry[]) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_client_perf(entries), "Record client perf");
+}
+
+export async function getLiveClientPerfAggregate(
+  ctx: FeatureBackendContext,
+  path: string,
+  metric: string | null,
+  sinceMs: number,
+  untilMs: number,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.client_perf_aggregate(path, candidOpt(metric), toNat64(sinceMs), toNat64(untilMs)),
+    "Get client perf aggregate",
+  );
+}
+
+// ---------------- Benchmarks ----------------
+
+export async function setLiveBenchmark(
+  ctx: FeatureBackendContext,
+  metricKey: string,
+  period: string,
+  value: number,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_benchmark(metricKey, period, value), "Set benchmark");
+}
+
+export async function getLiveBenchmarks(ctx: FeatureBackendContext, metricKeys: string[]) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_benchmarks(metricKeys), "Get benchmarks");
+}
+
+// ---------------- Sponsor metrics / performance ----------------
+
+export async function recordLiveSponsorMetric(
+  ctx: FeatureBackendContext,
+  sponsorId: string,
+  metric: string,
+  delta: number,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.record_sponsor_metric(sponsorId, metric, delta),
+    "Record sponsor metric",
+  );
+}
+
+export async function getLiveSponsorPerformance(
+  ctx: FeatureBackendContext,
+  sponsorId: string,
+  period: string,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_sponsor_performance(sponsorId, period),
+    "Get sponsor performance",
+  );
+}

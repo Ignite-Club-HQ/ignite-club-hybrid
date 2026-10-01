@@ -444,3 +444,37 @@ export async function grantLiveMiniLeagueRole(
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.grant_role(principal, role, clubId, candidOpt(teamId)), "Grant role");
 }
+
+// ---------------------------------------------------------------------------
+// Join links
+// ---------------------------------------------------------------------------
+
+/** Shareable rotating-token join links, counterpart of the invite flow above. */
+export async function createLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_mini_league_join_link(miniLeagueId), "Create mini league join link");
+}
+
+export async function rotateLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.rotate_mini_league_join_link(miniLeagueId), "Rotate mini league join link");
+}
+
+export async function revokeLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_mini_league_join_link(miniLeagueId), "Revoke mini league join link");
+}
+
+export async function listLiveMiniLeagueJoinLinks(ctx: FeatureBackendContext, miniLeagueId: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_mini_league_join_links(miniLeagueId), "List mini league join links");
+}
+
+export async function joinLiveMiniLeagueByToken(
+  ctx: FeatureBackendContext,
+  token: string,
+  playerName: string,
+) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.join_mini_league_by_token(token, playerName), "Join mini league");
+}
