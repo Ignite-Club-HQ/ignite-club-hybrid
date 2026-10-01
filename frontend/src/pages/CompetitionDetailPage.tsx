@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Trophy, Plus, Loader2, Check, X, Shield, Megaphone, Send, Settings, CircleCheck, Circle, ChevronDown, Users, Sparkles, CloudRain, CalendarClock, Bell, Pencil } from "lucide-react";
+import { ArrowLeft, Trophy, Plus, Loader2, Check, X, Shield, Megaphone, Send, Settings, CircleCheck, Circle, ChevronDown, Users, Sparkles, CloudRain, CalendarClock, Bell, Pencil, Copy } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveCompetitionTeam, isLiveCompetitionAdmin, assignLiveDivision } from "@/live/features/competitions";
+import { createLiveShellTeamInvite } from "@/live/features/membership";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { CompetitionFixturesPanel, CompetitionLadderPanel } from "@/components/CompetitionFixturesPanel";
 import CompetitionPlayerStatsPanel from "@/components/competitions/CompetitionPlayerStatsPanel";
@@ -513,6 +514,7 @@ function SupabaseCompetitionDetailPage() {
                   <div className="flex-1">
                     <InviteTeamForm
                       competitionId={id!}
+                      organizerClubId={organizerClubId}
                       divisions={divisions}
                       defaultOpen={inviteFromUrl}
                       onDone={() => qc.invalidateQueries({ queryKey: ["competition-entries", id] })}
@@ -1258,7 +1260,7 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
   );
 }
 
-function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { competitionId: string; divisions: any[]; defaultOpen?: boolean; onDone: () => void }) {
+function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen, onDone }: { competitionId: string; organizerClubId?: string | null; divisions: any[]; defaultOpen?: boolean; onDone: () => void }) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [open, setOpen] = useState(!!defaultOpen);
@@ -1275,6 +1277,9 @@ function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { com
   const [newClubName, setNewClubName] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
+  // ICP branch only: the canister has no email delivery, so the claim link
+  // is surfaced here for manual copy/paste instead of being emailed.
+  const [icpClaimLink, setIcpClaimLink] = useState<string | null>(null);
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["clubs-for-team-invite", clubSearch],
@@ -1342,50 +1347,90 @@ function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { com
       toast({ title: "Valid contact email required", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no canister shape for shell-team invites / transactional email.
-    if (resolveAuthBackend() === "icp") {
-      toast({ title: "Inviting a new team isn't available for Internet Identity accounts yet", variant: "destructive" });
-      return;
-    }
+    setIcpClaimLink(null);
     setSaving(true);
-    const { data, error } = await supabase.rpc("invite_shell_team_to_competition", {
-      p_competition_id: competitionId,
-      p_team_name: tName,
-      p_club_name: newClubName.trim() || null,
-      p_contact_name: contactName.trim() || null,
-      p_contact_email: email,
-      p_division_id: divisionId || null,
-    });
-    if (error || !data || !(data as any[]).length) {
+    try {
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("invite_shell_team_to_competition", {
+            p_competition_id: competitionId,
+            p_team_name: tName,
+            p_club_name: newClubName.trim() || null,
+            p_contact_name: contactName.trim() || null,
+            p_contact_email: email,
+            p_division_id: divisionId || null,
+          });
+          if (error || !data || !(data as any[]).length) {
+            throw new Error(error?.message || "Unknown error");
+          }
+          const row: any = (data as any[])[0];
+          const claimLink = `${window.location.origin}/claim-team?token=${row.token}`;
+          // Email delivery is Supabase-only — the club_domain canister has
+          // no transactional email capability.
+          try {
+            await supabase.functions.invoke("send-email", {
+              body: {
+                to: email,
+                subject: `You're invited to join a competition on Ignite`,
+                template: "team-invite",
+                templateData: {
+                  recipientName: contactName.trim() || email.split("@")[0],
+                  invitedEmail: email,
+                  teamName: tName,
+                  clubName: newClubName.trim() || tName,
+                  roleName: "Team Admin",
+                  inviteLink: claimLink,
+                },
+              },
+            });
+          } catch (err) {
+            console.error("send-email failed", err);
+          }
+          toast({ title: "Invite sent", description: `Magic link emailed to ${email}` });
+        },
+        icp: async (ctx) => {
+          if (!organizerClubId) {
+            throw new Error("This competition has no club to attach the shell team to yet.");
+          }
+          // Division assignment and competition-entry linkage stay
+          // Supabase-only — the canister shape has no competition/division
+          // concept. The canister also has no email delivery, so the claim
+          // link is surfaced in the UI below for copy/paste instead.
+          const team = await createLiveShellTeamInvite(
+            ctx,
+            organizerClubId,
+            tName,
+            email,
+            contactName.trim() || null,
+          );
+          const token = team.shell_claim_token?.[0];
+          if (!token) throw new Error("Shell team created but no claim token was returned.");
+          setIcpClaimLink(`${window.location.origin}/claim-team?token=${token}`);
+          toast({ title: "Shell team created", description: "Copy the claim link below to share it with the contact." });
+        },
+      });
+    } catch (error: any) {
       setSaving(false);
       toast({ title: "Could not send invite", description: error?.message || "Unknown error", variant: "destructive" });
       return;
     }
-    const row: any = (data as any[])[0];
-    const claimLink = `${window.location.origin}/claim-team?token=${row.token}`;
-    try {
-      await supabase.functions.invoke("send-email", {
-        body: {
-          to: email,
-          subject: `You're invited to join a competition on Ignite`,
-          template: "team-invite",
-          templateData: {
-            recipientName: contactName.trim() || email.split("@")[0],
-            invitedEmail: email,
-            teamName: tName,
-            clubName: newClubName.trim() || tName,
-            roleName: "Team Admin",
-            inviteLink: claimLink,
-          },
-        },
-      });
-    } catch (err) {
-      console.error("send-email failed", err);
-    }
     setSaving(false);
-    toast({ title: "Invite sent", description: `Magic link emailed to ${email}` });
+    if (resolveAuthBackend() === "icp") {
+      // Keep the sheet open so the claim link stays visible for copying.
+      return;
+    }
     setNewTeamName(""); setNewClubName(""); setContactName(""); setContactEmail(""); setDivisionId("");
     setOpen(false); onDone();
+  };
+
+  const copyIcpClaimLink = async () => {
+    if (!icpClaimLink) return;
+    try {
+      await navigator.clipboard.writeText(icpClaimLink);
+      toast({ title: "Link copied" });
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    }
   };
 
   const selectedTeam = teams.find((t: any) => t.id === teamId);
@@ -1517,6 +1562,18 @@ function InviteTeamForm({ competitionId, divisions, defaultOpen, onDone }: { com
                 <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="redacted@example.invalid" />
                 <p className="text-[11px] text-muted-foreground">This person will receive the invite and become the first team admin when they claim it.</p>
               </div>
+              {icpClaimLink && (
+                <div className="space-y-1.5">
+                  <Label>Claim link</Label>
+                  <div className="flex gap-2">
+                    <Input value={icpClaimLink} readOnly className="text-xs" onFocus={(e) => e.currentTarget.select()} />
+                    <Button variant="outline" size="icon" onClick={copyIcpClaimLink} aria-label="Copy claim link">
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Internet Identity accounts don't get an emailed invite yet — share this link with the contact directly.</p>
+                </div>
+              )}
             </>
           )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, User, Bell, Moon, Sun, Smartphone, Download, Send, MessageSquare, Calendar, Image, Users, LayoutGrid, Mail, Gift, Trophy, Settings, Fingerprint, ChevronRight, Lock, HelpCircle, Eye, Sparkles, Accessibility } from "lucide-react";
@@ -22,6 +22,13 @@ import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { NotificationPreferenceList, type NotificationPreferenceDescriptor } from "@/components/NotificationPreferenceList";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveNotificationPreferences,
+  upsertLiveNotificationPreferences,
+  type LiveNotificationPreferences,
+  type LiveNotificationPreferencesInput,
+} from "@/live/features/notifications";
 
 // Check if we're on native platform at module load time
 let isNativePlatform = false;
@@ -159,6 +166,11 @@ export default function SettingsPage() {
   });
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [emailPrefsLoading, setEmailPrefsLoading] = useState(false);
+  // Full ICP preferences row (all canister fields, including ones this
+  // UI doesn't expose) so partial edits can still send a complete
+  // upsert payload — the canister's upsert_preferences replaces the whole
+  // row, unlike the Supabase branch's column-scoped upsert.
+  const icpPreferencesRef = useRef<LiveNotificationPreferencesInput | null>(null);
   const [aiCatchUpEnabled, setAiCatchUpEnabled] = useState(true);
   const [aiCatchUpLoading, setAiCatchUpLoading] = useState(false);
   const { hasAICatchUpClub } = useUserHasAnyAICatchUpClub();
@@ -169,38 +181,66 @@ export default function SettingsPage() {
   // Load notification preferences
   useEffect(() => {
     const loadPreferences = async () => {
-      if (!user || isIcpAccount) return;
-      
-      const { data } = await supabase
-        .from("notification_preferences")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-      
-      if (data) {
-        const preferenceData = data as Record<string, boolean | null | undefined>;
-        setPreferences({
-          messages_enabled: Boolean(preferenceData.messages_enabled),
-          events_enabled: Boolean(preferenceData.events_enabled),
-          media_enabled: Boolean(preferenceData.media_enabled),
-          membership_enabled: Boolean(preferenceData.membership_enabled),
-          pitch_board_enabled: preferenceData.pitch_board_enabled ?? true,
-          rewards_enabled: preferenceData.rewards_enabled ?? true,
-          show_message_preview: preferenceData.show_message_preview ?? true,
-        });
-        setEmailPreferences({
-          email_messages_enabled: preferenceData.email_messages_enabled ?? true,
-          email_events_enabled: preferenceData.email_events_enabled ?? true,
-          email_media_enabled: preferenceData.email_media_enabled ?? true,
-          email_membership_enabled: preferenceData.email_membership_enabled ?? true,
-          email_admin_enabled: preferenceData.email_admin_enabled ?? true,
-          email_pitch_board_enabled: preferenceData.email_pitch_board_enabled ?? true,
-          email_rewards_enabled: preferenceData.email_rewards_enabled ?? true,
-          email_pom_enabled: preferenceData.email_pom_enabled ?? true,
-        });
-      }
+      if (!user) return;
+
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("notification_preferences")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+          if (data) {
+            const preferenceData = data as Record<string, boolean | null | undefined>;
+            setPreferences({
+              messages_enabled: Boolean(preferenceData.messages_enabled),
+              events_enabled: Boolean(preferenceData.events_enabled),
+              media_enabled: Boolean(preferenceData.media_enabled),
+              membership_enabled: Boolean(preferenceData.membership_enabled),
+              pitch_board_enabled: preferenceData.pitch_board_enabled ?? true,
+              rewards_enabled: preferenceData.rewards_enabled ?? true,
+              show_message_preview: preferenceData.show_message_preview ?? true,
+            });
+            setEmailPreferences({
+              email_messages_enabled: preferenceData.email_messages_enabled ?? true,
+              email_events_enabled: preferenceData.email_events_enabled ?? true,
+              email_media_enabled: preferenceData.email_media_enabled ?? true,
+              email_membership_enabled: preferenceData.email_membership_enabled ?? true,
+              email_admin_enabled: preferenceData.email_admin_enabled ?? true,
+              email_pitch_board_enabled: preferenceData.email_pitch_board_enabled ?? true,
+              email_rewards_enabled: preferenceData.email_rewards_enabled ?? true,
+              email_pom_enabled: preferenceData.email_pom_enabled ?? true,
+            });
+          }
+        },
+        icp: async (ctx) => {
+          const principal = ctx.identity.getPrincipal().toText();
+          const row = await getLiveNotificationPreferences(ctx, principal);
+          icpPreferencesRef.current = row;
+          setPreferences({
+            messages_enabled: row.messagesEnabled,
+            events_enabled: row.eventsEnabled,
+            media_enabled: row.mediaEnabled,
+            membership_enabled: row.membershipEnabled,
+            pitch_board_enabled: row.pitchBoardEnabled,
+            rewards_enabled: row.rewardsEnabled,
+            show_message_preview: row.showMessagePreview,
+          });
+          setEmailPreferences({
+            email_messages_enabled: row.emailMessagesEnabled,
+            email_events_enabled: row.emailEventsEnabled,
+            email_media_enabled: row.emailMediaEnabled,
+            email_membership_enabled: row.emailMembershipEnabled,
+            email_admin_enabled: row.emailAdminEnabled,
+            email_pitch_board_enabled: row.emailPitchBoardEnabled,
+            email_rewards_enabled: row.emailRewardsEnabled,
+            email_pom_enabled: row.emailPomEnabled,
+          });
+        },
+      });
     };
-    
+
     loadPreferences();
   }, [user, isIcpAccount]);
 
@@ -321,44 +361,102 @@ export default function SettingsPage() {
   };
 
   const handlePreferenceChange = async (key: keyof NotificationPreferences, value: boolean) => {
-    if (!user || isIcpAccount) return;
-    
+    if (!user) return;
+
     const newPrefs = { ...preferences, [key]: value };
     setPreferences(newPrefs);
     setPrefsLoading(true);
-    
+
     try {
-      const { error } = await supabase
-        .from("notification_preferences")
-        .upsert({ user_id: user.id, ...newPrefs }, { onConflict: "user_id" });
-      
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notification_preferences")
+            .upsert({ user_id: user.id, ...newPrefs }, { onConflict: "user_id" });
+
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const principal = ctx.identity.getPrincipal().toText();
+          const base = icpPreferencesRef.current ?? (await getLiveNotificationPreferences(ctx, principal));
+          const merged: LiveNotificationPreferencesInput = {
+            messagesEnabled: newPrefs.messages_enabled,
+            eventsEnabled: newPrefs.events_enabled,
+            mediaEnabled: newPrefs.media_enabled,
+            membershipEnabled: newPrefs.membership_enabled,
+            pitchBoardEnabled: newPrefs.pitch_board_enabled,
+            rewardsEnabled: newPrefs.rewards_enabled,
+            adminEnabled: base.adminEnabled,
+            pomEnabled: base.pomEnabled,
+            showMessagePreview: newPrefs.show_message_preview,
+            emailMessagesEnabled: base.emailMessagesEnabled,
+            emailEventsEnabled: base.emailEventsEnabled,
+            emailMediaEnabled: base.emailMediaEnabled,
+            emailMembershipEnabled: base.emailMembershipEnabled,
+            emailAdminEnabled: base.emailAdminEnabled,
+            emailPitchBoardEnabled: base.emailPitchBoardEnabled,
+            emailRewardsEnabled: base.emailRewardsEnabled,
+            emailPomEnabled: base.emailPomEnabled,
+          };
+          const result = await upsertLiveNotificationPreferences(ctx, principal, merged);
+          icpPreferencesRef.current = result;
+        },
+      });
     } catch {
       setPreferences(preferences);
       toast({ title: "Failed to update preference", variant: "destructive" });
     }
-    
+
     setPrefsLoading(false);
   };
 
   const handleEmailPreferenceChange = async (key: keyof EmailPreferences, value: boolean) => {
-    if (!user || isIcpAccount) return;
-    
+    if (!user) return;
+
     const newPrefs = { ...emailPreferences, [key]: value };
     setEmailPreferences(newPrefs);
     setEmailPrefsLoading(true);
-    
+
     try {
-      const { error } = await supabase
-        .from("notification_preferences")
-        .upsert({ user_id: user.id, ...newPrefs }, { onConflict: "user_id" });
-      
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("notification_preferences")
+            .upsert({ user_id: user.id, ...newPrefs }, { onConflict: "user_id" });
+
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const principal = ctx.identity.getPrincipal().toText();
+          const base = icpPreferencesRef.current ?? (await getLiveNotificationPreferences(ctx, principal));
+          const merged: LiveNotificationPreferencesInput = {
+            messagesEnabled: base.messagesEnabled,
+            eventsEnabled: base.eventsEnabled,
+            mediaEnabled: base.mediaEnabled,
+            membershipEnabled: base.membershipEnabled,
+            pitchBoardEnabled: base.pitchBoardEnabled,
+            rewardsEnabled: base.rewardsEnabled,
+            adminEnabled: base.adminEnabled,
+            pomEnabled: base.pomEnabled,
+            showMessagePreview: base.showMessagePreview,
+            emailMessagesEnabled: newPrefs.email_messages_enabled,
+            emailEventsEnabled: newPrefs.email_events_enabled,
+            emailMediaEnabled: newPrefs.email_media_enabled,
+            emailMembershipEnabled: newPrefs.email_membership_enabled,
+            emailAdminEnabled: newPrefs.email_admin_enabled,
+            emailPitchBoardEnabled: newPrefs.email_pitch_board_enabled,
+            emailRewardsEnabled: newPrefs.email_rewards_enabled,
+            emailPomEnabled: newPrefs.email_pom_enabled,
+          };
+          const result = await upsertLiveNotificationPreferences(ctx, principal, merged);
+          icpPreferencesRef.current = result;
+        },
+      });
     } catch (error) {
       setEmailPreferences(emailPreferences);
       toast({ title: "Failed to update email preference", variant: "destructive" });
     }
-    
+
     setEmailPrefsLoading(false);
   };
 

@@ -28,6 +28,8 @@ import { useChatVaultDeliverySync } from "@/hooks/useChatVaultDeliverySync";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -130,6 +132,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { Capacitor } from "@capacitor/core";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { NotificationNudgeBanner } from "@/components/NotificationNudgeBanner";
@@ -421,14 +424,25 @@ export default function GroupChatPage() {
     queryFn: async () => {
       const mlId = group?.mini_league_id;
       if (!mlId) return null;
-      if (useIcpLab) return null;
 
-      const { data } = await supabase
-        .from("mini_leagues")
-        .select("id, name, club_id")
-        .eq("id", mlId)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("mini_leagues")
+            .select("id, name, club_id")
+            .eq("id", mlId)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          try {
+            const league = await getLiveMiniLeague(ctx, mlId);
+            return { id: league.id, name: league.name, club_id: league.club_id };
+          } catch {
+            return null;
+          }
+        },
+      });
     },
     enabled: !!group?.mini_league_id,
     staleTime: 5 * 60 * 1000,
@@ -1073,6 +1087,11 @@ export default function GroupChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, groupId, user.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
       return deliveredSend();

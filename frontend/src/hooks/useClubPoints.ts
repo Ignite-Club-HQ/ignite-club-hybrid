@@ -73,11 +73,22 @@ export function useAllUserClubPoints(userId: string | null | undefined) {
     queryKey: ["user-club-points-all", userId],
     queryFn: async () => {
       if (!userId) return [] as Array<{ club_id: string; points: number }>;
-      const { data } = await supabase
-        .from("user_club_points")
-        .select("club_id, points")
-        .eq("user_id", userId);
-      return (data ?? []) as Array<{ club_id: string; points: number }>;
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_club_points")
+            .select("club_id, points")
+            .eq("user_id", userId);
+          return (data ?? []) as Array<{ club_id: string; points: number }>;
+        },
+        // The canister's `get_user_points` requires an explicit club_id — there
+        // is no canister equivalent of "every club this user belongs to" in one
+        // call. Rather than invent a cross-club aggregate (or silently fall
+        // back to Supabase while the feature is routed to ICP), surface an
+        // empty breakdown; per-club balances still resolve correctly via
+        // `useUserClubPoints`.
+        icp: async () => [] as Array<{ club_id: string; points: number }>,
+      });
     },
     enabled: !!userId,
     staleTime: 1000 * 30,
@@ -99,13 +110,23 @@ export function useChildrenClubPoints(
     queryFn: async () => {
       const map = new Map<string, number>();
       if (!clubId || ids.length === 0) return map;
-      const { data } = await supabase
-        .from("child_club_points")
-        .select("child_id, points")
-        .eq("club_id", clubId)
-        .in("child_id", ids);
-      (data ?? []).forEach((r: any) => map.set(r.child_id, r.points ?? 0));
-      return map;
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("child_club_points")
+            .select("child_id, points")
+            .eq("club_id", clubId)
+            .in("child_id", ids);
+          (data ?? []).forEach((r: any) => map.set(r.child_id, r.points ?? 0));
+          return map;
+        },
+        // The canister only exposes `get_child_points(clubId, childId)` for a
+        // single child at a time — there is no bulk-by-ids lookup. Rather than
+        // fire N round trips per render (or fall back to Supabase while ICP is
+        // the routed backend), surface an empty map; callers already treat a
+        // missing entry as "0 points".
+        icp: async () => map,
+      });
     },
     enabled: !!clubId && ids.length > 0,
     staleTime: 1000 * 30,
@@ -121,11 +142,18 @@ export function useAllChildClubPoints(childId: string | null | undefined) {
     queryKey: ["child-club-points-all", childId],
     queryFn: async () => {
       if (!childId) return [] as Array<{ club_id: string; points: number }>;
-      const { data } = await supabase
-        .from("child_club_points")
-        .select("club_id, points")
-        .eq("child_id", childId);
-      return (data ?? []) as Array<{ club_id: string; points: number }>;
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("child_club_points")
+            .select("club_id, points")
+            .eq("child_id", childId);
+          return (data ?? []) as Array<{ club_id: string; points: number }>;
+        },
+        // No canister equivalent of "every club this child belongs to" — see
+        // `useAllUserClubPoints` for the same constraint on the user side.
+        icp: async () => [] as Array<{ club_id: string; points: number }>,
+      });
     },
     enabled: !!childId,
     staleTime: 1000 * 30,

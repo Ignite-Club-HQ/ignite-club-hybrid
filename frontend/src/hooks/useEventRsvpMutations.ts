@@ -5,7 +5,8 @@ import { queueRsvp } from "@/lib/rsvpQueue";
 import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus } from "@/live/features/events";
+import { recordLiveRsvpCompleted } from "@/live/features/insights";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
 
@@ -83,6 +84,11 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
         icp: async (ctx) => {
           if (!id || !user?.id) throw new Error("Missing event or user ID");
           await setLiveEventRsvp(ctx, id, user.id, status);
+          try {
+            await recordLiveRsvpCompleted(ctx, event?.club_id ?? id, user.id);
+          } catch {
+            // best-effort engagement counter; must never block RSVP confirmation
+          }
           return true;
         },
       });
@@ -298,6 +304,22 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
       parentUserId: string | null;
       status: RsvpStatus;
     }) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          // Mini-league player RSVPs have no canister shape (no
+          // mini_league_players table in events_domain) — only the
+          // child-linked branch is wired here.
+          if (!childId) {
+            throw new Error("Admin RSVP for mini-league players isn't available on this backend yet.");
+          }
+          await adminUpsertLiveRsvp(ctx, id, parentUserId || user!.id, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       if (childId) {
         const { error } = await supabase.rpc('admin_upsert_rsvp', {
           p_event_id: id!,
@@ -336,6 +358,23 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   // Admin mutation to update existing RSVP status by RSVP ID
   const adminUpdateRsvpMutation = useMutation({
     mutationFn: async ({ rsvpId, status, playerName }: { rsvpId: string; status: RsvpStatus; playerName: string }) => {
+      // rsvpId on the ICP branch is the synthetic `${eventId}:${accountId}:${childId|"self"}`
+      // key built when the rsvps query is served by events_domain (see
+      // EventDetailPage's roster mapping) — decode it back into the
+      // (event, account, child) key the canister's admin_update_rsvp_status
+      // call expects, since it has no row-id lookup.
+      const parts = rsvpId.split(":");
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (parts.length !== 3) throw new Error("Unrecognised RSVP reference for this backend.");
+          const [eventId, accountId, childPart] = parts;
+          await adminUpdateLiveRsvpStatus(ctx, eventId, accountId, status, childPart === "self" ? null : childPart);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { error } = await supabase.rpc('admin_update_rsvp_status', {
         p_rsvp_id: rsvpId,
         p_status: status,
@@ -362,6 +401,16 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   // Admin mutation to create RSVP for a member who hasn't responded (for team/club events)
   const rsvpForMemberMutation = useMutation({
     mutationFn: async ({ memberId, memberName, status }: { memberId: string; memberName: string; status: RsvpStatus }) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          await adminUpsertLiveRsvp(ctx, id, memberId, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { error } = await supabase.rpc('admin_upsert_rsvp', {
         p_event_id: id!,
         p_user_id: memberId,
@@ -387,6 +436,16 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   // Admin mutation to create RSVP for a child who hasn't responded (for team events)
   const rsvpForChildMutation = useMutation({
     mutationFn: async ({ childId, childName, parentUserId, status }: { childId: string; childName: string; parentUserId: string; status: RsvpStatus }) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          await adminUpsertLiveRsvp(ctx, id, parentUserId, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       // Check if RSVP already exists for this child
       const { data: existingRsvp } = await supabase
         .from("rsvps")

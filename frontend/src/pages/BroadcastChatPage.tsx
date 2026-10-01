@@ -76,6 +76,7 @@ import { useMessageReads } from "@/hooks/useMessageReads";
 import { useMarkVisibleChatMessagesRead } from "@/hooks/useMarkVisibleChatMessagesRead";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import { queueMessage } from "@/lib/messageQueue";
@@ -887,6 +888,11 @@ export default function BroadcastChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment);
+          try {
+            await recordLiveMessageSent(ctx, "broadcast", user!.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
         },
       });
     },

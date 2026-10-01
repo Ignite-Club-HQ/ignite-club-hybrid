@@ -57,40 +57,24 @@ const typeColors = {
 
 type StatusFilter = "all" | FeedbackStatus;
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { resolveAuthBackend } from "@/live/authBackendMode";
-import { getLocalLabFeedback } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveFeedback, updateLiveFeedbackStatus } from "@/live/features/insights";
 
 export default function ManageFeedbackPage() {
-  const navigate = useNavigate();
-  const useIcpLab = resolveAuthBackend() === "icp";
-  if (useIcpLab) {
-    const feedback = getLocalLabFeedback("club-icp-001");
-    return (
-      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold">Feedback</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Showing synthetic ICP lab feedback records. Status changes and deletion are disabled.
-        </p>
-        <div className="space-y-2">
-          {feedback.map((item) => (
-            <Card key={item.id}>
-              <CardContent className="p-4 flex items-start justify-between gap-3">
-                <p className="text-sm">{item.message}</p>
-                <Badge variant="secondary">{item.status}</Badge>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
   return <SupabaseManageFeedbackPage />;
+}
+
+/** Maps a canister FeedbackStatus variant to the Supabase status string used by the UI. */
+function fromLiveFeedbackStatus(status: { Open: null } | { InProgress: null } | { Resolved: null }): FeedbackStatus {
+  if ("Open" in status) return "open";
+  if ("InProgress" in status) return "in_progress";
+  return "resolved";
+}
+
+function toLiveFeedbackStatus(status: FeedbackStatus): "Open" | "InProgress" | "Resolved" {
+  if (status === "open") return "Open";
+  if (status === "in_progress") return "InProgress";
+  return "Resolved";
 }
 
 function SupabaseManageFeedbackPage() {
@@ -117,12 +101,30 @@ function SupabaseManageFeedbackPage() {
   const { data: feedback, isLoading } = useQuery({
     queryKey: ["all-feedback"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("feedback")
-        .select("*, profiles:user_id(display_name, avatar_url)")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("feedback")
+            .select("*, profiles:user_id(display_name, avatar_url)")
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: canister has no profile join, so `profiles`
+          // falls back to the caller's principal text for display.
+          const { items } = await listLiveFeedback(ctx, null, 0, 200);
+          return items.map((item) => ({
+            id: item.id,
+            type: item.kind,
+            title: item.title[0] ?? item.message,
+            description: item.title.length ? item.message : null,
+            status: fromLiveFeedbackStatus(item.status),
+            created_at: new Date(Number(item.created_at_ms)).toISOString(),
+            profiles: { display_name: item.user.toText(), avatar_url: null },
+          }));
+        },
+      });
     },
     enabled: isAppAdmin === true,
   });
@@ -146,8 +148,15 @@ function SupabaseManageFeedbackPage() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: FeedbackStatus }) => {
-      const { error } = await supabase.from("feedback").update({ status }).eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("feedback").update({ status }).eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await updateLiveFeedbackStatus(ctx, id, toLiveFeedbackStatus(status), null);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-feedback"] });

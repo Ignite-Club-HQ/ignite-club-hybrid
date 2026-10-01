@@ -37,6 +37,7 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
@@ -44,6 +45,11 @@ import {
 } from "@/live/features/homeFeed";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { completeHomeAccountRecovery } from "@/features/home/accountRecoveryCompletion";
+import {
+  fetchAvailableHomeRewardsForBackend,
+  fetchNextHomeRewardInfoForBackend,
+  fetchPendingHomeRedemptionsForBackend,
+} from "@/features/home/homeRewardsRepository";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logHomeOpenLatency, resetHomeOpenLog } from "@/lib/homeOpenLatency";
 import { recordPointsHistory } from "@/lib/pointsHistory";
@@ -428,9 +434,28 @@ export default function HomePage() {
         teamIds.length > 0
           ? supabase.from("teams").select("id, club_id").in("id", teamIds).is("deleted_at", null)
           : Promise.resolve({ data: [] as { id: string; club_id: string }[], error: null as any }),
-        supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
+        withFeatureBackend("mini_leagues", {
+          supabase: () => supabase.from("mini_league_players").select("mini_league_id").eq("parent_user_id", user!.id),
+          icp: async (ctx) => {
+            // Provisional: ICP has no "players claimed by this principal"
+            // list query distinct from my_leagues(); my_leagues() already
+            // returns every league the caller is linked to (admin or
+            // claimed player), so we reuse it here and let the merge below
+            // de-duplicate against adminLeaguesResult.
+            const leagues = await listMyLiveMiniLeagues(ctx);
+            return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
+          },
+        }),
         leagueAdminArr.length > 0
-          ? supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr)
+          ? withFeatureBackend("mini_leagues", {
+              supabase: () => supabase.from("mini_leagues").select("id").in("club_id", leagueAdminArr),
+              icp: async (ctx) => {
+                const leagues = (
+                  await Promise.all(leagueAdminArr.map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)))
+                ).flat();
+                return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
+              },
+            })
           : Promise.resolve({ data: [] as { id: string }[], error: null as any }),
         // Filter out soft-deleted clubs from role-derived memberships. Without
         // this, deleting a club leaves orphan user_roles rows that still make
@@ -730,23 +755,10 @@ export default function HomePage() {
   const { data: pendingRedemptions = [] } = useQuery({
     queryKey: ["pending-redemptions-home", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("reward_redemptions")
-        .select(`
-          id,
-          reward_id,
-          club_id,
-          points_spent,
-          status,
-          redeemed_at,
-          club_rewards (id, name, description, points_required, qr_code_url, show_qr_code),
-          clubs!club_id (name)
-        `)
-        .eq("user_id", user!.id)
-        .eq("status", "pending")
-        .order("redeemed_at", { ascending: false })
-        .limit(1);
-      return data || [];
+      // Routed via withFeatureBackend("points", ...) inside the repository
+      // helper. ICP branch returns [] — see fetchPendingHomeRedemptionsForBackend
+      // doc comment (no cross-club bulk lookup equivalent on the canister).
+      return fetchPendingHomeRedemptionsForBackend(supabase, null, user!.id);
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -874,14 +886,9 @@ export default function HomePage() {
   const { data: availableRewards = [], isLoading: rewardsLoading } = useQuery({
     queryKey: ["home-available-rewards", selectedRewardClubId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("club_rewards")
-        .select("*, sponsors(id, name, logo_url)")
-        .eq("club_id", selectedRewardClubId!)
-        .eq("is_active", true)
-        .neq("reward_type", "player_of_match")
-        .order("points_required", { ascending: true });
-      return data || [];
+      // Routed via withFeatureBackend("points", ...). On ICP, rewards render
+      // without a sponsor badge (no canister-side sponsor join).
+      return fetchAvailableHomeRewardsForBackend(supabase, null, selectedRewardClubId!);
     },
     enabled: !!selectedRewardClubId,
     staleTime: 5 * 60 * 1000,
@@ -894,15 +901,9 @@ export default function HomePage() {
     queryFn: async () => {
       const proClubIds = rewardClubs.filter((c: any) => isAppAdmin || c.hasPro).map((c: any) => c.id);
       if (proClubIds.length === 0) return null;
-      const { data } = await supabase
-        .from("club_rewards")
-        .select("points_required, name")
-        .in("club_id", proClubIds)
-        .eq("is_active", true)
-        .neq("reward_type", "player_of_match")
-        .order("points_required", { ascending: true })
-        .limit(1);
-      return data?.[0] ? { points_required: data[0].points_required, name: data[0].name } : null;
+      // Routed via withFeatureBackend("points", ...); ICP branch issues one
+      // list_rewards call per eligible club (no bulk cross-club query exists).
+      return fetchNextHomeRewardInfoForBackend(supabase, null, proClubIds);
     },
     enabled: rewardClubs.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -1240,19 +1241,29 @@ export default function HomePage() {
 
   const { data: miniLeagues, error: miniLeaguesError } = useQuery({
     queryKey: ["all-mini-leagues"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_leagues")
-        .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
-        .is("clubs.deleted_at", null)
-        .is("clubs.purged_at", null)
-        .not("clubs.name", "ilike", "%test%")
-        .not("clubs.name", "ilike", "%demo%")
-        .not("clubs.name", "ilike", "%sample%")
-        .order("name");
-      if (error) throw error;
-      return data as MiniLeague[];
-    },
+    queryFn: async () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
+            .is("clubs.deleted_at", null)
+            .is("clubs.purged_at", null)
+            .not("clubs.name", "ilike", "%test%")
+            .not("clubs.name", "ilike", "%demo%")
+            .not("clubs.name", "ilike", "%sample%")
+            .order("name");
+          if (error) throw error;
+          return data as MiniLeague[];
+        },
+        // Provisional: this directory browses every mini-league across every
+        // club (for the "join a team" picker), which has no canister
+        // equivalent — mini_league_domain only exposes per-club
+        // (list_mini_leagues_by_club) and per-caller (my_leagues) listings,
+        // not a global cross-club directory with joined club metadata. Leave
+        // empty under ICP until a club directory canister can supply this.
+        icp: async () => [] as MiniLeague[],
+      }),
     enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,

@@ -1,6 +1,6 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
-  createLiveEventSeries,
+  createLiveRecurringEventSeries,
   getLiveEventsSnapshot,
   setLiveEventDuty,
   updateLiveEvent,
@@ -203,7 +203,7 @@ export async function convertEventToRecurringSeries(
       const updates = input.updates as Record<string, unknown>;
       const untilMs = new Date(input.recurrenceEndDate).getTime();
       const firstStartsAtMs = input.selectedDate.getTime();
-      const { events } = await createLiveEventSeries(ctx, {
+      const { events } = await createLiveRecurringEventSeries(ctx, {
         clubId: String(updates.club_id ?? ""),
         teamId: (updates.team_id as string | null | undefined) ?? null,
         title: String(updates.title ?? ""),

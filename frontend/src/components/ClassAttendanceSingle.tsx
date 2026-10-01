@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,17 @@ interface ClassAttendanceSingleProps {
 }
 
 type AttendanceStatus = "present" | "absent" | "late";
+
+/**
+ * This surface is keyed by (term_id, team_id, session_date) — a weekly class
+ * schedule slot on the `teams`/`terms` tables — not a Supabase `events` row,
+ * so there is no real event id to hand the events_domain canister's
+ * mark_attendance/get_attendance calls (see live/features/events.ts). Until
+ * class sessions are mapped onto canister events, the ICP branch reports
+ * attendance tracking as unavailable rather than inventing a synthetic
+ * event id.
+ */
+const ATTENDANCE_NOT_AVAILABLE_ON_ICP = "attendance-not-available-on-icp" as const;
 
 export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleProps) {
   const { user } = useAuth();
@@ -78,21 +90,29 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
     enabled: !!termId,
   });
 
-  const { data: attendance = [], isLoading } = useQuery({
+  const { data: attendanceResult = [], isLoading } = useQuery({
     queryKey: ["class-attendance", termId, teamId, sessionDate],
     queryFn: async () => {
       if (!termId || !sessionDate) return [];
-      const { data, error } = await supabase
-        .from("class_attendance")
-        .select("*")
-        .eq("term_id", termId)
-        .eq("team_id", teamId)
-        .eq("session_date", sessionDate);
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("attendance", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("class_attendance")
+            .select("*")
+            .eq("term_id", termId)
+            .eq("team_id", teamId)
+            .eq("session_date", sessionDate);
+          if (error) throw error;
+          return data;
+        },
+        icp: async () => ATTENDANCE_NOT_AVAILABLE_ON_ICP,
+      });
     },
     enabled: !!termId && !!sessionDate,
   });
+
+  const attendanceUnavailable = attendanceResult === ATTENDANCE_NOT_AVAILABLE_ON_ICP;
+  const attendance = attendanceUnavailable ? [] : attendanceResult;
 
   const getStatus = (childId: string | null, userId: string | null): AttendanceStatus | null => {
     const record = attendance.find(
@@ -104,14 +124,21 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
   const markMutation = useMutation({
     mutationFn: async ({ childId, userId, status }: { childId: string | null; userId: string | null; status: AttendanceStatus }) => {
       if (!termId || !sessionDate) throw new Error("Missing data");
-      const record: any = { term_id: termId, team_id: teamId, session_date: sessionDate, status, marked_by: user?.id };
-      if (childId) record.child_id = childId;
-      if (userId) record.user_id = userId;
+      return withFeatureBackend("attendance", {
+        supabase: async () => {
+          const record: any = { term_id: termId, team_id: teamId, session_date: sessionDate, status, marked_by: user?.id };
+          if (childId) record.child_id = childId;
+          if (userId) record.user_id = userId;
 
-      const { error } = await supabase.from("class_attendance").upsert(record, {
-        onConflict: childId ? "term_id,team_id,session_date,child_id" : "term_id,team_id,session_date,user_id",
+          const { error } = await supabase.from("class_attendance").upsert(record, {
+            onConflict: childId ? "term_id,team_id,session_date,child_id" : "term_id,team_id,session_date,user_id",
+          });
+          if (error) throw error;
+        },
+        icp: async () => {
+          throw new Error("Attendance tracking isn't available on this backend yet.");
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class-attendance", termId, teamId, sessionDate] });
@@ -147,6 +174,12 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
           className="h-9 px-3 rounded-md border border-input bg-background text-sm w-full sm:w-auto"
         />
       </div>
+
+      {attendanceUnavailable && (
+        <p className="text-sm text-muted-foreground text-center py-2 italic">
+          Attendance tracking isn't available on this backend yet.
+        </p>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-4">
@@ -189,7 +222,7 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
                             status: s,
                           })
                         }
-                        disabled={markMutation.isPending}
+                        disabled={markMutation.isPending || attendanceUnavailable}
                       >
                         {s === "present" ? "P" : s === "late" ? "L" : "A"}
                       </Button>

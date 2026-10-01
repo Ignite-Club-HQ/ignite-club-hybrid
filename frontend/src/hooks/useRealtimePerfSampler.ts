@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPlatform } from "@/lib/nativePush";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { recordLivePerfSamplesBatch, type LivePerfSampleInput } from "@/live/features/insights";
 
 /**
  * Lightweight realtime latency sampler.
@@ -72,13 +74,29 @@ export function useRealtimePerfSampler(userId: string | undefined) {
 
     const flush = async () => {
       if (!pending.length) return;
-      const batch = pending.splice(0, pending.length).map((p) => ({
-        ...p,
-        user_id: userId,
-        platform,
-      }));
+      const batch = pending.splice(0, pending.length);
       try {
-        await supabase.from("realtime_perf_samples").insert(batch);
+        await withFeatureBackend("analytics", {
+          supabase: async () => {
+            await supabase.from("realtime_perf_samples").insert(
+              batch.map((p) => ({ ...p, user_id: userId, platform })),
+            );
+          },
+          icp: async (ctx) => {
+            // Provisional mapping: channel/event/sent_at have no canister
+            // equivalent — only the bounded perf-sample shape survives,
+            // grouped under the "realtime" surface so perf_aggregate can
+            // report on it alongside the other open-latency surfaces.
+            const samples: LivePerfSampleInput[] = batch.map((p) => ({
+              surface: "realtime",
+              source: `${p.channel}:${p.event}`,
+              duration_ms: Math.max(0, Math.round(p.latency_ms)),
+              cache_hit: false,
+              platform,
+            }));
+            await recordLivePerfSamplesBatch(ctx, samples);
+          },
+        });
       } catch {
         // swallow; perf sampling must never crash the app
       }

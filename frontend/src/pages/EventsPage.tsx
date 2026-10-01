@@ -52,6 +52,7 @@ import { ScheduleDateStrip } from "@/components/events/ScheduleDateStrip";
 import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { getLiveAccountRosterScope } from "@/live/features/events";
 
 type EventType = "game" | "training" | "social";
@@ -361,19 +362,44 @@ export default function EventsPage() {
       // OR league_admin/app_admin for that club (covers every league in the club).
       step = performance.now();
       const [playerLeaguesRes, mlaRes, adminLeaguesRes] = await Promise.all([
-        supabase
-          .from("mini_league_players")
-          .select("mini_league_id")
-          .eq("parent_user_id", user!.id),
-        supabase
-          .from("mini_league_admins")
-          .select("mini_league_id")
-          .eq("user_id", user!.id),
+        withFeatureBackend("mini_leagues", {
+          supabase: () =>
+            supabase
+              .from("mini_league_players")
+              .select("mini_league_id")
+              .eq("parent_user_id", user!.id),
+          // Provisional: my_leagues() already folds in both claimed-player
+          // and admin leagues for the caller's principal, so it covers this
+          // leg; mlaRes below returns [] under ICP to avoid double counting.
+          icp: async (ctx) => {
+            const leagues = await listMyLiveMiniLeagues(ctx);
+            return { data: leagues.map((l) => ({ mini_league_id: l.id })), error: null as any };
+          },
+        }),
+        withFeatureBackend("mini_leagues", {
+          supabase: () =>
+            supabase
+              .from("mini_league_admins")
+              .select("mini_league_id")
+              .eq("user_id", user!.id),
+          icp: async () => ({ data: [] as { mini_league_id: string }[], error: null as any }),
+        }),
         leagueAdminClubIds.size > 0
-          ? supabase
-              .from("mini_leagues")
-              .select("id")
-              .in("club_id", Array.from(leagueAdminClubIds))
+          ? withFeatureBackend("mini_leagues", {
+              supabase: () =>
+                supabase
+                  .from("mini_leagues")
+                  .select("id")
+                  .in("club_id", Array.from(leagueAdminClubIds)),
+              icp: async (ctx) => {
+                const leagues = (
+                  await Promise.all(
+                    Array.from(leagueAdminClubIds).map((clubId) => listLiveMiniLeaguesByClub(ctx, clubId)),
+                  )
+                ).flat();
+                return { data: leagues.map((l) => ({ id: l.id })), error: null as any };
+              },
+            })
           : Promise.resolve({ data: [], error: null } as any),
       ]);
       diagLog("memberships:mini_leagues", {
@@ -445,10 +471,22 @@ export default function EventsPage() {
       if (useIcpLab) return [] as { id: string; name: string; club_id: string }[];
       const ids = userMemberships?.miniLeagueIds || [];
       if (ids.length === 0) return [] as { id: string; name: string; club_id: string }[];
-      let query = supabase.from("mini_leagues").select("id, name, club_id").in("id", ids).order("name");
-      if (clubFilter) query = query.eq("club_id", clubFilter);
-      const { data } = await query;
-      return data || [];
+      return withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          let query = supabase.from("mini_leagues").select("id, name, club_id").in("id", ids).order("name");
+          if (clubFilter) query = query.eq("club_id", clubFilter);
+          const { data } = await query;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const leagues = await Promise.all(ids.map((leagueId) => getLiveMiniLeague(ctx, leagueId).catch(() => null)));
+          return leagues
+            .filter((l): l is NonNullable<typeof l> => !!l)
+            .filter((l) => !clubFilter || l.club_id === clubFilter)
+            .map((l) => ({ id: l.id, name: l.name, club_id: l.club_id }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      });
     },
     enabled: (!!user || useIcpLab) && !!userMemberships,
     staleTime: 30 * 60 * 1000,

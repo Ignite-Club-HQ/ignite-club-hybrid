@@ -86,6 +86,7 @@ import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEa
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled } from "@/live/features/messaging";
+import { recordLiveMessageSent } from "@/live/features/insights";
 import { Principal } from "@icp-sdk/core/principal";
 
 
@@ -1041,6 +1042,11 @@ export default function DirectMessagePage() {
             `${conversationId}:${user!.id}:${Date.now()}`,
             attachment,
           );
+          try {
+            await recordLiveMessageSent(ctx, conversationId!, user!.id);
+          } catch {
+            // best-effort engagement counter; must never block message delivery
+          }
           data = {
             id: (sent as any)?.id ?? createSendTempId(),
             text,

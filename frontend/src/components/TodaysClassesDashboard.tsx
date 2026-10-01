@@ -4,10 +4,21 @@ import { CalendarDays, Clock, Users, CheckCircle2, AlertCircle } from "lucide-re
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface TodaysClassesDashboardProps {
   clubId: string;
 }
+
+/**
+ * This dashboard aggregates attendance by (term_id, team_id, session_date) —
+ * a weekly class schedule slot, not a Supabase `events` row — so there is no
+ * real event id to hand the events_domain canister's get_attendance call
+ * (see live/features/events.ts). Until class sessions are mapped onto
+ * canister events, the ICP branch reports attendance as unavailable rather
+ * than inventing a synthetic event id.
+ */
+const ATTENDANCE_NOT_AVAILABLE_ON_ICP = "attendance-not-available-on-icp" as const;
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -71,27 +82,35 @@ export function TodaysClassesDashboard({ clubId }: TodaysClassesDashboardProps) 
   });
 
   // Fetch today's attendance records
-  const { data: attendanceCounts = {} } = useQuery({
+  const { data: attendanceResult = {} } = useQuery({
     queryKey: ["todays-attendance-counts", activeTerm?.id, todayDate, classIds],
     queryFn: async () => {
       if (!activeTerm?.id || classIds.length === 0) return {};
-      const { data, error } = await supabase
-        .from("class_attendance")
-        .select("team_id, status")
-        .eq("term_id", activeTerm.id)
-        .eq("session_date", todayDate)
-        .in("team_id", classIds);
-      if (error) throw error;
-      const counts: Record<string, { present: number; total: number }> = {};
-      data?.forEach((a) => {
-        if (!counts[a.team_id]) counts[a.team_id] = { present: 0, total: 0 };
-        counts[a.team_id].total++;
-        if (a.status === "present" || a.status === "late") counts[a.team_id].present++;
+      return withFeatureBackend("attendance", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("class_attendance")
+            .select("team_id, status")
+            .eq("term_id", activeTerm.id)
+            .eq("session_date", todayDate)
+            .in("team_id", classIds);
+          if (error) throw error;
+          const counts: Record<string, { present: number; total: number }> = {};
+          data?.forEach((a) => {
+            if (!counts[a.team_id]) counts[a.team_id] = { present: 0, total: 0 };
+            counts[a.team_id].total++;
+            if (a.status === "present" || a.status === "late") counts[a.team_id].present++;
+          });
+          return counts;
+        },
+        icp: async () => ATTENDANCE_NOT_AVAILABLE_ON_ICP,
       });
-      return counts;
     },
     enabled: !!activeTerm?.id && classIds.length > 0,
   });
+
+  const attendanceUnavailable = attendanceResult === ATTENDANCE_NOT_AVAILABLE_ON_ICP;
+  const attendanceCounts = attendanceUnavailable ? {} : attendanceResult;
 
   if (todaysClasses.length === 0) return null;
 
@@ -138,7 +157,12 @@ export function TodaysClassesDashboard({ clubId }: TodaysClassesDashboardProps) 
                   </div>
                 </div>
                 <div className="shrink-0">
-                  {hasAttendance ? (
+                  {attendanceUnavailable ? (
+                    <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                      <AlertCircle className="h-3 w-3" />
+                      Not available
+                    </Badge>
+                  ) : hasAttendance ? (
                     <Badge variant="default" className="text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-600">
                       <CheckCircle2 className="h-3 w-3" />
                       {att.present}/{att.total}

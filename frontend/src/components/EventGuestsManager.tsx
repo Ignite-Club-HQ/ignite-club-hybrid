@@ -5,6 +5,8 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveEventGuest, removeLiveEventGuest, getLiveEventRosterDetailed } from "@/live/features/events";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +42,27 @@ export function EventGuestsManager({
   const { data: allGuests = [], isLoading } = useQuery({
     queryKey: ["event-guests", eventId],
     queryFn: async () => {
+      // `added_by` has no canister-side account id today (the canister does
+      // not record who added a guest), so ICP-mode guests show up with an
+      // empty `added_by` — "my guests"/admin-remove-by-others logic below
+      // degrades gracefully rather than crashing.
+      const icpGuests = await withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const roster = (await getLiveEventRosterDetailed(ctx, eventId)) as {
+            guests?: Array<{ id: string; event_id?: string; guest_name: string; created_at_ms?: bigint }>;
+          };
+          return (roster.guests ?? []).map((g) => ({
+            id: g.id,
+            event_id: g.event_id ?? eventId,
+            added_by: "",
+            guest_name: g.guest_name,
+            created_at: g.created_at_ms ? new Date(Number(g.created_at_ms)).toISOString() : new Date().toISOString(),
+          })) as EventGuest[];
+        },
+      });
+      if (icpGuests) return icpGuests;
+
       const { data, error } = await supabase
         .from("event_guests")
         .select("*")
@@ -72,6 +95,15 @@ export function EventGuestsManager({
 
   const addGuestMutation = useMutation({
     mutationFn: async (guestName: string) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await addLiveEventGuest(ctx, eventId, guestName.trim());
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { error } = await supabase.from("event_guests").insert({
         event_id: eventId,
         added_by: user!.id,
@@ -91,6 +123,15 @@ export function EventGuestsManager({
 
   const removeGuestMutation = useMutation({
     mutationFn: async (guestId: string) => {
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await removeLiveEventGuest(ctx, guestId);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { error } = await supabase
         .from("event_guests")
         .delete()

@@ -25,6 +25,8 @@ import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";
 
 import igniteIcon from "@/assets/ignite-icon.png";
 
@@ -218,20 +220,50 @@ export default function ProfilePage() {
   const { data: pointsHistoryData, isLoading: pointsHistoryLoading } = useQuery({
     queryKey: ["points-history", user?.id, activeClubFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("points_history")
-        .select(`id, amount, balance_after, source_type, source_id, description, created_at, club_id, clubs:club_id (name)`)
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(100);
-      
-      if (activeClubFilter) {
-        query = query.eq("club_id", activeClubFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          let query = supabase
+            .from("points_history")
+            .select(`id, amount, balance_after, source_type, source_id, description, created_at, club_id, clubs:club_id (name)`)
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false })
+            .limit(100);
+
+          if (activeClubFilter) {
+            query = query.eq("club_id", activeClubFilter);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // `list_points_history` requires a single club_id — there is no
+          // canister equivalent of the Supabase "All Clubs" cross-club
+          // history read, so that mode gates to empty here (see
+          // live/features/points.ts bulk-lookup limitation doc comment).
+          if (!activeClubFilter) return [];
+          const page = await listLivePointsHistory(
+            ctx,
+            activeClubFilter,
+            subjectForUser(user!.id),
+            0,
+            100,
+          );
+          return page.items.map((entry) => ({
+            id: entry.id,
+            amount: entry.amount,
+            balance_after: entry.balance_after,
+            source_type: entry.source_type,
+            source_id: entry.source_id[0] ?? null,
+            description: entry.description,
+            created_at: new Date(Number(entry.created_at_ms)).toISOString(),
+            club_id: entry.club_id,
+            // No canister-side club-name join — render without it.
+            clubs: null,
+          }));
+        },
+      });
     },
     enabled: !!user && !useIcpLab,
   });
@@ -267,19 +299,44 @@ export default function ProfilePage() {
   const { data: redemptionHistory, isLoading: redemptionsLoading } = useQuery({
     queryKey: ["redemption-history", user?.id, activeClubFilter],
     queryFn: async () => {
-      let query = supabase
-        .from("reward_redemptions")
-        .select(`id, points_spent, status, redeemed_at, created_at, club_id, club_rewards (name), clubs!club_id (name)`)
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      
-      if (activeClubFilter) {
-        query = query.eq("club_id", activeClubFilter);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          let query = supabase
+            .from("reward_redemptions")
+            .select(`id, points_spent, status, redeemed_at, created_at, club_id, club_rewards (name), clubs!club_id (name)`)
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false });
+
+          if (activeClubFilter) {
+            query = query.eq("club_id", activeClubFilter);
+          }
+
+          const { data, error } = await query;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // `list_redemptions` requires a single club_id — no cross-club
+          // bulk read exists, so "All Clubs" mode gates to empty (see
+          // live/features/points.ts doc comment).
+          if (!activeClubFilter) return [];
+          const redemptions = await listLiveRedemptions(ctx, activeClubFilter, subjectForUser(user!.id));
+          return redemptions
+            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              points_spent: r.points_spent,
+              status: r.status,
+              redeemed_at: r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])).toISOString() : null,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+              club_id: r.club_id,
+              reward_id: r.reward_id,
+              // No canister-side reward/club-name joins — render neutral fallbacks.
+              club_rewards: null,
+              clubs: null,
+            }));
+        },
+      });
     },
     enabled: !!user && !useIcpLab,
   });
@@ -365,18 +422,27 @@ export default function ProfilePage() {
     queryKey: ["points-rank", user?.id, activeClubFilter],
     queryFn: async () => {
       if (!user?.id || !activeClubFilter) return null;
-      const { data, error } = await supabase.rpc("get_user_leaderboard_rank_all_time", {
-        _user_id: user.id,
-        _club_id: activeClubFilter,
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("get_user_leaderboard_rank_all_time", {
+            _user_id: user.id,
+            _club_id: activeClubFilter,
+          });
+          if (error) throw error;
+          const row = Array.isArray(data) ? data[0] : null;
+          if (!row || !row.rank) return null;
+          return {
+            rank: row.rank as number,
+            total: row.total as number,
+            points: row.points as number,
+          };
+        },
+        // The canister's `get_leaderboard` returns a ranked top-N list but no
+        // dedicated "this user's rank" RPC — computing an exact rank would
+        // require pulling the full leaderboard client-side, which isn't a
+        // reasonable default for a profile badge. Gate to no-rank on ICP.
+        icp: async () => null,
       });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : null;
-      if (!row || !row.rank) return null;
-      return {
-        rank: row.rank as number,
-        total: row.total as number,
-        points: row.points as number,
-      };
     },
     enabled: !!user && !useIcpLab && hasProAccess === true && !!activeClubFilter,
   });
@@ -386,15 +452,22 @@ export default function ProfilePage() {
     queryKey: ["points-rank-seasoned", user?.id, activeClubFilter, selectedSeasonId],
     queryFn: async () => {
       if (!user?.id || !activeClubFilter || selectedSeasonId === "all") return null;
-      const { data, error } = await supabase.rpc("get_user_leaderboard_rank_seasoned", {
-        _user_id: user.id,
-        _club_id: activeClubFilter,
-        _season_id: selectedSeasonId,
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("get_user_leaderboard_rank_seasoned", {
+            _user_id: user.id,
+            _club_id: activeClubFilter,
+            _season_id: selectedSeasonId,
+          });
+          if (error) throw error;
+          const row = Array.isArray(data) ? data[0] : null;
+          if (!row || !row.rank) return null;
+          return { rank: row.rank as number, total: row.total as number, points: row.points as number };
+        },
+        // No canister-side season-scoped rank RPC — see rankData's ICP branch
+        // comment above; gate to no-rank rather than approximating one.
+        icp: async () => null,
       });
-      if (error) throw error;
-      const row = Array.isArray(data) ? data[0] : null;
-      if (!row || !row.rank) return null;
-      return { rank: row.rank as number, total: row.total as number, points: row.points as number };
     },
     enabled: !!user && !useIcpLab && hasProAccess === true && !!activeClubFilter && selectedSeasonId !== "all",
   });

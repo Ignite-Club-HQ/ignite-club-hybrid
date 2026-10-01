@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { listLivePlayers, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,7 +72,7 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveEventRoster } from "@/live/features/events";
+import { getLiveEventRoster, getLiveEventRosterDetailed } from "@/live/features/events";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -254,6 +255,44 @@ export default function EventDetailPage() {
         return listLocalEventRsvps(localIcpPersona, id);
       }
 
+      // Production ICP routing: events_domain has no per-event RSVP table
+      // shaped like Supabase `rsvps`, so the roster (account RSVPs + linked
+      // children) and the caller's own child RSVPs are read via the
+      // upgraded event_roster / my_child_rsvps queries and mapped into the
+      // Supabase-shaped row the rest of this page expects. Enrichment
+      // (profile display names, mini_league_players) has no canister
+      // equivalent and is left null — provisional until verified post-deploy.
+      const icpRsvps = await withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
+            rsvps?: Array<{
+              rsvp: { account_id: string; child_id: [] | [string]; state: string; notes: string };
+              child: [] | [{ id: string; name: string }];
+            }>;
+          };
+          const rows = (roster.rsvps ?? []).map(({ rsvp, child }) => {
+            const childId = Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null;
+            const childRow = Array.isArray(child) && child.length > 0 ? child[0] : null;
+            return {
+              id: `${id}:${rsvp.account_id}:${childId ?? "self"}`,
+              event_id: id,
+              user_id: rsvp.account_id,
+              child_id: childId,
+              status: rsvp.state,
+              notes: rsvp.notes || null,
+              source: "user",
+              profiles: null,
+              children: childRow ? { id: childRow.id, name: childRow.name } : null,
+              mini_league_players: null,
+            };
+          });
+          return rows;
+        },
+      });
+      if (icpRsvps) return icpRsvps;
+
       const provider: EventRsvpProvider = {
         async listRsvps(eventId) {
           const { data, error } = await supabase
@@ -329,6 +368,29 @@ export default function EventDetailPage() {
     queryKey: ["event-guests", id],
     queryFn: async () => {
       if (useIcpLab) return [];
+
+      // Production ICP routing: the upgraded event_roster query returns
+      // guests alongside RSVPs. `added_by` has no canister-side account id
+      // today (the canister does not record who added a guest), so the
+      // adder name enrichment below is skipped — provisional until the
+      // canister exposes it.
+      const icpGuests = await withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
+            guests?: Array<{ id: string; event_id?: string; guest_name: string; added_by?: string }>;
+          };
+          return (roster.guests ?? []).map((g) => ({
+            id: g.id,
+            event_id: g.event_id ?? id,
+            added_by: g.added_by ?? "",
+            guest_name: g.guest_name,
+            added_by_name: "A member",
+          }));
+        },
+      });
+      if (icpGuests) return icpGuests;
 
       const provider: EventSupportingReadsProvider = {
         async listEventGuests(eventId) {
@@ -813,12 +875,25 @@ export default function EventDetailPage() {
   const { data: miniLeaguePlayers } = useQuery({
     queryKey: ["mini-league-players-for-event", event?.mini_league_id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_players")
-        .select("id, name, parent_user_id, child_id")
-        .eq("mini_league_id", event!.mini_league_id!);
-      if (error) throw error;
-      const players = data || [];
+      const players = await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .select("id, name, parent_user_id, child_id")
+            .eq("mini_league_id", event!.mini_league_id!);
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const canisterPlayers = await listLivePlayers(ctx, event!.mini_league_id!);
+          return canisterPlayers.map((p) => ({
+            id: p.id,
+            name: p.name,
+            parent_user_id: p.parent_user_id ?? null,
+            child_id: p.child_id ?? null,
+          }));
+        },
+      });
 
       const childIds = Array.from(
         new Set(players.map((p: any) => p.child_id).filter((id: string | null): id is string => !!id)),
@@ -875,15 +950,28 @@ export default function EventDetailPage() {
   // Mini-league players owned by current parent (for self-serve per-player RSVP)
   const { data: myMiniLeaguePlayers } = useQuery({
     queryKey: ["my-mini-league-players-for-event", event?.mini_league_id, user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_players")
-        .select("id, name, child_id")
-        .eq("mini_league_id", event!.mini_league_id!)
-        .eq("parent_user_id", user!.id);
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .select("id, name, child_id")
+            .eq("mini_league_id", event!.mini_league_id!)
+            .eq("parent_user_id", user!.id);
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // Provisional: Supabase filters by auth.users uuid; the canister
+          // keys players by principal text via `parent_user_id`, so this
+          // compares against the signed-in identity's principal instead.
+          const myPrincipal = ctx.identity.getPrincipal().toText();
+          const canisterPlayers = await listLivePlayers(ctx, event!.mini_league_id!);
+          return canisterPlayers
+            .filter((p) => p.parent_user_id === myPrincipal)
+            .map((p) => ({ id: p.id, name: p.name, child_id: p.child_id ?? null }));
+        },
+      }),
     enabled: !!event?.mini_league_id && !!user?.id,
   });
 
@@ -931,15 +1019,24 @@ export default function EventDetailPage() {
     queryKey: ["mini-league-duty-assignees-session", event?.mini_league_id, id],
     queryFn: async () => {
       const miniLeagueId = event!.mini_league_id!;
-      
+
       // Get mini league to find the club_id
-      const { data: league, error: leagueError } = await supabase
-        .from("mini_leagues")
-        .select("club_id")
-        .eq("id", miniLeagueId)
-        .single();
-      if (leagueError) throw leagueError;
-      
+      const leagueClubId = await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data: league, error: leagueError } = await supabase
+            .from("mini_leagues")
+            .select("club_id")
+            .eq("id", miniLeagueId)
+            .single();
+          if (leagueError) throw leagueError;
+          return league.club_id as string;
+        },
+        icp: async (ctx) => {
+          const league = await getLiveMiniLeague(ctx, miniLeagueId);
+          return league.club_id;
+        },
+      });
+
       // Get RSVPs for this event (only user RSVPs, not children/players)
       const { data: eventRsvps, error: rsvpError } = await supabase
         .from("rsvps")
@@ -952,24 +1049,32 @@ export default function EventDetailPage() {
       const rsvpUserIds = new Set(eventRsvps?.map(r => r.user_id).filter(Boolean) as string[]);
       
       // Get all parent user IDs from mini league players who RSVP'd
-      const { data: playersData, error: playersError } = await supabase
-        .from("mini_league_players")
-        .select("parent_user_id")
-        .eq("mini_league_id", miniLeagueId)
-        .not("parent_user_id", "is", null);
-      if (playersError) throw playersError;
-      
+      const playerParentIds = await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data: playersData, error: playersError } = await supabase
+            .from("mini_league_players")
+            .select("parent_user_id")
+            .eq("mini_league_id", miniLeagueId)
+            .not("parent_user_id", "is", null);
+          if (playersError) throw playersError;
+          return (playersData?.map(p => p.parent_user_id).filter(Boolean) as string[]) || [];
+        },
+        icp: async (ctx) => {
+          const players = await listLivePlayers(ctx, miniLeagueId);
+          return players.map((p) => p.parent_user_id).filter((v): v is string => !!v);
+        },
+      });
+
       // Only include parents who RSVP'd going
       const parentIds = [...new Set(
-        (playersData?.map(p => p.parent_user_id).filter(Boolean) as string[])
-          .filter(parentId => rsvpUserIds.has(parentId))
+        playerParentIds.filter(parentId => rsvpUserIds.has(parentId))
       )];
       
       // Get club admins and league admins who RSVP'd
       const { data: adminRoles, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id")
-        .eq("club_id", league.club_id)
+        .eq("club_id", leagueClubId)
         .in("role", ["club_admin", "league_admin"]);
       if (rolesError) throw rolesError;
       
