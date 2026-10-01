@@ -8,7 +8,7 @@ module {
   // ("poll", "news", "image"), ref_id points at the referenced record, and
   // url carries externally-hosted media (Supabase storage today).
   public type Attachment = { kind : Text; ref_id : Text; url : ?Text };
-  public type Message = { conversation_id : Text; id : Text; sender : Principal; body : Text; sequence : Nat64; idempotency_key : Text; edited_at_ms : ?Nat64; attachment : ?Attachment };
+  public type Message = { conversation_id : Text; id : Text; sender : Principal; body : Text; sequence : Nat64; idempotency_key : Text; edited_at_ms : ?Nat64; attachment : ?Attachment; created_at_ms : Nat64 };
   public type Receipt = { conversation_id : Text; user : Principal; message_id : Text; read : Bool };
   public type Unread = { conversation_id : Text; user : Principal; count : Nat64; last_read_sequence : Nat64 };
   public type MessagePage = { messages : [Message]; next_sequence : ?Nat64; latest_sequence : Nat64 };
@@ -25,6 +25,9 @@ module {
     team_id : ?Text;
     members : [Principal];
     created_at_ms : Nat64;
+    avatar : ?Text;
+    description : ?Text;
+    deleted : Bool;
   };
 
   // Shared-club membership record backing `can_dm_user`: two users may DM
@@ -54,5 +57,89 @@ module {
     clubMemberships : [ClubMembership];
     competitionAdmins : [CompetitionAdmin];
     dmAttachmentsDisabled : [Principal];
+    groupRoles : [GroupRole];
+    joinRequests : [JoinRequest];
+    polls : [Poll];
+    pollVotes : [PollVote];
+    mutePreferences : [MutePreference];
+    dmLinks : [DmLink];
+    forwardRecords : [ForwardRecord];
+    scheduledMessages : [ScheduledMessage];
+    attachmentMetadata : [AttachmentMetadata];
+    reactions : [Reaction];
+    clubDmSettings : [ClubDmSettings];
+    userMessagingSettings : [UserMessagingSettings];
   };
+
+  // --- Group management (roles, bulk membership, soft-delete, join requests) ---
+  public type GroupRole = { conversation_id : Text; user : Principal; role : Text }; // "owner" | "admin" | "member"
+  public type JoinRequest = { conversation_id : Text; user : Principal; status : Text; created_at_ms : Nat64 }; // "pending" | "approved" | "rejected"
+
+  // --- Polls ---
+  public type Poll = {
+    id : Text;
+    conversation_id : Text;
+    message_id : ?Text;
+    question : Text;
+    options : [Text];
+    creator : Principal;
+    closed : Bool;
+    created_at_ms : Nat64;
+  };
+  public type PollVote = { poll_id : Text; user : Principal; option_index : Nat32 };
+  public type PollResults = { poll : Poll; counts : [Nat32]; total_votes : Nat32 };
+
+  // --- Mute preferences (storage only; not enforced on-chain) ---
+  public type MutePreference = { user : Principal; conversation_id : Text; muted : Bool };
+
+  // --- Deterministic DM lookup ---
+  public type DmLink = { a : Principal; b : Principal; conversation_id : Text };
+
+  // --- Forwarded messages ---
+  public type ForwardRecord = {
+    message_id : Text;
+    to_conversation_id : Text;
+    from_conversation_id : Text;
+    from_message_id : Text;
+    original_sender : Principal;
+  };
+
+  // --- Scheduled message replay markers ---
+  public type ScheduledMessage = {
+    id : Text;
+    conversation_id : Text;
+    sender : Principal;
+    body : Text;
+    scheduled_at_ms : Nat64;
+    replayed_at_ms : ?Nat64;
+    replayed_message_id : ?Text;
+  };
+
+  // --- Off-chain attachment metadata registration (bytes stay off-chain) ---
+  public type AttachmentMetadata = {
+    id : Text;
+    conversation_id : Text;
+    message_id : ?Text;
+    kind : Text;
+    ref_id : Text;
+    url : ?Text;
+    size_bytes : ?Nat64;
+    uploader : Principal;
+    created_at_ms : Nat64;
+  };
+
+  // --- Reactions (needed for chat recap "reactions summary") ---
+  public type Reaction = { message_id : Text; user : Principal; emoji : Text };
+  public type ReactionSummary = { emoji : Text; count : Nat32 };
+  public type MessageWithReactions = { message : Message; reactions : [ReactionSummary] };
+
+  // --- Per-club DM settings ---
+  public type ClubDmSettings = { club_id : Text; dm_disabled : Bool; attachments_disabled : Bool };
+
+  // --- Per-user messaging settings ---
+  public type UserMessagingSettings = { user : Principal; hide_message_preview : Bool; ai_catchup_enabled : Bool };
+
+  // --- Recent conversations rail ---
+  public type RecentConversation = { conversation_id : Text; kind : Text; last_message_sequence : Nat64; last_message_at_ms : ?Nat64 };
+  public type ClubUnreadSummary = { club_id : Text; count : Nat64 };
 }

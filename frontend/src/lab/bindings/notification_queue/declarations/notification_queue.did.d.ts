@@ -10,6 +10,8 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export type ChatNotifyBatchResult = { 'Ok' : number } |
+  { 'Err' : string };
 export type ChatType = { 'Club' : null } |
   { 'Group' : null } |
   { 'ClubAdmin' : null } |
@@ -96,6 +98,12 @@ export interface PreferencesInput {
   'email_pom_enabled' : boolean,
   'membership_enabled' : boolean,
 }
+export interface PreferencesPage {
+  'total' : number,
+  'items' : Array<Preferences>,
+}
+export type PreferencesPageResult = { 'Ok' : PreferencesPage } |
+  { 'Err' : string };
 export type PreferencesResult = { 'Ok' : Preferences } |
   { 'Err' : string };
 export interface PushAlertSettings {
@@ -192,11 +200,19 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
+  'list_preferences_by_club' : ActorMethod<
+    [string, number, number],
+    PreferencesPageResult
+  >,
   'list_scheduled' : ActorMethod<[string, [] | [string]], ScheduledResults>,
   'mark_all_read' : ActorMethod<[string, [] | [string]], ResultNat16>,
   'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
   'mark_read' : ActorMethod<[string], Result>,
   'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'record_chat_notify_batch' : ActorMethod<
+    [string, string, string, string, Array<string>, Array<string>],
+    ChatNotifyBatchResult
+  >,
   'record_digest_item' : ActorMethod<
     [
       string,

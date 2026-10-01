@@ -1,7 +1,23 @@
+type TeamTrainingPause = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   ends_at_ms: nat64;
+   id: text;
+   reason: text;
+   starts_at_ms: nat64;
+   team_id: text;
+ };
 type RsvpWithChild = 
  record {
    child: opt Child;
    rsvp: Rsvp;
+ };
+type RsvpSubject = 
+ variant {
+   account: text;
+   mini_league_player: text;
  };
 type Rsvp = 
  record {
@@ -27,11 +43,40 @@ type RoleGrant =
    team_id: opt text;
    user: principal;
  };
+type ReminderLog = 
+ record {
+   channel: text;
+   event_id: text;
+   id: text;
+   recipient: text;
+   sent_at_ms: nat64;
+ };
 type Recurrence = 
  record {
    event_id: text;
    frequency: text;
    until_ms: nat64;
+ };
+type PushReachability = 
+ record {
+   reachable: bool;
+   updated_at_ms: nat64;
+   user: principal;
+ };
+type OpenDuty = 
+ record {
+   claimed_by: opt text;
+   created_at_ms: nat64;
+   duty: text;
+   event_id: text;
+   id: text;
+ };
+type MiniLeagueRsvp = 
+ record {
+   event_id: text;
+   state: text;
+   subject: RsvpSubject;
+   updated_at_ms: nat64;
  };
 type LineupSnapshot = 
  record {
@@ -62,10 +107,17 @@ type LineupEntry =
    slot: text;
    team_id: opt text;
  };
+type EventView = 
+ record {
+   event_id: text;
+   viewed_at_ms: nat64;
+   viewer: principal;
+ };
 type EventSeries = 
  record {
    club_id: text;
    creator: principal;
+   deleted: bool;
    description: text;
    event_type: text;
    first_ends_at_ms: nat64;
@@ -91,6 +143,24 @@ type EventGuest =
    guest_name: text;
    id: text;
  };
+type EventGroupPlayer = 
+ record {
+   account_id: text;
+   group_id: text;
+ };
+type EventGroupDuty = 
+ record {
+   account_id: opt text;
+   duty: text;
+   group_id: text;
+ };
+type EventGroup = 
+ record {
+   created_at_ms: nat64;
+   event_id: text;
+   id: text;
+   name: text;
+ };
 type EventAttendance = 
  record {
    event_id: text;
@@ -106,6 +176,7 @@ type Event =
    cancelled: bool;
    club_id: text;
    creator: principal;
+   deleted: bool;
    description: text;
    ends_at_ms: nat64;
    event_type: text;
@@ -123,6 +194,13 @@ type Duty =
    completed: bool;
    duty: text;
    event_id: text;
+ };
+type CoachNote = 
+ record {
+   event_id: text;
+   note: text;
+   updated_at_ms: nat64;
+   updated_by: principal;
  };
 type ChildGuardian = 
  record {
@@ -161,11 +239,21 @@ service : {
       Err: text;
       Ok: EventGuest;
     });
+  add_group_player: (group_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok: EventGroupPlayer;
+    });
   add_lineup: (event_id: text, member: text, slot: text, team_id:
    opt text) -> (variant {
                    Err: text;
                    Ok: LineupEntry;
                  });
+  add_series_occurrence: (series_id: text, starts_at_ms: nat64, ends_at_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: Event;
+              });
   admin_link_guardian: (child_id: text, guardian_id: text, is_primary:
    bool) -> (variant {
                Err: text;
@@ -191,6 +279,11 @@ service : {
       Err: text;
       Ok: bool;
     }) query;
+  claim_open_duty: (id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok: OpenDuty;
+    });
   complete_duty: (event_id: text, account_id: text) ->
    (variant {
       Err: text;
@@ -202,6 +295,16 @@ service : {
                             Err: text;
                             Ok: Event;
                           });
+  create_event_group: (event_id: text, name: text) ->
+   (variant {
+      Err: text;
+      Ok: EventGroup;
+    });
+  create_open_duty: (event_id: text, duty: text) ->
+   (variant {
+      Err: text;
+      Ok: OpenDuty;
+    });
   create_recurring_series: (club_id: text, team_id: opt text, title: 
    text, description: text, event_type: text, location: opt text, frequency:
    text, first_starts_at_ms: nat64, first_ends_at_ms: nat64, occurrences:
@@ -223,11 +326,29 @@ service : {
             series: EventSeries;
           };
     });
+  create_team_training_pause: (club_id: text, team_id: text, starts_at_ms:
+   nat64, ends_at_ms: nat64, reason: text) ->
+   (variant {
+      Err: text;
+      Ok: TeamTrainingPause;
+    });
+  delete_event: (id: text) -> (variant {
+                                 Err: text;
+                                 Ok: Event;
+                               });
+  delete_event_group: (group_id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
   delete_series: (id: text, from_ms: nat64) ->
    (variant {
       Err: text;
       Ok: nat32;
     });
+  delete_team_training_pause: (id: text) -> (variant {
+                                               Err: text;
+                                               Ok;
+                                             });
   detach_occurrence: (event_id: text) -> (variant {
                                             Err: text;
                                             Ok: Event;
@@ -245,19 +366,29 @@ service : {
          attendance: vec Attendance;
          childGuardians: vec ChildGuardian;
          children: vec Child;
+         coachNotes: vec CoachNote;
          duties: vec Duty;
          eventAttendance: vec EventAttendance;
+         eventGroupDuties: vec EventGroupDuty;
+         eventGroupPlayers: vec EventGroupPlayer;
+         eventGroups: vec EventGroup;
          eventGuests: vec EventGuest;
+         eventViews: vec EventView;
          events: vec Event;
          governor: principal;
          lineupSnapshots: vec LineupSnapshot;
          lineups: vec LineupEntry;
+         miniLeagueRsvps: vec MiniLeagueRsvp;
+         openDuties: vec OpenDuty;
+         pushReachability: vec PushReachability;
          recurrences: vec Recurrence;
+         reminderLogs: vec ReminderLog;
          roles: vec RoleGrant;
          roster: vec RosterEntry;
          rsvps: vec Rsvp;
          schema: nat32;
          series: vec EventSeries;
+         teamTrainingPauses: vec TeamTrainingPause;
        };
     }) query;
   get_attendance: (event_id: text) ->
@@ -265,15 +396,30 @@ service : {
       Err: text;
       Ok: vec EventAttendance;
     }) query;
+  get_coach_note: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt CoachNote;
+    }) query;
   get_event_roster: (event_id: text) ->
    (variant {
       Err: text;
       Ok: vec RosterEntry;
     }) query;
+  get_event_view_count: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: nat32;
+    }) query;
   get_lineup_snapshot: (event_id: text, team_id: opt text) ->
    (variant {
       Err: text;
       Ok: opt LineupSnapshot;
+    }) query;
+  get_push_reachable: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok: opt bool;
     }) query;
   grant_role: ("principal": principal, role: text, club_id: text, team_id:
    opt text) -> (variant {
@@ -284,23 +430,80 @@ service : {
                        Err: text;
                        Ok;
                      });
+  is_guardian_of: ("principal": principal, child_id: text) -> (bool) query;
+  is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: bool;
+    }) query;
+  is_team_member: ("principal": principal, club_id: text, team_id: text) ->
+   (bool) query;
   listBulkAccessPrincipals: () ->
    (variant {
       Err: text;
       Ok: vec principal;
     }) query;
+  list_event_groups: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec EventGroup;
+    }) query;
   list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+  list_group_duties: (group_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec EventGroupDuty;
+    }) query;
+  list_group_players: (group_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec EventGroupPlayer;
+    }) query;
+  list_mini_league_rsvps: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec MiniLeagueRsvp;
+    }) query;
+  list_open_duties: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec OpenDuty;
+    }) query;
+  list_reminders: (event_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec ReminderLog;
+    }) query;
   list_series: (club_id: opt text, team_id: opt text) ->
    (vec EventSeries) query;
+  list_team_training_pauses: (club_id: text, team_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec TeamTrainingPause;
+    }) query;
   mark_attendance: (event_id: text, records: vec AttendanceInput) ->
    (variant {
       Err: text;
       Ok: vec EventAttendance;
     });
+  move_group_player: (from_group_id: text, to_group_id: text, account_id:
+   text) -> (variant {
+               Err: text;
+               Ok;
+             });
   my_attendance: (event_id: opt text) -> (vec EventAttendance) query;
   my_child_rsvps: (event_id: opt text, club_id: opt text) ->
    (vec RsvpWithChild) query;
   my_rsvps: () -> (vec Rsvp) query;
+  record_event_view: (event_id: text) -> (variant {
+                                            Err: text;
+                                            Ok;
+                                          });
+  record_reminder_sent: (event_id: text, channel: text, recipient: text) ->
+   (variant {
+      Err: text;
+      Ok: ReminderLog;
+    });
   removeBulkAccessPrincipal: ("principal": principal) ->
    (variant {
       Err: text;
@@ -315,6 +518,21 @@ service : {
                                        Err: text;
                                        Ok;
                                      });
+  remove_group_duty: (group_id: text, duty: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  remove_group_player: (group_id: text, account_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  rename_event_group: (group_id: text, name: text) ->
+   (variant {
+      Err: text;
+      Ok: EventGroup;
+    });
   save_lineup_snapshot: (event_id: text, team_id: opt text, formation:
    opt text, team_size: nat16, ball_x: opt float64, ball_y: opt float64,
    players: vec LineupPlayer) -> (variant {
@@ -326,6 +544,11 @@ service : {
                Err: text;
                Ok: Attendance;
              });
+  set_coach_note: (event_id: text, note: text) ->
+   (variant {
+      Err: text;
+      Ok: CoachNote;
+    });
   set_duty: (event_id: text, account_id: text, duty: text) ->
    (variant {
       Err: text;
@@ -335,6 +558,21 @@ service : {
    (variant {
       Err: text;
       Ok: Event;
+    });
+  set_group_duty: (group_id: text, duty: text, account_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EventGroupDuty;
+    });
+  set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
+   text) -> (variant {
+               Err: text;
+               Ok: MiniLeagueRsvp;
+             });
+  set_push_reachable: (reachable: bool) ->
+   (variant {
+      Err: text;
+      Ok: PushReachability;
     });
   set_recurrence: (event_id: text, frequency: text, until_ms: nat64) ->
    (variant {
@@ -351,6 +589,19 @@ service : {
       Err: text;
       Ok: Rsvp;
     });
+  soft_delete_series: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok: EventSeries;
+                                     });
+  swap_group_players: (group_a: text, account_a: text, group_b: text,
+   account_b: text) -> (variant {
+                          Err: text;
+                          Ok;
+                        });
+  unclaim_open_duty: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok: OpenDuty;
+                                    });
   uncomplete_duty: (event_id: text, account_id: text) ->
    (variant {
       Err: text;

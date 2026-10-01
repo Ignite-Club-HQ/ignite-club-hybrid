@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ChatSettings {
+  'revision' : bigint,
+  'competition_id' : string,
+  'chat_enabled' : boolean,
+}
 export interface Competition {
   'id' : string,
   'status' : string,
@@ -17,6 +22,27 @@ export interface Competition {
   'season' : string,
   'revision' : bigint,
   'club_id' : string,
+}
+export interface CompetitionInvite {
+  'id' : string,
+  'status' : string,
+  'responded_at_ms' : [] | [bigint],
+  'invitee' : Principal,
+  'role' : string,
+  'team_id' : [] | [string],
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'competition_id' : string,
+}
+export interface CompetitionJoinLink {
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'team_id' : [] | [string],
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'revision' : bigint,
+  'competition_id' : string,
 }
 export interface JoinToken {
   'id' : string,
@@ -63,7 +89,10 @@ export interface State {
   'entries' : Array<TeamEntry>,
   'matches' : Array<Match>,
   'tokens' : Array<JoinToken>,
+  'chatSettings' : Array<ChatSettings>,
+  'competitionInvites' : Array<CompetitionInvite>,
   'governor' : Principal,
+  'competitionJoinLinks' : Array<CompetitionJoinLink>,
   'competitions' : Array<Competition>,
   'roles' : Array<RoleGrant>,
 }
@@ -75,9 +104,19 @@ export interface TeamEntry {
   'club_id' : string,
 }
 export interface _SERVICE {
+  'accept_competition_invite' : ActorMethod<
+    [string],
+    { 'Ok' : CompetitionInvite } |
+      { 'Err' : string }
+  >,
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'add_competition_role' : ActorMethod<
+    [string, Principal, string, [] | [string]],
+    { 'Ok' : RoleGrant } |
       { 'Err' : string }
   >,
   'assign_division' : ActorMethod<
@@ -95,17 +134,38 @@ export interface _SERVICE {
     { 'Ok' : Competition } |
       { 'Err' : string }
   >,
+  'create_competition_invite' : ActorMethod<
+    [string, Principal, string, [] | [string]],
+    { 'Ok' : CompetitionInvite } |
+      { 'Err' : string }
+  >,
+  'create_competition_join_link' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : CompetitionJoinLink } |
+      { 'Err' : string }
+  >,
   'create_season' : ActorMethod<
     [string, string],
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'decline_competition_invite' : ActorMethod<
+    [string],
+    { 'Ok' : CompetitionInvite } |
+      { 'Err' : string }
+  >,
+  'delete_match' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'duplicate_season' : ActorMethod<
     [string, string, string],
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
+  'get_chat_settings' : ActorMethod<
+    [string],
+    { 'Ok' : ChatSettings } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -122,9 +182,24 @@ export interface _SERVICE {
     { 'Ok' : JoinToken } |
       { 'Err' : string }
   >,
+  'join_competition_by_token' : ActorMethod<
+    [string],
+    { 'Ok' : RoleGrant } |
+      { 'Err' : string }
+  >,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_competition_invites' : ActorMethod<
+    [string],
+    { 'Ok' : Array<CompetitionInvite> } |
+      { 'Err' : string }
+  >,
+  'list_competition_roles' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RoleGrant> } |
       { 'Err' : string }
   >,
   'list_competitions' : ActorMethod<
@@ -140,6 +215,11 @@ export interface _SERVICE {
   'list_entries' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamEntry> } |
+      { 'Err' : string }
+  >,
+  'list_invites_by_invitee' : ActorMethod<
+    [],
+    { 'Ok' : Array<CompetitionInvite> } |
       { 'Err' : string }
   >,
   'list_matches' : ActorMethod<
@@ -167,6 +247,26 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_competition_role' : ActorMethod<
+    [string, Principal, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'revoke_competition_join_link' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'rotate_competition_join_link' : ActorMethod<
+    [string],
+    { 'Ok' : CompetitionJoinLink } |
+      { 'Err' : string }
+  >,
+  'set_chat_settings' : ActorMethod<
+    [string, boolean, bigint],
+    { 'Ok' : ChatSettings } |
+      { 'Err' : string }
+  >,
   'set_match_result' : ActorMethod<
     [string, number, number, bigint],
     { 'Ok' : Match } |
@@ -180,6 +280,11 @@ export interface _SERVICE {
   'set_season_status' : ActorMethod<
     [string, string, bigint],
     { 'Ok' : Season } |
+      { 'Err' : string }
+  >,
+  'trim_rounds' : ActorMethod<
+    [string, number],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'update_match_details' : ActorMethod<

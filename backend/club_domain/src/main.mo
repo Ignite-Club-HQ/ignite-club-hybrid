@@ -44,6 +44,13 @@ persistent actor {
   var parentInvites : [Types.ParentInvite];
   var roleRequests : [Types.RoleRequest];
   var teamInvites : [Types.TeamInvite];
+  var teamInviteLinks : [Types.TeamInviteLink];
+  var pendingInvites : [Types.PendingInvite];
+  var teamCreationRequests : [Types.TeamCreationRequest];
+  var teamPlayerPositions : [Types.TeamPlayerPosition];
+  var teamCaptains : [Types.TeamCaptain];
+  var clubJoinRequests : [Types.ClubJoinRequest];
+  var themePrefs : [(Principal, Text)];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -1000,6 +1007,7 @@ persistent actor {
       name; division = null; gender = null; is_active = true; club_id;
       age_group = null; description = null; logo_url = null; team_type = null;
       deleted_at_ms = null;
+      archived = false;
       is_shell = true;
       shell_claim_token = ?token;
       shell_claimed_at_ms = null;
@@ -1046,4 +1054,555 @@ persistent actor {
     if (not isGovernor(caller)) return #Err("Governor required");
     #Ok({ schema = 1; accounts; exclusions = accountExclusions; families = accountFamilies; challenges = accountChallenges; roles = accountRoles; next_challenge = nextChallengeId })
   };
+  // ---- Team-invite shareable links: a single rotating token redeemable
+  // by anyone who holds it (role fixed at creation), distinct from the
+  // per-email TeamInvite records above. ----
+
+  func genToken(prefix : Text, size : Nat) : Text {
+    prefix # "-" # Nat.toText(size) # "-" # Nat64.toText(nowNs())
+  };
+
+  public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (role == "") return #Err("Invalid role");
+    let now = nowMs();
+    let link : Types.TeamInviteLink = {
+      id = "tlink-" # team_id # "-" # Nat.toText(teamInviteLinks.size() + 1);
+      club_id; team_id; role;
+      token = genToken("tok", teamInviteLinks.size());
+      created_by = caller;
+      created_at_ms = now;
+      rotated_at_ms = null;
+      revoked = false;
+    };
+    teamInviteLinks := teamInviteLinks.concat([link]);
+    #Ok(link)
+  };
+
+  public shared ({ caller }) func rotate_team_invite_link(id : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    auth(caller);
+    switch (teamInviteLinks.find(func(l) = l.id == id)) {
+      case null { #Err("Invite link not found") };
+      case (?link) {
+        if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
+        let updated : Types.TeamInviteLink = { link with token = genToken("tok", teamInviteLinks.size()); rotated_at_ms = ?nowMs() };
+        teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_team_invite_link(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (teamInviteLinks.find(func(l) = l.id == id)) {
+      case null { #Err("Invite link not found") };
+      case (?link) {
+        if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
+        let updated : Types.TeamInviteLink = { link with revoked = true };
+        teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
+        #Ok
+      };
+    }
+  };
+
+  public query ({ caller }) func get_team_invite_link_by_token(token : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    auth(caller);
+    switch (teamInviteLinks.find(func(l) = l.token == token)) {
+      case null { #Err("Invite link not found") };
+      case (?link) {
+        if (link.revoked) return #Err("Invite link revoked");
+        #Ok(link)
+      };
+    }
+  };
+
+  // ---- Pending invites: generalized team/club/guardian invite flow.
+  // Email delivery stays with a server job; create/resend return the
+  // payload that job would send instead of sending it. ----
+
+  func invitePayloadFor(invite : Types.PendingInvite) : Types.InvitePayload {
+    let subjectKind = switch (invite.kind) {
+      case "club" "You're invited to join a club";
+      case "guardian" "You're invited as a guardian";
+      case _ "You're invited to join a team";
+    };
+    {
+      to = invite.email;
+      subject = subjectKind;
+      body = "Invite id " # invite.id # " for club " # invite.club_id # (switch (invite.team_id) { case (?t) " team " # t; case null "" });
+    }
+  };
+
+  public shared ({ caller }) func create_pending_invite(kind : Text, club_id : Text, team_id : ?Text, child_id : ?Text, email : Text, role : ?Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {
+    auth(caller);
+    if (kind != "team" and kind != "club" and kind != "guardian") return #Err("Invalid invite kind");
+    if (email == "" or email.size() > 320) return #Err("Invalid email");
+    switch (team_id) {
+      case (?team) { if (not canManageTeam(caller, club_id, ?team)) return #Err("Team or club admin required") };
+      case null { if (not isAdmin(caller, club_id)) return #Err("Club admin required") };
+    };
+    let now = nowMs();
+    let invite : Types.PendingInvite = {
+      id = "pinv-" # club_id # "-" # Nat.toText(pendingInvites.size() + 1) # "-" # Nat64.toText(now);
+      kind; club_id; team_id; child_id; email; role;
+      invited_by = caller;
+      created_at_ms = now;
+      status = "pending";
+      resent_at_ms = null;
+    };
+    pendingInvites := pendingInvites.concat([invite]);
+    #Ok({ invite; payload = invitePayloadFor(invite) })
+  };
+
+  public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+  };
+
+  public shared ({ caller }) func resend_pending_invite(id : Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {
+    auth(caller);
+    switch (pendingInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
+        if (invite.status == "revoked") return #Err("Invite revoked");
+        let updated : Types.PendingInvite = { invite with status = "resent"; resent_at_ms = ?nowMs() };
+        pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
+        #Ok({ invite = updated; payload = invitePayloadFor(updated) })
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_pending_invite(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pendingInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required");
+        let updated : Types.PendingInvite = { invite with status = "revoked" };
+        pendingInvites := pendingInvites.map(func(i) = if (i.id == id) updated else i);
+        #Ok
+      };
+    }
+  };
+
+  // ---- Guardian link/unlink + admin-assisted child/parent linking ----
+
+  func childClubIds(child_id : Text) : [Text] {
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null { [] };
+      case (?child) {
+        var clubs : [Text] = [];
+        for (teamId in child.teams.values()) {
+          switch (acl.teams.find(func(t) = t.id == teamId)) {
+            case (?t) { if (not clubs.any(func(c) = c == t.club)) clubs := clubs.concat([t.club]) };
+            case null {};
+          };
+        };
+        clubs
+      };
+    }
+  };
+
+  func canManageChild(caller : Principal, child_id : Text) : Bool {
+    isGovernor(caller) or childClubIds(child_id).any(func(club) = isAdmin(caller, club))
+  };
+
+  public shared ({ caller }) func link_guardian(child_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageChild(caller, child_id)) return #Err("Club admin required");
+    if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
+      acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
+    };
+    #Ok
+  };
+
+  public shared ({ caller }) func unlink_guardian(child_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (canManageChild(caller, child_id) or caller.equal(user))) return #Err("Forbidden");
+    acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
+    #Ok
+  };
+
+  public shared ({ caller }) func admin_link_child_to_parent(child_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    if (not canManageChild(caller, child_id)) return #Err("Club admin required");
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null { #Err("Child not found") };
+      case (?child) {
+        let updated : Types.Child = { child with parent = ?parent };
+        acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
+        if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(parent))) {
+          acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user = parent }]) };
+        };
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func create_child_for_parent_on_team(club_id : Text, team_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (not acl.teams.any(func(t) = t.id == team_id and t.club == club_id)) return #Err("Team not found in club");
+    let child : Types.Child = {
+      id = "child-" # club_id # "-" # Nat.toText(acl.children.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      teams = [team_id];
+      parent = ?parent;
+    };
+    acl := { acl with children = acl.children.concat([child]) };
+    acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
+    #Ok(child)
+  };
+
+  // ---- Move member / child between teams ----
+
+  public shared ({ caller }) func move_member_to_team(club_id : Text, user : Principal, from_team : ?Text, to_team : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (not acl.teams.any(func(t) = t.id == to_team and t.club == club_id)) return #Err("Target team not found in club");
+    acl := { acl with roles = acl.roles.map(func(g) = if (g.user.equal(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g) };
+    accountRoles := accountRoles.map(func(g) = if (g.account_id == accountIdFor(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g);
+    #Ok
+  };
+
+  public shared ({ caller }) func move_child_to_team(child_id : Text, from_team : ?Text, to_team : Text) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    switch (acl.teams.find(func(t) = t.id == to_team)) {
+      case null { #Err("Target team not found") };
+      case (?team) {
+        if (not canManageTeam(caller, team.club, ?to_team)) return #Err("Team or club admin required");
+        switch (acl.children.find(func(c) = c.id == child_id)) {
+          case null { #Err("Child not found") };
+          case (?child) {
+            let keptTeams = switch (from_team) {
+              case (?ft) child.teams.filter(func(t) = t != ft);
+              case null child.teams;
+            };
+            let newTeams = if (keptTeams.any(func(t) = t == to_team)) keptTeams else keptTeams.concat([to_team]);
+            let updated : Types.Child = { child with teams = newTeams };
+            acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
+            #Ok(updated)
+          };
+        }
+      };
+    }
+  };
+
+  // ---- Bulk team-member add ----
+
+  public shared ({ caller }) func bulk_add_team_members(club_id : Text, team_id : Text, role : Text, users : [Principal]) : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (role == "") return #Err("Invalid role");
+    if (users.size() > 200) return #Err("Too many members");
+    for (user in users.values()) {
+      acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club_id; team = ?team_id }]) };
+      accountRoles := accountRoles.concat([{ account_id = accountIdFor(user); club = ?club_id; role; team = ?team_id }]);
+    };
+    #Ok(users.size())
+  };
+
+  // ---- Team archive ----
+
+  public shared ({ caller }) func archive_team(id : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        let updated : Types.ClubTeam = { team with archived = true };
+        teams := teams.map(func(t) = if (t.id == id) updated else t);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func unarchive_team(id : Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        let updated : Types.ClubTeam = { team with archived = false };
+        teams := teams.map(func(t) = if (t.id == id) updated else t);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // ---- Team-creation requests ----
+
+  public shared ({ caller }) func request_team_creation(club_id : Text, name : Text, division : ?Text, age_group : ?Text) : async { #Ok : Types.TeamCreationRequest; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Forbidden");
+    if (name == "" or name.size() > 160) return #Err("Invalid team name");
+    let now = nowMs();
+    let req : Types.TeamCreationRequest = {
+      id = "treq-" # club_id # "-" # Nat.toText(teamCreationRequests.size() + 1) # "-" # Nat64.toText(now);
+      club_id; name; division; age_group;
+      requested_by = caller;
+      status = "pending";
+      created_at_ms = now;
+      decided_at_ms = null;
+      decided_by = null;
+      team_id = null;
+    };
+    teamCreationRequests := teamCreationRequests.concat([req]);
+    #Ok(req)
+  };
+
+  public query ({ caller }) func list_team_creation_requests(club_id : Text) : async { #Ok : [Types.TeamCreationRequest]; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(teamCreationRequests.filter(func(r) = r.club_id == club_id))
+  };
+
+  public shared ({ caller }) func approve_team_creation_request(id : Text) : async { #Ok : Types.TeamCreationRequest; #Err : Text } {
+    auth(caller);
+    switch (teamCreationRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        let now = nowMs();
+        let team : Types.ClubTeam = {
+          id = "team-" # req.club_id # "-" # Nat.toText(teams.size() + 1) # "-" # Nat64.toText(now);
+          name = req.name; division = req.division; gender = null; is_active = true; club_id = req.club_id;
+          age_group = req.age_group; description = null; logo_url = null; team_type = null;
+          deleted_at_ms = null;
+          is_shell = false;
+          shell_claim_token = null;
+          shell_claimed_at_ms = null;
+          shell_claimed_by = null;
+          shell_contact_email = null;
+          shell_contact_name = null;
+          shell_invited_by = null;
+          archived = false;
+        };
+        teams := teams.concat([team]);
+        let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
+        teamCreationRequests := teamCreationRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func reject_team_creation_request(id : Text) : async { #Ok : Types.TeamCreationRequest; #Err : Text } {
+    auth(caller);
+    switch (teamCreationRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        let updated : Types.TeamCreationRequest = { req with status = "rejected"; decided_at_ms = ?nowMs(); decided_by = ?caller };
+        teamCreationRequests := teamCreationRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // ---- Team player positions ----
+
+  public query ({ caller }) func get_team_player_positions(team_id : Text) : async { #Ok : [Types.TeamPlayerPosition]; #Err : Text } {
+    switch (acl.teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isMember(caller, team.club)) return #Err("Forbidden");
+        #Ok(teamPlayerPositions.filter(func(p) = p.team_id == team_id))
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_team_player_position(team_id : Text, member_id : Text, position : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (acl.teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not canManageTeam(caller, team.club, ?team_id)) return #Err("Team or club admin required");
+        teamPlayerPositions := teamPlayerPositions.filter(func(p) = not (p.team_id == team_id and p.member_id == member_id));
+        teamPlayerPositions := teamPlayerPositions.concat([{ team_id; member_id; position }]);
+        #Ok
+      };
+    }
+  };
+
+  // ---- Team captains ----
+
+  public shared ({ caller }) func add_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    if (not teamCaptains.any(func(c) = c.team_id == team_id and c.user.equal(user))) {
+      teamCaptains := teamCaptains.concat([{ team_id; user }]);
+    };
+    #Ok
+  };
+
+  public shared ({ caller }) func remove_team_captain(club_id : Text, team_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
+    teamCaptains := teamCaptains.filter(func(c) = not (c.team_id == team_id and c.user.equal(user)));
+    #Ok
+  };
+
+  public query ({ caller }) func list_team_captains(team_id : Text) : async { #Ok : [Types.TeamCaptain]; #Err : Text } {
+    switch (acl.teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isMember(caller, team.club)) return #Err("Forbidden");
+        #Ok(teamCaptains.filter(func(c) = c.team_id == team_id))
+      };
+    }
+  };
+
+  // ---- Club creation + club join requests ----
+
+  public shared ({ caller }) func create_club(id : Text, name : Text, slug : Text, description : ?Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+    auth(caller);
+    if (id == "" or id.size() > 128) return #Err("Invalid club id");
+    if (name == "" or name.size() > 160) return #Err("Invalid club name");
+    if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
+    let profile : Types.ClubProfile = {
+      id; name; slug; description;
+      created_at_ms = nowMs();
+      logo_url = null;
+      is_active = true;
+      primary_color = null;
+      secondary_color = null;
+      deleted_at_ms = null;
+    };
+    profiles := profiles.concat([profile]);
+    acl := { acl with roles = acl.roles.concat([{ user = caller; role = "club_admin"; club = ?id; team = null }]) };
+    accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?id; role = "club_admin"; team = null }]);
+    #Ok(profile)
+  };
+
+  public shared ({ caller }) func request_club_join(club_id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
+    auth(caller);
+    if (isExcluded(caller, club_id)) return #Err("Forbidden");
+    if (isMember(caller, club_id)) return #Err("Already a member");
+    let now = nowMs();
+    let req : Types.ClubJoinRequest = {
+      id = "cjreq-" # club_id # "-" # Nat.toText(clubJoinRequests.size() + 1) # "-" # Nat64.toText(now);
+      club_id; user = caller;
+      status = "pending";
+      created_at_ms = now;
+      decided_at_ms = null;
+      decided_by = null;
+    };
+    clubJoinRequests := clubJoinRequests.concat([req]);
+    #Ok(req)
+  };
+
+  public query ({ caller }) func list_club_join_requests(club_id : Text) : async { #Ok : [Types.ClubJoinRequest]; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(clubJoinRequests.filter(func(r) = r.club_id == club_id))
+  };
+
+  public shared ({ caller }) func approve_club_join_request(id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
+    auth(caller);
+    switch (clubJoinRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
+        accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);
+        let updated : Types.ClubJoinRequest = { req with status = "approved"; decided_at_ms = ?nowMs(); decided_by = ?caller };
+        clubJoinRequests := clubJoinRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func reject_club_join_request(id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
+    auth(caller);
+    switch (clubJoinRequests.find(func(r) = r.id == id)) {
+      case null { #Err("Request not found") };
+      case (?req) {
+        if (not isAdmin(caller, req.club_id)) return #Err("Club admin required");
+        if (req.status != "pending") return #Err("Request already processed");
+        let updated : Types.ClubJoinRequest = { req with status = "rejected"; decided_at_ms = ?nowMs(); decided_by = ?caller };
+        clubJoinRequests := clubJoinRequests.map(func(r) = if (r.id == id) updated else r);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // ---- Club settings: theme palette, header toggles, invite style, hint.
+  // save_club_settings/get_club_settings above already cover the whole
+  // record; these are convenience patch-style setters over the same
+  // fields added in this migration. ----
+
+  func defaultSettingsFor(club_id : Text) : Types.ClubSettings {
+    {
+      club_id; contact_email = null; membership_open = false; announcement = null; public_directory = false;
+      media_sponsors_enabled = false; media_header_sponsors_enabled = false; events_sponsor_strip_enabled = false; chat_thread_ads_enabled = false;
+      theme_primary_color = null; theme_secondary_color = null; theme_accent_color = null;
+      header_logo_enabled = true; header_club_name_enabled = true; invite_email_style = null; club_switcher_hint = null;
+    }
+  };
+
+  func currentSettingsFor(club_id : Text) : Types.ClubSettings {
+    switch (settings.find(func(s) = s.club_id == club_id)) {
+      case (?s) s;
+      case null defaultSettingsFor(club_id);
+    }
+  };
+
+  func putSettings(updated : Types.ClubSettings) {
+    settings := settings.filter(func(s) = s.club_id != updated.club_id);
+    settings := settings.concat([updated]);
+  };
+
+  public shared ({ caller }) func set_club_theme_palette(club_id : Text, primary : ?Text, secondary : ?Text, accent : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with theme_primary_color = primary; theme_secondary_color = secondary; theme_accent_color = accent };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func set_club_header_toggles(club_id : Text, header_logo_enabled : Bool, header_club_name_enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with header_logo_enabled; header_club_name_enabled };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func set_club_invite_email_style(club_id : Text, style : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with invite_email_style = style };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func set_club_switcher_hint(club_id : Text, hint : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with club_switcher_hint = hint };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  // ---- Per-user theme preference (light/dark/system or a club theme id).
+  // Lives here rather than identity_access since it is club-switcher UI
+  // state, closest to the club settings this canister already owns. ----
+
+  public shared ({ caller }) func set_theme_preference(preference : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    themePrefs := themePrefs.filter(func(entry) = not entry.0.equal(caller));
+    themePrefs := themePrefs.concat([(caller, preference)]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_my_theme_preference() : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    switch (themePrefs.find(func(entry) = entry.0.equal(caller))) {
+      case (?entry) #Ok(?entry.1);
+      case null #Ok(null);
+    }
+  };
+
 };

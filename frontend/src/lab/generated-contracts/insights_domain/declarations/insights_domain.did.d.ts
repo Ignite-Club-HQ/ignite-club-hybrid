@@ -31,6 +31,26 @@ export interface AuditLog {
   'table_name' : string,
   'target_user_id' : [] | [string],
 }
+export interface Benchmark {
+  'value' : number,
+  'period' : string,
+  'updated_at_ms' : bigint,
+  'metric_key' : string,
+}
+export interface ClientPerfAggregate {
+  'path' : string,
+  'count' : number,
+  'p50_ms' : number,
+  'p95_ms' : number,
+  'avg_ms' : number,
+}
+export interface ClientPerfEntry {
+  'metric' : string,
+  'principal' : Principal,
+  'at_ms' : bigint,
+  'path' : string,
+  'value_ms' : number,
+}
 export interface EngagementBenchmarks {
   'previous' : EngagementTotals,
   'current' : EngagementTotals,
@@ -75,10 +95,20 @@ export interface PerfSampleInput {
   'platform' : string,
   'duration_ms' : number,
 }
+export interface SponsorPerformance {
+  'metrics' : Array<{ 'metric' : string, 'value' : number }>,
+  'period' : string,
+  'sponsor_id' : string,
+}
 export interface _SERVICE {
   'append_audit_log' : ActorMethod<
     [string, string, [] | [string], [] | [string], string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'client_perf_aggregate' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : ClientPerfAggregate } |
       { 'Err' : string }
   >,
   'club_engagement_active_users' : ActorMethod<
@@ -126,6 +156,16 @@ export interface _SERVICE {
     { 'Ok' : AdminAlert } |
       { 'Err' : string }
   >,
+  'get_benchmarks' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Benchmark> } |
+      { 'Err' : string }
+  >,
+  'get_sponsor_performance' : ActorMethod<
+    [string, string],
+    { 'Ok' : SponsorPerformance } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -158,6 +198,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'record_client_perf' : ActorMethod<
+    [Array<ClientPerfEntry>],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'record_message_sent' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -188,6 +233,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'record_sponsor_metric' : ActorMethod<
+    [string, string, number],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'record_web_vital' : ActorMethod<
     [string, number, string, string],
     { 'Ok' : null } |
@@ -196,6 +246,11 @@ export interface _SERVICE {
   'resolve_admin_alert' : ActorMethod<
     [string],
     { 'Ok' : AdminAlert } |
+      { 'Err' : string }
+  >,
+  'set_benchmark' : ActorMethod<
+    [string, string, number],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'submit_feedback' : ActorMethod<

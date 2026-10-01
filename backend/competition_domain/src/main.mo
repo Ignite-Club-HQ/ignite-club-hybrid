@@ -16,6 +16,9 @@ persistent actor {
   var seasons : [Types.Season];
   var matches : [Types.Match];
   var bulkAccessPrincipals : [Principal];
+  var chatSettings : [Types.ChatSettings];
+  var competitionInvites : [Types.CompetitionInvite];
+  var competitionJoinLinks : [Types.CompetitionJoinLink];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -345,6 +348,205 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 2; governor; roles; competitions; entries; tokens; seasons; matches })
+    #Ok({ schema = 3; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks })
+  };
+
+  // ---------------- Competition roles (admin-managed, not governor-only) ----------------
+
+  public shared ({ caller }) func add_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (principal.equal(Principal.anonymous()) or not valid(role)) return #Err("Invalid role assignment");
+    let grant : Types.RoleGrant = { user = principal; role; competition_id; team_id };
+    if (not roles.any(func(item) = item.user.equal(principal) and item.role == role and item.competition_id == competition_id and item.team_id == team_id)) {
+      roles := roles.concat([grant]);
+    };
+    #Ok(grant)
+  };
+
+  public shared ({ caller }) func remove_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == role and item.competition_id == competition_id and item.team_id == team_id));
+    #Ok
+  };
+
+  public query ({ caller }) func list_competition_roles(competition_id : Text) : async { #Ok : [Types.RoleGrant]; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    #Ok(roles.filter(func(item) = item.competition_id == competition_id))
+  };
+
+  // ---------------- Chat settings ----------------
+
+  func findChatSettings(competition_id : Text) : ?Types.ChatSettings {
+    chatSettings.find(func(item) = item.competition_id == competition_id)
+  };
+
+  public query ({ caller }) func get_chat_settings(competition_id : Text) : async { #Ok : Types.ChatSettings; #Err : Text } {
+    auth(caller);
+    switch (findChatSettings(competition_id)) {
+      case (?settings) #Ok(settings);
+      case null #Ok({ competition_id; chat_enabled = true; revision = 0 : Nat64 });
+    }
+  };
+
+  public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    let current_revision : Nat64 = switch (findChatSettings(competition_id)) { case (?s) s.revision; case null 0 };
+    if (current_revision != expected_revision) return #Err("Chat settings revision conflict");
+    let updated : Types.ChatSettings = { competition_id; chat_enabled; revision = current_revision + 1 };
+    chatSettings := chatSettings.filter(func(item) = item.competition_id != competition_id);
+    chatSettings := chatSettings.concat([updated]);
+    #Ok(updated)
+  };
+
+  // ---------------- Competition invites (accept/decline) ----------------
+
+  public shared ({ caller }) func create_competition_invite(competition_id : Text, invitee : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.CompetitionInvite; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (invitee.equal(Principal.anonymous()) or not valid(role)) return #Err("Invalid invite");
+    let invite : Types.CompetitionInvite = {
+      id = "inv-" # competition_id # "-" # Nat.toText(competitionInvites.size() + 1);
+      competition_id;
+      invitee;
+      role;
+      team_id;
+      status = "pending";
+      created_by = caller;
+      created_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000);
+      responded_at_ms = null;
+    };
+    competitionInvites := competitionInvites.concat([invite]);
+    #Ok(invite)
+  };
+
+  public shared ({ caller }) func accept_competition_invite(invite_id : Text) : async { #Ok : Types.CompetitionInvite; #Err : Text } {
+    auth(caller);
+    switch (competitionInvites.find(func(item) = item.id == invite_id)) {
+      case null #Err("Invite not found");
+      case (?invite) {
+        if (not invite.invitee.equal(caller)) return #Err("Invite does not belong to caller");
+        if (invite.status != "pending") return #Err("Invite already resolved");
+        let updated : Types.CompetitionInvite = { invite with status = "accepted"; responded_at_ms = ?Nat64.fromIntWrap(Time.now() / 1_000_000) };
+        competitionInvites := competitionInvites.map(func(item) = if (item.id == invite_id) updated else item);
+        if (not roles.any(func(item) = item.user.equal(invite.invitee) and item.role == invite.role and item.competition_id == invite.competition_id and item.team_id == invite.team_id)) {
+          roles := roles.concat([{ user = invite.invitee; role = invite.role; competition_id = invite.competition_id; team_id = invite.team_id }]);
+        };
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func decline_competition_invite(invite_id : Text) : async { #Ok : Types.CompetitionInvite; #Err : Text } {
+    auth(caller);
+    switch (competitionInvites.find(func(item) = item.id == invite_id)) {
+      case null #Err("Invite not found");
+      case (?invite) {
+        if (not invite.invitee.equal(caller)) return #Err("Invite does not belong to caller");
+        if (invite.status != "pending") return #Err("Invite already resolved");
+        let updated : Types.CompetitionInvite = { invite with status = "declined"; responded_at_ms = ?Nat64.fromIntWrap(Time.now() / 1_000_000) };
+        competitionInvites := competitionInvites.map(func(item) = if (item.id == invite_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public query ({ caller }) func list_competition_invites(competition_id : Text) : async { #Ok : [Types.CompetitionInvite]; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    #Ok(competitionInvites.filter(func(item) = item.competition_id == competition_id))
+  };
+
+  // Caller-scoped: invites addressed to the caller, across all competitions.
+  public query ({ caller }) func list_invites_by_invitee() : async { #Ok : [Types.CompetitionInvite]; #Err : Text } {
+    auth(caller);
+    #Ok(competitionInvites.filter(func(item) = item.invitee.equal(caller)))
+  };
+
+  // ---------------- Competition-wide join links ----------------
+
+  public shared ({ caller }) func create_competition_join_link(competition_id : Text, role : Text, team_id : ?Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not valid(role)) return #Err("Invalid role");
+    if (competitionJoinLinks.any(func(item) = item.competition_id == competition_id and not item.revoked)) return #Err("Active join link already exists");
+    let link : Types.CompetitionJoinLink = {
+      competition_id;
+      token = "cjl-" # competition_id # "-" # Nat.toText(competitionJoinLinks.size() + 1);
+      role;
+      team_id;
+      revoked = false;
+      created_by = caller;
+      created_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000);
+      revision = 1;
+    };
+    competitionJoinLinks := competitionJoinLinks.concat([link]);
+    #Ok(link)
+  };
+
+  public shared ({ caller }) func rotate_competition_join_link(competition_id : Text) : async { #Ok : Types.CompetitionJoinLink; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    switch (competitionJoinLinks.find(func(item) = item.competition_id == competition_id and not item.revoked)) {
+      case null #Err("No active join link");
+      case (?current) {
+        let rotated : Types.CompetitionJoinLink = {
+          current with token = "cjl-" # competition_id # "-" # Nat.toText(competitionJoinLinks.size() + 1);
+          revision = current.revision + 1;
+        };
+        competitionJoinLinks := competitionJoinLinks.map(func(item) = if (item.competition_id == competition_id and not item.revoked) rotated else item);
+        #Ok(rotated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_competition_join_link(competition_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    competitionJoinLinks := competitionJoinLinks.map(func(item) = if (item.competition_id == competition_id and not item.revoked) { { item with revoked = true } } else item);
+    #Ok
+  };
+
+  public shared ({ caller }) func join_competition_by_token(token : Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
+    auth(caller);
+    switch (competitionJoinLinks.find(func(item) = item.token == token)) {
+      case null #Err("Join link not found");
+      case (?link) {
+        if (link.revoked) return #Err("Join link revoked");
+        let grant : Types.RoleGrant = { user = caller; role = link.role; competition_id = link.competition_id; team_id = link.team_id };
+        if (not roles.any(func(item) = item.user.equal(caller) and item.role == link.role and item.competition_id == link.competition_id and item.team_id == link.team_id)) {
+          roles := roles.concat([grant]);
+        };
+        #Ok(grant)
+      };
+    }
+  };
+
+  // ---------------- Match deletion / round trimming ----------------
+
+  public shared ({ caller }) func delete_match(match_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (matches.find(func(item) = item.id == match_id)) {
+      case null #Err("Match not found");
+      case (?current) {
+        if (not canManageCompetition(caller, current.competition_id)) return #Err("Competition management forbidden");
+        matches := matches.filter(func(item) = item.id != match_id);
+        #Ok
+      };
+    }
+  };
+
+  // Removes matches scheduled beyond round `max_round` for a competition —
+  // matches without a round number are left untouched. Returns the count of
+  // matches removed.
+  public shared ({ caller }) func trim_rounds(competition_id : Text, max_round : Nat16) : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    let before = matches.size();
+    matches := matches.filter(func(item) = not (item.competition_id == competition_id and (switch (item.round_number) { case (?r) r > max_round; case null false })));
+    #Ok(before - matches.size())
   };
 };

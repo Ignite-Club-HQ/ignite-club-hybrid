@@ -25,6 +25,16 @@ persistent actor {
   var children : [Types.Child];
   var childGuardians : [Types.ChildGuardian];
   var bulkAccessPrincipals : [Principal];
+  var coachNotes : [Types.CoachNote];
+  var eventViews : [Types.EventView];
+  var reminderLogs : [Types.ReminderLog];
+  var pushReachability : [Types.PushReachability];
+  var eventGroups : [Types.EventGroup];
+  var eventGroupPlayers : [Types.EventGroupPlayer];
+  var eventGroupDuties : [Types.EventGroupDuty];
+  var teamTrainingPauses : [Types.TeamTrainingPause];
+  var openDuties : [Types.OpenDuty];
+  var miniLeagueRsvps : [Types.MiniLeagueRsvp];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -121,7 +131,7 @@ persistent actor {
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1 };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false };
     events := events.concat([created]); #Ok(created)
   };
 
@@ -139,7 +149,7 @@ persistent actor {
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
     let seriesId = "ser-" # club_id # "-" # Nat.toText(series.size());
-    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1 };
+    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1; deleted = false };
     let step = frequencyStepMs(frequency);
     let duration = first_ends_at_ms - first_starts_at_ms;
     // Cap at 366 occurrences to bound message/state size.
@@ -147,7 +157,7 @@ persistent actor {
     let base = events.size();
     let children = Array.tabulate<Types.Event>(maxCount, func(index) {
       let offset = step * Nat.toNat64(index);
-      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1 }
+      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false }
     });
     series := series.concat([created]);
     events := events.concat(children);
@@ -250,7 +260,8 @@ persistent actor {
 
   public query ({ caller }) func list_series(club_id : ?Text, team_id : ?Text) : async [Types.EventSeries] {
     series.filter(func(item) =
-      canViewSeries(caller, item)
+      not item.deleted
+        and canViewSeries(caller, item)
         and (club_id == null or club_id == ?item.club_id)
         and (team_id == null or team_id == item.team_id)
     )
@@ -411,7 +422,8 @@ persistent actor {
 
   public query ({ caller }) func list_events(club_id : ?Text, team_id : ?Text) : async [Types.Event] {
     events.filter(func(item) =
-      canView(caller, item)
+      not item.deleted
+        and canView(caller, item)
         and (club_id == null or club_id == ?item.club_id)
         and (team_id == null or team_id == item.team_id)
     )
@@ -612,8 +624,387 @@ persistent actor {
     }
   };
 
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian] }; #Err : Text } {
+  // ---- (1) Soft delete: event + series (cascades occurrences) ----
+  // Soft-deletes a single event in place — distinct from any hard-delete
+  // path; the row stays, deleted=true just hides it from list_events.
+  public shared ({ caller }) func delete_event(id : Text) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        let updated : Types.Event = { current with deleted = true; revision = current.revision + 1 };
+        var index = 0;
+        for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
+        #Err("Event not found")
+      };
+    }
+  };
+
+  // Soft-deletes a series and cascades deleted=true onto every child
+  // occurrence, without removing any rows — the soft counterpart to
+  // delete_series's hard cascade/truncate.
+  public shared ({ caller }) func soft_delete_series(id : Text) : async { #Ok : Types.EventSeries; #Err : Text } {
+    auth(caller);
+    switch (requireManageSeries(caller, id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        let updated : Types.EventSeries = { current with deleted = true; revision = current.revision + 1 };
+        series := series.map(func(item) = if (item.id == id) updated else item);
+        events := events.map(func(item) = if (item.series_id == ?id) { { item with deleted = true } } else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // ---- (2) Coach notes (per event, coach/admin authorized) ----
+  public shared ({ caller }) func set_coach_note(event_id : Text, note : Text) : async { #Ok : Types.CoachNote; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (note.size() > 4000) return #Err("Note too long");
+    let value : Types.CoachNote = { event_id; note; updated_by = caller; updated_at_ms = nowMs() };
+    coachNotes := coachNotes.filter(func(item) = item.event_id != event_id);
+    coachNotes := coachNotes.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func get_coach_note(event_id : Text) : async { #Ok : ?Types.CoachNote; #Err : Text } {
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    #Ok(coachNotes.find(func(item) = item.event_id == event_id))
+  };
+
+  // ---- (3) Per-occurrence series trim/extend ----
+  // detach_occurrence (above) already trims a single occurrence off its
+  // series. This is the inverse: append a brand-new occurrence to an
+  // existing series (e.g. "add one more training date").
+  public shared ({ caller }) func add_series_occurrence(series_id : Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller);
+    switch (requireManageSeries(caller, series_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(item)) {
+        if (starts_at_ms >= ends_at_ms) return #Err("Invalid occurrence");
+        let created : Types.Event = {
+          id = "evt-" # item.club_id # "-" # Nat.toText(events.size());
+          club_id = item.club_id; team_id = item.team_id; title = item.title; description = item.description;
+          event_type = item.event_type; location = item.location; cancelled = false; creator = caller;
+          starts_at_ms; ends_at_ms; series_id = ?series_id; revision = 1; deleted = false;
+        };
+        events := events.concat([created]);
+        #Ok(created)
+      };
+    }
+  };
+
+  // ---- (4) Event views, reminder log, push reachability ----
+  public shared ({ caller }) func record_event_view(event_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        eventViews := eventViews.concat([{ event_id; viewer = caller; viewed_at_ms = nowMs() }]);
+        #Ok
+      };
+    }
+  };
+
+  public query ({ caller }) func get_event_view_count(event_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(Nat.toNat32(eventViews.filter(func(item) = item.event_id == event_id).size()))
+      };
+    }
+  };
+
+  // record_reminder_sent/list_reminders: the canister only logs that a
+  // reminder was sent — actual delivery (push/email/SMS) stays off-chain.
+  public shared ({ caller }) func record_reminder_sent(event_id : Text, channel : Text, recipient : Text) : async { #Ok : Types.ReminderLog; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(channel) or not valid(recipient)) return #Err("Invalid reminder");
+    let value : Types.ReminderLog = { id = "rem-" # event_id # "-" # Nat.toText(reminderLogs.size()); event_id; channel; recipient; sent_at_ms = nowMs() };
+    reminderLogs := reminderLogs.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func list_reminders(event_id : Text) : async { #Ok : [Types.ReminderLog]; #Err : Text } {
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    #Ok(reminderLogs.filter(func(item) = item.event_id == event_id))
+  };
+
+  // Push reachability is a caller-set flag only; actual push delivery stays
+  // off-chain (this just records whether a device can currently be reached).
+  public shared ({ caller }) func set_push_reachable(reachable : Bool) : async { #Ok : Types.PushReachability; #Err : Text } {
+    auth(caller);
+    let value : Types.PushReachability = { user = caller; reachable; updated_at_ms = nowMs() };
+    pushReachability := pushReachability.filter(func(item) = not item.user.equal(caller));
+    pushReachability := pushReachability.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func get_push_reachable(principal : Principal) : async { #Ok : ?Bool; #Err : Text } {
+    auth(caller);
+    #Ok(switch (pushReachability.find(func(item) = item.user.equal(principal))) { case (?item) ?item.reachable; case null null })
+  };
+
+  // ---- (5) Event groups + players + duties ----
+  public shared ({ caller }) func create_event_group(event_id : Text, name : Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(name)) return #Err("Invalid group name");
+    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs() };
+    eventGroups := eventGroups.concat([value]);
+    #Ok(value)
+  };
+
+  func requireManageGroup(caller : Principal, group_id : Text) : { #Ok : Types.EventGroup; #Err : Text } {
+    switch (eventGroups.find(func(item) = item.id == group_id)) {
+      case null { #Err("Group not found") };
+      case (?group) { switch (requireManage(caller, group.event_id)) { case (#Err(e)) #Err(e); case (#Ok(_)) #Ok(group) } };
+    }
+  };
+
+  public shared ({ caller }) func rename_event_group(group_id : Text, name : Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        if (not valid(name)) return #Err("Invalid group name");
+        let updated : Types.EventGroup = { current with name };
+        eventGroups := eventGroups.map(func(item) = if (item.id == group_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_event_group(group_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_)) {
+        eventGroups := eventGroups.filter(func(item) = item.id != group_id);
+        eventGroupPlayers := eventGroupPlayers.filter(func(item) = item.group_id != group_id);
+        eventGroupDuties := eventGroupDuties.filter(func(item) = item.group_id != group_id);
+        #Ok
+      };
+    }
+  };
+
+  public query ({ caller }) func list_event_groups(event_id : Text) : async { #Ok : [Types.EventGroup]; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(eventGroups.filter(func(item) = item.event_id == event_id)) };
+    }
+  };
+
+  public shared ({ caller }) func add_group_player(group_id : Text, account_id : Text) : async { #Ok : Types.EventGroupPlayer; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(account_id)) return #Err("Invalid player");
+    let value : Types.EventGroupPlayer = { group_id; account_id };
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_id and item.account_id == account_id));
+    eventGroupPlayers := eventGroupPlayers.concat([value]);
+    #Ok(value)
+  };
+
+  public shared ({ caller }) func remove_group_player(group_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_id and item.account_id == account_id));
+    #Ok
+  };
+
+  // Moves a player from one group to another (both groups must belong to
+  // the same event the caller manages).
+  public shared ({ caller }) func move_group_player(from_group_id : Text, to_group_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, from_group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    switch (requireManageGroup(caller, to_group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == from_group_id and item.account_id == account_id));
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == to_group_id and item.account_id == account_id));
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = to_group_id; account_id }]);
+    #Ok
+  };
+
+  // Swaps two players sitting in two (possibly different) groups.
+  public shared ({ caller }) func swap_group_players(group_a : Text, account_a : Text, group_b : Text, account_b : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_a)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    switch (requireManageGroup(caller, group_b)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_a and item.account_id == account_a));
+    eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_b and item.account_id == account_b));
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = group_b; account_id = account_a }, { group_id = group_a; account_id = account_b }]);
+    #Ok
+  };
+
+  public query ({ caller }) func list_group_players(group_id : Text) : async { #Ok : [Types.EventGroupPlayer]; #Err : Text } {
+    switch (eventGroups.find(func(item) = item.id == group_id)) {
+      case null { #Err("Group not found") };
+      case (?group) {
+        switch (events.find(func(item) = item.id == group.event_id)) {
+          case null { #Err("Event not found") };
+          case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(eventGroupPlayers.filter(func(item) = item.group_id == group_id)) };
+        };
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_group_duty(group_id : Text, duty : Text, account_id : ?Text) : async { #Ok : Types.EventGroupDuty; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(duty)) return #Err("Invalid duty");
+    let value : Types.EventGroupDuty = { group_id; duty; account_id };
+    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    eventGroupDuties := eventGroupDuties.concat([value]);
+    #Ok(value)
+  };
+
+  public shared ({ caller }) func remove_group_duty(group_id : Text, duty : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventGroupDuties := eventGroupDuties.filter(func(item) = not (item.group_id == group_id and item.duty == duty));
+    #Ok
+  };
+
+  public query ({ caller }) func list_group_duties(group_id : Text) : async { #Ok : [Types.EventGroupDuty]; #Err : Text } {
+    switch (eventGroups.find(func(item) = item.id == group_id)) {
+      case null { #Err("Group not found") };
+      case (?group) {
+        switch (events.find(func(item) = item.id == group.event_id)) {
+          case null { #Err("Event not found") };
+          case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(eventGroupDuties.filter(func(item) = item.group_id == group_id)) };
+        };
+      };
+    }
+  };
+
+  // ---- (6) Team training pauses ----
+  func managesTeam(caller : Principal, club_id : Text, team_id : Text) : Bool {
+    isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or hasRole(caller, "team_admin", club_id, ?team_id) or hasRole(caller, "coach", club_id, ?team_id)
+  };
+
+  public shared ({ caller }) func create_team_training_pause(club_id : Text, team_id : Text, starts_at_ms : Nat64, ends_at_ms : Nat64, reason : Text) : async { #Ok : Types.TeamTrainingPause; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or starts_at_ms >= ends_at_ms or reason.size() > 2000) return #Err("Invalid pause");
+    if (not managesTeam(caller, club_id, team_id)) return #Err("Club or team admin required");
+    let value : Types.TeamTrainingPause = { id = "pause-" # club_id # "-" # team_id # "-" # Nat.toText(teamTrainingPauses.size()); club_id; team_id; starts_at_ms; ends_at_ms; reason; created_by = caller; created_at_ms = nowMs() };
+    teamTrainingPauses := teamTrainingPauses.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func list_team_training_pauses(club_id : Text, team_id : Text) : async { #Ok : [Types.TeamTrainingPause]; #Err : Text } {
+    if (not isClubMember(caller, club_id) and not managesTeam(caller, club_id, team_id)) return #Err("Forbidden");
+    #Ok(teamTrainingPauses.filter(func(item) = item.club_id == club_id and item.team_id == team_id))
+  };
+
+  public shared ({ caller }) func delete_team_training_pause(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (teamTrainingPauses.find(func(item) = item.id == id)) {
+      case null { #Err("Pause not found") };
+      case (?pause) {
+        if (not managesTeam(caller, pause.club_id, pause.team_id) and not pause.created_by.equal(caller)) return #Err("Forbidden");
+        teamTrainingPauses := teamTrainingPauses.filter(func(item) = item.id != id);
+        #Ok
+      };
+    }
+  };
+
+  public query ({ caller }) func is_paused(club_id : Text, team_id : Text, at_ms : Nat64) : async { #Ok : Bool; #Err : Text } {
+    if (not isClubMember(caller, club_id) and not managesTeam(caller, club_id, team_id)) return #Err("Forbidden");
+    #Ok(teamTrainingPauses.any(func(item) = item.club_id == club_id and item.team_id == team_id and item.starts_at_ms <= at_ms and at_ms <= item.ends_at_ms))
+  };
+
+  // ---- (7) Membership / child-scope check helpers ----
+  // Mirrors a team-roster-membership check other domains could replicate:
+  // any role grant scoped to this club+team (or club-wide) counts as
+  // membership, same convention as isClubMember.
+  public query ({ caller }) func is_team_member(principal : Principal, club_id : Text, team_id : Text) : async Bool {
+    roles.any(func(grant) = grant.user.equal(principal) and grant.club_id == club_id and (grant.team_id == ?team_id or grant.team_id == null))
+  };
+
+  // Mirrors a guardian-of-child check other domains could replicate against
+  // their own guardian data; here it reads events_domain's own
+  // childGuardians table (PROVISIONAL text-id convention, see ChildGuardian).
+  public query ({ caller }) func is_guardian_of(principal : Principal, child_id : Text) : async Bool {
+    childGuardians.any(func(item) = item.child_id == child_id and item.guardian_id == Principal.toText(principal))
+  };
+
+  // ---- (8) Open-duty creation / claiming ----
+  public shared ({ caller }) func create_open_duty(event_id : Text, duty : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not valid(duty)) return #Err("Invalid duty");
+    let value : Types.OpenDuty = { id = "oduty-" # event_id # "-" # Nat.toText(openDuties.size()); event_id; duty; claimed_by = null; created_at_ms = nowMs() };
+    openDuties := openDuties.concat([value]);
+    #Ok(value)
+  };
+
+  public shared ({ caller }) func claim_open_duty(id : Text, account_id : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    auth(caller);
+    if (not valid(account_id)) return #Err("Invalid account");
+    switch (openDuties.find(func(item) = item.id == id)) {
+      case null { #Err("Open duty not found") };
+      case (?current) {
+        if (current.claimed_by != null) return #Err("Duty already claimed");
+        let updated : Types.OpenDuty = { current with claimed_by = ?account_id };
+        openDuties := openDuties.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func unclaim_open_duty(id : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    auth(caller);
+    switch (openDuties.find(func(item) = item.id == id)) {
+      case null { #Err("Open duty not found") };
+      case (?current) {
+        switch (requireManage(caller, current.event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+        let updated : Types.OpenDuty = { current with claimed_by = null };
+        openDuties := openDuties.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public query ({ caller }) func list_open_duties(event_id : Text) : async { #Ok : [Types.OpenDuty]; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(openDuties.filter(func(item) = item.event_id == event_id)) };
+    }
+  };
+
+  // ---- (9) Mini-league-player RSVPs ----
+  func subjectEquals(a : Types.RsvpSubject, b : Types.RsvpSubject) : Bool {
+    switch (a, b) {
+      case (#account(x), #account(y)) x == y;
+      case (#mini_league_player(x), #mini_league_player(y)) x == y;
+      case (_, _) false;
+    }
+  };
+  func validSubject(value : Types.RsvpSubject) : Bool {
+    switch (value) { case (#account(id)) valid(id); case (#mini_league_player(id)) valid(id) }
+  };
+
+  public shared ({ caller }) func set_mini_league_rsvp(event_id : Text, subject : Types.RsvpSubject, state : Text) : async { #Ok : Types.MiniLeagueRsvp; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not validSubject(subject) or not valid(state)) return #Err("Invalid RSVP");
+    let value : Types.MiniLeagueRsvp = { event_id; subject; state; updated_at_ms = nowMs() };
+    miniLeagueRsvps := miniLeagueRsvps.filter(func(item) = not (item.event_id == event_id and subjectEquals(item.subject, subject)));
+    miniLeagueRsvps := miniLeagueRsvps.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func list_mini_league_rsvps(event_id : Text) : async { #Ok : [Types.MiniLeagueRsvp]; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(miniLeagueRsvps.filter(func(item) = item.event_id == event_id)) };
+    }
+  };
+
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    #Ok({ schema = 3; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians })
+    #Ok({ schema = 4; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps })
   };
 };

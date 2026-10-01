@@ -20,6 +20,18 @@ persistent actor {
   var clubMemberships : [Types.ClubMembership];
   var competitionAdmins : [Types.CompetitionAdmin];
   var dmAttachmentsDisabled : [Principal];
+  var groupRoles : [Types.GroupRole];
+  var joinRequests : [Types.JoinRequest];
+  var polls : [Types.Poll];
+  var pollVotes : [Types.PollVote];
+  var mutePreferences : [Types.MutePreference];
+  var dmLinks : [Types.DmLink];
+  var forwardRecords : [Types.ForwardRecord];
+  var scheduledMessages : [Types.ScheduledMessage];
+  var attachmentMetadata : [Types.AttachmentMetadata];
+  var reactions : [Types.Reaction];
+  var clubDmSettings : [Types.ClubDmSettings];
+  var userMessagingSettings : [Types.UserMessagingSettings];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -211,6 +223,7 @@ persistent actor {
       idempotency_key;
       edited_at_ms = null;
       attachment;
+      created_at_ms = nowMs();
     };
     let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
@@ -443,7 +456,7 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 3; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled })
+    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings })
   };
 
   func validKind(kind : Text) : Bool {
@@ -484,7 +497,13 @@ persistent actor {
         };
       };
     };
-    let updated : Types.GroupMetadata = { conversation_id; name; kind; club_id; team_id; members; created_at_ms = switch (existing) { case (?m) { m.created_at_ms }; case null { nowMs() } } };
+    let updated : Types.GroupMetadata = {
+      conversation_id; name; kind; club_id; team_id; members;
+      created_at_ms = switch (existing) { case (?m) { m.created_at_ms }; case null { nowMs() } };
+      avatar = switch (existing) { case (?m) { m.avatar }; case null { null } };
+      description = switch (existing) { case (?m) { m.description }; case null { null } };
+      deleted = switch (existing) { case (?m) { m.deleted }; case null { false } };
+    };
     groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
     groupMetadata := groupMetadata.concat([updated]);
     #Ok(updated)
@@ -559,5 +578,447 @@ persistent actor {
       };
     };
     result
+  };
+
+  // ===================== Group management (roles, bulk, soft-delete, join requests) =====================
+
+  func validGroupRole(role : Text) : Bool { role == "owner" or role == "admin" or role == "member" };
+
+  func isGroupAdmin(caller : Principal, conversation_id : Text) : Bool {
+    isGovernor(caller) or hasRole(caller, "app_admin", null, null) or
+    groupRoles.any(func(r) = r.conversation_id == conversation_id and r.user.equal(caller) and (r.role == "owner" or r.role == "admin"))
+  };
+
+  func isGroupDeleted(conversation_id : Text) : Bool {
+    switch (getGroupMetadataFor(conversation_id)) { case (?m) { m.deleted }; case null { false } }
+  };
+
+  public shared ({ caller }) func create_group_with_roles(
+    club_id : Text,
+    team_id : ?Text,
+    name : Text,
+    kind : Text,
+    role_entries : [(Principal, Text)],
+  ) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group");
+    if (role_entries.size() == 0) return #Err("At least one member required");
+    if (role_entries.any(func((p, r)) = p.equal(Principal.anonymous()) or not validGroupRole(r))) return #Err("Invalid role entry");
+    if (not role_entries.any(func((p, _r)) = p.equal(caller))) return #Err("Creator must be a member");
+    let members : [Principal] = Array.map<(Principal, Text), Principal>(role_entries, func((p, _r)) = p);
+    let conversation : Types.Conversation = {
+      id = "chat-" # club_id # "-" # Nat.toText(conversations.size() + 1);
+      club_id; team_id; participants = members; next_sequence = 1;
+    };
+    conversations := conversations.concat([conversation]);
+    let meta : Types.GroupMetadata = {
+      conversation_id = conversation.id; name; kind; club_id = ?club_id; team_id; members;
+      created_at_ms = nowMs(); avatar = null; description = null; deleted = false;
+    };
+    groupMetadata := groupMetadata.concat([meta]);
+    groupRoles := groupRoles.concat(Array.map<(Principal, Text), Types.GroupRole>(role_entries, func((p, r)) = { conversation_id = conversation.id; user = p; role = r }));
+    #Ok(meta)
+  };
+
+  public shared ({ caller }) func update_group(conversation_id : Text, name : ?Text, avatar : ?Text, description : ?Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (meta.deleted) return #Err("Group deleted");
+        if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
+        switch (name) { case (?n) { if (not valid(n)) return #Err("Invalid name") }; case null {} };
+        let updated : Types.GroupMetadata = {
+          meta with
+          name = switch (name) { case (?n) { n }; case null { meta.name } };
+          avatar = switch (avatar) { case (?_) { avatar }; case null { meta.avatar } };
+          description = switch (description) { case (?_) { description }; case null { meta.description } };
+        };
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        groupMetadata := groupMetadata.concat([updated]);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func add_group_members(conversation_id : Text, members : [Principal]) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    if (members.size() == 0 or members.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid members");
+    switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
+      case (null, _) { #Err("Group metadata not found") };
+      case (_, null) { #Err("Conversation not found") };
+      case (?meta, ?ci) {
+        if (meta.deleted) return #Err("Group deleted");
+        if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
+        var newMembers = meta.members;
+        var newRoles = groupRoles;
+        for (m in members.values()) {
+          if (not newMembers.any(func(p) = p.equal(m))) {
+            newMembers := newMembers.concat([m]);
+            newRoles := newRoles.concat([{ conversation_id; user = m; role = "member" }]);
+          };
+        };
+        let conv = conversations[ci];
+        var newParticipants = conv.participants;
+        for (m in members.values()) {
+          if (not newParticipants.any(func(p) = p.equal(m))) { newParticipants := newParticipants.concat([m]) };
+        };
+        conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = newParticipants } } else { conversations[pos] });
+        let updated : Types.GroupMetadata = { meta with members = newMembers };
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        groupMetadata := groupMetadata.concat([updated]);
+        groupRoles := newRoles;
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func soft_delete_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        groupMetadata := groupMetadata.concat([{ meta with deleted = true }]);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func request_join_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (findGroupMetadataIndex(conversation_id) == null) return #Err("Group metadata not found");
+    if (isGroupDeleted(conversation_id)) return #Err("Group deleted");
+    if (joinRequests.any(func(r) = r.conversation_id == conversation_id and r.user.equal(caller) and r.status == "pending")) return #Ok;
+    joinRequests := joinRequests.filter(func(r) = not (r.conversation_id == conversation_id and r.user.equal(caller)));
+    joinRequests := joinRequests.concat([{ conversation_id; user = caller; status = "pending"; created_at_ms = nowMs() }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func approve_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
+    if (not joinRequests.any(func(r) = r.conversation_id == conversation_id and r.user.equal(user) and r.status == "pending")) return #Err("Join request not found");
+    joinRequests := Array.map<Types.JoinRequest, Types.JoinRequest>(joinRequests, func(r) = if (r.conversation_id == conversation_id and r.user.equal(user)) { { r with status = "approved" } } else { r });
+    switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
+      case (?meta, ?ci) {
+        if (not meta.members.any(func(p) = p.equal(user))) {
+          let updated : Types.GroupMetadata = { meta with members = meta.members.concat([user]) };
+          groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+          groupMetadata := groupMetadata.concat([updated]);
+          groupRoles := groupRoles.concat([{ conversation_id; user; role = "member" }]);
+        };
+        let conv = conversations[ci];
+        if (not conv.participants.any(func(p) = p.equal(user))) {
+          conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = conv.participants.concat([user]) } } else { conversations[pos] });
+        };
+      };
+      case (_, _) {};
+    };
+    #Ok
+  };
+
+  public shared ({ caller }) func reject_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
+    joinRequests := Array.map<Types.JoinRequest, Types.JoinRequest>(joinRequests, func(r) = if (r.conversation_id == conversation_id and r.user.equal(user)) { { r with status = "rejected" } } else { r });
+    #Ok
+  };
+
+  public query ({ caller }) func list_join_requests(conversation_id : Text) : async { #Ok : [Types.JoinRequest]; #Err : Text } {
+    if (not isGroupAdmin(caller, conversation_id)) return #Err("Group admin required");
+    #Ok(joinRequests.filter(func(r) = r.conversation_id == conversation_id))
+  };
+
+  // ===================== Polls =====================
+
+  func findPollIndex(poll_id : Text) : ?Nat {
+    var idx = 0;
+    for (p in polls.values()) { if (p.id == poll_id) { return ?idx }; idx += 1 };
+    null
+  };
+
+  public shared ({ caller }) func create_poll(conversation_id : Text, message_id : ?Text, question : Text, options : [Text]) : async { #Ok : Types.Poll; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (not valid(question) or options.size() < 2 or options.size() > 10) return #Err("Invalid poll");
+    if (options.any(func(o) = not valid(o))) return #Err("Invalid poll option");
+    let poll : Types.Poll = {
+      id = "poll-" # conversation_id # "-" # Nat.toText(polls.size() + 1);
+      conversation_id; message_id; question; options; creator = caller; closed = false; created_at_ms = nowMs();
+    };
+    polls := polls.concat([poll]);
+    #Ok(poll)
+  };
+
+  public shared ({ caller }) func vote_poll(poll_id : Text, option_index : Nat32) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (findPollIndex(poll_id)) {
+      case null { #Err("Poll not found") };
+      case (?i) {
+        let poll = polls[i];
+        if (poll.closed) return #Err("Poll closed");
+        if (not canAccessConversation(caller, poll.conversation_id)) return #Err("Conversation access forbidden");
+        if (Nat32.toNat(option_index) >= poll.options.size()) return #Err("Invalid option");
+        pollVotes := pollVotes.filter(func(v) = not (v.poll_id == poll_id and v.user.equal(caller)));
+        pollVotes := pollVotes.concat([{ poll_id; user = caller; option_index }]);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func close_poll(poll_id : Text) : async { #Ok : Types.Poll; #Err : Text } {
+    auth(caller);
+    switch (findPollIndex(poll_id)) {
+      case null { #Err("Poll not found") };
+      case (?i) {
+        let poll = polls[i];
+        if (not poll.creator.equal(caller) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Poll close forbidden");
+        let updated = { poll with closed = true };
+        polls := Array.tabulate<Types.Poll>(polls.size(), func(pos) = if (pos == i) updated else polls[pos]);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public query ({ caller }) func get_poll_results(poll_id : Text) : async { #Ok : Types.PollResults; #Err : Text } {
+    switch (findPollIndex(poll_id)) {
+      case null { #Err("Poll not found") };
+      case (?i) {
+        let poll = polls[i];
+        if (not canAccessConversation(caller, poll.conversation_id)) return #Err("Conversation access forbidden");
+        var counts = Array.repeat<Nat32>(0, poll.options.size());
+        var total : Nat32 = 0;
+        for (v in pollVotes.values()) {
+          if (v.poll_id == poll_id) {
+            let idx = Nat32.toNat(v.option_index);
+            if (idx < counts.size()) {
+              counts := Array.tabulate<Nat32>(counts.size(), func(pos) = if (pos == idx) counts[pos] + 1 else counts[pos]);
+              total += 1;
+            };
+          };
+        };
+        #Ok({ poll; counts; total_votes = total })
+      };
+    }
+  };
+
+  // ===================== Mute preferences (storage only) =====================
+
+  public shared ({ caller }) func set_mute_preference(conversation_id : Text, muted : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    mutePreferences := mutePreferences.filter(func(m) = not (m.user.equal(caller) and m.conversation_id == conversation_id));
+    mutePreferences := mutePreferences.concat([{ user = caller; conversation_id; muted }]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_mute_preference(conversation_id : Text) : async Bool {
+    if (caller.equal(Principal.anonymous())) return false;
+    for (m in mutePreferences.values()) {
+      if (m.user.equal(caller) and m.conversation_id == conversation_id) { return m.muted };
+    };
+    false
+  };
+
+  // ===================== Deterministic DM create/lookup =====================
+
+  public shared ({ caller }) func get_or_create_dm(other : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
+    auth(caller);
+    if (other.equal(Principal.anonymous()) or other.equal(caller)) return #Err("Invalid DM target");
+    let aText = Principal.toText(caller);
+    let bText = Principal.toText(other);
+    let (loText, loP, hiP) = if (aText < bText) { (aText, caller, other) } else { (bText, other, caller) };
+    ignore loText;
+    for (link in dmLinks.values()) {
+      if ((link.a.equal(loP) and link.b.equal(hiP))) {
+        for (c in conversations.values()) { if (c.id == link.conversation_id) { return #Ok(c) } };
+      };
+    };
+    let conversation : Types.Conversation = {
+      id = "dm-" # Nat.toText(conversations.size() + 1);
+      club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
+    };
+    conversations := conversations.concat([conversation]);
+    dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
+    #Ok(conversation)
+  };
+
+  // ===================== Forward message =====================
+
+  public shared ({ caller }) func forward_message(message_id : Text, to_conversation_id : Text) : async { #Ok : Types.Message; #Err : Text } {
+    auth(caller);
+    var original : ?Types.Message = null;
+    for (m in messages.values()) { if (m.id == message_id) { original := ?m } };
+    switch (original) {
+      case null { #Err("Message not found") };
+      case (?orig) {
+        if (not canReadTeamMessages(caller, orig.conversation_id) and not canAccessConversation(caller, orig.conversation_id)) return #Err("Source conversation access forbidden");
+        if (not canAccessConversation(caller, to_conversation_id)) return #Err("Target conversation access forbidden");
+        switch (findConversationIndex(to_conversation_id)) {
+          case null { #Err("Target conversation not found") };
+          case (?ci) {
+            let key = "fwd-" # message_id # "-" # to_conversation_id;
+            for (m in messages.values()) {
+              if (m.conversation_id == to_conversation_id and m.idempotency_key == key) { return #Ok(m) };
+            };
+            let posted = postMessage(ci, caller, orig.body, key, orig.attachment);
+            forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
+            #Ok(posted)
+          };
+        }
+      };
+    }
+  };
+
+  // ===================== Scheduled messages & attachment metadata =====================
+
+  public shared ({ caller }) func register_scheduled_message(conversation_id : Text, body : Text, scheduled_at_ms : Nat64) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (not valid(body)) return #Err("Invalid message body");
+    let rec : Types.ScheduledMessage = {
+      id = "sched-" # conversation_id # "-" # Nat.toText(scheduledMessages.size() + 1);
+      conversation_id; sender = caller; body; scheduled_at_ms; replayed_at_ms = null; replayed_message_id = null;
+    };
+    scheduledMessages := scheduledMessages.concat([rec]);
+    #Ok(rec)
+  };
+
+  public shared ({ caller }) func replay_scheduled_message(id : Text) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
+    auth(caller);
+    var found_idx : ?Nat = null;
+    var idx = 0;
+    for (r in scheduledMessages.values()) { if (r.id == id) { found_idx := ?idx }; idx += 1 };
+    switch (found_idx) {
+      case null { #Err("Scheduled message not found") };
+      case (?i) {
+        let rec = scheduledMessages[i];
+        if (rec.replayed_at_ms != null) return #Ok(rec);
+        if (not rec.sender.equal(caller) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Replay forbidden");
+        switch (findConversationIndex(rec.conversation_id)) {
+          case null { #Err("Conversation not found") };
+          case (?ci) {
+            let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null);
+            let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
+            scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
+            #Ok(updated)
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func register_attachment_metadata(conversation_id : Text, message_id : ?Text, kind : Text, ref_id : Text, url : ?Text, size_bytes : ?Nat64) : async { #Ok : Types.AttachmentMetadata; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (not validAttachment({ kind; ref_id; url })) return #Err("Invalid attachment metadata");
+    let rec : Types.AttachmentMetadata = {
+      id = "att-" # conversation_id # "-" # Nat.toText(attachmentMetadata.size() + 1);
+      conversation_id; message_id; kind; ref_id; url; size_bytes; uploader = caller; created_at_ms = nowMs();
+    };
+    attachmentMetadata := attachmentMetadata.concat([rec]);
+    #Ok(rec)
+  };
+
+  // ===================== Reactions & chat catch-up / recap =====================
+
+  public shared ({ caller }) func toggle_reaction(message_id : Text, emoji : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(emoji)) return #Err("Invalid reaction");
+    if (reactions.any(func(r) = r.message_id == message_id and r.user.equal(caller) and r.emoji == emoji)) {
+      reactions := reactions.filter(func(r) = not (r.message_id == message_id and r.user.equal(caller) and r.emoji == emoji));
+    } else {
+      reactions := reactions.concat([{ message_id; user = caller; emoji }]);
+    };
+    #Ok
+  };
+
+  func reactionsSummaryFor(message_id : Text) : [Types.ReactionSummary] {
+    var summary : [Types.ReactionSummary] = [];
+    for (r in reactions.values()) {
+      if (r.message_id == message_id) {
+        var found = false;
+        summary := Array.map<Types.ReactionSummary, Types.ReactionSummary>(summary, func(s) = if (s.emoji == r.emoji) { found := true; { s with count = s.count + 1 } } else { s });
+        if (not found) { summary := summary.concat([{ emoji = r.emoji; count = 1 }]) };
+      };
+    };
+    summary
+  };
+
+  public query ({ caller }) func messages_since(conversation_id : Text, since_ms : Nat64) : async { #Ok : [Types.MessageWithReactions]; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    var result : [Types.MessageWithReactions] = [];
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id and m.created_at_ms > since_ms and result.size() < 200) {
+        result := result.concat([{ message = m; reactions = reactionsSummaryFor(m.id) }]);
+      };
+    };
+    #Ok(result)
+  };
+
+  // ===================== Per-club DM settings =====================
+
+  public shared ({ caller }) func set_club_dm_settings(club_id : Text, dm_disabled : Bool, attachments_disabled : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null) and not hasRole(caller, "club_admin", ?club_id, null)) return #Err("Club admin required");
+    if (not valid(club_id)) return #Err("Invalid club");
+    clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
+    clubDmSettings := clubDmSettings.concat([{ club_id; dm_disabled; attachments_disabled }]);
+    #Ok
+  };
+
+  public query func get_club_dm_settings(club_id : Text) : async Types.ClubDmSettings {
+    for (s in clubDmSettings.values()) { if (s.club_id == club_id) { return s } };
+    { club_id; dm_disabled = false; attachments_disabled = false }
+  };
+
+  // ===================== Per-user messaging settings =====================
+
+  public shared ({ caller }) func set_user_messaging_settings(hide_message_preview : Bool, ai_catchup_enabled : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    userMessagingSettings := userMessagingSettings.filter(func(s) = not s.user.equal(caller));
+    userMessagingSettings := userMessagingSettings.concat([{ user = caller; hide_message_preview; ai_catchup_enabled }]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_user_messaging_settings() : async Types.UserMessagingSettings {
+    for (s in userMessagingSettings.values()) { if (s.user.equal(caller)) { return s } };
+    { user = caller; hide_message_preview = false; ai_catchup_enabled = false }
+  };
+
+  // ===================== Per-club unread breakdown =====================
+
+  public query ({ caller }) func unread_count_by_club(principal : Principal) : async { #Ok : [Types.ClubUnreadSummary]; #Err : Text } {
+    if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
+    var result : [Types.ClubUnreadSummary] = [];
+    for (conversation in conversations.values()) {
+      if (conversation.participants.any(func(p) = p.equal(principal))) {
+        let u = unreadFor(principal, conversation.id);
+        if (u.count > 0) {
+          var found = false;
+          result := Array.map<Types.ClubUnreadSummary, Types.ClubUnreadSummary>(result, func(s) = if (s.club_id == conversation.club_id) { found := true; { s with count = s.count + u.count } } else { s });
+          if (not found) { result := result.concat([{ club_id = conversation.club_id; count = u.count }]) };
+        };
+      };
+    };
+    #Ok(result)
+  };
+
+  // ===================== Recent conversations rail =====================
+
+  public query ({ caller }) func recent_conversations(principal : Principal, limit : Nat16) : async { #Ok : [Types.RecentConversation]; #Err : Text } {
+    if (not caller.equal(principal) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid limit");
+    var entries : [Types.RecentConversation] = [];
+    for (conversation in conversations.values()) {
+      if (conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
+        let lastSeq = if (conversation.next_sequence == 0) 0 else conversation.next_sequence - 1 : Nat64;
+        entries := entries.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); last_message_sequence = lastSeq; last_message_at_ms = null }]);
+      };
+    };
+    let sorted = entries.sort(func(a, b) = Nat64.compare(b.last_message_sequence, a.last_message_sequence));
+    let take = if (sorted.size() < Nat16.toNat(limit)) sorted.size() else Nat16.toNat(limit);
+    #Ok(Array.tabulate<Types.RecentConversation>(take, func(i) = sorted[i]))
   };
 };

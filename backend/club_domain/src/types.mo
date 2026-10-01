@@ -77,6 +77,13 @@ module {
     media_header_sponsors_enabled : Bool;
     events_sponsor_strip_enabled : Bool;
     chat_thread_ads_enabled : Bool;
+    theme_primary_color : ?Text;
+    theme_secondary_color : ?Text;
+    theme_accent_color : ?Text;
+    header_logo_enabled : Bool;
+    header_club_name_enabled : Bool;
+    invite_email_style : ?Text;
+    club_switcher_hint : ?Text;
   };
   // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
   // exposure_percentage is the strip rotation share (0-100).
@@ -117,6 +124,7 @@ module {
     shell_contact_email : ?Text;
     shell_contact_name : ?Text;
     shell_invited_by : ?Principal;
+    archived : Bool;
   };
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
@@ -185,4 +193,76 @@ module {
   public type Challenge = { id : Nat64; account_id : Text; issuer : Principal; target : Principal; accepted : Bool; expires_at_ns : Nat64; expected_version : Nat64 };
   public type Family = { account_id : Text; child_id : Text };
   public type State = { schema : Nat32; accounts : [Account]; exclusions : [AccountExclusion]; families : [Family]; challenges : [Challenge]; roles : [AccountRole]; next_challenge : Nat64 };
+  // ---- Catalog of membership/club shapes added for the central canister
+  // pass (roadmap step 2 NEEDS-CANISTER list). Email/push delivery stays
+  // with a server job; these records store state + the payload a job
+  // would send. ----
+
+  // Shareable team-invite link: a single rotating token any holder can
+  // redeem (role fixed at creation), distinct from the per-email
+  // TeamInvite above. rotate replaces the token and keeps the record;
+  // revoke disables redemption without deleting history.
+  public type TeamInviteLink = {
+    id : Text;
+    club_id : Text;
+    team_id : Text;
+    role : Text;
+    token : Text;
+    created_by : Principal;
+    created_at_ms : Nat64;
+    rotated_at_ms : ?Nat64;
+    revoked : Bool;
+  };
+
+  // Generalized pending invite covering team/club/guardian flows. `kind`
+  // is "team" | "club" | "guardian". `payload` is the notification a
+  // server job would send on create/resend (subject/body), returned to
+  // the caller instead of actually emailing.
+  public type InvitePayload = { to : Text; subject : Text; body : Text };
+  public type PendingInvite = {
+    id : Text;
+    kind : Text;
+    club_id : Text;
+    team_id : ?Text;
+    child_id : ?Text;
+    email : Text;
+    role : ?Text;
+    invited_by : Principal;
+    created_at_ms : Nat64;
+    status : Text; // "pending" | "resent" | "revoked" | "accepted"
+    resent_at_ms : ?Nat64;
+  };
+
+  // A member's request to open a new team under a club, awaiting admin
+  // approval (distinct from role_requests which request a role on an
+  // existing team).
+  public type TeamCreationRequest = {
+    id : Text;
+    club_id : Text;
+    name : Text;
+    division : ?Text;
+    age_group : ?Text;
+    requested_by : Principal;
+    status : Text; // "pending" | "approved" | "rejected"
+    created_at_ms : Nat64;
+    decided_at_ms : ?Nat64;
+    decided_by : ?Principal;
+    team_id : ?Text;
+  };
+
+  // Per-team roster position assignment. member_id is a Principal-text or
+  // child id (free-form, matching the account-id-is-text convention).
+  public type TeamPlayerPosition = { team_id : Text; member_id : Text; position : Text };
+
+  public type TeamCaptain = { team_id : Text; user : Principal };
+
+  public type ClubJoinRequest = {
+    id : Text;
+    club_id : Text;
+    user : Principal;
+    status : Text; // "pending" | "approved" | "rejected"
+    created_at_ms : Nat64;
+    decided_at_ms : ?Nat64;
+    decided_by : ?Principal;
+  };
 }

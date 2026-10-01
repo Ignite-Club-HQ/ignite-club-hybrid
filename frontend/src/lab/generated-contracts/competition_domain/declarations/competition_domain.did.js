@@ -9,6 +9,23 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const CompetitionInvite = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'responded_at_ms' : IDL.Opt(IDL.Nat64),
+    'invitee' : IDL.Principal,
+    'role' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'competition_id' : IDL.Text,
+  });
+  const RoleGrant = IDL.Record({
+    'role' : IDL.Text,
+    'user' : IDL.Principal,
+    'team_id' : IDL.Opt(IDL.Text),
+    'competition_id' : IDL.Text,
+  });
   const TeamEntry = IDL.Record({
     'status' : IDL.Text,
     'team_id' : IDL.Text,
@@ -23,6 +40,16 @@ export const idlFactory = ({ IDL }) => {
     'season' : IDL.Text,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
+  });
+  const CompetitionJoinLink = IDL.Record({
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'revision' : IDL.Nat64,
+    'competition_id' : IDL.Text,
   });
   const Season = IDL.Record({
     'status' : IDL.Text,
@@ -57,11 +84,10 @@ export const idlFactory = ({ IDL }) => {
     'competition_id' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
-  const RoleGrant = IDL.Record({
-    'role' : IDL.Text,
-    'user' : IDL.Principal,
-    'team_id' : IDL.Opt(IDL.Text),
+  const ChatSettings = IDL.Record({
+    'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
+    'chat_enabled' : IDL.Bool,
   });
   const State = IDL.Record({
     'seasons' : IDL.Vec(Season),
@@ -69,15 +95,28 @@ export const idlFactory = ({ IDL }) => {
     'entries' : IDL.Vec(TeamEntry),
     'matches' : IDL.Vec(Match),
     'tokens' : IDL.Vec(JoinToken),
+    'chatSettings' : IDL.Vec(ChatSettings),
+    'competitionInvites' : IDL.Vec(CompetitionInvite),
     'governor' : IDL.Principal,
+    'competitionJoinLinks' : IDL.Vec(CompetitionJoinLink),
     'competitions' : IDL.Vec(Competition),
     'roles' : IDL.Vec(RoleGrant),
   });
   
   return IDL.Service({
+    'accept_competition_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
+        [],
+      ),
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'add_competition_role' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
         [],
       ),
     'assign_division' : IDL.Func(
@@ -95,9 +134,29 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
         [],
       ),
+    'create_competition_invite' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_competition_join_link' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_season' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'decline_competition_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_match' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'duplicate_season' : IDL.Func(
@@ -108,6 +167,11 @@ export const idlFactory = ({ IDL }) => {
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_chat_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
         ['query'],
       ),
     'grant_role' : IDL.Func(
@@ -130,9 +194,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : JoinToken, 'Err' : IDL.Text })],
         [],
       ),
+    'join_competition_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
+        [],
+      ),
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_competition_invites' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_competition_roles' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RoleGrant), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_competitions' : IDL.Func(
@@ -148,6 +227,11 @@ export const idlFactory = ({ IDL }) => {
     'list_entries' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_invites_by_invitee' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_matches' : IDL.Func(
@@ -175,6 +259,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'remove_competition_role' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_competition_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rotate_competition_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_chat_settings' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_match_result' : IDL.Func(
         [IDL.Text, IDL.Nat16, IDL.Nat16, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Match, 'Err' : IDL.Text })],
@@ -188,6 +292,11 @@ export const idlFactory = ({ IDL }) => {
     'set_season_status' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'trim_rounds' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'update_match_details' : IDL.Func(
