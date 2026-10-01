@@ -12,7 +12,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, getMyLiveChildRsvps } from "@/live/features/events";
 import { listLiveChildren } from "@/live/features/membership";
-import { listLiveMiniLeaguePlayers } from "@/live/features/miniLeagues";
+import { listLivePlayers } from "@/live/features/miniLeagues";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -200,10 +200,24 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
   // NEEDS-CANISTER: household RSVP roll-up (children-by-guardian across all
   // events) has no events_domain/club_domain counterpart — gate the query
   // off for II users instead of throwing a uuid-type error.
-  const icpAuth = resolveAuthBackend() === "icp";
   return useQuery({
     queryKey: ["child-rsvps-card", eventId, userId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: household children + RSVPs come from events_domain's
+        // my_child_rsvps, which keys off the caller's principal — no
+        // uuid-typed children/child_guardians lookups.
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as never[],
+          icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
+        });
+        return (rows ?? []).map((r) => ({
+          id: `${r.rsvp.event_id}:${r.rsvp.child_id[0] ?? ""}`,
+          status: r.rsvp.state,
+          child_id: r.rsvp.child_id[0] ?? "",
+          children: r.child[0] ? { name: r.child[0].name } : null,
+        }));
+      }
       const [ownChildren, guardianLinks] = await Promise.all([
         supabase.from("children").select("id").eq("parent_id", userId!),
         supabase.from("child_guardians").select("child_id").eq("guardian_id", userId!),
