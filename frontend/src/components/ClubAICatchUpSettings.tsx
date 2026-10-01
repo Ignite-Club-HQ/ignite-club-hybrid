@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
 
 interface Props {
@@ -54,6 +55,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
 
   const updateMutation = useMutation({
     mutationFn: async (ai_catch_up_enabled: boolean) => {
+      assertSupabaseWritePath("messaging", "AI chat recap toggle");
       const { error } = await supabase
         .from("clubs")
         .update({ ai_catch_up_enabled } as any)
@@ -71,6 +73,7 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
 
   const enableAllMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("messaging", "bulk-enable AI chat recap for all members");
       const { data, error } = await supabase.rpc(
         "enable_ai_catch_up_for_all_club_members" as any,
         { p_club_id: clubId }

@@ -343,6 +343,11 @@ function SupabaseMediaPage() {
 
   // Quick Pro check - check if user has any Pro club/team membership
   // Logic: Club Pro → all teams inherit Pro; Free club → check team subscription
+// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
+// have no Supabase session, so this query never runs/returns no rows and the
+// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
+// via what canister) is a pending product decision; this is intentionally
+// left as-is (no behavior change) until that's decided.
   const { data: hasProClub, isLoading: loadingProAccess, error: proAccessError } = useQuery({
     queryKey: ["has-pro-access", user?.id, roleClubIds.join(","), roleTeamIds.join(",")],
     queryFn: async () => {

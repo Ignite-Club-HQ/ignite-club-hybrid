@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
 
 interface ClubDMSettingsProps {
@@ -63,6 +64,7 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
   // Upsert settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: async (newSettings: { dm_enabled?: boolean; allowed_roles?: string[] }) => {
+      assertSupabaseWritePath("messaging", "club DM enablement/allowed roles");
       const { error } = await supabase
         .from("club_dm_settings")
         .upsert({
