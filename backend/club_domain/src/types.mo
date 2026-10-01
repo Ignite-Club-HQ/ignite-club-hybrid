@@ -1,7 +1,7 @@
 module {
   public type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
   public type Team = { id : Text; club : Text };
-  public type Child = { id : Text; teams : [Text]; parent : ?Principal };
+  public type Child = { id : Text; teams : [Text]; parent : ?Principal; club_id : ?Text };
   public type Guardian = { child : Text; user : Principal };
   public type Exclusion = { club : Text; user : Principal };
   public type Acl = {
@@ -256,6 +256,7 @@ module {
 
   public type TeamCaptain = { team_id : Text; user : Principal };
 
+  public type RemovedMember = { club : Text; user : Principal; removed_at_ms : Nat64; removed_by : Principal };
   public type ClubJoinRequest = {
     id : Text;
     club_id : Text;

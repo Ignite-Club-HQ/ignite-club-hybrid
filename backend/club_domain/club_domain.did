@@ -98,6 +98,13 @@ type Request =
    operation: Operation;
    request_id: text;
  };
+type RemovedMember = 
+ record {
+   club: text;
+   removed_at_ms: nat64;
+   removed_by: principal;
+   user: principal;
+ };
 type PendingInvite = 
  record {
    child_id: opt text;
@@ -286,6 +293,7 @@ type ClubJoinRequest =
  };
 type Child = 
  record {
+   club_id: opt text;
    id: text;
    parent: opt principal;
    teams: vec text;
@@ -394,6 +402,11 @@ service : {
                                         Err: text;
                                         Ok: ClubTeam;
                                       });
+  create_child_for_parent_in_club: (club_id: text, parent: principal) ->
+   (variant {
+      Err: text;
+      Ok: Child;
+    });
   create_child_for_parent_on_team: (club_id: text, team_id: text, parent:
    principal) -> (variant {
                     Err: text;
@@ -538,6 +551,7 @@ service : {
                        Err: text;
                        Ok;
                      });
+  is_member_removed: (club: text, user: principal) -> (bool) query;
   link_guardian: (child_id: text, user: principal) ->
    (variant {
       Err: text;
@@ -575,6 +589,11 @@ service : {
    (variant {
       Err: text;
       Ok: vec PendingInvite;
+    }) query;
+  list_removed_members: (club: text) ->
+   (variant {
+      Err: text;
+      Ok: vec RemovedMember;
     }) query;
   list_role_grants: (club: text) ->
    (variant {
@@ -686,6 +705,10 @@ service : {
       Err: text;
       Ok: ClubProfile;
     });
+  restore_member: (club: text, user: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
   restore_team: (id: text) -> (variant {
                                  Err: text;
                                  Ok: ClubTeam;

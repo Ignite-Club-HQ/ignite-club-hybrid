@@ -28,6 +28,7 @@ module {
     avatar : ?Text;
     description : ?Text;
     deleted : Bool;
+    admin_only_posting : Bool;
   };
 
   // Shared-club membership record backing `can_dm_user`: two users may DM
@@ -44,6 +45,12 @@ module {
   // the frontend can bucket into its {teams, clubs, groups, dms} shape
   // without a second round-trip.
   public type UnreadSummary = { conversation_id : Text; kind : Text; count : Nat64 };
+
+  // --- Chat recap (on-ICP HTTPS outcall AI) ---
+  // NOTE: api_key lives in canister stable state, which is visible to the
+  // node providers hosting this canister's subnet replicas. Only ever
+  // configure a scoped/limited-privilege key here, never a master key.
+  public type RecapConfig = { endpoint_url : Text; api_key : Text; model : Text };
 
   public type State = {
     schema : Nat32;

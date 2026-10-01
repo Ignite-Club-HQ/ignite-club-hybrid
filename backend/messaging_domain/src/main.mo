@@ -7,6 +7,10 @@ import Int "mo:core/Int";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
+import Text "mo:core/Text";
+import Blob "mo:core/Blob";
+import Call "mo:ic/Call";
+import IC "mo:ic/Types";
 import Types "types";
 
 persistent actor {
@@ -33,6 +37,9 @@ persistent actor {
   var reactions : [Types.Reaction];
   var clubDmSettings : [Types.ClubDmSettings];
   var userMessagingSettings : [Types.UserMessagingSettings];
+  // See Types.RecapConfig: api_key is visible to node providers hosting this
+  // canister; only a scoped/limited key should ever be stored here.
+  var recapConfig : ?Types.RecapConfig;
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -251,6 +258,12 @@ persistent actor {
       case (?meta) {
         if (meta.kind == "competition" and not isCompetitionAdminFor(caller, conversation_id)) {
           return #Err("Competition chat admin required");
+        };
+        if (
+          meta.admin_only_posting and (meta.kind == "group" or meta.kind == "broadcast") and
+          not isGroupAdmin(caller, conversation_id)
+        ) {
+          return #Err("Only group admins can post");
         };
       };
       case null {};
@@ -504,6 +517,7 @@ persistent actor {
       avatar = switch (existing) { case (?m) { m.avatar }; case null { null } };
       description = switch (existing) { case (?m) { m.description }; case null { null } };
       deleted = switch (existing) { case (?m) { m.deleted }; case null { false } };
+      admin_only_posting = switch (existing) { case (?m) { m.admin_only_posting }; case null { false } };
     };
     groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
     groupMetadata := groupMetadata.concat([updated]);
@@ -614,14 +628,14 @@ persistent actor {
     conversations := conversations.concat([conversation]);
     let meta : Types.GroupMetadata = {
       conversation_id = conversation.id; name; kind; club_id = ?club_id; team_id; members;
-      created_at_ms = nowMs(); avatar = null; description = null; deleted = false;
+      created_at_ms = nowMs(); avatar = null; description = null; deleted = false; admin_only_posting = false;
     };
     groupMetadata := groupMetadata.concat([meta]);
     groupRoles := groupRoles.concat(Array.map<(Principal, Text), Types.GroupRole>(role_entries, func((p, r)) = { conversation_id = conversation.id; user = p; role = r }));
     #Ok(meta)
   };
 
-  public shared ({ caller }) func update_group(conversation_id : Text, name : ?Text, avatar : ?Text, description : ?Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+  public shared ({ caller }) func update_group(conversation_id : Text, name : ?Text, avatar : ?Text, description : ?Text, admin_only_posting : ?Bool) : async { #Ok : Types.GroupMetadata; #Err : Text } {
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
       case null { #Err("Group metadata not found") };
@@ -634,6 +648,7 @@ persistent actor {
           name = switch (name) { case (?n) { n }; case null { meta.name } };
           avatar = switch (avatar) { case (?_) { avatar }; case null { meta.avatar } };
           description = switch (description) { case (?_) { description }; case null { meta.description } };
+          admin_only_posting = switch (admin_only_posting) { case (?v) { v }; case null { meta.admin_only_posting } };
         };
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
         groupMetadata := groupMetadata.concat([updated]);

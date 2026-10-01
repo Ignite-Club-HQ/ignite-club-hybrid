@@ -43,6 +43,7 @@ export interface Challenge {
 export interface Child {
   'id' : string,
   'teams' : Array<string>,
+  'club_id' : [] | [string],
   'parent' : [] | [Principal],
 }
 export interface ClubJoinRequest {
@@ -188,6 +189,12 @@ export interface PendingInvite {
   'created_at_ms' : bigint,
   'invited_by' : Principal,
   'club_id' : string,
+}
+export interface RemovedMember {
+  'club' : string,
+  'user' : Principal,
+  'removed_at_ms' : bigint,
+  'removed_by' : Principal,
 }
 export interface Request {
   'request_id' : string,
@@ -340,6 +347,11 @@ export interface _SERVICE {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'create_child_for_parent_in_club' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
   'create_child_for_parent_on_team' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : Child } |
@@ -479,6 +491,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_member_removed' : ActorMethod<[string, Principal], boolean>,
   'link_guardian' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
@@ -517,6 +530,11 @@ export interface _SERVICE {
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
+      { 'Err' : string }
+  >,
+  'list_removed_members' : ActorMethod<
+    [string],
+    { 'Ok' : Array<RemovedMember> } |
       { 'Err' : string }
   >,
   'list_role_grants' : ActorMethod<
@@ -624,6 +642,11 @@ export interface _SERVICE {
   'restore_club' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubProfile } |
+      { 'Err' : string }
+  >,
+  'restore_member' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'restore_team' : ActorMethod<

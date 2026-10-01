@@ -9,7 +9,13 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveRoleGrant } from "@/live/features/membership";
+import {
+  createLiveChildForParentOnTeam,
+  createLivePendingInvite,
+  linkLiveGuardian,
+} from "@/live/features/club";
 
 type Profile = {
   id: string;
@@ -41,6 +47,24 @@ type UseAddExistingTeamMemberMutationArgs = {
   onComplete: () => void;
 };
 
+/**
+ * ICP result shape kept compatible with the Supabase result so the single
+ * onSuccess handler below can serve both paths. `icp: true` gates the
+ * email-sending/notification steps that are Supabase-only.
+ */
+type MutationResult = {
+  secondParentInviteLink: string | null;
+  secondParentAddedDirectly: boolean;
+  secondParentStatus: SecondParentResult["status"] | "skipped";
+  secondParentLabel: string | null;
+  secondParentInviteEmail: string | null;
+  secondParentFailure: string | null;
+  roleWasDuplicate: boolean;
+  notificationFailed: boolean;
+  notificationError: string | null;
+  icp?: boolean;
+};
+
 export function useAddExistingTeamMemberMutation({
   supabase,
   queryClient,
@@ -66,167 +90,305 @@ export function useAddExistingTeamMemberMutation({
   onComplete,
 }: UseAddExistingTeamMemberMutationArgs) {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<MutationResult> => {
       if (!selectedUser) throw new Error("No user selected");
       if (!userId) throw new Error("You must be signed in to add a member");
-      assertSupabaseWritePath("membership", "existing-member add (role grant + children + second-parent + notifications) has no club_domain counterpart"); // NEEDS-CANISTER: existing-member add (role grant + children + second-parent + notifications) has no club_domain counterpart
 
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: selectedUser.id,
-        team_id: teamId,
-        club_id: clubId,
-        role: selectedRole,
-      });
-
-      const roleWasDuplicate = error && isDuplicateError(error);
-      if (error && !roleWasDuplicate) throw error;
-
-      const createdChildIds: string[] = [];
-      const resolvedChildren: { id: string; name: string; yearOfBirth: number | null }[] = [];
-      if (selectedRole === "parent") {
-        const validChildren = singleChildren.filter((child) => child.name.trim());
-        for (const child of validChildren) {
-          let childId = child.existingChildId;
-          if (child.pendingInviteId) continue;
-
-          if (childId) {
-            const existingChild = clubChildren.find((candidate) => candidate.id === childId);
-            if (existingChild && existingChild.parent_id !== selectedUser.id) {
-              const { error: guardianError } = await supabase
-                .from("child_guardians")
-                .insert({ child_id: childId, guardian_id: selectedUser.id });
-              if (guardianError && !isDuplicateChildError(guardianError)) {
-                console.error("[AddTeamMember] Failed to link guardian:", guardianError.message);
-                throw guardianError;
-              }
-            }
-          } else {
-            const { data: newChildId, error: childError } = await supabase.rpc(
-              "create_child_for_parent_on_team",
-              {
-                p_parent_user_id: selectedUser.id,
-                p_team_id: teamId,
-                p_name: child.name.trim(),
-                p_year_of_birth: child.yearOfBirth ? parseInt(child.yearOfBirth) : null,
-              },
-            );
-            if (childError) {
-              console.error(
-                "Failed to create child:",
-                childError.message,
-                childError.code,
-                childError.details,
-                childError.hint,
-                JSON.stringify(childError),
-              );
-              throw new Error(`We couldn't save ${child.name.trim()}. ${childError.message}`);
-            }
-            childId = newChildId;
-          }
-
-          if (!childId) continue;
-          createdChildIds.push(childId);
-          const existingClubChild = clubChildren.find((candidate) => candidate.id === childId);
-          resolvedChildren.push({
-            id: childId,
-            name: child.name.trim(),
-            yearOfBirth:
-              existingClubChild?.year_of_birth ??
-              (child.yearOfBirth ? parseInt(child.yearOfBirth) : null),
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").insert({
+            user_id: selectedUser.id,
+            team_id: teamId,
+            club_id: clubId,
+            role: selectedRole,
           });
 
-          const { data: existing } = await supabase
-            .from("child_team_assignments")
-            .select("id")
-            .eq("child_id", childId)
-            .eq("team_id", teamId)
-            .maybeSingle();
-          if (!existing) {
-            const { error: assignError } = await supabase
-              .from("child_team_assignments")
-              .insert({ child_id: childId, team_id: teamId });
-            if (assignError) {
-              console.error("Failed to assign child to team:", assignError.message);
-              throw new Error(
-                `We saved ${child.name.trim()}, but couldn't add them to ${teamName}. Please try again.`,
-              );
-            }
-          }
+          const roleWasDuplicate = error && isDuplicateError(error);
+          if (error && !roleWasDuplicate) throw error;
 
-          if (child.jerseyNumber) {
-            const jerseyNumber = parseInt(child.jerseyNumber);
-            if (!Number.isNaN(jerseyNumber)) {
-              const { data: existingPosition } = await supabase
-                .from("team_player_positions")
-                .select("id")
-                .eq("team_id", teamId)
-                .eq("child_id", childId)
-                .maybeSingle();
-              if (existingPosition) {
-                await supabase
-                  .from("team_player_positions")
-                  .update({ jersey_number: jerseyNumber })
-                  .eq("id", existingPosition.id);
+          const createdChildIds: string[] = [];
+          const resolvedChildren: { id: string; name: string; yearOfBirth: number | null }[] = [];
+          if (selectedRole === "parent") {
+            const validChildren = singleChildren.filter((child) => child.name.trim());
+            for (const child of validChildren) {
+              let childId = child.existingChildId;
+              if (child.pendingInviteId) continue;
+
+              if (childId) {
+                const existingChild = clubChildren.find((candidate) => candidate.id === childId);
+                if (existingChild && existingChild.parent_id !== selectedUser.id) {
+                  const { error: guardianError } = await supabase
+                    .from("child_guardians")
+                    .insert({ child_id: childId, guardian_id: selectedUser.id });
+                  if (guardianError && !isDuplicateChildError(guardianError)) {
+                    console.error("[AddTeamMember] Failed to link guardian:", guardianError.message);
+                    throw guardianError;
+                  }
+                }
               } else {
-                await supabase.from("team_player_positions").insert({
-                  team_id: teamId,
-                  child_id: childId,
-                  position: "MID",
-                  jersey_number: jerseyNumber,
-                });
+                const { data: newChildId, error: childError } = await supabase.rpc(
+                  "create_child_for_parent_on_team",
+                  {
+                    p_parent_user_id: selectedUser.id,
+                    p_team_id: teamId,
+                    p_name: child.name.trim(),
+                    p_year_of_birth: child.yearOfBirth ? parseInt(child.yearOfBirth) : null,
+                  },
+                );
+                if (childError) {
+                  console.error(
+                    "Failed to create child:",
+                    childError.message,
+                    childError.code,
+                    childError.details,
+                    childError.hint,
+                    JSON.stringify(childError),
+                  );
+                  throw new Error(`We couldn't save ${child.name.trim()}. ${childError.message}`);
+                }
+                childId = newChildId;
+              }
+
+              if (!childId) continue;
+              createdChildIds.push(childId);
+              const existingClubChild = clubChildren.find((candidate) => candidate.id === childId);
+              resolvedChildren.push({
+                id: childId,
+                name: child.name.trim(),
+                yearOfBirth:
+                  existingClubChild?.year_of_birth ??
+                  (child.yearOfBirth ? parseInt(child.yearOfBirth) : null),
+              });
+
+              const { data: existing } = await supabase
+                .from("child_team_assignments")
+                .select("id")
+                .eq("child_id", childId)
+                .eq("team_id", teamId)
+                .maybeSingle();
+              if (!existing) {
+                const { error: assignError } = await supabase
+                  .from("child_team_assignments")
+                  .insert({ child_id: childId, team_id: teamId });
+                if (assignError) {
+                  console.error("Failed to assign child to team:", assignError.message);
+                  throw new Error(
+                    `We saved ${child.name.trim()}, but couldn't add them to ${teamName}. Please try again.`,
+                  );
+                }
+              }
+
+              if (child.jerseyNumber) {
+                const jerseyNumber = parseInt(child.jerseyNumber);
+                if (!Number.isNaN(jerseyNumber)) {
+                  const { data: existingPosition } = await supabase
+                    .from("team_player_positions")
+                    .select("id")
+                    .eq("team_id", teamId)
+                    .eq("child_id", childId)
+                    .maybeSingle();
+                  if (existingPosition) {
+                    await supabase
+                      .from("team_player_positions")
+                      .update({ jersey_number: jerseyNumber })
+                      .eq("id", existingPosition.id);
+                  } else {
+                    await supabase.from("team_player_positions").insert({
+                      team_id: teamId,
+                      child_id: childId,
+                      position: "MID",
+                      jersey_number: jerseyNumber,
+                    });
+                  }
+                }
               }
             }
           }
-        }
-      }
 
-      let secondParent: SecondParentResult = { status: "skipped", label: null };
-      let secondParentFailure: string | null = null;
-      try {
-        secondParent = await ensureSecondParent({
-          role: selectedRole,
-          selectedProfile: selectedSecondParent,
-          name: secondParentName,
-          email: secondParentEmail,
-          teamId,
-          clubId,
-          teamName,
-          childIds: createdChildIds,
-          childrenMetadata: resolvedChildren.map((child) => ({
-            name: child.name,
-            yearOfBirth: child.yearOfBirth,
-            existingChildId: child.id,
-          })),
-          expectChildren:
-            selectedRole === "parent" && singleChildren.some((child) => child.name.trim()),
-          invitedByUserId: userId,
-        });
-      } catch (error) {
-        console.error("[AddTeamMember] second parent failed", (error as Error)?.message);
-        secondParentFailure =
-          error instanceof SecondParentError
-            ? error.label ?? "the second parent"
-            : "the second parent";
-      }
+          let secondParent: SecondParentResult = { status: "skipped", label: null };
+          let secondParentFailure: string | null = null;
+          try {
+            secondParent = await ensureSecondParent({
+              role: selectedRole,
+              selectedProfile: selectedSecondParent,
+              name: secondParentName,
+              email: secondParentEmail,
+              teamId,
+              clubId,
+              teamName,
+              childIds: createdChildIds,
+              childrenMetadata: resolvedChildren.map((child) => ({
+                name: child.name,
+                yearOfBirth: child.yearOfBirth,
+                existingChildId: child.id,
+              })),
+              expectChildren:
+                selectedRole === "parent" && singleChildren.some((child) => child.name.trim()),
+              invitedByUserId: userId,
+            });
+          } catch (error) {
+            console.error("[AddTeamMember] second parent failed", (error as Error)?.message);
+            secondParentFailure =
+              error instanceof SecondParentError
+                ? error.label ?? "the second parent"
+                : "the second parent";
+          }
 
-      const { error: notificationError } = await supabase.from("notifications").insert({
-        user_id: selectedUser.id,
-        type: "membership",
-        message: `You have been added to ${teamName} as ${selectedRoleLabel}`,
-        related_id: teamId,
+          const { error: notificationError } = await supabase.from("notifications").insert({
+            user_id: selectedUser.id,
+            type: "membership",
+            message: `You have been added to ${teamName} as ${selectedRoleLabel}`,
+            related_id: teamId,
+          });
+
+          return {
+            secondParentInviteLink: secondParent.inviteLink ?? null,
+            secondParentAddedDirectly: secondParent.status === "added",
+            secondParentStatus: secondParent.status,
+            secondParentLabel: secondParent.label,
+            secondParentInviteEmail: secondParent.email ?? null,
+            secondParentFailure,
+            roleWasDuplicate,
+            notificationFailed: !!notificationError,
+            notificationError: notificationError?.message ?? null,
+          };
+        },
+
+        // Best-effort ICP sequence (locked decision: no composite canister
+        // method). Each step is isolated so one failure doesn't abort the
+        // rest; failures are collected and surfaced in a single thrown error
+        // message so the coach knows exactly what to retry. No rollback.
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          // NEEDS-CANISTER / gap: selectedUser.id here is whatever the member
+          // picker (useAddTeamMemberSearch) resolved, but that hook queries
+          // Supabase `search_invitable_profiles` ungated — under ICP it will
+          // surface Supabase profile UUIDs, not Internet Identity principals.
+          // Principal.fromText will throw for a UUID; the picker needs its
+          // own canister-backed member search before this flow is reachable
+          // end-to-end for ICP users.
+          const userPrincipal = Principal.fromText(selectedUser.id);
+
+          const succeeded: string[] = [];
+          const failed: string[] = [];
+
+          try {
+            await addLiveRoleGrant(ctx, userPrincipal, clubId, selectedRole, teamId);
+            succeeded.push("role granted");
+          } catch (error) {
+            console.error("[AddTeamMember][ICP] role grant failed:", error);
+            failed.push("the role grant");
+          }
+
+          let childFailures = 0;
+          let childAttempts = 0;
+          if (selectedRole === "parent") {
+            const validChildren = singleChildren.filter((child) => child.name.trim());
+            for (const child of validChildren) {
+              if (child.pendingInviteId) continue;
+              childAttempts += 1;
+              try {
+                let childId = child.existingChildId;
+                if (childId) {
+                  const existingChild = clubChildren.find((candidate) => candidate.id === childId);
+                  if (existingChild && existingChild.parent_id !== selectedUser.id) {
+                    await linkLiveGuardian(ctx, childId, userPrincipal);
+                  }
+                } else {
+                  const created = (await createLiveChildForParentOnTeam(
+                    ctx,
+                    teamId,
+                    child.name.trim(),
+                    userPrincipal,
+                  )) as { id?: string } | undefined;
+                  childId = created?.id;
+                }
+                if (!childId) throw new Error("No child id returned from canister");
+
+                // NEEDS-CANISTER: club_domain's team-player-position record
+                // only stores a single `position` string, no jersey_number
+                // field — jersey numbers can't be persisted under ICP yet, so
+                // we skip that sub-step silently rather than fail the child.
+              } catch (error) {
+                console.error("[AddTeamMember][ICP] child failed:", child.name, error);
+                childFailures += 1;
+              }
+            }
+            if (childAttempts > 0) {
+              if (childFailures > 0) {
+                failed.push(
+                  `${childFailures} ${childFailures === 1 ? "child" : "children"} could not be saved`,
+                );
+              } else {
+                succeeded.push(
+                  childAttempts === 1 ? "child saved" : `${childAttempts} children saved`,
+                );
+              }
+            }
+          }
+
+          let secondParentInviteLink: string | null = null;
+          let secondParentInviteEmail: string | null = null;
+          let secondParentStatus: MutationResult["secondParentStatus"] = "skipped";
+          let secondParentFailure: string | null = null;
+          const trimmedSecondParentEmail = secondParentEmail.trim();
+          const wantsSecondParentInvite =
+            selectedRole === "parent" && !selectedSecondParent && !!trimmedSecondParentEmail;
+
+          if (wantsSecondParentInvite) {
+            try {
+              // NEEDS-CANISTER: create_pending_invite does not return (or
+              // store) a token the way Supabase's pending_invites does, and
+              // there is no club_domain-aware accept route in the frontend
+              // yet — the id-based link below is best-effort/non-functional
+              // until that route exists. Surfaced per the locked decision so
+              // the coach at least has a reference to share/retry with.
+              const invite = (await createLivePendingInvite(
+                ctx,
+                clubId,
+                trimmedSecondParentEmail,
+                teamId,
+                "parent",
+                selectedUser.display_name ?? "",
+                secondParentName.trim() || undefined,
+              )) as { id?: string } | undefined;
+              secondParentInviteEmail = trimmedSecondParentEmail;
+              secondParentInviteLink = invite?.id
+                ? `${window.location.origin}/join/p/${invite.id}`
+                : null;
+              secondParentStatus = "invited";
+              succeeded.push("second parent invited");
+            } catch (error) {
+              console.error("[AddTeamMember][ICP] second parent invite failed:", error);
+              secondParentFailure = secondParentName.trim() || "the second parent";
+              failed.push("the second parent invite");
+            }
+          }
+
+          // Notifications and all email-sending are Supabase-only; skipped
+          // under ICP per the locked decision (not treated as a failure).
+
+          if (failed.length > 0) {
+            const succeededText = succeeded.length > 0 ? `${succeeded.join(", ")}, but ` : "";
+            throw new Error(
+              `${succeededText}${failed.join(" and ")} — please retry.`,
+            );
+          }
+
+          return {
+            secondParentInviteLink,
+            secondParentAddedDirectly: false,
+            secondParentStatus,
+            secondParentLabel: secondParentName.trim() || null,
+            secondParentInviteEmail,
+            secondParentFailure,
+            roleWasDuplicate: false,
+            notificationFailed: false,
+            notificationError: null,
+            icp: true,
+          };
+        },
       });
-
-      return {
-        secondParentInviteLink: secondParent.inviteLink ?? null,
-        secondParentAddedDirectly: secondParent.status === "added",
-        secondParentStatus: secondParent.status,
-        secondParentLabel: secondParent.label,
-        secondParentInviteEmail: secondParent.email ?? null,
-        secondParentFailure,
-        roleWasDuplicate,
-        notificationFailed: !!notificationError,
-        notificationError: notificationError?.message ?? null,
-      };
     },
     onSuccess: async (result) => {
       refreshTeamRoleChange(queryClient, teamId);
@@ -264,11 +426,25 @@ export function useAddExistingTeamMemberMutation({
           title: "Second parent added",
           description: `${result.secondParentLabel} has also been added as Parent`,
         });
+      } else if (result.secondParentStatus === "invited" && result.icp) {
+        // ICP: no email is sent by the canister — surface the invite link
+        // directly instead of the Supabase email-confirmation toast below.
+        toast({
+          title: "Second parent invite created",
+          description: result.secondParentInviteLink
+            ? `Share this link with ${result.secondParentLabel || "the second parent"}: ${result.secondParentInviteLink}`
+            : `An invitation was created for ${result.secondParentLabel}. Share it from the pending invites list.`,
+        });
       } else if (result.secondParentStatus === "invited") {
         toast({
           title: "Second parent invited",
           description: `An invitation was created for ${result.secondParentLabel}.`,
         });
+      }
+
+      if (result.icp) {
+        if (!result.secondParentFailure) onComplete();
+        return;
       }
 
       const childrenNames = singleChildren
