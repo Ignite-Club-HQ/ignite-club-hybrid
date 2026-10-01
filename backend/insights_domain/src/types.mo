@@ -28,6 +28,18 @@ module {
   public type FeedbackStatus = { #Open; #InProgress; #Resolved };
   public type Feedback = { id : Text; user : Principal; kind : Text; title : ?Text; message : Text; page_url : ?Text; status : FeedbackStatus; admin_notes : ?Text; created_at_ms : Nat64; updated_at_ms : Nat64 };
 
+  // ---- Client perf log (clientPerfLog equivalent) ----
+  public type ClientPerfEntry = { path : Text; metric : Text; value_ms : Nat32; at_ms : Nat64; principal : Principal };
+  public type ClientPerfSample = { path : Text; metric : Text; value_ms : Nat32; at_ms : Nat64; user : Principal };
+  public type ClientPerfAggregate = { path : Text; count : Nat32; avg_ms : Float; p50_ms : Nat32; p95_ms : Nat32 };
+
+  // ---- Engagement benchmarks (admin-set target/reference values) ----
+  public type Benchmark = { metric_key : Text; period : Text; value : Float; updated_at_ms : Nat64 };
+
+  // ---- Sponsor performance rollups ----
+  public type SponsorMetricCounter = { sponsor_id : Text; metric : Text; period : Text; value : Float };
+  public type SponsorPerformance = { sponsor_id : Text; period : Text; metrics : [{ metric : Text; value : Float }] };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -38,5 +50,8 @@ module {
     var auditLogs : [AuditLog];
     var feedback : [Feedback];
     var nextId : Nat64;
+    var clientPerfSamples : [ClientPerfSample];
+    var benchmarks : [Benchmark];
+    var sponsorMetrics : [SponsorMetricCounter];
   };
 }

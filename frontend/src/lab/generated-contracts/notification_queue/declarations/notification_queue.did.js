@@ -145,6 +145,18 @@ export const idlFactory = ({ IDL }) => {
     'min_notifications' : IDL.Nat32,
     'failure_threshold_percent' : IDL.Nat32,
   });
+  const PreferencesPage = IDL.Record({
+    'total' : IDL.Nat32,
+    'items' : IDL.Vec(Preferences),
+  });
+  const PreferencesPageResult = IDL.Variant({
+    'Ok' : PreferencesPage,
+    'Err' : IDL.Text,
+  });
+  const ChatNotifyBatchResult = IDL.Variant({
+    'Ok' : IDL.Nat16,
+    'Err' : IDL.Text,
+  });
   const DigestResult = IDL.Variant({ 'Ok' : DigestItem, 'Err' : IDL.Text });
   const PreferencesInput = IDL.Record({
     'email_pitch_board_enabled' : IDL.Bool,
@@ -237,6 +249,11 @@ export const idlFactory = ({ IDL }) => {
         [Results],
         ['query'],
       ),
+    'list_preferences_by_club' : IDL.Func(
+        [IDL.Text, IDL.Nat32, IDL.Nat32],
+        [PreferencesPageResult],
+        ['query'],
+      ),
     'list_scheduled' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [ScheduledResults],
@@ -250,6 +267,18 @@ export const idlFactory = ({ IDL }) => {
     'mark_failed' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'mark_read' : IDL.Func([IDL.Text], [Result], []),
     'mark_sent' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
+    'record_chat_notify_batch' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Vec(IDL.Text),
+          IDL.Vec(IDL.Text),
+        ],
+        [ChatNotifyBatchResult],
+        [],
+      ),
     'record_digest_item' : IDL.Func(
         [
           IDL.Text,

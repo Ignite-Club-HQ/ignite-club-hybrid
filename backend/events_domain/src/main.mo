@@ -25,6 +25,16 @@ persistent actor {
   var children : [Types.Child];
   var childGuardians : [Types.ChildGuardian];
   var bulkAccessPrincipals : [Principal];
+  var coachNotes : [Types.CoachNote];
+  var eventViews : [Types.EventView];
+  var reminderLogs : [Types.ReminderLog];
+  var pushReachability : [Types.PushReachability];
+  var eventGroups : [Types.EventGroup];
+  var eventGroupPlayers : [Types.EventGroupPlayer];
+  var eventGroupDuties : [Types.EventGroupDuty];
+  var teamTrainingPauses : [Types.TeamTrainingPause];
+  var openDuties : [Types.OpenDuty];
+  var miniLeagueRsvps : [Types.MiniLeagueRsvp];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -121,7 +131,7 @@ persistent actor {
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1 };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false };
     events := events.concat([created]); #Ok(created)
   };
 
@@ -139,7 +149,7 @@ persistent actor {
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
     let seriesId = "ser-" # club_id # "-" # Nat.toText(series.size());
-    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1 };
+    let created : Types.EventSeries = { id = seriesId; club_id; team_id; title; description; event_type; location; frequency; first_starts_at_ms; first_ends_at_ms; until_ms; creator = caller; revision = 1; deleted = false };
     let step = frequencyStepMs(frequency);
     let duration = first_ends_at_ms - first_starts_at_ms;
     // Cap at 366 occurrences to bound message/state size.
@@ -147,7 +157,7 @@ persistent actor {
     let base = events.size();
     let children = Array.tabulate<Types.Event>(maxCount, func(index) {
       let offset = step * Nat.toNat64(index);
-      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1 }
+      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false }
     });
     series := series.concat([created]);
     events := events.concat(children);
@@ -250,7 +260,8 @@ persistent actor {
 
   public query ({ caller }) func list_series(club_id : ?Text, team_id : ?Text) : async [Types.EventSeries] {
     series.filter(func(item) =
-      canViewSeries(caller, item)
+      not item.deleted
+        and canViewSeries(caller, item)
         and (club_id == null or club_id == ?item.club_id)
         and (team_id == null or team_id == item.team_id)
     )
@@ -411,7 +422,8 @@ persistent actor {
 
   public query ({ caller }) func list_events(club_id : ?Text, team_id : ?Text) : async [Types.Event] {
     events.filter(func(item) =
-      canView(caller, item)
+      not item.deleted
+        and canView(caller, item)
         and (club_id == null or club_id == ?item.club_id)
         and (team_id == null or team_id == item.team_id)
     )

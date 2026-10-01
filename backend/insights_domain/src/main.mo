@@ -19,6 +19,9 @@ persistent actor {
   var auditLogs : [Types.AuditLog];
   var feedback : [Types.Feedback];
   var nextId : Nat64;
+  var clientPerfSamples : [Types.ClientPerfSample];
+  var benchmarks : [Types.Benchmark];
+  var sponsorMetrics : [Types.SponsorMetricCounter];
 
   transient let MAX_BATCH = 50;
 
@@ -322,5 +325,94 @@ persistent actor {
         #Ok(updated)
       };
     }
+  };
+
+  // ================= Client perf log =================
+  // clientPerfLog equivalent: accepts a batch of per-page/per-metric timing
+  // samples from a client flush (mirrors record_perf_samples_batch above but
+  // keyed by page path + named metric rather than surface/source, matching
+  // the browser's generic clientPerfLog shape). `principal` on each entry
+  // lets a single flush cover samples gathered for more than one identity
+  // (e.g. a service worker relaying buffered entries); it is trusted as
+  // supplied, same as the account-id fields elsewhere in this app pending
+  // stronger per-entry attestation.
+
+  public shared ({ caller }) func record_client_perf(entries : [Types.ClientPerfEntry]) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    if (entries.size() == 0) return #Err("Empty batch");
+    if (entries.size() > MAX_BATCH) return #Err("Batch too large");
+    for (item in entries.values()) { if (not valid(item.path) or not valid(item.metric)) return #Err("Invalid client perf entry") };
+    let rows = entries.map(func(item : Types.ClientPerfEntry) : Types.ClientPerfSample = { path = item.path; metric = item.metric; value_ms = item.value_ms; at_ms = item.at_ms; user = item.principal });
+    clientPerfSamples := clientPerfSamples.concat(rows);
+    #Ok(Nat.toNat32(rows.size()))
+  };
+
+  // Avg/p50/p95 value_ms for a page path (optionally filtered by metric)
+  // over [since_ms, until_ms).
+  public query ({ caller }) func client_perf_aggregate(path : Text, metric : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.ClientPerfAggregate; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let matches = clientPerfSamples.filter(func(item) =
+      item.path == path and (metric == null or metric == ?item.metric) and item.at_ms >= since_ms and item.at_ms < until_ms
+    );
+    if (matches.size() == 0) return #Ok({ path; count = 0; avg_ms = 0.0; p50_ms = 0; p95_ms = 0 });
+    let durations = matches.map(func(item) = item.value_ms);
+    let sorted = durations.sort(func(a, b) = Nat32.compare(a, b));
+    let total = durations.foldLeft(0.0, func(acc, item) = acc + Int.toFloat(Nat32.toNat(item)));
+    #Ok({
+      path;
+      count = Nat.toNat32(matches.size());
+      avg_ms = total / Int.toFloat(matches.size());
+      p50_ms = percentile(sorted, 0.5);
+      p95_ms = percentile(sorted, 0.95);
+    })
+  };
+
+  // ================= Engagement benchmarks =================
+  // Admin-set target/reference values per (metric_key, period), e.g.
+  // ("messages_per_active_user", "2026-W40") -> 4.2. Distinct from the
+  // computed club_engagement_benchmarks (current vs. previous window) above;
+  // these are externally curated reference numbers (industry/org targets).
+
+  public shared ({ caller }) func set_benchmark(metric_key : Text, period : Text, value : Float) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not valid(metric_key) or not valid(period)) return #Err("Invalid benchmark");
+    let updated : Types.Benchmark = { metric_key; period; value; updated_at_ms = nowMs() };
+    switch (benchmarks.find(func(item) = item.metric_key == metric_key and item.period == period)) {
+      case (?_) { benchmarks := benchmarks.map(func(item) = if (item.metric_key == metric_key and item.period == period) updated else item) };
+      case null { benchmarks := benchmarks.concat([updated]) };
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func get_benchmarks(metric_keys : [Text]) : async { #Ok : [Types.Benchmark]; #Err : Text } {
+    auth(caller);
+    if (metric_keys.size() == 0) return #Ok(benchmarks);
+    #Ok(benchmarks.filter(func(item) = metric_keys.any(func(k) = k == item.metric_key)))
+  };
+
+  // ================= Sponsor performance rollups =================
+  // Free-form per-sponsor metric counters (e.g. "impressions", "clicks",
+  // "leads"), bucketed by day like the club engagement counters above so
+  // repeated small deltas (one per impression/click event) accumulate
+  // cheaply instead of requiring a read-modify-write of a large row set.
+
+  public shared ({ caller }) func record_sponsor_metric(sponsor_id : Text, metric : Text, delta : Float) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(sponsor_id) or not valid(metric)) return #Err("Invalid sponsor metric");
+    let period = dayKey(nowMs());
+    switch (sponsorMetrics.find(func(item) = item.sponsor_id == sponsor_id and item.metric == metric and item.period == period)) {
+      case (?current) {
+        let updated = { current with value = current.value + delta };
+        sponsorMetrics := sponsorMetrics.map(func(item) = if (item.sponsor_id == sponsor_id and item.metric == metric and item.period == period) updated else item);
+      };
+      case null { sponsorMetrics := sponsorMetrics.concat([{ sponsor_id; metric; period; value = delta }]) };
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func get_sponsor_performance(sponsor_id : Text, period : Text) : async { #Ok : Types.SponsorPerformance; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let matches = sponsorMetrics.filter(func(item) = item.sponsor_id == sponsor_id and item.period == period);
+    #Ok({ sponsor_id; period; metrics = matches.map(func(item) = { metric = item.metric; value = item.value }) })
   };
 }

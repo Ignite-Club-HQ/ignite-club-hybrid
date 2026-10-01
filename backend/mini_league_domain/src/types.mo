@@ -137,6 +137,18 @@ module {
     created_at_ms : Nat64;
   };
 
+  // Generic mini-league-wide join link (as opposed to MiniLeagueInvite,
+  // which is single-use and optionally pre-bound to a player). Claiming
+  // creates a new player record, mirroring join_mini_league_by_token.
+  public type MiniLeagueJoinLink = {
+    mini_league_id : Text;
+    token : Text;
+    revoked : Bool;
+    created_by : Principal;
+    created_at_ms : Nat64;
+    revision : Nat64;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -149,5 +161,6 @@ module {
     var duties : [MiniLeagueGroupDuty];
     var availability : [MiniLeagueSessionAvailability];
     var admins : [MiniLeagueAdmin];
+    var joinLinks : [MiniLeagueJoinLink];
   };
 }

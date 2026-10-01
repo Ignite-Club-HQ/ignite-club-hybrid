@@ -90,6 +90,16 @@ type PreferencesResult =
    Err: text;
    Ok: Preferences;
  };
+type PreferencesPageResult = 
+ variant {
+   Err: text;
+   Ok: PreferencesPage;
+ };
+type PreferencesPage = 
+ record {
+   items: vec Preferences;
+   total: nat32;
+ };
 type PreferencesInput = 
  record {
    admin_enabled: bool;
@@ -195,6 +205,11 @@ type ChatType =
    Group;
    Team;
  };
+type ChatNotifyBatchResult = 
+ variant {
+   Err: text;
+   Ok: nat16;
+ };
 service : {
   acknowledge: (id: text, key: text) -> (Result);
   cancel_scheduled: (id: text, author: text) -> (ScheduledResult);
@@ -224,12 +239,17 @@ service : {
                        Ok;
                      });
   list_inbox: (user: text, club: opt text, limit: nat16) -> (Results) query;
+  list_preferences_by_club: (club_id: text, limit: nat32, offset: nat32) ->
+   (PreferencesPageResult) query;
   list_scheduled: (author: text, target: opt text) ->
    (ScheduledResults) query;
   mark_all_read: (user: text, club: opt text) -> (ResultNat16);
   mark_failed: (id: text, error: text) -> (ScheduledResult);
   mark_read: (id: text) -> (Result);
   mark_sent: (id: text, sent_message_id: text) -> (ScheduledResult);
+  record_chat_notify_batch: (message_id: text, conversation_id: text, sender:
+   text, preview: text, recipients: vec text, mute_list: vec text) ->
+   (ChatNotifyBatchResult);
   record_digest_item: (id: text, message_id: text, message_type:
    DigestSource, chat_scope_id: text, message_created_at_ms: nat64,
    classification: DigestClassification, summary: text, topic: opt text,

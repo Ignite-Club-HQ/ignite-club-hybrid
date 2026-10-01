@@ -1,6 +1,8 @@
 module {
   public type RoleGrant = { user : Principal; role : Text; club_id : Text; team_id : ?Text };
-  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64 };
+  // deleted: soft-delete flag added for delete_event/soft_delete_series — existing
+  // rows migrate with deleted = false.
+  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool };
   // Widened to mirror Supabase rsvps: child_id/notes/has_paid/source added on
   // top of the original (event_id, account_id, state, updated_at_ms) shape.
   // Existing rows migrate with child_id = null, notes = "", has_paid = null,
@@ -19,8 +21,10 @@ module {
   public type Recurrence = { event_id : Text; frequency : Text; until_ms : Nat64 };
   // A recurring series: one record plus generated child events linked by
   // series_id. Monthly recurrence steps a fixed 30 days (provisional — no
-  // calendar math canister-side).
-  public type EventSeries = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; frequency : Text; first_starts_at_ms : Nat64; first_ends_at_ms : Nat64; until_ms : Nat64; creator : Principal; revision : Nat64 };
+  // calendar math canister-side). deleted: soft-delete flag — soft_delete_series
+  // sets this true and cascades to every child occurrence's own deleted flag
+  // without removing rows (distinct from delete_series's hard cascade/trim).
+  public type EventSeries = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; frequency : Text; first_starts_at_ms : Nat64; first_ends_at_ms : Nat64; until_ms : Nat64; creator : Principal; revision : Nat64; deleted : Bool };
 
   // ---- Attendance (class_attendance parity) ----
   // Mirrors Supabase class_attendance's status/marked_by/marked_at/notes
@@ -43,6 +47,37 @@ module {
   public type ChildGuardian = { child_id : Text; guardian_id : Text; is_primary : Bool };
   public type RsvpWithChild = { rsvp : Rsvp; child : ?Child };
   public type EventRoster = { rsvps : [RsvpWithChild]; guests : [EventGuest] };
+
+  // ---- Coach notes (per event, coach/admin only) ----
+  public type CoachNote = { event_id : Text; note : Text; updated_by : Principal; updated_at_ms : Nat64 };
+
+  // ---- Event views / reminder log / push reachability (NEEDS-CANISTER #4) ----
+  // One row per view; count queries fold over this. Delivery of reminders
+  // and push notifications themselves stays off-chain — this canister only
+  // records what happened.
+  public type EventView = { event_id : Text; viewer : Principal; viewed_at_ms : Nat64 };
+  public type ReminderLog = { id : Text; event_id : Text; channel : Text; recipient : Text; sent_at_ms : Nat64 };
+  public type PushReachability = { user : Principal; reachable : Bool; updated_at_ms : Nat64 };
+
+  // ---- Event groups / players / duties (NEEDS-CANISTER #5) ----
+  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64 };
+  public type EventGroupPlayer = { group_id : Text; account_id : Text };
+  // account_id = null -> open duty within a group, same convention as
+  // OpenDuty below.
+  public type EventGroupDuty = { group_id : Text; duty : Text; account_id : ?Text };
+
+  // ---- Team training pauses (NEEDS-CANISTER #6) ----
+  public type TeamTrainingPause = { id : Text; club_id : Text; team_id : Text; starts_at_ms : Nat64; ends_at_ms : Nat64; reason : Text; created_by : Principal; created_at_ms : Nat64 };
+
+  // ---- Open duties (NEEDS-CANISTER #8) ----
+  // Unassigned duty that any eligible member can claim via claim_open_duty.
+  public type OpenDuty = { id : Text; event_id : Text; duty : Text; claimed_by : ?Text; created_at_ms : Nat64 };
+
+  // ---- Mini-league-player RSVPs (NEEDS-CANISTER #9) ----
+  // Separate from Rsvp (which is keyed by account_id) so a mini-league
+  // player without an account can RSVP via their mini_league_players row id.
+  public type RsvpSubject = { #account : Text; #mini_league_player : Text };
+  public type MiniLeagueRsvp = { event_id : Text; subject : RsvpSubject; state : Text; updated_at_ms : Nat64 };
 
   public type State = {
     var governor : Principal;

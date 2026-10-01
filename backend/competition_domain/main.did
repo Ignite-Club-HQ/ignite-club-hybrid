@@ -8,6 +8,9 @@ type TeamEntry =
  };
 type State = 
  record {
+   chatSettings: vec ChatSettings;
+   competitionInvites: vec CompetitionInvite;
+   competitionJoinLinks: vec CompetitionJoinLink;
    competitions: vec Competition;
    entries: vec TeamEntry;
    governor: principal;
@@ -60,6 +63,29 @@ type JoinToken =
    team_id: text;
    used: bool;
  };
+type CompetitionJoinLink = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   revision: nat64;
+   revoked: bool;
+   role: text;
+   team_id: opt text;
+   token: text;
+ };
+type CompetitionInvite = 
+ record {
+   competition_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   invitee: principal;
+   responded_at_ms: opt nat64;
+   role: text;
+   status: text;
+   team_id: opt text;
+ };
 type Competition = 
  record {
    club_id: text;
@@ -69,12 +95,28 @@ type Competition =
    season: text;
    status: text;
  };
+type ChatSettings = 
+ record {
+   chat_enabled: bool;
+   competition_id: text;
+   revision: nat64;
+ };
 service : {
+  accept_competition_invite: (invite_id: text) ->
+   (variant {
+      Err: text;
+      Ok: CompetitionInvite;
+    });
   addBulkAccessPrincipal: ("principal": principal) ->
    (variant {
       Err: text;
       Ok;
     });
+  add_competition_role: (competition_id: text, "principal": principal, role:
+   text, team_id: opt text) -> (variant {
+                                  Err: text;
+                                  Ok: RoleGrant;
+                                });
   assign_division: (competition_id: text, team_id: text, division_id:
    opt text) -> (variant {
                    Err: text;
@@ -89,11 +131,30 @@ service : {
       Err: text;
       Ok: Competition;
     });
+  create_competition_invite: (competition_id: text, invitee: principal, role:
+   text, team_id: opt text) -> (variant {
+                                  Err: text;
+                                  Ok: CompetitionInvite;
+                                });
+  create_competition_join_link: (competition_id: text, role: text, team_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: CompetitionJoinLink;
+                 });
   create_season: (competition_id: text, name: text) ->
    (variant {
       Err: text;
       Ok: Season;
     });
+  decline_competition_invite: (invite_id: text) ->
+   (variant {
+      Err: text;
+      Ok: CompetitionInvite;
+    });
+  delete_match: (match_id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
   duplicate_season: (competition_id: text, source_name: text, new_name:
    text) -> (variant {
                Err: text;
@@ -103,6 +164,11 @@ service : {
                          Err: text;
                          Ok: State;
                        }) query;
+  get_chat_settings: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: ChatSettings;
+    }) query;
   grant_role: ("principal": principal, role: text, competition_id: text,
    team_id: opt text) -> (variant {
                             Err: text;
@@ -122,10 +188,25 @@ service : {
                 Err: text;
                 Ok: JoinToken;
               });
+  join_competition_by_token: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: RoleGrant;
+    });
   listBulkAccessPrincipals: () ->
    (variant {
       Err: text;
       Ok: vec principal;
+    }) query;
+  list_competition_invites: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec CompetitionInvite;
+    }) query;
+  list_competition_roles: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec RoleGrant;
     }) query;
   list_competitions: (club_id: text) ->
    (variant {
@@ -141,6 +222,11 @@ service : {
    (variant {
       Err: text;
       Ok: vec TeamEntry;
+    }) query;
+  list_invites_by_invitee: () ->
+   (variant {
+      Err: text;
+      Ok: vec CompetitionInvite;
     }) query;
   list_matches: (competition_id: text) ->
    (variant {
@@ -167,6 +253,26 @@ service : {
       Err: text;
       Ok;
     });
+  remove_competition_role: (competition_id: text, "principal": principal,
+   role: text, team_id: opt text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+  revoke_competition_join_link: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  rotate_competition_join_link: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: CompetitionJoinLink;
+    });
+  set_chat_settings: (competition_id: text, chat_enabled: bool,
+   expected_revision: nat64) -> (variant {
+                                   Err: text;
+                                   Ok: ChatSettings;
+                                 });
   set_match_result: (match_id: text, home_score: nat16, away_score: nat16,
    expected_revision: nat64) -> (variant {
                                    Err: text;
@@ -182,6 +288,11 @@ service : {
                 Err: text;
                 Ok: Season;
               });
+  trim_rounds: (competition_id: text, max_round: nat16) ->
+   (variant {
+      Err: text;
+      Ok: nat;
+    });
   update_match_details: (match_id: text, home_team: text, away_team: 
    text, division_id: opt text, scheduled_at_ms: opt nat64, venue: opt text,
    pitch_number: opt text, round_number: opt nat16, duration_minutes:

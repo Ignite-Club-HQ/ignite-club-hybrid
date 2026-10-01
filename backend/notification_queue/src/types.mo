@@ -185,4 +185,27 @@ module {
     cooldown_hours : Nat32;
     alerts_enabled : Bool;
   };
+
+  // ---- Chat notification side-effects (fan-out per chat message) ----
+  // Mirrors the app's "notify recipients of a new chat message" side effect:
+  // one record_chat_notify_batch call per sent message, skipping muted
+  // recipients, idempotent per message_id (repeated calls for the same
+  // message_id are no-ops after the first).
+
+  public type ChatNotifyRecipient = {
+    user : Text;
+    club : Text;
+  };
+
+  public type ChatNotifyBatchResult = { #Ok : Nat16; #Err : Text };
+
+  // ---- Bulk preferences listing for admin aggregate views ----
+  // NOTE: Preferences rows are keyed by user only (no club_id column in the
+  // real public.notification_preferences table), so there is no reliable
+  // per-club membership link available in this canister. list_preferences_by_club
+  // accepts club_id for API parity with other admin aggregate endpoints but
+  // currently does not filter by it (see main.mo for details); it just
+  // paginates the full preferences set.
+  public type PreferencesPage = { items : [Preferences]; total : Nat32 };
+  public type PreferencesPageResult = { #Ok : PreferencesPage; #Err : Text };
 }

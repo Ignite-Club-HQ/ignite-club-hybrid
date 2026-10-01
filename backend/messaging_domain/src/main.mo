@@ -20,6 +20,18 @@ persistent actor {
   var clubMemberships : [Types.ClubMembership];
   var competitionAdmins : [Types.CompetitionAdmin];
   var dmAttachmentsDisabled : [Principal];
+  var groupRoles : [Types.GroupRole];
+  var joinRequests : [Types.JoinRequest];
+  var polls : [Types.Poll];
+  var pollVotes : [Types.PollVote];
+  var mutePreferences : [Types.MutePreference];
+  var dmLinks : [Types.DmLink];
+  var forwardRecords : [Types.ForwardRecord];
+  var scheduledMessages : [Types.ScheduledMessage];
+  var attachmentMetadata : [Types.AttachmentMetadata];
+  var reactions : [Types.Reaction];
+  var clubDmSettings : [Types.ClubDmSettings];
+  var userMessagingSettings : [Types.UserMessagingSettings];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -211,6 +223,7 @@ persistent actor {
       idempotency_key;
       edited_at_ms = null;
       attachment;
+      created_at_ms = nowMs();
     };
     let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
@@ -443,7 +456,7 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 3; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled })
+    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings })
   };
 
   func validKind(kind : Text) : Bool {
@@ -484,7 +497,13 @@ persistent actor {
         };
       };
     };
-    let updated : Types.GroupMetadata = { conversation_id; name; kind; club_id; team_id; members; created_at_ms = switch (existing) { case (?m) { m.created_at_ms }; case null { nowMs() } } };
+    let updated : Types.GroupMetadata = {
+      conversation_id; name; kind; club_id; team_id; members;
+      created_at_ms = switch (existing) { case (?m) { m.created_at_ms }; case null { nowMs() } };
+      avatar = switch (existing) { case (?m) { m.avatar }; case null { null } };
+      description = switch (existing) { case (?m) { m.description }; case null { null } };
+      deleted = switch (existing) { case (?m) { m.deleted }; case null { false } };
+    };
     groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
     groupMetadata := groupMetadata.concat([updated]);
     #Ok(updated)

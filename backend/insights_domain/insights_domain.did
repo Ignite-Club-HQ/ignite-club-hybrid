@@ -1,3 +1,12 @@
+type SponsorPerformance = 
+ record {
+   metrics: vec record {
+                  metric: text;
+                  value: float64;
+                };
+   period: text;
+   sponsor_id: text;
+ };
 type PerfSampleInput = 
  record {
    cache_hit: bool;
@@ -54,6 +63,29 @@ type EngagementBenchmarks =
    current: EngagementTotals;
    previous: EngagementTotals;
  };
+type ClientPerfEntry = 
+ record {
+   at_ms: nat64;
+   metric: text;
+   path: text;
+   "principal": principal;
+   value_ms: nat32;
+ };
+type ClientPerfAggregate = 
+ record {
+   avg_ms: float64;
+   count: nat32;
+   p50_ms: nat32;
+   p95_ms: nat32;
+   path: text;
+ };
+type Benchmark = 
+ record {
+   metric_key: text;
+   period: text;
+   updated_at_ms: nat64;
+   value: float64;
+ };
 type AuditLog = 
  record {
    action_type: text;
@@ -87,6 +119,11 @@ service : {
       Err: text;
       Ok;
     });
+  client_perf_aggregate: (path: text, metric: opt text, since_ms: nat64,
+   until_ms: nat64) -> (variant {
+                          Err: text;
+                          Ok: ClientPerfAggregate;
+                        }) query;
   club_engagement_active_users: (club_id: text, since_ms: nat64, until_ms:
    nat64) -> (variant {
                 Err: text;
@@ -134,6 +171,16 @@ service : {
       Err: text;
       Ok: AdminAlert;
     });
+  get_benchmarks: (metric_keys: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec Benchmark;
+    }) query;
+  get_sponsor_performance: (sponsor_id: text, period: text) ->
+   (variant {
+      Err: text;
+      Ok: SponsorPerformance;
+    }) query;
   grant_role: ("principal": principal, role: text, club_id: text, team_id:
    opt text) -> (variant {
                    Err: text;
@@ -176,6 +223,11 @@ service : {
       Err: text;
       Ok;
     });
+  record_client_perf: (entries: vec ClientPerfEntry) ->
+   (variant {
+      Err: text;
+      Ok: nat32;
+    });
   record_message_sent: (club_id: text, account_id: text) ->
    (variant {
       Err: text;
@@ -204,6 +256,11 @@ service : {
                                                    Err: text;
                                                    Ok;
                                                  });
+  record_sponsor_metric: (sponsor_id: text, metric: text, delta: float64) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   record_web_vital: (metric_name: text, metric_value: float64, rating: 
    text, page_path: text) -> (variant {
                                 Err: text;
@@ -213,6 +270,11 @@ service : {
                                         Err: text;
                                         Ok: AdminAlert;
                                       });
+  set_benchmark: (metric_key: text, period: text, value: float64) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   submit_feedback: (kind: text, title: opt text, message: text, page_url:
    opt text) -> (variant {
                    Err: text;

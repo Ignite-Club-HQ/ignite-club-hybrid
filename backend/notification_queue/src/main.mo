@@ -1,5 +1,7 @@
 import Array "mo:core/Array";
+import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
+import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -16,6 +18,7 @@ persistent actor {
   var digests : [Types.DigestItem];
   var preferences : [Types.Preferences];
   var push_settings : ?Types.PushAlertSettings;
+  var chat_notified_messages : [Text];
 
   func authenticated(caller : Principal) {
     if (caller.equal(Principal.anonymous())) { Runtime.trap("Forbidden") };
@@ -731,5 +734,84 @@ persistent actor {
     };
     push_settings := ?updated;
     updated
+  };
+
+  // ======================================================================
+  // Chat notification side-effects
+  // Per-recipient fan-out triggered by a new chat message. Idempotent per
+  // message id: once a message_id has been processed, repeat calls (e.g.
+  // retried client-side side-effect dispatch) are no-ops that report 0
+  // newly-created notifications instead of erroring or double-enqueuing.
+  // Recipients present in mute_list are skipped (muted conversation/thread),
+  // as are recipients with the "message" category disabled in their stored
+  // Preferences (see recipientAllowed/categoryAllowed above).
+  // ======================================================================
+
+  func chatMessageProcessed(message_id : Text) : Bool {
+    chat_notified_messages.any(func(id) = id == message_id)
+  };
+
+  public shared ({ caller }) func record_chat_notify_batch(
+    message_id : Text,
+    conversation_id : Text,
+    sender : Text,
+    preview : Text,
+    recipients : [Text],
+    mute_list : [Text],
+  ) : async Types.ChatNotifyBatchResult {
+    authenticated(caller);
+    if (not valid(message_id) or not valid(conversation_id) or not valid(sender)) {
+      return #Err("Invalid chat notify fields");
+    };
+    if (recipients.size() > 500) { return #Err("Invalid recipient count") };
+    if (chatMessageProcessed(message_id)) { return #Ok(0) };
+    let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var created : Nat16 = 0;
+    for (recipient in recipients.values()) {
+      let muted = mute_list.any(func(m) = m == recipient);
+      if (valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
+        let id = "chat-" # message_id # "-" # recipient;
+        switch (get(id)) {
+          case (?_) {};
+          case null {
+            let notification : Types.Notification = {
+              id;
+              user = recipient;
+              club = conversation_id;
+              kind = "message_chat";
+              body = preview;
+              idempotency_key = message_id;
+              status = #Pending;
+              attempts = 0;
+              next_attempt_ms = 0;
+              read = false;
+              related_id = ?conversation_id;
+              created_at_ms = stamp;
+            };
+            items := items.concat([notification]);
+            created += 1;
+          };
+        };
+      };
+    };
+    chat_notified_messages := chat_notified_messages.concat([message_id]);
+    #Ok(created)
+  };
+
+  // ======================================================================
+  // Bulk preferences listing (admin aggregate views)
+  // See Types.PreferencesPage NOTE: club_id is accepted for parity with
+  // other admin aggregate endpoints across the app, but preferences rows
+  // carry no club_id in the real schema, so this paginates the full set.
+  // ======================================================================
+
+  public query ({ caller }) func list_preferences_by_club(club_id : Text, limit : Nat32, offset : Nat32) : async Types.PreferencesPageResult {
+    governorOnly(caller);
+    if (not valid(club_id)) { return #Err("Invalid club") };
+    let boundedLimit = Nat32.min(limit, 500);
+    let start = Nat.min(Nat32.toNat(offset), preferences.size());
+    let end = Nat.min(start + Nat32.toNat(boundedLimit), preferences.size());
+    let page = Array.tabulate<Types.Preferences>(end - start, func(i) = preferences[start + i]);
+    #Ok({ items = page; total = Nat.toNat32(preferences.size()) })
   };
 };

@@ -9,6 +9,13 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const ClientPerfAggregate = IDL.Record({
+    'path' : IDL.Text,
+    'count' : IDL.Nat32,
+    'p50_ms' : IDL.Nat32,
+    'p95_ms' : IDL.Nat32,
+    'avg_ms' : IDL.Float64,
+  });
   const EngagementDayPoint = IDL.Record({
     'day' : IDL.Text,
     'value' : IDL.Nat32,
@@ -35,6 +42,19 @@ export const idlFactory = ({ IDL }) => {
     'details' : IDL.Text,
     'resolved_at_ms' : IDL.Opt(IDL.Nat64),
     'resolved_by' : IDL.Opt(IDL.Principal),
+  });
+  const Benchmark = IDL.Record({
+    'value' : IDL.Float64,
+    'period' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'metric_key' : IDL.Text,
+  });
+  const SponsorPerformance = IDL.Record({
+    'metrics' : IDL.Vec(
+      IDL.Record({ 'metric' : IDL.Text, 'value' : IDL.Float64 })
+    ),
+    'period' : IDL.Text,
+    'sponsor_id' : IDL.Text,
   });
   const AuditLog = IDL.Record({
     'id' : IDL.Text,
@@ -71,6 +91,13 @@ export const idlFactory = ({ IDL }) => {
     'p95_ms' : IDL.Nat32,
     'avg_ms' : IDL.Float64,
   });
+  const ClientPerfEntry = IDL.Record({
+    'metric' : IDL.Text,
+    'principal' : IDL.Principal,
+    'at_ms' : IDL.Nat64,
+    'path' : IDL.Text,
+    'value_ms' : IDL.Nat32,
+  });
   const PerfSampleInput = IDL.Record({
     'source' : IDL.Text,
     'cache_hit' : IDL.Bool,
@@ -84,6 +111,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
+      ),
+    'client_perf_aggregate' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : ClientPerfAggregate, 'Err' : IDL.Text })],
+        ['query'],
       ),
     'club_engagement_active_users' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64],
@@ -132,6 +164,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
         [],
+      ),
+    'get_benchmarks' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Benchmark), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_sponsor_performance' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SponsorPerformance, 'Err' : IDL.Text })],
+        ['query'],
       ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
@@ -191,6 +233,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'record_client_perf' : IDL.Func(
+        [IDL.Vec(ClientPerfEntry)],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'record_message_sent' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -221,6 +268,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'record_sponsor_metric' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Float64],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'record_web_vital' : IDL.Func(
         [IDL.Text, IDL.Float64, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -229,6 +281,11 @@ export const idlFactory = ({ IDL }) => {
     'resolve_admin_alert' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_benchmark' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Float64],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'submit_feedback' : IDL.Func(

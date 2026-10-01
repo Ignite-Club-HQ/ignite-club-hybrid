@@ -12,7 +12,7 @@ use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
-const SCHEMA: u32 = 3;
+const SCHEMA: u32 = 4;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -20,6 +20,8 @@ const MAX_FAMILIES: usize = 100_000;
 const MAX_EXCLUSIONS: usize = 100_000;
 const MAX_CHALLENGES: usize = 10_000;
 const CHALLENGE_TTL_NS: u64 = 600_000_000_000;
+const MAX_ENTITLEMENTS: usize = 100_000;
+const MAX_VERIFIERS: usize = 16;
 
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Account {
@@ -84,6 +86,20 @@ pub struct Profile {
     pub avatar_ref: Option<String>,
     pub updated_at_ns: u64,
 }
+/// A Pro entitlement granted to a principal from an IAP (App Store) receipt
+/// or a governor/verifier write. `transaction_id` is the Apple transaction
+/// id (or empty for non-IAP grants) and is the replay-protection key: once a
+/// transaction id has been redeemed, only the same principal may redeem it
+/// again (idempotent re-verification), never a different one.
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Entitlement {
+    pub principal: Principal,
+    pub product_id: String,
+    pub transaction_id: String,
+    pub expires_at_ms: u64,
+    pub source: String,
+    pub granted_at_ms: u64,
+}
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct State {
     pub schema: u32,
@@ -105,6 +121,21 @@ pub struct State {
     /// post_upgrade. Wiped by erase_account.
     #[serde(default)]
     pub terms_acceptances: Vec<TermsAcceptance>,
+    /// Pro entitlements granted via IAP receipt verification or governor/
+    /// verifier writes (schema 4+); empty on older blobs via serde default.
+    #[serde(default)]
+    pub entitlements: Vec<Entitlement>,
+    /// Principals (in addition to the governor) allowed to call
+    /// `set_entitlement` directly — e.g. a server-side receipt verifier
+    /// identity. Empty by default; only the governor can grow this list.
+    #[serde(default)]
+    pub verifiers: Vec<Principal>,
+    /// Shared HMAC secret used to verify `redeem_entitlement` attestations
+    /// minted by the session-free IAP verification endpoint. Empty until the
+    /// governor calls `set_attestation_secret`; redemption is rejected while
+    /// empty.
+    #[serde(default)]
+    pub attestation_secret: Vec<u8>,
     pub next_challenge: u64,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
