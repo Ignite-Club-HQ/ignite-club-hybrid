@@ -158,7 +158,7 @@ persistent actor {
     var created : [Types.Event] = [];
     var index = 0;
     for (club_id in club_ids.values()) {
-      created := created.concat([{ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false }]);
+      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false } : Types.Event)]);
       index += 1;
     };
     events := events.concat(created);
