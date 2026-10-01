@@ -60,7 +60,7 @@ import {
   CONFLICT_CHECK_ERROR_DESCRIPTION,
   type ConflictCheckResult,
 } from "@/features/events/trainingConflictPolicy";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { createLocalEvent, setLocalEventRecurrence } from "@/lab/localEventsService";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -83,7 +83,7 @@ const EVENT_TYPES = [
 ];
 
 export default function CreateEventPage() {
-  const useIcpLab = isFeatureRoutedToIcp("events");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpCreateEventPage />;

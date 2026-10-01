@@ -42,6 +42,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { eventKeys } from "@/lab/eventQueryKeys";
 const PitchBoard = lazyWithRetry(() => import("@/components/pitch/PitchBoard"));
 // NetballBoard / BasketballBoard archived — football-only build (see archive/sports/)
@@ -81,9 +82,8 @@ import { computeAppAdminOverride, type TeamAppAdminOverrideChange } from "@/lib/
 import TeamCompetitionsSection from "@/components/competitions/TeamCompetitionsSection";
 import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQueryError";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   softDeleteLiveTeam,
@@ -124,7 +124,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
   // has no club_domain canister shape yet, so these actions are gated off entirely
   // in ICP mode rather than falling through to Supabase against a principal id.

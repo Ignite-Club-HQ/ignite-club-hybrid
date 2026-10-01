@@ -16,7 +16,6 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { getPasswordResetRedirectUrl } from "@/lib/passwordResetRedirect";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const emailSchema = z.string().email("Please enter a valid email address");

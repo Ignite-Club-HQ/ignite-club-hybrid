@@ -103,9 +103,8 @@ import { MoveToTeamSheet } from "@/components/MoveToTeamSheet";
 import ClubRecentGames from "@/components/history/ClubRecentGames";
 import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsSection";
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   softDeleteLiveClub,
@@ -127,7 +126,7 @@ const MEMBERS_PER_PAGE = 10;
 export default function ClubDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   // Club deletion/restore and role-request flows have no club_domain canister
   // shape yet, so they are gated off entirely for Internet Identity accounts.
   const isIcpAccount = resolveAuthBackend() === "icp";

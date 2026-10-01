@@ -20,7 +20,6 @@ import { FixturesCSVImport } from "@/components/FixturesCSVImport";
 import { ClubAdminConfirmBanner } from "@/components/ClubAdminConfirmBanner";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function ImportFixturesPage() {

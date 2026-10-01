@@ -24,7 +24,7 @@ import { MobileSelect } from "@/components/ui/mobile-select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClassEnrolment } from "@/lab/fixtureDataLayer";
 
 type TeamType = "junior" | "senior" | "mixed";
@@ -32,7 +32,7 @@ type TeamType = "junior" | "senior" | "mixed";
 export default function ClassEnrolmentPage() {
   const navigate = useNavigate();
   const { teamId } = useParams<{ teamId: string }>();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const enrolment = getLocalLabClassEnrolment(teamId ?? "team-icp-001");

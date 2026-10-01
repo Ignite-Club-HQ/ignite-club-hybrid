@@ -18,12 +18,11 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabSeasonCompare } from "@/lab/fixtureDataLayer";
 
 export default function SeasonComparePage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const compare = getLocalLabSeasonCompare("club-icp-001");
     return (

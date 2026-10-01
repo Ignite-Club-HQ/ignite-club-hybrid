@@ -49,13 +49,12 @@ import { exportEoisCSV } from "@/lib/exportEois";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabEoiSubmissions } from "@/lab/fixtureDataLayer";
 
 export default function EoiAdminPage() {
   const navigate = useNavigate();
   const { clubId } = useParams<{ clubId: string }>();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const submissions = getLocalLabEoiSubmissions(clubId ?? "club-icp-001");
     return (

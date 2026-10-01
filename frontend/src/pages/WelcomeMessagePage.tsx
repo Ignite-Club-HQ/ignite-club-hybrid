@@ -66,7 +66,7 @@ function renderTextWithLinks(text: string) {
 
 export default function WelcomeMessagePage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const welcome = getLocalLabWelcomeMessage("club-icp-001");

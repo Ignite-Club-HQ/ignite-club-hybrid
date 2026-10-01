@@ -50,11 +50,11 @@ function detectSport(row: ActiveGameRow): string {
   return a || b || "soccer";
 }
 
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabActiveGames } from "@/lab/fixtureDataLayer";
 
 export default function AdminActiveGamesPage() {
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabAdminActiveGamesPage />;
   }

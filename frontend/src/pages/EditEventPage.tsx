@@ -60,7 +60,7 @@ import { EventEditScheduleSection } from "@/components/event/EventEditScheduleSe
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague, listLiveAdmins } from "@/live/features/miniLeagues";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalEvent, setLocalEventRecurrence, updateLocalEvent } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
 import {
@@ -79,7 +79,7 @@ const EVENT_TYPES = [
 ];
 
 export default function EditEventPage() {
-  const useIcpLab = isFeatureRoutedToIcp("events");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpEditEventPage />;

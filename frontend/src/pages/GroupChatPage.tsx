@@ -130,6 +130,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { queueMessage } from "@/lib/messageQueue";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveGroupMetadata, isLiveCompetitionAdmin } from "@/live/features/messaging";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { sendLiveMessage } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
@@ -145,7 +146,6 @@ import { ChatUnreachable } from "@/components/chat/ChatUnreachable";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const PinVaultSheet = lazyWithRetry(() => import("@/components/chat/PinVaultSheet").then(m => ({ default: m.PinVaultSheet })));
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { orderChatMessagesChronologically } from "@/lab/chatMessageOrdering";
 
@@ -164,7 +164,7 @@ export default function GroupChatPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();
   const queryClient = useQueryClient();

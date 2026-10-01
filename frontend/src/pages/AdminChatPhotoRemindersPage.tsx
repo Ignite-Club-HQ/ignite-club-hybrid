@@ -1,3 +1,4 @@
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,11 +30,10 @@ const DEFAULTS: Settings = {
 };
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminChatPhotoRemindersPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (isFeatureRoutedToIcp("media")) {
     return <IcpUnavailablePage title="Photo-reminder administration is unavailable in ICP lab mode" description="Media scanning, reminder selection, and delivery remain disabled external-worker workflows." />;
   }
   return <SupabaseAdminChatPhotoRemindersPage />;

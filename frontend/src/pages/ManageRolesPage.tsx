@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import AddClubRoleToMemberDialog from "@/components/AddClubRoleToMemberDialog";
 import { RoleRequestsList } from "@/components/members/RoleRequestsList";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabRoleRoster } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { roleLabels, type AppRole } from "@/features/membership/rolePresentation";
@@ -56,7 +55,7 @@ const roleColors: Record<AppRole, string> = {
 const MEMBERS_PER_PAGE = 10;
 
 export default function ManageRolesPage() {
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabManageRolesPage />;
   }

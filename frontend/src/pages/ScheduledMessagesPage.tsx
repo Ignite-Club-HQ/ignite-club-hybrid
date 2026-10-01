@@ -247,10 +247,10 @@ function lookupLabel(
 }
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export default function ScheduledMessagesPage() {
-  if (resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true)) {
+  if (isFeatureRoutedToIcp("messaging")) {
     return <IcpUnavailablePage title="Scheduled messages are unavailable in ICP lab mode" description="Message scheduling and external delivery workers are not connected to the ICP messaging service yet." />;
   }
   return <SupabaseScheduledMessagesPage />;

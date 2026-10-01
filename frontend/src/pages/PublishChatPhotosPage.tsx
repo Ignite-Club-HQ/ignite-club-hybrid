@@ -1,3 +1,4 @@
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Check } from "lucide-react";
@@ -16,12 +17,11 @@ interface ChatImage {
 }
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabPublishableChatPhotos } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function PublishChatPhotosPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabPublishChatPhotosPage />;
   }

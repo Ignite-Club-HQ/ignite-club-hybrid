@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam, addLiveRoleGrant } from "@/live/features/membership";
 import { Principal } from "@icp-sdk/core/principal";
@@ -29,7 +30,6 @@ import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
 import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 // TeamAdminInviteDialog now shown on TeamDetailPage via navigation state
 import type { Database } from "@/integrations/supabase/types";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -44,7 +44,7 @@ export default function CreateTeamPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const providerKey = useIcpLab ? "icp" : "supabase";
 
   const [name, setName] = useState("");

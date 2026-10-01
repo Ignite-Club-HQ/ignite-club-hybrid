@@ -47,6 +47,7 @@ import { TeamMemberManagementSheets } from "@/components/chat/TeamMemberManageme
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { orderChatMessagesChronologically } from "@/lab/chatMessageOrdering";
 import { selectHistoryChatPlaceholderSource } from "@/lab/chatThreadCacheHydration";
@@ -64,7 +65,6 @@ import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { isSameDay } from "date-fns";
 import { ChatDateSeparator } from "@/components/chat/ChatDateSeparator";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { usePublishChatImage } from "@/hooks/usePublishChatImage";
@@ -134,7 +134,7 @@ export default function TeamChatPage() {
   }, []);
   const { teamId } = useParams<{ teamId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const localIcpPersona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();

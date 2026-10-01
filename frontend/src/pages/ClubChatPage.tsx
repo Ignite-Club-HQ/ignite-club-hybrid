@@ -41,6 +41,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { orderChatMessagesChronologically } from "@/lab/chatMessageOrdering";
 import { selectHistoryChatPlaceholderSource } from "@/lab/chatThreadCacheHydration";
@@ -105,7 +106,6 @@ import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
-
 const MESSAGES_PER_PAGE = 30;
 
 interface Message {
@@ -169,7 +169,7 @@ export default function ClubChatPage() {
   }, []);
   const { clubId } = useParams<{ clubId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();
   const navigate = useNavigate();

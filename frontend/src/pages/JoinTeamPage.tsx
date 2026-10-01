@@ -27,12 +27,12 @@ import { JoinTeamChildStepCard } from "@/components/join-team/JoinTeamChildStepC
 import { JoinTeamInviteCard } from "@/components/join-team/JoinTeamInviteCard";
 import { JoinTeamStatusCard } from "@/components/join-team/JoinTeamStatusCard";
 import type { Database } from "@/integrations/supabase/types";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
@@ -95,7 +95,7 @@ const fixedRoles: AppRole[] = ["club_admin", "team_admin", "app_admin"];
 
 export default function JoinTeamPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const team = getLocalLabClaimableTeam("team-icp-001");

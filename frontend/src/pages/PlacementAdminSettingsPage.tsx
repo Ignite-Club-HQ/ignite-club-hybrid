@@ -36,8 +36,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
 import {
   ICP_CANISTER_CONFIG_KEY,
@@ -173,7 +171,6 @@ export default function PlacementAdminSettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isAppAdmin, isLoading: isLoadingAuth } = useIsAppAdmin();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
 
   const [rows, setRows] = useState<CanisterRow[]>([]);
   const [touched, setTouched] = useState(false);
@@ -431,9 +428,6 @@ export default function PlacementAdminSettingsPage() {
     }
   };
 
-  if (useIcpLab) {
-    return <IcpUnavailablePage title="Placement settings are unavailable in ICP lab mode" description="The local placement-admin control plane is intentionally disabled until the approved external worker and policy boundary is implemented." />;
-  }
 
   if (isLoadingAuth || (isAppAdmin && (isLoadingSettings || isLoadingRouting))) {
     return <PageLoading />;

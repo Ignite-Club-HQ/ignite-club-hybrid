@@ -19,7 +19,6 @@ import { FeedbackDialog } from "@/components/FeedbackDialog";
 import { useUserHasAnyAICatchUpClub } from "@/hooks/useUserHasAnyAICatchUpClub";
 import { useQueryClient } from "@tanstack/react-query";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { NotificationPreferenceList, type NotificationPreferenceDescriptor } from "@/components/NotificationPreferenceList";
 import { withFeatureBackend } from "@/live/featureRouter";

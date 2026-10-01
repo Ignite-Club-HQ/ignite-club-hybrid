@@ -31,7 +31,6 @@ import {
   type ChatTarget,
 } from "@/lib/notificationChatRouting";
 import { requestClubSwitchForChatTarget, requestClubSwitchForNotificationUrl } from "@/lib/notificationClubSwitch";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import {
   invalidateNotificationSurfaces,
@@ -40,7 +39,7 @@ import {
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import {
   clearLiveInbox,
   deleteLiveNotification,
@@ -185,7 +184,7 @@ const NOTIFICATIONS_PER_PAGE = 30;
 
 export default function NotificationsPage() {
   const { user, refreshUnreadCount, clearUnreadCount } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   usePageTitle("Notifications");
   const navigate = useNavigate();
@@ -303,7 +302,7 @@ export default function NotificationsPage() {
     refetchOnMount: "always",
     // ICP-routed notifications have no realtime channel (see the effect
     // below) — poll the canister inbox via query calls instead.
-    refetchInterval: isFeatureRoutedToIcp("notifications") ? 30000 : false,
+    refetchInterval: useIcpLab ? 30000 : false,
   });
 
   // Split into unread (newest first) and earlier/read (newest first) BEFORE
@@ -323,7 +322,7 @@ export default function NotificationsPage() {
     queryKey: ["notifications-other-clubs-unread", user?.id, activeClubFilter],
     // Supabase-only nudge: hidden on ICP (the cross-club unread row is a
     // display nicety, not data the canister inbox exposes).
-    enabled: !!user?.id && !!activeClubFilter && !useIcpLab && !isFeatureRoutedToIcp("notifications"),
+    enabled: !!user?.id && !!activeClubFilter && !useIcpLab && !useIcpLab,
     staleTime: 30000,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -360,7 +359,7 @@ export default function NotificationsPage() {
   // Skipped when notifications are routed to ICP: canisters are
   // request/response, so the list query above polls instead.
   useEffect(() => {
-    if (!user || useIcpLab || isFeatureRoutedToIcp("notifications")) return;
+    if (!user || useIcpLab || useIcpLab) return;
 
     // Channel name is scoped to the user id AND to this page. `useAuth` runs
     // its own global `notifications-realtime` subscription for unread-count

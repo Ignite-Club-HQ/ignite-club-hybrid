@@ -26,7 +26,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { isVideoUrl } from "@/lib/videoUtils";
 import { cn } from "@/lib/utils";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type ChatDetailsType = ChatSharedMediaType | "support";
@@ -78,7 +78,7 @@ export function ChatDetailsSheet({
   onInviteToMiniLeague,
   onInviteToTeam,
 }: ChatDetailsSheetProps) {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [mediaViewerOpen, setMediaViewerOpen] = useState(false);

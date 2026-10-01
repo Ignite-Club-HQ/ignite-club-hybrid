@@ -101,7 +101,6 @@ import { MessagesPageDialogs } from "@/components/chat/MessagesPageDialogs";
 // warm re-entries paint cached rows immediately instead of re-running the
 // initial ordering gate. Reset implicitly on reload / user switch.
 let sessionRevealedInboxUserId: string | null = null;
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 
 const MESSAGES_PER_PAGE = 15;
 const isNativeRuntime = () => !!(window as any).Capacitor?.isNativePlatform?.();
@@ -155,7 +154,7 @@ function inboxAuthorizationSnapshot(refs: {
 
 export default function MessagesPage() {
   const { user, initialized, refreshUnreadCount } = useAuth();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const { isOnline } = useOnlineStatus();
   usePageTitle("Messages");
   const navigate = useNavigate();

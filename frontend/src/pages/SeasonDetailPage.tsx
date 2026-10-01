@@ -30,13 +30,12 @@ import { SeasonEoiConfigCard } from "@/components/seasons/SeasonEoiConfigCard";
 import { EoiEmbedCard } from "@/components/eoi/EoiEmbedCard";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabSeasonDetail } from "@/lab/fixtureDataLayer";
 
 export default function SeasonDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     const season = getLocalLabSeasonDetail(id ?? "season-icp-001") ?? getLocalLabSeasonDetail("season-icp-001");
     return (

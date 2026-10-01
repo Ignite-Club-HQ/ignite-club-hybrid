@@ -12,7 +12,7 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { useMemo } from "react";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveCompetitions, listLiveCompetitionsMulti } from "@/live/features/competitions";
@@ -20,7 +20,7 @@ import { listLiveMembershipClubs } from "@/live/features/membership";
 
 export default function CompetitionsPage() {
   usePageTitle("Competitions");
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpCompetitionsPage />;

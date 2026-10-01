@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type AdType = "image" | "logo_text";
@@ -132,7 +132,7 @@ function LogoTextPreview({
 
 export default function ManageAdsPage() {
   const navigate = useNavigate();
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = isFeatureRoutedToIcp("admin");
   if (useIcpLab) {
     return (
       <div className="container max-w-3xl mx-auto px-4 py-10">

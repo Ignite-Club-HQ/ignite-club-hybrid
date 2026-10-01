@@ -17,7 +17,7 @@ import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useNativeKeyboardBottomInset } from "@/hooks/useNativeKeyboardBottomInset";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { markChatScopeNotificationsRead } from "@/lib/markChatScopeRead";
 import { useAuth } from "@/hooks/useAuth";
@@ -240,7 +240,7 @@ export default function DirectMessagePage() {
     return () => noteChatUnmount("DirectMessage", k, null);
   }, []);
   const { conversationId } = useParams<{ conversationId: string }>();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, profile, initialized, refreshUnreadCount, decrementUnreadCount } = useAuth();

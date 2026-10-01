@@ -45,7 +45,7 @@ import { getLocalLabDeletedChats } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function AdminDeletedChatsPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabAdminDeletedChatsPage />;
   }

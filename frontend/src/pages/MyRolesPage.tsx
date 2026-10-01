@@ -10,7 +10,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { connectLocalIdentityAccessClient, resetLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { personas } from "@/lab/syntheticIdentities.mjs";
 
@@ -39,7 +38,7 @@ const roleColors: Record<string, string> = {
 };
 
 export default function MyRolesPage() {
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpMyRolesPage />;
   }
