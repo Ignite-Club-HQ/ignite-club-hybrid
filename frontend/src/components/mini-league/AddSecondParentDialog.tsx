@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, UserPlus, Search, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
+import { withFeatureBackend } from "@/live/featureRouter";
 import type { Database, Json } from "@/integrations/supabase/types";
 
 interface AddSecondParentDialogProps {
@@ -108,21 +109,29 @@ export function AddSecondParentDialog({
   });
 
 
-  const ensureChildId = async (): Promise<string> => {
-    if (childId) return childId;
-    const newChildId = crypto.randomUUID();
-    const { error: childError } = await supabase.from("children").insert({
-      id: newChildId,
-      parent_id: null,
-      name: playerName,
+  const ensureChildId = (): Promise<string> =>
+    withFeatureBackend("mini_leagues", {
+      supabase: async () => {
+        if (childId) return childId;
+        const newChildId = crypto.randomUUID();
+        const { error: childError } = await supabase.from("children").insert({
+          id: newChildId,
+          parent_id: null,
+          name: playerName,
+        });
+        if (childError) throw new Error(`Couldn't prepare child record: ${childError.message}`);
+        await supabase
+          .from("mini_league_players")
+          .update({ child_id: newChildId })
+          .eq("id", playerId);
+        return newChildId;
+      },
+      // Gated: creates a Supabase `children` row and links it on
+      // mini_league_players.child_id; no canister equivalent.
+      icp: async () => {
+        throw new Error("Adding a second parent isn't available yet on this backend.");
+      },
     });
-    if (childError) throw new Error(`Couldn't prepare child record: ${childError.message}`);
-    await supabase
-      .from("mini_league_players")
-      .update({ child_id: newChildId })
-      .eq("id", playerId);
-    return newChildId;
-  };
 
   // Link an existing user directly as a guardian (no email invite)
   const linkExistingMutation = useMutation({

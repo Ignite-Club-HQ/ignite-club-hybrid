@@ -5,6 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { Share } from "@capacitor/share";
 
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -84,26 +85,32 @@ export function ManageMiniLeagueAdminsSheet({
   // Current per-league admin grants
   const { data: currentAdmins, isLoading: loadingCurrent } = useQuery({
     queryKey: ["mini-league-admins", miniLeagueId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_admins")
-        .select("id, user_id, created_at")
-        .eq("mini_league_id", miniLeagueId);
-      if (error) throw error;
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_admins")
+            .select("id, user_id, created_at")
+            .eq("mini_league_id", miniLeagueId);
+          if (error) throw error;
 
-      const userIds = (data || []).map((r) => r.user_id);
-      if (userIds.length === 0) return [];
+          const userIds = (data || []).map((r) => r.user_id);
+          if (userIds.length === 0) return [];
 
-      const { data: profiles } = await selectCachedProfilesByIds(userIds);
+          const { data: profiles } = await selectCachedProfilesByIds(userIds);
 
-      const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
-      return (data || []).map((r) => ({
-        id: r.id,
-        user_id: r.user_id,
-        display_name: profileMap.get(r.user_id)?.display_name ?? null,
-        avatar_url: profileMap.get(r.user_id)?.avatar_url ?? null,
-      }));
-    },
+          const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+          return (data || []).map((r) => ({
+            id: r.id,
+            user_id: r.user_id,
+            display_name: profileMap.get(r.user_id)?.display_name ?? null,
+            avatar_url: profileMap.get(r.user_id)?.avatar_url ?? null,
+          }));
+        },
+        // Gated: admin display names come from Supabase profiles joined by
+        // uuid, which has no canister equivalent (canister keys by principal).
+        icp: async () => [] as { id: string; user_id: string; display_name: string | null; avatar_url: string | null }[],
+      }),
     enabled: open && !!miniLeagueId,
   });
 
@@ -131,14 +138,20 @@ export function ManageMiniLeagueAdminsSheet({
   });
 
   const grantMutation = useMutation({
-    mutationFn: async (targetUserId: string) => {
-      const { error } = await supabase.from("mini_league_admins").insert({
-        mini_league_id: miniLeagueId,
-        user_id: targetUserId,
-        granted_by: user?.id ?? null,
-      });
-      if (error) throw error;
-    },
+    mutationFn: (targetUserId: string) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("mini_league_admins").insert({
+            mini_league_id: miniLeagueId,
+            user_id: targetUserId,
+            granted_by: user?.id ?? null,
+          });
+          if (error) throw error;
+        },
+        icp: async () => {
+          throw new Error("Adding league admins isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-admins", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-members"] });
@@ -154,13 +167,19 @@ export function ManageMiniLeagueAdminsSheet({
   });
 
   const revokeMutation = useMutation({
-    mutationFn: async (rowId: string) => {
-      const { error } = await supabase
-        .from("mini_league_admins")
-        .delete()
-        .eq("id", rowId);
-      if (error) throw error;
-    },
+    mutationFn: (rowId: string) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("mini_league_admins")
+            .delete()
+            .eq("id", rowId);
+          if (error) throw error;
+        },
+        icp: async () => {
+          throw new Error("Removing league admins isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-admins", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["mini-league-members"] });

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Loader2, Camera, ImageIcon, Plus, Check, Copy, Wand2, ChevronDown, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,26 +106,34 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
   ];
 
   const generateMockPlayersMutation = useMutation({
-    mutationFn: async () => {
-      const players = [];
-      const usedNames = new Set<string>();
-      for (let i = 0; i < mockPlayerCount; i++) {
-        let name: string;
-        do {
-          const first = MOCK_FIRST_NAMES[Math.floor(Math.random() * MOCK_FIRST_NAMES.length)];
-          const last = MOCK_LAST_NAMES[Math.floor(Math.random() * MOCK_LAST_NAMES.length)];
-          name = `${first} ${last}`;
-        } while (usedNames.has(name));
-        usedNames.add(name);
-        players.push({
-          mini_league_id: league.id,
-          name,
-          ability_rating: Math.floor(Math.random() * 5) + 1,
-        });
-      }
-      const { error } = await supabase.from("mini_league_players").insert(players);
-      if (error) throw error;
-    },
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const players = [];
+          const usedNames = new Set<string>();
+          for (let i = 0; i < mockPlayerCount; i++) {
+            let name: string;
+            do {
+              const first = MOCK_FIRST_NAMES[Math.floor(Math.random() * MOCK_FIRST_NAMES.length)];
+              const last = MOCK_LAST_NAMES[Math.floor(Math.random() * MOCK_LAST_NAMES.length)];
+              name = `${first} ${last}`;
+            } while (usedNames.has(name));
+            usedNames.add(name);
+            players.push({
+              mini_league_id: league.id,
+              name,
+              ability_rating: Math.floor(Math.random() * 5) + 1,
+            });
+          }
+          const { error } = await supabase.from("mini_league_players").insert(players);
+          if (error) throw error;
+        },
+        // Gated: test-data generator writes directly into Supabase's
+        // mini_league_players table; no canister equivalent/need.
+        icp: async () => {
+          throw new Error("Generating test players isn't available on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", league.id] });
       toast.success(`${mockPlayerCount} test players added`);
@@ -133,17 +142,23 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
   });
 
   const clearMockPlayersMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_players")
-        .delete()
-        .eq("mini_league_id", league.id)
-        .is("child_id", null)
-        .is("parent_user_id", null)
-        .select("id");
-      if (error) throw error;
-      return data?.length ?? 0;
-    },
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .delete()
+            .eq("mini_league_id", league.id)
+            .is("child_id", null)
+            .is("parent_user_id", null)
+            .select("id");
+          if (error) throw error;
+          return data?.length ?? 0;
+        },
+        icp: async () => {
+          throw new Error("Clearing test players isn't available on this backend.");
+        },
+      }),
     onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", league.id] });
       if (count === 0) {
@@ -197,22 +212,31 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
   };
 
   const updateLeagueMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("mini_leagues")
-        .update({
-          name: editName.trim(),
-          description: editDescription.trim() || null,
-          logo_url: editLogoUrl,
-          team_size: editTeamSize,
-          min_players_per_side: editMinPlayersPerSide,
-          minutes_per_half: editMinutesPerHalf,
-          bib_colors: editBibColors.length > 0 ? editBibColors : null,
-          show_matches_to_members: editShowMatchesToMembers,
-        })
-        .eq("id", league.id);
-      if (error) throw error;
-    },
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("mini_leagues")
+            .update({
+              name: editName.trim(),
+              description: editDescription.trim() || null,
+              logo_url: editLogoUrl,
+              team_size: editTeamSize,
+              min_players_per_side: editMinPlayersPerSide,
+              minutes_per_half: editMinutesPerHalf,
+              bib_colors: editBibColors.length > 0 ? editBibColors : null,
+              show_matches_to_members: editShowMatchesToMembers,
+            })
+            .eq("id", league.id);
+          if (error) throw error;
+        },
+        // Gated: no clean mapping to update_mini_league exists here yet
+        // because this dialog also drives Supabase-only logo storage uploads;
+        // disabled under ICP routing rather than writing to Supabase.
+        icp: async () => {
+          throw new Error("Saving league settings isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league", league.id] });
       onOpenChange(false);
@@ -222,10 +246,16 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
   });
 
   const deleteLeagueMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("mini_leagues").delete().eq("id", league.id);
-      if (error) throw error;
-    },
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("mini_leagues").delete().eq("id", league.id);
+          if (error) throw error;
+        },
+        icp: async () => {
+          throw new Error("Deleting leagues isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       toast.success("Mini League deleted");
       navigate("/mini-leagues");
@@ -234,43 +264,51 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
   });
 
   const duplicateLeagueMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("You must be logged in to duplicate a league");
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          if (!user) throw new Error("You must be logged in to duplicate a league");
 
-      const { data: newLeague, error: createError } = await supabase
-        .from("mini_leagues")
-        .insert({
-          name: `${editName.trim() || league.name} (Copy)`,
-          description: editDescription.trim() || league.description,
-          club_id: league.club_id,
-          team_size: editTeamSize,
-          min_players_per_side: editMinPlayersPerSide,
-          minutes_per_half: editMinutesPerHalf,
-          bib_colors: editBibColors.length > 0 ? editBibColors : league.bib_colors,
-          logo_url: editLogoUrl ?? league.logo_url,
-          created_by: user.id,
-        })
-        .select("id")
-        .single();
-      if (createError) throw createError;
+          const { data: newLeague, error: createError } = await supabase
+            .from("mini_leagues")
+            .insert({
+              name: `${editName.trim() || league.name} (Copy)`,
+              description: editDescription.trim() || league.description,
+              club_id: league.club_id,
+              team_size: editTeamSize,
+              min_players_per_side: editMinPlayersPerSide,
+              minutes_per_half: editMinutesPerHalf,
+              bib_colors: editBibColors.length > 0 ? editBibColors : league.bib_colors,
+              logo_url: editLogoUrl ?? league.logo_url,
+              created_by: user.id,
+            })
+            .select("id")
+            .single();
+          if (createError) throw createError;
 
-      const { data: existingPlayers } = await supabase
-        .from("mini_league_players")
-        .select("name, ability_rating, notes, parent_user_id, child_id")
-        .eq("mini_league_id", league.id);
+          const { data: existingPlayers } = await supabase
+            .from("mini_league_players")
+            .select("name, ability_rating, notes, parent_user_id, child_id")
+            .eq("mini_league_id", league.id);
 
-      if (existingPlayers && existingPlayers.length > 0) {
-        const { error: playersError } = await supabase
-          .from("mini_league_players")
-          .insert(existingPlayers.map(p => ({
-            ...p,
-            mini_league_id: newLeague.id,
-          })));
-        if (playersError) throw playersError;
-      }
+          if (existingPlayers && existingPlayers.length > 0) {
+            const { error: playersError } = await supabase
+              .from("mini_league_players")
+              .insert(existingPlayers.map(p => ({
+                ...p,
+                mini_league_id: newLeague.id,
+              })));
+            if (playersError) throw playersError;
+          }
 
-      return newLeague.id;
-    },
+          return newLeague.id;
+        },
+        // Gated: duplication also depends on Supabase `created_by` (uuid)
+        // and copies player rows directly; no canister equivalent.
+        icp: async () => {
+          throw new Error("Duplicating leagues isn't available yet on this backend.");
+        },
+      }),
     onSuccess: (newId) => {
       queryClient.invalidateQueries({ queryKey: ["mini-leagues"] });
       onOpenChange(false);

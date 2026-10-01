@@ -124,7 +124,9 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
   // Fetch active mini league matches (where timer_state has isRunning = true)
   const { data: activeMatches = [], refetch } = useQuery({
     queryKey: ["active-mini-league-matches", userLeagueMemberships?.allLeagueIds, activeClubFilter],
-    queryFn: async () => {
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
       if (!userLeagueMemberships?.allLeagueIds?.length) return [];
 
       // Get events from user's leagues that have active matches
@@ -278,7 +280,13 @@ export function MiniLeagueGameWidgets({ activeClubFilter }: MiniLeagueGameWidget
       }
 
       return activeMatches;
-    },
+        },
+        // Gated: active match resolution joins events/event_groups/
+        // event_group_players/event_group_duties with mini_league_players
+        // by Supabase uuid, and has no canister equivalent. ICP-routed
+        // sessions see no active matches here rather than invented data.
+        icp: async () => [] as ActiveMiniLeagueMatch[],
+      }),
     enabled: !!user && !!userLeagueMemberships?.allLeagueIds?.length,
     refetchInterval: 5000, // Refresh every 5 seconds to get updated timer states
   });
