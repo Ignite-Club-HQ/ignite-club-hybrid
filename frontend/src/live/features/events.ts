@@ -99,6 +99,53 @@ export async function setLiveEventCancelled(
   );
 }
 
+/**
+ * Association-scoped fan-out (Phase 3, F5): creates the same social event in
+ * every selected member club via events_domain `create_association_event`.
+ * Returns the number of clubs the event was created for.
+ */
+export interface LiveAssociationEventInput {
+  associationId: string;
+  clubIds: string[];
+  title: string;
+  description: string;
+  location?: string | null;
+  startsAtMs: number | Date;
+  endsAtMs: number | Date;
+}
+
+export async function createLiveAssociationEvent(
+  ctx: FeatureBackendContext,
+  input: LiveAssociationEventInput,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_association_event(
+      input.associationId,
+      input.clubIds,
+      input.title,
+      input.description,
+      candidOpt(input.location),
+      toNat64(input.startsAtMs),
+      toNat64(input.endsAtMs),
+    ),
+    "Create association event",
+  );
+}
+
+/**
+ * Child display record for award flows (Phase 3, F8): events_domain
+ * `get_event_child`, gated canister-side to managers of the event.
+ */
+export async function getLiveEventChild(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  childId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_child(eventId, childId), "Get event child");
+}
+
 export async function setLiveEventRsvp(
   ctx: FeatureBackendContext,
   eventId: string,
