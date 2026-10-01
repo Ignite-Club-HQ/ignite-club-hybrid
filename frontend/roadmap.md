@@ -31,3 +31,12 @@
 - Contract test `CreateTeamPage.icpMembership.contract.test.ts` updated to match the widened `withFeatureBackend` generic.
 - Real bug found via `JoinTeamPage.icp.test.tsx`: the provisional ICP invite mapping dropped `metadata`, so the mini-league join block for II accounts could never fire; mapping now defensively passes `metadata` (incl. `mini_league_id`) through.
 - Full suite green: shard 1/3 (1,764), 2/3 (1,423), 3/3 (1,519). Note: `EventGroupsManager.characterization` and `CreateCompetitionPage` tests are load-flaky under full shards — they pass in isolation.
+
+## NEEDS-CANISTER completion pass — Phase 3 DONE (2026-10-02)
+- F1 household RSVP roll-up: DONE — NextUpCarousel useChildRsvps + mini-league children branch now ICP-routed via events_domain my_child_rsvps and club_domain list_children + mini_league_domain list_players (client-side household filter).
+- F5 association events: DONE — events_domain gained an AssociationEvent store (new migration 20261003_000000) with create_association_event (per-club fan-out) and list_association_events (admin-gated); AssociationEventsPanel reads + creates via canister in ICP mode. PlayHQ-derived "participating clubs" default stays Supabase-only (PlayHQ data source); ICP defaults to all member clubs.
+- F6 manual payment ledger: DONE — club_domain MemberPayment store (migration 20261002_000000) with list/mark/unmark; MemberSubscriptionPaymentsManager routes payments query, Mark Paid, Remove, and Send Reminders (notification_queue fan_out, kind fee_payment_request). Online member payments stay Supabase/Stripe-gated by design; ledger is bookkeeping only.
+- F8 POM notifications: DONE — notification_queue fan_out (kind player_of_match, pom_enabled prefs gate) + events_domain get_event_child for the child branch; all four POM notification paths work in ICP mode. Reward-unlock interpolation stays Supabase-side (rewards tables).
+- Canisters: club_domain, events_domain, notification_queue compile clean (moc 1.16.1, --enhanced-migration); .did + bindings regenerated in both dirs; candid drift 17/17 green. Sandbox toolchain was wiped mid-pass; reinstalled per backend/AGENTS.md (bun add -g ic-mops && mops toolchain use moc 1.16.1).
+- Gates: tsgo 0 errors; full vitest suite 516 files / 4,706 tests green.
+- Remaining: Phase 4 (competition/mini-league admin + child-cascade gaps), Phase 5 (F9 cross-club sponsor lookup + ~55 degraded reads sweep). Live-test prerequisites unchanged: deploy the 17 canisters, paste IDs into Placement Settings, Internet Identity sign-in test.
