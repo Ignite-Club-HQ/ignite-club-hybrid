@@ -1834,4 +1834,44 @@ persistent actor {
     }
   };
 
+  // ---- Manual member payment ledger (Phase 3, F6) ----
+  // Bookkeeping only — "mark paid" records for member subscription/uniform
+  // fees, mirroring the Supabase member_subscription_payments table. No
+  // money moves through the canister; online payments stay Supabase-gated.
+  public query ({ caller }) func list_member_payments(club_id : Text, payment_period : Text, payment_type : Text) : async { #Ok : [Types.MemberPayment]; #Err : Text } {
+    auth(caller);
+    let scoped = memberPayments.filter(func(p) = p.club_id == club_id and p.payment_period == payment_period and p.payment_type == payment_type);
+    if (isAdmin(caller, club_id)) return #Ok(scoped);
+    let callerId = Principal.toText(caller);
+    #Ok(scoped.filter(func(p) = p.user_id == callerId))
+  };
+
+  public shared ({ caller }) func mark_member_paid(club_id : Text, user_id : Text, child_id : ?Text, payment_period : Text, payment_type : Text, amount : Float, notes : ?Text) : async { #Ok : Types.MemberPayment; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (user_id == "" or payment_period == "" or payment_type == "" or amount < 0) return #Err("Invalid payment");
+    let duplicate = memberPayments.any(func(p) = p.club_id == club_id and p.payment_period == payment_period and p.payment_type == payment_type and p.user_id == user_id and p.child_id == child_id);
+    if (duplicate) return #Err("Already marked as paid for this period");
+    let stored : Types.MemberPayment = {
+      id = "pay-" # club_id # "-" # Nat.toText(memberPayments.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      club_id; user_id; child_id; payment_period; payment_type; amount; notes;
+      marked_by = caller;
+      created_at_ms = nowMs();
+    };
+    memberPayments := memberPayments.concat([stored]);
+    #Ok(stored)
+  };
+
+  public shared ({ caller }) func unmark_member_paid(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (memberPayments.find(func(p) = p.id == id)) {
+      case null { #Err("Payment not found") };
+      case (?current) {
+        if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
+        memberPayments := memberPayments.filter(func(p) = p.id != id);
+        #Ok
+      };
+    }
+  };
+
 };
