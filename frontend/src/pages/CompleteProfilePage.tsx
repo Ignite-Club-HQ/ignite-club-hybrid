@@ -30,7 +30,7 @@ import {
   getParentInviteErrorMessage,
   provisionInviteChildren,
 } from "@/features/membership/acceptParentInvite";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
@@ -58,7 +58,7 @@ interface PendingInvite {
 export default function CompleteProfilePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpLabCompleteProfilePage userId={user?.id ?? "icp-member"} onDone={() => navigate("/")} />;

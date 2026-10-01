@@ -18,14 +18,14 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { CompetitionAdminsCard } from "@/components/competitions/CompetitionAdminsCard";
 import { CompetitionMemberChatCard } from "@/components/competitions/CompetitionMemberChatCard";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabCompetitionSettings } from "@/lab/fixtureDataLayer";
 import { getLocalCompetition, isLocalCompetitionCanisterUnavailable } from "@/lab/localCompetitionService";
 
 export default function CompetitionSettingsPage() {
   usePageTitle("Competition settings");
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpCompetitionSettingsPage />;

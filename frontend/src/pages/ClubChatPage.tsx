@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { orderChatMessagesChronologically } from "@/lab/chatMessageOrdering";
 import { selectHistoryChatPlaceholderSource } from "@/lab/chatThreadCacheHydration";
@@ -169,7 +169,7 @@ export default function ClubChatPage() {
   }, []);
   const { clubId } = useParams<{ clubId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("messaging");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();
   const navigate = useNavigate();

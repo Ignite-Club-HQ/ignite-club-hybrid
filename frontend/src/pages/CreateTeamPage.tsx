@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { saveLiveMembershipTeam, addLiveRoleGrant } from "@/live/features/membership";
 import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
@@ -43,7 +43,7 @@ export default function CreateTeamPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const providerKey = useIcpLab ? "icp" : "supabase";
 
   const [name, setName] = useState("");

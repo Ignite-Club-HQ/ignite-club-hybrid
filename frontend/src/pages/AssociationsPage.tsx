@@ -8,12 +8,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabAssociations } from "@/lab/fixtureDataLayer";
 
 export default function AssociationsPage() {
   usePageTitle("Associations");
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const associations = getLocalLabAssociations();

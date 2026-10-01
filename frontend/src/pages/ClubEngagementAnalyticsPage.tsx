@@ -70,7 +70,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubEngagementAnalytics } from "@/lab/fixtureDataLayer";
 import { CommunicationEngagementSection } from "@/components/club/CommunicationEngagementSection";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -118,7 +118,7 @@ export default function ClubEngagementAnalyticsPage({
   mode = "club",
 }: { mode?: "club" | "platform" } = {}) {
   const navigate = useNavigate();
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     const analytics = getLocalLabClubEngagementAnalytics("club-icp-001");

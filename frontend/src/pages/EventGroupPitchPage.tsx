@@ -39,11 +39,11 @@ interface GroupPlayer {
   team: "a" | "b" | null;
 }
 
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabEventGroupPitch } from "@/lab/fixtureDataLayer";
 
 export default function EventGroupPitchPage() {
-  const useIcpLab = isFeatureRoutedToIcp("events");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabEventGroupPitchPage />;
   }

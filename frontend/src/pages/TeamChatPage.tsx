@@ -46,7 +46,7 @@ import { ChatPageSkeleton } from "@/components/chat/ChatPageSkeleton";
 import { TeamMemberManagementSheets } from "@/components/chat/TeamMemberManagementSheets";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { orderChatMessagesChronologically } from "@/lab/chatMessageOrdering";
 import { selectHistoryChatPlaceholderSource } from "@/lab/chatThreadCacheHydration";
@@ -134,7 +134,7 @@ export default function TeamChatPage() {
   }, []);
   const { teamId } = useParams<{ teamId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("messaging");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const localIcpPersona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();

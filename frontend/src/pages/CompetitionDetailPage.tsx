@@ -29,7 +29,7 @@ import { CompetitionShareJoinLink } from "@/components/CompetitionShareJoinLink"
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { Crown } from "lucide-react";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { IcpCompetitionContent } from "@/components/competition/IcpCompetitionContent";
 import {
   createLocalCompetitionSeason,
@@ -44,7 +44,7 @@ import {
 
 export default function CompetitionDetailPage() {
   usePageTitle("Competition");
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
 
   if (useIcpLab) {
     return <IcpCompetitionDetailPage />;
