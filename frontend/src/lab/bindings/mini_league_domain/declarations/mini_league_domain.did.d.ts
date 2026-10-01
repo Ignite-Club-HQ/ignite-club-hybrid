@@ -316,6 +316,11 @@ export interface _SERVICE {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'unassign_player_from_group' : ActorMethod<
     [string, string],
     { 'Ok' : null } |

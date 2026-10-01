@@ -159,4 +159,9 @@ service : {
       Err: text;
       Ok: KeyRotationResult;
     });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
 }

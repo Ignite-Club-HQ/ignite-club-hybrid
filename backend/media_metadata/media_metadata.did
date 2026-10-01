@@ -1,89 +1,143 @@
-type BlobRef = record {
-  canister : text;
-  path : text;
-  content_hash : text;
-};
-type Asset = record {
-  id : text;
-  club_id : text;
-  owner : principal;
-  kind : text;
-  mime : text;
-  checksum : text;
-  storage_path : text;
-  blob_ref : opt BlobRef;
-  visibility : text;
-  content_length : nat64;
-  encrypted : bool;
-  child_sensitive : bool;
-  retention_until_ms : nat64;
-  deleted : bool;
-  expires_at_ms : nat64;
-};
-type Capability = record {
-  asset_id : text;
-  action : text;
-  owner : principal;
-  allowed : bool;
-  purpose : text;
-  expires_at_ms : nat64;
-};
-type Reaction = record {
-  asset_id : text;
-  user : principal;
-  kind : text;
-  created_at_ms : nat64;
-};
-type Comment = record {
-  id : text;
-  asset_id : text;
-  author : principal;
-  body : text;
-  created_at_ms : nat64;
-  deleted : bool;
-};
-type RoleGrant = record {
-  user : principal;
-  role : text;
-  club_id : opt text;
-  team_id : opt text;
-};
-type Init = record { governor : principal };
-type Result = variant { Ok : Asset; Err : text };
-type Result_1 = variant { Ok : Capability; Err : text };
-type Result_2 = variant { Ok : State; Err : text };
-type Result_3 = variant { Ok : Asset; Err : text };
-type Result_4 = variant { Ok; Err : text };
-type Result_5 = variant { Ok : Reaction; Err : text };
-type Result_6 = variant { Ok : Comment; Err : text };
-type Result_7 = variant { Ok; Err : text };
-type Result_8 = variant { Ok : vec principal; Err : text };
-type State = record {
-  schema : nat32;
-  governor : principal;
-  assets : vec Asset;
-  capabilities : vec Capability;
-  reactions : vec Reaction;
-  comments : vec Comment;
-  roles : vec RoleGrant;
-};
+type State = 
+ record {
+   assets: vec Asset;
+   capabilities: vec Capability;
+   comments: vec Comment;
+   governor: principal;
+   reactions: vec Reaction;
+   roles: vec RoleGrant;
+   schema: nat32;
+ };
+type RoleGrant = 
+ record {
+   club_id: opt text;
+   role: text;
+   team_id: opt text;
+   user: principal;
+ };
+type Reaction = 
+ record {
+   asset_id: text;
+   created_at_ms: nat64;
+   kind: text;
+   user: principal;
+ };
+type Comment = 
+ record {
+   asset_id: text;
+   author: principal;
+   body: text;
+   created_at_ms: nat64;
+   deleted: bool;
+   id: text;
+ };
+type Capability = 
+ record {
+   action: text;
+   allowed: bool;
+   asset_id: text;
+   expires_at_ms: nat64;
+   owner: principal;
+   purpose: text;
+ };
+type BlobRef = 
+ record {
+   canister: text;
+   content_hash: text;
+   path: text;
+ };
+type Asset = 
+ record {
+   blob_ref: opt BlobRef;
+   checksum: text;
+   child_sensitive: bool;
+   club_id: text;
+   content_length: nat64;
+   deleted: bool;
+   encrypted: bool;
+   expires_at_ms: nat64;
+   id: text;
+   kind: text;
+   mime: text;
+   owner: principal;
+   retention_until_ms: nat64;
+   storage_path: text;
+   visibility: text;
+ };
 service : {
-  initialize : () -> (variant { Ok; Err : text });
-  addBulkAccessPrincipal : (principal) -> (Result_7);
-  removeBulkAccessPrincipal : (principal) -> (Result_7);
-  listBulkAccessPrincipals : () -> (Result_8) query;
-  export_state : () -> (Result_2) query;
-  get_asset : (text) -> (opt Asset) query;
-  issue_capability : (text, text, text, nat64) -> (Result_1);
-  delete_asset : (text) -> (Result_3);
-  register_asset : (text, text, text, text, text, text, nat64) -> (Result);
-  set_blob_ref : (text, opt BlobRef) -> (Result);
-  grant_role : (principal, text, opt text, opt text) -> (Result_4);
-  list_assets : (text) -> (vec Asset) query;
-  add_reaction : (text, text, nat64) -> (Result_5);
-  remove_reaction : (text) -> (Result_4);
-  list_reactions : (text) -> (vec Reaction) query;
-  add_comment : (text, text, nat64) -> (Result_6);
-  list_comments : (text) -> (vec Comment) query;
-  delete_comment : (text) -> (Result_6);
-};
+  addBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  add_comment: (asset_id: text, body: text, created_at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Comment;
+    });
+  add_reaction: (asset_id: text, kind: text, created_at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Reaction;
+    });
+  delete_asset: (asset_id: text) -> (variant {
+                                       Err: text;
+                                       Ok: Asset;
+                                     });
+  delete_comment: (comment_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Comment;
+                                         });
+  export_state: () -> (variant {
+                         Err: text;
+                         Ok: State;
+                       }) query;
+  get_asset: (asset_id: text) -> (opt Asset) query;
+  grant_role: ("principal": principal, role: text, club_id: opt text,
+   team_id: opt text) -> (variant {
+                            Err: text;
+                            Ok;
+                          });
+  initialize: () -> (variant {
+                       Err: text;
+                       Ok;
+                     });
+  issue_capability: (asset_id: text, action: text, purpose: text,
+   expires_at_ms: nat64) -> (variant {
+                               Err: text;
+                               Ok: Capability;
+                             });
+  listBulkAccessPrincipals: () ->
+   (variant {
+      Err: text;
+      Ok: vec principal;
+    }) query;
+  list_assets: (club_id: text) -> (vec Asset) query;
+  list_comments: (asset_id: text) -> (vec Comment) query;
+  list_reactions: (asset_id: text) -> (vec Reaction) query;
+  register_asset: (club_id: text, kind: text, mime: text, checksum: text,
+   storage_path: text, visibility: text, expires_at_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: Asset;
+    });
+  removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  remove_reaction: (asset_id: text) -> (variant {
+                                          Err: text;
+                                          Ok;
+                                        });
+  set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
+   (variant {
+      Err: text;
+      Ok: Asset;
+    });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+}

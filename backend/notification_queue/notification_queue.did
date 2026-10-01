@@ -260,6 +260,11 @@ service : {
    opt text, body: text, image_url: opt text, reply_to_id: opt text,
    scheduled_for_ms: nat64, recurrence: Recurrence, recurrence_until_ms:
    opt nat64) -> (ScheduledResult);
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   upsert_preferences: (user: text, input: PreferencesInput) ->
    (PreferencesResult);
   upsert_push_alert_settings: (input: PushAlertSettingsInput) ->

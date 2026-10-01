@@ -230,15 +230,16 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
         // admin_only_posting; Supabase chat_groups has no equivalent columns,
         // so those fields are ICP-mode-only here — allowed_roles/join_policy/
         // allow_forwarding still have no canister field.
-        icp: (ctx) =>
-          updateLiveGroup(
+        icp: async (ctx) => {
+          await updateLiveGroup(
             ctx,
             group.id,
             name,
             description.trim() ? description : null,
             avatar.trim() ? avatar : null,
             adminOnlyPosting,
-          ),
+          );
+        },
       });
     },
     onSuccess: () => {

@@ -399,6 +399,13 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     update_feedback_status(id: string, status: FeedbackStatus, admin_notes: string | null): Promise<{
         __kind__: "Ok";
         Ok: Feedback;
@@ -742,6 +749,16 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.submit_feedback(arg0, to_candid_opt_n1(arg1), arg2, to_candid_opt_n1(arg3));
         return from_candid_variant_n49(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n2(result);
     }
     async update_feedback_status(arg0: string, arg1: FeedbackStatus, arg2: string | null): Promise<{
         __kind__: "Ok";

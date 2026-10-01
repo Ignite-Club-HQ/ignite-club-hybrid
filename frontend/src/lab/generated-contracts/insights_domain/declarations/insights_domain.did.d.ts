@@ -286,6 +286,11 @@ export interface _SERVICE {
     { 'Ok' : Feedback } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'update_feedback_status' : ActorMethod<
     [string, FeedbackStatus, [] | [string]],
     { 'Ok' : Feedback } |

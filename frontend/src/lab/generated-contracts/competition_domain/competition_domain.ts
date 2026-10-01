@@ -411,6 +411,13 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     trim_rounds(competition_id: string, max_round: number): Promise<{
         __kind__: "Ok";
         Ok: bigint;
@@ -808,6 +815,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.set_season_status(arg0, arg1, arg2);
         return from_candid_variant_n19(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n6(result);
     }
     async trim_rounds(arg0: string, arg1: number): Promise<{
         __kind__: "Ok";

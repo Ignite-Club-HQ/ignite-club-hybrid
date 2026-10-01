@@ -64,7 +64,7 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
           // team creation, role grant and notification still have no
           // canister counterpart, so they stay Supabase-only even once this
           // request record is routed to ICP.
-          return approveLiveTeamCreationRequest(ctx, request.id);
+          await approveLiveTeamCreationRequest(ctx, request.id);
         },
         supabase: async () => {
       // Create the team
@@ -118,10 +118,9 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
         related_id: team.id,
       });
 
-      return team;
         },
       }),
-    onSuccess: (team, request) => {
+    onSuccess: (_team, request) => {
       toast({
         title: "Team Approved!",
         description: `"${request.name}" has been created and ${request.requester?.display_name || 'the requester'} assigned as admin.`,

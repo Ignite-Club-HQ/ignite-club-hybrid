@@ -57,13 +57,6 @@ export interface Reaction {
     created_at_ms: bigint;
     asset_id: string;
 }
-export type Result_2 = {
-    __kind__: "Ok";
-    Ok: State;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface Comment {
     id: string;
     deleted: boolean;
@@ -72,57 +65,6 @@ export interface Comment {
     created_at_ms: bigint;
     asset_id: string;
 }
-export type Result_6 = {
-    __kind__: "Ok";
-    Ok: Comment;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface Init {
-    governor: Principal;
-}
-export type Result_5 = {
-    __kind__: "Ok";
-    Ok: Reaction;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_1 = {
-    __kind__: "Ok";
-    Ok: Capability;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export interface RoleGrant {
-    role: string;
-    user: Principal;
-    team_id?: string;
-    club_id?: string;
-}
-export type Result_4 = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result = {
-    __kind__: "Ok";
-    Ok: Asset;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_3 = {
-    __kind__: "Ok";
-    Ok: Asset;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface Asset {
     id: string;
     storage_path: string;
@@ -140,20 +82,6 @@ export interface Asset {
     club_id: string;
     expires_at_ms: bigint;
 }
-export type Result_8 = {
-    __kind__: "Ok";
-    Ok: Array<Principal>;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
-export type Result_7 = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export interface BlobRef {
     path: string;
     content_hash: string;
@@ -168,6 +96,12 @@ export interface State {
     reactions: Array<Reaction>;
     roles: Array<RoleGrant>;
 }
+export interface RoleGrant {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    club_id?: string;
+}
 export interface Capability {
     action: string;
     owner: Principal;
@@ -177,14 +111,56 @@ export interface Capability {
     expires_at_ms: bigint;
 }
 export interface media_metadataInterface {
-    addBulkAccessPrincipal(arg0: Principal): Promise<Result_7>;
-    add_comment(arg0: string, arg1: string, arg2: bigint): Promise<Result_6>;
-    add_reaction(arg0: string, arg1: string, arg2: bigint): Promise<Result_5>;
-    delete_asset(arg0: string): Promise<Result_3>;
-    delete_comment(arg0: string): Promise<Result_6>;
-    export_state(): Promise<Result_2>;
-    get_asset(arg0: string): Promise<Asset | null>;
-    grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_4>;
+    addBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    add_comment(asset_id: string, body: string, created_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    add_reaction(asset_id: string, kind: string, created_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Reaction;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_asset(asset_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_comment(comment_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    export_state(): Promise<{
+        __kind__: "Ok";
+        Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_asset(asset_id: string): Promise<Asset | null>;
+    grant_role(principal: Principal, role: string, club_id: string | null, team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -192,50 +168,135 @@ export interface media_metadataInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    issue_capability(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result_1>;
-    listBulkAccessPrincipals(): Promise<Result_8>;
-    list_assets(arg0: string): Promise<Array<Asset>>;
-    list_comments(arg0: string): Promise<Array<Comment>>;
-    list_reactions(arg0: string): Promise<Array<Reaction>>;
-    register_asset(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<Result>;
-    removeBulkAccessPrincipal(arg0: Principal): Promise<Result_7>;
-    remove_reaction(arg0: string): Promise<Result_4>;
-    set_blob_ref(arg0: string, arg1: BlobRef | null): Promise<Result>;
+    issue_capability(asset_id: string, action: string, purpose: string, expires_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Capability;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    listBulkAccessPrincipals(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_assets(club_id: string): Promise<Array<Asset>>;
+    list_comments(asset_id: string): Promise<Array<Comment>>;
+    list_reactions(asset_id: string): Promise<Array<Reaction>>;
+    register_asset(club_id: string, kind: string, mime: string, checksum: string, storage_path: string, visibility: string, expires_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    removeBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    remove_reaction(asset_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_blob_ref(asset_id: string, blob_ref: BlobRef | null): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
 }
-import type { Asset as _Asset, BlobRef as _BlobRef, Capability as _Capability, Comment as _Comment, Reaction as _Reaction, Result as _Result, Result_1 as _Result_1, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, RoleGrant as _RoleGrant, State as _State } from "./declarations/media_metadata.did";
+import type { Asset as _Asset, BlobRef as _BlobRef, Capability as _Capability, Comment as _Comment, Reaction as _Reaction, RoleGrant as _RoleGrant, State as _State } from "./declarations/media_metadata.did";
 export class Media_metadata implements media_metadataInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
-    async addBulkAccessPrincipal(arg0: Principal): Promise<Result_7> {
+    async addBulkAccessPrincipal(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.addBulkAccessPrincipal(arg0);
-        return from_candid_Result_7_n1(result);
+        return from_candid_variant_n1(result);
     }
-    async add_comment(arg0: string, arg1: string, arg2: bigint): Promise<Result_6> {
+    async add_comment(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.add_comment(arg0, arg1, arg2);
-        return from_candid_Result_6_n3(result);
+        return from_candid_variant_n2(result);
     }
-    async add_reaction(arg0: string, arg1: string, arg2: bigint): Promise<Result_5> {
+    async add_reaction(arg0: string, arg1: string, arg2: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Reaction;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.add_reaction(arg0, arg1, arg2);
-        return from_candid_Result_5_n5(result);
+        return from_candid_variant_n3(result);
     }
-    async delete_asset(arg0: string): Promise<Result_3> {
+    async delete_asset(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.delete_asset(arg0);
-        return from_candid_Result_3_n7(result);
+        return from_candid_variant_n4(result);
     }
-    async delete_comment(arg0: string): Promise<Result_6> {
+    async delete_comment(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.delete_comment(arg0);
-        return from_candid_Result_6_n3(result);
+        return from_candid_variant_n2(result);
     }
-    async export_state(): Promise<Result_2> {
+    async export_state(): Promise<{
+        __kind__: "Ok";
+        Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.export_state();
-        return from_candid_Result_2_n12(result);
+        return from_candid_variant_n8(result);
     }
     async get_asset(arg0: string): Promise<Asset | null> {
         const result = await this.actor.get_asset(arg0);
-        return from_candid_opt_n21(result);
+        return from_candid_opt_n16(result);
     }
-    async grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_4> {
-        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3));
-        return from_candid_Result_4_n23(result);
+    async grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n17(arg2), to_candid_opt_n17(arg3));
+        return from_candid_variant_n1(result);
     }
     async initialize(): Promise<{
         __kind__: "Ok";
@@ -245,19 +306,31 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.initialize();
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n1(result);
     }
-    async issue_capability(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<Result_1> {
+    async issue_capability(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Capability;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.issue_capability(arg0, arg1, arg2, arg3);
-        return from_candid_Result_1_n24(result);
+        return from_candid_variant_n18(result);
     }
-    async listBulkAccessPrincipals(): Promise<Result_8> {
+    async listBulkAccessPrincipals(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_Result_8_n26(result);
+        return from_candid_variant_n19(result);
     }
     async list_assets(arg0: string): Promise<Array<Asset>> {
         const result = await this.actor.list_assets(arg0);
-        return from_candid_vec_n16(result);
+        return from_candid_vec_n11(result);
     }
     async list_comments(arg0: string): Promise<Array<Comment>> {
         const result = await this.actor.list_comments(arg0);
@@ -267,69 +340,121 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.list_reactions(arg0);
         return result;
     }
-    async register_asset(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<Result> {
+    async register_asset(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.register_asset(arg0, arg1, arg2, arg3, arg4, arg5, arg6);
-        return from_candid_Result_n28(result);
+        return from_candid_variant_n4(result);
     }
-    async removeBulkAccessPrincipal(arg0: Principal): Promise<Result_7> {
+    async removeBulkAccessPrincipal(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
-        return from_candid_Result_7_n1(result);
+        return from_candid_variant_n1(result);
     }
-    async remove_reaction(arg0: string): Promise<Result_4> {
+    async remove_reaction(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
         const result = await this.actor.remove_reaction(arg0);
-        return from_candid_Result_4_n23(result);
+        return from_candid_variant_n1(result);
     }
-    async set_blob_ref(arg0: string, arg1: BlobRef | null): Promise<Result> {
-        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n29(arg1));
-        return from_candid_Result_n28(result);
+    async set_blob_ref(arg0: string, arg1: BlobRef | null): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n20(arg1));
+        return from_candid_variant_n4(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n1(result);
     }
 }
-function from_candid_Asset_n9(value: _Asset): Asset {
+function from_candid_Asset_n5(value: _Asset): Asset {
+    return from_candid_record_n6(value);
+}
+function from_candid_RoleGrant_n13(value: _RoleGrant): RoleGrant {
+    return from_candid_record_n14(value);
+}
+function from_candid_State_n9(value: _State): State {
     return from_candid_record_n10(value);
 }
-function from_candid_Result_1_n24(value: _Result_1): Result_1 {
-    return from_candid_variant_n25(value);
-}
-function from_candid_Result_2_n12(value: _Result_2): Result_2 {
-    return from_candid_variant_n13(value);
-}
-function from_candid_Result_3_n7(value: _Result_3): Result_3 {
-    return from_candid_variant_n8(value);
-}
-function from_candid_Result_4_n23(value: _Result_4): Result_4 {
-    return from_candid_variant_n2(value);
-}
-function from_candid_Result_5_n5(value: _Result_5): Result_5 {
-    return from_candid_variant_n6(value);
-}
-function from_candid_Result_6_n3(value: _Result_6): Result_6 {
-    return from_candid_variant_n4(value);
-}
-function from_candid_Result_7_n1(value: _Result_7): Result_7 {
-    return from_candid_variant_n2(value);
-}
-function from_candid_Result_8_n26(value: _Result_8): Result_8 {
-    return from_candid_variant_n27(value);
-}
-function from_candid_Result_n28(value: _Result): Result {
-    return from_candid_variant_n8(value);
-}
-function from_candid_RoleGrant_n18(value: _RoleGrant): RoleGrant {
-    return from_candid_record_n19(value);
-}
-function from_candid_State_n14(value: _State): State {
-    return from_candid_record_n15(value);
-}
-function from_candid_opt_n11(value: [] | [_BlobRef]): BlobRef | null {
+function from_candid_opt_n15(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n20(value: [] | [string]): string | null {
-    return value.length === 0 ? null : value[0];
+function from_candid_opt_n16(value: [] | [_Asset]): Asset | null {
+    return value.length === 0 ? null : from_candid_Asset_n5(value[0]);
 }
-function from_candid_opt_n21(value: [] | [_Asset]): Asset | null {
-    return value.length === 0 ? null : from_candid_Asset_n9(value[0]);
+function from_candid_opt_n7(value: [] | [_BlobRef]): BlobRef | null {
+    return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n10(value: {
+    capabilities: Array<_Capability>;
+    schema: number;
+    assets: Array<_Asset>;
+    governor: Principal;
+    comments: Array<_Comment>;
+    reactions: Array<_Reaction>;
+    roles: Array<_RoleGrant>;
+}): {
+    capabilities: Array<Capability>;
+    schema: number;
+    assets: Array<Asset>;
+    governor: Principal;
+    comments: Array<Comment>;
+    reactions: Array<Reaction>;
+    roles: Array<RoleGrant>;
+} {
+    return {
+        capabilities: value.capabilities,
+        schema: value.schema,
+        assets: from_candid_vec_n11(value.assets),
+        governor: value.governor,
+        comments: value.comments,
+        reactions: value.reactions,
+        roles: from_candid_vec_n12(value.roles)
+    };
+}
+function from_candid_record_n14(value: {
+    role: string;
+    user: Principal;
+    team_id: [] | [string];
+    club_id: [] | [string];
+}): {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    club_id?: string;
+} {
+    return {
+        role: value.role,
+        user: value.user,
+        team_id: record_opt_to_undefined(from_candid_opt_n15(value.team_id)),
+        club_id: record_opt_to_undefined(from_candid_opt_n15(value.club_id))
+    };
+}
+function from_candid_record_n6(value: {
     id: string;
     storage_path: string;
     retention_until_ms: bigint;
@@ -371,7 +496,7 @@ function from_candid_record_n10(value: {
         kind: value.kind,
         mime: value.mime,
         encrypted: value.encrypted,
-        blob_ref: record_opt_to_undefined(from_candid_opt_n11(value.blob_ref)),
+        blob_ref: record_opt_to_undefined(from_candid_opt_n7(value.blob_ref)),
         content_length: value.content_length,
         checksum: value.checksum,
         child_sensitive: value.child_sensitive,
@@ -380,71 +505,7 @@ function from_candid_record_n10(value: {
         expires_at_ms: value.expires_at_ms
     };
 }
-function from_candid_record_n15(value: {
-    capabilities: Array<_Capability>;
-    schema: number;
-    assets: Array<_Asset>;
-    governor: Principal;
-    comments: Array<_Comment>;
-    reactions: Array<_Reaction>;
-    roles: Array<_RoleGrant>;
-}): {
-    capabilities: Array<Capability>;
-    schema: number;
-    assets: Array<Asset>;
-    governor: Principal;
-    comments: Array<Comment>;
-    reactions: Array<Reaction>;
-    roles: Array<RoleGrant>;
-} {
-    return {
-        capabilities: value.capabilities,
-        schema: value.schema,
-        assets: from_candid_vec_n16(value.assets),
-        governor: value.governor,
-        comments: value.comments,
-        reactions: value.reactions,
-        roles: from_candid_vec_n17(value.roles)
-    };
-}
-function from_candid_record_n19(value: {
-    role: string;
-    user: Principal;
-    team_id: [] | [string];
-    club_id: [] | [string];
-}): {
-    role: string;
-    user: Principal;
-    team_id?: string;
-    club_id?: string;
-} {
-    return {
-        role: value.role,
-        user: value.user,
-        team_id: record_opt_to_undefined(from_candid_opt_n20(value.team_id)),
-        club_id: record_opt_to_undefined(from_candid_opt_n20(value.club_id))
-    };
-}
-function from_candid_variant_n13(value: {
-    Ok: _State;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: State;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_State_n14(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n2(value: {
+function from_candid_variant_n1(value: {
     Ok: null;
 } | {
     Err: string;
@@ -463,7 +524,7 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n25(value: {
+function from_candid_variant_n18(value: {
     Ok: _Capability;
 } | {
     Err: string;
@@ -482,7 +543,7 @@ function from_candid_variant_n25(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n27(value: {
+function from_candid_variant_n19(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -501,7 +562,7 @@ function from_candid_variant_n27(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n4(value: {
+function from_candid_variant_n2(value: {
     Ok: _Comment;
 } | {
     Err: string;
@@ -520,7 +581,7 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
+function from_candid_variant_n3(value: {
     Ok: _Reaction;
 } | {
     Err: string;
@@ -539,7 +600,7 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n8(value: {
+function from_candid_variant_n4(value: {
     Ok: _Asset;
 } | {
     Err: string;
@@ -552,22 +613,41 @@ function from_candid_variant_n8(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Asset_n9(value.Ok)
+        Ok: from_candid_Asset_n5(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n16(value: Array<_Asset>): Array<Asset> {
-    return value.map((x)=>from_candid_Asset_n9(x));
+function from_candid_variant_n8(value: {
+    Ok: _State;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: State;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_State_n9(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
 }
-function from_candid_vec_n17(value: Array<_RoleGrant>): Array<RoleGrant> {
-    return value.map((x)=>from_candid_RoleGrant_n18(x));
+function from_candid_vec_n11(value: Array<_Asset>): Array<Asset> {
+    return value.map((x)=>from_candid_Asset_n5(x));
 }
-function to_candid_opt_n22(value: string | null): [] | [string] {
+function from_candid_vec_n12(value: Array<_RoleGrant>): Array<RoleGrant> {
+    return value.map((x)=>from_candid_RoleGrant_n13(x));
+}
+function to_candid_opt_n17(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n29(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n20(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {

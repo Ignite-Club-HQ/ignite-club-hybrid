@@ -121,6 +121,11 @@ service : {
                                  Err: text;
                                  Ok: VaultFile;
                                });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   trash_file: (id: text) -> (variant {
                                Err: text;
                                Ok: VaultFile;

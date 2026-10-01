@@ -46,6 +46,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(Migration), IDL.Vec(Migration)],
         ['query'],
       ),
+    'transfer_governorship' : IDL.Func([IDL.Principal], [], []),
     'verify' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
   });
 };

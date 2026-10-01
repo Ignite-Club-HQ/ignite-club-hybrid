@@ -3,13 +3,13 @@
 Source: docs/icp-audit-2026-10-01-deep-round2.md (all findings verified in source).
 Standing rules: no "not available" UI states; only iOS IAP works in ICP mode (other payment paths stay gated/blocked); wire real data or record NEEDS-CANISTER.
 
-## Phase 1 — Canister security patches (small, verified)
+## Phase 1 — Canister security patches [DONE]
 
-1. identity_access/src/lib.rs:1157 — replace `expected != signature_hex.to_lowercase()` string compare with constant-time byte comparison of decoded HMAC. Verify with cargo check + existing tests.
-2. pii_access_control register_pii TOCTOU (src/main.mo ~279-324) — re-check for an existing record AFTER the `await* random_bytes(...)` inter-canister call before appending, so concurrent registrations can't duplicate a pii_id+field_id record. Compile with moc --enhanced-migration.
-3. Governor race (all 14 Motoko canisters) — investigate actor-class install argument under --enhanced-migration on one canister (club_domain). If supported: convert `initialize()` first-caller-wins to install-arg governor with initialize kept only as a migration-path no-op for already-initialized state. If not supported: restrict initialize to a one-time call plus document scripted initialize-at-deploy as the operational control, and add a `transfer_governorship` guard. Compile all touched canisters.
+1. [DONE] identity_access/src/lib.rs:1157 — replace `expected != signature_hex.to_lowercase()` string compare with constant-time byte comparison of decoded HMAC. Verify with cargo check + existing tests.
+2. [DONE — FALSE POSITIVE] pii_access_control register_pii TOCTOU (src/main.mo ~279-324) — re-check for an existing record AFTER the `await* random_bytes(...)` inter-canister call before appending, so concurrent registrations can't duplicate a pii_id+field_id record. Compile with moc --enhanced-migration.
+3. [DONE — fallback path] Governor race (all 14 Motoko canisters): one-shot confirmed already enforced; transfer_governorship added to all 13; initialize-at-deploy rule in backend/AGENTS.md; drift 17/17. Original text: — investigate actor-class install argument under --enhanced-migration on one canister (club_domain). If supported: convert `initialize()` first-caller-wins to install-arg governor with initialize kept only as a migration-path no-op for already-initialized state. If not supported: restrict initialize to a one-time call plus document scripted initialize-at-deploy as the operational control, and add a `transfer_governorship` guard. Compile all touched canisters.
 
-## Phase 2 — Frontend gates F1–F11 (from audit table)
+## Phase 2 — Frontend gates F1–F11 (from audit table) [DONE — verified on disk; NEEDS-CANISTER items recorded in frontend/roadmap.md]
 
 - F1 NextUpCarousel useChildRsvps: gate the children/child_guardians queries for II users; route RSVP reads through the events canister wrapper (getLiveEventRosterDetailed) where household RSVP data is needed, else skip the query for principal-text IDs. Never pass a principal to a uuid column.
 - F2 AccountRecoveryBanner: gate the profiles status query to Supabase-auth users only (resolveAuthBackend).

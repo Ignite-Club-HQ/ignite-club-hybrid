@@ -416,6 +416,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'unread_count' : ActorMethod<
     [string],
     { 'Ok' : Unread } |

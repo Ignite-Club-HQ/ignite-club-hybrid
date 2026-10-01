@@ -792,6 +792,11 @@ service : {
                                      Err: text;
                                      Ok: ClubTeam;
                                    });
+  transfer_governorship: (new_governor: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   unarchive_team: (id: text) -> (variant {
                                    Err: text;
                                    Ok: ClubTeam;

@@ -326,6 +326,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Feedback, 'Err' : IDL.Text })],
         [],
       ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'update_feedback_status' : IDL.Func(
         [IDL.Text, FeedbackStatus, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Feedback, 'Err' : IDL.Text })],

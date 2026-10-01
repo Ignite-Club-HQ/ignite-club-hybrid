@@ -315,6 +315,11 @@ export const idlFactory = ({ IDL }) => {
         [ScheduledResult],
         [],
       ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'upsert_preferences' : IDL.Func(
         [IDL.Text, PreferencesInput],
         [PreferencesResult],

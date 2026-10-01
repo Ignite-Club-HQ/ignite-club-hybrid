@@ -561,7 +561,7 @@ function ChatMessageInner({
             .eq("id", id);
           if (error) throw error;
         },
-        icp: (ctx) => deleteLiveMessage(ctx, id),
+        icp: async (ctx) => { await deleteLiveMessage(ctx, id); },
       });
     },
     onMutate: async () => {

@@ -524,7 +524,6 @@ export function AppHeader() {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
   });
 
   // Show club logo if theme is active and showLogoInHeader is enabled

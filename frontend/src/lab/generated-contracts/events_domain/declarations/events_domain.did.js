@@ -711,6 +711,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'unclaim_open_duty' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : OpenDuty, 'Err' : IDL.Text })],

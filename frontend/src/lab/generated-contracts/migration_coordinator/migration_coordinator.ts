@@ -51,8 +51,6 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface Init {
-}
 export interface Migration {
     id: bigint;
     destination: Principal;
@@ -72,16 +70,17 @@ export enum Phase {
     committed = "committed"
 }
 export interface migration_coordinatorInterface {
-    abort(arg0: bigint): Promise<Migration>;
-    begin(arg0: string, arg1: Principal, arg2: Principal, arg3: bigint, arg4: string): Promise<Migration>;
-    commit(arg0: bigint): Promise<Migration>;
+    abort(id: bigint): Promise<Migration>;
+    begin(domain: string, source: Principal, destination: Principal, schemaVersion: bigint, checksum: string): Promise<Migration>;
+    commit(id: bigint): Promise<Migration>;
     initialize(): Promise<void>;
-    markExported(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration>;
-    markImported(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration>;
-    orchestrateExport(arg0: bigint): Promise<Migration>;
-    orchestrateVerify(arg0: bigint): Promise<Migration>;
+    markExported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+    markImported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+    orchestrateExport(id: bigint): Promise<Migration>;
+    orchestrateVerify(id: bigint): Promise<Migration>;
     status(): Promise<[Migration | null, Array<Migration>]>;
-    verify(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration>;
+    transfer_governorship(new_governor: Principal): Promise<void>;
+    verify(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
 }
 import type { Migration as _Migration, Phase as _Phase } from "./declarations/migration_coordinator.did";
 export class Migration_coordinator implements migration_coordinatorInterface {
@@ -124,6 +123,10 @@ export class Migration_coordinator implements migration_coordinatorInterface {
             from_candid_opt_n5(result[0]),
             from_candid_vec_n6(result[1])
         ];
+    }
+    async transfer_governorship(arg0: Principal): Promise<void> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return result;
     }
     async verify(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration> {
         const result = await this.actor.verify(arg0, arg1, arg2);

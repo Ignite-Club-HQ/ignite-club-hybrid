@@ -204,6 +204,13 @@ export interface vault_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     trash_file(id: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -381,6 +388,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.restore_file(arg0);
         return from_candid_variant_n20(result);
+    }
+    async transfer_governorship(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.transfer_governorship(arg0);
+        return from_candid_variant_n8(result);
     }
     async trash_file(arg0: string): Promise<{
         __kind__: "Ok";

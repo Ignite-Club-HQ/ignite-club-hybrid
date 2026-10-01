@@ -14,3 +14,13 @@
 - F9 SponsorOrAdCarousel.tsx: gated the no-filter "which of my clubs" auth.getUser/user_roles/sponsors fallback paths off for II users. NEEDS-CANISTER: cross-club sponsor/strip lookup without an explicit club filter.
 - F10 TermsManager.tsx: gated the whole terms query + save/toggle/status/delete mutations off for ICP-routed membership via assertSupabaseWritePath/enabled. NEEDS-CANISTER: club terms (class/season terms) has no club_domain counterpart.
 - F11 ClubAnnouncementDialog.tsx: relaxed the announcement payload's `club_id`/`team_ids` Zod validation from `.uuid()` to non-empty `.string()` so ICP-routed club_domain string ids validate.
+
+## Governor one-shot + transfer_governorship
+
+- Verified all 13 Motoko canisters with `initialize()` already refuse re-initialization (first-caller-wins only on the *first* call; no code change needed for that part).
+- Added governor-only `transfer_governorship(new_governor : Principal)` to all 13 canisters: club_domain, club_points_domain, competition_domain, events_domain, insights_domain, media_metadata, messaging_domain, mini_league_domain, vault_domain, secret_workload_identity, pii_access_control, migration_coordinator, notification_queue.
+- All 13 compile clean with moc 1.16.1; `.did` files regenerated for each.
+- Frontend bindings regenerated for all 13 canisters into both `frontend/src/lab/bindings/<c>` and `frontend/src/lab/generated-contracts/<c>` via `icp-bindgen --force`.
+- Candid drift check: 17/17 green.
+- `backend/AGENTS.md` updated with a hard rule: deploy script must call `initialize()` immediately after canister creation, naming the deployer principal as governor (mitigates the first-caller-wins race).
+- `docs/icp-audit-2026-10-01-deep-round2.md` governor finding marked FIXED.

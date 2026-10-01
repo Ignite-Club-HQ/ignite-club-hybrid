@@ -10,7 +10,6 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
-export type Init = {};
 export interface Migration {
   'id' : bigint,
   'destination' : Principal,
@@ -40,6 +39,7 @@ export interface _SERVICE {
   'orchestrateExport' : ActorMethod<[bigint], Migration>,
   'orchestrateVerify' : ActorMethod<[bigint], Migration>,
   'status' : ActorMethod<[], [[] | [Migration], Array<Migration>]>,
+  'transfer_governorship' : ActorMethod<[Principal], undefined>,
   'verify' : ActorMethod<[bigint, bigint, string], Migration>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

@@ -1,31 +1,34 @@
-type Init = record {};
-type Phase = variant {
-  aborted;
-  committed;
-  exported;
-  imported;
-  started;
-  verified;
-};
-type Migration = record {
-  id : nat;
-  domain : text;
-  source : principal;
-  destination : principal;
-  schemaVersion : nat;
-  recordCount : nat;
-  checksum : text;
-  phase : Phase;
-};
+type Phase = 
+ variant {
+   aborted;
+   committed;
+   exported;
+   imported;
+   started;
+   verified;
+ };
+type Migration = 
+ record {
+   checksum: text;
+   destination: principal;
+   domain: text;
+   id: nat;
+   phase: Phase;
+   recordCount: nat;
+   schemaVersion: nat;
+   source: principal;
+ };
 service : {
-  abort : (nat) -> (Migration);
-  begin : (text, principal, principal, nat, text) -> (Migration);
-  commit : (nat) -> (Migration);
-  initialize : () -> ();
-  markExported : (nat, nat, text) -> (Migration);
-  markImported : (nat, nat, text) -> (Migration);
-  orchestrateExport : (nat) -> (Migration);
-  orchestrateVerify : (nat) -> (Migration);
-  status : () -> (opt Migration, vec Migration) query;
-  verify : (nat, nat, text) -> (Migration);
-};
+  abort: (id: nat) -> (Migration);
+  begin: (domain: text, source: principal, destination: principal,
+   schemaVersion: nat, checksum: text) -> (Migration);
+  commit: (id: nat) -> (Migration);
+  initialize: () -> ();
+  markExported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+  markImported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+  orchestrateExport: (id: nat) -> (Migration);
+  orchestrateVerify: (id: nat) -> (Migration);
+  status: () -> (opt Migration, vec Migration) query;
+  transfer_governorship: (new_governor: principal) -> ();
+  verify: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+}

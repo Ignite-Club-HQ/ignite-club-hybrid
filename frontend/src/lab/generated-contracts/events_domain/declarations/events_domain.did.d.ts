@@ -647,6 +647,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'unclaim_open_duty' : ActorMethod<
     [string],
     { 'Ok' : OpenDuty } |

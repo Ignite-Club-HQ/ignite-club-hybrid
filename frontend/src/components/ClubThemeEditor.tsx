@@ -624,7 +624,7 @@ export function ClubThemeEditor({
                       .eq("id", clubId);
                     if (error) throw error;
                   },
-                  icp: (ctx) => setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader),
+                  icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader); },
                 });
               } catch {
                 toast({
@@ -672,7 +672,7 @@ export function ClubThemeEditor({
                       .eq("id", clubId);
                     if (error) throw error;
                   },
-                  icp: (ctx) => setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked),
+                  icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked); },
                 });
               } catch {
                 toast({
