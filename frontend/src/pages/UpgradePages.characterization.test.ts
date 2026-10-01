@@ -49,7 +49,7 @@ describe("Club and team upgrade page characterization", () => {
   it("keeps ICP behavior explicit: club fixtures remain available while team billing is unavailable", () => {
     expect(clubUpgradeSource).toContain("getLocalLabClubDetail");
     expect(clubUpgradeSource).toContain("getLocalLabTeamList");
-    expect(clubUpgradeSource).toContain('const useIcpLab = isFeatureRoutedToIcp("membership")');
+    expect(clubUpgradeSource).toContain("const useIcpLab = resolveLocalAuthMode(window.location.search, true)");
 
     expect(teamUpgradeSource).toContain('const useIcpLab = resolveAuthBackend() === "icp"');
     expect(teamUpgradeSource).toContain("Pro upgrades are unavailable in ICP lab mode");
