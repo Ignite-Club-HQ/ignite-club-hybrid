@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveMessages } from "@/live/features/messaging";
 
 export type ChatSharedMediaType = "team" | "club" | "group" | "dm" | "broadcast";
 
@@ -82,6 +85,60 @@ export function useChatSharedMedia(
   return useQuery({
     queryKey: ["chat-shared-media", chatType, chatId, limit],
     queryFn: async (): Promise<SharedMediaItem[]> => {
+      // ICP branch: conversation ids are the canister's native identifier
+      // for every chat type here (club/team ids double as conversation ids
+      // by the same convention the chat pages already use; group/dm ids are
+      // real conversation ids). There is no vault/file-token concept on the
+      // canister, so derived items are limited to attachment images and
+      // plain-text links — same derivation shape as the Supabase branch,
+      // minus what the canister genuinely has no equivalent for.
+      if (isFeatureRoutedToIcp("messaging") && chatId) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const messages = await listLiveMessages(ctx, chatId, null);
+            const items: SharedMediaItem[] = [];
+            for (const m of messages) {
+              const createdAt = new Date(Number(m.created_at_ms)).toISOString();
+              const authorId = m.sender.toText();
+              const base = {
+                message_id: m.id,
+                created_at: createdAt,
+                author_id: authorId,
+                author_name: null,
+                author_avatar: null,
+              };
+              const attachment = m.attachment?.[0];
+              if (attachment && attachment.kind === "image" && attachment.url?.[0]) {
+                items.push({
+                  ...base,
+                  id: `${m.id}:photo`,
+                  kind: "photo",
+                  image_url: attachment.url[0],
+                });
+              }
+              const seenUrls = new Set<string>();
+              for (const match of (m.body ?? "").matchAll(URL_RE)) {
+                const url = match[0].replace(/[).,;!?]+$/, "");
+                if (seenUrls.has(url)) continue;
+                seenUrls.add(url);
+                items.push({
+                  ...base,
+                  id: `${m.id}:link:${seenUrls.size}`,
+                  kind: "link",
+                  image_url: "",
+                  url,
+                  label: url,
+                  sublabel: hostnameOf(url),
+                });
+              }
+            }
+            items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            return items.slice(0, limit);
+          },
+        });
+      }
+
       const { table, column } = TABLE_AND_FILTER[chatType];
 
       // Fetch larger window of recent messages so we can also derive file & link items

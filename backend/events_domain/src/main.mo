@@ -267,6 +267,22 @@ persistent actor {
     )
   };
 
+  // list_series_occurrences: the generated occurrence events for a series
+  // (id + starts_at_ms/ends_at_ms + deleted), sorted oldest-first, so
+  // SeriesEndDateEditor can compute which trailing occurrences a shortened
+  // end date would trim, or how many new ones extending it would add.
+  public query ({ caller }) func list_series_occurrences(series_id : Text) : async { #Ok : [{ id : Text; starts_at_ms : Nat64; ends_at_ms : Nat64; deleted : Bool }]; #Err : Text } {
+    switch (series.find(func(item) = item.id == series_id)) {
+      case null { #Err("Series not found") };
+      case (?item) {
+        if (not canViewSeries(caller, item)) return #Err("Forbidden");
+        let occurrences = events.filter(func(e) = e.series_id == ?series_id);
+        let sorted = occurrences.sort(func(a, b) = Nat64.compare(a.starts_at_ms, b.starts_at_ms));
+        #Ok(sorted.map(func(e) = { id = e.id; starts_at_ms = e.starts_at_ms; ends_at_ms = e.ends_at_ms; deleted = e.deleted }));
+      };
+    }
+  };
+
   public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, id)) {
@@ -748,12 +764,40 @@ persistent actor {
     #Ok(switch (pushReachability.find(func(item) = item.user.equal(principal))) { case (?item) ?item.reachable; case null null })
   };
 
+  // get_reminder_log: summary mirroring the Supabase event_reminder_log RPC
+  // shape AttendanceSection expects (sent_at + recipients_count of the most
+  // recent reminder batch — entries sharing the latest sent_at_ms).
+  public query ({ caller }) func get_reminder_log(event_id : Text) : async { #Ok : { sent_at_ms : ?Nat64; recipients_count : Nat32 }; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        let logs = reminderLogs.filter(func(item) = item.event_id == event_id);
+        if (logs.size() == 0) return #Ok({ sent_at_ms = null; recipients_count = 0 });
+        var latest : Nat64 = 0;
+        for (item in logs.values()) { if (item.sent_at_ms > latest) latest := item.sent_at_ms };
+        let batch = logs.filter(func(item) = item.sent_at_ms == latest);
+        #Ok({ sent_at_ms = ?latest; recipients_count = Nat.toNat32(batch.size()) });
+      };
+    }
+  };
+
+  // is_reachable: per-member notification-reachability read mirroring the
+  // Supabase get_members_push_reachable RPC — true when the member has
+  // self-reported any contact channel (set_push_reachable). account_id is
+  // matched against Principal.toText(caller), the same provisional
+  // account-id-is-principal-text convention used elsewhere (e.g. my_rsvps).
+  public query ({ caller }) func is_reachable(account_id : Text) : async { #Ok : Bool; #Err : Text } {
+    auth(caller);
+    #Ok(pushReachability.any(func(item) = Principal.toText(item.user) == account_id and item.reachable))
+  };
+
   // ---- (5) Event groups + players + duties ----
-  public shared ({ caller }) func create_event_group(event_id : Text, name : Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+  public shared ({ caller }) func create_event_group(event_id : Text, name : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(name)) return #Err("Invalid group name");
-    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs() };
+    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs(); team_letter; colour; ability_band; pitch_name };
     eventGroups := eventGroups.concat([value]);
     #Ok(value)
   };
@@ -772,6 +816,21 @@ persistent actor {
       case (#Ok(current)) {
         if (not valid(name)) return #Err("Invalid group name");
         let updated : Types.EventGroup = { current with name };
+        eventGroups := eventGroups.map(func(item) = if (item.id == group_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  // set_event_group_appearance: auto-generate/team-colour/ability-band/pitch
+  // UI support — sets the optional display fields independently of the
+  // group's name so a rename doesn't clobber them (and vice versa).
+  public shared ({ caller }) func set_event_group_appearance(group_id : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+    auth(caller);
+    switch (requireManageGroup(caller, group_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(current)) {
+        let updated : Types.EventGroup = { current with team_letter; colour; ability_band; pitch_name };
         eventGroups := eventGroups.map(func(item) = if (item.id == group_id) updated else item);
         #Ok(updated)
       };
@@ -798,11 +857,11 @@ persistent actor {
     }
   };
 
-  public shared ({ caller }) func add_group_player(group_id : Text, account_id : Text) : async { #Ok : Types.EventGroupPlayer; #Err : Text } {
+  public shared ({ caller }) func add_group_player(group_id : Text, account_id : Text, team_letter : ?Text) : async { #Ok : Types.EventGroupPlayer; #Err : Text } {
     auth(caller);
     switch (requireManageGroup(caller, group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(account_id)) return #Err("Invalid player");
-    let value : Types.EventGroupPlayer = { group_id; account_id };
+    let value : Types.EventGroupPlayer = { group_id; account_id; team_letter };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_id and item.account_id == account_id));
     eventGroupPlayers := eventGroupPlayers.concat([value]);
     #Ok(value)
@@ -823,7 +882,7 @@ persistent actor {
     switch (requireManageGroup(caller, to_group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == from_group_id and item.account_id == account_id));
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == to_group_id and item.account_id == account_id));
-    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = to_group_id; account_id }]);
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = to_group_id; account_id; team_letter = null }]);
     #Ok
   };
 
@@ -834,7 +893,7 @@ persistent actor {
     switch (requireManageGroup(caller, group_b)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_a and item.account_id == account_a));
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_b and item.account_id == account_b));
-    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = group_b; account_id = account_a }, { group_id = group_a; account_id = account_b }]);
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = group_b; account_id = account_a; team_letter = null }, { group_id = group_a; account_id = account_b; team_letter = null }]);
     #Ok
   };
 
