@@ -31,7 +31,6 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { getLiveEventChild } from "@/live/features/events";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
