@@ -72,7 +72,7 @@ import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveEventRoster, getLiveEventRosterDetailed, getMyLiveChildRsvps } from "@/live/features/events";
+import { getLiveEventRoster, getLiveEventRosterDetailed } from "@/live/features/events";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -267,20 +267,24 @@ export default function EventDetailPage() {
         icp: async (ctx) => {
           if (!id) throw new Error("Missing event ID");
           const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
-            rsvps?: Array<{ account_id: string; child_id: [] | [string]; status: string; notes?: string }>;
+            rsvps?: Array<{
+              rsvp: { account_id: string; child_id: [] | [string]; state: string; notes: string };
+              child: [] | [{ id: string; name: string }];
+            }>;
           };
-          const rows = (roster.rsvps ?? []).map((r) => {
-            const childId = Array.isArray(r.child_id) && r.child_id.length > 0 ? r.child_id[0] : null;
+          const rows = (roster.rsvps ?? []).map(({ rsvp, child }) => {
+            const childId = Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null;
+            const childRow = Array.isArray(child) && child.length > 0 ? child[0] : null;
             return {
-              id: `${id}:${r.account_id}:${childId ?? "self"}`,
+              id: `${id}:${rsvp.account_id}:${childId ?? "self"}`,
               event_id: id,
-              user_id: r.account_id,
+              user_id: rsvp.account_id,
               child_id: childId,
-              status: r.status,
-              notes: r.notes || null,
+              status: rsvp.state,
+              notes: rsvp.notes || null,
               source: "user",
               profiles: null,
-              children: null,
+              children: childRow ? { id: childRow.id, name: childRow.name } : null,
               mini_league_players: null,
             };
           });

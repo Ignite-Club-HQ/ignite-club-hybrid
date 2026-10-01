@@ -72,14 +72,14 @@ interface AlertSettings {
   alerts_enabled: boolean;
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLivePushAlertSettings,
+  upsertLivePushAlertSettings,
+  type LivePushAlertSettingsInput,
+} from "@/live/features/notifications";
 
 export default function PushAnalyticsPage() {
-  if (resolveAuthBackend() === "icp") {
-    return <IcpUnavailablePage title="Push analytics are unavailable in ICP lab mode" description="Push delivery and analytics remain disabled external-provider workflows." />;
-  }
   return <SupabasePushAnalyticsPage />;
 }
 
@@ -168,19 +168,38 @@ function SupabasePushAnalyticsPage() {
   // Keep legacy subscription count for backwards compat
   const subscriptionCount = subscriptionStats?.total || 0;
 
-  // Fetch alert settings
+  // Fetch alert settings. push_alert_settings is a canister-wide singleton on
+  // the ICP branch (no per-user scoping) — only this governor-guarded admin
+  // editor surfaces it; push delivery itself stays on Supabase.
   const { data: alertSettings, isLoading: settingsLoading } = useQuery({
     queryKey: ["push-alert-settings"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("push_alert_settings")
-        .select("*")
-        .limit(1)
-        .single();
+    queryFn: async (): Promise<AlertSettings> => {
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("push_alert_settings")
+            .select("*")
+            .limit(1)
+            .single();
 
-      if (error) throw error;
-      if (!localSettings) setLocalSettings(data as AlertSettings);
-      return data as AlertSettings;
+          if (error) throw error;
+          if (!localSettings) setLocalSettings(data as AlertSettings);
+          return data as AlertSettings;
+        },
+        icp: async (ctx) => {
+          const row = await getLivePushAlertSettings(ctx);
+          const settings: AlertSettings = {
+            id: "singleton",
+            failure_threshold_percent: row.failureThresholdPercent,
+            check_window_hours: row.checkWindowHours,
+            min_notifications: row.minNotifications,
+            cooldown_hours: row.cooldownHours,
+            alerts_enabled: row.alertsEnabled,
+          };
+          if (!localSettings) setLocalSettings(settings);
+          return settings;
+        },
+      });
     },
     enabled: isAdmin === true,
   });
@@ -216,16 +235,30 @@ function SupabasePushAnalyticsPage() {
   const updateSettings = useMutation({
     mutationFn: async (settings: Partial<AlertSettings>) => {
       if (!alertSettings?.id) throw new Error("No settings found");
-      const { error } = await supabase
-        .from("push_alert_settings")
-        .update({
-          ...settings,
-          updated_at: new Date().toISOString(),
-          updated_by: user?.id,
-        })
-        .eq("id", alertSettings.id);
-      
-      if (error) throw error;
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("push_alert_settings")
+            .update({
+              ...settings,
+              updated_at: new Date().toISOString(),
+              updated_by: user?.id,
+            })
+            .eq("id", alertSettings.id);
+
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const merged: LivePushAlertSettingsInput = {
+            failureThresholdPercent: settings.failure_threshold_percent ?? alertSettings.failure_threshold_percent,
+            checkWindowHours: settings.check_window_hours ?? alertSettings.check_window_hours,
+            minNotifications: settings.min_notifications ?? alertSettings.min_notifications,
+            cooldownHours: settings.cooldown_hours ?? alertSettings.cooldown_hours,
+            alertsEnabled: settings.alerts_enabled ?? alertSettings.alerts_enabled,
+          };
+          await upsertLivePushAlertSettings(ctx, merged);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["push-alert-settings"] });
