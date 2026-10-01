@@ -365,6 +365,7 @@ export default function TeamDetailPage() {
           admin_pro_override: false,
           admin_pro_football_override: false,
           trial_ends_at: null,
+          disable_team_pom_rewards: false,
         };
       }
 

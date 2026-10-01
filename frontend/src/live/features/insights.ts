@@ -395,12 +395,12 @@ export async function setLiveBenchmark(
       metricKey,
       period,
       value,
-      totalMembers ?? null,
-      dau ?? null,
-      wau ?? null,
-      mau ?? null,
-      posters ?? null,
-      readRate ?? null,
+      totalMembers != null ? [totalMembers] : [],
+      dau != null ? [dau] : [],
+      wau != null ? [wau] : [],
+      mau != null ? [mau] : [],
+      posters != null ? [posters] : [],
+      readRate != null ? [readRate] : [],
     ),
     "Set benchmark",
   );
@@ -422,7 +422,7 @@ export async function recordLiveSponsorMetric(
 ) {
   const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.record_sponsor_metric(sponsorId, metric, delta, accountId ?? null),
+    actor.record_sponsor_metric(sponsorId, metric, delta, accountId != null ? [accountId] : []),
     "Record sponsor metric",
   );
 }

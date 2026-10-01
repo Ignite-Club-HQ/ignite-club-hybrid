@@ -398,8 +398,8 @@ function SupabaseManageUsersPage() {
             table_name: item.table_name,
             actor_id: item.actor_id.toText(),
             actor_name: item.actor_id.toText(),
-            target_user_id: item.target_user_id ?? null,
-            target_user_name: item.target_user_name ?? null,
+            target_user_id: item.target_user_id[0] ?? null,
+            target_user_name: item.target_user_name[0] ?? null,
             // Canister `details` is a plain string; the Supabase branch
             // stores structured jsonb, so parse when possible and fall back
             // to an empty object rather than fabricating fields.

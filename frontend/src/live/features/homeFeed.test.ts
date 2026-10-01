@@ -62,6 +62,8 @@ describe("mapLiveHomeEvent", () => {
     club_id: "club-1",
     team_id: ["team-1"] as [] | [string],
     creator: { toText: () => "aaaaa-aa" } as never,
+    deleted: false,
+    series_id: [] as [] | [string],
     starts_at_ms: BigInt(1_800_000_000_000),
     ends_at_ms: BigInt(1_800_003_600_000),
     revision: BigInt(3),

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { useClubProAccess, useFreeClubPollingEnabled, isFeatureRoutedToIcp } = vi.hoisted(() => ({
   useClubProAccess: vi.fn(),
   useFreeClubPollingEnabled: vi.fn(),
-  isFeatureRoutedToIcp: vi.fn(() => false),
+  isFeatureRoutedToIcp: vi.fn((_feature?: string) => false),
 }));
 vi.mock("@/hooks/useClubProAccess", () => ({ useClubProAccess }));
 vi.mock("@/hooks/useFreeClubPollingEnabled", () => ({ useFreeClubPollingEnabled }));

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { rpc, maybeSingle, eq, select, from } = vi.hoisted(() => {
+const { maybeSingle, eq, select } = vi.hoisted(() => {
   const maybeSingle = vi.fn();
   const eq = vi.fn(() => ({ maybeSingle }));
   const select = vi.fn(() => ({ eq }));

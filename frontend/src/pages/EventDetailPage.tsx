@@ -887,8 +887,8 @@ export default function EventDetailPage() {
           return canisterPlayers.map((p) => ({
             id: p.id,
             name: p.name,
-            parent_user_id: p.parent_user_id ?? null,
-            child_id: p.child_id ?? null,
+            parent_user_id: p.parent_user_id[0] ?? null,
+            child_id: p.child_id[0] ?? null,
           }));
         },
       });
@@ -966,8 +966,8 @@ export default function EventDetailPage() {
           const myPrincipal = ctx.identity.getPrincipal().toText();
           const canisterPlayers = await listLivePlayers(ctx, event!.mini_league_id!);
           return canisterPlayers
-            .filter((p) => p.parent_user_id === myPrincipal)
-            .map((p) => ({ id: p.id, name: p.name, child_id: p.child_id ?? null }));
+            .filter((p) => p.parent_user_id[0] === myPrincipal)
+            .map((p) => ({ id: p.id, name: p.name, child_id: p.child_id[0] ?? null }));
         },
       }),
     enabled: !!event?.mini_league_id && !!user?.id,
@@ -1059,7 +1059,7 @@ export default function EventDetailPage() {
         },
         icp: async (ctx) => {
           const players = await listLivePlayers(ctx, miniLeagueId);
-          return players.map((p) => p.parent_user_id).filter((v): v is string => !!v);
+          return players.map((p) => p.parent_user_id[0]).filter((v): v is string => !!v);
         },
       });
 

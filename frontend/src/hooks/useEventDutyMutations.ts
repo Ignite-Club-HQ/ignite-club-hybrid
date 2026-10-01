@@ -196,7 +196,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     if (adminsError) throw new DutyNotificationPartialError(adminsError.message);
     if (!admins || admins.length === 0) return;
 
-    const recipientIds = Array.from(
+    const recipientIds: string[] = Array.from(
       new Set(admins.map(a => a.user_id).filter((userId): userId is string => !!userId && userId !== user?.id))
     );
     if (recipientIds.length === 0) return;

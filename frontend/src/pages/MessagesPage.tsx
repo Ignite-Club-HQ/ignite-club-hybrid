@@ -36,6 +36,7 @@ import { registerChannel } from "@/lib/realtimeChannelRegistry";
 import {
   createInboxRealtimeCoordinator,
   createInboxPreviewWatermarks,
+  type InboxPreviewLike,
   type InboxRealtimeEvent,
 } from "@/features/messaging/inbox/inboxRealtimeReconciliation";
 import {
@@ -622,16 +623,32 @@ export default function MessagesPage() {
     
     const hasData = teams || memberClubs || adminClubs || chatGroups?.length || latestBroadcast;
     if (!hasData) return;
-    
+
+    // Reconciliation returns the loose InboxPreviewLike shape (optional
+    // fields); the page cache requires text/author/created_at, so normalize
+    // before persisting.
+    const toLatest = (record: Record<string, InboxPreviewLike>) =>
+      Object.fromEntries(
+        Object.entries(record).map(([key, message]) => [
+          key,
+          {
+            text: typeof message.text === "string" ? message.text : "",
+            author: typeof message.author === "string" ? message.author : "",
+            created_at: typeof message.created_at === "string" ? message.created_at : "",
+            image_url: typeof message.image_url === "string" ? message.image_url : null,
+          },
+        ]),
+      );
+
     cacheMessagesPageData(user.id, {
       teams: teams as any,
       memberClubs: memberClubs as any,
       adminClubs: adminClubs as any,
       chatGroups: chatGroups as any,
       latestBroadcast: latestBroadcast as any,
-      latestTeamMessages,
-      latestClubMessages,
-      latestGroupMessages,
+      latestTeamMessages: toLatest(latestTeamMessages),
+      latestClubMessages: toLatest(latestClubMessages),
+      latestGroupMessages: toLatest(latestGroupMessages),
     });
   }, [user?.id, teams, memberClubs, adminClubs, chatGroups, latestBroadcast, latestTeamMessages, latestClubMessages, latestGroupMessages]);
 

@@ -1270,7 +1270,8 @@ function SupabaseJoinTeamPage() {
       const targetsMiniLeague =
         !!inviteMiniLeagueId ||
         !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id ||
-        !!(invite?.metadata as { mini_league_id?: string } | null | undefined)?.mini_league_id;
+        !!(invite && "metadata" in invite &&
+          (invite.metadata as { mini_league_id?: string } | null | undefined)?.mini_league_id);
       if (membershipIcpRouted && targetsMiniLeague) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",

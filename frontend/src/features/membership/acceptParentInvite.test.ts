@@ -4,8 +4,8 @@ const mocks = vi.hoisted(() => ({
   backend: "supabase" as "supabase" | "icp",
   principal: { toText: () => "principal-guardian" },
   acceptLiveParentInvite: vi.fn(),
-  addLiveGuardianRelationship: vi.fn(async () => undefined),
-  grantLivePiiRead: vi.fn(async () => undefined),
+  addLiveGuardianRelationship: vi.fn(async (_ctx?: unknown, _guardian?: unknown, _childId?: string) => undefined),
+  grantLivePiiRead: vi.fn(async (_ctx?: unknown, _piiId?: string, _fieldId?: string, _reader?: unknown) => undefined),
   supabaseRpc: vi.fn(),
 }));
 

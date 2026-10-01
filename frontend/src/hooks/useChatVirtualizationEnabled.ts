@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const QUERY_KEY = ["app-setting", "chat_virtualization_enabled"] as const;
 
@@ -38,11 +39,7 @@ export function useChatVirtualizationEnabled(): boolean {
   // the 5-minute staleTime. Single shared channel; the postgres_changes filter
   // ensures we only react to the row we care about.
   useEffect(() => {
-    let channel:
-      | {
-          unsubscribe?: () => void;
-        }
-      | undefined;
+    let channel: RealtimeChannel | undefined;
 
     try {
       channel = supabase
