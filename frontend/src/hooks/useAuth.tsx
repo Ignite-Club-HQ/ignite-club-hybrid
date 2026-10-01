@@ -1400,6 +1400,8 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       setSession(null);
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
+      const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
+      clearIcpEntitlementsCache(principal ?? undefined);
       const { signOutInternetIdentity } = await import("@/lab/internetIdentityAuth");
       await signOutInternetIdentity();
     },
