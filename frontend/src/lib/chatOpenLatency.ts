@@ -87,7 +87,7 @@ export async function logChatOpenLatency(args: LogArgs): Promise<void> {
       void withFeatureBackend("analytics", {
         supabase: async () => { supabaseInsert(); },
         icp: async (ctx) => {
-          await recordLivePerfSample(ctx, "chat_open", args.source, tap_to_render_ms, args.fromCache ?? args.cacheHit, platform);
+          await recordLivePerfSample(ctx, "chat_open", args.source, tap_to_render_ms, args.fromCache, platform);
         },
       }).catch(() => {});
     };

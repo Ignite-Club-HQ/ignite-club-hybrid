@@ -31,9 +31,8 @@ const MiniLeagueSettingsDialog = lazyWithRetry(() => import("@/components/mini-l
 const ManageMiniLeagueAdminsSheet = lazyWithRetry(() => import("@/components/mini-league/ManageMiniLeagueAdminsSheet").then(m => ({ default: m.ManageMiniLeagueAdminsSheet })));
 import PendingInvitesList from "@/components/PendingInvitesList";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { getLocalLabMiniLeagueDetail } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 interface MiniLeagueEvent {
   id: string;
@@ -49,45 +48,6 @@ interface MiniLeagueEvent {
 }
 
 export default function MiniLeagueDetailPage() {
-  const useIcpLab = isFeatureRoutedToIcp("competitions");
-  if (useIcpLab) {
-    return <IcpLabMiniLeagueDetailPage />;
-  }
-  return <SupabaseMiniLeagueDetailPage />;
-}
-
-/** Read-only synthetic mini-league detail; member management and scheduling remain unavailable until competition_domain admin tooling is wired here. */
-function IcpLabMiniLeagueDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const league = getLocalLabMiniLeagueDetail(id ?? "mini-league-icp-001") ?? getLocalLabMiniLeagueDetail("mini-league-icp-001");
-
-  return (
-    <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-bold">{league?.name ?? "Mini League"}</h1>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Showing synthetic ICP lab mini-league data. Member management and scheduling are disabled.
-      </p>
-      <div className="space-y-2">
-        {league?.standings.map((row) => (
-          <Card key={row.team_id}>
-            <CardContent className="p-4 flex items-center justify-between">
-              <span className="text-sm font-medium">{row.team_name}</span>
-              <span className="text-xs text-muted-foreground">{row.played} played · {row.points} pts</span>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SupabaseMiniLeagueDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -99,15 +59,32 @@ function SupabaseMiniLeagueDetailPage() {
 
   const { data: league, isLoading: leagueLoading } = useQuery({
     queryKey: ["mini-league", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_leagues")
-        .select("*, club:clubs!club_id(id, name)")
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("*, club:clubs!club_id(id, name)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const canisterLeague = await getLiveMiniLeague(ctx, id!);
+          // Provisional: club display name is not available from
+          // mini_league_domain; this leaves `club.name` blank under ICP
+          // until club_domain membership lookups are wired in here too.
+          return {
+            ...canisterLeague,
+            description: canisterLeague.description[0] ?? null,
+            logo_url: canisterLeague.logo_url[0] ?? null,
+            created_at: new Date(Number(canisterLeague.created_at_ms)).toISOString(),
+            updated_at: new Date(Number(canisterLeague.updated_at_ms)).toISOString(),
+            club: { id: canisterLeague.club_id, name: "" },
+          } as any;
+        },
+      }),
     enabled: !!id,
   });
 
