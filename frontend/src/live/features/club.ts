@@ -283,24 +283,32 @@ export async function getLiveTeamInviteLinkByToken(ctx: FeatureBackendContext, t
 /**
  * Pending invites — club/team email invites awaiting acceptance.
  */
+/**
+ * Creates a pending invite. The canister signature is
+ * (kind, club_id, team_id, child_id, email, role) — an options object keeps
+ * the argument order honest. There is no label/note field on the canister
+ * record; the invite id doubles as the /join/p/<id> share token.
+ */
 export async function createLivePendingInvite(
   ctx: FeatureBackendContext,
-  clubId: string,
-  email: string,
-  teamId?: string | null,
-  role?: string | null,
-  invitedByLabel = "",
-  note?: string | null,
+  input: {
+    kind: "team" | "club" | "guardian";
+    clubId: string;
+    email: string;
+    teamId?: string | null;
+    childId?: string | null;
+    role?: string | null;
+  },
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
     actor.create_pending_invite(
-      clubId,
-      email,
-      candidOpt(teamId),
-      candidOpt(role),
-      invitedByLabel,
-      candidOpt(note),
+      input.kind,
+      input.clubId,
+      candidOpt(input.teamId),
+      candidOpt(input.childId),
+      input.email,
+      candidOpt(input.role),
     ),
     "Create pending invite",
   );
