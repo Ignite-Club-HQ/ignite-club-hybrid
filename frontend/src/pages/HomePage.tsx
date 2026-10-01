@@ -45,6 +45,11 @@ import {
 } from "@/live/features/homeFeed";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { completeHomeAccountRecovery } from "@/features/home/accountRecoveryCompletion";
+import {
+  fetchAvailableHomeRewardsForBackend,
+  fetchNextHomeRewardInfoForBackend,
+  fetchPendingHomeRedemptionsForBackend,
+} from "@/features/home/homeRewardsRepository";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logHomeOpenLatency, resetHomeOpenLog } from "@/lib/homeOpenLatency";
 import { recordPointsHistory } from "@/lib/pointsHistory";
@@ -750,23 +755,10 @@ export default function HomePage() {
   const { data: pendingRedemptions = [] } = useQuery({
     queryKey: ["pending-redemptions-home", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("reward_redemptions")
-        .select(`
-          id,
-          reward_id,
-          club_id,
-          points_spent,
-          status,
-          redeemed_at,
-          club_rewards (id, name, description, points_required, qr_code_url, show_qr_code),
-          clubs!club_id (name)
-        `)
-        .eq("user_id", user!.id)
-        .eq("status", "pending")
-        .order("redeemed_at", { ascending: false })
-        .limit(1);
-      return data || [];
+      // Routed via withFeatureBackend("points", ...) inside the repository
+      // helper. ICP branch returns [] — see fetchPendingHomeRedemptionsForBackend
+      // doc comment (no cross-club bulk lookup equivalent on the canister).
+      return fetchPendingHomeRedemptionsForBackend(supabase, null, user!.id);
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -894,14 +886,9 @@ export default function HomePage() {
   const { data: availableRewards = [], isLoading: rewardsLoading } = useQuery({
     queryKey: ["home-available-rewards", selectedRewardClubId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("club_rewards")
-        .select("*, sponsors(id, name, logo_url)")
-        .eq("club_id", selectedRewardClubId!)
-        .eq("is_active", true)
-        .neq("reward_type", "player_of_match")
-        .order("points_required", { ascending: true });
-      return data || [];
+      // Routed via withFeatureBackend("points", ...). On ICP, rewards render
+      // without a sponsor badge (no canister-side sponsor join).
+      return fetchAvailableHomeRewardsForBackend(supabase, null, selectedRewardClubId!);
     },
     enabled: !!selectedRewardClubId,
     staleTime: 5 * 60 * 1000,
@@ -914,15 +901,9 @@ export default function HomePage() {
     queryFn: async () => {
       const proClubIds = rewardClubs.filter((c: any) => isAppAdmin || c.hasPro).map((c: any) => c.id);
       if (proClubIds.length === 0) return null;
-      const { data } = await supabase
-        .from("club_rewards")
-        .select("points_required, name")
-        .in("club_id", proClubIds)
-        .eq("is_active", true)
-        .neq("reward_type", "player_of_match")
-        .order("points_required", { ascending: true })
-        .limit(1);
-      return data?.[0] ? { points_required: data[0].points_required, name: data[0].name } : null;
+      // Routed via withFeatureBackend("points", ...); ICP branch issues one
+      // list_rewards call per eligible club (no bulk cross-club query exists).
+      return fetchNextHomeRewardInfoForBackend(supabase, null, proClubIds);
     },
     enabled: rewardClubs.length > 0,
     staleTime: 5 * 60 * 1000,
