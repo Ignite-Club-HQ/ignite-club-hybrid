@@ -16,6 +16,11 @@ import { useAuth } from "@/hooks/useAuth";
  *   Pro grant.
  * - Successful Free and Pro answers behave exactly as before.
  */
+// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
+// have no Supabase session, so this query never runs/returns no rows and the
+// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
+// via what canister) is a pending product decision; this is intentionally
+// left as-is (no behavior change) until that's decided.
 export function useUserHasAnyClubPro() {
   const { user } = useAuth();
 

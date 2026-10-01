@@ -21,6 +21,11 @@ import type { ScheduleTarget } from "@/hooks/useScheduledMessages";
  *   - Genuinely clubless targets (DM, broadcast, group with no owning
  *     club/team): fall back to any-club Pro per existing product rules.
  */
+// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
+// have no Supabase session, so this query never runs/returns no rows and the
+// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
+// via what canister) is a pending product decision; this is intentionally
+// left as-is (no behavior change) until that's decided.
 export function useScheduleProAccess(target: ScheduleTarget | null | undefined) {
   const hasExplicitClub = !!target?.club_id;
   const hasTeam = !!target?.team_id;

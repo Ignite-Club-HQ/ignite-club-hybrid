@@ -5,6 +5,7 @@ import { resolveDriveTitlesForClub } from "@/features/vault/driveTitleResolution
 import { invalidateVaultCache } from "./vaultQueryKeys";
 import { createVaultLinkFile } from "./vaultMutationRepository";
 import type { FolderView } from "./useVaultExport";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type VaultFunctionsInvoke = (
   name: string,
@@ -51,6 +52,13 @@ export function useVaultDriveLinkWorkflow({
   const [resolvingDriveTitles, setResolvingDriveTitles] = useState(false);
 
   const handleResolveDriveTitles = useCallback(async () => {
+    // Google Drive title resolution calls the Supabase `resolve-drive-titles`
+    // edge function and has no canister counterpart — stays Supabase-only
+    // (media-bytes-coupled) until a vault canister/blob store exists.
+    if (isFeatureRoutedToIcp("vault")) {
+      toast.error("Drive title resolution isn't available for this vault yet");
+      return;
+    }
     const clubId = currentView.type !== "root" ? currentView.clubId : undefined;
     if (!clubId) return;
     setResolvingDriveTitles(true);
@@ -97,6 +105,15 @@ export function useVaultDriveLinkWorkflow({
   // Process saved OAuth code
   useEffect(() => {
     const savedCode = sessionStorage.getItem('googleDriveOAuthCode');
+
+    // Same Supabase-only constraint as above: the OAuth code exchange hits
+    // the `google-drive-import` edge function, which has no canister route.
+    if (savedCode && isFeatureRoutedToIcp("vault")) {
+      sessionStorage.removeItem('googleDriveOAuthCode');
+      sessionStorage.removeItem('googleDriveImportPending');
+      sessionStorage.removeItem('driveLinkPending');
+      return;
+    }
 
     if (savedCode) {
       console.log("[GoogleDrive OAuth] Processing saved code");

@@ -7,6 +7,11 @@ import type { NavigateFunction } from "react-router-dom";
  * Checks team-level pro first (if team_id given), then club-level.
  * If neither team nor club id is supplied, denies by default.
  */
+// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
+// have no Supabase session, so this query never runs/returns no rows and the
+// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
+// via what canister) is a pending product decision; this is intentionally
+// left as-is (no behavior change) until that's decided.
 export async function checkProForShare(opts: {
   teamId?: string | null;
   clubId?: string | null;

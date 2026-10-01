@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
 
 interface Props {
@@ -28,6 +29,7 @@ export function ClubMessagePrivacySettings({ clubId }: Props) {
 
   const updateMutation = useMutation({
     mutationFn: async (force_disable_message_previews: boolean) => {
+      assertSupabaseWritePath("messaging", "message preview privacy toggle");
       const { error } = await supabase
         .from("clubs")
         .update({ force_disable_message_previews })

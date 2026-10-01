@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  markAllLiveNotificationsRead,
+  deleteLiveNotification,
+  clearLiveInbox,
+} from "@/live/features/notifications";
 import type { Database } from "@/integrations/supabase/types";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -68,19 +74,34 @@ export async function markAllNotificationsRead(
   activeClubId: string | null,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  let query = client.from("notifications").update({ is_read: true }).eq("user_id", userId).eq("is_read", false);
-  if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
-  const { error } = await query;
-  if (error) throw error;
+  await withFeatureBackend("notifications", {
+    supabase: async () => {
+      let query = client.from("notifications").update({ is_read: true }).eq("user_id", userId).eq("is_read", false);
+      if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
+      const { error } = await query;
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      await markAllLiveNotificationsRead(ctx, userId, activeClubId);
+    },
+  });
 }
 
 export async function deleteNotification(
   notificationId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<string> {
-  const { error } = await client.from("notifications").delete().eq("id", notificationId);
-  if (error) throw error;
-  return notificationId;
+  return withFeatureBackend("notifications", {
+    supabase: async () => {
+      const { error } = await client.from("notifications").delete().eq("id", notificationId);
+      if (error) throw error;
+      return notificationId;
+    },
+    icp: async (ctx) => {
+      await deleteLiveNotification(ctx, notificationId);
+      return notificationId;
+    },
+  });
 }
 
 export async function clearNotifications(
@@ -88,8 +109,15 @@ export async function clearNotifications(
   activeClubId: string | null,
   client: IgniteSupabaseClient = supabase,
 ): Promise<void> {
-  let query = client.from("notifications").delete().eq("user_id", userId);
-  if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
-  const { error } = await query;
-  if (error) throw error;
+  await withFeatureBackend("notifications", {
+    supabase: async () => {
+      let query = client.from("notifications").delete().eq("user_id", userId);
+      if (activeClubId) query = query.or(clubScopeFilter(activeClubId));
+      const { error } = await query;
+      if (error) throw error;
+    },
+    icp: async (ctx) => {
+      await clearLiveInbox(ctx, userId, activeClubId);
+    },
+  });
 }

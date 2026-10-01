@@ -13,6 +13,11 @@ export { resolveClubProAccess, type ClubSubscriptionEntitlements } from "@/lib/p
  * uses `keepPreviousData` so resume/reconnect refetches never flash a PRO lock
  * badge on a Pro club while the background refetch is in flight.
  */
+// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
+// have no Supabase session, so this query never runs/returns no rows and the
+// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
+// via what canister) is a pending product decision; this is intentionally
+// left as-is (no behavior change) until that's decided.
 export function useClubProAccess(
   clubId: string | null | undefined,
   options?: { enabled?: boolean },
