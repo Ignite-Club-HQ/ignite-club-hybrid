@@ -498,15 +498,22 @@ function SupabaseCreateEventPage() {
   });
 
   // Fetch mini leagues for the selected club (Pro Football only)
-  const fetchMiniLeagues = async (): Promise<{ id: string; name: string }[]> => {
-    const { data, error } = await (supabase as any)
-      .from("mini_leagues")
-      .select("id, name")
-      .eq("club_id", clubId)
-      .order("name");
-    if (error) throw error;
-    return data || [];
-  };
+  const fetchMiniLeagues = async (): Promise<{ id: string; name: string }[]> =>
+    withFeatureBackend("mini_leagues", {
+      supabase: async () => {
+        const { data, error } = await (supabase as any)
+          .from("mini_leagues")
+          .select("id, name")
+          .eq("club_id", clubId)
+          .order("name");
+        if (error) throw error;
+        return data || [];
+      },
+      icp: async (ctx) => {
+        const leagues = await listLiveMiniLeaguesByClub(ctx, clubId);
+        return (leagues as any[]).map((l) => ({ id: l.id, name: l.name }));
+      },
+    });
 
   const { data: miniLeagues } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["club-mini-leagues", clubId],
