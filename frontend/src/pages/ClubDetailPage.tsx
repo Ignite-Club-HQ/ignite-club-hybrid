@@ -105,7 +105,6 @@ import ClubCompetitionsSection from "@/components/competitions/ClubCompetitionsS
 import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   softDeleteLiveClub,

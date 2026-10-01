@@ -83,7 +83,6 @@ import { friendlyQueryError, friendlyQueryErrorMessage } from "@/lib/friendlyQue
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   softDeleteLiveTeam,
