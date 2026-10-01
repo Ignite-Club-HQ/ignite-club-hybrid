@@ -1,7 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLiveMatch, setLiveMatchResult, updateLiveMatchDetails } from "@/live/features/competitions";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import {
+  deleteLiveMatch,
+  recordLiveMatch,
+  setLiveMatchResult,
+  trimLiveCompetitionRounds,
+  updateLiveMatchDetails,
+} from "@/live/features/competitions";
 
 export interface MatchMutationError {
   message: string;
@@ -199,33 +204,45 @@ export async function createGeneratedMatches(
 export async function deleteCompetitionMatch(
   matchId: string,
 ): Promise<MatchMutationResult> {
-  // NEEDS-CANISTER: competition_domain has no delete_match method.
-  try {
-    assertSupabaseWritePath("competitions", "deleting a competition fixture");
-  } catch (e) {
-    return { error: { message: e instanceof Error ? e.message : String(e) } };
-  }
-  const { error } = await supabase
-    .from("competition_matches")
-    .delete()
-    .eq("id", matchId);
-  return { error };
+  return withFeatureBackend("competitions", {
+    supabase: async () => {
+      const { error } = await supabase
+        .from("competition_matches")
+        .delete()
+        .eq("id", matchId);
+      return { error };
+    },
+    icp: async (ctx) => {
+      try {
+        await deleteLiveMatch(ctx, matchId);
+        return { error: null };
+      } catch (e) {
+        return { error: { message: e instanceof Error ? e.message : String(e) } };
+      }
+    },
+  });
 }
 
 export async function trimCompetitionRounds(
   competitionId: string,
   maximumRound: number,
 ): Promise<MatchMutationResult> {
-  // NEEDS-CANISTER: competition_domain has no bulk fixture-trim method.
-  try {
-    assertSupabaseWritePath("competitions", "trimming generated fixture rounds");
-  } catch (e) {
-    return { error: { message: e instanceof Error ? e.message : String(e) } };
-  }
-  const { error } = await supabase
-    .from("competition_matches")
-    .delete()
-    .eq("competition_id", competitionId)
-    .gt("round_number", maximumRound);
-  return { error };
+  return withFeatureBackend("competitions", {
+    supabase: async () => {
+      const { error } = await supabase
+        .from("competition_matches")
+        .delete()
+        .eq("competition_id", competitionId)
+        .gt("round_number", maximumRound);
+      return { error };
+    },
+    icp: async (ctx) => {
+      try {
+        await trimLiveCompetitionRounds(ctx, competitionId, maximumRound);
+        return { error: null };
+      } catch (e) {
+        return { error: { message: e instanceof Error ? e.message : String(e) } };
+      }
+    },
+  });
 }

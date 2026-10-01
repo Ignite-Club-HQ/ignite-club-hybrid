@@ -660,7 +660,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${isIcpAuth ? "grid-cols-2" : "grid-cols-3"}`}>
         <Button
           variant="outline"
           size="sm"
@@ -670,15 +670,17 @@ export default function ProfilePage() {
           <Pencil className="h-4 w-4" />
           <span className="text-xs">Edit Profile</span>
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-auto flex-col gap-1 py-3"
-          onClick={() => setChangePasswordOpen(true)}
-        >
-          <KeyRound className="h-4 w-4" />
-          <span className="text-xs">Password</span>
-        </Button>
+        {!isIcpAuth && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-auto flex-col gap-1 py-3"
+            onClick={() => setChangePasswordOpen(true)}
+          >
+            <KeyRound className="h-4 w-4" />
+            <span className="text-xs">Password</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -940,7 +942,9 @@ export default function ProfilePage() {
         Sign Out
       </Button>
 
-      <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+      {!isIcpAuth && (
+        <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+      )}
     </div>
   );
 }
