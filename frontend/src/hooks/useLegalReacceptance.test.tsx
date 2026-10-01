@@ -29,8 +29,8 @@ vi.mock("@/live/internetIdentityAuth", () => ({
 
 vi.mock("@/live/legalTerms", () => ({
   fetchMyIcpTermsAcceptance: async () => mocks.icpAcceptance,
-  setIcpTermsAcceptance: (identity: unknown, termsVersion: number, target?: unknown) =>
-    mocks.setIcpTermsAcceptance(identity, termsVersion, target),
+  setIcpTermsAcceptance: (...args: [unknown, number, unknown?]) =>
+    mocks.setIcpTermsAcceptance(...args),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
