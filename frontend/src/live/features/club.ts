@@ -670,6 +670,42 @@ export async function isLiveMemberRemoved(ctx: FeatureBackendContext, clubId: st
 }
 
 /**
+ * Compact branding read (name + logo + contact email) for invite/admin
+ * surfaces — one query instead of profile + settings.
+ */
+export async function getLiveClubBranding(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_club_branding(clubId), "Get club branding");
+}
+
+/**
+ * Club terms (class/season enrolment periods). save_club_term creates when
+ * the id is empty/unknown, otherwise updates in place; status is
+ * "active" | "archived" | "completed" and active terms may not overlap.
+ */
+export type LiveClubTerm = Parameters<ClubDomainActor["save_club_term"]>[0];
+
+export async function listLiveClubTerms(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_club_terms(clubId), "List club terms");
+}
+
+export async function saveLiveClubTerm(ctx: FeatureBackendContext, term: LiveClubTerm) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_club_term(term), "Save club term");
+}
+
+export async function setLiveClubTermStatus(ctx: FeatureBackendContext, id: string, status: "active" | "archived" | "completed") {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_term_status(id, status), "Set club term status");
+}
+
+export async function deleteLiveClubTerm(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_club_term(id), "Delete club term");
+}
+
+/**
  * Club-scope child creation — no team required. Used for mini-league-scope
  * parent–child linking where there is no team id (design decision 2, round 4).
  */
