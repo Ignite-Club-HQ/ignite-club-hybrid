@@ -335,6 +335,12 @@ fn init(init: Init) {
         privacy_consents: vec![],
         profiles: vec![],
         terms_acceptances: vec![],
+        entitlements: vec![],
+        verifiers: vec![],
+        attestation_secret: vec![],
+        entitlements: vec![],
+        verifiers: vec![],
+        attestation_secret: vec![],
         next_challenge: 0,
     };
     store(&state);
@@ -344,7 +350,8 @@ fn post_upgrade() {
     let mut state = state();
     assert!(state.schema <= SCHEMA, "unsupported identity schema");
     // Schema 1 -> 2: profiles were added; schema 2 -> 3: terms_acceptances
-    // were added. Both were already decoded via serde default, so the
+    // were added; schema 3 -> 4: entitlements/verifiers/attestation_secret
+    // were added. All were already decoded via serde default, so the
     // migration is just the marker bump.
     if state.schema != SCHEMA {
         state.schema = SCHEMA;
@@ -957,6 +964,234 @@ fn set_exclusion_scoped(
     Ok(())
 }
 
+/// Manual HMAC-SHA256 (RFC 2104) built on the existing `sha2` dependency so
+/// attestation verification needs no extra crate. Used only to check
+/// `redeem_entitlement` signatures minted by the session-free IAP
+/// verification endpoint against the governor-set shared secret.
+fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
+    const BLOCK_SIZE: usize = 64;
+    let mut key_block = [0u8; BLOCK_SIZE];
+    if key.len() > BLOCK_SIZE {
+        let hashed = Sha256::digest(key);
+        key_block[..32].copy_from_slice(&hashed);
+    } else {
+        key_block[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; BLOCK_SIZE];
+    let mut opad = [0x5cu8; BLOCK_SIZE];
+    for i in 0..BLOCK_SIZE {
+        ipad[i] ^= key_block[i];
+        opad[i] ^= key_block[i];
+    }
+    let mut inner = Sha256::new();
+    inner.update(ipad);
+    inner.update(msg);
+    let inner_hash = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(opad);
+    outer.update(inner_hash);
+    outer.finalize().into()
+}
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+fn attestation_message(
+    principal: Principal,
+    product_id: &str,
+    transaction_id: &str,
+    expires_at_ms: u64,
+    source: &str,
+) -> Vec<u8> {
+    format!(
+        "{}|{}|{}|{}|{}",
+        principal.to_text(),
+        product_id,
+        transaction_id,
+        expires_at_ms,
+        source
+    )
+    .into_bytes()
+}
+fn upsert_entitlement(
+    state: &mut State,
+    principal: Principal,
+    product_id: String,
+    transaction_id: String,
+    expires_at_ms: u64,
+    source: String,
+) -> Outcome<Entitlement> {
+    if !valid_id(&product_id) || !valid_id(&source) {
+        return Err("Invalid entitlement fields".into());
+    }
+    // Replay protection: once an Apple transaction id has been redeemed, it
+    // is permanently bound to the first principal that redeemed it. The same
+    // principal may re-verify (idempotent refresh, e.g. renewal), but a
+    // different principal submitting the same transaction id is rejected.
+    if !transaction_id.is_empty() {
+        if let Some(existing) = state
+            .entitlements
+            .iter()
+            .find(|e| e.transaction_id == transaction_id)
+        {
+            if existing.principal != principal {
+                return Err("Transaction already redeemed by another identity".into());
+            }
+        }
+    }
+    if state.entitlements.len() >= MAX_ENTITLEMENTS
+        && !state.entitlements.iter().any(|e| {
+            e.principal == principal && e.product_id == product_id && e.transaction_id == transaction_id
+        })
+    {
+        return Err("Entitlement quota reached".into());
+    }
+    let record = Entitlement {
+        principal,
+        product_id: product_id.clone(),
+        transaction_id: transaction_id.clone(),
+        expires_at_ms,
+        source,
+        granted_at_ms: ic_cdk::api::time() / 1_000_000,
+    };
+    state.entitlements.retain(|e| {
+        !(e.principal == principal
+            && e.product_id == product_id
+            && e.transaction_id == transaction_id)
+    });
+    state.entitlements.push(record.clone());
+    Ok(record)
+}
+
+/// Governor-only: grants an additional verifier principal permitted to call
+/// `set_entitlement` directly (e.g. a trusted server-side receipt verifier
+/// identity, once one is established).
+#[ic_cdk::update]
+fn add_verifier(verifier: Principal) -> Outcome<()> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    require_governor(&state, caller)?;
+    authenticated(verifier)?;
+    if state.verifiers.len() >= MAX_VERIFIERS {
+        return Err("Verifier quota reached".into());
+    }
+    if !state.verifiers.contains(&verifier) {
+        state.verifiers.push(verifier);
+        store(&state);
+    }
+    Ok(())
+}
+
+/// Governor-only: revokes a verifier principal.
+#[ic_cdk::update]
+fn remove_verifier(verifier: Principal) -> Outcome<()> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    require_governor(&state, caller)?;
+    state.verifiers.retain(|v| *v != verifier);
+    store(&state);
+    Ok(())
+}
+
+/// Governor-only: sets (or rotates) the shared HMAC secret used to verify
+/// `redeem_entitlement` attestations. Must match the secret held by the
+/// session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
+#[ic_cdk::update]
+fn set_attestation_secret(secret: Vec<u8>) -> Outcome<()> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    require_governor(&state, caller)?;
+    if secret.len() < 16 {
+        return Err("Attestation secret too short".into());
+    }
+    state.attestation_secret = secret;
+    store(&state);
+    Ok(())
+}
+
+/// Governor- or verifier-only: records a Pro entitlement for an arbitrary
+/// principal. Used by a trusted server-side writer; client-submitted IAP
+/// receipts instead go through `redeem_entitlement` below.
+#[ic_cdk::update]
+fn set_entitlement(
+    principal: Principal,
+    product_id: String,
+    transaction_id: String,
+    expires_at_ms: u64,
+    source: String,
+) -> Outcome<Entitlement> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    if state.governor != caller && !state.verifiers.contains(&caller) {
+        return Err("Forbidden".into());
+    }
+    authenticated(principal)?;
+    let record = upsert_entitlement(&mut state, principal, product_id, transaction_id, expires_at_ms, source)?;
+    store(&state);
+    Ok(record)
+}
+
+/// Caller-authenticated: redeems a signed attestation minted by the
+/// session-free IAP verification endpoint after it confirms an Apple
+/// receipt/transaction with the App Store. The endpoint has no Internet
+/// Identity session and cannot act as the caller, so instead of writing the
+/// entitlement itself it signs `{principal}|{product_id}|{transaction_id}|
+/// {expires_at_ms}|{source}` with the shared secret and returns that
+/// signature to the client; the client (already authenticated as `principal`
+/// via II) submits it here, where the signature over its *own* principal is
+/// verified before the entitlement is written. A different principal cannot
+/// replay the signature because it is bound to the principal that produced
+/// it (changing the principal changes the signed message).
+#[ic_cdk::update]
+fn redeem_entitlement(
+    product_id: String,
+    transaction_id: String,
+    expires_at_ms: u64,
+    source: String,
+    signature_hex: String,
+) -> Outcome<Entitlement> {
+    let caller = ic_cdk::api::msg_caller();
+    authenticated(caller)?;
+    let mut state = state();
+    if state.attestation_secret.is_empty() {
+        return Err("IAP attestation is not configured".into());
+    }
+    let message = attestation_message(caller, &product_id, &transaction_id, expires_at_ms, &source);
+    let expected = hex_encode(&hmac_sha256(&state.attestation_secret, &message));
+    if expected != signature_hex.to_lowercase() {
+        return Err("Invalid attestation signature".into());
+    }
+    let record = upsert_entitlement(&mut state, caller, product_id, transaction_id, expires_at_ms, source)?;
+    store(&state);
+    Ok(record)
+}
+
+/// The caller's own entitlement records (active and expired).
+#[ic_cdk::query]
+fn get_my_entitlements() -> Outcome<Vec<Entitlement>> {
+    let caller = ic_cdk::api::msg_caller();
+    authenticated(caller)?;
+    let state = state();
+    Ok(state
+        .entitlements
+        .iter()
+        .filter(|e| e.principal == caller)
+        .cloned()
+        .collect())
+}
+
+/// True when `principal` holds any non-expired Pro entitlement. Callable by
+/// any authenticated principal (boolean only, no entitlement detail leaked).
+#[ic_cdk::query]
+fn is_pro(principal: Principal) -> Outcome<bool> {
+    authenticated(ic_cdk::api::msg_caller())?;
+    let state = state();
+    let now_ms = ic_cdk::api::time() / 1_000_000;
+    Ok(state
+        .entitlements
+        .iter()
+        .any(|e| e.principal == principal && e.expires_at_ms > now_ms))
+}
+
 #[ic_cdk::query]
 fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
     let state = state();
@@ -1008,6 +1243,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         state.roles.push(RoleGrant {
@@ -1062,6 +1300,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(&state, "a", "app_admin", None, None, None));
@@ -1097,6 +1338,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         assert!(account_has_role(
@@ -1158,6 +1402,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
 
@@ -1209,6 +1456,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
 
@@ -1271,6 +1521,9 @@ mod tests {
             }],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
 
@@ -1329,6 +1582,9 @@ mod tests {
                 terms_version: 1,
                 accepted_at_ms: 0,
             }],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         let mut erased = state;
@@ -1374,6 +1630,9 @@ mod tests {
             privacy_consents: vec![],
             profiles: vec![],
             terms_acceptances: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         // Simulate set_terms_acceptance's monotonic check directly against state.
@@ -1430,6 +1689,9 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         let bytes = encode(&legacy);
@@ -1517,6 +1779,9 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
+            entitlements: vec![],
+            verifiers: vec![],
+            attestation_secret: vec![],
             next_challenge: 0,
         };
         let bytes = encode(&legacy);

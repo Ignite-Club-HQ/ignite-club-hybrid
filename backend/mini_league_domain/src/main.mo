@@ -19,6 +19,7 @@ persistent actor {
   var duties : [Types.MiniLeagueGroupDuty];
   var availability : [Types.MiniLeagueSessionAvailability];
   var admins : [Types.MiniLeagueAdmin];
+  var joinLinks : [Types.MiniLeagueJoinLink];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -674,6 +675,89 @@ persistent actor {
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(admins.filter(func(item) = item.mini_league_id == mini_league_id));
+    }
+  };
+
+  // ---------------- Join links ----------------
+
+  public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    auth(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        if (joinLinks.any(func(item) = item.mini_league_id == mini_league_id and not item.revoked)) return #Err("Active join link already exists");
+        let link : Types.MiniLeagueJoinLink = {
+          mini_league_id;
+          token = nextId("mljl-" # mini_league_id, joinLinks.size());
+          revoked = false;
+          created_by = caller;
+          created_at_ms = nowMs();
+          revision = 1;
+        };
+        joinLinks := joinLinks.concat([link]);
+        #Ok(link)
+      };
+    }
+  };
+
+  public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    auth(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        switch (joinLinks.find(func(item) = item.mini_league_id == mini_league_id and not item.revoked)) {
+          case null #Err("No active join link");
+          case (?current) {
+            let rotated : Types.MiniLeagueJoinLink = { current with token = nextId("mljl-" # mini_league_id, joinLinks.size()); revision = current.revision + 1 };
+            joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and not item.revoked) rotated else item);
+            #Ok(rotated)
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and not item.revoked) { { item with revoked = true } } else item);
+        #Ok
+      };
+    }
+  };
+
+  // Mirrors join_competition_by_token but mints a fresh player record,
+  // since mini-league join links are not pre-bound to an existing player.
+  public shared ({ caller }) func join_mini_league_by_token(token : Text, player_name : Text) : async { #Ok : Types.ClaimedInvite; #Err : Text } {
+    auth(caller);
+    switch (joinLinks.find(func(item) = item.token == token)) {
+      case null #Err("Join link not found");
+      case (?link) {
+        if (link.revoked) return #Err("Join link revoked");
+        if (not valid(player_name)) return #Err("Invalid player name");
+        switch (findLeague(link.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            let now = nowMs();
+            let created : Types.MiniLeaguePlayer = {
+              id = nextId("mlp-" # link.mini_league_id, players.size()); mini_league_id = link.mini_league_id;
+              name = player_name; child_id = null; parent_user_id = null; claimed_by = ?caller;
+              ability_rating = null; notes = null; created_at_ms = now; updated_at_ms = now;
+            };
+            players := players.concat([created]);
+            #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = created.id })
+          };
+        }
+      };
+    }
+  };
+
+  public query ({ caller }) func list_mini_league_join_links(mini_league_id : Text) : async { #Ok : [Types.MiniLeagueJoinLink]; #Err : Text } {
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
     }
   };
 }
