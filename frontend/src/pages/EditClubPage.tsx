@@ -254,6 +254,13 @@ export default function EditClubPage() {
 
           const existingSettingsOpt = await getLiveClubSettings(ctx, id!);
           const existingSettings = existingSettingsOpt[0];
+          // media_sponsors_enabled / media_header_sponsors_enabled /
+          // events_sponsor_strip_enabled / chat_thread_ads_enabled have no UI
+          // toggle on this page yet (events_sponsor_strip_enabled is edited
+          // from ClubDetailPage's Sponsors accordion for the pilot club) —
+          // round-trip the existing canister value so a profile-only save
+          // never resets them. New settings default to off, matching the
+          // Supabase `clubs` table column defaults.
           const settings: LiveClubSettings = existingSettings
             ? { ...existingSettings, contact_email: candidOpt(contactEmail.trim() || undefined) }
             : {
@@ -263,6 +270,10 @@ export default function EditClubPage() {
                 membership_open: true,
                 announcement: [],
                 public_directory: false,
+                media_sponsors_enabled: false,
+                media_header_sponsors_enabled: false,
+                events_sponsor_strip_enabled: false,
+                chat_thread_ads_enabled: false,
               };
           await saveLiveClubSettings(ctx, settings);
         },

@@ -7,6 +7,15 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  cancelLiveScheduledMessage,
+  listLiveScheduledMessages,
+  scheduleLiveMessage,
+  type LiveScheduledChatType,
+  type LiveScheduledMessage,
+  type LiveScheduledRecurrence,
+} from "@/live/features/notifications";
 
 export type ScheduledChatType =
   | "team"
