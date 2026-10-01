@@ -80,6 +80,9 @@ describe("getLiveGroupMetadata", () => {
       clubId: null,
       members: [other],
       createdAtMs: 1000,
+      description: null,
+      avatar: null,
+      adminOnlyPosting: false,
     });
   });
 

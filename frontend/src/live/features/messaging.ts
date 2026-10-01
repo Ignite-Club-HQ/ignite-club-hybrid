@@ -169,9 +169,11 @@ function toLiveGroupMetadata(raw: {
   club_id: [] | [string];
   members: Principal[];
   created_at_ms: bigint;
-  description: [] | [string];
-  avatar: [] | [string];
-  admin_only_posting: boolean;
+  // Optional so metadata from a canister deployed before the
+  // description/avatar/admin_only_posting migration still maps cleanly.
+  description?: [] | [string];
+  avatar?: [] | [string];
+  admin_only_posting?: boolean;
 }): LiveGroupMetadata {
   return {
     conversationId: raw.conversation_id,
@@ -181,9 +183,9 @@ function toLiveGroupMetadata(raw: {
     clubId: raw.club_id[0] ?? null,
     members: raw.members,
     createdAtMs: Number(raw.created_at_ms),
-    description: raw.description[0] ?? null,
-    avatar: raw.avatar[0] ?? null,
-    adminOnlyPosting: raw.admin_only_posting,
+    description: raw.description?.[0] ?? null,
+    avatar: raw.avatar?.[0] ?? null,
+    adminOnlyPosting: raw.admin_only_posting ?? false,
   };
 }
 
