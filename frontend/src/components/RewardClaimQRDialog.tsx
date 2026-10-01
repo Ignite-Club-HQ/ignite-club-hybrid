@@ -21,6 +21,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { fulfillLiveRedemption } from "@/live/features/points";
 
 interface RewardClaimQRDialogProps {
   open: boolean;
@@ -56,15 +58,22 @@ export function RewardClaimQRDialog({
 
       // Mark redemption as fulfilled
       if (redemptionId) {
-        const { error: redemptionError } = await supabase
-          .from("reward_redemptions")
-          .update({
-            status: "fulfilled",
-            verified_at: new Date().toISOString(),
-          })
-          .eq("id", redemptionId);
+        await withFeatureBackend("points", {
+          supabase: async () => {
+            const { error: redemptionError } = await supabase
+              .from("reward_redemptions")
+              .update({
+                status: "fulfilled",
+                verified_at: new Date().toISOString(),
+              })
+              .eq("id", redemptionId);
 
-        if (redemptionError) throw redemptionError;
+            if (redemptionError) throw redemptionError;
+          },
+          icp: async (ctx) => {
+            await fulfillLiveRedemption(ctx, redemptionId);
+          },
+        });
       }
 
       // Invalidate queries to refresh data

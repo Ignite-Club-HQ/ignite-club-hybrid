@@ -267,13 +267,18 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: activityRows = [], isLoading: actLoading } = useQuery({
     queryKey: ["club-engagement-activity-rpc", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_active_users", {
-        _club_id: clubId as any,
-        _start: range.start.toISOString(),
-        _end: range.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_active_users", {
+            _club_id: clubId as any,
+            _start: range.start.toISOString(),
+            _end: range.end.toISOString(),
+          });
+          if (error) throw error;
+          return (data || []) as { day: string; user_id: string }[];
+        },
+        icp: (ctx) => icpActiveUserRows(ctx, range.start, range.end),
       });
-      if (error) throw error;
-      return (data || []) as { day: string; user_id: string }[];
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -281,13 +286,18 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: prevActivityRows = [] } = useQuery({
     queryKey: ["club-engagement-activity-prev-rpc", clubId, mode, prevRange.start.toISOString(), prevRange.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_active_users", {
-        _club_id: clubId as any,
-        _start: prevRange.start.toISOString(),
-        _end: prevRange.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_active_users", {
+            _club_id: clubId as any,
+            _start: prevRange.start.toISOString(),
+            _end: prevRange.end.toISOString(),
+          });
+          if (error) throw error;
+          return (data || []) as { day: string; user_id: string }[];
+        },
+        icp: (ctx) => icpActiveUserRows(ctx, prevRange.start, prevRange.end),
       });
-      if (error) throw error;
-      return (data || []) as { day: string; user_id: string }[];
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -299,13 +309,18 @@ function SupabaseClubEngagementAnalyticsPage({
     queryFn: async () => {
       const end = new Date();
       const start = subDays(end, 30);
-      const { data, error } = await supabase.rpc("club_engagement_active_users", {
-        _club_id: clubId as any,
-        _start: start.toISOString(),
-        _end: end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_active_users", {
+            _club_id: clubId as any,
+            _start: start.toISOString(),
+            _end: end.toISOString(),
+          });
+          if (error) throw error;
+          return (data || []) as { day: string; user_id: string }[];
+        },
+        icp: (ctx) => icpActiveUserRows(ctx, start, end),
       });
-      if (error) throw error;
-      return (data || []) as { day: string; user_id: string }[];
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -438,24 +453,47 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: totals, isLoading: totalsLoading, error: totalsError } = useQuery({
     queryKey: ["club-engagement-totals-rpc", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_totals", {
-        _club_id: clubId as any,
-        _start: range.start.toISOString(),
-        _end: range.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_totals", {
+            _club_id: clubId as any,
+            _start: range.start.toISOString(),
+            _end: range.end.toISOString(),
+          });
+          if (error) throw error;
+          const row = (data && (data as any[])[0]) || {};
+          return {
+            clubMsgs: Number(row.club_msgs ?? 0),
+            teamMsgs: Number(row.team_msgs ?? 0),
+            reactions: Number(row.reactions ?? 0),
+            broadcasts: Number(row.broadcasts ?? 0),
+            events: Number(row.events ?? 0),
+            rsvpsTotal: Number(row.rsvps_total ?? 0),
+            rsvpsResponded: Number(row.rsvps_responded ?? 0),
+            rsvpsGoing: Number(row.rsvps_going ?? 0),
+            photosUploaded: Number(row.photos_uploaded ?? 0),
+          };
+        },
+        icp: async (ctx) => {
+          const t = await getLiveClubEngagementTotals(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
+          // Canister EngagementTotals only exposes `messages`, `rsvps`,
+          // `active_users`, `sponsor_clicks`/`sponsor_impressions` — there is
+          // no club/team message split, reaction/broadcast/event counters,
+          // RSVP roster size, or photo counter. Everything without an honest
+          // mapping is left at 0 rather than fabricated.
+          return {
+            clubMsgs: Number(t.messages),
+            teamMsgs: 0,
+            reactions: 0,
+            broadcasts: 0,
+            events: 0,
+            rsvpsTotal: 0,
+            rsvpsResponded: Number(t.rsvps),
+            rsvpsGoing: 0,
+            photosUploaded: 0,
+          };
+        },
       });
-      if (error) throw error;
-      const row = (data && (data as any[])[0]) || {};
-      return {
-        clubMsgs: Number(row.club_msgs ?? 0),
-        teamMsgs: Number(row.team_msgs ?? 0),
-        reactions: Number(row.reactions ?? 0),
-        broadcasts: Number(row.broadcasts ?? 0),
-        events: Number(row.events ?? 0),
-        rsvpsTotal: Number(row.rsvps_total ?? 0),
-        rsvpsResponded: Number(row.rsvps_responded ?? 0),
-        rsvpsGoing: Number(row.rsvps_going ?? 0),
-        photosUploaded: Number(row.photos_uploaded ?? 0),
-      };
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -464,13 +502,22 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: msgVolume = [], error: msgVolumeError } = useQuery({
     queryKey: ["club-engagement-msg-volume-rpc", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_message_volume", {
-        _club_id: clubId as any,
-        _start: range.start.toISOString(),
-        _end: range.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_message_volume", {
+            _club_id: clubId as any,
+            _start: range.start.toISOString(),
+            _end: range.end.toISOString(),
+          });
+          if (error) throw error;
+          return (data || []) as { day: string; club_count: number; team_count: number }[];
+        },
+        icp: async (ctx) => {
+          const points = await getLiveClubEngagementMessageVolume(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
+          // Canister has one message counter per day, no club/team split.
+          return points.map((p) => ({ day: p.day, club_count: Number(p.value), team_count: 0 }));
+        },
       });
-      if (error) throw error;
-      return (data || []) as { day: string; club_count: number; team_count: number }[];
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -484,13 +531,23 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: rsvpSeries = [] } = useQuery({
     queryKey: ["club-engagement-rsvp-series", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_rsvp_completion_series", {
-        _club_id: clubId as any,
-        _start: range.start.toISOString(),
-        _end: range.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_rsvp_completion_series", {
+            _club_id: clubId as any,
+            _start: range.start.toISOString(),
+            _end: range.end.toISOString(),
+          });
+          if (error) throw error;
+          return (data || []) as { week: string; completion_pct: number | null; responded: number; expected: number }[];
+        },
+        icp: async (ctx) => {
+          const points = await getLiveClubEngagementRsvpCompletionSeries(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
+          // Canister series is keyed by day, not ISO week, and has no
+          // responded/expected roster breakdown — only the completion % itself.
+          return points.map((p) => ({ week: p.day, completion_pct: Number(p.value), responded: 0, expected: 0 }));
+        },
       });
-      if (error) throw error;
-      return (data || []) as { week: string; completion_pct: number | null; responded: number; expected: number }[];
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -653,7 +710,7 @@ function SupabaseClubEngagementAnalyticsPage({
       if (error) throw error;
       return data as Record<string, number>;
     },
-    enabled: queryReady && !!access?.isAdmin,
+    enabled: queryReady && !!access?.isAdmin && !isIcpAnalytics,
   });
 
   // ---------- Sponsor performance (unique reach + CTR per sponsor) ----------
@@ -676,20 +733,28 @@ function SupabaseClubEngagementAnalyticsPage({
         tracking_started: string | null;
       }>;
     },
-    enabled: queryReady && !!access?.isAdmin,
+    enabled: queryReady && !!access?.isAdmin && !isIcpAnalytics,
   });
 
   // ---------- Club-wide distinct members reached (de-duped across sponsors) ----------
   const { data: totalUniqueReach = 0 } = useQuery({
     queryKey: ["club-engagement-total-unique-reach", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("club_engagement_total_unique_reach", {
-        _club_id: clubId as any,
-        _start: range.start.toISOString(),
-        _end: range.end.toISOString(),
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("club_engagement_total_unique_reach", {
+            _club_id: clubId as any,
+            _start: range.start.toISOString(),
+            _end: range.end.toISOString(),
+          });
+          if (error) throw error;
+          return (data as number) ?? 0;
+        },
+        icp: async (ctx) => {
+          const n = await getLiveClubEngagementTotalUniqueReach(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
+          return Number(n);
+        },
       });
-      if (error) throw error;
-      return (data as number) ?? 0;
     },
     enabled: queryReady && !!access?.isAdmin,
   });
