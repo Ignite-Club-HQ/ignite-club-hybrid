@@ -5,14 +5,14 @@
 ## ICP audit round2 — frontend findings F1–F11 (gated/wired)
 - F1 NextUpCarousel.tsx useChildRsvps: gated off for II users (`resolveAuthBackend()==="icp"`) — events_domain/club_domain have no children/child_guardians table; NEEDS-CANISTER household RSVP roll-up.
 - F2 AccountRecoveryBanner.tsx: gated the `profiles.scheduled_deletion_at` status query to Supabase-auth users only, matching the already-gated mutation.
-- F3 AddClubAdminSheet.tsx: gated existingMembers/clubBranding/search_invitable_profiles queries off for ICP-routed membership. NEEDS-CANISTER: club branding read + fuzzy user search have no club_domain counterpart (list_role_grants exists but wasn't wired here).
+- F3 AddClubAdminSheet.tsx: DONE (Phase 2, 2026-10-01) — existingMembers via club_domain list_role_grants, clubBranding via get_club_branding, fuzzy search via identity_access search_profiles; addExistingUser → add_role_grant + best-effort notification_queue enqueue; addPendingMember → club-domain pending invite (id doubles as /join/p/<id> token). Invite email send stays Supabase-gated (skipped for II; share link shown instead).
 - F4 AddressAutocomplete.tsx: gated google-places-search invokes (autocomplete/details/reverse) off for II users; manual text entry still works.
 - F5 AssociationEventsPanel.tsx: gated association-create-club-event invoke via assertSupabaseWritePath("events", ...). NEEDS-CANISTER: association-scoped multi-club event fan-out.
 - F6 MemberSubscriptionPaymentsManager.tsx: gated "Mark Paid" and "Send Reminders" via assertSupabaseWritePath("membership", ...). NEEDS-CANISTER: manual payment ledger + bulk fee reminder notifications.
-- F7 PlayHQTeamLinkCard.tsx: gated teams.update (PlayHQ link fields) and playhq-materialise-team-events invoke via assertSupabaseWritePath. NEEDS-CANISTER: club_domain team shape needs PlayHQ fields; events_domain needs fixture import.
+- F7 PlayHQTeamLinkCard.tsx: PARTIAL (Phase 2, 2026-10-01) — club_domain ClubTeam now carries playhq_team_id/playhq_competition_id/playhq_auto_create_events; card reads/writes them via get/save team fetch-modify-save in ICP mode. STILL NEEDS-CANISTER: competition/fixture reads and playhq-materialise-team-events import stay Supabase-gated until the events_domain PlayHQ pass (Phases 3/4).
 - F8 PlayerOfMatchSelector.tsx: moved notification inserts + child lookups behind the same `isFeatureRoutedToIcp("points")` gate as the points award, so awarding no longer fails part-way for II users. NEEDS-CANISTER: player_of_match notifications have no notification_queue counterpart.
 - F9 SponsorOrAdCarousel.tsx: gated the no-filter "which of my clubs" auth.getUser/user_roles/sponsors fallback paths off for II users. NEEDS-CANISTER: cross-club sponsor/strip lookup without an explicit club filter.
-- F10 TermsManager.tsx: gated the whole terms query + save/toggle/status/delete mutations off for ICP-routed membership via assertSupabaseWritePath/enabled. NEEDS-CANISTER: club terms (class/season terms) has no club_domain counterpart.
+- F10 TermsManager.tsx: DONE (Phase 2, 2026-10-01) — full terms CRUD via club_domain save/list/set_status/delete_club_term (ClubTerm record, canister enforces no-overlapping-active-terms and derives created_at_ms/is_active server-side).
 - F11 ClubAnnouncementDialog.tsx: relaxed the announcement payload's `club_id`/`team_ids` Zod validation from `.uuid()` to non-empty `.string()` so ICP-routed club_domain string ids validate.
 
 ## Governor one-shot + transfer_governorship
