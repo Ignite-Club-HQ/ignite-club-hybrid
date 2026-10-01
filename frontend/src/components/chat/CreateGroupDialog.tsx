@@ -23,6 +23,10 @@ import {
 import { Plus, Crown, Check, Users, Shield, Sparkles, ChevronLeft, ChevronRight, Search, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveGroupWithRoles } from "@/live/features/messaging";
+import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
+import { Principal } from "@icp-sdk/core/principal";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -338,13 +342,38 @@ export default function CreateGroupDialog({
   const createGroupMutation = useMutation({
     mutationFn: async () => {
       if (!user || selectedRoles.length === 0) return;
-      // Chat group creation writes club/team/role-scoped metadata (allowed_roles,
-      // membership_mode, category) that has no canister equivalent yet.
-      // NEEDS-CANISTER: messaging_domain create-group call accepting role/category metadata.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Creating chat groups isn't available yet on the Internet Identity messaging backend.");
-      }
 
+      if (isFeatureRoutedToIcp("messaging")) {
+        const icpTeamId = teamId || selectedTeamId || null;
+        const icpClubId = clubId || clubInfo?.clubId || null;
+        if (!icpClubId) throw new Error("Please pick a club or team");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: async (ctx) => {
+            const candidates = await fetchLiveMessagingCandidates(ctx, [icpClubId], new Set());
+            const roleEntries: Array<[Principal, string]> = [];
+            for (const candidate of candidates) {
+              const matched = candidate.roles.find(
+                (r) =>
+                  selectedRoles.includes(r.role as AppRole) &&
+                  (!icpTeamId || r.teamId === icpTeamId),
+              );
+              if (matched) roleEntries.push([candidate.principal, matched.role]);
+            }
+            await createLiveGroupWithRoles(
+              ctx,
+              icpClubId,
+              icpTeamId,
+              name.trim(),
+              "role_group",
+              roleEntries,
+            );
+          },
+        });
+        return;
+      }
 
       const finalTeamId = teamId || selectedTeamId || null;
       const finalMiniLeagueId = miniLeagueId || selectedMiniLeagueId || null;

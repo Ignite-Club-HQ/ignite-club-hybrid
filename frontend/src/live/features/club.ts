@@ -629,3 +629,9 @@ export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return actor.my_role_grants();
 }
+
+/** Auto-accept a pending email invite under the ICP backend (PendingInviteWelcomeDialog). */
+export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+}

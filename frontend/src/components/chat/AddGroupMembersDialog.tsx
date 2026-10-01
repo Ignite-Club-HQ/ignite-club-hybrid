@@ -1,8 +1,13 @@
 import { useState, useMemo } from "react";
+import { Principal } from "@icp-sdk/core/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
+import { useClubTheme } from "@/hooks/useClubTheme";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveGroupMembers } from "@/live/features/messaging";
+import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -45,6 +50,7 @@ export function AddGroupMembersDialog({
   existingMemberIds,
 }: AddGroupMembersDialogProps) {
   const { user } = useAuth();
+  const { activeClubFilter } = useClubTheme();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selected, setSelected] = useState<Candidate[]>([]);
@@ -53,6 +59,37 @@ export function AddGroupMembersDialog({
     queryKey: ["add-group-members-candidates-v2", user?.id, groupId, existingMemberIds.length],
     queryFn: async (): Promise<Candidate[]> => {
       if (!user) return [];
+
+      if (isFeatureRoutedToIcp("messaging")) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => [] as Candidate[],
+          icp: async (ctx) => {
+            if (!activeClubFilter) return [] as Candidate[];
+            const liveCandidates = await fetchLiveMessagingCandidates(
+              ctx,
+              [activeClubFilter],
+              new Set(existingMemberIds),
+            );
+            return liveCandidates.map((c) => {
+              const identity = computeMemberIdentity({
+                display_name: c.display_name,
+                roles: c.roles.map((r) => ({ role: r.role as MemberRole, team_id: r.teamId })),
+                children_names: [],
+                teamNameById: {},
+              });
+              return {
+                id: c.id,
+                display_name: c.display_name,
+                avatar_url: c.avatar_url,
+                identity,
+                haystack: [c.display_name, identity.roleLabel, identity.contextLine]
+                  .join(" ")
+                  .toLowerCase(),
+              } satisfies Candidate;
+            });
+          },
+        });
+      }
 
       const { data: myRoles } = await supabase
         .from("user_roles")
@@ -172,10 +209,15 @@ export function AddGroupMembersDialog({
   const addMutation = useMutation({
     mutationFn: async () => {
       if (!user || selected.length === 0) return;
-      // No canister method exists to add members to an existing group's roster.
-      // NEEDS-CANISTER: messaging_domain add-group-members call.
+
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Adding chat group members isn't available yet on the Internet Identity messaging backend.");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => addLiveGroupMembers(ctx, groupId, selected.map((s) => Principal.fromText(s.id))),
+        });
+        return;
       }
 
       const inserts = selected.map(s => ({

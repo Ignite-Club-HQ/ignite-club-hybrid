@@ -1027,3 +1027,50 @@ export async function listLiveMiniLeagueRsvps(ctx: FeatureBackendContext, eventI
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_mini_league_rsvps(eventId), "List mini-league RSVPs");
 }
+
+/**
+ * Child occurrences generated for a series (id/deleted/starts/ends only) —
+ * used to safely derive how a series' end date edit should trim or extend
+ * its existing children without re-deriving dates client-side.
+ */
+export async function listLiveSeriesOccurrences(ctx: FeatureBackendContext, seriesId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_series_occurrences(seriesId), "List series occurrences");
+}
+
+/** Reminder-send summary for an event (recipient count + last-sent time). */
+export async function getLiveReminderLog(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_reminder_log(eventId), "Get reminder log");
+}
+
+/** Push-reachability check keyed by account id string (distinct from get_push_reachable's Principal). */
+export async function isLiveReachable(ctx: FeatureBackendContext, accountId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.is_reachable(accountId), "Check reachability");
+}
+
+/**
+ * Event-group appearance (team letter, colour, ability band, pitch name) —
+ * used by the auto-generate/team-colour/ability-band group UI.
+ */
+export async function setLiveEventGroupAppearance(
+  ctx: FeatureBackendContext,
+  groupId: string,
+  teamLetter?: string | null,
+  colour?: string | null,
+  abilityBand?: string | null,
+  pitchName?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_group_appearance(
+      groupId,
+      candidOpt(teamLetter),
+      candidOpt(colour),
+      candidOpt(abilityBand),
+      candidOpt(pitchName),
+    ),
+    "Set event group appearance",
+  );
+}

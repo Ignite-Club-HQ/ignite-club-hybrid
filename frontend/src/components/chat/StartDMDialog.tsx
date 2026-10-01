@@ -19,6 +19,10 @@ import { Search, MessageCircle, Loader2, Crown, Lock, Check, X, Users, SlidersHo
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getOrCreateLiveDm } from "@/live/features/messaging";
+import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
+import { Principal } from "@icp-sdk/core/principal";
 import {
   Select,
   SelectContent,
@@ -164,9 +168,12 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
   }, [isOpen]);
 
   // Check if user has Pro access for DMs
+  const isIcpMessaging = isFeatureRoutedToIcp("messaging");
+
   const { data: hasProAccess, isLoading: checkingPro } = useQuery({
-    queryKey: ["has-pro-for-dm", user?.id],
+    queryKey: ["has-pro-for-dm", user?.id, isIcpMessaging],
     queryFn: async () => {
+      if (isIcpMessaging) return true;
       // Get clubs user is a member of
       const { data: roles } = await supabase
         .from("user_roles")
@@ -195,8 +202,9 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
 
   // Check if current user can send DMs (has admin role or allowed by club settings)
   const { data: canSendDMs, isLoading: checkingCanSend } = useQuery({
-    queryKey: ["can-send-dms", user?.id],
+    queryKey: ["can-send-dms", user?.id, isIcpMessaging],
     queryFn: async () => {
+      if (isIcpMessaging) return { canSend: true, reason: null };
       // First check if user is app_admin - they can always DM
       const { data: isAppAdmin } = await supabase
         .from("user_roles")
@@ -287,8 +295,30 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
 
   // Fetch users that can be DMed (members of shared Pro clubs + mini-league parents) excluding app admins
   const { data: dmData, isLoading: loadingUsers } = useQuery({
-    queryKey: ["dmable-users-with-filters", user?.id, activeClubFilter],
+    queryKey: ["dmable-users-with-filters", user?.id, activeClubFilter, isIcpMessaging],
     queryFn: async () => {
+      if (isIcpMessaging) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => ({ users: [] as DMableUser[], clubs: [] as ClubInfo[], teams: [] as TeamInfo[] }),
+          icp: async (ctx) => {
+            if (!activeClubFilter) return { users: [] as DMableUser[], clubs: [] as ClubInfo[], teams: [] as TeamInfo[] };
+            const candidates = await fetchLiveMessagingCandidates(ctx, [activeClubFilter]);
+            const users: DMableUser[] = candidates.map((c) => ({
+              id: c.id,
+              display_name: c.display_name,
+              avatar_url: c.avatar_url,
+              shared_clubs: [],
+              club_ids: c.roles.map((r) => r.clubId).filter((id): id is string => !!id),
+              team_ids: c.roles.map((r) => r.teamId).filter((id): id is string => !!id),
+              role_label: pickTopRole(c.roles.map((r) => r.role)),
+              children_names: [],
+              has_prior_dm: false,
+              last_seen_at: null,
+            }));
+            return { users, clubs: [] as ClubInfo[], teams: [] as TeamInfo[] };
+          },
+        });
+      }
       // Get Pro clubs user is a member of
       const { data: userRoles } = await supabase
         .from("user_roles")
@@ -485,11 +515,16 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
   // Start single DM mutation
   const startDMMutation = useMutation({
     mutationFn: async (otherUserId: string) => {
-      // NEEDS-CANISTER: this uses canLiveDmUser already for ACL, but DM
-      // conversation creation/lookup itself (get_or_create_dm_conversation)
-      // has no messaging_domain equivalent wired here yet.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Starting direct messages isn't available yet on the Internet Identity messaging backend.");
+      if (isIcpMessaging) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: async (ctx) => {
+            const conversation = await getOrCreateLiveDm(ctx, Principal.fromText(otherUserId));
+            return conversation.id;
+          },
+        });
       }
 
       const { data, error } = await supabase.rpc("get_or_create_dm_conversation", {
