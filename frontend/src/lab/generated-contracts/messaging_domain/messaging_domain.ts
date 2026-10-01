@@ -317,6 +317,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    delete_poll(poll_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     dm_attachments_disabled(user: Principal): Promise<boolean>;
     export_state(): Promise<{
         __kind__: "Ok";
@@ -378,6 +385,13 @@ export interface messaging_domainInterface {
         Err: string;
     }>;
     is_competition_admin(conversation_id: string): Promise<boolean>;
+    leave_group(conversation_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -446,6 +460,13 @@ export interface messaging_domainInterface {
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    remove_group_member(conversation_id: string, member: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
     } | {
         __kind__: "Err";
         Err: string;
@@ -660,6 +681,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.delete_message(arg0);
         return from_candid_variant_n14(result);
     }
+    async delete_poll(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_poll(arg0);
+        return from_candid_variant_n1(result);
+    }
     async dm_attachments_disabled(arg0: Principal): Promise<boolean> {
         const result = await this.actor.dm_attachments_disabled(arg0);
         return result;
@@ -759,6 +790,16 @@ export class Messaging_domain implements messaging_domainInterface {
     async is_competition_admin(arg0: string): Promise<boolean> {
         const result = await this.actor.is_competition_admin(arg0);
         return result;
+    }
+    async leave_group(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.leave_group(arg0);
+        return from_candid_variant_n2(result);
     }
     async listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
@@ -867,6 +908,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
         return from_candid_variant_n1(result);
+    }
+    async remove_group_member(arg0: string, arg1: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: GroupMetadata;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.remove_group_member(arg0, arg1);
+        return from_candid_variant_n2(result);
     }
     async replay_scheduled_message(arg0: string): Promise<{
         __kind__: "Ok";

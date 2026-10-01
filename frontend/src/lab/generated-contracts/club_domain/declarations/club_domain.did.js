@@ -612,6 +612,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Mutation, 'Err' : IDL.Text })],
         [],
       ),
+    'my_role_grants' : IDL.Func([], [IDL.Vec(RoleGrant)], ['query']),
     'reject_club_join_request' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubJoinRequest, 'Err' : IDL.Text })],

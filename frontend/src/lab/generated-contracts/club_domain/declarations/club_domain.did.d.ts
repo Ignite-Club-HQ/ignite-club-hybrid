@@ -560,6 +560,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
+  'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
   'reject_club_join_request' : ActorMethod<
     [string],
     { 'Ok' : ClubJoinRequest } |

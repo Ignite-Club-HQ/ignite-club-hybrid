@@ -52,9 +52,15 @@ function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
 export interface Benchmark {
+    dau?: number;
+    mau?: number;
+    wau?: number;
+    posters?: number;
     value: number;
     period: string;
+    read_rate?: number;
     updated_at_ms: bigint;
+    total_members?: number;
     metric_key: string;
 }
 export interface PerfSampleInput {
@@ -82,6 +88,13 @@ export interface AdminAlert {
     details: string;
     resolved_at_ms?: bigint;
     resolved_by?: Principal;
+}
+export interface SponsorBenchmarkRow {
+    ctr: number;
+    clicks: number;
+    impressions: number;
+    sponsor_id: string;
+    unique_reach: number;
 }
 export interface Feedback {
     id: string;
@@ -232,6 +245,13 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_sponsor_benchmarks(sponsor_ids: Array<string>, since_period: string, until_period: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SponsorBenchmarkRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_sponsor_performance(sponsor_id: string, period: string): Promise<{
         __kind__: "Ok";
         Ok: SponsorPerformance;
@@ -344,7 +364,7 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    record_sponsor_metric(sponsor_id: string, metric: string, delta: number): Promise<{
+    record_sponsor_metric(sponsor_id: string, metric: string, delta: number, account_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -365,7 +385,7 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    set_benchmark(metric_key: string, period: string, value: number): Promise<{
+    set_benchmark(metric_key: string, period: string, value: number, total_members: number | null, dau: number | null, wau: number | null, mau: number | null, posters: number | null, read_rate: number | null): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -387,7 +407,7 @@ export interface insights_domainInterface {
         Err: string;
     }>;
 }
-import type { AdminAlert as _AdminAlert, AlertStatus as _AlertStatus, AuditLog as _AuditLog, Benchmark as _Benchmark, ClientPerfAggregate as _ClientPerfAggregate, EngagementBenchmarks as _EngagementBenchmarks, EngagementDayPoint as _EngagementDayPoint, EngagementTotals as _EngagementTotals, Feedback as _Feedback, FeedbackStatus as _FeedbackStatus, PerfAggregate as _PerfAggregate, SponsorPerformance as _SponsorPerformance } from "./declarations/insights_domain.did";
+import type { AdminAlert as _AdminAlert, AlertStatus as _AlertStatus, AuditLog as _AuditLog, Benchmark as _Benchmark, ClientPerfAggregate as _ClientPerfAggregate, EngagementBenchmarks as _EngagementBenchmarks, EngagementDayPoint as _EngagementDayPoint, EngagementTotals as _EngagementTotals, Feedback as _Feedback, FeedbackStatus as _FeedbackStatus, PerfAggregate as _PerfAggregate, SponsorBenchmarkRow as _SponsorBenchmarkRow, SponsorPerformance as _SponsorPerformance } from "./declarations/insights_domain.did";
 export class Insights_domain implements insights_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async append_audit_log(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string): Promise<{
@@ -503,6 +523,16 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.get_benchmarks(arg0);
         return from_candid_variant_n16(result);
     }
+    async get_sponsor_benchmarks(arg0: Array<string>, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<SponsorBenchmarkRow>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_sponsor_benchmarks(arg0, arg1, arg2);
+        return from_candid_variant_n22(result);
+    }
     async get_sponsor_performance(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: SponsorPerformance;
@@ -511,7 +541,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_sponsor_performance(arg0, arg1);
-        return from_candid_variant_n17(result);
+        return from_candid_variant_n23(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -540,8 +570,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_admin_alerts(to_candid_opt_n18(arg0));
-        return from_candid_variant_n21(result);
+        const result = await this.actor.list_admin_alerts(to_candid_opt_n24(arg0));
+        return from_candid_variant_n27(result);
     }
     async list_audit_logs(arg0: Principal | null, arg1: string | null, arg2: string | null, arg3: number, arg4: number): Promise<{
         __kind__: "Ok";
@@ -553,8 +583,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_audit_logs(to_candid_opt_n23(arg0), to_candid_opt_n1(arg1), to_candid_opt_n1(arg2), arg3, arg4);
-        return from_candid_variant_n24(result);
+        const result = await this.actor.list_audit_logs(to_candid_opt_n29(arg0), to_candid_opt_n1(arg1), to_candid_opt_n1(arg2), arg3, arg4);
+        return from_candid_variant_n30(result);
     }
     async list_feedback(arg0: FeedbackStatus | null, arg1: number, arg2: number): Promise<{
         __kind__: "Ok";
@@ -566,12 +596,12 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_feedback(to_candid_opt_n30(arg0), arg1, arg2);
-        return from_candid_variant_n33(result);
+        const result = await this.actor.list_feedback(to_candid_opt_n36(arg0), arg1, arg2);
+        return from_candid_variant_n39(result);
     }
     async my_feedback(): Promise<Array<Feedback>> {
         const result = await this.actor.my_feedback();
-        return from_candid_vec_n35(result);
+        return from_candid_vec_n41(result);
     }
     async perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -581,7 +611,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.perf_aggregate(arg0, to_candid_opt_n1(arg1), arg2, arg3);
-        return from_candid_variant_n40(result);
+        return from_candid_variant_n46(result);
     }
     async record_active_user(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -663,14 +693,14 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.record_sponsor_impression(arg0);
         return from_candid_variant_n2(result);
     }
-    async record_sponsor_metric(arg0: string, arg1: string, arg2: number): Promise<{
+    async record_sponsor_metric(arg0: string, arg1: string, arg2: number, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.record_sponsor_metric(arg0, arg1, arg2);
+        const result = await this.actor.record_sponsor_metric(arg0, arg1, arg2, to_candid_opt_n1(arg3));
         return from_candid_variant_n2(result);
     }
     async record_web_vital(arg0: string, arg1: number, arg2: string, arg3: string): Promise<{
@@ -693,14 +723,14 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.resolve_admin_alert(arg0);
         return from_candid_variant_n9(result);
     }
-    async set_benchmark(arg0: string, arg1: string, arg2: number): Promise<{
+    async set_benchmark(arg0: string, arg1: string, arg2: number, arg3: number | null, arg4: number | null, arg5: number | null, arg6: number | null, arg7: number | null, arg8: number | null): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_benchmark(arg0, arg1, arg2);
+        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n47(arg3), to_candid_opt_n47(arg4), to_candid_opt_n47(arg5), to_candid_opt_n47(arg6), to_candid_opt_n47(arg7), to_candid_opt_n48(arg8));
         return from_candid_variant_n2(result);
     }
     async submit_feedback(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<{
@@ -711,7 +741,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.submit_feedback(arg0, to_candid_opt_n1(arg1), arg2, to_candid_opt_n1(arg3));
-        return from_candid_variant_n41(result);
+        return from_candid_variant_n49(result);
     }
     async update_feedback_status(arg0: string, arg1: FeedbackStatus, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -720,8 +750,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n31(arg1), to_candid_opt_n1(arg2));
-        return from_candid_variant_n41(result);
+        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n37(arg1), to_candid_opt_n1(arg2));
+        return from_candid_variant_n49(result);
     }
 }
 function from_candid_AdminAlert_n10(value: _AdminAlert): AdminAlert {
@@ -730,14 +760,17 @@ function from_candid_AdminAlert_n10(value: _AdminAlert): AdminAlert {
 function from_candid_AlertStatus_n12(value: _AlertStatus): AlertStatus {
     return from_candid_variant_n13(value);
 }
-function from_candid_AuditLog_n27(value: _AuditLog): AuditLog {
-    return from_candid_record_n28(value);
+function from_candid_AuditLog_n33(value: _AuditLog): AuditLog {
+    return from_candid_record_n34(value);
 }
-function from_candid_FeedbackStatus_n38(value: _FeedbackStatus): FeedbackStatus {
-    return from_candid_variant_n39(value);
+function from_candid_Benchmark_n18(value: _Benchmark): Benchmark {
+    return from_candid_record_n19(value);
 }
-function from_candid_Feedback_n36(value: _Feedback): Feedback {
-    return from_candid_record_n37(value);
+function from_candid_FeedbackStatus_n44(value: _FeedbackStatus): FeedbackStatus {
+    return from_candid_variant_n45(value);
+}
+function from_candid_Feedback_n42(value: _Feedback): Feedback {
+    return from_candid_record_n43(value);
 }
 function from_candid_opt_n14(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
@@ -745,7 +778,13 @@ function from_candid_opt_n14(value: [] | [bigint]): bigint | null {
 function from_candid_opt_n15(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n29(value: [] | [string]): string | null {
+function from_candid_opt_n20(value: [] | [number]): number | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n21(value: [] | [number]): number | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n35(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n11(value: {
@@ -775,7 +814,43 @@ function from_candid_record_n11(value: {
         resolved_by: record_opt_to_undefined(from_candid_opt_n15(value.resolved_by))
     };
 }
-function from_candid_record_n25(value: {
+function from_candid_record_n19(value: {
+    dau: [] | [number];
+    mau: [] | [number];
+    wau: [] | [number];
+    posters: [] | [number];
+    value: number;
+    period: string;
+    read_rate: [] | [number];
+    updated_at_ms: bigint;
+    total_members: [] | [number];
+    metric_key: string;
+}): {
+    dau?: number;
+    mau?: number;
+    wau?: number;
+    posters?: number;
+    value: number;
+    period: string;
+    read_rate?: number;
+    updated_at_ms: bigint;
+    total_members?: number;
+    metric_key: string;
+} {
+    return {
+        dau: record_opt_to_undefined(from_candid_opt_n20(value.dau)),
+        mau: record_opt_to_undefined(from_candid_opt_n20(value.mau)),
+        wau: record_opt_to_undefined(from_candid_opt_n20(value.wau)),
+        posters: record_opt_to_undefined(from_candid_opt_n20(value.posters)),
+        value: value.value,
+        period: value.period,
+        read_rate: record_opt_to_undefined(from_candid_opt_n21(value.read_rate)),
+        updated_at_ms: value.updated_at_ms,
+        total_members: record_opt_to_undefined(from_candid_opt_n20(value.total_members)),
+        metric_key: value.metric_key
+    };
+}
+function from_candid_record_n31(value: {
     total: number;
     items: Array<_AuditLog>;
 }): {
@@ -784,10 +859,10 @@ function from_candid_record_n25(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n26(value.items)
+        items: from_candid_vec_n32(value.items)
     };
 }
-function from_candid_record_n28(value: {
+function from_candid_record_n34(value: {
     id: string;
     target_user_name: [] | [string];
     action_type: string;
@@ -808,16 +883,16 @@ function from_candid_record_n28(value: {
 } {
     return {
         id: value.id,
-        target_user_name: record_opt_to_undefined(from_candid_opt_n29(value.target_user_name)),
+        target_user_name: record_opt_to_undefined(from_candid_opt_n35(value.target_user_name)),
         action_type: value.action_type,
         actor_id: value.actor_id,
         created_at_ms: value.created_at_ms,
         details: value.details,
         table_name: value.table_name,
-        target_user_id: record_opt_to_undefined(from_candid_opt_n29(value.target_user_id))
+        target_user_id: record_opt_to_undefined(from_candid_opt_n35(value.target_user_id))
     };
 }
-function from_candid_record_n34(value: {
+function from_candid_record_n40(value: {
     total: number;
     items: Array<_Feedback>;
 }): {
@@ -826,10 +901,10 @@ function from_candid_record_n34(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n35(value.items)
+        items: from_candid_vec_n41(value.items)
     };
 }
-function from_candid_record_n37(value: {
+function from_candid_record_n43(value: {
     id: string;
     status: _FeedbackStatus;
     title: [] | [string];
@@ -854,15 +929,15 @@ function from_candid_record_n37(value: {
 } {
     return {
         id: value.id,
-        status: from_candid_FeedbackStatus_n38(value.status),
-        title: record_opt_to_undefined(from_candid_opt_n29(value.title)),
+        status: from_candid_FeedbackStatus_n44(value.status),
+        title: record_opt_to_undefined(from_candid_opt_n35(value.title)),
         kind: value.kind,
         user: value.user,
-        page_url: record_opt_to_undefined(from_candid_opt_n29(value.page_url)),
+        page_url: record_opt_to_undefined(from_candid_opt_n35(value.page_url)),
         updated_at_ms: value.updated_at_ms,
         created_at_ms: value.created_at_ms,
         message: value.message,
-        admin_notes: record_opt_to_undefined(from_candid_opt_n29(value.admin_notes))
+        admin_notes: record_opt_to_undefined(from_candid_opt_n35(value.admin_notes))
     };
 }
 function from_candid_variant_n13(value: {
@@ -885,26 +960,7 @@ function from_candid_variant_n16(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n17(value: {
-    Ok: _SponsorPerformance;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: SponsorPerformance;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_vec_n17(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -929,7 +985,45 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n21(value: {
+function from_candid_variant_n22(value: {
+    Ok: Array<_SponsorBenchmarkRow>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<SponsorBenchmarkRow>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n23(value: {
+    Ok: _SponsorPerformance;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: SponsorPerformance;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n27(value: {
     Ok: Array<_AdminAlert>;
 } | {
     Err: string;
@@ -942,32 +1036,7 @@ function from_candid_variant_n21(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n22(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n24(value: {
-    Ok: {
-        total: number;
-        items: Array<_AuditLog>;
-    };
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: {
-        total: number;
-        items: Array<AuditLog>;
-    };
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_record_n25(value.Ok)
+        Ok: from_candid_vec_n28(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -992,7 +1061,32 @@ function from_candid_variant_n3(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n33(value: {
+function from_candid_variant_n30(value: {
+    Ok: {
+        total: number;
+        items: Array<_AuditLog>;
+    };
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: {
+        total: number;
+        items: Array<AuditLog>;
+    };
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_record_n31(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n39(value: {
     Ok: {
         total: number;
         items: Array<_Feedback>;
@@ -1011,20 +1105,11 @@ function from_candid_variant_n33(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n34(value.Ok)
+        Ok: from_candid_record_n40(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
-}
-function from_candid_variant_n39(value: {
-    Open: null;
-} | {
-    InProgress: null;
-} | {
-    Resolved: null;
-}): FeedbackStatus {
-    return "Open" in value ? FeedbackStatus.Open : "InProgress" in value ? FeedbackStatus.InProgress : "Resolved" in value ? FeedbackStatus.Resolved : value;
 }
 function from_candid_variant_n4(value: {
     Ok: Array<_EngagementDayPoint>;
@@ -1045,7 +1130,16 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n40(value: {
+function from_candid_variant_n45(value: {
+    Open: null;
+} | {
+    InProgress: null;
+} | {
+    Resolved: null;
+}): FeedbackStatus {
+    return "Open" in value ? FeedbackStatus.Open : "InProgress" in value ? FeedbackStatus.InProgress : "Resolved" in value ? FeedbackStatus.Resolved : value;
+}
+function from_candid_variant_n46(value: {
     Ok: _PerfAggregate;
 } | {
     Err: string;
@@ -1064,7 +1158,7 @@ function from_candid_variant_n40(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n41(value: {
+function from_candid_variant_n49(value: {
     Ok: _Feedback;
 } | {
     Err: string;
@@ -1077,7 +1171,7 @@ function from_candid_variant_n41(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Feedback_n36(value.Ok)
+        Ok: from_candid_Feedback_n42(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1184,34 +1278,43 @@ function from_candid_variant_n9(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n22(value: Array<_AdminAlert>): Array<AdminAlert> {
+function from_candid_vec_n17(value: Array<_Benchmark>): Array<Benchmark> {
+    return value.map((x)=>from_candid_Benchmark_n18(x));
+}
+function from_candid_vec_n28(value: Array<_AdminAlert>): Array<AdminAlert> {
     return value.map((x)=>from_candid_AdminAlert_n10(x));
 }
-function from_candid_vec_n26(value: Array<_AuditLog>): Array<AuditLog> {
-    return value.map((x)=>from_candid_AuditLog_n27(x));
+function from_candid_vec_n32(value: Array<_AuditLog>): Array<AuditLog> {
+    return value.map((x)=>from_candid_AuditLog_n33(x));
 }
-function from_candid_vec_n35(value: Array<_Feedback>): Array<Feedback> {
-    return value.map((x)=>from_candid_Feedback_n36(x));
+function from_candid_vec_n41(value: Array<_Feedback>): Array<Feedback> {
+    return value.map((x)=>from_candid_Feedback_n42(x));
 }
-function to_candid_AlertStatus_n19(value: AlertStatus): _AlertStatus {
-    return to_candid_variant_n20(value);
+function to_candid_AlertStatus_n25(value: AlertStatus): _AlertStatus {
+    return to_candid_variant_n26(value);
 }
-function to_candid_FeedbackStatus_n31(value: FeedbackStatus): _FeedbackStatus {
-    return to_candid_variant_n32(value);
+function to_candid_FeedbackStatus_n37(value: FeedbackStatus): _FeedbackStatus {
+    return to_candid_variant_n38(value);
 }
 function to_candid_opt_n1(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n18(value: AlertStatus | null): [] | [_AlertStatus] {
-    return value === null ? candid_none() : candid_some(to_candid_AlertStatus_n19(value));
+function to_candid_opt_n24(value: AlertStatus | null): [] | [_AlertStatus] {
+    return value === null ? candid_none() : candid_some(to_candid_AlertStatus_n25(value));
 }
-function to_candid_opt_n23(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n29(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n30(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
-    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n31(value));
+function to_candid_opt_n36(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
+    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n37(value));
 }
-function to_candid_variant_n20(value: AlertStatus): {
+function to_candid_opt_n47(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n48(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_variant_n26(value: AlertStatus): {
     Open: null;
 } | {
     Resolved: null;
@@ -1222,7 +1325,7 @@ function to_candid_variant_n20(value: AlertStatus): {
         Resolved: null
     } : value;
 }
-function to_candid_variant_n32(value: FeedbackStatus): {
+function to_candid_variant_n38(value: FeedbackStatus): {
     Open: null;
 } | {
     InProgress: null;

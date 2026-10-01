@@ -790,6 +790,7 @@ export interface club_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    my_role_grants(): Promise<Array<RoleGrant>>;
     reject_club_join_request(id: string): Promise<{
         __kind__: "Ok";
         Ok: ClubJoinRequest;
@@ -1664,6 +1665,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.mutate(to_candid_Request_n116(arg0));
         return from_candid_variant_n121(result);
+    }
+    async my_role_grants(): Promise<Array<RoleGrant>> {
+        const result = await this.actor.my_role_grants();
+        return from_candid_vec_n47(result);
     }
     async reject_club_join_request(arg0: string): Promise<{
         __kind__: "Ok";
