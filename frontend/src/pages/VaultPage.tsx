@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -247,29 +249,49 @@ function SupabaseVaultPage() {
       
       if (isAppAdmin || isClubAdminRole || isLeagueAdmin || isCoach || isCommitteeMember) {
         // Admins, committee members, coaches and league admins can see all mini-leagues
-        const { data } = await supabase
-          .from("mini_leagues")
-          .select("id, name")
-          .eq("club_id", clubId)
-          .order("name");
+        const data = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            const { data } = await supabase
+              .from("mini_leagues")
+              .select("id, name")
+              .eq("club_id", clubId)
+              .order("name");
+            return data || [];
+          },
+          icp: async (ctx) => {
+            const leagues = await listLiveMiniLeaguesByClub(ctx, clubId);
+            return leagues
+              .map((l) => ({ id: l.id, name: l.name }))
+              .sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
         console.log("[Vault Mini-Leagues] Fetched leagues:", data);
         return data || [];
       } else {
         // Parents can only see leagues their children are in
         console.log("[Vault Mini-Leagues] User doesn't have admin access, checking for children");
-        const { data: playerLeagues } = await supabase
-          .from("mini_league_players")
-          .select("mini_league_id, mini_leagues!inner(id, name, club_id)")
-          .eq("parent_user_id", user!.id);
-        
-        if (playerLeagues) {
-          const filtered = playerLeagues
-            .filter((pl: any) => pl.mini_leagues?.club_id === clubId)
-            .map((pl: any) => ({ id: pl.mini_leagues.id, name: pl.mini_leagues.name }));
-          console.log("[Vault Mini-Leagues] Leagues via children:", filtered);
-          return filtered;
-        }
-        return [];
+        const filtered = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            const { data: playerLeagues } = await supabase
+              .from("mini_league_players")
+              .select("mini_league_id, mini_leagues!inner(id, name, club_id)")
+              .eq("parent_user_id", user!.id);
+            if (!playerLeagues) return [];
+            return playerLeagues
+              .filter((pl: any) => pl.mini_leagues?.club_id === clubId)
+              .map((pl: any) => ({ id: pl.mini_leagues.id, name: pl.mini_leagues.name }));
+          },
+          icp: async (ctx) => {
+            // my_leagues() is already scoped to the signed-in identity's
+            // principal, so no parent_user_id uuid filter is needed here.
+            const leagues = await listMyLiveMiniLeagues(ctx);
+            return leagues
+              .filter((l) => l.club_id === clubId)
+              .map((l) => ({ id: l.id, name: l.name }));
+          },
+        });
+        console.log("[Vault Mini-Leagues] Leagues via children:", filtered);
+        return filtered;
       }
     },
     enabled: currentView.type === "club" && !!user,
@@ -509,11 +531,24 @@ function SupabaseVaultPage() {
       try {
         if (miniLeagueId) {
           // Navigate directly to mini-league vault folder
-          const { data: league } = await supabase
-            .from("mini_leagues")
-            .select("id, name, club_id")
-            .eq("id", miniLeagueId)
-            .maybeSingle();
+          const league = await withFeatureBackend("mini_leagues", {
+            supabase: async () => {
+              const { data } = await supabase
+                .from("mini_leagues")
+                .select("id, name, club_id")
+                .eq("id", miniLeagueId)
+                .maybeSingle();
+              return data;
+            },
+            icp: async (ctx) => {
+              try {
+                const l = await getLiveMiniLeague(ctx, miniLeagueId);
+                return { id: l.id, name: l.name, club_id: l.club_id };
+              } catch {
+                return null;
+              }
+            },
+          });
 
           if (league) {
             const club = userClubs.find(c => c.id === league.club_id);

@@ -27,6 +27,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { recordPointsHistory } from "@/lib/pointsHistory";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -224,29 +226,48 @@ export default function PlayerOfMatchSelector({
       // Only award points if there's a reward configured
       if (pointsToAward > 0) {
         if (userId) {
-          // Atomic points increment
-          const { data: newBalance, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
-            _user_id: userId,
-            _amount: pointsToAward,
-            _club_id: clubId,
+          // Atomic points increment (+ matching history entry, recorded
+          // atomically by award_points on the ICP branch — see
+          // live/features/points.ts doc comment).
+          const balanceAfter = await withFeatureBackend("points", {
+            supabase: async () => {
+              const { data: newBalance, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
+                _user_id: userId,
+                _amount: pointsToAward,
+                _club_id: clubId,
+              });
+
+              if (updateError) throw updateError;
+
+              const balance = newBalance || 0;
+
+              await recordPointsHistory({
+                userId,
+                clubId,
+                amount: pointsToAward,
+                balanceAfter: balance,
+                sourceType: 'player_of_match',
+                sourceId: eventId,
+                description: 'Player of the Match award',
+                createdBy: user!.id,
+              });
+
+              return balance;
+            },
+            icp: async (ctx) => {
+              const entry = await awardLivePoints(
+                ctx,
+                clubId,
+                subjectForUser(userId),
+                'player_of_match',
+                eventId,
+                pointsToAward,
+                'Player of the Match award',
+              );
+              return entry.balance_after;
+            },
           });
-
-          if (updateError) throw updateError;
-
-          const balanceAfter = newBalance || 0;
           const previousPoints = balanceAfter - pointsToAward;
-
-          // Record in points history
-          await recordPointsHistory({
-            userId,
-            clubId,
-            amount: pointsToAward,
-            balanceAfter,
-            sourceType: 'player_of_match',
-            sourceId: eventId,
-            description: 'Player of the Match award',
-            createdBy: user!.id,
-          });
 
           // Check reward threshold
           const { checkRewardThreshold } = await import("@/lib/rewardThresholdCheck");
@@ -267,36 +288,55 @@ export default function PlayerOfMatchSelector({
             related_id: eventId,
           });
         } else if (childId) {
-          // Atomic child points increment
-          const { data: childNewBalance, error: childUpdateError } = await (supabase.rpc as any)('increment_child_ignite_points', {
-            _child_id: childId,
-            _amount: pointsToAward,
-            _club_id: clubId,
-          });
-
-          if (childUpdateError) throw childUpdateError;
-
-          const childBalanceAfter = childNewBalance || 0;
-          const previousChildPoints = childBalanceAfter - pointsToAward;
-
-          // Get child info for notification
+          // Get child info for notification (no canister equivalent for this
+          // display-only lookup — see live/features/points.ts doc comment).
           const { data: child } = await supabase
             .from("children")
             .select("parent_id, name")
             .eq("id", childId)
             .single();
 
-          // Record in points history for child
-          await recordPointsHistory({
-            childId,
-            clubId,
-            amount: pointsToAward,
-            balanceAfter: childBalanceAfter,
-            sourceType: 'player_of_match',
-            sourceId: eventId,
-            description: `Player of the Match award for ${child?.name}`,
-            createdBy: user!.id,
+          // Atomic child points increment (+ matching history entry,
+          // recorded atomically by award_points on the ICP branch).
+          const childBalanceAfter = await withFeatureBackend("points", {
+            supabase: async () => {
+              const { data: childNewBalance, error: childUpdateError } = await (supabase.rpc as any)('increment_child_ignite_points', {
+                _child_id: childId,
+                _amount: pointsToAward,
+                _club_id: clubId,
+              });
+
+              if (childUpdateError) throw childUpdateError;
+
+              const balance = childNewBalance || 0;
+
+              await recordPointsHistory({
+                childId,
+                clubId,
+                amount: pointsToAward,
+                balanceAfter: balance,
+                sourceType: 'player_of_match',
+                sourceId: eventId,
+                description: `Player of the Match award for ${child?.name}`,
+                createdBy: user!.id,
+              });
+
+              return balance;
+            },
+            icp: async (ctx) => {
+              const entry = await awardLivePoints(
+                ctx,
+                clubId,
+                subjectForChild(childId),
+                'player_of_match',
+                eventId,
+                pointsToAward,
+                `Player of the Match award for ${child?.name}`,
+              );
+              return entry.balance_after;
+            },
           });
+          const previousChildPoints = childBalanceAfter - pointsToAward;
 
           // Check reward threshold for child
           const { checkRewardThreshold: checkChildReward } = await import("@/lib/rewardThresholdCheck");
@@ -378,42 +418,70 @@ export default function PlayerOfMatchSelector({
       // Best-effort points deduction + history. Failures here are logged
       // but don't roll back the removal (the award is already gone in UI).
       try {
-        if (playerOfMatch.user_id) {
-          const { data: newBalance } = await (supabase.rpc as any)('increment_ignite_points', {
-            _user_id: playerOfMatch.user_id,
-            _amount: -pointsToDeduct,
-            _club_id: clubId,
+        if (pointsToDeduct > 0 && playerOfMatch.user_id) {
+          await withFeatureBackend("points", {
+            supabase: async () => {
+              const { data: newBalance } = await (supabase.rpc as any)('increment_ignite_points', {
+                _user_id: playerOfMatch.user_id,
+                _amount: -pointsToDeduct,
+                _club_id: clubId,
+              });
+              await recordPointsHistory({
+                userId: playerOfMatch.user_id,
+                clubId,
+                amount: -pointsToDeduct,
+                balanceAfter: newBalance || 0,
+                sourceType: 'pom_removed',
+                sourceId: eventId,
+                description: 'Player of the Match award removed',
+                createdBy: user!.id,
+              });
+            },
+            icp: async (ctx) => {
+              // Deduct via a negative award — award_points records the
+              // compensating history entry atomically.
+              await awardLivePoints(
+                ctx,
+                clubId,
+                subjectForUser(playerOfMatch.user_id),
+                'pom_removed',
+                eventId,
+                -pointsToDeduct,
+                'Player of the Match award removed',
+              );
+            },
           });
-          if (pointsToDeduct > 0) {
-            await recordPointsHistory({
-              userId: playerOfMatch.user_id,
-              clubId,
-              amount: -pointsToDeduct,
-              balanceAfter: newBalance || 0,
-              sourceType: 'pom_removed',
-              sourceId: eventId,
-              description: 'Player of the Match award removed',
-              createdBy: user!.id,
-            });
-          }
-        } else if (playerOfMatch.child_id) {
-          const { data: childNewBalance } = await (supabase.rpc as any)('increment_child_ignite_points', {
-            _child_id: playerOfMatch.child_id,
-            _amount: -pointsToDeduct,
-            _club_id: clubId,
+        } else if (pointsToDeduct > 0 && playerOfMatch.child_id) {
+          await withFeatureBackend("points", {
+            supabase: async () => {
+              const { data: childNewBalance } = await (supabase.rpc as any)('increment_child_ignite_points', {
+                _child_id: playerOfMatch.child_id,
+                _amount: -pointsToDeduct,
+                _club_id: clubId,
+              });
+              await recordPointsHistory({
+                childId: playerOfMatch.child_id,
+                clubId,
+                amount: -pointsToDeduct,
+                balanceAfter: childNewBalance || 0,
+                sourceType: 'pom_removed',
+                sourceId: eventId,
+                description: 'Player of the Match award removed',
+                createdBy: user!.id,
+              });
+            },
+            icp: async (ctx) => {
+              await awardLivePoints(
+                ctx,
+                clubId,
+                subjectForChild(playerOfMatch.child_id),
+                'pom_removed',
+                eventId,
+                -pointsToDeduct,
+                'Player of the Match award removed',
+              );
+            },
           });
-          if (pointsToDeduct > 0) {
-            await recordPointsHistory({
-              childId: playerOfMatch.child_id,
-              clubId,
-              amount: -pointsToDeduct,
-              balanceAfter: childNewBalance || 0,
-              sourceType: 'pom_removed',
-              sourceId: eventId,
-              description: 'Player of the Match award removed',
-              createdBy: user!.id,
-            });
-          }
         }
       } catch (e) {
         console.error("[POM remove] points cleanup failed (award already removed):", e);

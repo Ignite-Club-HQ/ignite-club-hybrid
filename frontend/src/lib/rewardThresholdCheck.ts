@@ -1,4 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveClubRewards } from "@/live/features/points";
 
 /**
  * Checks if a user/child has crossed a reward threshold after receiving points.
@@ -23,23 +25,37 @@ export async function checkRewardThreshold({
     if (newPoints <= previousPoints) return undefined;
 
     // Find highest reward threshold that was just crossed
-    const { data: rewards } = await supabase
-      .from("club_rewards")
-      .select("id, name, points_required")
-      .eq("club_id", clubId)
-      .eq("is_active", true)
-      .neq("reward_type", "player_of_match")
-      .lte("points_required", newPoints)
-      .gt("points_required", previousPoints)
-      .order("points_required", { ascending: false })
-      .limit(1);
+    const crossedRewards = await withFeatureBackend("points", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("club_rewards")
+          .select("id, name, points_required")
+          .eq("club_id", clubId)
+          .eq("is_active", true)
+          .neq("reward_type", "player_of_match")
+          .lte("points_required", newPoints)
+          .gt("points_required", previousPoints)
+          .order("points_required", { ascending: false })
+          .limit(1);
+        return (data ?? []) as { id: string; name: string; points_required: number }[];
+      },
+      icp: async (ctx) => {
+        const rewards = await listLiveClubRewards(ctx, clubId, null, true);
+        return rewards
+          .filter((r) => r.reward_type !== "player_of_match" && r.points_required <= newPoints && r.points_required > previousPoints)
+          .sort((a, b) => b.points_required - a.points_required)
+          .slice(0, 1)
+          .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required }));
+      },
+    });
 
-    if (!rewards || rewards.length === 0) return undefined;
+    if (!crossedRewards || crossedRewards.length === 0) return undefined;
 
-    const reward = rewards[0];
+    const reward = crossedRewards[0];
     const notifyUserId = userId || (childId ? await getParentId(childId) : null);
 
     if (notifyUserId) {
+      // Notifications table has no canister equivalent — always write via Supabase.
       await supabase.from("notifications").insert({
         user_id: notifyUserId,
         type: "reward_unlocked",

@@ -43,6 +43,8 @@ import {
 import { invalidateNotificationSurfaces } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 // Preload Ignite icon so it's instantly available when switching from club theme
 const preloadedIgniteIcon = new Image();
@@ -1058,11 +1060,24 @@ export function AppHeader() {
           return;
         case "member_joined":
           if (relatedId) {
-            const { data: miniLeagueCheckMJ } = await supabase
-              .from("mini_leagues")
-              .select("id")
-              .eq("id", relatedId)
-              .maybeSingle();
+            const miniLeagueCheckMJ = await withFeatureBackend("mini_leagues", {
+              supabase: async () => {
+                const { data } = await supabase
+                  .from("mini_leagues")
+                  .select("id")
+                  .eq("id", relatedId)
+                  .maybeSingle();
+                return data;
+              },
+              icp: async (ctx) => {
+                try {
+                  const league = await getLiveMiniLeague(ctx, relatedId);
+                  return { id: league.id };
+                } catch {
+                  return null;
+                }
+              },
+            });
             if (miniLeagueCheckMJ) {
               navigate(`/mini-leagues/${relatedId}`);
             } else {

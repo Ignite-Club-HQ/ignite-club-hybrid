@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2, Check, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -86,39 +87,47 @@ export function MatchDutiesDialog({
   // Fetch league members for duty assignment
   const { data: leagueMembers } = useQuery({
     queryKey: ["mini-league-duty-assignees", miniLeagueId],
-    queryFn: async () => {
-      const { data: league, error: leagueError } = await supabase
-        .from("mini_leagues")
-        .select("club_id")
-        .eq("id", miniLeagueId)
-        .single();
-      if (leagueError) throw leagueError;
-      
-      const { data: playersData, error: playersError } = await supabase
-        .from("mini_league_players")
-        .select("parent_user_id")
-        .eq("mini_league_id", miniLeagueId)
-        .not("parent_user_id", "is", null);
-      if (playersError) throw playersError;
-      
-      const parentIds = [...new Set(playersData?.map(p => p.parent_user_id).filter(Boolean) as string[])];
-      
-      const { data: adminRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", league.club_id)
-        .in("role", ["club_admin", "league_admin"]);
-      if (rolesError) throw rolesError;
-      
-      const adminIds = adminRoles?.map(r => r.user_id) || [];
-      const allUserIds = [...new Set([...parentIds, ...adminIds])];
-      if (!allUserIds.length) return [];
-      
-      const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(allUserIds);
-      if (profilesError) throw profilesError;
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data: league, error: leagueError } = await supabase
+            .from("mini_leagues")
+            .select("club_id")
+            .eq("id", miniLeagueId)
+            .single();
+          if (leagueError) throw leagueError;
 
-      return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
-    },
+          const { data: playersData, error: playersError } = await supabase
+            .from("mini_league_players")
+            .select("parent_user_id")
+            .eq("mini_league_id", miniLeagueId)
+            .not("parent_user_id", "is", null);
+          if (playersError) throw playersError;
+
+          const parentIds = [...new Set(playersData?.map(p => p.parent_user_id).filter(Boolean) as string[])];
+
+          const { data: adminRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("club_id", league.club_id)
+            .in("role", ["club_admin", "league_admin"]);
+          if (rolesError) throw rolesError;
+
+          const adminIds = adminRoles?.map(r => r.user_id) || [];
+          const allUserIds = [...new Set([...parentIds, ...adminIds])];
+          if (!allUserIds.length) return [];
+
+          const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(allUserIds);
+          if (profilesError) throw profilesError;
+
+          return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+        },
+        // Gated: resolving duty assignees requires joining club_admin/
+        // league_admin roles (user_roles) and Supabase profile rows by uuid,
+        // neither of which has a canister equivalent. Rather than invent
+        // data, ICP-routed sessions see an empty assignee list here.
+        icp: async () => [] as Array<{ id: string; display_name: string | null }>,
+      }),
     enabled: open && !!miniLeagueId,
   });
 

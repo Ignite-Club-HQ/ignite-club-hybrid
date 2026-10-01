@@ -58,6 +58,9 @@ import { recordPointsHistory } from "@/lib/pointsHistory";
 import type { Database } from "@/integrations/supabase/types";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveAuditLogs } from "@/live/features/insights";
+
 type AppRole = Database["public"]["Enums"]["app_role"];
 
 /**
@@ -374,13 +377,43 @@ function SupabaseManageUsersPage() {
   const { data: auditLogs, isLoading: loadingAuditLogs } = useQuery({
     queryKey: ["audit-logs"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(100);
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // Provisional mapping: canister actor_id is a Principal, not a
+          // Supabase user id, so `actor_id`/`actor_name` fall back to the
+          // principal text — there is no profile join on the canister.
+          const { items } = await listLiveAuditLogs(ctx, { limit: 100 });
+          return items.map((item) => ({
+            id: item.id,
+            action_type: item.action_type,
+            table_name: item.table_name,
+            actor_id: item.actor.toText(),
+            actor_name: item.actor.toText(),
+            target_user_id: item.target_user_id[0] ?? null,
+            target_user_name: item.target_user_name[0] ?? null,
+            // Canister `details` is a plain string; the Supabase branch
+            // stores structured jsonb, so parse when possible and fall back
+            // to an empty object rather than fabricating fields.
+            details: (() => {
+              try {
+                return JSON.parse(item.details);
+              } catch {
+                return {};
+              }
+            })(),
+            created_at: new Date(Number(item.created_at_ms)).toISOString(),
+          }));
+        },
+      });
     },
     enabled: isAppAdmin === true,
   });

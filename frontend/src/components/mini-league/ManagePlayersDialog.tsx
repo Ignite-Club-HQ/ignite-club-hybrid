@@ -4,6 +4,7 @@ import { Users, Trash2, Loader2, Star, CheckSquare, Pencil, Check, X, UserRound,
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-league/AddSecondParentDialog").then(m => ({ default: m.AddSecondParentDialog })));
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -176,15 +177,23 @@ export function ManagePlayersDialog({
   // Fetch players
   const { data: players, isLoading: playersLoading } = useQuery({
     queryKey: ["mini-league-players", miniLeagueId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_players")
-        .select("*")
-        .eq("mini_league_id", miniLeagueId)
-        .order("ability_rating", { ascending: false });
-      if (error) throw error;
-      return data as MiniLeaguePlayer[];
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .select("*")
+            .eq("mini_league_id", miniLeagueId)
+            .order("ability_rating", { ascending: false });
+          if (error) throw error;
+          return data as MiniLeaguePlayer[];
+        },
+        // Gated: this dialog's roster management (ratings, names, second
+        // parents, deletion cascades into children/child_guardians) has no
+        // canister equivalent yet. ICP-routed sessions see an empty roster
+        // rather than invented data.
+        icp: async () => [] as MiniLeaguePlayer[],
+      }),
     enabled: !!miniLeagueId && open,
   });
 
@@ -283,33 +292,42 @@ export function ManagePlayersDialog({
 
   // Delete player mutation
   const deletePlayerMutation = useMutation({
-    mutationFn: async (playerId: string) => {
-      const { data: player } = await supabase
-        .from("mini_league_players")
-        .select("child_id")
-        .eq("id", playerId)
-        .single();
+    mutationFn: (playerId: string) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data: player } = await supabase
+            .from("mini_league_players")
+            .select("child_id")
+            .eq("id", playerId)
+            .single();
 
-      const { error } = await supabase.from("mini_league_players").delete().eq("id", playerId);
-      if (error) throw error;
+          const { error } = await supabase.from("mini_league_players").delete().eq("id", playerId);
+          if (error) throw error;
 
-      if (player?.child_id) {
-        await supabase
-          .from("child_mini_league_assignments")
-          .delete()
-          .eq("child_id", player.child_id)
-          .eq("mini_league_id", miniLeagueId);
+          if (player?.child_id) {
+            await supabase
+              .from("child_mini_league_assignments")
+              .delete()
+              .eq("child_id", player.child_id)
+              .eq("mini_league_id", miniLeagueId);
 
-        const [{ count: leagueCount }, { count: teamCount }] = await Promise.all([
-          supabase.from("child_mini_league_assignments").select("id", { count: "exact", head: true }).eq("child_id", player.child_id),
-          supabase.from("child_team_assignments").select("id", { count: "exact", head: true }).eq("child_id", player.child_id),
-        ]);
+            const [{ count: leagueCount }, { count: teamCount }] = await Promise.all([
+              supabase.from("child_mini_league_assignments").select("id", { count: "exact", head: true }).eq("child_id", player.child_id),
+              supabase.from("child_team_assignments").select("id", { count: "exact", head: true }).eq("child_id", player.child_id),
+            ]);
 
-        if ((leagueCount || 0) === 0 && (teamCount || 0) === 0) {
-          await supabase.from("children").delete().eq("id", player.child_id);
-        }
-      }
-    },
+            if ((leagueCount || 0) === 0 && (teamCount || 0) === 0) {
+              await supabase.from("children").delete().eq("id", player.child_id);
+            }
+          }
+        },
+        // Gated: removing a player cascades into child_mini_league_assignments/
+        // children with no canister equivalent. Disabled under ICP routing
+        // rather than silently touching Supabase from an ICP session.
+        icp: async () => {
+          throw new Error("Removing players isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       toast.success("Player removed");
@@ -319,35 +337,42 @@ export function ManagePlayersDialog({
 
   // Bulk delete players mutation
   const bulkDeletePlayersMutation = useMutation({
-    mutationFn: async (playerIds: string[]) => {
-      const { data: playersToDelete } = await supabase
-        .from("mini_league_players")
-        .select("id, child_id")
-        .in("id", playerIds);
+    mutationFn: (playerIds: string[]) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data: playersToDelete } = await supabase
+            .from("mini_league_players")
+            .select("id, child_id")
+            .in("id", playerIds);
 
-      const childIds = (playersToDelete || []).map(p => p.child_id).filter(Boolean) as string[];
+          const childIds = (playersToDelete || []).map(p => p.child_id).filter(Boolean) as string[];
 
-      const { error } = await supabase.from("mini_league_players").delete().in("id", playerIds);
-      if (error) throw error;
+          const { error } = await supabase.from("mini_league_players").delete().in("id", playerIds);
+          if (error) throw error;
 
-      if (childIds.length > 0) {
-        await supabase
-          .from("child_mini_league_assignments")
-          .delete()
-          .in("child_id", childIds)
-          .eq("mini_league_id", miniLeagueId);
+          if (childIds.length > 0) {
+            await supabase
+              .from("child_mini_league_assignments")
+              .delete()
+              .in("child_id", childIds)
+              .eq("mini_league_id", miniLeagueId);
 
-        for (const childId of childIds) {
-          const [{ count: leagueCount }, { count: teamCount }] = await Promise.all([
-            supabase.from("child_mini_league_assignments").select("id", { count: "exact", head: true }).eq("child_id", childId),
-            supabase.from("child_team_assignments").select("id", { count: "exact", head: true }).eq("child_id", childId),
-          ]);
-          if ((leagueCount || 0) === 0 && (teamCount || 0) === 0) {
-            await supabase.from("children").delete().eq("id", childId);
+            for (const childId of childIds) {
+              const [{ count: leagueCount }, { count: teamCount }] = await Promise.all([
+                supabase.from("child_mini_league_assignments").select("id", { count: "exact", head: true }).eq("child_id", childId),
+                supabase.from("child_team_assignments").select("id", { count: "exact", head: true }).eq("child_id", childId),
+              ]);
+              if ((leagueCount || 0) === 0 && (teamCount || 0) === 0) {
+                await supabase.from("children").delete().eq("id", childId);
+              }
+            }
           }
-        }
-      }
-    },
+        },
+        // Gated: same child/team assignment cascades as single-player delete.
+        icp: async () => {
+          throw new Error("Removing players isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       setSelectedPlayerIds(new Set());
@@ -360,24 +385,31 @@ export function ManagePlayersDialog({
 
   // Update ability rating mutation
   const updateAbilityMutation = useMutation({
-    mutationFn: async ({ playerId, childId, newRating }: { playerId: string; childId: string | null; newRating: number }) => {
-      // DB CHECK constraint requires ability_rating IS NULL or 1..5.
-      // "Unrated" (group 0) maps to NULL.
-      const dbValue = newRating >= 1 && newRating <= 5 ? newRating : null;
-      const { error } = await supabase
-        .from("mini_league_players")
-        .update({ ability_rating: dbValue })
-        .eq("id", playerId);
-      if (error) throw error;
+    mutationFn: ({ playerId, childId, newRating }: { playerId: string; childId: string | null; newRating: number }) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          // DB CHECK constraint requires ability_rating IS NULL or 1..5.
+          // "Unrated" (group 0) maps to NULL.
+          const dbValue = newRating >= 1 && newRating <= 5 ? newRating : null;
+          const { error } = await supabase
+            .from("mini_league_players")
+            .update({ ability_rating: dbValue })
+            .eq("id", playerId);
+          if (error) throw error;
 
-      if (childId) {
-        await supabase
-          .from("child_mini_league_assignments")
-          .update({ ability_rating: dbValue })
-          .eq("child_id", childId)
-          .eq("mini_league_id", miniLeagueId);
-      }
-    },
+          if (childId) {
+            await supabase
+              .from("child_mini_league_assignments")
+              .update({ ability_rating: dbValue })
+              .eq("child_id", childId)
+              .eq("mini_league_id", miniLeagueId);
+          }
+        },
+        // Gated: also mirrors into child_mini_league_assignments, no canister equivalent.
+        icp: async () => {
+          throw new Error("Updating player ratings isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
     },
@@ -386,20 +418,27 @@ export function ManagePlayersDialog({
 
   // Update player name mutation
   const updateNameMutation = useMutation({
-    mutationFn: async ({ playerId, childId, newName }: { playerId: string; childId: string | null; newName: string }) => {
-      const { error } = await supabase
-        .from("mini_league_players")
-        .update({ name: newName })
-        .eq("id", playerId);
-      if (error) throw error;
+    mutationFn: ({ playerId, childId, newName }: { playerId: string; childId: string | null; newName: string }) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("mini_league_players")
+            .update({ name: newName })
+            .eq("id", playerId);
+          if (error) throw error;
 
-      if (childId) {
-        await supabase
-          .from("children")
-          .update({ name: newName })
-          .eq("id", childId);
-      }
-    },
+          if (childId) {
+            await supabase
+              .from("children")
+              .update({ name: newName })
+              .eq("id", childId);
+          }
+        },
+        // Gated: also mirrors into the Supabase-only children table.
+        icp: async () => {
+          throw new Error("Renaming players isn't available yet on this backend.");
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       setEditingPlayerId(null);

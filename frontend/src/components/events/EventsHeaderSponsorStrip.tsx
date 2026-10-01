@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubSettings } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -21,7 +23,26 @@ const STRIP_KEY = "events_header";
 // during first-ever cold load to prevent content-jump when queries resolve.
 const RESERVED_CLASS = "min-h-[44px]";
 
-// Any club may opt in via clubs.events_sponsor_strip_enabled.
+
+// Any club may opt in via clubs.events_sponsor_strip_enabled (or, under an
+// ICP-routed club, the club_domain canister's events_sponsor_strip_enabled
+// setting — see live/featureRouter).
+async function isEventsStripEnabledForClub(candidateClubId: string): Promise<boolean> {
+  return withFeatureBackend("membership", {
+    supabase: async () => {
+      const { data } = await supabase
+        .from("clubs")
+        .select("events_sponsor_strip_enabled")
+        .eq("id", candidateClubId)
+        .maybeSingle();
+      return !!(data as any)?.events_sponsor_strip_enabled;
+    },
+    icp: async (ctx) => {
+      const settingsOpt = await getLiveClubSettings(ctx, candidateClubId);
+      return !!settingsOpt[0]?.events_sponsor_strip_enabled;
+    },
+  });
+}
 
 const DISMISS_TTL_MS = 24 * 60 * 60 * 1000;
 const dismissKey = (userId: string | undefined, clubId: string) =>
@@ -71,13 +92,8 @@ export function EventsHeaderSponsorStrip({
     staleTime: 5 * 60_000,
     queryFn: async () => {
       if (activeClubFilter) {
-        const { data } = await supabase
-          .from("clubs")
-          .select("events_sponsor_strip_enabled")
-          .eq("id", activeClubFilter)
-          .maybeSingle();
-        if (!(data as any)?.events_sponsor_strip_enabled) return { clubId: null as string | null };
-        return { clubId: activeClubFilter };
+        const enabled = await isEventsStripEnabledForClub(activeClubFilter);
+        return { clubId: enabled ? activeClubFilter : (null as string | null) };
       }
       const { data: roles } = await supabase
         .from("user_roles")
@@ -92,12 +108,12 @@ export function EventsHeaderSponsorStrip({
         (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
       }
       if (clubIds.size === 0) return { clubId: null as string | null };
-      const { data: enabledClubs } = await supabase
-        .from("clubs")
-        .select("id, events_sponsor_strip_enabled")
-        .in("id", Array.from(clubIds));
-      const hit = (enabledClubs ?? []).find((c: any) => c.events_sponsor_strip_enabled);
-      return { clubId: hit?.id ?? null };
+      for (const candidateClubId of clubIds) {
+        if (await isEventsStripEnabledForClub(candidateClubId)) {
+          return { clubId: candidateClubId };
+        }
+      }
+      return { clubId: null as string | null };
     },
   });
   const clubId = resolved?.clubId ?? null;

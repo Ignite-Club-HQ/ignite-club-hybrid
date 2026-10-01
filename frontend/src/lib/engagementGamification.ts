@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { awardLivePoints, listLiveClubRewards, subjectForUser } from "@/live/features/points";
 
 /**
  * Gamification helpers that run after engagement points are awarded.
@@ -57,6 +59,11 @@ export async function checkLeaderboardPosition({
   userId: string;
   clubId: string;
 }): Promise<void> {
+  // The canister exposes `get_leaderboard` (points-ordered, no documented "window"
+  // value list or guaranteed total ordering semantics) but no direct "this user's
+  // rank" query like the Supabase `get_user_leaderboard_rank` RPC. Scanning the full
+  // leaderboard client-side to reconstruct a rank would be guesswork against an
+  // undocumented contract, so this stays Supabase-only regardless of routing.
   try {
     const { data: rank } = await supabase.rpc('get_user_leaderboard_rank', {
       _user_id: userId,
@@ -167,22 +174,42 @@ export async function checkEngagementStreak({
     if (!awarded) return; // Already awarded this week
 
     // Increment points — scoped to the club
-    const { data: newPoints } = await (supabase.rpc as any)('increment_ignite_points', {
-      _user_id: userId,
-      _amount: bonusPoints,
-      _club_id: clubId,
-    });
+    const balanceAfter = await withFeatureBackend("points", {
+      supabase: async () => {
+        const { data: newPoints } = await (supabase.rpc as any)('increment_ignite_points', {
+          _user_id: userId,
+          _amount: bonusPoints,
+          _club_id: clubId,
+        });
+        const balance = newPoints || 0;
 
-    const balanceAfter = newPoints || 0;
+        // Record history
+        await recordPointsHistory({
+          userId,
+          clubId,
+          amount: bonusPoints,
+          balanceAfter: balance,
+          sourceType: 'weekly_chat_streak',
+          description: `🔥 ${streakLabel} engagement streak bonus!`,
+        });
 
-    // Record history
-    await recordPointsHistory({
-      userId,
-      clubId,
-      amount: bonusPoints,
-      balanceAfter,
-      sourceType: 'weekly_chat_streak',
-      description: `🔥 ${streakLabel} engagement streak bonus!`,
+        return balance;
+      },
+      icp: async (ctx) => {
+        // `award_points` records the matching history entry atomically —
+        // do not also call recordPointsHistory here (it no-ops on this
+        // branch anyway, see live/features/points.ts doc comment).
+        const entry = await awardLivePoints(
+          ctx,
+          clubId,
+          subjectForUser(userId),
+          'weekly_chat_streak',
+          `streak:${streak}`,
+          bonusPoints,
+          `🔥 ${streakLabel} engagement streak bonus!`,
+        );
+        return entry.balance_after;
+      },
     });
 
     // Send notification
@@ -221,15 +248,28 @@ export async function checkRewardProximity({
 }): Promise<void> {
   try {
     // Find the next reward above current points
-    const { data: rewards } = await supabase
-      .from("club_rewards")
-      .select("id, name, points_required")
-      .eq("club_id", clubId)
-      .eq("is_active", true)
-      .neq("reward_type", "player_of_match")
-      .gt("points_required", currentPoints)
-      .order("points_required", { ascending: true })
-      .limit(1);
+    const rewards = await withFeatureBackend("points", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("club_rewards")
+          .select("id, name, points_required")
+          .eq("club_id", clubId)
+          .eq("is_active", true)
+          .neq("reward_type", "player_of_match")
+          .gt("points_required", currentPoints)
+          .order("points_required", { ascending: true })
+          .limit(1);
+        return (data ?? []) as { id: string; name: string; points_required: number }[];
+      },
+      icp: async (ctx) => {
+        const all = await listLiveClubRewards(ctx, clubId, null, true);
+        return all
+          .filter((r) => r.reward_type !== "player_of_match" && r.points_required > currentPoints)
+          .sort((a, b) => a.points_required - b.points_required)
+          .slice(0, 1)
+          .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required }));
+      },
+    });
 
     if (!rewards || rewards.length === 0) return;
 

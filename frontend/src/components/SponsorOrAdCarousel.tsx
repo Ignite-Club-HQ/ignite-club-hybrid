@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubSettings } from "@/live/features/club";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
@@ -17,7 +19,26 @@ interface SponsorOrAdCarouselProps {
 // little breathing room so the layout doesn't shift when the ad resolves.
 const RESERVED_CLASS = "min-h-[112px]";
 
-// Events sponsor strip is per-club opt-in via clubs.events_sponsor_strip_enabled.
+// Events sponsor strip is per-club opt-in via clubs.events_sponsor_strip_enabled
+// (or, under an ICP-routed club, the club_domain canister's
+// events_sponsor_strip_enabled setting — see live/featureRouter).
+async function isEventsStripEnabledForClub(candidateClubId: string): Promise<boolean> {
+  return withFeatureBackend("membership", {
+    supabase: async () => {
+      const { data, error } = await supabase
+        .from("clubs")
+        .select("events_sponsor_strip_enabled")
+        .eq("id", candidateClubId)
+        .maybeSingle();
+      if (error) throw error;
+      return !!(data as any)?.events_sponsor_strip_enabled;
+    },
+    icp: async (ctx) => {
+      const settingsOpt = await getLiveClubSettings(ctx, candidateClubId);
+      return !!settingsOpt[0]?.events_sponsor_strip_enabled;
+    },
+  });
+}
 
 export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdCarouselProps) {
   const { user, initialized } = useAuth();
@@ -38,13 +59,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
     placeholderData: keepPreviousData,
     queryFn: async () => {
       if (activeClubFilter) {
-        const { data, error } = await supabase
-          .from("clubs")
-          .select("events_sponsor_strip_enabled")
-          .eq("id", activeClubFilter)
-          .maybeSingle();
-        if (error) throw error;
-        const allowed = !!(data as any)?.events_sponsor_strip_enabled;
+        const allowed = await isEventsStripEnabledForClub(activeClubFilter);
         return { allowed, effectiveClubId: allowed ? activeClubFilter : null };
       }
 
@@ -68,13 +83,12 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
       }
       if (clubIds.size === 0) return { allowed: false, effectiveClubId: null };
 
-      const { data: enabledClubs, error: enabledError } = await supabase
-        .from("clubs")
-        .select("id, events_sponsor_strip_enabled")
-        .in("id", Array.from(clubIds));
-      if (enabledError) throw enabledError;
-      const hit = (enabledClubs ?? []).find((c: any) => c.events_sponsor_strip_enabled);
-      return { allowed: !!hit, effectiveClubId: hit?.id ?? null };
+      for (const candidateClubId of clubIds) {
+        if (await isEventsStripEnabledForClub(candidateClubId)) {
+          return { allowed: true, effectiveClubId: candidateClubId };
+        }
+      }
+      return { allowed: false, effectiveClubId: null as string | null };
     },
     enabled: isEventsPlacement,
   });

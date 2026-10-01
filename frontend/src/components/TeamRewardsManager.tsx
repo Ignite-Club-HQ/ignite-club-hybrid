@@ -30,6 +30,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveClubReward,
+  deleteLiveClubReward,
+  listLiveClubRewards,
+  updateLiveClubReward,
+} from "@/live/features/points";
 
 interface TeamReward {
   id: string;
@@ -39,6 +46,7 @@ interface TeamReward {
   description: string | null;
   points_required: number;
   is_active: boolean;
+  is_default: boolean;
   reward_type: string;
   created_at: string;
 }
@@ -62,15 +70,37 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   const { data: teamRewards = [], isLoading: isTeamRewardsLoading } = useQuery({
     queryKey: ["team-pom-rewards", teamId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*")
-        .eq("club_id", clubId)
-        .eq("team_id", teamId)
-        .eq("reward_type", "player_of_match")
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data || []) as TeamReward[];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_rewards")
+            .select("*")
+            .eq("club_id", clubId)
+            .eq("team_id", teamId)
+            .eq("reward_type", "player_of_match")
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return (data || []) as TeamReward[];
+        },
+        icp: async (ctx) => {
+          const rewards = await listLiveClubRewards(ctx, clubId, teamId, false);
+          return rewards
+            .filter((r) => r.reward_type === "player_of_match")
+            .sort((a, b) => Number(a.created_at_ms) - Number(b.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              team_id: r.team_id[0] ?? null,
+              name: r.name,
+              description: r.description[0] ?? null,
+              points_required: r.points_required,
+              is_active: r.is_active,
+              is_default: r.is_default,
+              reward_type: r.reward_type,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+            })) as TeamReward[];
+        },
+      });
     },
   });
 
@@ -78,16 +108,38 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   const { data: clubRewards = [], isLoading: isClubRewardsLoading } = useQuery({
     queryKey: ["club-pom-rewards", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*")
-        .eq("club_id", clubId)
-        .is("team_id", null)
-        .eq("reward_type", "player_of_match")
-        .eq("is_active", true)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data || []) as TeamReward[];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_rewards")
+            .select("*")
+            .eq("club_id", clubId)
+            .is("team_id", null)
+            .eq("reward_type", "player_of_match")
+            .eq("is_active", true)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return (data || []) as TeamReward[];
+        },
+        icp: async (ctx) => {
+          const rewards = await listLiveClubRewards(ctx, clubId, null, true);
+          return rewards
+            .filter((r) => r.reward_type === "player_of_match")
+            .sort((a, b) => Number(a.created_at_ms) - Number(b.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              team_id: r.team_id[0] ?? null,
+              name: r.name,
+              description: r.description[0] ?? null,
+              points_required: r.points_required,
+              is_active: r.is_active,
+              is_default: r.is_default,
+              reward_type: r.reward_type,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+            })) as TeamReward[];
+        },
+      });
     },
   });
 
@@ -96,17 +148,36 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   // Create team-specific reward
   const createMutation = useMutation({
     mutationFn: async (reward: { name: string; description: string; points_required: number }) => {
-      const { error } = await supabase.from("club_rewards").insert({
-        club_id: clubId,
-        team_id: teamId,
-        name: reward.name,
-        description: reward.description || null,
-        points_required: reward.points_required,
-        reward_type: "player_of_match",
-        is_default: false,
-        is_active: true,
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_rewards").insert({
+            club_id: clubId,
+            team_id: teamId,
+            name: reward.name,
+            description: reward.description || null,
+            points_required: reward.points_required,
+            reward_type: "player_of_match",
+            is_default: false,
+            is_active: true,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await createLiveClubReward(
+            ctx,
+            clubId,
+            reward.name,
+            reward.description || null,
+            reward.points_required,
+            false,
+            "player_of_match",
+            null,
+            false,
+            null,
+            teamId,
+          );
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -123,15 +194,38 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   // Update team-specific reward
   const updateMutation = useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; name: string; description: string; points_required: number }) => {
-      const { error } = await supabase
-        .from("club_rewards")
-        .update({
-          name: updates.name,
-          description: updates.description || null,
-          points_required: updates.points_required,
-        })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_rewards")
+            .update({
+              name: updates.name,
+              description: updates.description || null,
+              points_required: updates.points_required,
+            })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existing = teamRewards.find((r) => r.id === id);
+          if (!existing) throw new Error("Reward not found for update.");
+          await updateLiveClubReward(
+            ctx,
+            id,
+            updates.name,
+            updates.description || null,
+            updates.points_required,
+            existing.is_default,
+            existing.is_active,
+            "player_of_match",
+            null,
+            null,
+            false,
+            null,
+            teamId,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -148,11 +242,34 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   // Toggle active status
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from("club_rewards")
-        .update({ is_active: isActive })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_rewards")
+            .update({ is_active: isActive })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const reward = teamRewards.find((r) => r.id === id);
+          if (!reward) throw new Error("Reward not found for status toggle.");
+          await updateLiveClubReward(
+            ctx,
+            id,
+            reward.name,
+            reward.description,
+            reward.points_required,
+            reward.is_default,
+            isActive,
+            "player_of_match",
+            null,
+            null,
+            false,
+            null,
+            teamId,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
@@ -163,8 +280,15 @@ export default function TeamRewardsManager({ teamId, clubId, disableTeamOverride
   // Delete team-specific reward
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("club_rewards").delete().eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_rewards").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveClubReward(ctx, id);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-pom-rewards", teamId] });
