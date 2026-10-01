@@ -18,6 +18,7 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'description' : IDL.Opt(IDL.Text),
     'created_at_ms' : IDL.Nat64,
+    'admin_only_posting' : IDL.Bool,
     'club_id' : IDL.Opt(IDL.Text),
     'avatar' : IDL.Opt(IDL.Text),
   });
@@ -200,11 +201,22 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'count' : IDL.Nat64,
   });
+  const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const HttpRequestResult = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(HttpHeader),
+  });
   const RecentConversation = IDL.Record({
     'last_message_sequence' : IDL.Nat64,
     'conversation_id' : IDL.Text,
     'kind' : IDL.Text,
     'last_message_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const RecapConfig = IDL.Record({
+    'model' : IDL.Text,
+    'api_key' : IDL.Text,
+    'endpoint_url' : IDL.Text,
   });
   const ClubUnreadSummary = IDL.Record({
     'count' : IDL.Nat64,
@@ -282,6 +294,11 @@ export const idlFactory = ({ IDL }) => {
     'forward_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
+    'generate_chat_recap' : IDL.Func(
+        [IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
     'get_club_dm_settings' : IDL.Func([IDL.Text], [ClubDmSettings], ['query']),
@@ -363,6 +380,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], ['query']),
+    'recapTransform' : IDL.Func(
+        [
+          IDL.Record({
+            'context' : IDL.Vec(IDL.Nat8),
+            'response' : HttpRequestResult,
+          }),
+        ],
+        [HttpRequestResult],
+        ['query'],
+      ),
     'recent_conversations' : IDL.Func(
         [IDL.Principal, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(RecentConversation), 'Err' : IDL.Text })],
@@ -430,6 +457,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_recap_config' : IDL.Func(
+        [IDL.Opt(RecapConfig)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_user_messaging_settings' : IDL.Func(
         [IDL.Bool, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -456,7 +488,13 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'update_group' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Bool),
+        ],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         [],
       ),

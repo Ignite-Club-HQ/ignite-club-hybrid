@@ -69,6 +69,7 @@ export interface GroupMetadata {
   'team_id' : [] | [string],
   'description' : [] | [string],
   'created_at_ms' : bigint,
+  'admin_only_posting' : boolean,
   'club_id' : [] | [string],
   'avatar' : [] | [string],
 }
@@ -76,6 +77,12 @@ export interface GroupRole {
   'conversation_id' : string,
   'role' : string,
   'user' : Principal,
+}
+export interface HttpHeader { 'value' : string, 'name' : string }
+export interface HttpRequestResult {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<HttpHeader>,
 }
 export interface JoinRequest {
   'status' : string,
@@ -134,6 +141,11 @@ export interface Reaction {
   'message_id' : string,
 }
 export interface ReactionSummary { 'count' : number, 'emoji' : string }
+export interface RecapConfig {
+  'model' : string,
+  'api_key' : string,
+  'endpoint_url' : string,
+}
 export interface Receipt {
   'conversation_id' : string,
   'read' : boolean,
@@ -253,6 +265,11 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'generate_chat_recap' : ActorMethod<
+    [string, bigint],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'get_club_dm_settings' : ActorMethod<[string], ClubDmSettings>,
   'get_group_metadata' : ActorMethod<
     [string],
@@ -315,6 +332,10 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'my_unread_counts' : ActorMethod<[], Array<UnreadSummary>>,
+  'recapTransform' : ActorMethod<
+    [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
+    HttpRequestResult
+  >,
   'recent_conversations' : ActorMethod<
     [Principal, number],
     { 'Ok' : Array<RecentConversation> } |
@@ -375,6 +396,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_recap_config' : ActorMethod<
+    [[] | [RecapConfig]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_user_messaging_settings' : ActorMethod<
     [boolean, boolean],
     { 'Ok' : null } |
@@ -401,7 +427,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'update_group' : ActorMethod<
-    [string, [] | [string], [] | [string], [] | [string]],
+    [string, [] | [string], [] | [string], [] | [string], [] | [boolean]],
     { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,

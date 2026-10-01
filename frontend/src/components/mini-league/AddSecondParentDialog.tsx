@@ -19,7 +19,8 @@ import { Loader2, UserPlus, Search, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLivePendingInvite } from "@/live/features/club";
+import { createLivePendingInvite, createLiveChildForParentInClub } from "@/live/features/club";
+import { Principal } from "@icp-sdk/core/principal";
 import type { Database, Json } from "@/integrations/supabase/types";
 
 interface AddSecondParentDialogProps {
@@ -127,11 +128,12 @@ export function AddSecondParentDialog({
           .eq("id", playerId);
         return newChildId;
       },
-      // NEEDS-CANISTER: creates a Supabase `children` row and links it on
-      // mini_league_players.child_id; no canister equivalent for a
-      // mini-league-scoped child link (no team id in this context).
-      icp: async () => {
-        throw new Error("Linking a child record isn't supported on this backend.");
+      icp: async (ctx) => {
+        if (childId) return childId;
+        if (!selectedUser) throw new Error("Select a parent to link first");
+        const parentPrincipal = Principal.fromText(selectedUser.id);
+        const child = await createLiveChildForParentInClub(ctx, clubId, parentPrincipal);
+        return child.id;
       },
     });
 

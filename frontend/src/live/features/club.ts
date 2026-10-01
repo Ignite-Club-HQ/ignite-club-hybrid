@@ -1,3 +1,4 @@
+import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
@@ -634,4 +635,44 @@ export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
 export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+}
+
+// ---------------------------------------------------------------------------
+// Member soft-delete (round 4): removal keeps records, hidden, reversible.
+// ---------------------------------------------------------------------------
+
+export async function removeLiveMember(ctx: FeatureBackendContext, clubId: string, user: Principal) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_member(clubId, user), "Remove member");
+}
+
+export async function restoreLiveMember(ctx: FeatureBackendContext, clubId: string, user: Principal) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_member(clubId, user), "Restore member");
+}
+
+export async function listLiveRemovedMembers(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_removed_members(clubId), "List removed members");
+}
+
+export async function isLiveMemberRemoved(ctx: FeatureBackendContext, clubId: string, user: Principal) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.is_member_removed(clubId, user);
+}
+
+/**
+ * Club-scope child creation — no team required. Used for mini-league-scope
+ * parent–child linking where there is no team id (design decision 2, round 4).
+ */
+export async function createLiveChildForParentInClub(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  parent: Principal,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_child_for_parent_in_club(clubId, parent),
+    "Create child for parent in club",
+  );
 }

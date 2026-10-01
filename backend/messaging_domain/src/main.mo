@@ -1163,8 +1163,8 @@ persistent actor {
       if (matched) {
         // Find the opening quote of the value after the colon.
         var k = i + n.size();
-        while (k < size and parts[k] != '"') {
-          if (parts[k] == '}' or parts[k] == ',') return null;
+        while (k < size and parts[k] != '\u{22}') {
+          if (parts[k] == '}' or parts[k] == ',') { return null };
           k += 1;
         };
         if (k >= size) return null;
@@ -1178,7 +1178,7 @@ persistent actor {
             escaped := false;
           } else if (c == '\\') {
             escaped := true;
-          } else if (c == '"') {
+          } else if (c == '\u{22}') {
             return ?value;
           } else {
             value := value # Text.fromArray([c]);
