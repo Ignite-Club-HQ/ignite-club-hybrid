@@ -24,6 +24,7 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";
 
@@ -37,7 +38,8 @@ function getOrdinalSuffix(n: number): string {
 
 export default function ProfilePage() {
   const { user, profile, signOut } = useAuth();
-  const useIcpLab = resolveAuthBackend() === "icp";
+  const isIcpAuth = resolveAuthBackend() === "icp";
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const notificationNudge = useNotificationNudge(user?.id, "settings");
   usePageTitle("Profile");
   const { toast } = useToast();
