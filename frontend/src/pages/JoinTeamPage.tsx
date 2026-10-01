@@ -266,7 +266,10 @@ function SupabaseJoinTeamPage() {
             expires_at: raw.expires_at_ms != null ? new Date(Number(raw.expires_at_ms)).toISOString() : null,
             created_at: raw.created_at_ms != null ? new Date(Number(raw.created_at_ms)).toISOString() : null,
             created_by: raw.invited_by?.toText() ?? null,
-            metadata: null as { child_name?: string; child_year_of_birth?: number } | null,
+            // Preserve metadata (e.g. mini_league_id) when the canister
+            // record carries it — the join guard below blocks mini-league
+            // invites for II accounts based on this field.
+            metadata: ((raw as { metadata?: { mini_league_id?: string; child_name?: string; child_year_of_birth?: number } | null }).metadata ?? null),
             teams: {
               id: raw.team_id ?? null,
               name: "",
