@@ -463,24 +463,36 @@ function SupabaseEditEventPage() {
 
       // For mini-league (Match Day) events, league admins can edit
       if ((event as any).mini_league_id) {
-        // Check mini_league_admins table (per-league admins)
-        const { data: leagueAdmin } = await supabase
-          .from("mini_league_admins")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("mini_league_id", (event as any).mini_league_id)
-          .maybeSingle();
-        if (leagueAdmin) return true;
+        const isLeagueAdmin = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            // Check mini_league_admins table (per-league admins)
+            const { data: leagueAdmin } = await supabase
+              .from("mini_league_admins")
+              .select("id")
+              .eq("user_id", user!.id)
+              .eq("mini_league_id", (event as any).mini_league_id)
+              .maybeSingle();
+            if (leagueAdmin) return true;
 
-        // Check club-scoped league_admin role (matches events RLS)
-        const { data: clubLeagueAdmin } = await supabase
-          .from("user_roles")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("club_id", event.club_id)
-          .eq("role", "league_admin")
-          .maybeSingle();
-        if (clubLeagueAdmin) return true;
+            // Check club-scoped league_admin role (matches events RLS)
+            const { data: clubLeagueAdmin } = await supabase
+              .from("user_roles")
+              .select("id")
+              .eq("user_id", user!.id)
+              .eq("club_id", event.club_id)
+              .eq("role", "league_admin")
+              .maybeSingle();
+            return !!clubLeagueAdmin;
+          },
+          icp: async (ctx) => {
+            // Per-league admin check via the canister; the club-scoped
+            // league_admin role has no canister equivalent yet.
+            const admins = await listLiveAdmins(ctx, (event as any).mini_league_id) as any[];
+            const myPrincipal = ctx.identity.getPrincipal().toText();
+            return admins.some((a) => a.user_id?.toText?.() === myPrincipal || String(a.user_id) === myPrincipal);
+          },
+        });
+        if (isLeagueAdmin) return true;
       }
 
       return false;
