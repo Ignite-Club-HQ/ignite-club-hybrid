@@ -58,10 +58,14 @@ export interface ClubProfile {
   'deleted_at_ms' : [] | [bigint],
 }
 export interface ClubSettings {
+  'events_sponsor_strip_enabled' : boolean,
+  'chat_thread_ads_enabled' : boolean,
   'contact_email' : [] | [string],
   'membership_open' : boolean,
   'announcement' : [] | [string],
   'public_directory' : boolean,
+  'media_header_sponsors_enabled' : boolean,
+  'media_sponsors_enabled' : boolean,
   'club_id' : string,
 }
 export interface ClubSponsor {
@@ -84,8 +88,15 @@ export interface ClubTeam {
   'description' : [] | [string],
   'team_type' : [] | [string],
   'logo_url' : [] | [string],
+  'shell_invited_by' : [] | [Principal],
+  'shell_contact_name' : [] | [string],
+  'shell_claim_token' : [] | [string],
+  'is_shell' : boolean,
   'gender' : [] | [string],
+  'shell_claimed_at_ms' : [] | [bigint],
   'is_active' : boolean,
+  'shell_contact_email' : [] | [string],
+  'shell_claimed_by' : [] | [Principal],
   'club_id' : string,
   'age_group' : [] | [string],
   'deleted_at_ms' : [] | [bigint],
@@ -224,6 +235,11 @@ export interface _SERVICE {
     { 'Ok' : Challenge } |
       { 'Err' : string }
   >,
+  'claim_shell_team' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
   'create_news_post' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : NewsPost } |
@@ -232,6 +248,11 @@ export interface _SERVICE {
   'create_parent_invite' : ActorMethod<
     [string, [] | [string], string],
     { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'create_shell_team_invite' : ActorMethod<
+    [string, string, [] | [string], [] | [string]],
+    { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
   'create_team_invite' : ActorMethod<
@@ -290,6 +311,11 @@ export interface _SERVICE {
   'get_parent_invite' : ActorMethod<
     [string],
     { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'get_shell_team_by_token' : ActorMethod<
+    [string],
+    { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
   'get_sponsor' : ActorMethod<
@@ -395,7 +421,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'restore_club' : ActorMethod<
-    [string],
+    [string, boolean],
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
@@ -435,7 +461,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'soft_delete_club' : ActorMethod<
-    [string],
+    [string, boolean],
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,

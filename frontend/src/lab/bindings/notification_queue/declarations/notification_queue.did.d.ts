@@ -10,6 +10,37 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export type ChatType = { 'Club' : null } |
+  { 'Group' : null } |
+  { 'ClubAdmin' : null } |
+  { 'Team' : null } |
+  { 'Broadcast' : null } |
+  { 'Direct' : null };
+export type DigestClassification = { 'Question' : null } |
+  { 'Info' : null } |
+  { 'Action' : null } |
+  { 'Social' : null } |
+  { 'Decision' : null };
+export interface DigestItem {
+  'id' : string,
+  'topic' : [] | [string],
+  'provider' : [] | [string],
+  'message_created_at_ms' : bigint,
+  'summary' : string,
+  'message_type' : DigestSource,
+  'mentions' : Array<string>,
+  'message_id' : string,
+  'chat_scope_id' : string,
+  'digested_at_ms' : bigint,
+  'classification' : DigestClassification,
+}
+export type DigestResult = { 'Ok' : DigestItem } |
+  { 'Err' : string };
+export type DigestResults = { 'Ok' : Array<DigestItem> } |
+  { 'Err' : string };
+export type DigestSource = { 'Club' : null } |
+  { 'Group' : null } |
+  { 'Team' : null };
 export interface Notification {
   'id' : string,
   'status' : Status,
@@ -24,18 +55,112 @@ export interface Notification {
   'related_id' : [] | [string],
   'idempotency_key' : string,
 }
+export interface Preferences {
+  'email_pitch_board_enabled' : boolean,
+  'admin_enabled' : boolean,
+  'email_rewards_enabled' : boolean,
+  'pom_enabled' : boolean,
+  'user' : string,
+  'updated_at_ms' : bigint,
+  'email_events_enabled' : boolean,
+  'email_admin_enabled' : boolean,
+  'rewards_enabled' : boolean,
+  'messages_enabled' : boolean,
+  'created_at_ms' : bigint,
+  'media_enabled' : boolean,
+  'pitch_board_enabled' : boolean,
+  'email_media_enabled' : boolean,
+  'email_messages_enabled' : boolean,
+  'show_message_preview' : boolean,
+  'email_membership_enabled' : boolean,
+  'events_enabled' : boolean,
+  'email_pom_enabled' : boolean,
+  'membership_enabled' : boolean,
+}
+export interface PreferencesInput {
+  'email_pitch_board_enabled' : boolean,
+  'admin_enabled' : boolean,
+  'email_rewards_enabled' : boolean,
+  'pom_enabled' : boolean,
+  'email_events_enabled' : boolean,
+  'email_admin_enabled' : boolean,
+  'rewards_enabled' : boolean,
+  'messages_enabled' : boolean,
+  'media_enabled' : boolean,
+  'pitch_board_enabled' : boolean,
+  'email_media_enabled' : boolean,
+  'email_messages_enabled' : boolean,
+  'show_message_preview' : boolean,
+  'email_membership_enabled' : boolean,
+  'events_enabled' : boolean,
+  'email_pom_enabled' : boolean,
+  'membership_enabled' : boolean,
+}
+export type PreferencesResult = { 'Ok' : Preferences } |
+  { 'Err' : string };
+export interface PushAlertSettings {
+  'updated_by' : [] | [string],
+  'alerts_enabled' : boolean,
+  'updated_at_ms' : bigint,
+  'check_window_hours' : number,
+  'cooldown_hours' : number,
+  'min_notifications' : number,
+  'failure_threshold_percent' : number,
+}
+export interface PushAlertSettingsInput {
+  'alerts_enabled' : boolean,
+  'check_window_hours' : number,
+  'cooldown_hours' : number,
+  'min_notifications' : number,
+  'failure_threshold_percent' : number,
+}
+export type Recurrence = { 'Weekly' : null } |
+  { 'None' : null } |
+  { 'Daily' : null } |
+  { 'Monthly' : null };
 export type Result = { 'Ok' : Notification } |
   { 'Err' : string };
 export type ResultNat16 = { 'Ok' : number } |
   { 'Err' : string };
 export type Results = { 'Ok' : Array<Notification> } |
   { 'Err' : string };
+export interface ScheduledMessage {
+  'id' : string,
+  'status' : ScheduledStatus,
+  'recurrence_until_ms' : [] | [bigint],
+  'sent_message_id' : [] | [string],
+  'image_url' : [] | [string],
+  'conversation_id' : [] | [string],
+  'body' : string,
+  'error_message' : [] | [string],
+  'team_id' : [] | [string],
+  'updated_at_ms' : bigint,
+  'reply_to_id' : [] | [string],
+  'scheduled_for_ms' : bigint,
+  'author' : string,
+  'recurrence' : Recurrence,
+  'created_at_ms' : bigint,
+  'recurrence_parent_id' : [] | [string],
+  'group_id' : [] | [string],
+  'attempted_at_ms' : [] | [bigint],
+  'club_id' : [] | [string],
+  'chat_type' : ChatType,
+}
+export type ScheduledResult = { 'Ok' : ScheduledMessage } |
+  { 'Err' : string };
+export type ScheduledResults = { 'Ok' : Array<ScheduledMessage> } |
+  { 'Err' : string };
+export type ScheduledStatus = { 'Failed' : null } |
+  { 'Sent' : null } |
+  { 'Cancelled' : null } |
+  { 'Pending' : null };
 export type Status = { 'Failed' : null } |
   { 'Delivered' : null } |
   { 'Processing' : null } |
   { 'Pending' : null };
 export interface _SERVICE {
   'acknowledge' : ActorMethod<[string, string], Result>,
+  'cancel_scheduled' : ActorMethod<[string, string], ScheduledResult>,
   'claim' : ActorMethod<[bigint, number], Results>,
   'clear_inbox' : ActorMethod<[string, [] | [string]], ResultNat16>,
   'delete_notification' : ActorMethod<
@@ -43,6 +168,7 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'due_scheduled' : ActorMethod<[bigint, number], ScheduledResults>,
   'enqueue' : ActorMethod<
     [string, string, string, string, string, string],
     Result
@@ -52,7 +178,13 @@ export interface _SERVICE {
     [Array<string>, string, string, string, string, [] | [string]],
     ResultNat16
   >,
+  'get_digest' : ActorMethod<
+    [DigestSource, string, bigint, number],
+    DigestResults
+  >,
   'get_notification' : ActorMethod<[string], [] | [Notification]>,
+  'get_preferences' : ActorMethod<[string], Preferences>,
+  'get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
   'grant_worker' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -60,9 +192,53 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
+  'list_scheduled' : ActorMethod<[string, [] | [string]], ScheduledResults>,
   'mark_all_read' : ActorMethod<[string, [] | [string]], ResultNat16>,
+  'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
   'mark_read' : ActorMethod<[string], Result>,
+  'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'record_digest_item' : ActorMethod<
+    [
+      string,
+      string,
+      DigestSource,
+      string,
+      bigint,
+      DigestClassification,
+      string,
+      [] | [string],
+      Array<string>,
+      [] | [string],
+    ],
+    DigestResult
+  >,
   'recover' : ActorMethod<[], ResultNat16>,
+  'schedule_message' : ActorMethod<
+    [
+      string,
+      string,
+      ChatType,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      string,
+      [] | [string],
+      [] | [string],
+      bigint,
+      Recurrence,
+      [] | [bigint],
+    ],
+    ScheduledResult
+  >,
+  'upsert_preferences' : ActorMethod<
+    [string, PreferencesInput],
+    PreferencesResult
+  >,
+  'upsert_push_alert_settings' : ActorMethod<
+    [PushAlertSettingsInput],
+    PushAlertSettings
+  >,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

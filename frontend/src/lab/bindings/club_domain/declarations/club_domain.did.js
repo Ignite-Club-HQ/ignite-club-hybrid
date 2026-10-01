@@ -58,6 +58,26 @@ export const idlFactory = ({ IDL }) => {
     'expires_at_ns' : IDL.Nat64,
     'expected_version' : IDL.Nat64,
   });
+  const ClubTeam = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'division' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'team_type' : IDL.Opt(IDL.Text),
+    'logo_url' : IDL.Opt(IDL.Text),
+    'shell_invited_by' : IDL.Opt(IDL.Principal),
+    'shell_contact_name' : IDL.Opt(IDL.Text),
+    'shell_claim_token' : IDL.Opt(IDL.Text),
+    'is_shell' : IDL.Bool,
+    'gender' : IDL.Opt(IDL.Text),
+    'shell_claimed_at_ms' : IDL.Opt(IDL.Nat64),
+    'is_active' : IDL.Bool,
+    'shell_contact_email' : IDL.Opt(IDL.Text),
+    'shell_claimed_by' : IDL.Opt(IDL.Principal),
+    'club_id' : IDL.Text,
+    'age_group' : IDL.Opt(IDL.Text),
+    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const NewsPost = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -153,10 +173,14 @@ export const idlFactory = ({ IDL }) => {
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
   const ClubSettings = IDL.Record({
+    'events_sponsor_strip_enabled' : IDL.Bool,
+    'chat_thread_ads_enabled' : IDL.Bool,
     'contact_email' : IDL.Opt(IDL.Text),
     'membership_open' : IDL.Bool,
     'announcement' : IDL.Opt(IDL.Text),
     'public_directory' : IDL.Bool,
+    'media_header_sponsors_enabled' : IDL.Bool,
+    'media_sponsors_enabled' : IDL.Bool,
     'club_id' : IDL.Text,
   });
   const ClubSponsor = IDL.Record({
@@ -171,19 +195,6 @@ export const idlFactory = ({ IDL }) => {
     'is_active' : IDL.Bool,
     'club_id' : IDL.Text,
     'exposure_percentage' : IDL.Opt(IDL.Nat8),
-  });
-  const ClubTeam = IDL.Record({
-    'id' : IDL.Text,
-    'name' : IDL.Text,
-    'division' : IDL.Opt(IDL.Text),
-    'description' : IDL.Opt(IDL.Text),
-    'team_type' : IDL.Opt(IDL.Text),
-    'logo_url' : IDL.Opt(IDL.Text),
-    'gender' : IDL.Opt(IDL.Text),
-    'is_active' : IDL.Bool,
-    'club_id' : IDL.Text,
-    'age_group' : IDL.Opt(IDL.Text),
-    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
   const Operation = IDL.Variant({
     'SetActive' : IDL.Record({ 'id' : IDL.Text, 'active' : IDL.Bool }),
@@ -233,6 +244,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Challenge, 'Err' : IDL.Text })],
         [],
       ),
+    'claim_shell_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_news_post' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
@@ -241,6 +257,11 @@ export const idlFactory = ({ IDL }) => {
     'create_parent_invite' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_shell_team_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
         [],
       ),
     'create_team_invite' : IDL.Func(
@@ -311,6 +332,11 @@ export const idlFactory = ({ IDL }) => {
     'get_parent_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_shell_team_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_sponsor' : IDL.Func(
@@ -424,7 +450,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'restore_club' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
         [],
       ),
@@ -464,7 +490,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'soft_delete_club' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
         [],
       ),
