@@ -369,6 +369,46 @@ export async function softDeleteLiveGroup(ctx: FeatureBackendContext, conversati
 }
 
 // ---------------------------------------------------------------------------
+// Presence & blocking.
+// ---------------------------------------------------------------------------
+
+/** Record the caller's heartbeat; call on an interval while chat is open. */
+export async function livePresenceHeartbeat(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.presence_heartbeat(), "Presence heartbeat");
+}
+
+/**
+ * Online participant count for a conversation (last 90s, caller excluded).
+ * Callers pass the team/club/group id — it doubles as the conversation id
+ * under the same provisional mapping the send/read paths use.
+ */
+export async function liveOnlineCount(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  // Query call: the binding resolves to the variant directly, not a Promise.
+  const result = await actor.online_count(conversationId);
+  if ("Err" in result) throw new Error(`Online count failed: ${result.Err}`);
+  return Number(result.Ok);
+}
+
+export async function liveBlockUser(ctx: FeatureBackendContext, user: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.block_user(user), "Block user");
+}
+
+export async function liveUnblockUser(ctx: FeatureBackendContext, user: Principal) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unblock_user(user), "Unblock user");
+}
+
+/** Principals (as text) the caller has blocked. */
+export async function liveListBlockedUsers(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const blocked = await actor.list_blocked_users();
+  return blocked.map((p) => p.toText());
+}
+
+// ---------------------------------------------------------------------------
 // Join requests.
 // ---------------------------------------------------------------------------
 

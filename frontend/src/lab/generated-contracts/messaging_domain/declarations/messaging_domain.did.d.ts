@@ -230,6 +230,7 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'block_user' : ActorMethod<[Principal], { 'Ok' : null } | { 'Err' : string }>,
   'broadcast_announcement' : ActorMethod<
     [string, Array<string>, boolean, string, string],
     { 'Ok' : BroadcastResult } |
@@ -298,6 +299,7 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'has_blocked' : ActorMethod<[Principal], boolean>,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_competition_admin' : ActorMethod<[string], boolean>,
   'leave_group' : ActorMethod<
@@ -310,6 +312,7 @@ export interface _SERVICE {
     { 'Ok' : Array<Principal> } |
       { 'Err' : string }
   >,
+  'list_blocked_users' : ActorMethod<[], Array<Principal>>,
   'list_join_requests' : ActorMethod<
     [string],
     { 'Ok' : Array<JoinRequest> } |
@@ -332,6 +335,12 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'my_unread_counts' : ActorMethod<[], Array<UnreadSummary>>,
+  'online_count' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'presence_heartbeat' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -417,6 +426,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'unblock_user' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }

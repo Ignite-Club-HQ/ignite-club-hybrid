@@ -239,6 +239,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'block_user' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'broadcast_announcement' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text), IDL.Bool, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : BroadcastResult, 'Err' : IDL.Text })],
@@ -333,6 +338,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'has_blocked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
     'initialize' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -349,6 +355,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'list_join_requests' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
@@ -380,6 +387,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'my_unread_counts' : IDL.Func([], [IDL.Vec(UnreadSummary)], ['query']),
+    'online_count' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'presence_heartbeat' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'recapTransform' : IDL.Func(
         [
           IDL.Record({
@@ -478,6 +495,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'transfer_governorship' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unblock_user' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

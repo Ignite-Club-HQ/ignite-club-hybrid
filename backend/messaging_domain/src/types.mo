@@ -52,6 +52,12 @@ module {
   // configure a scoped/limited-privilege key here, never a master key.
   public type RecapConfig = { endpoint_url : Text; api_key : Text; model : Text };
 
+  // --- Presence & blocking ---
+  // Last heartbeat per user; drives the online count (window checked at read).
+  public type PresencePing = { user : Principal; last_seen_ms : Nat64 };
+  // blocker -> blocked pair; enforced on DMs in both directions.
+  public type BlockedUser = { blocker : Principal; blocked : Principal; created_at_ms : Nat64 };
+
   public type State = {
     schema : Nat32;
     governor : Principal;
