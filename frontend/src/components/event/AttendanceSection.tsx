@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { EventViewMemberRow } from "@/components/EventViewMemberRow";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveReminderLog, isLiveReachable } from "@/live/features/events";
 
 interface AttendanceCounts {
   going: number;
@@ -136,6 +138,22 @@ export function AttendanceSection({
   const { data: lastReminder, refetch: refetchLastReminder } = useQuery({
     queryKey: ["event-reminder-log-latest", eventId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const log = await getLiveReminderLog(ctx, eventId);
+            if (!log || log.sent_at_ms.length === 0) return null;
+            const sentAtMs = Number(log.sent_at_ms[0]);
+            const cutoffMs = Date.now() - cooldownWindowMs;
+            if (sentAtMs < cutoffMs) return null;
+            return {
+              sent_at: new Date(sentAtMs).toISOString(),
+              recipients_count: log.recipients_count,
+            };
+          },
+        });
+      }
       const cutoff = new Date(Date.now() - cooldownWindowMs).toISOString();
       const { data, error } = await supabase
         .from("event_reminder_log")
@@ -148,8 +166,7 @@ export function AttendanceSection({
       if (error) throw error;
       return data;
     },
-    // NEEDS-CANISTER: events_domain has no event_reminder_log equivalent.
-    enabled: isAdmin && !isFeatureRoutedToIcp("events"),
+    enabled: isAdmin,
     staleTime: 60_000,
   });
 
@@ -187,6 +204,24 @@ export function AttendanceSection({
     queryKey: ["event-attendance-push-reachable", eventId, notViewedIdsKey],
     queryFn: async () => {
       if (notViewedIds.length === 0) return {} as Record<string, boolean>;
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => ({} as Record<string, boolean>),
+          icp: async (ctx) => {
+            const map: Record<string, boolean> = {};
+            await Promise.all(
+              notViewedIds.map(async (id) => {
+                try {
+                  map[id] = await isLiveReachable(ctx, id);
+                } catch {
+                  map[id] = false;
+                }
+              }),
+            );
+            return map;
+          },
+        });
+      }
       const { data, error } = await supabase.rpc("get_members_push_reachable", {
         member_ids: notViewedIds,
       });
@@ -195,8 +230,7 @@ export function AttendanceSection({
       for (const row of data || []) map[row.user_id] = !!row.has_push;
       return map;
     },
-    // NEEDS-CANISTER: no push-reachability RPC equivalent on events_domain.
-    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0 && !isFeatureRoutedToIcp("events"),
+    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0,
     staleTime: 60_000,
   });
 
@@ -213,7 +247,8 @@ export function AttendanceSection({
       for (const row of data || []) map[row.user_id] = row.events_enabled !== false;
       return map;
     },
-    // NEEDS-CANISTER: no events-enabled preference RPC equivalent on events_domain.
+    // events-enabled preference has no events_domain equivalent yet; default to
+    // enabled (matches the Supabase default_true policy) under ICP routing.
     enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0 && !isFeatureRoutedToIcp("events"),
     staleTime: 60_000,
   });
