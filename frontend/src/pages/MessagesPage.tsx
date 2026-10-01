@@ -36,6 +36,7 @@ import { registerChannel } from "@/lib/realtimeChannelRegistry";
 import {
   createInboxRealtimeCoordinator,
   createInboxPreviewWatermarks,
+  type InboxPreviewLike,
   type InboxRealtimeEvent,
 } from "@/features/messaging/inbox/inboxRealtimeReconciliation";
 import {
