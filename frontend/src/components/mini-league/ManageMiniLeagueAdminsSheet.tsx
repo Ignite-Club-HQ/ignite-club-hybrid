@@ -148,8 +148,8 @@ export function ManageMiniLeagueAdminsSheet({
           });
           if (error) throw error;
         },
-        icp: async () => {
-          throw new Error("Adding league admins isn't available yet on this backend.");
+        icp: async (ctx) => {
+          await addLiveAdmin(ctx, miniLeagueId, Principal.fromText(targetUserId));
         },
       }),
     onSuccess: () => {
@@ -167,17 +167,17 @@ export function ManageMiniLeagueAdminsSheet({
   });
 
   const revokeMutation = useMutation({
-    mutationFn: (rowId: string) =>
+    mutationFn: (admin: { id: string; user_id: string }) =>
       withFeatureBackend("mini_leagues", {
         supabase: async () => {
           const { error } = await supabase
             .from("mini_league_admins")
             .delete()
-            .eq("id", rowId);
+            .eq("id", admin.id);
           if (error) throw error;
         },
-        icp: async () => {
-          throw new Error("Removing league admins isn't available yet on this backend.");
+        icp: async (ctx) => {
+          await removeLiveAdmin(ctx, miniLeagueId, Principal.fromText(admin.user_id));
         },
       }),
     onSuccess: () => {
@@ -411,7 +411,7 @@ export function ManageMiniLeagueAdminsSheet({
                         size="icon"
                         variant="ghost"
                         className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => revokeMutation.mutate(a.id)}
+                        onClick={() => revokeMutation.mutate({ id: a.id, user_id: a.user_id })}
                         disabled={revokeMutation.isPending}
                       >
                         <Trash2 className="h-4 w-4" />

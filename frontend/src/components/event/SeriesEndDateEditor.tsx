@@ -19,7 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSeriesOccurrences, addLiveSeriesOccurrence, deleteLiveEvent } from "@/live/features/events";
 
 interface Props {
   eventId: string;
@@ -56,30 +57,50 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
   // Fetch parent + all siblings for the series.
   const { data: series, isLoading, refetch } = useQuery({
     queryKey: ["series-siblings", parentEventId],
-    // NEEDS-CANISTER: events_domain series are opaque (create/update/delete
-    // only) — there is no per-occurrence sibling listing to read here.
-    enabled: !isFeatureRoutedToIcp("events"),
-    queryFn: async () => {
-      const { data: parent, error: pErr } = await supabase
-        .from("events")
-        .select("id, event_date, start_time, end_time, parent_event_id, recurrence_end_date")
-        .eq("id", parentEventId)
-        .maybeSingle();
-      if (pErr) throw pErr;
+    enabled: true,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data: parent, error: pErr } = await supabase
+            .from("events")
+            .select("id, event_date, start_time, end_time, parent_event_id, recurrence_end_date")
+            .eq("id", parentEventId)
+            .maybeSingle();
+          if (pErr) throw pErr;
 
-      const { data: children, error: cErr } = await supabase
-        .from("events")
-        .select("id, event_date, start_time, end_time, parent_event_id, recurrence_end_date")
-        .eq("parent_event_id", parentEventId)
-        .order("event_date", { ascending: true });
-      if (cErr) throw cErr;
+          const { data: children, error: cErr } = await supabase
+            .from("events")
+            .select("id, event_date, start_time, end_time, parent_event_id, recurrence_end_date")
+            .eq("parent_event_id", parentEventId)
+            .order("event_date", { ascending: true });
+          if (cErr) throw cErr;
 
-      const all: SeriesEvent[] = [];
-      if (parent) all.push(parent as SeriesEvent);
-      for (const c of children ?? []) all.push(c as SeriesEvent);
-      all.sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
-      return { parent: parent as SeriesEvent | null, all };
-    },
+          const all: SeriesEvent[] = [];
+          if (parent) all.push(parent as SeriesEvent);
+          for (const c of children ?? []) all.push(c as SeriesEvent);
+          all.sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+          return { parent: parent as SeriesEvent | null, all };
+        },
+        // Wired: list_series_occurrences gives id/deleted/starts/ends for
+        // every child generated from this series; the parent's own
+        // starts_at_ms/ends_at_ms stands in for the Supabase "parent" row.
+        icp: async (ctx) => {
+          const occurrences = await listLiveSeriesOccurrences(ctx, parentEventId);
+          const live = (occurrences ?? []).filter((o: any) => !o.deleted);
+          const all: SeriesEvent[] = live
+            .map((o: any) => ({
+              id: o.id,
+              event_date: new Date(Number(o.starts_at_ms)).toISOString(),
+              start_time: new Date(Number(o.starts_at_ms)).toISOString(),
+              end_time: new Date(Number(o.ends_at_ms)).toISOString(),
+              parent_event_id: parentEventId,
+              recurrence_end_date: null,
+            }))
+            .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+          const parent = all.length > 0 ? all[0] : null;
+          return { parent, all };
+        },
+      }),
   });
 
   const currentEnd = series?.parent?.recurrence_end_date ?? null;

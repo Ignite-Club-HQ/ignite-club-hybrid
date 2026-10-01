@@ -1074,4 +1074,3 @@ export async function setLiveEventGroupAppearance(
     "Set event group appearance",
   );
 }
-const x: number = "bad";
