@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -275,12 +276,22 @@ function useChildrenForEvent(
           return true;
         }) as Array<{ id: string; name: string }>;
         if (merged.length === 0) return merged;
-        const { data: players, error: playersError } = await supabase
-          .from("mini_league_players")
-          .select("child_id")
-          .eq("mini_league_id", miniLeagueId)
-          .in("child_id", merged.map((c) => c.id));
-        if (playersError) throw playersError;
+        const players = await withFeatureBackend("mini_leagues", {
+          supabase: async () => {
+            const { data, error } = await supabase
+              .from("mini_league_players")
+              .select("child_id")
+              .eq("mini_league_id", miniLeagueId)
+              .in("child_id", merged.map((c) => c.id));
+            if (error) throw error;
+            return data;
+          },
+          // Gated: filtering players by an arbitrary subset of household
+          // child ids has no canister equivalent (the canister only lists
+          // all players for a mini league). ICP-routed sessions see no
+          // rostered children rather than an unfiltered/incorrect list.
+          icp: async () => [] as { child_id: string | null }[],
+        });
         const allowed = new Set((players || []).map((p: any) => p.child_id).filter(Boolean));
         return merged.filter((c) => allowed.has(c.id));
       }
