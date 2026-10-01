@@ -61,10 +61,10 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
           return data as { playhq_tenant: string | null; playhq_org_id: string | null } | null;
         },
         icp: async (ctx) => {
-          const profile = await getLiveClubProfile(ctx, clubId);
+          const profile = (await getLiveClubProfile(ctx, clubId))[0];
           return {
-            playhq_tenant: profile.playhq_tenant[0] ?? null,
-            playhq_org_id: profile.playhq_org_id[0] ?? null,
+            playhq_tenant: profile?.playhq_tenant[0] ?? null,
+            playhq_org_id: profile?.playhq_org_id[0] ?? null,
           };
         },
       }),
@@ -85,7 +85,8 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
           return data as TeamRow;
         },
         icp: async (ctx) => {
-          const liveTeam = await getLiveTeam(ctx, teamId);
+          const liveTeam = (await getLiveTeam(ctx, teamId))[0];
+          if (!liveTeam) throw new Error("Team not found");
           return {
             playhq_team_id: liveTeam.playhq_team_id[0] ?? null,
             playhq_competition_id: liveTeam.playhq_competition_id[0] ?? null,
@@ -151,7 +152,8 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
         icp: async (ctx) => {
           // Fetch-modify-save: the canister takes the whole team record, so
           // load it, apply the PlayHQ patch, and save it back.
-          const liveTeam = await getLiveTeam(ctx, teamId);
+          const liveTeam = (await getLiveTeam(ctx, teamId))[0];
+          if (!liveTeam) throw new Error("Team not found");
           await saveLiveTeam(ctx, {
             ...liveTeam,
             playhq_team_id:

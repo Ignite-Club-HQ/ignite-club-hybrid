@@ -77,16 +77,20 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         icp: async (ctx) => {
           const canisterTerms = await listLiveClubTerms(ctx, clubId);
           return canisterTerms
-            .map((t) => ({
-              id: t.id,
-              club_id: t.club_id,
-              name: t.name,
-              start_date: t.start_date,
-              end_date: t.end_date,
-              is_active: t.is_active,
-              status: t.status,
-              created_at_ms: Number(t.created_at_ms),
-            }))
+            .map((t) => {
+              const createdIso = new Date(Number(t.created_at_ms)).toISOString();
+              return {
+                id: t.id,
+                club_id: t.club_id,
+                name: t.name,
+                start_date: t.start_date,
+                end_date: t.end_date,
+                is_active: t.is_active,
+                status: t.status,
+                created_at: createdIso,
+                updated_at: createdIso,
+              };
+            })
             .sort((a, b) => b.start_date.localeCompare(a.start_date));
         },
       }),
@@ -170,7 +174,9 @@ export function TermsManager({ clubId }: TermsManagerProps) {
             .eq("id", id);
           if (error) throw error;
         },
-        icp: (ctx) => setLiveClubTermStatus(ctx, id, isActive ? "active" : "archived"),
+        icp: async (ctx) => {
+          await setLiveClubTermStatus(ctx, id, isActive ? "active" : "archived");
+        },
       });
     },
     onSuccess: () => {
@@ -189,7 +195,9 @@ export function TermsManager({ clubId }: TermsManagerProps) {
             .eq("id", id);
           if (error) throw error;
         },
-        icp: (ctx) => setLiveClubTermStatus(ctx, id, status),
+        icp: async (ctx) => {
+          await setLiveClubTermStatus(ctx, id, status);
+        },
       });
     },
     onSuccess: () => {
