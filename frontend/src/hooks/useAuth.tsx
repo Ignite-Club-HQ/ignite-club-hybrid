@@ -27,7 +27,7 @@ import { notificationKeys } from "@/lab/notificationQueryKeys";
 // dynamically at call time below. That module statically imports the ICP
 // agent/candid SDK and its crypto dependencies (~480KB), which must not enter
 // every page's initial chunk — only IcpAuthProvider (ICP lab auth mode) needs it.
-import type { InternetIdentitySession } from "@/lab/internetIdentityAuth";
+import type { InternetIdentitySession } from "@/live/internetIdentityAuth";
 import { getCachedIcpIdentityProfile, type IcpIdentityProfile } from "@/live/identityProfileCache";
 
 
@@ -1298,7 +1298,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     void (async () => {
       try {
         const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
-          import("@/lab/internetIdentityAuth"),
+          import("@/live/internetIdentityAuth"),
           import("@/live/identityProfile"),
         ]);
         const identity = await getCurrentInternetIdentity();
@@ -1349,11 +1349,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // click event before our code resumes, causing "Signer window should not
   // be opened outside of click handler". Warming here means `signInWithIcp`
   // below can reach the actual `signIn()` call with zero awaits in front of it.
-  const internetIdentityModuleRef = useRef<typeof import("@/lab/internetIdentityAuth") | null>(null);
+  const internetIdentityModuleRef = useRef<typeof import("@/live/internetIdentityAuth") | null>(null);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const mod = await import("@/lab/internetIdentityAuth");
+      const mod = await import("@/live/internetIdentityAuth");
       if (cancelled) return;
       internetIdentityModuleRef.current = mod;
       void mod.warmInternetIdentityAuthClient();
@@ -1369,7 +1369,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       // `client.signIn()`) synchronously — see the warm-up effect above.
       // The `??` short-circuits, so the fallback `import()` is never
       // evaluated (and never adds an await) on the common warmed path.
-      const mod = internetIdentityModuleRef.current ?? (await import("@/lab/internetIdentityAuth"));
+      const mod = internetIdentityModuleRef.current ?? (await import("@/live/internetIdentityAuth"));
       const nextSession = await mod.signInWithInternetIdentity(
         typeof window !== "undefined" ? `${location.pathname}${location.search}${location.hash}` : undefined,
       );
@@ -1402,13 +1402,13 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       clearIcpIdentityProfileCache();
       const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
       clearIcpEntitlementsCache(principal ?? undefined);
-      const { signOutInternetIdentity } = await import("@/lab/internetIdentityAuth");
+      const { signOutInternetIdentity } = await import("@/live/internetIdentityAuth");
       await signOutInternetIdentity();
     },
     refreshProfile: async () => {
       if (!principal) return;
       const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
-        import("@/lab/internetIdentityAuth"),
+        import("@/live/internetIdentityAuth"),
         import("@/live/identityProfile"),
       ]);
       const identity = await getCurrentInternetIdentity();
