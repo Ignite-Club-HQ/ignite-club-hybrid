@@ -86,6 +86,15 @@ pub struct Profile {
     pub avatar_ref: Option<String>,
     pub updated_at_ns: u64,
 }
+/// One row of a `search_profiles` result: the profile plus the account's
+/// first principal (needed by callers to grant roles).
+#[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProfileSearchResult {
+    pub account_id: String,
+    pub principal: Principal,
+    pub display_name: String,
+    pub avatar_ref: Option<String>,
+}
 /// A Pro entitlement granted to a principal from an IAP (App Store) receipt
 /// or a governor/verifier write. `transaction_id` is the Apple transaction
 /// id (or empty for non-IAP grants) and is the replay-protection key: once a
@@ -418,6 +427,49 @@ fn get_profile() -> Outcome<Profile> {
         .find(|p| p.account_id == account_id)
         .cloned()
         .ok_or("Profile not set".into())
+}
+
+/// Case-insensitive substring search over display names — the ICP-mode
+/// counterpart of the Supabase `search_invitable_profiles` RPC, used by the
+/// "add an existing member" pickers. Returns at most `limit` (capped at 25)
+/// matches; each result carries the account's first principal so the caller
+/// can grant roles without a second lookup. Profiles without an account or
+/// with a blank name are skipped.
+#[ic_cdk::query]
+fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult>> {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return Err("Search text is required".into());
+    }
+    let cap = limit.clamp(1, 25) as usize;
+    let state = state();
+    let mut results = Vec::new();
+    for profile in &state.profiles {
+        if profile.display_name.trim().is_empty()
+            || !profile.display_name.to_lowercase().contains(&needle)
+        {
+            continue;
+        }
+        let principal = match state
+            .accounts
+            .iter()
+            .find(|a| a.id == profile.account_id)
+            .and_then(|a| a.principals.first())
+        {
+            Some(p) => *p,
+            None => continue,
+        };
+        results.push(ProfileSearchResult {
+            account_id: profile.account_id.clone(),
+            principal,
+            display_name: profile.display_name.clone(),
+            avatar_ref: profile.avatar_ref.clone(),
+        });
+        if results.len() >= cap {
+            break;
+        }
+    }
+    Ok(results)
 }
 
 /// Every role grant held by the caller, across all clubs/teams.

@@ -61,6 +61,32 @@ module {
     // Soft-delete marker mirroring the Supabase `clubs.deleted_at` column;
     // null means active. Permanent delete removes the record outright.
     deleted_at_ms : ?Nat64;
+    // PlayHQ integration config mirroring the Supabase `clubs.playhq_*`
+    // columns; null means the club has no PlayHQ connection.
+    playhq_tenant : ?Text;
+    playhq_org_id : ?Text;
+  };
+  // Compact branding read for invite/email surfaces — the canister
+  // counterpart of selecting name/logo_url/contact_email off the clubs row.
+  public type ClubBranding = {
+    name : Text;
+    logo_url : ?Text;
+    contact_email : ?Text;
+  };
+  // A club term (class/season enrolment period) — the canister counterpart
+  // of the Supabase `terms` table. Dates are ISO yyyy-mm-dd text, matching
+  // the Postgres date columns. status is "active" | "archived" |
+  // "completed"; is_active mirrors the boolean column (true only when
+  // status is "active").
+  public type ClubTerm = {
+    id : Text;
+    club_id : Text;
+    name : Text;
+    start_date : Text;
+    end_date : Text;
+    is_active : Bool;
+    status : Text;
+    created_at_ms : Nat64;
   };
   // Sponsor-strip display toggles mirror the Supabase `clubs` columns of
   // the same name: whether the media gallery strip, the media header
@@ -125,6 +151,12 @@ module {
     shell_contact_name : ?Text;
     shell_invited_by : ?Principal;
     archived : Bool;
+    // PlayHQ link fields mirroring the Supabase `teams.playhq_*` columns:
+    // which PlayHQ competition/team this team mirrors, and whether fixture
+    // sync auto-creates match events. null/false means unlinked.
+    playhq_team_id : ?Text;
+    playhq_competition_id : ?Text;
+    playhq_auto_create_events : Bool;
   };
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
