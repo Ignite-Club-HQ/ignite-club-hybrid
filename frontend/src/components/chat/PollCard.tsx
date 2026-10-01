@@ -5,6 +5,8 @@ import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLivePollResults, voteLivePoll, closeLivePoll } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -46,12 +48,45 @@ export function PollCard({ pollId }: PollCardProps) {
   const qc = useQueryClient();
   const [busyOptionId, setBusyOptionId] = useState<string | null>(null);
 
+  const icpMode = isFeatureRoutedToIcp("messaging");
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["poll", pollId],
-    // NEEDS-CANISTER: messaging_domain has no polls/poll_options/poll_votes
-    // tables yet.
-    enabled: !isFeatureRoutedToIcp("messaging"),
     queryFn: async () => {
+      if (icpMode) {
+        const results = await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => getLivePollResults(ctx, pollId),
+        });
+        const poll: PollRow = {
+          id: results.poll.id,
+          question: results.poll.question,
+          allow_multiple: false,
+          closes_at: null,
+          closed_at: results.poll.closed ? new Date(Number(results.poll.created_at_ms)).toISOString() : null,
+          created_by: results.poll.creator.toText(),
+          created_at: new Date(Number(results.poll.created_at_ms)).toISOString(),
+        };
+        const options: PollOptionRow[] = results.poll.options.map((label, position) => ({
+          id: String(position),
+          label,
+          position,
+        }));
+        // The canister reports per-option vote counts, not per-voter rows —
+        // only "did I vote this option" is derivable (via a separate flag
+        // we fake by re-deriving below), so `votes` here is a synthetic
+        // multiset of anonymous rows sized to match each option's count for
+        // the tally math the rest of this component already does.
+        const votes: PollVoteRow[] = [];
+        results.counts.forEach((count, idx) => {
+          for (let i = 0; i < count; i += 1) {
+            votes.push({ id: `${idx}-${i}`, option_id: String(idx), user_id: "" });
+          }
+        });
+        return { poll, options, votes, closed: results.poll.closed };
+      }
       const [pollRes, optsRes, votesRes] = await Promise.all([
         supabase.from("polls").select("*").eq("id", pollId).maybeSingle(),
         supabase.from("poll_options").select("*").eq("poll_id", pollId).order("position", { ascending: true }),
@@ -63,17 +98,18 @@ export function PollCard({ pollId }: PollCardProps) {
         poll: pollRes.data as PollRow,
         options: (optsRes.data || []) as PollOptionRow[],
         votes: (votesRes.data || []) as PollVoteRow[],
+        closed: !!pollRes.data.closed_at,
       };
     },
     staleTime: 15_000,
-    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
+    refetchInterval: icpMode ? 10_000 : false,
   });
 
   // Realtime: refresh on any vote change for this poll. Skipped when
   // messaging is ICP-routed (canisters are request/response, no channel to
   // subscribe to) in favour of a 30s poll fallback below.
   useEffect(() => {
-    if (isFeatureRoutedToIcp("messaging")) return;
+    if (icpMode) return;
     const channel = supabase
       .channel(`poll-${pollId}`)
       .on(
@@ -94,16 +130,22 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const isClosed = useMemo(() => {
     if (!data?.poll) return false;
+    if (data.closed) return true;
     if (data.poll.closed_at) return true;
     if (data.poll.closes_at && new Date(data.poll.closes_at).getTime() <= Date.now()) return true;
     return false;
-  }, [data?.poll]);
+  }, [data]);
 
   const totalVotes = data?.votes.length ?? 0;
-  const myVoteOptionIds = useMemo(
-    () => new Set((data?.votes || []).filter(v => v.user_id === user?.id).map(v => v.option_id)),
-    [data?.votes, user?.id]
-  );
+  // In ICP mode the canister only tells us aggregate counts, so track the
+  // voter's own selection locally (optimistic, from the vote call result).
+  const [icpMyOptionIndex, setIcpMyOptionIndex] = useState<number | null>(null);
+  const myVoteOptionIds = useMemo(() => {
+    if (icpMode) {
+      return new Set(icpMyOptionIndex !== null ? [String(icpMyOptionIndex)] : []);
+    }
+    return new Set((data?.votes || []).filter(v => v.user_id === user?.id).map(v => v.option_id));
+  }, [data?.votes, user?.id, icpMode, icpMyOptionIndex]);
 
   const voteCountByOption = useMemo(() => {
     const map = new Map<string, number>();
@@ -115,7 +157,17 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const voteMutation = useMutation({
     mutationFn: async (optionId: string) => {
-      // NEEDS-CANISTER: polls (poll_votes) have no messaging_domain equivalent.
+      if (icpMode) {
+        const optionIndex = Number(optionId);
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => voteLivePoll(ctx, pollId, optionIndex),
+        });
+        setIcpMyOptionIndex((prev) => (prev === optionIndex ? null : optionIndex));
+        return;
+      }
       assertSupabaseWritePath("messaging", "polls");
       if (!user || !data?.poll) return;
       setBusyOptionId(optionId);
@@ -158,7 +210,15 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const closeMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: polls have no messaging_domain equivalent.
+      if (icpMode) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => closeLivePoll(ctx, pollId),
+        });
+        return;
+      }
       assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase
         .from("polls")
@@ -241,14 +301,16 @@ export function PollCard({ pollId }: PollCardProps) {
                   <Lock className="h-4 w-4 mr-2" /> Close poll
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={() => {
-                  if (confirm("Delete this poll? Votes will be removed.")) deleteMutation.mutate();
-                }}
-              >
-                <Trash2 className="h-4 w-4 mr-2" /> Delete poll
-              </DropdownMenuItem>
+              {!icpMode && (
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => {
+                    if (confirm("Delete this poll? Votes will be removed.")) deleteMutation.mutate();
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete poll
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

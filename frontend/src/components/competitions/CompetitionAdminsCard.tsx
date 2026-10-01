@@ -6,11 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Principal } from "@icp-sdk/core/principal";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import {
+  addLiveCompetitionRole,
+  listLiveCompetitionRoles,
+  removeLiveCompetitionRole,
+} from "@/live/features/competitions";
 
 interface CompetitionAdminsCardProps {
   competitionId: string;
@@ -47,39 +54,60 @@ export function CompetitionAdminsCard({
   const { data: roles = [], isLoading } = useQuery({
     queryKey: rolesQueryKey,
     enabled: !!competitionId,
-    queryFn: async () => {
-      const { data: roleRows, error } = await supabase
-        .from("competition_roles")
-        .select("id, user_id, role")
-        .eq("competition_id", competitionId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      const rows = roleRows ?? [];
-      if (rows.length === 0) return [] as RoleRow[];
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data: roleRows, error } = await supabase
+            .from("competition_roles")
+            .select("id, user_id, role")
+            .eq("competition_id", competitionId)
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          const rows = roleRows ?? [];
+          if (rows.length === 0) return [] as RoleRow[];
 
-      const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url")
-        .in("id", userIds);
-      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+          const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url")
+            .in("id", userIds);
+          const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
-      return rows.map((r) => ({
-        id: r.id,
-        user_id: r.user_id,
-        role: r.role,
-        profile: profileMap.get(r.user_id) ?? null,
-      })) as RoleRow[];
-    },
+          return rows.map((r) => ({
+            id: r.id,
+            user_id: r.user_id,
+            role: r.role,
+            profile: profileMap.get(r.user_id) ?? null,
+          })) as RoleRow[];
+        },
+        // Canister role grants have no joined profile row (keyed by
+        // principal, not a Supabase uuid) — display principal text instead
+        // of a resolved name/avatar.
+        icp: async (ctx) => {
+          const grants = await listLiveCompetitionRoles(ctx, competitionId);
+          return grants
+            .filter((g) => g.role === "owner" || g.role === "admin")
+            .map((g) => ({
+              id: `${g.user.toText()}:${g.role}`,
+              user_id: g.user.toText(),
+              role: g.role,
+              profile: null,
+            })) as RoleRow[];
+        },
+      }),
   });
 
   const existingUserIds = useMemo(() => new Set(roles.map((r) => r.user_id)), [roles]);
 
   // Member search scoped to the organiser club (consistent with other
   // club-scoped invite searches in the app).
+  const isIcp = isFeatureRoutedToIcp("competitions");
+
+  // Supabase RPC search only — the canister has no profile directory to
+  // search, so ICP admins are added by pasting their principal below.
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
     queryKey: ["competition-admin-search", competitionId, debouncedSearch],
-    enabled: debouncedSearch.trim().length >= 2,
+    enabled: !isIcp && debouncedSearch.trim().length >= 2,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("search_invitable_profiles", {
         _query: debouncedSearch.trim(),
@@ -91,23 +119,41 @@ export function CompetitionAdminsCard({
     },
   });
 
+  const addByPrincipal = () => {
+    const text = search.trim();
+    if (!text) return;
+    try {
+      Principal.fromText(text);
+    } catch {
+      toast({ title: "Invalid principal", description: "Enter a valid Internet Identity principal.", variant: "destructive" });
+      return;
+    }
+    if (existingUserIds.has(text)) {
+      toast({ title: "Already an admin" });
+      return;
+    }
+    addMutation.mutate({ id: text, display_name: null });
+  };
+
   const addMutation = useMutation({
     mutationFn: async (target: { id: string; display_name: string | null }) => {
-      // NEEDS-CANISTER: competition_domain has no admin-roster write (add/remove
-      // competition_roles); only is_competition_admin (read) exists.
-      assertSupabaseWritePath("competitions", "granting a per-competition admin role");
-      const { error } = await supabase.from("competition_roles").insert({
-        competition_id: competitionId,
-        user_id: target.id,
-        role: "admin",
-      });
-      if (error) throw error;
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.from("competition_roles").insert({
+            competition_id: competitionId,
+            user_id: target.id,
+            role: "admin",
+          });
+          if (error) throw error;
 
-      await supabase.from("notifications").insert({
-        user_id: target.id,
-        type: "membership",
-        message: `You have been added as an admin of ${competitionName}`,
-        related_id: competitionId,
+          await supabase.from("notifications").insert({
+            user_id: target.id,
+            type: "membership",
+            message: `You have been added as an admin of ${competitionName}`,
+            related_id: competitionId,
+          });
+        },
+        icp: (ctx) => addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin"),
       });
       return target;
     },
@@ -126,10 +172,13 @@ export function CompetitionAdminsCard({
 
   const removeMutation = useMutation({
     mutationFn: async (row: RoleRow) => {
-      // NEEDS-CANISTER: competition_domain has no admin-roster write.
-      assertSupabaseWritePath("competitions", "removing a per-competition admin role");
-      const { error } = await supabase.from("competition_roles").delete().eq("id", row.id);
-      if (error) throw error;
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase.from("competition_roles").delete().eq("id", row.id);
+          if (error) throw error;
+        },
+        icp: (ctx) => removeLiveCompetitionRole(ctx, competitionId, Principal.fromText(row.user_id), row.role),
+      });
       return row;
     },
     onSuccess: (row) => {
@@ -215,7 +264,7 @@ export function CompetitionAdminsCard({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search club members to add as admin…"
+              placeholder={isIcp ? "Paste an Internet Identity principal…" : "Search club members to add as admin…"}
               className="pl-9 pr-9"
               aria-label="Search members to add as competition admin"
             />
@@ -231,7 +280,18 @@ export function CompetitionAdminsCard({
             )}
           </div>
 
-          {debouncedSearch.trim().length >= 2 && (
+          {isIcp ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={addMutation.isPending || !search.trim()}
+              onClick={addByPrincipal}
+            >
+              <ShieldPlus className="h-3.5 w-3.5" />
+              Add by principal
+            </Button>
+          ) : debouncedSearch.trim().length >= 2 && (
             <div className="border rounded-md divide-y">
               {isSearching ? (
                 <div className="flex justify-center py-3">

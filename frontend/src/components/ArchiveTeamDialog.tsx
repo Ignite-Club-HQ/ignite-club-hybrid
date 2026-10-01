@@ -17,6 +17,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { archiveLiveTeam, unarchiveLiveTeam } from "@/live/features/club";
 
 interface ArchiveTeamDialogProps {
   teamId: string;
@@ -45,20 +47,29 @@ export function ArchiveTeamDialog({
 
   const handleArchive = async () => {
     setLoading(true);
-    const { error } = await supabase
-      .from("teams")
-      .update({
-        is_archived: true,
-        archived_at: new Date().toISOString(),
-        season_label: seasonLabel.trim() || null,
-      } as any)
-      .eq("id", teamId);
-    setLoading(false);
-
-    if (error) {
-      toast({ title: "Failed to archive team", variant: "destructive" });
+    try {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("teams")
+            .update({
+              is_archived: true,
+              archived_at: new Date().toISOString(),
+              season_label: seasonLabel.trim() || null,
+            } as any)
+            .eq("id", teamId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await archiveLiveTeam(ctx, teamId);
+        },
+      });
+    } catch (error) {
+      setLoading(false);
+      toast({ title: "Failed to archive team", description: (error as Error).message, variant: "destructive" });
       return;
     }
+    setLoading(false);
 
     queryClient.invalidateQueries({ queryKey: ["club-teams", clubId] });
     queryClient.invalidateQueries({ queryKey: ["team", teamId] });
@@ -67,26 +78,29 @@ export function ArchiveTeamDialog({
   };
 
   const handleReinstate = async () => {
-    try {
-      assertSupabaseWritePath("membership", "team reinstate (is_archived/archived_at) has no club_domain counterpart"); // NEEDS-CANISTER: team reinstate (is_archived/archived_at) has no club_domain counterpart
-    } catch (guardError) {
-      toast({ title: "Failed to reinstate team", description: (guardError as Error).message, variant: "destructive" });
-      return;
-    }
     setLoading(true);
-    const { error } = await supabase
-      .from("teams")
-      .update({
-        is_archived: false,
-        archived_at: null,
-      } as any)
-      .eq("id", teamId);
-    setLoading(false);
-
-    if (error) {
-      toast({ title: "Failed to reinstate team", variant: "destructive" });
+    try {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("teams")
+            .update({
+              is_archived: false,
+              archived_at: null,
+            } as any)
+            .eq("id", teamId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await unarchiveLiveTeam(ctx, teamId);
+        },
+      });
+    } catch (error) {
+      setLoading(false);
+      toast({ title: "Failed to reinstate team", description: (error as Error).message, variant: "destructive" });
       return;
     }
+    setLoading(false);
 
     queryClient.invalidateQueries({ queryKey: ["club-teams", clubId] });
     queryClient.invalidateQueries({ queryKey: ["team", teamId] });

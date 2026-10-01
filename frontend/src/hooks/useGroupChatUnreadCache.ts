@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveUnreadCounts } from "@/live/features/messaging";
 
 export const groupChatUnreadCacheKey = (userId: string | null | undefined) =>
   notificationKeys.chatGroupUnreadFor(userId);
@@ -37,17 +39,29 @@ export function useGroupChatUnreadCache(userId: string | null | undefined) {
     initialDataUpdatedAt: 0,
     refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("chat_group_unread")
-        .select("group_id, unread_count")
-        .eq("user_id", userId!)
-        .gt("unread_count", 0);
-      if (error) throw error;
-      const map: UnreadMap = {};
-      (data ?? []).forEach((row: any) => {
-        if (row.group_id) map[row.group_id] = Number(row.unread_count) || 0;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("chat_group_unread")
+            .select("group_id, unread_count")
+            .eq("user_id", userId!)
+            .gt("unread_count", 0);
+          if (error) throw error;
+          const map: UnreadMap = {};
+          (data ?? []).forEach((row: any) => {
+            if (row.group_id) map[row.group_id] = Number(row.unread_count) || 0;
+          });
+          return map;
+        },
+        icp: async (ctx) => {
+          const summaries = await myLiveUnreadCounts(ctx);
+          const map: UnreadMap = {};
+          for (const s of summaries) {
+            if (s.kind === "group" && s.count > 0) map[s.conversationId] = s.count;
+          }
+          return map;
+        },
       });
-      return map;
     },
   });
 

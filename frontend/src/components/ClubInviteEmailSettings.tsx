@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveClubInviteEmailStyle } from "@/live/features/club";
 import { toast } from "sonner";
 
 interface Props {
@@ -57,12 +58,18 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
 
   const updateMutation = useMutation({
     mutationFn: async (invite_email_style: InviteEmailStyle) => {
-      assertSupabaseWritePath("membership", "invite_email_style column");
-      const { error } = await supabase
-        .from("clubs")
-        .update({ invite_email_style })
-        .eq("id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("clubs")
+            .update({ invite_email_style })
+            .eq("id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveClubInviteEmailStyle(ctx, clubId, invite_email_style);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-invite-email-style", clubId] });

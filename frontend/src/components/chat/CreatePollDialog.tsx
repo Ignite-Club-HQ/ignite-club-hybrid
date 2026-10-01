@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLivePoll } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -154,12 +156,6 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
   const create = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not signed in");
-      // Polls (polls/poll_options rows) have no canister counterpart yet.
-      // NEEDS-CANISTER: messaging_domain (or a dedicated polls canister) create-poll call.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Creating polls isn't available yet on the Internet Identity messaging backend.");
-      }
-
 
       const currentValidation = validatePoll(question, options);
       if (currentValidation.questionError) throw new Error(currentValidation.questionError);
@@ -171,6 +167,19 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
         if (Number.isNaN(time.getTime())) throw new Error("Invalid close time");
         if (time.getTime() <= Date.now()) throw new Error("Close time must be in the future");
         closesAtIso = time.toISOString();
+      }
+
+      if (isFeatureRoutedToIcp("messaging")) {
+        // ICP polls have no `closes_at` or `allow_multiple` field yet — the
+        // canister always behaves single-choice and open until closed.
+        const poll = await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) =>
+            createLivePoll(ctx, chatId, null, currentValidation.cleanQuestion, currentValidation.cleanOptions),
+        });
+        return poll.id;
       }
 
       const { data: poll, error: pollErr } = await supabase
