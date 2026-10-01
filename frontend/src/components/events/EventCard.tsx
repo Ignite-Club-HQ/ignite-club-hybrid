@@ -38,6 +38,10 @@ import { formatEventTitle } from "@/lib/eventTitle";
 import { getEventDisplay } from "@/lib/eventDisplay";
 import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled } from "@/live/features/events";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 import { buildPersonalRsvpLine } from "@/lib/personalRsvpLine";
 import { useEventMembership } from "@/hooks/useEventMembership";
@@ -392,6 +396,17 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   // Self RSVP (parent attending too)
   const selfRsvpMutation = useMutation({
     mutationFn: async (status: RsvpStatus) => {
+      // Hybrid routing: when the events feature resolves to ICP, write the
+      // RSVP to the events_domain canister (mirrors useEventRsvpMutations).
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveEventRsvp(ctx, event.id, user!.id, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       let rsvpId: string | null = null;
       if (myRsvp) {
         const { error } = await supabase.from("rsvps").update({ status }).eq("id", myRsvp.id);
@@ -423,6 +438,20 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   // Per-child RSVP
   const childRsvpMutation = useMutation({
     mutationFn: async ({ childId, status }: { childId: string; status: RsvpStatus }) => {
+      // Hybrid routing: child RSVP upsert reuses the admin_upsert_rsvp
+      // canister method (account + optional child + status) — the canister
+      // has no separate "self, on behalf of my own child" shape, so the
+      // parent's own account id is used as the acting account (mirrors the
+      // child RSVP write in useEventRsvpMutations).
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await adminUpsertLiveRsvp(ctx, event.id, user!.id, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const existing = (householdChildren || []).find((c) => c.child_id === childId)?.rsvp;
       let rsvpId: string | null = null;
       if (existing) {

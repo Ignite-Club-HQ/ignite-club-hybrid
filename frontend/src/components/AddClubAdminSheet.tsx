@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sheet";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -121,6 +122,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
   // Add existing user directly to club
   const addExistingUserMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "club admin role grant via add_role_grant has no notification/email equivalent"); // NEEDS-CANISTER: club admin role grant via add_role_grant has no notification/email equivalent
       if (!selectedUser) throw new Error("No user selected");
 
       const { error } = await supabase.from("user_roles").insert({
@@ -159,6 +161,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
   // Add pending member (by name) with invite
   const addPendingMemberMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "club-level named pending invite (pending_invites row) has no club_domain counterpart"); // NEEDS-CANISTER: club-level named pending invite (pending_invites row) has no club_domain counterpart
       if (!customName.trim()) throw new Error("Please enter a name");
 
       // Create a unique token for this specific pending invite

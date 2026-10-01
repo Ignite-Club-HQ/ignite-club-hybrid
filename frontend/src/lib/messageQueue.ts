@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type QueuedMessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
 
@@ -81,6 +82,20 @@ export function getQueuedMessagesForTarget(type: QueuedMessageType, targetId: st
 // Send a single queued message to the server
 async function sendQueuedMessage(message: QueuedMessage): Promise<boolean> {
   try {
+    // The offline queue replays each message type as a raw Supabase insert.
+    // There is no canister method yet to replay an arbitrary queued chat
+    // message (team/club/group/broadcast/dm/club_admin) with its original
+    // idempotency semantics, so under ICP routing we refuse to send instead
+    // of writing into a database ICP users' data never lands in. The
+    // message stays queued and is dropped after MAX_RETRIES like any other
+    // send failure.
+    // NEEDS-CANISTER: generic queued-message replay (idempotent send for
+    // team/club/group/broadcast/dm/club_admin types) on messaging_domain.
+    if (isFeatureRoutedToIcp("messaging")) {
+      console.warn("[messageQueue] messaging is routed to ICP; skipping Supabase replay for", message.type);
+      return false;
+    }
+
     let error;
 
     switch (message.type) {
