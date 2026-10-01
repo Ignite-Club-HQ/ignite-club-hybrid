@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveCoachNote, setLiveCoachNote } from "@/live/features/events";
 
 interface EventNoteSectionProps {
   eventId: string;
@@ -33,13 +35,44 @@ export function EventNoteSection({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note ?? "");
   const cardRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const isIcpRouted = isFeatureRoutedToIcp("events");
+
+  // On ICP, coach notes live in events_domain (set_coach_note/get_coach_note)
+  // rather than on the Supabase `events` row the caller passed props from —
+  // fetch directly so Internet Identity accounts see live canister state.
+  const { data: icpNote } = useQuery({
+    queryKey: ["live-coach-note", eventId],
+    enabled: isIcpRouted && !!eventId,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const result = await getLiveCoachNote(ctx, eventId);
+          return (result && result.length ? result[0] : null) as {
+            note: string;
+            author: string;
+            updated_at: bigint | number;
+          } | null;
+        },
+      }),
+  });
+
+  const effectiveNote = isIcpRouted ? icpNote?.note ?? null : note ?? null;
+  const effectiveNoteAuthor = isIcpRouted ? icpNote?.author ?? null : noteAuthor ?? null;
+  const effectiveNoteUpdatedAt = isIcpRouted
+    ? icpNote?.updated_at != null
+      ? new Date(Number(icpNote.updated_at)).toISOString()
+      : null
+    : noteUpdatedAt ?? null;
+
+  const [draft, setDraft] = useState(effectiveNote ?? "");
+
   useEffect(() => {
-    if (!editing) setDraft(note ?? "");
-  }, [note, editing]);
+    if (!editing) setDraft(effectiveNote ?? "");
+  }, [effectiveNote, editing]);
 
   // When entering edit mode, gently scroll the card into view before focusing
   // the textarea. Mobile browsers otherwise scroll the focused input to the
@@ -54,27 +87,41 @@ export function EventNoteSection({
     return () => cancelAnimationFrame(raf);
   }, [editing]);
 
+  // On ICP, the author is a principal text (no Supabase profile row to join
+  // against) — show the raw author id rather than attempting a profile
+  // lookup that would always miss.
   const { data: fetchedAuthor } = useQuery({
-    queryKey: ["event-note-author", noteAuthor],
-    enabled: !!noteAuthor && !authorName,
+    queryKey: ["event-note-author", effectiveNoteAuthor],
+    enabled: !!effectiveNoteAuthor && !authorName && !isIcpRouted,
     queryFn: async () => {
-      const { data } = await selectCachedProfileById(noteAuthor!);
+      const { data } = await selectCachedProfileById(effectiveNoteAuthor!);
       return data?.display_name ?? null;
     },
   });
-  const displayAuthor = authorName ?? fetchedAuthor ?? null;
+  const displayAuthor = authorName ?? fetchedAuthor ?? (isIcpRouted ? effectiveNoteAuthor : null) ?? null;
 
   const saveMutation = useMutation({
     mutationFn: async (value: string) => {
-      // NEEDS-CANISTER: events_domain update_event has no coach_note field
-      // (title/description/type/location/times only).
-      assertSupabaseWritePath("events", "event notes");
       const trimmed = value.trim();
+      const isUpdate = !!effectiveNote?.trim() && !!trimmed;
+      const isClear = !trimmed;
+
+      const savedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveCoachNote(ctx, eventId, trimmed);
+          return true;
+        },
+      });
+      if (savedOnIcp) {
+        queryClient.invalidateQueries({ queryKey: ["live-coach-note", eventId] });
+        // Push notifications on note changes stay Supabase-only (push
+        // delivery infra); ICP-routed notes are saved but do not notify.
+        return { isClear };
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
-
-      const isUpdate = !!note?.trim() && !!trimmed;
-      const isClear = !trimmed;
 
       const { error } = await supabase
         .from("events")
@@ -111,7 +158,7 @@ export function EventNoteSection({
     },
   });
 
-  const hasNote = !!note?.trim();
+  const hasNote = !!effectiveNote?.trim();
 
   if (!hasNote && !canEdit) return null;
 
@@ -139,7 +186,7 @@ export function EventNoteSection({
               size="sm"
               onClick={() => {
                 setEditing(false);
-                setDraft(note ?? "");
+                setDraft(effectiveNote ?? "");
               }}
               disabled={saveMutation.isPending}
             >
@@ -159,7 +206,7 @@ export function EventNoteSection({
             <Button
               size="sm"
               onClick={() => saveMutation.mutate(draft)}
-              disabled={saveMutation.isPending || !draft.trim() || draft.trim() === (note ?? "").trim()}
+              disabled={saveMutation.isPending || !draft.trim() || draft.trim() === (effectiveNote ?? "").trim()}
             >
               {saveMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -207,12 +254,12 @@ export function EventNoteSection({
             </Button>
           )}
         </div>
-        <p className="text-sm whitespace-pre-line">{note}</p>
-        {(displayAuthor || noteUpdatedAt) && (
+        <p className="text-sm whitespace-pre-line">{effectiveNote}</p>
+        {(displayAuthor || effectiveNoteUpdatedAt) && (
           <p className="text-xs text-muted-foreground">
             {displayAuthor ? `By ${displayAuthor}` : "Posted"}
-            {noteUpdatedAt &&
-              ` · ${formatDistanceToNow(new Date(noteUpdatedAt), { addSuffix: true })}`}
+            {effectiveNoteUpdatedAt &&
+              ` · ${formatDistanceToNow(new Date(effectiveNoteUpdatedAt), { addSuffix: true })}`}
           </p>
         )}
       </CardContent>

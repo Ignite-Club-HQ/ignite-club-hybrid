@@ -634,6 +634,15 @@ persistent actor {
     #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
   };
 
+  // Caller-scoped: every role grant the caller holds across ALL clubs,
+  // from the authorization-source `acl.roles` (not the `accountRoles`
+  // roster mirror). No club-admin gate — callers may always see their own
+  // grants, matching whoami()/list_children()'s self-scoped read stance.
+  public query ({ caller }) func my_role_grants() : async [Types.RoleGrant] {
+    auth(caller);
+    acl.roles.filter(func(grant) = grant.user.equal(caller))
+  };
+
   // Caller-scoped: returns only the children linked to the caller's own
   // account via family links. Children without a matching record in
   // acl.children are skipped.

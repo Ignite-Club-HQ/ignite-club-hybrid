@@ -674,6 +674,52 @@ persistent actor {
     }
   };
 
+  // Shared removal core for remove_group_member/leave_group: drops `member`
+  // from the group's member list, its group-role entries, and the backing
+  // conversation's participants.
+  func removeGroupMemberCore(conversation_id : Text, meta : Types.GroupMetadata, ci : Nat, member : Principal) : Types.GroupMetadata {
+    let updated : Types.GroupMetadata = { meta with members = meta.members.filter(func(p) = not p.equal(member)) };
+    groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+    groupMetadata := groupMetadata.concat([updated]);
+    groupRoles := groupRoles.filter(func(r) = not (r.conversation_id == conversation_id and r.user.equal(member)));
+    let conv = conversations[ci];
+    let newParticipants = conv.participants.filter(func(p) = not p.equal(member));
+    conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = newParticipants } } else { conversations[pos] });
+    updated
+  };
+
+  // Same permission rule as add_group_members: group/metadata manager
+  // (owner/admin role, scoped admin, governor/app_admin) only.
+  public shared ({ caller }) func remove_group_member(conversation_id : Text, member : Principal) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    if (member.equal(Principal.anonymous())) return #Err("Invalid member");
+    switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
+      case (null, _) { #Err("Group metadata not found") };
+      case (_, null) { #Err("Conversation not found") };
+      case (?meta, ?ci) {
+        if (meta.deleted) return #Err("Group deleted");
+        if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
+        if (not meta.members.any(func(p) = p.equal(member))) return #Err("Member not found");
+        #Ok(removeGroupMemberCore(conversation_id, meta, ci, member))
+      };
+    }
+  };
+
+  // A member removing themselves: requires current membership, no admin
+  // gate (mirrors remove_group_member's effect targeted at the caller).
+  public shared ({ caller }) func leave_group(conversation_id : Text) : async { #Ok : Types.GroupMetadata; #Err : Text } {
+    auth(caller);
+    switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
+      case (null, _) { #Err("Group metadata not found") };
+      case (_, null) { #Err("Conversation not found") };
+      case (?meta, ?ci) {
+        if (meta.deleted) return #Err("Group deleted");
+        if (not meta.members.any(func(p) = p.equal(caller))) return #Err("Not a member");
+        #Ok(removeGroupMemberCore(conversation_id, meta, ci, caller))
+      };
+    }
+  };
+
   public shared ({ caller }) func soft_delete_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     switch (getGroupMetadataFor(conversation_id)) {
@@ -779,6 +825,22 @@ persistent actor {
         let updated = { poll with closed = true };
         polls := Array.tabulate<Types.Poll>(polls.size(), func(pos) = if (pos == i) updated else polls[pos]);
         #Ok(updated)
+      };
+    }
+  };
+
+  // Same gating as close_poll: poll creator, governor, or app_admin. Removes
+  // the poll and every vote cast on it.
+  public shared ({ caller }) func delete_poll(poll_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (findPollIndex(poll_id)) {
+      case null { #Err("Poll not found") };
+      case (?i) {
+        let poll = polls[i];
+        if (not poll.creator.equal(caller) and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("Poll delete forbidden");
+        polls := polls.filter(func(p) = p.id != poll_id);
+        pollVotes := pollVotes.filter(func(v) = v.poll_id != poll_id);
+        #Ok
       };
     }
   };

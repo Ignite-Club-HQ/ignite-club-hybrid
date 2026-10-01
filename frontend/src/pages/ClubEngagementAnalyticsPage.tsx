@@ -82,7 +82,10 @@ import {
   getLiveClubEngagementMessageVolume,
   getLiveClubEngagementRsvpCompletionSeries,
   getLiveClubEngagementTotalUniqueReach,
+  getLiveClubEngagementBenchmarks,
+  getLiveClubEngagementSponsorPerformance,
 } from "@/live/features/insights";
+import type { EngagementBenchmarks as IcpEngagementBenchmarks, EngagementDayPoint } from "@/lab/bindings/insights_domain/declarations/insights_domain.did.js";
 
 const ALL_TEAMS = "__all__";
 const RANGE_PRESETS = [
@@ -713,6 +716,36 @@ function SupabaseClubEngagementAnalyticsPage({
     enabled: queryReady && !!access?.isAdmin && !isIcpAnalytics,
   });
 
+  // ---------- ICP-native benchmarks + sponsor day-series (insights_domain mirrors) ----------
+  const { data: icpBenchmarks } = useQuery({
+    queryKey: ["club-engagement-icp-benchmarks", clubId, range.start.toISOString(), range.end.toISOString(), prevRange.start.toISOString(), prevRange.end.toISOString()],
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => null,
+        icp: (ctx) =>
+          getLiveClubEngagementBenchmarks(
+            ctx,
+            requireIcpClubId(),
+            range.start.getTime(),
+            range.end.getTime(),
+            prevRange.start.getTime(),
+            prevRange.end.getTime(),
+          ),
+      }),
+    enabled: queryReady && !!access?.isAdmin && isIcpAnalytics,
+  });
+
+  const { data: icpSponsorSeries } = useQuery({
+    queryKey: ["club-engagement-icp-sponsor-series", clubId, range.start.toISOString(), range.end.toISOString()],
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => null,
+        icp: (ctx) =>
+          getLiveClubEngagementSponsorPerformance(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime()),
+      }),
+    enabled: queryReady && !!access?.isAdmin && isIcpAnalytics,
+  });
+
   // ---------- Sponsor performance (unique reach + CTR per sponsor) ----------
   const { data: sponsorPerf = [] } = useQuery({
     queryKey: ["club-engagement-sponsor-perf", clubId, mode, range.start.toISOString(), range.end.toISOString()],
@@ -1111,19 +1144,19 @@ function SupabaseClubEngagementAnalyticsPage({
 
       {/* Benchmark: Active Member % */}
       <SectionHeader icon={Users} title="Active Member Rate" description="Members with any meaningful action in this period" />
-      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <ActiveMemberCard b={benchmarks} />}
+      {isIcpAnalytics ? <IcpEngagementTotalsCard b={icpBenchmarks} field="active_users" label="Active users" icon={Users} /> : benchmarksError ? <AnalyticsErrorCard /> : <ActiveMemberCard b={benchmarks} />}
 
       {/* Benchmark: DAU / WAU / MAU */}
-      <SectionHeader icon={Activity} title="Engagement (DAU / WAU / MAU)" description="Industry-standard active-user metrics" />
-      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <EngagementBenchmarkCards b={benchmarks} />}
+      <SectionHeader icon={Activity} title={isIcpAnalytics ? "Active Users Trend" : "Engagement (DAU / WAU / MAU)"} description={isIcpAnalytics ? "Current vs previous period active users (canister aggregate — no daily/weekly/monthly split yet)" : "Industry-standard active-user metrics"} />
+      {isIcpAnalytics ? <IcpEngagementTotalsCard b={icpBenchmarks} field="active_users" label="Active users" icon={Activity} /> : benchmarksError ? <AnalyticsErrorCard /> : <EngagementBenchmarkCards b={benchmarks} />}
 
       {/* Benchmark: Message Participation */}
-      <SectionHeader icon={MessageSquare} title="Message Participation" description="How members engage with chat" />
-      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <MessageParticipationCard b={benchmarks} />}
+      <SectionHeader icon={MessageSquare} title="Message Participation" description={isIcpAnalytics ? "Messages sent, current vs previous period" : "How members engage with chat"} />
+      {isIcpAnalytics ? <IcpEngagementTotalsCard b={icpBenchmarks} field="messages" label="Messages sent" icon={MessageSquare} /> : benchmarksError ? <AnalyticsErrorCard /> : <MessageParticipationCard b={benchmarks} />}
 
-      {/* Benchmark: Read Rates */}
-      <SectionHeader icon={Eye} title="Read Rates" description="Communication effectiveness — viewers within 7 days" />
-      {isIcpAnalytics ? <NotAvailableCard /> : benchmarksError ? <AnalyticsErrorCard /> : <ReadRatesGrid b={benchmarks} />}
+      {/* Benchmark: RSVP engagement (canister has no per-communication read rate yet) */}
+      <SectionHeader icon={Eye} title={isIcpAnalytics ? "RSVP Completions" : "Read Rates"} description={isIcpAnalytics ? "RSVPs completed, current vs previous period" : "Communication effectiveness — viewers within 7 days"} />
+      {isIcpAnalytics ? <IcpEngagementTotalsCard b={icpBenchmarks} field="rsvps" label="RSVPs completed" icon={Eye} /> : benchmarksError ? <AnalyticsErrorCard /> : <ReadRatesGrid b={benchmarks} />}
 
       {/* Section 2: Member Adoption */}
       <SectionHeader
@@ -1246,8 +1279,8 @@ function SupabaseClubEngagementAnalyticsPage({
       </div>
 
       {/* Section 6: Sponsor Performance */}
-      <SectionHeader icon={Trophy} title="Sponsor Performance" description="Unique reach, profile views, clicks and CTR" />
-      {isIcpAnalytics ? <NotAvailableCard /> : <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />}
+      <SectionHeader icon={Trophy} title="Sponsor Performance" description={isIcpAnalytics ? "Aggregate sponsor impressions & clicks over time" : "Unique reach, profile views, clicks and CTR"} />
+      {isIcpAnalytics ? <IcpSponsorPerformanceCard series={icpSponsorSeries} totalUniqueReach={totalUniqueReach} /> : <SponsorPerformanceBlock rows={sponsorPerf} totalSponsors={sponsorRows.length} totalUniqueReach={totalUniqueReach} />}
 
       {/* Section 6b: In-app Ad Performance (platform-wide only — house ads served to Free clubs).
           AdMob-mediated impressions/revenue are reported separately in the Google AdMob console. */}
@@ -1386,17 +1419,6 @@ function AnalyticsErrorCard() {
       <CardContent className="p-3 flex items-start gap-2 text-sm text-destructive">
         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
         <span>Analytics could not load. Refresh this page to try again.</span>
-      </CardContent>
-    </Card>
-  );
-}
-
-function NotAvailableCard() {
-  return (
-    <Card className="border-border/60">
-      <CardContent className="p-3 flex items-start gap-2 text-sm text-muted-foreground">
-        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-        <span>Not available on this backend yet.</span>
       </CardContent>
     </Card>
   );
@@ -1677,6 +1699,103 @@ function ReadRatesGrid({ b }: { b: Benchmarks }) {
         prevPossible={Number(b.prev_team_msg_possible || 0)}
         emptyLabel="No team messages in this period."
       />
+    </div>
+  );
+}
+
+function IcpEngagementTotalsCard({
+  b,
+  field,
+  label,
+  icon: Icon,
+}: {
+  b: IcpEngagementBenchmarks | undefined;
+  field: keyof IcpEngagementBenchmarks["current"];
+  label: string;
+  icon: any;
+}) {
+  if (!b) return <Skeleton className="h-24 w-full" />;
+  const current = Number(b.current[field] || 0);
+  const previous = Number(b.previous[field] || 0);
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-3xl font-bold text-primary flex items-center gap-2">
+              <Icon className="h-5 w-5 text-muted-foreground" />
+              {current.toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground">{label} (this period)</div>
+          </div>
+          <div className="text-right text-xs space-y-0.5">
+            <div className="text-muted-foreground">{previous.toLocaleString()} previous period</div>
+            <TrendBadge current={current} previous={previous} suffix="%" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function sumDayPoints(points: EngagementDayPoint[] | undefined): number {
+  if (!points) return 0;
+  return points.reduce((a, p) => a + Number(p.value), 0);
+}
+
+function IcpSponsorPerformanceCard({
+  series,
+  totalUniqueReach,
+}: {
+  series: { clicks: EngagementDayPoint[]; impressions: EngagementDayPoint[] } | null | undefined;
+  totalUniqueReach: number;
+}) {
+  if (!series) return <Skeleton className="h-40 w-full" />;
+  const totalClicks = sumDayPoints(series.clicks);
+  const totalImpressions = sumDayPoints(series.impressions);
+  const ctr = totalImpressions ? Math.round((totalClicks / totalImpressions) * 1000) / 10 : 0;
+  if (totalClicks === 0 && totalImpressions === 0) {
+    return (
+      <Card>
+        <CardContent className="py-6">
+          <EmptyState label="No sponsor impressions or clicks recorded in this period." />
+        </CardContent>
+      </Card>
+    );
+  }
+  const chartData = series.impressions.map((p, i) => ({
+    day: p.day,
+    impressions: p.value,
+    clicks: series.clicks[i]?.value ?? 0,
+  }));
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Metric icon={Eye} label="Impressions" value={totalImpressions} />
+        <Metric icon={MousePointerClick} label="Clicks" value={totalClicks} />
+        <Metric icon={TrendingUp} label="CTR" value={`${ctr}%`} />
+        <Metric icon={Users} label="Members Reached" value={totalUniqueReach} hint="unique identified members" />
+      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Sponsor impressions & clicks over time</CardTitle>
+          <CardDescription className="text-xs">Aggregate across all sponsors for this club (canister has no per-sponsor breakdown yet)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="day" tickFormatter={(d) => format(parseISO(d), "M/d")} fontSize={11} />
+                <YAxis fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="impressions" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="Impressions" />
+                <Line type="monotone" dataKey="clicks" stroke="hsl(var(--destructive))" strokeWidth={2} dot={false} name="Clicks" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

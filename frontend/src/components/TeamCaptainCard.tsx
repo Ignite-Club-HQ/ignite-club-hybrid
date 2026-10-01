@@ -19,11 +19,14 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveTeamCaptain, removeLiveTeamCaptain, listLiveTeamCaptains } from "@/live/features/club";
+import { Principal } from "@icp-sdk/core/principal";
 
 interface TeamCaptainCardProps {
   teamId: string;
   teamName: string;
+  clubId: string;
   /** Roster keyed by user id, same shape TeamDetailPage passes to PromoteToTeamAdminDialog. */
   members: Record<string, { profile: any; roles: { id: string; role: string }[] }>;
   /** Only real team admins / club admins / app admins may appoint or remove captains. */
@@ -33,6 +36,7 @@ interface TeamCaptainCardProps {
 export default function TeamCaptainCard({
   teamId,
   teamName,
+  clubId,
   members,
   canManage,
 }: TeamCaptainCardProps) {
@@ -44,14 +48,21 @@ export default function TeamCaptainCard({
 
   const { data: captains = [] } = useQuery({
     queryKey: ["team-captains", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("team_captains")
-        .select("id, user_id")
-        .eq("team_id", teamId);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_captains")
+            .select("id, user_id")
+            .eq("team_id", teamId);
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const list = await listLiveTeamCaptains(ctx, teamId);
+          return list.map((c) => ({ id: c.user.toText(), user_id: c.user.toText() }));
+        },
+      }),
     enabled: !!teamId,
   });
 
@@ -75,18 +86,24 @@ export default function TeamCaptainCard({
 
   const assignMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "team_captains insert + notification has no club_domain counterpart"); // NEEDS-CANISTER: team_captains insert + notification has no club_domain counterpart
       if (!selectedUserId) return;
-      const { error } = await supabase
-        .from("team_captains")
-        .insert({ team_id: teamId, user_id: selectedUserId });
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("team_captains")
+            .insert({ team_id: teamId, user_id: selectedUserId });
+          if (error) throw error;
 
-      await supabase.from("notifications").insert({
-        user_id: selectedUserId,
-        type: "membership",
-        message: `You are now Captain of ${teamName} and can help manage the team`,
-        related_id: teamId,
+          await supabase.from("notifications").insert({
+            user_id: selectedUserId,
+            type: "membership",
+            message: `You are now Captain of ${teamName} and can help manage the team`,
+            related_id: teamId,
+          });
+        },
+        icp: async (ctx) => {
+          await addLiveTeamCaptain(ctx, clubId, teamId, Principal.fromText(selectedUserId));
+        },
       });
     },
     onSuccess: () => {
@@ -107,13 +124,19 @@ export default function TeamCaptainCard({
 
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
-      assertSupabaseWritePath("membership", "team_captains delete has no club_domain counterpart"); // NEEDS-CANISTER: team_captains delete has no club_domain counterpart
-      const { error } = await supabase
-        .from("team_captains")
-        .delete()
-        .eq("team_id", teamId)
-        .eq("user_id", userId);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("team_captains")
+            .delete()
+            .eq("team_id", teamId)
+            .eq("user_id", userId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await removeLiveTeamCaptain(ctx, clubId, teamId, Principal.fromText(userId));
+        },
+      });
     },
     onSuccess: () => {
       afterChange();
