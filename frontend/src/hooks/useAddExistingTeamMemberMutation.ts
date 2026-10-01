@@ -9,6 +9,7 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 type Profile = {
   id: string;
@@ -68,6 +69,7 @@ export function useAddExistingTeamMemberMutation({
     mutationFn: async () => {
       if (!selectedUser) throw new Error("No user selected");
       if (!userId) throw new Error("You must be signed in to add a member");
+      assertSupabaseWritePath("membership", "existing-member add (role grant + children + second-parent + notifications) has no club_domain counterpart"); // NEEDS-CANISTER: existing-member add (role grant + children + second-parent + notifications) has no club_domain counterpart
 
       const { error } = await supabase.from("user_roles").insert({
         user_id: selectedUser.id,

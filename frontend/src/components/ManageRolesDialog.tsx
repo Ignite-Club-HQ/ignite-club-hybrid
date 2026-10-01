@@ -26,6 +26,9 @@ import { useToast } from "@/hooks/use-toast";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { cn } from "@/lib/utils";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveRoleGrant, removeLiveRoleGrant } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 
 /**
  * Single dialog that unifies role assignment AND team-admin promotion for a
@@ -168,41 +171,56 @@ export default function ManageRolesDialog({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Inserts first so we never leave a member role-less mid-flight.
-      if (additions.length > 0) {
-        const rows = additions.map((r) => ({
-          user_id: userId,
-          team_id: teamId,
-          club_id: clubId,
-          role: r.value,
-        }));
-        const { error } = await supabase.from("user_roles").insert(rows);
-        if (error) throw error;
-      }
-      if (removals.length > 0) {
-        const ids = removals.map((r) => r.id);
-        const { error } = await supabase.from("user_roles").delete().in("id", ids);
-        if (error) throw error;
-      }
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          // Inserts first so we never leave a member role-less mid-flight.
+          if (additions.length > 0) {
+            const rows = additions.map((r) => ({
+              user_id: userId,
+              team_id: teamId,
+              club_id: clubId,
+              role: r.value,
+            }));
+            const { error } = await supabase.from("user_roles").insert(rows);
+            if (error) throw error;
+          }
+          if (removals.length > 0) {
+            const ids = removals.map((r) => r.id);
+            const { error } = await supabase.from("user_roles").delete().in("id", ids);
+            if (error) throw error;
+          }
 
-      // Single consolidated notification summarising the change.
-      const parts: string[] = [];
-      if (additions.length > 0) {
-        parts.push(`added: ${additions.map((r) => r.label).join(", ")}`);
-      }
-      if (removals.length > 0) {
-        parts.push(
-          `removed: ${removals.map((r) => ROLE_LABEL[r.role] ?? r.role).join(", ")}`,
-        );
-      }
-      if (parts.length > 0) {
-        await supabase.from("notifications").insert({
-          user_id: userId,
-          type: "membership",
-          message: `Your roles in ${teamName} were updated — ${parts.join("; ")}`,
-          related_id: teamId,
-        });
-      }
+          // Single consolidated notification summarising the change.
+          const parts: string[] = [];
+          if (additions.length > 0) {
+            parts.push(`added: ${additions.map((r) => r.label).join(", ")}`);
+          }
+          if (removals.length > 0) {
+            parts.push(
+              `removed: ${removals.map((r) => ROLE_LABEL[r.role] ?? r.role).join(", ")}`,
+            );
+          }
+          if (parts.length > 0) {
+            await supabase.from("notifications").insert({
+              user_id: userId,
+              type: "membership",
+              message: `Your roles in ${teamName} were updated — ${parts.join("; ")}`,
+              related_id: teamId,
+            });
+          }
+        },
+        // No notification equivalent on the canister; add/remove the role
+        // grants per role change (team-scoped).
+        icp: async (ctx) => {
+          const user = Principal.fromText(userId);
+          for (const r of additions) {
+            await addLiveRoleGrant(ctx, user, clubId, r.value, teamId);
+          }
+          for (const r of removals) {
+            await removeLiveRoleGrant(ctx, user, clubId, r.role, teamId);
+          }
+        },
+      });
 
       // Invalidate the affected user's role cache (e.g. team_admin gained/lost).
       invalidateRolesCache();

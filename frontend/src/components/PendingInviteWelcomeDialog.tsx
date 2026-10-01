@@ -14,6 +14,7 @@ import {
 } from "@/features/membership/acceptParentInvite";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /** Best-effort "child added" email for a second parent. Never blocks acceptance. */
 async function notifySecondParent(
@@ -227,6 +228,22 @@ export function PendingInviteWelcomeDialog() {
           const parentInviteMeta = invite.metadata as any;
           const isGuardianChildInvite =
             invite.role === "parent" && !!parentInviteMeta?.guardian_child_id;
+
+          // The mini-league child-link branch below is already gated via
+          // withFeatureBackend("mini_leagues", ...). Every other branch here
+          // (guardian auto-accept, parent-team invite auto-accept, generic
+          // role assignment, and the child-added/guardian emails) reads and
+          // writes the Supabase `pending_invites`/`child_guardians`/
+          // `user_roles` tables directly with no club_domain counterpart, so
+          // under ICP membership routing we leave those invites pending
+          // rather than silently no-op or write to the wrong backend.
+          const isMiniLeagueLinkInvite = !!(
+            parentInviteMeta?.child_id && parentInviteMeta?.mini_league_id
+          );
+          if (isFeatureRoutedToIcp("membership") && !isMiniLeagueLinkInvite) {
+            // NEEDS-CANISTER: guardian/parent-team pending_invites auto-accept (role grant, child_guardians links, child-added emails) has no club_domain counterpart
+            continue;
+          }
 
           // Guardian (parent-to-parent) invites: run the whole thing as a
           // single transactional RPC. If the guardian link fails, no role

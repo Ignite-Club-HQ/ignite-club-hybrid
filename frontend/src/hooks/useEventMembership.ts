@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Whether the current user (or any of their children) is a member of the
@@ -39,6 +40,12 @@ export function useEventMembership(event: {
     ],
     queryFn: async (): Promise<boolean> => {
       if (!user) return false;
+
+      // NEEDS-CANISTER: events_domain has no user_roles/children/
+      // child_team_assignments/child_guardians membership tables. Fail open
+      // (assume membership) under ICP routing so RSVP prompts are never
+      // wrongly hidden from an actual member.
+      if (isFeatureRoutedToIcp("events")) return true;
 
       /** Membership against a concrete set of team ids. */
       const isMemberOfAnyTeam = async (teamIds: string[]): Promise<boolean> => {

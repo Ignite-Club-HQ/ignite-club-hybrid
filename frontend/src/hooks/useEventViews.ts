@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 /**
  * Hook to track when a user views an event.
@@ -19,6 +21,8 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
   // Check if user has already viewed this event
   const viewCheckQuery = useQuery({
     queryKey: ["event-view-check", eventId, userId],
+    // NEEDS-CANISTER: events_domain has no event_views table.
+    enabled: !!eventId && !!userId && !isFeatureRoutedToIcp("events"),
     queryFn: async (): Promise<boolean> => {
       const { data, error } = await supabase
         .from("event_views")
@@ -35,7 +39,6 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
       }
       return !!data;
     },
-    enabled: !!eventId && !!userId,
   });
 
   const hasViewed = viewCheckQuery.data;
@@ -43,6 +46,8 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
   // Mutation to record the view
   const recordViewMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: events_domain has no event_views table.
+      assertSupabaseWritePath("events", "event view tracking");
       const { error } = await supabase
         .from("event_views")
         .insert({
@@ -82,6 +87,8 @@ export function useEventViewTracking(eventId: string | undefined, userId: string
 export function useEventViewsAdmin(eventId: string | undefined, enabled: boolean = true) {
   return useQuery({
     queryKey: ["event-views", eventId],
+    // NEEDS-CANISTER: events_domain has no event_views table.
+    enabled: !!eventId && enabled && !isFeatureRoutedToIcp("events"),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_views")
@@ -95,7 +102,6 @@ export function useEventViewsAdmin(eventId: string | undefined, enabled: boolean
       if (error) throw error;
       return data || [];
     },
-    enabled: !!eventId && enabled,
   });
 }
 
@@ -116,6 +122,8 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
 
   return useQuery({
     queryKey: ["user-event-views", userId, cacheKey],
+    // NEEDS-CANISTER: events_domain has no event_views table.
+    enabled: !!userId && normalizedIds.length > 0 && !isFeatureRoutedToIcp("events"),
     queryFn: async () => {
       if (normalizedIds.length === 0) return new Set<string>();
 
@@ -132,6 +140,5 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
         ),
       );
     },
-    enabled: !!userId && normalizedIds.length > 0,
   });
 }

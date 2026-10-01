@@ -11,6 +11,7 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { getMessagePreviewText } from "@/lib/messagePreview";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface RailItem {
   id: string;
@@ -43,12 +44,16 @@ export function DesktopMessagesRail() {
   const [query, setQuery] = useState("");
 
   const isNative = Capacitor.isNativePlatform();
+  // NEEDS-CANISTER: no messaging_domain listing covers a combined recent
+  // conversations rail (DMs + groups + team/club chats with snippets) —
+  // Supabase-only until that wrapper exists.
+  const messagingOnIcp = isFeatureRoutedToIcp("messaging");
 
 
   // DM conversations (same base query + latest-message RPC as MessagesPage)
   const { data: dmItems = [] } = useQuery({
     queryKey: ["desktop-rail-dms", user?.id],
-    enabled: !!user && initialized && !isNative,
+    enabled: !!user && initialized && !isNative && !messagingOnIcp,
     staleTime: 30_000,
     refetchOnReconnect: "always",
     queryFn: async (): Promise<RailItem[]> => {
@@ -107,7 +112,7 @@ export function DesktopMessagesRail() {
   // Group chats (club/team/custom) via the same access RPC the inbox uses
   const { data: groupItems = [] } = useQuery({
     queryKey: ["desktop-rail-groups", user?.id],
-    enabled: !!user && initialized && !isNative,
+    enabled: !!user && initialized && !isNative && !messagingOnIcp,
     staleTime: 30_000,
     refetchOnReconnect: "always",
     queryFn: async (): Promise<RailItem[]> => {
@@ -186,7 +191,7 @@ export function DesktopMessagesRail() {
   // Team chats — same source as the inbox "Teams" section.
   const { data: teamItems = [] } = useQuery({
     queryKey: ["desktop-rail-teams", user?.id],
-    enabled: !!user && initialized && !isNative,
+    enabled: !!user && initialized && !isNative && !messagingOnIcp,
     staleTime: 30_000,
     refetchOnReconnect: "always",
     queryFn: async (): Promise<RailItem[]> => {
@@ -245,7 +250,7 @@ export function DesktopMessagesRail() {
   // Club chats — same source as the inbox "Clubs" section.
   const { data: clubItems = [] } = useQuery({
     queryKey: ["desktop-rail-clubs", user?.id],
-    enabled: !!user && initialized && !isNative,
+    enabled: !!user && initialized && !isNative && !messagingOnIcp,
     staleTime: 30_000,
     refetchOnReconnect: "always",
     queryFn: async (): Promise<RailItem[]> => {
@@ -357,7 +362,7 @@ export function DesktopMessagesRail() {
   }, [dmItems, groupItems, teamItems, clubItems, query, activeClubFilter, activeClubTeamIds, usersInActiveClub]);
 
 
-  if (isNative) return null;
+  if (isNative || messagingOnIcp) return null;
 
   return (
     <section

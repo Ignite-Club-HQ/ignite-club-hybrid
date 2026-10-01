@@ -6,6 +6,7 @@ import { ensureSecondParent, secondParentPartialFailureMessage, SecondParentErro
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 type TeamRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -51,6 +52,7 @@ export function useAddBulkTeamMembersMutation({
       const membersSource = membersToAdd || bulkMembers;
       const validMembers = membersSource.filter(m => m.name.trim());
       if (validMembers.length === 0) throw new Error("Please enter at least one name");
+      assertSupabaseWritePath("membership", "bulk team-member add (role grants + pending invites + second-parent + email) has no club_domain counterpart"); // NEEDS-CANISTER: bulk team-member add (role grants + pending invites + second-parent + email) has no club_domain counterpart
 
       const results: { name: string; email: string; link: string; sent: boolean; role: string; childrenCount: number }[] = [];
       const secondParentFailures: string[] = [];

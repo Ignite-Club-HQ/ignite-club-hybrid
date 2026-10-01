@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory, type PointsSourceType } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { awardLivePoints, subjectForUser } from "@/live/features/points";
 import {
   checkLeaderboardPosition,
   checkEngagementStreak,
@@ -95,22 +97,45 @@ export async function awardEngagementPoints({
       return false; // Already awarded or daily cap reached
     }
 
-    // Atomic points increment — scoped to this club
-    const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
-      _user_id: userId,
-      _amount: config.points,
-      _club_id: clubId,
-    });
-
-    if (updateError) {
+    // Atomic points increment — scoped to this club. Routed through the
+    // club_points_domain award_points wrapper under ICP (atomic balance +
+    // history write) instead of the Supabase-only increment RPC.
+    let balanceAfter: number;
+    try {
+      balanceAfter = await withFeatureBackend("points", {
+        supabase: async () => {
+          const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
+            _user_id: userId,
+            _amount: config.points,
+            _club_id: clubId,
+          });
+          if (updateError) throw updateError;
+          return newPoints || 0;
+        },
+        icp: async (ctx) => {
+          const entry = await awardLivePoints(
+            ctx,
+            clubId,
+            subjectForUser(userId),
+            action,
+            scopeId,
+            config.points,
+            DESCRIPTION_MAP[action],
+            sourceId || scopeId,
+            null,
+            config.dailyCap,
+          );
+          return entry.balance_after;
+        },
+      });
+    } catch (updateError) {
       console.error("Failed to award engagement points:", updateError);
       return false;
     }
-
-    const balanceAfter = newPoints || 0;
     const previousPoints = balanceAfter - config.points;
 
-    // Record in points history
+    // Record in points history. No-ops on the ICP branch: award_points above
+    // already wrote the matching history entry atomically.
     await recordPointsHistory({
       userId,
       clubId,

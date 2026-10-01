@@ -4,6 +4,7 @@ import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2 } from "lu
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,9 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["poll", pollId],
+    // NEEDS-CANISTER: messaging_domain has no polls/poll_options/poll_votes
+    // tables yet.
+    enabled: !isFeatureRoutedToIcp("messaging"),
     queryFn: async () => {
       const [pollRes, optsRes, votesRes] = await Promise.all([
         supabase.from("polls").select("*").eq("id", pollId).maybeSingle(),
@@ -111,6 +115,8 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const voteMutation = useMutation({
     mutationFn: async (optionId: string) => {
+      // NEEDS-CANISTER: polls (poll_votes) have no messaging_domain equivalent.
+      assertSupabaseWritePath("messaging", "polls");
       if (!user || !data?.poll) return;
       setBusyOptionId(optionId);
       const alreadyVoted = myVoteOptionIds.has(optionId);
@@ -152,6 +158,8 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const closeMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: polls have no messaging_domain equivalent.
+      assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase
         .from("polls")
         .update({ closed_at: new Date().toISOString() })
@@ -167,6 +175,8 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: polls have no messaging_domain equivalent.
+      assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase.from("polls").delete().eq("id", pollId);
       if (error) throw error;
     },

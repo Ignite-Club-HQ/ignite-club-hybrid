@@ -5,6 +5,7 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { getMatchArrivalDate } from "@/lib/matchArrivalTime";
 import { setLocalEventDuty } from "@/lab/localEventsService";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
   removeLiveEventDuty,
@@ -62,6 +63,13 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     mutationFn: async (args: { dutyName: string; startTime?: string; endTime?: string }) => {
       if (useIcpLab) {
         throw new Error("Open duty creation is not connected to the local events canister yet.");
+      }
+
+      // NEEDS-CANISTER: events_domain set_duty always assigns an account —
+      // there is no "create an open/unassigned duty" method, so adding a new
+      // duty cannot be routed to ICP yet.
+      if (isFeatureRoutedToIcp("events")) {
+        throw new Error("Adding duties isn't available yet for Internet Identity accounts.");
       }
 
       // Combine event date with optional HH:MM times into ISO timestamps

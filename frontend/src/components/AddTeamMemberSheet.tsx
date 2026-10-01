@@ -45,6 +45,7 @@ import { useAddTeamMemberSearch } from "@/hooks/useAddTeamMemberSearch";
 import { useAddExistingTeamMemberMutation } from "@/hooks/useAddExistingTeamMemberMutation";
 import { useAddPendingTeamMemberMutation } from "@/hooks/useAddPendingTeamMemberMutation";
 import { useAddBulkTeamMembersMutation } from "@/hooks/useAddBulkTeamMembersMutation";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface BulkMember {
   id: string;
@@ -344,6 +345,7 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
 
   // Get or create generic invite link for the selected role (used for existing users or when no name restriction)
   const getOrCreateInviteLink = async (role: TeamRole): Promise<string> => {
+    assertSupabaseWritePath("membership", "generic role-based team_invites row (no email) has no club_domain counterpart; create_team_invite requires an email"); // NEEDS-CANISTER: generic role-based team_invites row (no email) has no club_domain counterpart; create_team_invite requires an email
     // First check for existing invite
     const { data: existingInvite } = await supabase
       .from("team_invites")

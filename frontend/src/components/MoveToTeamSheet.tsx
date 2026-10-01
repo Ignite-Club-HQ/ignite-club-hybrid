@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface MoveToTeamSheetProps {
   open: boolean;
@@ -64,6 +65,7 @@ export function MoveToTeamSheet({
   const moveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedTeamId) throw new Error("No team selected");
+      assertSupabaseWritePath("membership", "move_member_to_team/move_child_to_team RPC has no club_domain counterpart"); // NEEDS-CANISTER: move_member_to_team/move_child_to_team RPC has no club_domain counterpart
 
       if (memberType === "adult") {
         const { error } = await supabase.rpc("move_member_to_team", {

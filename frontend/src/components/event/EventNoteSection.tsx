@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface EventNoteSectionProps {
   eventId: string;
@@ -65,6 +66,9 @@ export function EventNoteSection({
 
   const saveMutation = useMutation({
     mutationFn: async (value: string) => {
+      // NEEDS-CANISTER: events_domain update_event has no coach_note field
+      // (title/description/type/location/times only).
+      assertSupabaseWritePath("events", "event notes");
       const trimmed = value.trim();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");

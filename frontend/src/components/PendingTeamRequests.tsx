@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import type { Database } from "@/integrations/supabase/types";
 import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -56,6 +57,7 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
 
   const approveMutation = useMutation({
     mutationFn: async (request: (typeof requests)[0]) => {
+      assertSupabaseWritePath("membership", "team creation request approval (team + role grant + notification) has no club_domain counterpart"); // NEEDS-CANISTER: team creation request approval (team + role grant + notification) has no club_domain counterpart
       // Create the team
       const { data: team, error: teamError } = await supabase
         .from("teams")
@@ -129,6 +131,7 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
 
   const rejectMutation = useMutation({
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) => {
+      assertSupabaseWritePath("membership", "team creation request rejection + notification has no club_domain counterpart"); // NEEDS-CANISTER: team creation request rejection + notification has no club_domain counterpart
       const request = requests.find(r => r.id === requestId);
 
       await supabase

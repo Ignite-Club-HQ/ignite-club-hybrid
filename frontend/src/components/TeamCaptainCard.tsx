@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface TeamCaptainCardProps {
   teamId: string;
@@ -74,6 +75,7 @@ export default function TeamCaptainCard({
 
   const assignMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "team_captains insert + notification has no club_domain counterpart"); // NEEDS-CANISTER: team_captains insert + notification has no club_domain counterpart
       if (!selectedUserId) return;
       const { error } = await supabase
         .from("team_captains")
@@ -105,6 +107,7 @@ export default function TeamCaptainCard({
 
   const removeMutation = useMutation({
     mutationFn: async (userId: string) => {
+      assertSupabaseWritePath("membership", "team_captains delete has no club_domain counterpart"); // NEEDS-CANISTER: team_captains delete has no club_domain counterpart
       const { error } = await supabase
         .from("team_captains")
         .delete()

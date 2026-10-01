@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -164,6 +165,8 @@ export function ChatParticipantsList({
 
   const removeMemberMutation = useMutation({
     mutationFn: async (userId: string) => {
+      // NEEDS-CANISTER: messaging_domain group member removal.
+      assertSupabaseWritePath("messaging", "removing a group member");
       const { error } = await supabase
         .from("group_members")
         .delete()
@@ -184,6 +187,8 @@ export function ChatParticipantsList({
   const leaveGroupMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
+      // NEEDS-CANISTER: messaging_domain leave-group call.
+      assertSupabaseWritePath("messaging", "leaving a group");
       const { error } = await supabase
         .from("group_members")
         .delete()
@@ -615,6 +620,13 @@ export function ChatParticipantsList({
   };
 
   const handleRemoveRole = async (roleItem: { id: string; role: string }) => {
+    // NEEDS-CANISTER: club_domain role-removal call.
+    try {
+      assertSupabaseWritePath("membership", "removing a member role");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to remove role");
+      return;
+    }
     const { error } = await supabase.from("user_roles").delete().eq("id", roleItem.id);
     if (error) {
       toast.error("Failed to remove role");
@@ -631,6 +643,13 @@ export function ChatParticipantsList({
 
   const handleRemoveMember = async () => {
     if (!selectedMember || !effectiveTeamId) return;
+    // NEEDS-CANISTER: club_domain team-member removal call.
+    try {
+      assertSupabaseWritePath("membership", "removing a team member");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to remove member");
+      return;
+    }
     // Authoritative team-member removal — same scoped RPC used by Team Detail.
     // It atomically revokes the team role, this team's child assignments and
     // team-chat group memberships. Never delete user_roles directly here.
@@ -648,12 +667,15 @@ export function ChatParticipantsList({
       refreshChatRemovedTeamMember(queryClient, effectiveTeamId, chatType, chatId);
     };
 
-    const { error: notifyError } = await supabase.from("notifications").insert({
-      user_id: selectedMember.userId,
-      type: "membership",
-      message: `You have been removed from ${chatName || "the team"}`,
-      related_id: effectiveTeamId,
-    });
+    // NEEDS-CANISTER: notification_queue enqueue call.
+    const notifyError = isFeatureRoutedToIcp("notifications")
+      ? new Error("Notifications aren't available yet on the Internet Identity notifications backend.")
+      : (await supabase.from("notifications").insert({
+          user_id: selectedMember.userId,
+          type: "membership",
+          message: `You have been removed from ${chatName || "the team"}`,
+          related_id: effectiveTeamId,
+        })).error;
 
     refreshMembership();
     if (notifyError) {

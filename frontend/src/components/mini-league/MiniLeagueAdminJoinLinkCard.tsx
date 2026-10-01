@@ -17,6 +17,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { MiniLeagueJoinLinkCard } from "./MiniLeagueJoinLinkCard";
 import {
   buildMiniLeagueJoinLinkQrFilename,
@@ -90,6 +91,10 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
 
   const createOrRotate = useMutation({
     mutationFn: async ({ rotate }: { rotate: boolean }) => {
+      // NEEDS-CANISTER: mini_league_domain has create_invite/claim_invite for
+      // single-player invites, but no generic role-grant join-link shape
+      // backed by pending_invites (admin-grant / parent-join semantics).
+      assertSupabaseWritePath("mini_leagues", "creating a mini-league join link");
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
         await supabase.from("pending_invites").delete().eq("id", link.id);
@@ -127,6 +132,8 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
   const revoke = useMutation({
     mutationFn: async () => {
       if (!link) return;
+      // NEEDS-CANISTER: see createOrRotate above.
+      assertSupabaseWritePath("mini_leagues", "revoking a mini-league join link");
       const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
       if (error) throw error;
     },

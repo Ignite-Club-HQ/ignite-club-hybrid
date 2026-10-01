@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 import type { Json } from "@/integrations/supabase/types";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -112,6 +114,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch event groups
   const { data: groups, isLoading, refetch: refetchGroups } = useQuery({
     queryKey: ["event-groups", eventId],
+    // NEEDS-CANISTER: event_groups/event_group_players (mini-league match
+    // groups) have no events_domain/mini_league_domain equivalent.
+    enabled: !!eventId && !isFeatureRoutedToIcp("mini_leagues"),
     queryFn: async () => {
       const { data: groupsData, error } = await supabase
         .from("event_groups")
@@ -162,7 +167,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       }
       return groupsWithPlayers;
     },
-    enabled: !!eventId,
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -260,6 +264,8 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch all duties for all groups in this event (for inline badges)
   const { data: allGroupDuties } = useQuery({
     queryKey: ["event-all-group-duties", eventId],
+    // NEEDS-CANISTER: event_group_duties has no mini_league_domain equivalent.
+    enabled: !!eventId && !!groups && groups.length > 0 && !isFeatureRoutedToIcp("mini_leagues"),
     queryFn: async () => {
       if (!groups || groups.length === 0) return {};
       const groupIds = groups.map(g => g.id);
@@ -277,7 +283,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       }
       return map;
     },
-    enabled: !!eventId && !!groups && groups.length > 0,
   });
 
   // State for quick-assign (clicking a duty badge)
@@ -349,6 +354,8 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
   // Smart duty distribution: assign event-level duties to matches, preferring parents whose kids are in each match
   const distributeEventDutiesToMatches = useCallback(async (matchIds: string[], matchPlayerIds: string[][]) => {
+    // NEEDS-CANISTER: event_group_duties has no mini_league_domain equivalent.
+    assertSupabaseWritePath("mini_leagues", "assigning match duties");
     // Fetch event-level duties
     const { data: eventDuties } = await supabase
       .from("duties")
@@ -421,6 +428,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
   // Auto-generate matches (core logic)
   const runAutoGenerate = useCallback(async (abilityModeOverride?: "similar" | "mixed") => {
+    // NEEDS-CANISTER: replace_event_groups has no mini_league_domain
+    // equivalent.
+    assertSupabaseWritePath("mini_leagues", "auto-generating matches");
     const effectiveAbilityMode = abilityModeOverride || abilityMode;
     if (!availablePlayers || availablePlayers.length === 0) {
       throw new Error("No available players for this session");
@@ -565,6 +575,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Create group mutation - with player assignments
   const createGroupMutation = useMutation({
     mutationFn: async (data: { name: string; pitchName: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] }) => {
+      // NEEDS-CANISTER: event_groups/event_group_players have no
+      // mini_league_domain equivalent.
+      assertSupabaseWritePath("mini_leagues", "creating a match");
       const leagueColors = miniLeague?.bib_colors || DEFAULT_BIB_COLORS;
       const colors = getMatchColors(groups?.length || 0, leagueColors);
       const { data: newGroup, error } = await supabase.from("event_groups").insert({
@@ -682,6 +695,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Copy from previous mutation
   const copyFromPreviousMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: event_groups/event_group_players have no
+      // mini_league_domain equivalent.
+      assertSupabaseWritePath("mini_leagues", "copying matches from a previous event");
       if (!selectedPreviousEventId) throw new Error("Select an event");
 
       // Get players who have RSVP'd "going" to the CURRENT session
@@ -773,6 +789,8 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Delete group mutation
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
+      // NEEDS-CANISTER: event_groups has no mini_league_domain equivalent.
+      assertSupabaseWritePath("mini_leagues", "deleting a match");
       const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
       if (error) throw error;
     },
@@ -786,6 +804,8 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Delete all groups mutation
   const deleteAllGroupsMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: event_groups has no mini_league_domain equivalent.
+      assertSupabaseWritePath("mini_leagues", "deleting all matches");
       const groupIds = groups?.map(g => g.id) || [];
       for (const groupId of groupIds) {
         const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
@@ -802,6 +822,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Move player mutation (move to a team)
   const movePlayerMutation = useMutation({
     mutationFn: async ({ playerId, fromGroupId, toGroupId, toTeam }: { playerId: string; fromGroupId: string; toGroupId: string; toTeam: "a" | "b" }) => {
+      // NEEDS-CANISTER: event_group_players has no mini_league_domain
+      // equivalent.
+      assertSupabaseWritePath("mini_leagues", "moving a player between matches");
       if (fromGroupId === toGroupId) {
         const { error } = await supabase
           .from("event_group_players")
@@ -841,6 +864,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       player1Id: string; player1GroupId: string; player1Team: "a" | "b"; 
       player2Id: string; player2GroupId: string; player2Team: "a" | "b";
     }) => {
+      // NEEDS-CANISTER: event_group_players has no mini_league_domain
+      // equivalent.
+      assertSupabaseWritePath("mini_leagues", "swapping players between matches");
       // Single atomic RPC: all writes commit together or none do, so a
       // failure part-way can never leave a player removed but not re-added.
       const { error } = await supabase.rpc("swap_event_group_players", {

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import PendingInviteCard from "./PendingInviteCard";
 import ReconcilePendingInvitesButton from "./ReconcilePendingInvitesButton";
 
@@ -60,6 +61,15 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
 
   const handleResendAll = async () => {
     if (invitesWithEmail.length === 0) return;
+    // NEEDS-CANISTER: resend-invite-email edge function call has no club_domain/mini_league_domain counterpart
+    if (isFeatureRoutedToIcp("membership")) {
+      toast({
+        title: "Not available yet",
+        description: "Resending invite emails isn't available yet for Internet Identity accounts.",
+        variant: "destructive",
+      });
+      return;
+    }
     setIsResendingAll(true);
 
     // Fetch all invite tokens and metadata in one query

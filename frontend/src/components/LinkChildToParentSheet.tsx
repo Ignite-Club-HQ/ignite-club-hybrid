@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface LinkChildToParentSheetProps {
   open: boolean;
@@ -56,6 +57,7 @@ export default function LinkChildToParentSheet({
 
   const linkMutation = useMutation({
     mutationFn: async (parentId: string) => {
+      assertSupabaseWritePath("membership", "admin_link_child_to_parent RPC has no club_domain counterpart"); // NEEDS-CANISTER: admin_link_child_to_parent RPC has no club_domain counterpart
       const { error } = await supabase.rpc("admin_link_child_to_parent", {
         p_child_name: childName,
         p_existing_child_id: existingChildId || null,

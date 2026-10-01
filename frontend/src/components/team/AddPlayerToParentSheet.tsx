@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface ParentCandidate {
   user_id: string;
@@ -136,6 +137,7 @@ export default function AddPlayerToParentSheet({
 
   const addPlayer = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "create_child_for_parent_on_team RPC has no club_domain counterpart"); // NEEDS-CANISTER: create_child_for_parent_on_team RPC has no club_domain counterpart
       if (!selectedParentId) throw new Error("Please pick a parent");
       const trimmed = childName.trim();
       if (!trimmed) throw new Error("Please enter the player's name");

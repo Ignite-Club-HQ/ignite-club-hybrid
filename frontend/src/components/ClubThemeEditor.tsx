@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { useTheme } from "next-themes";
 
 interface HSLColor {
@@ -254,6 +255,15 @@ export function ClubThemeEditor({
   const [activeTab, setActiveTab] = useState<string>(resolvedTheme === "dark" ? "dark" : "light");
 
   const handleSave = async () => {
+    // NEEDS-CANISTER: club theme (light/dark HSL palette, header logo/name
+    // display toggles) has no shape on club_domain's ClubSettings/ClubProfile
+    // today; only primary_color/secondary_color exist there.
+    try {
+      assertSupabaseWritePath("membership", "club theme colors and header display settings");
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     
     const { error } = await supabase
@@ -316,6 +326,13 @@ export function ClubThemeEditor({
 
 
   const handleClear = async () => {
+    // NEEDS-CANISTER: see handleSave — clearing theme colors has no canister shape.
+    try {
+      assertSupabaseWritePath("membership", "club theme colors reset");
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     
     const { error } = await supabase
@@ -391,6 +408,14 @@ export function ClubThemeEditor({
             id="theme-enabled"
             checked={themeEnabled}
             onCheckedChange={async (checked) => {
+              // NEEDS-CANISTER: theme_enabled toggle has no canister shape (not part
+              // of ClubSettings today).
+              try {
+                assertSupabaseWritePath("membership", "club theme_enabled toggle");
+              } catch (e: any) {
+                toast({ title: "Error", description: e.message, variant: "destructive" });
+                return;
+              }
               setThemeEnabled(checked);
               
               const { error } = await supabase

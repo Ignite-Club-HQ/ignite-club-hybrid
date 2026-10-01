@@ -17,6 +17,7 @@ import {
 import { useKeyboardOpen } from "@/hooks/useKeyboardOpen";
 import { useNativeKeyboardHeight } from "@/hooks/useNativeKeyboardHeight";
 import { prefetchRoute, warmMainRoutes } from "@/lib/routePrefetch";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 const navItems = [
   { to: "/", icon: Home, label: "Home" },
@@ -56,6 +57,12 @@ export function BottomNav() {
   // suppressed scopes (see useSuppressedChatScopes below) from the total.
   const { data: counts } = useUnreadMessageCounts(user?.id);
 
+  // NEEDS-CANISTER: per-club badge breakdown (group->club mapping, broadcast
+  // club scoping, DM club scoping) has no messaging_domain equivalent yet —
+  // skip these Supabase-only reads when messaging is ICP-routed so they don't
+  // run against principal ids that have no matching Supabase rows.
+  const messagingOnIcp = isFeatureRoutedToIcp("messaging");
+
   // Secondary lookup: which chat groups belong to the active club. Cached
   // separately so it doesn't piggy-back on every unread refetch.
   const groupIds = counts ? Object.keys(counts.groups) : [];
@@ -71,7 +78,7 @@ export function BottomNav() {
       data?.forEach((g) => { map[g.id] = { club_id: g.club_id, team_id: g.team_id }; });
       return map;
     },
-    enabled: groupIds.length > 0,
+    enabled: groupIds.length > 0 && !messagingOnIcp,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -103,7 +110,7 @@ export function BottomNav() {
   // announcement inflates a badge with no matching row in the filtered inbox.
   const { data: clubBroadcastUnread = 0 } = useQuery({
     queryKey: ["bottomnav-club-broadcast-unread", user?.id, activeClubFilter],
-    enabled: !!user?.id && !!activeClubFilter,
+    enabled: !!user?.id && !!activeClubFilter && !messagingOnIcp,
     staleTime: 60 * 1000,
     queryFn: async () => {
       const { count, error } = await supabase
@@ -126,7 +133,7 @@ export function BottomNav() {
     : [];
   const { data: clubScopedDmIds } = useQuery({
     queryKey: ["bottomnav-club-scoped-dms", user?.id, activeClubFilter, unreadDmConversationIds.sort().join(",")],
-    enabled: !!user?.id && !!activeClubFilter && unreadDmConversationIds.length > 0,
+    enabled: !!user?.id && !!activeClubFilter && unreadDmConversationIds.length > 0 && !messagingOnIcp,
     staleTime: 60 * 1000,
     queryFn: async () => {
       const { data: convs } = await supabase
