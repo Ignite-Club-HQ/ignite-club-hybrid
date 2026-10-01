@@ -35,6 +35,7 @@ persistent actor {
   var teamTrainingPauses : [Types.TeamTrainingPause];
   var openDuties : [Types.OpenDuty];
   var miniLeagueRsvps : [Types.MiniLeagueRsvp];
+  var associationEvents : [Types.AssociationEvent];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
