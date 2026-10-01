@@ -143,12 +143,12 @@ const getCachedClubAdminMessages = (conversationId: string): ClubAdminMessage[] 
     })),
   }));
 
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabAdminChatMessages } from "@/lab/fixtureDataLayer";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 export default function ClubAdminChatPage() {
-  const useIcpLab = resolveLocalAuthMode(typeof window !== "undefined" ? window.location.search : "", true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   if (useIcpLab) {
     return <IcpLabClubAdminChatPage />;
   }

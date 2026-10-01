@@ -17,7 +17,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getAvatarFallbackStyle, getAvatarInitial } from "@/lib/avatarColor";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { removeMessageFromCache } from "@/lib/messageCache";
 import { MessageContent } from "./MessageContent";
@@ -181,7 +180,7 @@ function ChatMessageInner({
   const optimisticReactionsRef = useRef<Reaction[]>(reactions);
   const isReactionMutatingRef = useRef(false);
   const queryClient = useQueryClient();
-  const useIcpLab = resolveLocalAuthMode(typeof window !== 'undefined' ? window.location.search : '', true);
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const { isBlocked } = useBlockedUsers();
   const {
     armDismissGuard,
