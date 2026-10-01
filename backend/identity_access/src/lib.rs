@@ -338,9 +338,6 @@ fn init(init: Init) {
         entitlements: vec![],
         verifiers: vec![],
         attestation_secret: vec![],
-        entitlements: vec![],
-        verifiers: vec![],
-        attestation_secret: vec![],
         next_challenge: 0,
     };
     store(&state);
@@ -1689,9 +1686,6 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
             next_challenge: 0,
         };
         let bytes = encode(&legacy);
@@ -1779,9 +1773,6 @@ mod tests {
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
             next_challenge: 0,
         };
         let bytes = encode(&legacy);
