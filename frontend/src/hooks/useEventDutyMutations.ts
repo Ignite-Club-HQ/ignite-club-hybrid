@@ -8,6 +8,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
+  createLiveOpenDuty,
   removeLiveEventDuty,
   setLiveEventDuty,
   uncompleteLiveEventDuty,
@@ -65,11 +66,18 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         throw new Error("Open duty creation is not connected to the local events canister yet.");
       }
 
-      // NEEDS-CANISTER: events_domain set_duty always assigns an account —
-      // there is no "create an open/unassigned duty" method, so adding a new
-      // duty cannot be routed to ICP yet.
+      // events_domain now exposes create_open_duty (an unassigned duty board
+      // entry) — route new duties there instead of blocking.
       if (isFeatureRoutedToIcp("events")) {
-        throw new Error("Adding duties isn't available yet for Internet Identity accounts.");
+        const createdOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            if (!id) throw new Error("Missing event ID");
+            await createLiveOpenDuty(ctx, id, args.dutyName);
+            return true;
+          },
+        });
+        if (createdOnIcp) return;
       }
 
       // Combine event date with optional HH:MM times into ISO timestamps

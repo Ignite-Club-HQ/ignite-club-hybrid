@@ -10,6 +10,8 @@ import {
 } from "@/lib/eventSeriesDeletion";
 import { purgeDeletedEventFromCaches } from "@/lib/eventDeletionCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { deleteLiveEvent, softDeleteLiveEventSeries } from "@/live/features/events";
 
 interface UseDeleteEventOptions {
   /** Called only after the database has confirmed the deletion. */
@@ -45,18 +47,28 @@ export function useDeleteEvent(options: UseDeleteEventOptions = {}) {
       setIsPending(true);
 
       let outcome: EventDeletionOutcome;
-      // NEEDS-CANISTER: events_domain has no delete_event/delete_series
-      // method (only set_event_cancelled / delete_series-for-recurrence
-      // children via the recurrence surface, which don't cover hard-deleting
-      // a standalone event or an entire series anchor). Block the Supabase
-      // delete under ICP routing rather than removing a row ICP users'
-      // canister state never reflected in the first place.
       if (isFeatureRoutedToIcp("events")) {
-        outcome = {
-          kind: "failed",
-          message:
-            "Deleting events isn't available yet on this backend. Cancel the event instead.",
-        };
+        // events_domain now exposes delete_event (hard delete of a single
+        // event row) and soft_delete_series (series anchor) — route through
+        // the wrappers instead of blocking.
+        try {
+          outcome = await withFeatureBackend("events", {
+            supabase: () => {
+              throw new Error("unreachable: ICP routing active");
+            },
+            icp: async (ctx) => {
+              if (deleteType === "series" && (event.is_recurring || event.parent_event_id)) {
+                const seriesId = event.parent_event_id ?? event.id;
+                await softDeleteLiveEventSeries(ctx, seriesId);
+                return { kind: "success", deletedIds: [seriesId] } as const;
+              }
+              await deleteLiveEvent(ctx, event.id);
+              return { kind: "success", deletedIds: [event.id] } as const;
+            },
+          });
+        } catch (err: any) {
+          outcome = { kind: "failed", message: err?.message ?? "Unknown error" };
+        }
       } else {
         try {
           outcome = await performEventDeletion(supabase, event, deleteType);

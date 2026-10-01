@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveEventRosterDetailed } from "@/live/features/events";
 
 /**
  * Fetch the set of attendee IDs who RSVP'd "going" to a given event.
@@ -17,22 +20,37 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export function useEventGoingAttendees(eventId: string | null | undefined) {
   return useQuery({
-    queryKey: ["event-going-attendees", eventId],
+    queryKey: ["event-going-attendees", eventId, isFeatureRoutedToIcp("events")],
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await supabase
-        .from("rsvps")
-        .select("user_id, child_id, status")
-        .eq("event_id", eventId!)
-        .eq("status", "going");
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("rsvps")
+            .select("user_id, child_id, status")
+            .eq("event_id", eventId!)
+            .eq("status", "going");
 
-      if (error) throw error;
+          if (error) throw error;
 
-      const ids = new Set<string>();
-      for (const r of data ?? []) {
-        if (r.child_id) ids.add(r.child_id);
-        else if (r.user_id) ids.add(r.user_id);
-      }
-      return ids;
+          const ids = new Set<string>();
+          for (const r of data ?? []) {
+            if (r.child_id) ids.add(r.child_id);
+            else if (r.user_id) ids.add(r.user_id);
+          }
+          return ids;
+        },
+        icp: async (ctx) => {
+          const roster = await getLiveEventRosterDetailed(ctx, eventId!);
+          const ids = new Set<string>();
+          for (const entry of roster.rsvps ?? []) {
+            if (entry.rsvp.state !== "going") continue;
+            const childId = entry.rsvp.child_id?.[0];
+            if (childId) ids.add(childId);
+            else if (entry.rsvp.account_id) ids.add(entry.rsvp.account_id);
+          }
+          return ids;
+        },
+      });
     },
     enabled: !!eventId,
     staleTime: 30 * 1000, // RSVPs change during a session — keep this short
