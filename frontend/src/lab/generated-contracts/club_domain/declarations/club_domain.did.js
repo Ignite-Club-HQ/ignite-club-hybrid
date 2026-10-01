@@ -281,6 +281,18 @@ export const idlFactory = ({ IDL }) => {
     'is_active' : IDL.Bool,
     'club_id' : IDL.Text,
   });
+  const MemberPayment = IDL.Record({
+    'id' : IDL.Text,
+    'payment_type' : IDL.Text,
+    'marked_by' : IDL.Principal,
+    'user_id' : IDL.Text,
+    'child_id' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'notes' : IDL.Opt(IDL.Text),
+    'payment_period' : IDL.Text,
+    'amount' : IDL.Float64,
+    'club_id' : IDL.Text,
+  });
   const RemovedMember = IDL.Record({
     'club' : IDL.Text,
     'user' : IDL.Principal,
@@ -599,6 +611,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_member_payments' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MemberPayment), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_news' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
@@ -658,6 +675,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'mark_member_paid' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Float64,
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : MemberPayment, 'Err' : IDL.Text })],
+        [],
       ),
     'move_child_to_team' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
@@ -865,6 +895,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'unlink_guardian' : IDL.Func(
         [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unmark_member_paid' : IDL.Func(
+        [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

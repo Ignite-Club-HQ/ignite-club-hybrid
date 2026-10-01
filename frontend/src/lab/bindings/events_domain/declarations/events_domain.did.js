@@ -274,6 +274,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
         [],
       ),
+    'create_association_event' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Vec(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Nat64,
+          IDL.Nat64,
+        ],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_event' : IDL.Func(
         [
           IDL.Text,
@@ -434,6 +447,11 @@ export const idlFactory = ({ IDL }) => {
     'get_coach_note' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(CoachNote), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_event_child' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_event_roster' : IDL.Func(
