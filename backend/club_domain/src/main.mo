@@ -1007,6 +1007,7 @@ persistent actor {
       name; division = null; gender = null; is_active = true; club_id;
       age_group = null; description = null; logo_url = null; team_type = null;
       deleted_at_ms = null;
+      archived = false;
       is_shell = true;
       shell_claim_token = ?token;
       shell_claimed_at_ms = null;

@@ -32,6 +32,12 @@ export interface ChildGuardian {
   'child_id' : string,
   'guardian_id' : string,
 }
+export interface CoachNote {
+  'updated_by' : Principal,
+  'note' : string,
+  'updated_at_ms' : bigint,
+  'event_id' : string,
+}
 export interface Duty {
   'account_id' : string,
   'duty' : string,
@@ -42,6 +48,7 @@ export interface Event {
   'id' : string,
   'title' : string,
   'creator' : Principal,
+  'deleted' : boolean,
   'cancelled' : boolean,
   'series_id' : [] | [string],
   'team_id' : [] | [string],
@@ -62,6 +69,18 @@ export interface EventAttendance {
   'notes' : string,
   'event_id' : string,
 }
+export interface EventGroup {
+  'id' : string,
+  'name' : string,
+  'created_at_ms' : bigint,
+  'event_id' : string,
+}
+export interface EventGroupDuty {
+  'account_id' : [] | [string],
+  'duty' : string,
+  'group_id' : string,
+}
+export interface EventGroupPlayer { 'account_id' : string, 'group_id' : string }
 export interface EventGuest {
   'id' : string,
   'added_by' : Principal,
@@ -77,6 +96,7 @@ export interface EventSeries {
   'id' : string,
   'title' : string,
   'creator' : Principal,
+  'deleted' : boolean,
   'until_ms' : bigint,
   'first_starts_at_ms' : bigint,
   'team_id' : [] | [string],
@@ -87,6 +107,11 @@ export interface EventSeries {
   'club_id' : string,
   'location' : [] | [string],
   'event_type' : string,
+}
+export interface EventView {
+  'viewed_at_ms' : bigint,
+  'event_id' : string,
+  'viewer' : Principal,
 }
 export interface LineupEntry {
   'member' : string,
@@ -114,10 +139,35 @@ export interface LineupSnapshot {
   'event_id' : string,
   'revision' : bigint,
 }
+export interface MiniLeagueRsvp {
+  'subject' : RsvpSubject,
+  'updated_at_ms' : bigint,
+  'state' : string,
+  'event_id' : string,
+}
+export interface OpenDuty {
+  'id' : string,
+  'claimed_by' : [] | [string],
+  'duty' : string,
+  'created_at_ms' : bigint,
+  'event_id' : string,
+}
+export interface PushReachability {
+  'user' : Principal,
+  'updated_at_ms' : bigint,
+  'reachable' : boolean,
+}
 export interface Recurrence {
   'until_ms' : bigint,
   'frequency' : string,
   'event_id' : string,
+}
+export interface ReminderLog {
+  'id' : string,
+  'sent_at_ms' : bigint,
+  'recipient' : string,
+  'event_id' : string,
+  'channel' : string,
 }
 export interface RoleGrant {
   'role' : string,
@@ -140,7 +190,19 @@ export interface Rsvp {
   'event_id' : string,
   'has_paid' : [] | [boolean],
 }
+export type RsvpSubject = { 'account' : string } |
+  { 'mini_league_player' : string };
 export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
+export interface TeamTrainingPause {
+  'id' : string,
+  'team_id' : string,
+  'created_by' : Principal,
+  'starts_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'ends_at_ms' : bigint,
+  'club_id' : string,
+  'reason' : string,
+}
 export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -152,9 +214,19 @@ export interface _SERVICE {
     { 'Ok' : EventGuest } |
       { 'Err' : string }
   >,
+  'add_group_player' : ActorMethod<
+    [string, string],
+    { 'Ok' : EventGroupPlayer } |
+      { 'Err' : string }
+  >,
   'add_lineup' : ActorMethod<
     [string, string, string, [] | [string]],
     { 'Ok' : LineupEntry } |
+      { 'Err' : string }
+  >,
+  'add_series_occurrence' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Event } |
       { 'Err' : string }
   >,
   'admin_link_guardian' : ActorMethod<
@@ -182,6 +254,11 @@ export interface _SERVICE {
     { 'Ok' : boolean } |
       { 'Err' : string }
   >,
+  'claim_open_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : OpenDuty } |
+      { 'Err' : string }
+  >,
   'complete_duty' : ActorMethod<
     [string, string],
     { 'Ok' : Duty } |
@@ -199,6 +276,16 @@ export interface _SERVICE {
       bigint,
     ],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'create_event_group' : ActorMethod<
+    [string, string],
+    { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'create_open_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : OpenDuty } |
       { 'Err' : string }
   >,
   'create_recurring_series' : ActorMethod<
@@ -234,9 +321,25 @@ export interface _SERVICE {
     { 'Ok' : { 'series' : EventSeries, 'events' : Array<Event> } } |
       { 'Err' : string }
   >,
+  'create_team_training_pause' : ActorMethod<
+    [string, string, bigint, bigint, string],
+    { 'Ok' : TeamTrainingPause } |
+      { 'Err' : string }
+  >,
+  'delete_event' : ActorMethod<[string], { 'Ok' : Event } | { 'Err' : string }>,
+  'delete_event_group' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_series' : ActorMethod<
     [string, bigint],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'delete_team_training_pause' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'detach_occurrence' : ActorMethod<
@@ -255,20 +358,30 @@ export interface _SERVICE {
         'Ok' : {
           'lineups' : Array<LineupEntry>,
           'eventGuests' : Array<EventGuest>,
+          'miniLeagueRsvps' : Array<MiniLeagueRsvp>,
+          'teamTrainingPauses' : Array<TeamTrainingPause>,
           'eventAttendance' : Array<EventAttendance>,
           'schema' : number,
+          'pushReachability' : Array<PushReachability>,
+          'eventGroupPlayers' : Array<EventGroupPlayer>,
+          'coachNotes' : Array<CoachNote>,
           'series' : Array<EventSeries>,
+          'eventGroups' : Array<EventGroup>,
           'children' : Array<Child>,
           'recurrences' : Array<Recurrence>,
+          'reminderLogs' : Array<ReminderLog>,
           'attendance' : Array<Attendance>,
           'events' : Array<Event>,
           'lineupSnapshots' : Array<LineupSnapshot>,
           'duties' : Array<Duty>,
           'governor' : Principal,
+          'eventViews' : Array<EventView>,
           'roster' : Array<RosterEntry>,
+          'eventGroupDuties' : Array<EventGroupDuty>,
           'childGuardians' : Array<ChildGuardian>,
           'roles' : Array<RoleGrant>,
           'rsvps' : Array<Rsvp>,
+          'openDuties' : Array<OpenDuty>,
         }
       } |
       { 'Err' : string }
@@ -278,14 +391,29 @@ export interface _SERVICE {
     { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
   >,
+  'get_coach_note' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [CoachNote] } |
+      { 'Err' : string }
+  >,
   'get_event_roster' : ActorMethod<
     [string],
     { 'Ok' : Array<RosterEntry> } |
       { 'Err' : string }
   >,
+  'get_event_view_count' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'get_lineup_snapshot' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : [] | [LineupSnapshot] } |
+      { 'Err' : string }
+  >,
+  'get_push_reachable' : ActorMethod<
+    [Principal],
+    { 'Ok' : [] | [boolean] } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -294,19 +422,66 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_guardian_of' : ActorMethod<[Principal, string], boolean>,
+  'is_paused' : ActorMethod<
+    [string, string, bigint],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
+  'is_team_member' : ActorMethod<[Principal, string, string], boolean>,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
       { 'Err' : string }
   >,
+  'list_event_groups' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroup> } |
+      { 'Err' : string }
+  >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'list_group_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroupDuty> } |
+      { 'Err' : string }
+  >,
+  'list_group_players' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventGroupPlayer> } |
+      { 'Err' : string }
+  >,
+  'list_mini_league_rsvps' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MiniLeagueRsvp> } |
+      { 'Err' : string }
+  >,
+  'list_open_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<OpenDuty> } |
+      { 'Err' : string }
+  >,
+  'list_reminders' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ReminderLog> } |
+      { 'Err' : string }
+  >,
   'list_series' : ActorMethod<
     [[] | [string], [] | [string]],
     Array<EventSeries>
   >,
+  'list_team_training_pauses' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<TeamTrainingPause> } |
+      { 'Err' : string }
+  >,
   'mark_attendance' : ActorMethod<
     [string, Array<AttendanceInput>],
     { 'Ok' : Array<EventAttendance> } |
+      { 'Err' : string }
+  >,
+  'move_group_player' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'my_attendance' : ActorMethod<[[] | [string]], Array<EventAttendance>>,
@@ -315,6 +490,16 @@ export interface _SERVICE {
     Array<RsvpWithChild>
   >,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
+  'record_event_view' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'record_reminder_sent' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : ReminderLog } |
+      { 'Err' : string }
+  >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -328,6 +513,21 @@ export interface _SERVICE {
   'remove_event_guest' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_group_duty' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_group_player' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'rename_event_group' : ActorMethod<
+    [string, string],
+    { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
   'save_lineup_snapshot' : ActorMethod<
@@ -348,6 +548,11 @@ export interface _SERVICE {
     { 'Ok' : Attendance } |
       { 'Err' : string }
   >,
+  'set_coach_note' : ActorMethod<
+    [string, string],
+    { 'Ok' : CoachNote } |
+      { 'Err' : string }
+  >,
   'set_duty' : ActorMethod<
     [string, string, string],
     { 'Ok' : Duty } |
@@ -356,6 +561,21 @@ export interface _SERVICE {
   'set_event_cancelled' : ActorMethod<
     [string, boolean],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'set_group_duty' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : EventGroupDuty } |
+      { 'Err' : string }
+  >,
+  'set_mini_league_rsvp' : ActorMethod<
+    [string, RsvpSubject, string],
+    { 'Ok' : MiniLeagueRsvp } |
+      { 'Err' : string }
+  >,
+  'set_push_reachable' : ActorMethod<
+    [boolean],
+    { 'Ok' : PushReachability } |
       { 'Err' : string }
   >,
   'set_recurrence' : ActorMethod<
@@ -371,6 +591,21 @@ export interface _SERVICE {
   'set_rsvp' : ActorMethod<
     [string, string, string],
     { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'soft_delete_series' : ActorMethod<
+    [string],
+    { 'Ok' : EventSeries } |
+      { 'Err' : string }
+  >,
+  'swap_group_players' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'unclaim_open_duty' : ActorMethod<
+    [string],
+    { 'Ok' : OpenDuty } |
       { 'Err' : string }
   >,
   'uncomplete_duty' : ActorMethod<
