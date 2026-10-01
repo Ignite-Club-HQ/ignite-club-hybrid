@@ -40,6 +40,13 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveClubReward,
+  deleteLiveClubReward,
+  listLiveClubRewards,
+  updateLiveClubReward,
+} from "@/live/features/points";
 
 export type RewardType = "general" | "player_of_match";
 
@@ -185,27 +192,72 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   const { data: rewards = [], isLoading } = useQuery({
     queryKey: ["club-rewards", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_rewards")
-        .select("*, sponsors(id, name, logo_url)")
-        .eq("club_id", clubId)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data as ClubReward[];
+      return withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_rewards")
+            .select("*, sponsors(id, name, logo_url)")
+            .eq("club_id", clubId)
+            .order("is_default", { ascending: false })
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          return data as ClubReward[];
+        },
+        icp: async (ctx) => {
+          const liveRewards = await listLiveClubRewards(ctx, clubId, null, false);
+          return liveRewards
+            .sort((a, b) => Number(b.is_default) - Number(a.is_default) || Number(a.created_at_ms) - Number(b.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              name: r.name,
+              description: r.description[0] ?? null,
+              points_required: r.points_required,
+              is_default: r.is_default,
+              is_active: r.is_active,
+              logo_url: r.logo_url[0] ?? null,
+              reward_type: r.reward_type as RewardType,
+              qr_code_url: r.qr_code_url[0] ?? null,
+              show_qr_code: r.show_qr_code,
+              sponsor_id: r.sponsor_id[0] ?? null,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+              // No canister-side sponsor join — see live/features/points.ts doc comment.
+              sponsors: null,
+            })) as ClubReward[];
+        },
+      });
     },
   });
 
   const createDefaultRewardMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("club_rewards").insert({
-        club_id: clubId,
-        name: "Free Sausage Sizzle",
-        description: "Enjoy a free sausage at the next club event",
-        points_required: 20,
-        is_default: true,
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_rewards").insert({
+            club_id: clubId,
+            name: "Free Sausage Sizzle",
+            description: "Enjoy a free sausage at the next club event",
+            points_required: 20,
+            is_default: true,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await createLiveClubReward(
+            ctx,
+            clubId,
+            "Free Sausage Sizzle",
+            "Enjoy a free sausage at the next club event",
+            20,
+            true,
+            "general",
+            null,
+            false,
+            null,
+            null,
+          );
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -214,19 +266,39 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   const addRewardMutation = useMutation({
     mutationFn: async (reward: { name: string; description: string; points_required: number; logo_url: string | null; reward_type: RewardType; qr_code_url: string | null; show_qr_code: boolean; sponsor_id: string | null }) => {
-      const { error } = await supabase.from("club_rewards").insert({
-        club_id: clubId,
-        name: reward.name,
-        description: reward.description || null,
-        points_required: reward.points_required,
-        logo_url: reward.logo_url,
-        reward_type: reward.reward_type,
-        qr_code_url: reward.qr_code_url,
-        show_qr_code: reward.show_qr_code,
-        sponsor_id: reward.sponsor_id,
-        is_default: false,
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_rewards").insert({
+            club_id: clubId,
+            name: reward.name,
+            description: reward.description || null,
+            points_required: reward.points_required,
+            logo_url: reward.logo_url,
+            reward_type: reward.reward_type,
+            qr_code_url: reward.qr_code_url,
+            show_qr_code: reward.show_qr_code,
+            sponsor_id: reward.sponsor_id,
+            is_default: false,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // sponsor_id has no canister-side name resolution; stored id-only.
+          await createLiveClubReward(
+            ctx,
+            clubId,
+            reward.name,
+            reward.description || null,
+            reward.points_required,
+            false,
+            reward.reward_type,
+            reward.logo_url,
+            reward.show_qr_code,
+            reward.sponsor_id,
+            null,
+          );
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -241,20 +313,42 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   const updateRewardMutation = useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; name: string; description: string; points_required: number; logo_url: string | null; reward_type: RewardType; qr_code_url: string | null; show_qr_code: boolean; sponsor_id: string | null }) => {
-      const { error } = await supabase
-        .from("club_rewards")
-        .update({
-          name: updates.name,
-          description: updates.description || null,
-          points_required: updates.points_required,
-          logo_url: updates.logo_url,
-          reward_type: updates.reward_type,
-          qr_code_url: updates.qr_code_url,
-          show_qr_code: updates.show_qr_code,
-          sponsor_id: updates.sponsor_id,
-        })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_rewards")
+            .update({
+              name: updates.name,
+              description: updates.description || null,
+              points_required: updates.points_required,
+              logo_url: updates.logo_url,
+              reward_type: updates.reward_type,
+              qr_code_url: updates.qr_code_url,
+              show_qr_code: updates.show_qr_code,
+              sponsor_id: updates.sponsor_id,
+            })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const existing = editingReward;
+          await updateLiveClubReward(
+            ctx,
+            id,
+            updates.name,
+            updates.description || null,
+            updates.points_required,
+            existing?.is_default ?? false,
+            existing?.is_active ?? true,
+            updates.reward_type,
+            updates.logo_url,
+            updates.qr_code_url,
+            updates.show_qr_code,
+            updates.sponsor_id,
+            null,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -269,11 +363,34 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from("club_rewards")
-        .update({ is_active: isActive })
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_rewards")
+            .update({ is_active: isActive })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const reward = rewards.find((r) => r.id === id);
+          if (!reward) throw new Error("Reward not found for status toggle.");
+          await updateLiveClubReward(
+            ctx,
+            id,
+            reward.name,
+            reward.description,
+            reward.points_required,
+            reward.is_default,
+            isActive,
+            reward.reward_type,
+            reward.logo_url,
+            reward.qr_code_url,
+            reward.show_qr_code,
+            reward.sponsor_id,
+            null,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -282,16 +399,63 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   const setDefaultRewardMutation = useMutation({
     mutationFn: async (rewardId: string) => {
-      await supabase
-        .from("club_rewards")
-        .update({ is_default: false })
-        .eq("club_id", clubId);
-      
-      const { error } = await supabase
-        .from("club_rewards")
-        .update({ is_default: true })
-        .eq("id", rewardId);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          await supabase
+            .from("club_rewards")
+            .update({ is_default: false })
+            .eq("club_id", clubId);
+
+          const { error } = await supabase
+            .from("club_rewards")
+            .update({ is_default: true })
+            .eq("id", rewardId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // update_reward has no bulk "clear all defaults" op — unset every
+          // other default, then set the chosen one, matching the Supabase
+          // two-step above.
+          await Promise.all(
+            rewards
+              .filter((r) => r.is_default && r.id !== rewardId)
+              .map((r) =>
+                updateLiveClubReward(
+                  ctx,
+                  r.id,
+                  r.name,
+                  r.description,
+                  r.points_required,
+                  false,
+                  r.is_active,
+                  r.reward_type,
+                  r.logo_url,
+                  r.qr_code_url,
+                  r.show_qr_code,
+                  r.sponsor_id,
+                  null,
+                ),
+              ),
+          );
+          const target = rewards.find((r) => r.id === rewardId);
+          if (!target) throw new Error("Reward not found to set as default.");
+          await updateLiveClubReward(
+            ctx,
+            rewardId,
+            target.name,
+            target.description,
+            target.points_required,
+            true,
+            target.is_active,
+            target.reward_type,
+            target.logo_url,
+            target.qr_code_url,
+            target.show_qr_code,
+            target.sponsor_id,
+            null,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
@@ -301,8 +465,15 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
 
   const deleteRewardMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("club_rewards").delete().eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase.from("club_rewards").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveClubReward(ctx, id);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-rewards", clubId] });
