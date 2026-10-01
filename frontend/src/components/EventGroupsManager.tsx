@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Wand2, Loader2, X, Copy, Shirt, RefreshCw, Flame, MoreHorizontal, ChevronDown, ArrowRightLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
 
 import type { Json } from "@/integrations/supabase/types";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -129,11 +131,21 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         let players: GroupPlayer[] = [];
         
         if (playerIds.length > 0) {
-          const { data: playersData } = await supabase
-            .from("mini_league_players")
-            .select("id, name, ability_rating")
-            .in("id", playerIds);
-          
+          const playersData = await withFeatureBackend("mini_leagues", {
+            supabase: async () => {
+              const { data } = await supabase
+                .from("mini_league_players")
+                .select("id, name, ability_rating")
+                .in("id", playerIds);
+              return data;
+            },
+            // Gated: looking up player names/ratings for an arbitrary subset
+            // of ids has no canister equivalent (the canister only lists all
+            // players for a mini league or a group, not a filtered id set).
+            // ICP-routed sessions see empty names rather than invented data.
+            icp: async () => [] as { id: string; name: string; ability_rating: number | null }[],
+          });
+
           players = (playersData || []).map(p => ({
             ...p,
             ability_rating: p.ability_rating || 3,
@@ -158,15 +170,35 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch mini league settings
   const { data: miniLeague } = useQuery({
     queryKey: ["mini-league-settings", miniLeagueId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_leagues")
-        .select("id, name, team_size, min_players_per_side, minutes_per_half, bib_colors, show_matches_to_members, club_id, clubs:clubs!mini_leagues_club_id_fkey(sport)")
-        .eq("id", miniLeagueId)
-        .single();
-      if (error) throw error;
-      return data as unknown as { id: string; name: string; team_size: number; min_players_per_side: number; minutes_per_half: number; bib_colors: string[] | null; show_matches_to_members: boolean; club_id: string | null; clubs: { sport: string | null } | null };
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_leagues")
+            .select("id, name, team_size, min_players_per_side, minutes_per_half, bib_colors, show_matches_to_members, club_id, clubs:clubs!mini_leagues_club_id_fkey(sport)")
+            .eq("id", miniLeagueId)
+            .single();
+          if (error) throw error;
+          return data as unknown as { id: string; name: string; team_size: number; min_players_per_side: number; minutes_per_half: number; bib_colors: string[] | null; show_matches_to_members: boolean; club_id: string | null; clubs: { sport: string | null } | null };
+        },
+        // Wired: the canister's MiniLeague record matches these fields 1:1.
+        // `clubs.sport` has no canister equivalent (no club join), so the
+        // pitch board sport gate defaults to unsupported rather than guessing.
+        icp: async (ctx) => {
+          const league = await getLiveMiniLeague(ctx, miniLeagueId);
+          return {
+            id: league.id,
+            name: league.name,
+            team_size: league.team_size,
+            min_players_per_side: league.min_players_per_side,
+            minutes_per_half: league.minutes_per_half,
+            bib_colors: league.bib_colors,
+            show_matches_to_members: league.show_matches_to_members,
+            club_id: league.club_id,
+            clubs: null as { sport: string | null } | null,
+          };
+        },
+      }),
     enabled: !!miniLeagueId,
   });
 
@@ -179,15 +211,32 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch mini league players
   const { data: allPlayers } = useQuery({
     queryKey: ["mini-league-players", miniLeagueId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mini_league_players")
-        .select("id, name, ability_rating, parent_user_id, child_id")
-        .eq("mini_league_id", miniLeagueId)
-        .order("ability_rating", { ascending: false });
-      if (error) throw error;
-      return data as (MiniLeaguePlayer & { child_id: string | null })[];
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("mini_league_players")
+            .select("id, name, ability_rating, parent_user_id, child_id")
+            .eq("mini_league_id", miniLeagueId)
+            .order("ability_rating", { ascending: false });
+          if (error) throw error;
+          return data as (MiniLeaguePlayer & { child_id: string | null })[];
+        },
+        // Wired: maps directly onto list_players. Opt fields are unwrapped to
+        // nullable to match the Supabase shape consumers already expect.
+        icp: async (ctx) => {
+          const players = await listLivePlayers(ctx, miniLeagueId);
+          return players
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              ability_rating: p.ability_rating.length ? p.ability_rating[0] : null,
+              parent_user_id: p.parent_user_id.length ? p.parent_user_id[0] : null,
+              child_id: p.child_id.length ? p.child_id[0] : null,
+            }))
+            .sort((a, b) => (b.ability_rating || 0) - (a.ability_rating || 0)) as (MiniLeaguePlayer & { child_id: string | null })[];
+        },
+      }),
     enabled: !!miniLeagueId,
   });
 
