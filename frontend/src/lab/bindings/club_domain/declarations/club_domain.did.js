@@ -53,6 +53,7 @@ export const idlFactory = ({ IDL }) => {
   const Child = IDL.Record({
     'id' : IDL.Text,
     'teams' : IDL.Vec(IDL.Text),
+    'club_id' : IDL.Opt(IDL.Text),
     'parent' : IDL.Opt(IDL.Principal),
   });
   const ClubJoinRequest = IDL.Record({
@@ -260,6 +261,12 @@ export const idlFactory = ({ IDL }) => {
     'member_id' : IDL.Text,
     'position' : IDL.Text,
   });
+  const RemovedMember = IDL.Record({
+    'club' : IDL.Text,
+    'user' : IDL.Principal,
+    'removed_at_ms' : IDL.Nat64,
+    'removed_by' : IDL.Principal,
+  });
   const TeamCaptain = IDL.Record({
     'user' : IDL.Principal,
     'team_id' : IDL.Text,
@@ -350,6 +357,11 @@ export const idlFactory = ({ IDL }) => {
     'claim_shell_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_child_for_parent_in_club' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),
     'create_child_for_parent_on_team' : IDL.Func(
@@ -522,6 +534,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'is_member_removed' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Bool],
+        ['query'],
+      ),
     'link_guardian' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -560,6 +577,11 @@ export const idlFactory = ({ IDL }) => {
     'list_pending_invites_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_removed_members' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RemovedMember), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_role_grants' : IDL.Func(
@@ -684,6 +706,11 @@ export const idlFactory = ({ IDL }) => {
     'restore_club' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_member' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'restore_team' : IDL.Func(

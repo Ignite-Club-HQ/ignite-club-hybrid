@@ -51,6 +51,7 @@ persistent actor {
   var teamCaptains : [Types.TeamCaptain];
   var clubJoinRequests : [Types.ClubJoinRequest];
   var themePrefs : [(Principal, Text)];
+  var removedMembers : [Types.RemovedMember];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -389,7 +390,7 @@ persistent actor {
           case (?team) {
             switch (acl.children.find(func(c) = c.id == invite.child_id)) {
               case null {
-                let child : Types.Child = { id = invite.child_id; teams = [team]; parent = null };
+                let child : Types.Child = { id = invite.child_id; teams = [team]; parent = null; club_id = ?invite.club_id };
                 acl := { acl with children = acl.children.concat([child]) };
               };
               case (?child) {
@@ -760,16 +761,41 @@ persistent actor {
     #Ok
   };
 
-  // Removes every role a member holds in a club (club-level roles only,
-  // not global roles), the canister equivalent of the "remove member"
-  // action on ClubDetailPage/TeamDetailPage.
+  // SOFT delete: revokes every role a member holds in a club (club-level
+  // roles only, not global roles) -- access must still be revoked -- and
+  // records a RemovedMember marker so the member is hidden from active
+  // rosters while keeping their history (guardian/child/points/attendance
+  // records untouched). Idempotent: removing an already-removed member is
+  // a no-op #Ok.
   public shared ({ caller }) func remove_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club)) return #Err("Club admin required");
     acl := { acl with roles = acl.roles.filter(func(g) = not (g.user.equal(user) and g.club == ?club)) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.filter(func(g) = not (g.account_id == accountId and g.club == ?club));
+    if (not removedMembers.any(func(m) = m.club == club and m.user.equal(user))) {
+      removedMembers := removedMembers.concat([{ club; user; removed_at_ms = nowMs(); removed_by = caller }]);
+    };
     #Ok
+  };
+
+  // Clears the soft-delete marker. Does NOT restore previously revoked
+  // role grants -- the admin must re-grant roles explicitly via
+  // add_role_grant.
+  public shared ({ caller }) func restore_member(club : Text, user : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    removedMembers := removedMembers.filter(func(m) = not (m.club == club and m.user.equal(user)));
+    #Ok
+  };
+
+  public query ({ caller }) func list_removed_members(club : Text) : async { #Ok : [Types.RemovedMember]; #Err : Text } {
+    if (not isAdmin(caller, club)) return #Err("Club admin required");
+    #Ok(removedMembers.filter(func(m) = m.club == club))
+  };
+
+  public query func is_member_removed(club : Text, user : Principal) : async Bool {
+    removedMembers.any(func(m) = m.club == club and m.user.equal(user))
   };
 
   public shared ({ caller }) func request_role(club : Text, role : Text, team : ?Text) : async { #Ok : Types.RoleRequest; #Err : Text } {
@@ -1216,7 +1242,7 @@ persistent actor {
                 case (?team) {
                   switch (acl.children.find(func(c) = c.id == childId)) {
                     case null {
-                      let child : Types.Child = { id = childId; teams = [team]; parent = null };
+                      let child : Types.Child = { id = childId; teams = [team]; parent = null; club_id = ?invite.club_id };
                       acl := { acl with children = acl.children.concat([child]) };
                     };
                     case (?child) {
@@ -1270,6 +1296,10 @@ persistent actor {
       case null { [] };
       case (?child) {
         var clubs : [Text] = [];
+        switch (child.club_id) {
+          case (?club) { if (not clubs.any(func(c) = c == club)) clubs := clubs.concat([club]) };
+          case null {};
+        };
         for (teamId in child.teams.values()) {
           switch (acl.teams.find(func(t) = t.id == teamId)) {
             case (?t) { if (not clubs.any(func(c) = c == t.club)) clubs := clubs.concat([t.club]) };
@@ -1325,6 +1355,25 @@ persistent actor {
       id = "child-" # club_id # "-" # Nat.toText(acl.children.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
       teams = [team_id];
       parent = ?parent;
+      club_id = ?club_id;
+    };
+    acl := { acl with children = acl.children.concat([child]) };
+    acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
+    #Ok(child)
+  };
+
+  // Mini-league-scope link: a club admin can create a child record scoped
+  // only to the club (no team assignment yet), mirroring
+  // create_child_for_parent_on_team but without requiring a team id.
+  public shared ({ caller }) func create_child_for_parent_in_club(club_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    if (not (isAdmin(caller, club_id) or isGovernor(caller))) return #Err("Club admin required");
+    if (not acl.clubs.any(func(c) = c == club_id)) return #Err("Club not found");
+    let child : Types.Child = {
+      id = "child-" # club_id # "-" # Nat.toText(acl.children.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
+      teams = [];
+      parent = ?parent;
+      club_id = ?club_id;
     };
     acl := { acl with children = acl.children.concat([child]) };
     acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = parent }]) };
