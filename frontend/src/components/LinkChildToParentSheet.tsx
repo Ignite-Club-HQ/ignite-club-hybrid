@@ -13,7 +13,9 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { adminLinkLiveChildToParent } from "@/live/features/club";
+import { Principal } from "@icp-sdk/core/principal";
 
 interface LinkChildToParentSheetProps {
   open: boolean;
@@ -57,16 +59,30 @@ export default function LinkChildToParentSheet({
 
   const linkMutation = useMutation({
     mutationFn: async (parentId: string) => {
-      assertSupabaseWritePath("membership", "admin_link_child_to_parent RPC has no club_domain counterpart"); // NEEDS-CANISTER: admin_link_child_to_parent RPC has no club_domain counterpart
-      const { error } = await supabase.rpc("admin_link_child_to_parent", {
-        p_child_name: childName,
-        p_existing_child_id: existingChildId || null,
-        p_parent_user_id: parentId,
-        p_team_id: teamId,
-        p_club_id: clubId,
-        p_pending_invite_ids: pendingInviteIds,
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: admin_link_child_to_parent only links an existing
+          // child id on club_domain — creating a brand-new child record by
+          // name and marking pending invites accepted stay Supabase-only
+          // concepts until the canister grows them.
+          const childId = existingChildId;
+          if (!childId) {
+            throw new Error("Linking a brand-new child requires a club_domain child record first.");
+          }
+          await adminLinkLiveChildToParent(ctx, childId, Principal.fromText(parentId));
+        },
+        supabase: async () => {
+          const { error } = await supabase.rpc("admin_link_child_to_parent", {
+            p_child_name: childName,
+            p_existing_child_id: existingChildId || null,
+            p_parent_user_id: parentId,
+            p_team_id: teamId,
+            p_club_id: clubId,
+            p_pending_invite_ids: pendingInviteIds,
+          });
+          if (error) throw error;
+        },
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast({

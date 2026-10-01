@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 module {
   type RoleGrant = { user : Principal; role : Text; club_id : Text; team_id : ?Text };
@@ -64,11 +65,21 @@ module {
   // distinct-reach store (sponsorReach), starting empty.
   public func migration(old : OldActor) : NewActor {
     {
-      old with
-      benchmarks = old.benchmarks.map<NewBenchmark>(func(b) {
+      var governor = old.governor;
+      var roles = old.roles;
+      var webVitals = old.webVitals;
+      var perfSamples = old.perfSamples;
+      var engagementCounters = old.engagementCounters;
+      var adminAlerts = old.adminAlerts;
+      var auditLogs = old.auditLogs;
+      var feedback = old.feedback;
+      var nextId = old.nextId;
+      var clientPerfSamples = old.clientPerfSamples;
+      var benchmarks = Array.map<OldBenchmark, NewBenchmark>(old.benchmarks, func(b) {
         { b with total_members = null; dau = null; wau = null; mau = null; posters = null; read_rate = null }
       });
-      sponsorReach = [];
+      var sponsorMetrics = old.sponsorMetrics;
+      var sponsorReach = [];
     }
   };
 };

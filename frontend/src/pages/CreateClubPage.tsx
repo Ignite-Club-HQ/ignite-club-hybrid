@@ -23,6 +23,9 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { SPORT_EMOJIS, getSportEmoji, isClassModeSport } from "@/lib/sportEmojis";
 import { isCachedAppAdmin } from "@/lib/rolesCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveClub } from "@/live/features/club";
+import { slugifyClubName } from "@/lib/eoiUtils";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -166,109 +169,115 @@ export default function CreateClubPage() {
       return;
     }
 
-    if (useIcpLab) {
-      toast({
-        title: "Club creation is unavailable in ICP lab mode",
-        description: "The form is a local preview and no club data has been persisted.",
-      });
-      return;
-    }
-
     setSaving(true);
 
-    // Check for duplicate club name
-    const { data: existingClub } = await supabase
-      .from("clubs")
-      .select("id")
-      .ilike("name", name.trim())
-      .maybeSingle();
+    try {
+      const clubId = await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: create_club has no sport/class-mode/logo-upload
+          // fields yet and does not auto-assign the creator a club_admin
+          // role grant — only name/slug/description/logo_url persist.
+          const profile = await createLiveClub(
+            ctx,
+            name.trim(),
+            slugifyClubName(name.trim()) || `club-${Date.now()}`,
+            description.trim() || "",
+            null,
+          );
+          return profile.id;
+        },
+        supabase: async () => {
+          // Check for duplicate club name
+          const { data: existingClub } = await supabase
+            .from("clubs")
+            .select("id")
+            .ilike("name", name.trim())
+            .maybeSingle();
 
-    if (existingClub) {
-      setSaving(false);
-      toast({
-        title: "Club name already exists",
-        description: "Please choose a different name for your club.",
-        variant: "destructive",
+          if (existingClub) {
+            throw new Error("A club with this name already exists.");
+          }
+
+          // Create the club first (without logo)
+          const { data: club, error: clubError } = await supabase
+            .from("clubs")
+            .insert({
+              name: name.trim(),
+              description: description.trim() || null,
+              logo_url: null, // Will be updated after upload
+              sport: sport || null,
+              created_by: user!.id,
+              class_mode_enabled: isClassModeSport(sport),
+            })
+            .select()
+            .single();
+
+          if (clubError) {
+            throw new Error(
+              clubError.message.includes("idx_unique_club_name")
+                ? "A club with this name already exists."
+                : "Failed to create club. Please try again.",
+            );
+          }
+
+          // Upload logo to storage if one was selected
+          if (logoFile) {
+            try {
+              const fileExt = logoFile.name.split('.').pop();
+              const fileName = `${club.id}/${Date.now()}.${fileExt}`;
+
+              const { error: uploadError } = await supabase.storage
+                .from('club-logos')
+                .upload(fileName, logoFile, { upsert: true });
+
+              if (uploadError) throw uploadError;
+
+              const { data: urlData } = supabase.storage
+                .from('club-logos')
+                .getPublicUrl(fileName);
+
+              // Update the club with the logo URL
+              await supabase
+                .from("clubs")
+                .update({ logo_url: urlData.publicUrl })
+                .eq("id", club.id);
+            } catch (error) {
+              console.error('Logo upload error:', error);
+              // Continue without logo - club is still created
+            }
+          }
+
+          // Assign creator as club_admin
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({
+              user_id: user!.id,
+              role: "club_admin",
+              club_id: club.id,
+            });
+
+          if (roleError) {
+            toast({
+              title: "Warning",
+              description: "Club created but couldn't assign admin role.",
+              variant: "destructive",
+            });
+          }
+
+          return club.id as string;
+        },
       });
-      return;
-    }
 
-    // Create the club first (without logo)
-    const { data: club, error: clubError } = await supabase
-      .from("clubs")
-      .insert({
-        name: name.trim(),
-        description: description.trim() || null,
-        logo_url: null, // Will be updated after upload
-        sport: sport || null,
-        created_by: user!.id,
-        class_mode_enabled: isClassModeSport(sport),
-      })
-      .select()
-      .single();
-
-    if (clubError) {
+      setSaving(false);
+      navigate(`/clubs/${clubId}/setup`);
+    } catch (error: any) {
       setSaving(false);
       toast({
         title: "Error",
-        description: clubError.message.includes("idx_unique_club_name") 
-          ? "A club with this name already exists." 
-          : "Failed to create club. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Upload logo to storage if one was selected
-    let finalLogoUrl: string | null = null;
-    if (logoFile) {
-      try {
-        const fileExt = logoFile.name.split('.').pop();
-        const fileName = `${club.id}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('club-logos')
-          .upload(fileName, logoFile, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('club-logos')
-          .getPublicUrl(fileName);
-
-        finalLogoUrl = urlData.publicUrl;
-
-        // Update the club with the logo URL
-        await supabase
-          .from("clubs")
-          .update({ logo_url: finalLogoUrl })
-          .eq("id", club.id);
-      } catch (error) {
-        console.error('Logo upload error:', error);
-        // Continue without logo - club is still created
-      }
-    }
-
-    // Assign creator as club_admin
-    const { error: roleError } = await supabase
-      .from("user_roles")
-      .insert({
-        user_id: user!.id,
-        role: "club_admin",
-        club_id: club.id,
-      });
-
-    setSaving(false);
-
-    if (roleError) {
-      toast({
-        title: "Warning",
-        description: "Club created but couldn't assign admin role.",
+        description: error?.message || "Failed to create club. Please try again.",
         variant: "destructive",
       });
     }
-
-    navigate(`/clubs/${club.id}/setup`);
   };
 
   return (
@@ -288,11 +297,6 @@ export default function CreateClubPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-6 space-y-8 max-w-lg mx-auto">
-          {useIcpLab && (
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-              Preview only: club creation is not persisted in ICP lab mode.
-            </div>
-          )}
           {/* Locked Notice */}
           {!canCreateClub && !isLoadingSettings && (
             <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-6 text-center">
