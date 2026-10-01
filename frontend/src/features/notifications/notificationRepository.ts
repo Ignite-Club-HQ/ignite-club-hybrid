@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import type { Database } from "@/integrations/supabase/types";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;

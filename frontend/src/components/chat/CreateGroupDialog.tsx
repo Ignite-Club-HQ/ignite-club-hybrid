@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Crown, Check, Users, Shield, Sparkles, ChevronLeft, ChevronRight, Search, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -337,6 +338,13 @@ export default function CreateGroupDialog({
   const createGroupMutation = useMutation({
     mutationFn: async () => {
       if (!user || selectedRoles.length === 0) return;
+      // Chat group creation writes club/team/role-scoped metadata (allowed_roles,
+      // membership_mode, category) that has no canister equivalent yet.
+      // NEEDS-CANISTER: messaging_domain create-group call accepting role/category metadata.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Creating chat groups isn't available yet on the Internet Identity messaging backend.");
+      }
+
 
       const finalTeamId = teamId || selectedTeamId || null;
       const finalMiniLeagueId = miniLeagueId || selectedMiniLeagueId || null;

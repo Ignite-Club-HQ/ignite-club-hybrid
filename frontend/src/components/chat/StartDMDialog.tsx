@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Search, MessageCircle, Loader2, Crown, Lock, Check, X, Users, SlidersHorizontal, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   Select,
   SelectContent,

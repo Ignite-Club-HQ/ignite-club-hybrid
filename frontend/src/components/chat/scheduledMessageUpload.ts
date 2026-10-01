@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import {
@@ -27,6 +28,13 @@ export async function uploadScheduledImage(
   if (!file.type.startsWith("image/")) {
     throw new Error("Please select an image file");
   }
+  // Scheduled-message image uploads go to Supabase Storage; there is no
+  // canister/media counterpart for scheduled-send attachments yet.
+  // NEEDS-CANISTER: media_metadata (or messaging_domain) scheduled-attachment upload path.
+  if (isFeatureRoutedToIcp("messaging")) {
+    throw new Error("Scheduled message attachments aren't available yet on the Internet Identity messaging backend.");
+  }
+
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
     throw new Error("Image must be less than 10MB");
   }

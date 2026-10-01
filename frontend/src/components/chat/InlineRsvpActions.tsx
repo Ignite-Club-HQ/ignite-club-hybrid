@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, Loader2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { toast } from "@/hooks/use-toast";
 import { hapticImpactLight } from "@/lib/haptics";
 import { RsvpNoteSheet } from "@/components/rsvp/RsvpNoteSheet";

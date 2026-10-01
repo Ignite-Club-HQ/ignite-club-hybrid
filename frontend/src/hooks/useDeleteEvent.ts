@@ -9,6 +9,7 @@ import {
   type EventDeletionOutcome,
 } from "@/lib/eventSeriesDeletion";
 import { purgeDeletedEventFromCaches } from "@/lib/eventDeletionCache";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface UseDeleteEventOptions {
   /** Called only after the database has confirmed the deletion. */
@@ -44,10 +45,24 @@ export function useDeleteEvent(options: UseDeleteEventOptions = {}) {
       setIsPending(true);
 
       let outcome: EventDeletionOutcome;
-      try {
-        outcome = await performEventDeletion(supabase, event, deleteType);
-      } catch (err: any) {
-        outcome = { kind: "failed", message: err?.message ?? "Unknown error" };
+      // NEEDS-CANISTER: events_domain has no delete_event/delete_series
+      // method (only set_event_cancelled / delete_series-for-recurrence
+      // children via the recurrence surface, which don't cover hard-deleting
+      // a standalone event or an entire series anchor). Block the Supabase
+      // delete under ICP routing rather than removing a row ICP users'
+      // canister state never reflected in the first place.
+      if (isFeatureRoutedToIcp("events")) {
+        outcome = {
+          kind: "failed",
+          message:
+            "Deleting events isn't available yet on this backend. Cancel the event instead.",
+        };
+      } else {
+        try {
+          outcome = await performEventDeletion(supabase, event, deleteType);
+        } catch (err: any) {
+          outcome = { kind: "failed", message: err?.message ?? "Unknown error" };
+        }
       }
 
       if (outcome.kind !== "failed") {

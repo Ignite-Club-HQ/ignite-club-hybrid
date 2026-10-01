@@ -15,6 +15,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -154,6 +155,13 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
   const updateGroupMutation = useMutation({
     mutationFn: async () => {
       if (!canEdit) throw new Error("You do not have permission to edit this group");
+      // Edits allowed_roles/join_policy/allow_forwarding — fields the canister's
+      // upsert_group_metadata does not model.
+      // NEEDS-CANISTER: messaging_domain update-group-settings call for roles/join policy/forwarding.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Editing chat group settings isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const updates: { name: string; allowed_roles?: AppRole[]; join_policy?: string; allow_forwarding?: boolean } = { name };
       if (!isManual) updates.allowed_roles = selectedRoles;
       if (qualifiesForOpenJoin) {

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -90,6 +91,13 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
       destinationGroupIds: string[];
     }) => {
       if (!currentUserId) throw new Error("Not signed in");
+      // Forwarding writes new group_messages rows directly; messaging_domain has
+      // no forward/copy-message method yet.
+      // NEEDS-CANISTER: messaging_domain forward-message call (copy into N conversations).
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Forwarding messages isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const { source, destinationGroupIds } = args;
       if (destinationGroupIds.length === 0) return { forwarded: 0 };
 
