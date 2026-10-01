@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Guardian {
   id: string;
@@ -126,6 +127,7 @@ export default function ManageGuardiansDialog({
   // Add guardian mutation
   const addGuardian = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "child_guardians insert has no club_domain counterpart"); // NEEDS-CANISTER: child_guardians insert has no club_domain counterpart
       if (!selectedUserId) return;
       const { error } = await supabase.from("child_guardians").insert({
         child_id: childId,
@@ -154,6 +156,7 @@ export default function ManageGuardiansDialog({
   // Remove guardian mutation
   const removeGuardian = useMutation({
     mutationFn: async (guardianRecordId: string) => {
+      assertSupabaseWritePath("membership", "child_guardians delete has no club_domain counterpart"); // NEEDS-CANISTER: child_guardians delete has no club_domain counterpart
       const { error } = await supabase
         .from("child_guardians")
         .delete()

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 const PUBLIC_BASE = "https://reference.invalid";
 
@@ -39,6 +40,15 @@ export function CompetitionShareJoinLink({
         .maybeSingle();
       if (error || !data?.join_token) {
         // create one
+        // NEEDS-CANISTER: competition_domain's issue_join_token is scoped to a
+        // single team, not a competition-wide link shared from this card.
+        try {
+          assertSupabaseWritePath("competitions", "creating a competition join link");
+        } catch (gateErr: any) {
+          toast({ title: "Could not load link", description: gateErr.message, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
         const { data: newTok, error: rerr } = await supabase.rpc(
           "regenerate_competition_join_token",
           { p_competition_id: competitionId }
@@ -102,6 +112,13 @@ export function CompetitionShareJoinLink({
 
   const regenerate = async () => {
     if (!confirm("Replace the current link? The old link will stop working.")) return;
+    // NEEDS-CANISTER: see above — no competition-wide join-link canister shape.
+    try {
+      assertSupabaseWritePath("competitions", "regenerating a competition join link");
+    } catch (gateErr: any) {
+      toast({ title: "Could not regenerate", description: gateErr.message, variant: "destructive" });
+      return;
+    }
     setRegenerating(true);
     const { data, error } = await supabase.rpc("regenerate_competition_join_token", {
       p_competition_id: competitionId,

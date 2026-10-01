@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface CompetitionAdminsCardProps {
   competitionId: string;
@@ -92,6 +93,9 @@ export function CompetitionAdminsCard({
 
   const addMutation = useMutation({
     mutationFn: async (target: { id: string; display_name: string | null }) => {
+      // NEEDS-CANISTER: competition_domain has no admin-roster write (add/remove
+      // competition_roles); only is_competition_admin (read) exists.
+      assertSupabaseWritePath("competitions", "granting a per-competition admin role");
       const { error } = await supabase.from("competition_roles").insert({
         competition_id: competitionId,
         user_id: target.id,
@@ -122,6 +126,8 @@ export function CompetitionAdminsCard({
 
   const removeMutation = useMutation({
     mutationFn: async (row: RoleRow) => {
+      // NEEDS-CANISTER: competition_domain has no admin-roster write.
+      assertSupabaseWritePath("competitions", "removing a per-competition admin role");
       const { error } = await supabase.from("competition_roles").delete().eq("id", row.id);
       if (error) throw error;
       return row;

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type ChatScopeType = "team" | "club" | "group" | "club_admin" | "direct";
 
@@ -237,6 +238,10 @@ export function useChatCatchUp({
       };
 
       const fetchTier = async (hours: number, force: boolean): Promise<{ result: ChatSummaryResult | null; error: string | null }> => {
+        // NEEDS-CANISTER: messaging_domain chat recap/summary call.
+        if (isFeatureRoutedToIcp("messaging")) {
+          return { result: null, error: "Chat recap isn't available yet on the Internet Identity messaging backend." };
+        }
         const lastOpenedMs = getLastOpened(scope_type, scope_id);
         const last_opened_at = lastOpenedMs ? new Date(lastOpenedMs).toISOString() : null;
         const body: Record<string, unknown> = {

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 // Get theme from DOM (the authoritative source after useAuth applies it)
 const getThemeFromDOM = (): 'light' | 'dark' => {
@@ -77,6 +78,12 @@ export function ThemeToggle() {
       return;
     }
     
+    // NEEDS-CANISTER: identity_access has no theme_preference field — ICP
+    // accounts keep the local DOM/localStorage theme only.
+    if (resolveAuthBackend() === "icp") {
+      return;
+    }
+
     console.log('[ThemeToggle] Saving theme to profile:', newTheme, 'for user:', currentUser.id);
     setIsSaving(true);
     try {

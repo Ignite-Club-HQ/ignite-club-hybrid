@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 const APP_URL = "https://reference.invalid";
 const DEFAULT_EXPIRY_DAYS = 30;
@@ -168,6 +169,7 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
 
   const createOrRotate = useMutation({
     mutationFn: async ({ rotate, role }: { rotate: boolean; role: RoleVariant }) => {
+      assertSupabaseWritePath("membership", "team_invites shareable-link create/rotate has no club_domain counterpart"); // NEEDS-CANISTER: team_invites shareable-link create/rotate has no club_domain counterpart
       if (!user) throw new Error("Not signed in");
       const existing = links?.[role];
       if (rotate && existing) {
@@ -218,6 +220,7 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
 
   const revoke = useMutation({
     mutationFn: async (role: RoleVariant) => {
+      assertSupabaseWritePath("membership", "team_invites shareable-link revoke has no club_domain counterpart"); // NEEDS-CANISTER: team_invites shareable-link revoke has no club_domain counterpart
       const existing = links?.[role];
       if (!existing) return role;
       const { error } = await supabase.from("team_invites").delete().eq("id", existing.id);

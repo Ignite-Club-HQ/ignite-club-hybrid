@@ -5,6 +5,7 @@ import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-league/AddSecondParentDialog").then(m => ({ default: m.AddSecondParentDialog })));
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -249,7 +250,9 @@ export function ManagePlayersDialog({
   const { data: pendingMeta } = useQuery({
     queryKey: ["mini-league-players-pending-meta", miniLeagueId, childIdsForPending],
     queryFn: async () => {
-      if (childIdsForPending.length === 0) return { childParent: new Map<string, string | null>(), guardianCount: new Map<string, number>() };
+      // NEEDS-CANISTER: children/child_guardians pending-status lookup has no
+      // canister equivalent; skip the raw Supabase read under ICP routing.
+      if (childIdsForPending.length === 0 || isFeatureRoutedToIcp("mini_leagues")) return { childParent: new Map<string, string | null>(), guardianCount: new Map<string, number>() };
       const [{ data: childRows }, { data: guardianRows }] = await Promise.all([
         supabase.from("children").select("id, parent_id").in("id", childIdsForPending),
         supabase.from("child_guardians").select("child_id").in("child_id", childIdsForPending),
@@ -274,6 +277,9 @@ export function ManagePlayersDialog({
   const { data: pendingInvites = [] } = useQuery({
     queryKey: ["pending-invites", null, clubId, miniLeagueId],
     queryFn: async () => {
+      // NEEDS-CANISTER: pending_invites has no canister equivalent; skip under
+      // ICP routing instead of an unauthenticated Supabase read.
+      if (isFeatureRoutedToIcp("mini_leagues")) return [];
       const { data, error } = await supabase
         .from("pending_invites")
         .select("id, role, invited_user_id, invited_label, invited_email, created_at, status, metadata")

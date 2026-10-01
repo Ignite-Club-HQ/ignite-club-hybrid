@@ -67,6 +67,12 @@ export function ArchiveTeamDialog({
   };
 
   const handleReinstate = async () => {
+    try {
+      assertSupabaseWritePath("membership", "team reinstate (is_archived/archived_at) has no club_domain counterpart"); // NEEDS-CANISTER: team reinstate (is_archived/archived_at) has no club_domain counterpart
+    } catch (guardError) {
+      toast({ title: "Failed to reinstate team", description: (guardError as Error).message, variant: "destructive" });
+      return;
+    }
     setLoading(true);
     const { error } = await supabase
       .from("teams")

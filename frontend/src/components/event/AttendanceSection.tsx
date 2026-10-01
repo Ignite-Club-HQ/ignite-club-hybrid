@@ -23,6 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { EventViewMemberRow } from "@/components/EventViewMemberRow";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface AttendanceCounts {
   going: number;
@@ -100,7 +102,8 @@ export function AttendanceSection({
       if (error) throw error;
       return data || [];
     },
-    enabled: isAdmin,
+    // NEEDS-CANISTER: events_domain has no event_views equivalent.
+    enabled: isAdmin && !isFeatureRoutedToIcp("events"),
     staleTime: 30_000,
   });
 
@@ -145,7 +148,8 @@ export function AttendanceSection({
       if (error) throw error;
       return data;
     },
-    enabled: isAdmin,
+    // NEEDS-CANISTER: events_domain has no event_reminder_log equivalent.
+    enabled: isAdmin && !isFeatureRoutedToIcp("events"),
     staleTime: 60_000,
   });
 
@@ -191,7 +195,8 @@ export function AttendanceSection({
       for (const row of data || []) map[row.user_id] = !!row.has_push;
       return map;
     },
-    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0,
+    // NEEDS-CANISTER: no push-reachability RPC equivalent on events_domain.
+    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0 && !isFeatureRoutedToIcp("events"),
     staleTime: 60_000,
   });
 
@@ -208,7 +213,8 @@ export function AttendanceSection({
       for (const row of data || []) map[row.user_id] = row.events_enabled !== false;
       return map;
     },
-    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0,
+    // NEEDS-CANISTER: no events-enabled preference RPC equivalent on events_domain.
+    enabled: isAdmin && viewsDialogOpen && notViewedIds.length > 0 && !isFeatureRoutedToIcp("events"),
     staleTime: 60_000,
   });
 
@@ -221,6 +227,9 @@ export function AttendanceSection({
     channels: "push" | "email" | "both",
     userIds?: string[],
   ) => {
+    // NEEDS-CANISTER: event-view reminders (send-event-view-reminder edge
+    // function) have no events_domain counterpart.
+    assertSupabaseWritePath("events", "event view reminders");
     if (!canSendReminders) {
       onProRequired?.();
       return;

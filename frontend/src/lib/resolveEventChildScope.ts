@@ -13,6 +13,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { resolveRsvpAudience, shouldPromptPlayer } from "@/lib/rsvpAudience";
 import { getEventEligibleTeamIds } from "@/lib/eventAudience";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type RsvpChild = { id: string; name: string; parent_id?: string | null };
 
@@ -74,6 +75,11 @@ export async function resolveRsvpChildren({
 }): Promise<RsvpChild[]> {
   if (!event || !userId) return [];
 
+  // NEEDS-CANISTER: events_domain has no children/child_guardians/
+  // child_team_assignments tables, so child RSVP scoping cannot be computed
+  // on ICP. Never widen — return no eligible children rather than guess.
+  if (isFeatureRoutedToIcp("events")) return [];
+
   // Step 1 — adults/parents-only + role restrictions, before any team lookup.
   if (childrenAreExcluded(event, teamDefaultAudience)) return [];
 
@@ -118,6 +124,8 @@ export async function resolveEventChildRoster({
   teamDefaultAudience?: string | null;
 }): Promise<RsvpChild[]> {
   if (!event) return [];
+  // NEEDS-CANISTER: see resolveRsvpChildren — same missing child/team tables.
+  if (isFeatureRoutedToIcp("events")) return [];
   if (childrenAreExcluded(event, teamDefaultAudience)) return [];
 
   const eligible = getEventEligibleTeamIds(event);

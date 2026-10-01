@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Target, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { cn } from "@/lib/utils";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -82,6 +83,7 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
 
   const upsertPositionMutation = useMutation({
     mutationFn: async ({ playerId, playerType, positions, number }: { playerId: string; playerType: "member" | "child"; positions: PitchPosition[]; number: number | null }) => {
+      assertSupabaseWritePath("membership", "team_player_positions upsert has no club_domain counterpart"); // NEEDS-CANISTER: team_player_positions upsert has no club_domain counterpart
       const payload: any = {
         team_id: teamId,
         position: positions[0] || 'MID',

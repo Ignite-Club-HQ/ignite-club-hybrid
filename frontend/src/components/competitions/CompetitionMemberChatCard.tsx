@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Props {
   competitionId: string;
@@ -39,6 +40,13 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
     member_chat_enabled?: boolean;
     member_chat_admins_only?: boolean;
   }) => {
+    // NEEDS-CANISTER: competition_domain has no member-chat settings fields.
+    try {
+      assertSupabaseWritePath("competitions", "toggling competition-wide chat settings");
+    } catch (err: any) {
+      toast({ title: "Could not update", description: err.message, variant: "destructive" });
+      return;
+    }
     const { error } = await supabase
       .from("competitions")
       .update(patch)

@@ -28,6 +28,7 @@ import { isVideoUrl } from "@/lib/videoUtils";
 import { cn } from "@/lib/utils";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 export type ChatDetailsType = ChatSharedMediaType | "support";
 
@@ -489,6 +490,8 @@ function NotificationsToggle({
 
   const toggleMutation = useMutation({
     mutationFn: async (enable: boolean) => {
+      // NEEDS-CANISTER: messaging_domain mute-preference call.
+      assertSupabaseWritePath("messaging", "updating chat mute preferences");
       if (enable) {
         await supabase
           .from("chat_mute_preferences")

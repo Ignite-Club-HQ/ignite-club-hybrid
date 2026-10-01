@@ -9,6 +9,7 @@ import {
 } from "@/features/membership/secondParentInvite";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 type Args = {
   supabase: any;
@@ -72,6 +73,7 @@ export function useAddPendingTeamMemberMutation({
   return useMutation({
     mutationFn: async () => {
       if (!nameInput.trim()) throw new Error("Please enter a name");
+      assertSupabaseWritePath("membership", "pending team invite (pending_invites row + second-parent + email) has no club_domain counterpart"); // NEEDS-CANISTER: pending team invite (pending_invites row + second-parent + email) has no club_domain counterpart
 
       // Email dedupe: if the inviter typed an email and it belongs to an
       // existing in-scope user, attach the role directly instead of

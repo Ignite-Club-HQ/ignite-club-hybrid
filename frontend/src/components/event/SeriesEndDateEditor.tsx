@@ -18,6 +18,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Props {
   eventId: string;
@@ -54,6 +56,9 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
   // Fetch parent + all siblings for the series.
   const { data: series, isLoading, refetch } = useQuery({
     queryKey: ["series-siblings", parentEventId],
+    // NEEDS-CANISTER: events_domain series are opaque (create/update/delete
+    // only) — there is no per-occurrence sibling listing to read here.
+    enabled: !isFeatureRoutedToIcp("events"),
     queryFn: async () => {
       const { data: parent, error: pErr } = await supabase
         .from("events")
@@ -120,6 +125,10 @@ export function SeriesEndDateEditor({ eventId, parentEventId, canEdit, onUpdated
     if (!series?.parent || !newEndDate) return;
     setSaving(true);
     try {
+      // NEEDS-CANISTER: this editor trims/extends occurrences with raw
+      // events-table inserts/deletes, which has no events_domain equivalent
+      // (the canister only exposes whole-series create/update/delete).
+      assertSupabaseWritePath("events", "editing a recurring series end date");
       const endOfDay = new Date(`${newEndDate}T23:59:59`);
 
       if (preview.action === "trim") {

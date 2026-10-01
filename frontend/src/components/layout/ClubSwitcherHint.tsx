@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * One-shot coach-mark for the header club switcher.
@@ -28,6 +29,9 @@ export function markClubSwitcherHintSeen(userId: string): void {
   } catch {
     /* storage unavailable — hint simply shows again next launch */
   }
+  // NEEDS-CANISTER: identity_access profile has no club_switcher_hint_seen_at
+  // field. ICP accounts keep the local-only dismissal flag above.
+  if (resolveAuthBackend() === "icp") return;
   // Persist across devices; local flag above keeps the UI instant.
   void supabase
     .from("profiles")
@@ -37,6 +41,12 @@ export function markClubSwitcherHintSeen(userId: string): void {
 
 /** Server-side dismissal state, so the hint stays dismissed on other devices. */
 export async function fetchClubSwitcherHintSeen(userId: string): Promise<boolean> {
+  // NEEDS-CANISTER: no canister-side dismissal state for ICP accounts yet —
+  // fall back to the local-only flag so the hint still behaves (just
+  // per-device rather than per-account).
+  if (resolveAuthBackend() === "icp") {
+    return hasSeenClubSwitcherHint(userId);
+  }
   const { data, error } = await supabase
     .from("profiles")
     .select("club_switcher_hint_seen_at")

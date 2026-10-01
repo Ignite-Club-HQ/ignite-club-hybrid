@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Props {
   teamId: string;
@@ -36,6 +37,15 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
 
   const respond = async (entryId: string, status: "accepted" | "declined") => {
     setRespondingId(entryId);
+    // NEEDS-CANISTER: competition_domain has no entry invite accept/decline
+    // write (register_team is a different, admin-driven shape).
+    try {
+      assertSupabaseWritePath("competitions", "accepting/declining a competition invite");
+    } catch (err: any) {
+      setRespondingId(null);
+      toast({ title: "Could not respond", description: err.message, variant: "destructive" });
+      return;
+    }
     const { error } = await supabase
       .from("competition_entries")
       .update({ status, responded_by: user?.id, responded_at: new Date().toISOString() })

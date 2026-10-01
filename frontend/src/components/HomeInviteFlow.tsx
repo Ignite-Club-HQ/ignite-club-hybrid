@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { getCachedRoles } from "@/lib/rolesCache";
@@ -117,15 +118,20 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
         .map((r: any) => r.competition_id)
         .filter(Boolean) as string[];
 
+      // NEEDS-CANISTER: club_domain has no team/club directory lookup by id
+      // set, and competitions reads below have no competition_domain
+      // equivalent for this combined invite-target shape. ICP-routed
+      // sessions see no invite targets rather than a partial result.
+      const icpRoutedForInvites = isFeatureRoutedToIcp("membership") || isFeatureRoutedToIcp("competitions");
       const [teamsRes, clubsRes, clubLeaguesRes, scopedLeaguesRes, orgCompsRes, scopedCompsRes] = await Promise.all([
-        teamIds.length
+        teamIds.length && !icpRoutedForInvites
           ? supabase
               .from("teams")
               .select("id, name, club_id, is_archived, clubs!club_id(id, name)")
               .in("id", teamIds)
               .eq("is_archived", false)
           : Promise.resolve({ data: [] as any[] }),
-        allClubIds.length
+        allClubIds.length && !icpRoutedForInvites
           ? supabase.from("clubs").select("id, name").in("id", allClubIds)
           : Promise.resolve({ data: [] as any[] }),
         leagueAdminClubIds.length
@@ -155,18 +161,18 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
             })
           : Promise.resolve({ data: [] as any[] }),
         // Competitions organised by clubs the user admins (or all if app_admin)
-        isAppAdmin
+        isAppAdmin && !icpRoutedForInvites
           ? supabase
               .from("competitions")
               .select("id, name, season, organizer_club_id, organizer_club:organizer_club_id(name)")
               .limit(200)
-          : competitionOrgClubIds.length
+          : competitionOrgClubIds.length && !icpRoutedForInvites
             ? supabase
                 .from("competitions")
                 .select("id, name, season, organizer_club_id, organizer_club:organizer_club_id(name)")
                 .in("organizer_club_id", competitionOrgClubIds)
             : Promise.resolve({ data: [] as any[] }),
-        scopedCompetitionIds.length
+        scopedCompetitionIds.length && !icpRoutedForInvites
           ? supabase
               .from("competitions")
               .select("id, name, season, organizer_club_id, organizer_club:organizer_club_id(name)")

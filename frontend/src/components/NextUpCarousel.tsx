@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -577,6 +578,16 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
 
   const rsvpMutation = useMutation({
     mutationFn: async (status: RsvpStatus) => {
+      // Hybrid routing: mirrors the self-RSVP write in EventCard.tsx.
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveEventRsvp(ctx, event.id, user!.id, status);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       let rsvpId: string | null = null;
       if (myRsvp) {
         const { error } = await supabase.from("rsvps").update({ status }).eq("id", myRsvp.id);
@@ -616,6 +627,16 @@ function HeroCard({ event, fullWidth, onNeedsRsvpChange, onReadyChange }: { even
 
   const childRsvpMutation = useMutation({
     mutationFn: async ({ childId, status }: { childId: string; status: RsvpStatus }) => {
+      // Hybrid routing: mirrors the child-RSVP write in EventCard.tsx.
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await adminUpsertLiveRsvp(ctx, event.id, user!.id, status, { childId });
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       // Server-authoritative lookup — do NOT trust the local cache to decide
       // UPDATE vs INSERT. A cold/stale childRsvps cache would otherwise cause
       // us to INSERT a row that already exists; skip_duplicate_rsvps rescues

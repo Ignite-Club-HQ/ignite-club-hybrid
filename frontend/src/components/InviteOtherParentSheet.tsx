@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface InviteOtherParentSheetProps {
   open: boolean;
@@ -100,6 +101,7 @@ export default function InviteOtherParentSheet({
   // Direct link existing user as guardian (no invite needed)
   const linkExistingGuardian = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "direct guardian link (child_guardians insert) has no club_domain counterpart"); // NEEDS-CANISTER: direct guardian link (child_guardians insert) has no club_domain counterpart
       if (!selectedUser) return;
       const { error } = await supabase.from("child_guardians").insert({
         child_id: childId,
@@ -123,6 +125,7 @@ export default function InviteOtherParentSheet({
 
   const sendInvite = useMutation({
     mutationFn: async (requestedDelivery?: "email" | "share") => {
+      assertSupabaseWritePath("membership", "guardian pending_invites row + send-email invoke has no club_domain parent-invite equivalent wired here"); // NEEDS-CANISTER: guardian pending_invites row + send-email invoke has no club_domain parent-invite equivalent wired here
       const effectiveDelivery = requestedDelivery ?? deliveryMethod;
       if (!user || !parentName.trim()) return;
       if (effectiveDelivery === "email" && !parentEmail.trim()) return;

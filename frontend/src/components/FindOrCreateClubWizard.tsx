@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SPORT_EMOJIS, getSportEmoji } from "@/lib/sportEmojis";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -118,6 +119,13 @@ export default function FindOrCreateClubWizard({
   const handleCreateClub = async () => {
     if (!clubName.trim() || !user) return;
 
+    try {
+      assertSupabaseWritePath("membership", "club creation + club_admin role grant + logo upload has no club_domain counterpart wired here"); // NEEDS-CANISTER: club creation + club_admin role grant + logo upload has no club_domain counterpart wired here
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Not available", variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
 
     // Check for duplicate name
@@ -190,6 +198,12 @@ export default function FindOrCreateClubWizard({
 
   const handleSendJoinRequest = async (club: ClubSearchResult) => {
     if (!user) return;
+    try {
+      assertSupabaseWritePath("membership", "club_join_requests insert has no club_domain counterpart"); // NEEDS-CANISTER: club_join_requests insert has no club_domain counterpart
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : "Not available", variant: "destructive" });
+      return;
+    }
     setSendingRequest(true);
 
     const { error } = await supabase.from("club_join_requests").insert({

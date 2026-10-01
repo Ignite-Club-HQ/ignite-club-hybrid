@@ -18,6 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { invalidateRolesCache } from "@/lib/rolesCache";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveRoleGrant } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 
 interface PromoteToTeamAdminDialogProps {
   teamId: string;
@@ -57,23 +60,30 @@ export default function PromoteToTeamAdminDialog({
     mutationFn: async () => {
       if (!selectedUserId) return;
 
-      // The RLS policy on user_roles enforces admin permissions
-      // This mutation will fail if the current user lacks club_admin, team_admin, or app_admin role
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: selectedUserId,
-        team_id: teamId,
-        club_id: clubId,
-        role: "team_admin",
-      });
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          // The RLS policy on user_roles enforces admin permissions
+          // This mutation will fail if the current user lacks club_admin, team_admin, or app_admin role
+          const { error } = await supabase.from("user_roles").insert({
+            user_id: selectedUserId,
+            team_id: teamId,
+            club_id: clubId,
+            role: "team_admin",
+          });
+          if (error) throw error;
 
-      // Notify the promoted user
-      const selectedMember = members[selectedUserId];
-      await supabase.from("notifications").insert({
-        user_id: selectedUserId,
-        type: "membership",
-        message: `You have been promoted to Team Admin for ${teamName}`,
-        related_id: teamId,
+          // Notify the promoted user
+          await supabase.from("notifications").insert({
+            user_id: selectedUserId,
+            type: "membership",
+            message: `You have been promoted to Team Admin for ${teamName}`,
+            related_id: teamId,
+          });
+        },
+        // No notification equivalent on the canister; the grant itself is
+        // the only effect.
+        icp: (ctx) =>
+          addLiveRoleGrant(ctx, Principal.fromText(selectedUserId), clubId, "team_admin", teamId),
       });
 
       // Invalidate the promoted user's roles cache

@@ -2,6 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays, parseISO } from "date-fns";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { awardLivePoints, subjectFor } from "@/live/features/points";
 
 const EARLY_RSVP_DAYS_THRESHOLD = 3;
 const EARLY_RSVP_POINTS = 5;
@@ -77,43 +79,55 @@ export async function awardEarlyRsvpPoints({
       return false; // Another request already marked it
     }
 
-    // Atomic points increment — child or user
+    // Atomic points increment — child or user. Routed through the
+    // club_points_domain award_points wrapper under ICP so the balance and
+    // its history entry land on the canister atomically instead of calling
+    // Supabase-only RPCs that never see an ICP user's data.
     let balanceAfter: number;
     let previousPoints: number;
 
-    if (childId) {
-      const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_child_ignite_points', {
-        _child_id: childId,
-        _amount: EARLY_RSVP_POINTS,
-        _club_id: clubId,
+    try {
+      balanceAfter = await withFeatureBackend("points", {
+        supabase: async () => {
+          if (childId) {
+            const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_child_ignite_points', {
+              _child_id: childId,
+              _amount: EARLY_RSVP_POINTS,
+              _club_id: clubId,
+            });
+            if (updateError) throw updateError;
+            return newPoints || 0;
+          }
+          const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
+            _user_id: userId,
+            _amount: EARLY_RSVP_POINTS,
+            _club_id: clubId,
+          });
+          if (updateError) throw updateError;
+          return newPoints || 0;
+        },
+        icp: async (ctx) => {
+          const entry = await awardLivePoints(
+            ctx,
+            clubId,
+            subjectFor({ userId: childId ? null : userId, childId }),
+            'early_rsvp',
+            rsvpId,
+            EARLY_RSVP_POINTS,
+            `Early RSVP bonus (${daysUntilEvent} days before event)`,
+          );
+          return entry.balance_after;
+        },
       });
-
-      if (updateError) {
-        console.error("Failed to award early RSVP points to child:", updateError);
-        await supabase.from("rsvps").update({ early_rsvp_points_awarded: false }).eq("id", rsvpId);
-        return false;
-      }
-
-      balanceAfter = newPoints || 0;
-      previousPoints = balanceAfter - EARLY_RSVP_POINTS;
-    } else {
-      const { data: newPoints, error: updateError } = await (supabase.rpc as any)('increment_ignite_points', {
-        _user_id: userId,
-        _amount: EARLY_RSVP_POINTS,
-        _club_id: clubId,
-      });
-
-      if (updateError) {
-        console.error("Failed to award early RSVP points:", updateError);
-        await supabase.from("rsvps").update({ early_rsvp_points_awarded: false }).eq("id", rsvpId);
-        return false;
-      }
-
-      balanceAfter = newPoints || 0;
-      previousPoints = balanceAfter - EARLY_RSVP_POINTS;
+    } catch (updateError) {
+      console.error("Failed to award early RSVP points:", updateError);
+      await supabase.from("rsvps").update({ early_rsvp_points_awarded: false }).eq("id", rsvpId);
+      return false;
     }
+    previousPoints = balanceAfter - EARLY_RSVP_POINTS;
 
-    // Record in points history
+    // Record in points history. No-ops on the ICP branch: award_points above
+    // already wrote the matching history entry atomically.
     await recordPointsHistory({
       userId,
       childId: childId || undefined,

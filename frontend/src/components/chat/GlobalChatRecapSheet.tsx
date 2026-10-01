@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   getCatchUpLastOpened,
   DEFAULT_LOOKBACK_HOURS,
@@ -110,6 +111,10 @@ async function getLLMFnName(): Promise<string> {
 }
 
 async function fetchOne(ref: RecapScopeRef, lookbackHours: number): Promise<{ result: ChatSummaryResult | null; error: string | null }> {
+  // NEEDS-CANISTER: messaging_domain chat recap/summary call.
+  if (isFeatureRoutedToIcp("messaging")) {
+    return { result: null, error: "Chat recap isn't available yet on the Internet Identity messaging backend." };
+  }
   const lastOpenedMs = getCatchUpLastOpened(ref.scope_type, ref.scope_id);
   const last_opened_at = lastOpenedMs ? new Date(lastOpenedMs).toISOString() : null;
   const body: Record<string, unknown> = {

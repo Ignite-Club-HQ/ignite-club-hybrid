@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Trash2, Loader2, CalendarOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Pause {
   id: string;
@@ -42,6 +43,7 @@ export default function TeamTrainingPausesCard({ teamId }: { teamId: string }) {
 
   const add = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("events", "team_training_pauses insert has no events_domain counterpart"); // NEEDS-CANISTER: team_training_pauses insert has no events_domain counterpart
       if (!starts || !ends) throw new Error("Pick start and end dates");
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from("team_training_pauses").insert({
@@ -63,6 +65,7 @@ export default function TeamTrainingPausesCard({ teamId }: { teamId: string }) {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      assertSupabaseWritePath("events", "team_training_pauses delete has no events_domain counterpart"); // NEEDS-CANISTER: team_training_pauses delete has no events_domain counterpart
       const { error } = await supabase.from("team_training_pauses").delete().eq("id", id);
       if (error) throw error;
     },
