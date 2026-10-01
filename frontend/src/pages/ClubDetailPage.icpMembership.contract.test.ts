@@ -7,8 +7,8 @@ const source = readFileSync(resolve(process.cwd(), "src/pages/ClubDetailPage.tsx
 describe("ClubDetailPage ICP membership wiring", () => {
   it("routes club delete/restore/permanent-delete through withFeatureBackend(\"membership\")", () => {
     expect(source).toContain('isFeatureRoutedToIcp("membership")');
-    expect(source).toContain("softDeleteLiveClub(ctx, id!)");
-    expect(source).toContain("restoreLiveClub(ctx, id!)");
+    expect(source).toContain("softDeleteLiveClub(ctx, id!, true)");
+    expect(source).toContain("restoreLiveClub(ctx, id!, true)");
     expect(source).toContain("deleteLiveClubPermanent(ctx, id!)");
   });
 
