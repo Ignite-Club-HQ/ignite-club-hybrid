@@ -233,6 +233,20 @@ type Attendance =
    note: text;
    present: bool;
  };
+type AssociationEvent = 
+ record {
+   association_id: text;
+   child_event_ids: vec text;
+   created_at_ms: nat64;
+   created_by: principal;
+   deleted: bool;
+   description: text;
+   ends_at_ms: nat64;
+   id: text;
+   location: opt text;
+   starts_at_ms: nat64;
+   title: text;
+ };
 service : {
   addBulkAccessPrincipal: ("principal": principal) ->
    (variant {
@@ -471,6 +485,11 @@ service : {
    (variant {
       Err: text;
       Ok: vec principal;
+    }) query;
+  list_association_events: (association_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec AssociationEvent;
     }) query;
   list_event_groups: (event_id: text) ->
    (variant {
