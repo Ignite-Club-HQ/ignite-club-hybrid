@@ -1,12 +1,14 @@
 import { useState, useRef, useCallback, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users, Trash2, Loader2, Star, CheckSquare, Pencil, Check, X, UserRound, GripVertical, UserPlus, MoreVertical, Plus } from "lucide-react";
+import { Users, Trash2, Loader2, Star, CheckSquare, Pencil, Check, X, UserRound, GripVertical, UserPlus, MoreVertical, Plus, RotateCcw } from "lucide-react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-league/AddSecondParentDialog").then(m => ({ default: m.AddSecondParentDialog })));
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { removeLivePlayer } from "@/live/features/miniLeagues";
+import { Principal } from "@icp-sdk/core/principal";
+import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -297,6 +299,34 @@ export function ManagePlayersDialog({
     enabled: !!clubId && !!miniLeagueId && open,
   });
 
+  // Removed players (round-4 soft delete) — ICP only; Supabase has no
+  // equivalent tombstone surfaced in this dialog.
+  const { data: removedMembers } = useQuery({
+    queryKey: ["mini-league-removed-members", clubId],
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => [],
+        icp: async (ctx) => listLiveRemovedMembers(ctx, clubId),
+      }),
+    enabled: !!clubId && open && isFeatureRoutedToIcp("mini_leagues"),
+  });
+
+  const restoreMemberMutation = useMutation({
+    mutationFn: (user: Principal) =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          throw new Error("Restoring players isn't available on this backend.");
+        },
+        icp: async (ctx) => restoreLiveMember(ctx, clubId, user),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
+      queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
+      toast.success("Player restored");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   // Delete player mutation
   const deletePlayerMutation = useMutation({
     mutationFn: (playerId: string) =>
@@ -332,12 +362,23 @@ export function ManagePlayersDialog({
         // children tables, so the cascade cleanup below has no canister
         // equivalent — the player row itself is removed on-canister, but the
         // linked child/assignment rows (Supabase-only) are left untouched.
+        // Round-4 design decision: removal is a soft delete on club_domain
+        // (records kept, hidden, reversible via "Removed players" below).
+        // Players linked to a club member (parent_user_id set) are soft
+        // removed as club members; unlinked roster-only entries (no account
+        // yet) fall back to the mini-league domain's own remove_player.
         icp: async (ctx) => {
-          await removeLivePlayer(ctx, playerId);
+          const player = players?.find(p => p.id === playerId);
+          if (player?.parent_user_id) {
+            await removeLiveMember(ctx, clubId, Principal.fromText(player.parent_user_id));
+          } else {
+            await removeLivePlayer(ctx, playerId);
+          }
         },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
+      queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
       toast.success("Player removed");
     },
     onError: (error: Error) => toast.error(error.message),
@@ -376,16 +417,22 @@ export function ManagePlayersDialog({
             }
           }
         },
-        // NEEDS-CANISTER: same child/team assignment cascade gap as the
-        // single-player delete above — only the player rows are removed.
+        // Round-4 design decision: same soft-delete-on-club_domain approach
+        // as the single-player remove above, applied per selected player.
         icp: async (ctx) => {
           for (const playerId of playerIds) {
-            await removeLivePlayer(ctx, playerId);
+            const player = players?.find(p => p.id === playerId);
+            if (player?.parent_user_id) {
+              await removeLiveMember(ctx, clubId, Principal.fromText(player.parent_user_id));
+            } else {
+              await removeLivePlayer(ctx, playerId);
+            }
           }
         },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
+      queryClient.invalidateQueries({ queryKey: ["mini-league-removed-members", clubId] });
       setSelectedPlayerIds(new Set());
       setSelectionMode(false);
       setBulkDeleteOpen(false);
@@ -889,6 +936,43 @@ export function ManagePlayersDialog({
           {/* Pending invites are surfaced inline on each player row via the
               "Pending" badge + invite-second-parent (UserPlus) button, so no
               separate "Pending Parent Invites" section is rendered here. */}
+
+          {isFeatureRoutedToIcp("mini_leagues") && (removedMembers?.length || 0) > 0 && (
+            <div className="pt-2 space-y-2">
+              <div className="flex items-baseline gap-2">
+                <Badge variant="secondary" className="text-xs">Removed players</Badge>
+                <span className="text-xs text-muted-foreground">
+                  {removedMembers?.length} player{(removedMembers?.length || 0) !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {removedMembers?.map((rm) => {
+                  const principalText = rm.user.toText();
+                  return (
+                    <Card key={principalText} className="rounded-xl border-dashed border-border/60">
+                      <CardContent className="py-2 px-2.5 flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground truncate flex-1 min-w-0">
+                          {parentMap.get(principalText) || principalText}
+                        </span>
+                        {canManage && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 shrink-0"
+                            disabled={restoreMemberMutation.isPending}
+                            onClick={() => restoreMemberMutation.mutate(rm.user)}
+                          >
+                            <RotateCcw className="h-4 w-4 mr-1" />
+                            Restore
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
             <AlertDialogContent>

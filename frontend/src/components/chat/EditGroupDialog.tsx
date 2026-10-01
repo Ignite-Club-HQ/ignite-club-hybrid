@@ -16,7 +16,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { updateLiveGroup } from "@/live/features/messaging";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { updateLiveGroup, getLiveGroupMetadata } from "@/live/features/messaging";
 import { myLiveRoleGrants } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
@@ -87,6 +90,10 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
   const [selectedRoles, setSelectedRoles] = useState<AppRole[]>(group.allowed_roles);
   const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>(normalizeJoinPolicy(group.join_policy));
   const [allowForwarding, setAllowForwarding] = useState<boolean>(group.allow_forwarding !== false);
+  const isIcpMessaging = isFeatureRoutedToIcp("messaging");
+  const [description, setDescription] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [adminOnlyPosting, setAdminOnlyPosting] = useState(false);
   const queryClient = useQueryClient();
 
   const isControlled = controlledOpen !== undefined;
@@ -100,8 +107,13 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
       setSelectedRoles(group.allowed_roles);
       setJoinPolicy(normalizeJoinPolicy(group.join_policy));
       setAllowForwarding(group.allow_forwarding !== false);
+      if (!isIcpMessaging) {
+        setDescription("");
+        setAvatar("");
+        setAdminOnlyPosting(false);
+      }
     }
-  }, [open, group.id]);
+  }, [open, group.id, isIcpMessaging]);
 
   // Permission gate: for club-scoped groups, require club_admin (or app_admin).
   const { data: canEdit, isLoading: permLoading } = useQuery({
@@ -174,6 +186,27 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
     staleTime: 5 * 60 * 1000,
   });
 
+  // ICP-only group settings (description/avatar/admin-only posting) have no
+  // Supabase chat_groups column, so prefill them from the canister's group
+  // metadata only when this dialog is routed to ICP.
+  useQuery({
+    queryKey: ["edit-group-live-metadata", group.id],
+    queryFn: async () => {
+      const metadata = await withFeatureBackend("messaging", {
+        supabase: async () => null,
+        icp: (ctx) => getLiveGroupMetadata(ctx, group.id),
+      });
+      if (metadata) {
+        setDescription(metadata.description ?? "");
+        setAvatar(metadata.avatar ?? "");
+        setAdminOnlyPosting(metadata.adminOnlyPosting);
+      }
+      return metadata;
+    },
+    enabled: isIcpMessaging && open,
+    staleTime: 0,
+  });
+
   const updateGroupMutation = useMutation({
     mutationFn: async () => {
       if (!canEdit) throw new Error("You do not have permission to edit this group");
@@ -193,10 +226,19 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
 
           if (error) throw error;
         },
-        // NEEDS-CANISTER: messaging_domain's update_group only models
-        // name/description/avatar — allowed_roles/join_policy/allow_forwarding
-        // have no canister field yet, so only the name edit is sent here.
-        icp: (ctx) => updateLiveGroup(ctx, group.id, name, null, null),
+        // messaging_domain's update_group models name/description/avatar/
+        // admin_only_posting; Supabase chat_groups has no equivalent columns,
+        // so those fields are ICP-mode-only here — allowed_roles/join_policy/
+        // allow_forwarding still have no canister field.
+        icp: (ctx) =>
+          updateLiveGroup(
+            ctx,
+            group.id,
+            name,
+            description.trim() ? description : null,
+            avatar.trim() ? avatar : null,
+            adminOnlyPosting,
+          ),
       });
     },
     onSuccess: () => {
@@ -276,6 +318,45 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
                   placeholder="Enter group name"
                 />
               </div>
+
+              {isIcpMessaging && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-description">Description</Label>
+                    <Textarea
+                      id="edit-group-description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="What is this group for?"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-group-avatar">Group photo URL</Label>
+                    <Input
+                      id="edit-group-avatar"
+                      value={avatar}
+                      onChange={(e) => setAvatar(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-md border p-3">
+                    <div className="space-y-0.5 pr-3">
+                      <Label htmlFor="edit-group-admin-only-posting">Admin-only posting</Label>
+                      <p className="text-xs text-muted-foreground">
+                        When on, only group admins can send messages in this chat.
+                      </p>
+                    </div>
+                    <Switch
+                      id="edit-group-admin-only-posting"
+                      checked={adminOnlyPosting}
+                      onCheckedChange={setAdminOnlyPosting}
+                    />
+                  </div>
+                </>
+              )}
 
               {!isManual && (
                 <div className="space-y-2">

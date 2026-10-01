@@ -21,6 +21,8 @@ import {
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { generateLiveChatRecap } from "@/live/features/messaging";
 import {
   getCatchUpLastOpened,
   DEFAULT_LOOKBACK_HOURS,
@@ -110,10 +112,40 @@ async function getLLMFnName(): Promise<string> {
   return "summarize-chat";
 }
 
+function parseIcpRecapMarkdown(markdown: string): ChatSummaryResult {
+  const lines = markdown.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const today: string[] = [];
+  let headline = "";
+  for (const line of lines) {
+    const bulletMatch = line.match(/^[-*]\s+(.*)$/);
+    if (bulletMatch) {
+      today.push(bulletMatch[1]);
+    } else if (!headline) {
+      headline = stripRecapDatePrefix(line);
+    }
+  }
+  return {
+    summary: { headline, since_last_visit: { today, yesterday: [], earlier: [] } },
+    message_count: today.length,
+    last_message_id: null,
+    cached: false,
+  };
+}
+
 async function fetchOne(ref: RecapScopeRef, lookbackHours: number): Promise<{ result: ChatSummaryResult | null; error: string | null }> {
-  // NEEDS-CANISTER: messaging_domain chat recap/summary call.
   if (isFeatureRoutedToIcp("messaging")) {
-    return { result: null, error: "Chat recap isn't available yet on the Internet Identity messaging backend." };
+    try {
+      const sinceMs = BigInt(Date.now() - lookbackHours * 3600_000);
+      const markdown = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          throw new Error("messaging is routed to ICP");
+        },
+        icp: (ctx) => generateLiveChatRecap(ctx, ref.scope_id, sinceMs),
+      });
+      return { result: parseIcpRecapMarkdown(markdown), error: null };
+    } catch (e: any) {
+      return { result: null, error: e?.message || "unknown" };
+    }
   }
   const lastOpenedMs = getCatchUpLastOpened(ref.scope_type, ref.scope_id);
   const last_opened_at = lastOpenedMs ? new Date(lastOpenedMs).toISOString() : null;

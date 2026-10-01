@@ -156,6 +156,9 @@ export interface LiveGroupMetadata {
   clubId: string | null;
   members: Principal[];
   createdAtMs: number;
+  description: string | null;
+  avatar: string | null;
+  adminOnlyPosting: boolean;
 }
 
 function toLiveGroupMetadata(raw: {
@@ -166,6 +169,9 @@ function toLiveGroupMetadata(raw: {
   club_id: [] | [string];
   members: Principal[];
   created_at_ms: bigint;
+  description: [] | [string];
+  avatar: [] | [string];
+  admin_only_posting: boolean;
 }): LiveGroupMetadata {
   return {
     conversationId: raw.conversation_id,
@@ -175,6 +181,9 @@ function toLiveGroupMetadata(raw: {
     clubId: raw.club_id[0] ?? null,
     members: raw.members,
     createdAtMs: Number(raw.created_at_ms),
+    description: raw.description[0] ?? null,
+    avatar: raw.avatar[0] ?? null,
+    adminOnlyPosting: raw.admin_only_posting,
   };
 }
 
@@ -310,11 +319,36 @@ export async function updateLiveGroup(
   name?: string | null,
   description?: string | null,
   avatar?: string | null,
+  adminOnlyPosting?: boolean | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.update_group(conversationId, candidOpt(name), candidOpt(description), candidOpt(avatar)),
+    actor.update_group(
+      conversationId,
+      candidOpt(name),
+      candidOpt(avatar),
+      candidOpt(description),
+      candidOpt(adminOnlyPosting),
+    ),
     "Update group",
+  );
+}
+
+/**
+ * AI catch-up recap for a conversation — the canister makes an HTTPS
+ * outcall to the configured LLM endpoint (see set_recap_config). Caller
+ * needs message-read access and ai_catchup_enabled in their messaging
+ * settings (governor/app_admin bypass).
+ */
+export async function generateLiveChatRecap(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  sinceMs: bigint,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.generate_chat_recap(conversationId, sinceMs),
+    "Generate chat recap",
   );
 }
 
