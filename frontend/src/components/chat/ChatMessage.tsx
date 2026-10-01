@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { deleteLiveMessage } from "@/live/features/messaging";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Megaphone, ImagePlus, Check, Loader2, Forward } from "lucide-react";
 import {
@@ -550,15 +552,17 @@ function ChatMessageInner({
 
   const deleteMessageMutation = useMutation({
     mutationFn: async () => {
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Message deletion isn't available yet on the Internet Identity messaging backend.");
-      }
       if (useIcpLab) return;
-      const { error } = await supabase
-        .from(getTableName())
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from(getTableName())
+            .delete()
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: (ctx) => deleteLiveMessage(ctx, id),
+      });
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey });

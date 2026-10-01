@@ -3,7 +3,8 @@ import { Check, X, Loader2, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveJoinRequests, approveLiveJoinRequest, rejectLiveJoinRequest } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -27,22 +28,42 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
     enabled: enabled && !!user?.id && !!groupId,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("chat_group_join_requests" as any)
-        .select("id, user_id, message, created_at")
-        .eq("group_id", groupId)
-        .eq("status", "pending")
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      const rows = (data ?? []) as any[];
-      if (rows.length === 0) return [] as any[];
-      const userIds = rows.map((r) => r.user_id);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .in("id", userIds);
-      const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-      return rows.map((r) => ({ ...r, profile: byId.get(r.user_id) || null }));
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("chat_group_join_requests" as any)
+            .select("id, user_id, message, created_at")
+            .eq("group_id", groupId)
+            .eq("status", "pending")
+            .order("created_at", { ascending: true });
+          if (error) throw error;
+          const rows = (data ?? []) as any[];
+          if (rows.length === 0) return [] as any[];
+          const userIds = rows.map((r) => r.user_id);
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, full_name, avatar_url")
+            .in("id", userIds);
+          const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+          return rows.map((r) => ({ ...r, profile: byId.get(r.user_id) || null }));
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveJoinRequests(ctx, groupId);
+          // No per-principal profile lookup exists on identity_access yet —
+          // fall back to a shortened principal text as the display name
+          // rather than throwing or showing a "not available" state.
+          return rows.map((r) => {
+            const principalText = r.user.toText();
+            const shortName = `${principalText.slice(0, 5)}…${principalText.slice(-3)}`;
+            return {
+              id: principalText,
+              user_id: principalText,
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+              profile: { full_name: shortName, avatar_url: null },
+            };
+          });
+        },
+      });
     },
   });
 
@@ -54,21 +75,25 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
 
   const approveMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      // NEEDS-CANISTER: messaging_domain approve-join-request call.
-      if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Approving join requests isn't available yet on the Internet Identity messaging backend.");
-      }
-
-      const { error } = await (supabase as any).rpc("approve_chat_group_join_request", {
-        _request_id: requestId,
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await (supabase as any).rpc("approve_chat_group_join_request", {
+            _request_id: requestId,
+          });
+          if (error) throw error;
+          // Notify the requester (in-app + push). Best-effort; never block UI.
+          await supabase.functions
+            .invoke("notify-join-request-decision", {
+              body: { requestId, decision: "approved" },
+            })
+            .catch((e) => console.warn("[join-request] notify failed", e));
+        },
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          // Push delivery is Supabase-only — no notify call under ICP.
+          await approveLiveJoinRequest(ctx, groupId, Principal.fromText(requestId));
+        },
       });
-      if (error) throw error;
-      // Notify the requester (in-app + push). Best-effort; never block UI.
-      await supabase.functions
-        .invoke("notify-join-request-decision", {
-          body: { requestId, decision: "approved" },
-        })
-        .catch((e) => console.warn("[join-request] notify failed", e));
     },
     onSuccess: () => {
       toast.success("Request approved");
@@ -79,15 +104,24 @@ export function ChatGroupJoinRequests({ groupId, enabled = true }: ChatGroupJoin
 
   const rejectMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const { error } = await (supabase as any).rpc("reject_chat_group_join_request", {
-        _request_id: requestId,
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await (supabase as any).rpc("reject_chat_group_join_request", {
+            _request_id: requestId,
+          });
+          if (error) throw error;
+          await supabase.functions
+            .invoke("notify-join-request-decision", {
+              body: { requestId, decision: "rejected" },
+            })
+            .catch((e) => console.warn("[join-request] notify failed", e));
+        },
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          // Push delivery is Supabase-only — no notify call under ICP.
+          await rejectLiveJoinRequest(ctx, groupId, Principal.fromText(requestId));
+        },
       });
-      if (error) throw error;
-      await supabase.functions
-        .invoke("notify-join-request-decision", {
-          body: { requestId, decision: "rejected" },
-        })
-        .catch((e) => console.warn("[join-request] notify failed", e));
     },
     onSuccess: () => {
       toast.success("Request rejected");
