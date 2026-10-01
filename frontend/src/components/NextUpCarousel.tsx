@@ -207,10 +207,10 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
           icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
         });
         return (rows ?? []).map((r) => ({
-          id: `${r.rsvp.event_id}:${r.rsvp.child_id[0] ?? ""}`,
+          id: `${r.rsvp.event_id}:${r.rsvp.child_id ?? ""}`,
           status: r.rsvp.state,
-          child_id: r.rsvp.child_id[0] ?? "",
-          children: r.child[0] ? { name: r.child[0].name } : null,
+          child_id: r.rsvp.child_id ?? "",
+          children: r.child ? { name: r.child.name } : null,
         }));
       }
       const [ownChildren, guardianLinks] = await Promise.all([
@@ -279,6 +279,27 @@ function useChildrenForEvent(
       // Mini-league events keep their own roster rule: children rostered to
       // the league, which is not a team assignment.
       if (!event.team_id && miniLeagueId) {
+        if (resolveAuthBackend() === "icp") {
+          // ICP: household children come from club_domain's caller-scoped
+          // list_children; rostered membership from mini_league_domain's
+          // list_players, filtered client-side to the household child ids.
+          const merged = await withFeatureBackend("membership", {
+            supabase: async () => [] as never[],
+            icp: async (ctx) => {
+              const children = await listLiveChildren(ctx);
+              return children.map((c) => ({ id: c.id, name: c.name }));
+            },
+          });
+          if (merged.length === 0) return [];
+          const players = await withFeatureBackend("mini_leagues", {
+            supabase: async () => [] as never[],
+            icp: (ctx) => listLivePlayers(ctx, miniLeagueId),
+          });
+          const allowed = new Set(
+            (players ?? []).map((p) => p.child_id).filter((id): id is string => !!id),
+          );
+          return merged.filter((c) => allowed.has(c.id));
+        }
         const [ownChildren, guardianLinks] = await Promise.all([
           supabase.from("children").select("id, name").eq("parent_id", userId!),
           supabase
@@ -298,22 +319,12 @@ function useChildrenForEvent(
           return true;
         }) as Array<{ id: string; name: string }>;
         if (merged.length === 0) return merged;
-        const players = await withFeatureBackend("mini_leagues", {
-          supabase: async () => {
-            const { data, error } = await supabase
-              .from("mini_league_players")
-              .select("child_id")
-              .eq("mini_league_id", miniLeagueId)
-              .in("child_id", merged.map((c) => c.id));
-            if (error) throw error;
-            return data;
-          },
-          // Gated: filtering players by an arbitrary subset of household
-          // child ids has no canister equivalent (the canister only lists
-          // all players for a mini league). ICP-routed sessions see no
-          // rostered children rather than an unfiltered/incorrect list.
-          icp: async () => [] as { child_id: string | null }[],
-        });
+        const { data: players, error: playersError } = await supabase
+          .from("mini_league_players")
+          .select("child_id")
+          .eq("mini_league_id", miniLeagueId)
+          .in("child_id", merged.map((c) => c.id));
+        if (playersError) throw playersError;
         const allowed = new Set((players || []).map((p: any) => p.child_id).filter(Boolean));
         return merged.filter((c) => allowed.has(c.id));
       }
