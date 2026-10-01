@@ -26,10 +26,10 @@ export const useGroupDeleteChat = ({
   navigate,
 }: UseGroupDeleteChatOptions) =>
   useMutation({
+    mutationFn: async () => {
       if (isFeatureRoutedToIcp("messaging")) {
         throw new Error("Chat deletion isn't available yet on the Internet Identity messaging backend.");
       }
-    mutationFn: async () => {
       if (useIcpLab) return;
 
       // Soft-delete: keep the row so app admins can restore within the retention window.
