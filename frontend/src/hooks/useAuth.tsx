@@ -3,7 +3,6 @@ import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { prefetchUserData } from "@/lib/prefetchData";
@@ -333,9 +332,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // MESSAGE_NOTIFICATION_TYPES imported from @/lib/notificationTypes
 
   const fetchUnreadCount = useCallback(async (userId: string) => {
-    // Notification count is feature-routed so the bell badge keeps working
-    // when notifications are served by the canister. Message unread counts
-    // stay Supabase (message unread tracking has no canister shape).
+    // Notification count and message unread counts are each independently
+    // feature-routed so the bell badge and the chat-header/nav unread badges
+    // keep working when either surface is served by its own canister.
     const [allCount, messageCounts] = await Promise.all([
       withFeatureBackend("notifications", {
         supabase: async () => {
@@ -353,9 +352,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return (inbox as any[]).filter((n) => !n.read).length;
         },
       }),
-      isFeatureRoutedToIcp("notifications") || resolveAuthBackend() === "icp"
-        ? Promise.resolve(null)
-        : fetchUnreadMessageCounts(userId),
+      withFeatureBackend("messaging", {
+        supabase: async () => fetchUnreadMessageCounts(userId),
+        icp: async (ctx) => {
+          const { myLiveUnreadCounts } = await import("@/live/features/messaging");
+          const { createEmptyUnreadMessageCounts } = await import("@/lib/unreadMessageCounts");
+          const summaries = await myLiveUnreadCounts(ctx);
+          const counts = createEmptyUnreadMessageCounts();
+          for (const summary of summaries) {
+            if (summary.kind === "dm") counts.dms[summary.conversationId] = summary.count;
+            else if (summary.kind === "team") counts.teams[summary.conversationId] = summary.count;
+            else if (summary.kind === "club") counts.clubs[summary.conversationId] = summary.count;
+            else counts.groups[summary.conversationId] = summary.count;
+          }
+          return counts;
+        },
+      }),
     ]);
 
     setUnreadCount(allCount);

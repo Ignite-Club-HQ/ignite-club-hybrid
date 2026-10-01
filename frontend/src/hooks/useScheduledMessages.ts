@@ -89,6 +89,40 @@ function targetMatches(row: ScheduledMessageRow, t: ScheduleTarget): boolean {
   );
 }
 
+function liveChatTypeFromRow(chat_type: ScheduledChatType): LiveScheduledChatType {
+  return chat_type;
+}
+
+function liveRecurrenceFromRow(recurrence: ScheduledMessageRecurrence): LiveScheduledRecurrence {
+  return recurrence;
+}
+
+/** Maps a canister ScheduledMessage into the same row shape the UI already renders from Supabase. */
+function rowFromLiveScheduledMessage(row: LiveScheduledMessage): ScheduledMessageRow {
+  return {
+    id: row.id,
+    author_id: row.author,
+    chat_type: row.chatType,
+    team_id: row.teamId,
+    club_id: row.clubId,
+    group_id: row.groupId,
+    conversation_id: row.conversationId,
+    text: row.body,
+    image_url: row.imageUrl,
+    reply_to_id: row.replyToId,
+    scheduled_for: new Date(row.scheduledForMs).toISOString(),
+    status: row.status,
+    sent_message_id: row.sentMessageId,
+    error_message: row.errorMessage,
+    attempted_at: row.attemptedAtMs != null ? new Date(row.attemptedAtMs).toISOString() : null,
+    recurrence: row.recurrence,
+    recurrence_until: row.recurrenceUntilMs != null ? new Date(row.recurrenceUntilMs).toISOString() : null,
+    recurrence_parent_id: row.recurrenceParentId,
+    created_at: new Date(row.createdAtMs).toISOString(),
+    updated_at: new Date(row.updatedAtMs).toISOString(),
+  };
+}
+
 /**
  * Pending scheduled messages for a specific thread (current user only).
  */
@@ -100,34 +134,46 @@ export function useThreadScheduledMessages(target: ScheduleTarget | null) {
     queryKey: ["scheduled-messages-thread", user?.id, key],
     queryFn: async (): Promise<ScheduledMessageRow[]> => {
       if (!user?.id || !target) return [];
-      let q = supabase
-        .from("scheduled_messages" as any)
-        .select("*")
-        .eq("author_id", user.id)
-        .eq("status", "pending")
-        .eq("chat_type", target.chat_type)
-        .order("scheduled_for", { ascending: true });
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          let q = supabase
+            .from("scheduled_messages" as any)
+            .select("*")
+            .eq("author_id", user.id)
+            .eq("status", "pending")
+            .eq("chat_type", target.chat_type)
+            .order("scheduled_for", { ascending: true });
 
-      if (target.team_id) q = q.eq("team_id", target.team_id);
-      else q = q.is("team_id", null);
-      if (target.club_id) q = q.eq("club_id", target.club_id);
-      else q = q.is("club_id", null);
-      if (target.group_id) q = q.eq("group_id", target.group_id);
-      else q = q.is("group_id", null);
-      if (target.conversation_id) q = q.eq("conversation_id", target.conversation_id);
-      else q = q.is("conversation_id", null);
+          if (target.team_id) q = q.eq("team_id", target.team_id);
+          else q = q.is("team_id", null);
+          if (target.club_id) q = q.eq("club_id", target.club_id);
+          else q = q.is("club_id", null);
+          if (target.group_id) q = q.eq("group_id", target.group_id);
+          else q = q.is("group_id", null);
+          if (target.conversation_id) q = q.eq("conversation_id", target.conversation_id);
+          else q = q.is("conversation_id", null);
 
-      const { data, error } = await q;
-      if (error) {
-        console.error("[scheduled-messages] thread fetch error", error);
-        // Reject rather than return `[]` so React Query enters an error
-        // state — the UI must warn that existing scheduled messages may
-        // still send, instead of implying the schedule is empty.
-        const e = new Error(error.message || "Failed to load scheduled messages");
-        (e as any).code = "scheduled_messages_read_failed";
-        throw e;
-      }
-      return (data || []) as unknown as ScheduledMessageRow[];
+          const { data, error } = await q;
+          if (error) {
+            console.error("[scheduled-messages] thread fetch error", error);
+            // Reject rather than return `[]` so React Query enters an error
+            // state — the UI must warn that existing scheduled messages may
+            // still send, instead of implying the schedule is empty.
+            const e = new Error(error.message || "Failed to load scheduled messages");
+            (e as any).code = "scheduled_messages_read_failed";
+            throw e;
+          }
+          return (data || []) as unknown as ScheduledMessageRow[];
+        },
+        icp: async (ctx) => {
+          const author = ctx.identity.getPrincipal().toText();
+          const rows = await listLiveScheduledMessages(ctx, author);
+          return rows
+            .filter((row) => row.status === "pending" && targetMatches(rowFromLiveScheduledMessage(row), target))
+            .sort((a, b) => a.scheduledForMs - b.scheduledForMs)
+            .map(rowFromLiveScheduledMessage);
+        },
+      });
     },
     enabled: !!user?.id && !!target,
     staleTime: 30 * 1000,
@@ -157,19 +203,31 @@ export function useAllScheduledMessages(statuses: ScheduledMessageStatus[] = ["p
     queryKey: ["scheduled-messages-all", user?.id, statuses.join(",")],
     queryFn: async (): Promise<ScheduledMessageRow[]> => {
       if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from("scheduled_messages" as any)
-        .select("*")
-        .eq("author_id", user.id)
-        .in("status", statuses)
-        .order("scheduled_for", { ascending: true });
-      if (error) {
-        console.error("[scheduled-messages] all fetch error", error);
-        const e = new Error(error.message || "Failed to load scheduled messages");
-        (e as any).code = "scheduled_messages_read_failed";
-        throw e;
-      }
-      return (data || []) as unknown as ScheduledMessageRow[];
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("scheduled_messages" as any)
+            .select("*")
+            .eq("author_id", user.id)
+            .in("status", statuses)
+            .order("scheduled_for", { ascending: true });
+          if (error) {
+            console.error("[scheduled-messages] all fetch error", error);
+            const e = new Error(error.message || "Failed to load scheduled messages");
+            (e as any).code = "scheduled_messages_read_failed";
+            throw e;
+          }
+          return (data || []) as unknown as ScheduledMessageRow[];
+        },
+        icp: async (ctx) => {
+          const author = ctx.identity.getPrincipal().toText();
+          const rows = await listLiveScheduledMessages(ctx, author);
+          return rows
+            .filter((row) => statuses.includes(row.status))
+            .sort((a, b) => a.scheduledForMs - b.scheduledForMs)
+            .map(rowFromLiveScheduledMessage);
+        },
+      });
     },
     enabled: !!user?.id,
     staleTime: 30 * 1000,
@@ -222,23 +280,46 @@ export function useCreateScheduledMessage() {
   return useMutation({
     mutationFn: async (input: CreateScheduledMessageInput) => {
       if (!user?.id) throw new Error("Not authenticated");
-      const data = await invokeWrite({
-        action: "create",
-        chat_type: input.chat_type,
-        team_id: input.team_id ?? null,
-        club_id: input.club_id ?? null,
-        group_id: input.group_id ?? null,
-        conversation_id: input.conversation_id ?? null,
-        text: input.text || "",
-        image_url: input.image_url ?? null,
-        reply_to_id: input.reply_to_id ?? null,
-        scheduled_for: input.scheduled_for.toISOString(),
-        recurrence: input.recurrence ?? "none",
-        recurrence_until: input.recurrence_until
-          ? input.recurrence_until.toISOString()
-          : null,
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const data = await invokeWrite({
+            action: "create",
+            chat_type: input.chat_type,
+            team_id: input.team_id ?? null,
+            club_id: input.club_id ?? null,
+            group_id: input.group_id ?? null,
+            conversation_id: input.conversation_id ?? null,
+            text: input.text || "",
+            image_url: input.image_url ?? null,
+            reply_to_id: input.reply_to_id ?? null,
+            scheduled_for: input.scheduled_for.toISOString(),
+            recurrence: input.recurrence ?? "none",
+            recurrence_until: input.recurrence_until
+              ? input.recurrence_until.toISOString()
+              : null,
+          });
+          return (data as any)?.row as ScheduledMessageRow;
+        },
+        icp: async (ctx) => {
+          const author = ctx.identity.getPrincipal().toText();
+          const row = await scheduleLiveMessage(ctx, {
+            id: crypto.randomUUID(),
+            author,
+            chatType: liveChatTypeFromRow(input.chat_type),
+            teamId: input.team_id,
+            clubId: input.club_id,
+            groupId: input.group_id,
+            conversationId: input.conversation_id,
+            body: input.text || "",
+            imageUrl: input.image_url,
+            replyToId: input.reply_to_id,
+            scheduledForMs: input.scheduled_for.getTime(),
+            recurrence: liveRecurrenceFromRow(input.recurrence ?? "none"),
+            recurrenceUntilMs: input.recurrence_until ? input.recurrence_until.getTime() : null,
+          });
+          return rowFromLiveScheduledMessage(row);
+        },
       });
-      return (data as any)?.row as ScheduledMessageRow;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });
@@ -260,6 +341,15 @@ export function useUpdateScheduledMessage() {
       recurrence_until?: Date | null;
     }) => {
       if (!user?.id) throw new Error("Not authenticated");
+      // Provisional: the notification_queue canister does not yet expose an
+      // "update scheduled message" method (only schedule/list/cancel), so
+      // editing an existing scheduled message is not available when routed
+      // to ICP — cancel and re-schedule instead until the canister adds one.
+      if (await import("@/live/loadBackendRouting").then((m) => m.isFeatureRoutedToIcp("notifications"))) {
+        throw new Error(
+          "Editing a scheduled message isn't supported yet on this backend. Cancel it and schedule a new one instead.",
+        );
+      }
       const body: Record<string, unknown> = { action: "update", id: input.id };
       if (input.text !== undefined) body.text = input.text;
       if (input.image_url !== undefined) body.image_url = input.image_url;
@@ -286,7 +376,15 @@ export function useCancelScheduledMessage() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!user?.id) throw new Error("Not authenticated");
-      await invokeWrite({ action: "cancel", id });
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          await invokeWrite({ action: "cancel", id });
+        },
+        icp: async (ctx) => {
+          const author = ctx.identity.getPrincipal().toText();
+          await cancelLiveScheduledMessage(ctx, id, author);
+        },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });
