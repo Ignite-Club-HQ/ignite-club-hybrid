@@ -28,6 +28,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { SubscriptionLegalLinks } from "@/components/SubscriptionLegalLinks";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const STORAGE_PACKS = [
   { id: '10gb', gb: 10, priceMonthly: 4.99, priceAnnual: 49.99, popular: false },
@@ -90,6 +91,12 @@ export function StoragePurchaseDialog({
 
   const purchaseMutation = useMutation({
     mutationFn: async (packType: string) => {
+      // NEEDS-DECISION: Stripe checkout cannot move to an ICP canister. II
+      // sessions have no Supabase session, so block before invoking rather
+      // than letting the edge function 401.
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Storage purchases are not available for this sign-in method yet.");
+      }
       const { data, error } = await supabase.functions.invoke('create-storage-checkout', {
         body: {
           clubId,

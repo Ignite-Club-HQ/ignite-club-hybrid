@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Auto-sync chat attachments (images and external links) to the relevant file vault.
@@ -56,6 +57,11 @@ export async function syncChatAttachmentToVault({
   /** Set true for Club Admin Chat (member ↔ club admin DM). */
   isClubAdminChat?: boolean;
 }) {
+  // NEEDS-CANISTER: this auto-sync writes vault_folders/vault_files directly
+  // (folder lookup-or-create + file insert) outside the typed vault_domain
+  // wrappers' dedup/cache semantics. Skip under ICP rather than writing into a
+  // Supabase table ICP vault reads never see.
+  if (isFeatureRoutedToIcp("vault")) return;
   try {
     const imageEntries: {
       file_url: string;

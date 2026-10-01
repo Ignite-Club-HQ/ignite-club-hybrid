@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { CreateTeamFolderDialog } from "@/components/CreateTeamFolderDialog";
@@ -86,6 +87,8 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const createFolderMutation = useMutation({
     mutationFn: async (params: { name: string; description: string; color: string }) => {
+      // NEEDS-CANISTER: team_folders has no club_domain equivalent.
+      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase.from("team_folders").insert({
         club_id: clubId,
         name: params.name,
@@ -109,6 +112,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   const updateFolderMutation = useMutation({
     mutationFn: async () => {
       if (!editingFolder) return;
+      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("team_folders")
         .update({
@@ -134,6 +138,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
+      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("team_folders")
         .delete()
@@ -152,6 +157,7 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const reorderFoldersMutation = useMutation({
     mutationFn: async (reorderedFolders: { id: string; sort_order: number }[]) => {
+      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const updates = reorderedFolders.map(({ id, sort_order }) =>
         supabase.from("team_folders").update({ sort_order }).eq("id", id)
       );

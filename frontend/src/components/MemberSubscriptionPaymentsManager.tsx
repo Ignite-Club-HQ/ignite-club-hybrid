@@ -31,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { Capacitor } from "@capacitor/core";
 
 type PaymentType = "subscription" | "uniform";
@@ -330,6 +331,12 @@ export default function MemberSubscriptionPaymentsManager({
     
     setIsProcessingPayment(true);
     try {
+      // NEEDS-DECISION: Stripe member checkout cannot move to an ICP
+      // canister; II sessions have no Supabase session to attribute the
+      // payment to. Block before creating a checkout session.
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Payments are not available for this sign-in method yet.");
+      }
       const amountCents = Math.round((clubPaymentSettings?.member_subscription_amount || 0) * 100);
       const isNative = Capacitor.isNativePlatform();
       const title = activeTab === "subscription" 
