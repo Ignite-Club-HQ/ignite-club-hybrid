@@ -19,6 +19,7 @@ import { Loader2, UserPlus, Search, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { createLivePendingInvite } from "@/live/features/club";
 import type { Database, Json } from "@/integrations/supabase/types";
 
 interface AddSecondParentDialogProps {
@@ -126,10 +127,11 @@ export function AddSecondParentDialog({
           .eq("id", playerId);
         return newChildId;
       },
-      // Gated: creates a Supabase `children` row and links it on
-      // mini_league_players.child_id; no canister equivalent.
+      // NEEDS-CANISTER: creates a Supabase `children` row and links it on
+      // mini_league_players.child_id; no canister equivalent for a
+      // mini-league-scoped child link (no team id in this context).
       icp: async () => {
-        throw new Error("Adding a second parent isn't available yet on this backend.");
+        throw new Error("Linking a child record isn't supported on this backend.");
       },
     });
 
@@ -169,7 +171,39 @@ export function AddSecondParentDialog({
   });
 
   const inviteMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: inviteViaSupabase,
+        // ICP: create the pending invite on club_domain. Email delivery is
+        // Supabase-only, so the invite link is shared manually by the admin.
+        icp: async (ctx) => {
+          const trimmedName = parentName.trim();
+          const trimmedEmail = parentEmail.trim().toLowerCase();
+          if (!trimmedName) throw new Error("Enter the parent's name");
+          if (!emailRe.test(trimmedEmail)) throw new Error("Enter a valid email");
+          await createLivePendingInvite(
+            ctx,
+            clubId,
+            trimmedEmail,
+            null,
+            "parent",
+            trimmedName,
+            `Second parent for ${playerName} in ${miniLeagueName} (mini-league ${miniLeagueId}, player ${playerId})`,
+          );
+          return false;
+        },
+      }),
+    onSuccess: (sent) => {
+      queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      toast.success(sent ? "Invite sent to second parent" : "Invite created (email pending)");
+      reset();
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const inviteViaSupabase = async (): Promise<boolean> => {
       const trimmedName = parentName.trim();
       const trimmedEmail = parentEmail.trim().toLowerCase();
       if (!trimmedName) throw new Error("Enter the parent's name");
@@ -240,16 +274,7 @@ export function AddSecondParentDialog({
         .eq("invite_token", inviteToken);
 
       return sent;
-    },
-    onSuccess: (sent) => {
-      queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
-      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
-      toast.success(sent ? "Invite sent to second parent" : "Invite created (email pending)");
-      reset();
-      onOpenChange(false);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  };
 
   const showInviteFields = !selectedUser;
   const busy = inviteMutation.isPending || linkExistingMutation.isPending;
