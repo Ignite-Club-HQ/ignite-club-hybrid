@@ -183,15 +183,12 @@ export function AddSecondParentDialog({
           const trimmedEmail = parentEmail.trim().toLowerCase();
           if (!trimmedName) throw new Error("Enter the parent's name");
           if (!emailRe.test(trimmedEmail)) throw new Error("Enter a valid email");
-          await createLivePendingInvite(
-            ctx,
+          await createLivePendingInvite(ctx, {
+            kind: "club",
             clubId,
-            trimmedEmail,
-            null,
-            "parent",
-            trimmedName,
-            `Second parent for ${playerName} in ${miniLeagueName} (mini-league ${miniLeagueId}, player ${playerId})`,
-          );
+            email: trimmedEmail,
+            role: "parent",
+          });
           return false;
         },
       }),

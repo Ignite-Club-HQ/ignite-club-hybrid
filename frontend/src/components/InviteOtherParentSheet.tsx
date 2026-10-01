@@ -181,15 +181,14 @@ export default function InviteOtherParentSheet({
     if (!clubId) throw new InviteScopeResolutionError();
 
     const trimmedEmail = parentEmail.trim().toLowerCase();
-    const { invite } = await createLivePendingInvite(
-      ctx,
+    const { invite } = await createLivePendingInvite(ctx, {
+      kind: "guardian",
       clubId,
-      trimmedEmail,
+      email: trimmedEmail,
       teamId,
-      "parent",
-      parentName.trim(),
-      `guardian_child_id:${childId}`,
-    );
+      childId,
+      role: "parent",
+    });
 
     setResolvedClubName("Your Club");
     setResolvedTeamName("");

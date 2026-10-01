@@ -122,14 +122,13 @@ export function useAddPendingTeamMemberMutation({
       }
     }
 
-    const { invite } = await createLivePendingInvite(
-      ctx,
+    const { invite } = await createLivePendingInvite(ctx, {
+      kind: "team",
       clubId,
-      customEmail.trim().toLowerCase(),
+      email: customEmail.trim().toLowerCase(),
       teamId,
-      selectedRole,
-      nameInput.trim(),
-    );
+      role: selectedRole,
+    });
     const link = `${window.location.origin}/join/p/${invite.id}`;
     return {
       link,

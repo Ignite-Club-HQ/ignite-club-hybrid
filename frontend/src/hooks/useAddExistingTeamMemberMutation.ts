@@ -343,15 +343,13 @@ export function useAddExistingTeamMemberMutation({
               // yet — the id-based link below is best-effort/non-functional
               // until that route exists. Surfaced per the locked decision so
               // the coach at least has a reference to share/retry with.
-              const invite = (await createLivePendingInvite(
-                ctx,
+              const { invite } = await createLivePendingInvite(ctx, {
+                kind: "team",
                 clubId,
-                trimmedSecondParentEmail,
+                email: trimmedSecondParentEmail,
                 teamId,
-                "parent",
-                selectedUser.display_name ?? "",
-                secondParentName.trim() || undefined,
-              )) as { id?: string } | undefined;
+                role: "parent",
+              });
               secondParentInviteEmail = trimmedSecondParentEmail;
               secondParentInviteLink = invite?.id
                 ? `${window.location.origin}/join/p/${invite.id}`
