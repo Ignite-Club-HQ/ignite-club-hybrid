@@ -4,6 +4,7 @@ import { Loader2, MapPin, Plus, X, History, Clock, Star, Trash2, Navigation } fr
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export interface SavedLocation {
   id?: string;
@@ -51,6 +52,10 @@ export function AddressAutocomplete({
   savedLocations = [],
 }: AddressAutocompleteProps) {
   const { user } = useAuth();
+  // II users have no Supabase JWT, so the google-places-search Edge Function
+  // (autocomplete/details/reverse) is unreachable for them. Fall back to the
+  // plain manual text input (typing + onChange) that already exists below.
+  const icpMode = resolveAuthBackend() === "icp";
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -111,6 +116,12 @@ export function AddressAutocomplete({
       return;
     }
 
+    if (icpMode) {
+      setSuggestions([]);
+      setSearchAttempted(false);
+      return;
+    }
+
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       setSearchAttempted(true);
@@ -142,9 +153,10 @@ export function AddressAutocomplete({
         clearTimeout(debounceRef.current);
       }
     };
-  }, [value]);
+  }, [value, icpMode]);
 
   const handleSelect = async (suggestion: Suggestion) => {
+    if (icpMode) return;
     skipNextSearchRef.current = true;
     // Optimistic display while details load
     onChange(suggestion.description);
@@ -263,6 +275,7 @@ export function AddressAutocomplete({
     favoriteLocations.some(loc => loc.address === currentAddress.address);
 
   const handleUseCurrentLocation = async () => {
+    if (icpMode) return;
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
       return;
@@ -446,7 +459,7 @@ export function AddressAutocomplete({
           {(loading || gpsLoading) && (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
-          {!loading && !gpsLoading && (
+          {!icpMode && !loading && !gpsLoading && (
             <button
               type="button"
               className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-primary transition-colors"

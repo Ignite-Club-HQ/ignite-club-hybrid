@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Props {
   teamId: string;
@@ -111,6 +112,10 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
 
   const update = useMutation({
     mutationFn: async (patch: Partial<TeamRow>) => {
+      // PlayHQ integration is Supabase-only; club_domain's team record has no
+      // playhq_team_id/playhq_competition_id/playhq_auto_create_events fields.
+      // NEEDS-CANISTER: club_domain team shape needs PlayHQ link fields.
+      assertSupabaseWritePath("membership", "PlayHQ team link fields (playhq_team_id/playhq_competition_id/playhq_auto_create_events) have no club_domain counterpart");
       const { error } = await supabase.from("teams").update(patch).eq("id", teamId);
       if (error) throw error;
     },
@@ -123,6 +128,9 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   const runImport = async () => {
     setImporting(true);
     try {
+      // NEEDS-CANISTER: PlayHQ fixture materialisation (playhq-materialise-team-events)
+      // writes events via Supabase and has no events_domain counterpart.
+      assertSupabaseWritePath("events", "PlayHQ fixture import/materialisation has no events_domain counterpart");
       const { data, error } = await supabase.functions.invoke("playhq-materialise-team-events", {
         body: { team_id: teamId },
       });

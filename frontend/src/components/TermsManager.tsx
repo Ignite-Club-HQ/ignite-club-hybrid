@@ -37,6 +37,8 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 interface TermsManagerProps {
   clubId: string;
@@ -51,6 +53,11 @@ export function TermsManager({ clubId }: TermsManagerProps) {
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
 
+  // NEEDS-CANISTER: club_domain has no terms/class-term table (team records
+  // only) — gate the whole terms surface off for ICP-routed membership
+  // instead of throwing uuid-shaped Supabase errors for II principals.
+  const termsIsIcp = isFeatureRoutedToIcp("membership");
+
   const { data: terms = [], isLoading } = useQuery({
     queryKey: ["terms", clubId],
     queryFn: async () => {
@@ -62,10 +69,12 @@ export function TermsManager({ clubId }: TermsManagerProps) {
       if (error) throw error;
       return data;
     },
+    enabled: !termsIsIcp,
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
       if (!name.trim() || !startDate || !endDate) throw new Error("Missing fields");
 
       if (endDate <= startDate) {
@@ -115,6 +124,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
       const { error } = await supabase
         .from("terms")
         .update({ is_active: isActive, status: isActive ? "active" : "archived" })
@@ -128,6 +138,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
 
   const setTermStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
       const isActive = status === "active";
       const { error } = await supabase
         .from("terms")
@@ -142,6 +153,7 @@ export function TermsManager({ clubId }: TermsManagerProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
       const { error } = await supabase.from("terms").delete().eq("id", id);
       if (error) throw error;
     },

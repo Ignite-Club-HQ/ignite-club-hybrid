@@ -989,8 +989,30 @@ fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     outer.update(inner_hash);
     outer.finalize().into()
 }
-fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+/// Constant-time hex decode; rejects odd-length or non-hex input.
+fn hex_decode(hex: &str) -> Option<Vec<u8>> {
+    let hex = hex.trim();
+    if hex.len() % 2 != 0 {
+        return None;
+    }
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+        .collect()
+}
+/// Constant-time equality over byte slices. Used for attestation HMAC
+/// verification so the comparison does not leak how many leading bytes
+/// matched through timing. (Length inequality is public knowledge: the
+/// expected HMAC length is fixed at 32 bytes.)
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 fn attestation_message(
     principal: Principal,
@@ -1153,8 +1175,12 @@ fn redeem_entitlement(
         return Err("IAP attestation is not configured".into());
     }
     let message = attestation_message(caller, &product_id, &transaction_id, expires_at_ms, &source);
-    let expected = hex_encode(&hmac_sha256(&state.attestation_secret, &message));
-    if expected != signature_hex.to_lowercase() {
+    let expected = hmac_sha256(&state.attestation_secret, &message);
+    let provided = match hex_decode(&signature_hex) {
+        Some(bytes) => bytes,
+        None => return Err("Invalid attestation signature".into()),
+    };
+    if !constant_time_eq(&expected, &provided) {
         return Err("Invalid attestation signature".into());
     }
     let record = upsert_entitlement(&mut state, caller, product_id, transaction_id, expires_at_ms, source)?;

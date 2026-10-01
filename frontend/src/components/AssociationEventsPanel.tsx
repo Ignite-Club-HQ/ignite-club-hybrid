@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { CalendarDays, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 interface Props {
   associationId: string;
@@ -159,6 +160,9 @@ function CreateAssociationEventSheet({
     }
     setSubmitting(true);
     try {
+      // NEEDS-CANISTER: events_domain has no association-scoped multi-club
+      // fan-out create (association-create-club-event is Supabase-only).
+      assertSupabaseWritePath("events", "association-wide multi-club event fan-out (association-create-club-event) has no events_domain counterpart");
       const eventDateIso = new Date(`${date}T${time || "19:00"}:00`).toISOString();
       const { data, error } = await supabase.functions.invoke("association-create-club-event", {
         body: {

@@ -20,6 +20,7 @@ import {
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -66,6 +67,14 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
   const debouncedSearch = useDebounce(customName, 300);
   const nativeKbHeight = useNativeKeyboardBottomInset();
 
+  // NEEDS-CANISTER: club_domain has list_role_grants (member list) but no
+  // club branding read or a fuzzy-search-by-name/email lookup equivalent to
+  // search_invitable_profiles — gate all three Supabase lookups off for
+  // ICP-routed membership so they don't throw uuid-shaped errors for II
+  // principals; the member-add flow falls back to the "add pending member by
+  // name" path, which is already gated at the mutation.
+  const membershipIsIcp = isFeatureRoutedToIcp("membership");
+
   // Fetch existing club admins
   const { data: existingMembers } = useQuery({
     queryKey: ["club-roles", clubId],
@@ -77,7 +86,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
         .is("team_id", null);
       return data?.map(m => m.user_id) || [];
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !membershipIsIcp,
   });
 
   // Fetch club branding data for emails
@@ -91,7 +100,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
         .single();
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !membershipIsIcp,
   });
 
   // Search for existing users
@@ -111,7 +120,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
         masked_email: string | null;
       }>;
     },
-    enabled: debouncedSearch.length >= 2,
+    enabled: debouncedSearch.length >= 2 && !membershipIsIcp,
   });
 
   // Filter out existing members

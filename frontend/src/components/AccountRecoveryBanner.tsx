@@ -19,6 +19,13 @@ export function AccountRecoveryBanner({ userId, onRecovered }: AccountRecoveryBa
   const { toast } = useToast();
 
   useEffect(() => {
+    // II users have no Supabase `profiles` row keyed by their principal (user.id
+    // is principal text, not a uuid) and account-deletion scheduling is itself
+    // Supabase-only — skip the query entirely instead of throwing a uuid error.
+    if (resolveAuthBackend() === "icp") {
+      setLoading(false);
+      return;
+    }
     const checkDeletionStatus = async () => {
       const { data, error } = await supabase
         .from('profiles')
