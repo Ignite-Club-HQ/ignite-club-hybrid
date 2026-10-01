@@ -1,36 +1,65 @@
-# Deep-audit round 2 — fix implementation plan
+# NEEDS-CANISTER completion pass
 
-Source: docs/icp-audit-2026-10-01-deep-round2.md (all findings verified in source).
-Standing rules: no "not available" UI states; only iOS IAP works in ICP mode (other payment paths stay gated/blocked); wire real data or record NEEDS-CANISTER.
+Close every recorded "NEEDS-CANISTER" gap so ICP mode has no degraded or gated-off
+screens (standing rule: no "not available" UI — wire it or it isn't done).
 
-## Phase 1 — Canister security patches [DONE]
+## Phase 1 — Messaging domain
+- Canister: add presence/online-count query, user blocking (block/unblock/list), and a
+  conversation recap digest query (text + outstanding actions/questions per scope) to
+  `messaging_domain`. One new timestamped migration file; self-contained, mo:core only.
+- Frontend: wire `useChatOnlineCount`, `useBlockedUsers`, `GlobalChatRecapSheet` to the
+  new methods via withFeatureBackend; recap LLM call happens canister-side via HTTPS
+  outcall per the locked design decision.
+- Frontend-only (canister methods already exist): wire `AddGroupMembersDialog`,
+  `CreateGroupDialog`, `StartDMDialog` to addLiveGroupMembers /
+  createLiveGroupWithRoles / getOrCreateLiveDm using list_role_grants candidates.
 
-1. [DONE] identity_access/src/lib.rs:1157 — replace `expected != signature_hex.to_lowercase()` string compare with constant-time byte comparison of decoded HMAC. Verify with cargo check + existing tests.
-2. [DONE — FALSE POSITIVE] pii_access_control register_pii TOCTOU (src/main.mo ~279-324) — re-check for an existing record AFTER the `await* random_bytes(...)` inter-canister call before appending, so concurrent registrations can't duplicate a pii_id+field_id record. Compile with moc --enhanced-migration.
-3. [DONE — fallback path] Governor race (all 14 Motoko canisters): one-shot confirmed already enforced; transfer_governorship added to all 13; initialize-at-deploy rule in backend/AGENTS.md; drift 17/17. Original text: — investigate actor-class install argument under --enhanced-migration on one canister (club_domain). If supported: convert `initialize()` first-caller-wins to install-arg governor with initialize kept only as a migration-path no-op for already-initialized state. If not supported: restrict initialize to a one-time call plus document scripted initialize-at-deploy as the operational control, and add a `transfer_governorship` guard. Compile all touched canisters.
+## Phase 2 — Club domain
+- Canister: add club branding read, fuzzy invitable-profile search, club terms CRUD
+  (class/season terms), and PlayHQ link fields on the team shape.
+- Frontend: wire `AddClubAdminSheet` (F3), `TermsManager` (F10), `PlayHQTeamLinkCard`
+  team update (F7, team side).
 
-## Phase 2 — Frontend gates F1–F11 (from audit table) [DONE — verified on disk; NEEDS-CANISTER items recorded in frontend/roadmap.md]
+## Phase 3 — Events / notifications / payments ledger
+- Canisters: household RSVP roll-up (children/child_guardians shape) in events/club
+  domain (F1); association-scoped multi-club event fan-out (F5); player_of_match
+  notification type in notification_queue (F8); manual payment ledger + bulk fee
+  reminder fan-out (F6). Payments here are the manual "mark paid / remind" ledger only —
+  non-IAP money stays Supabase-gated per the payments rule.
+- Frontend: wire `NextUpCarousel` useChildRsvps, `AssociationEventsPanel`,
+  `PlayerOfMatchSelector`, `MemberSubscriptionPaymentsManager`.
 
-- F1 NextUpCarousel useChildRsvps: gate the children/child_guardians queries for II users; route RSVP reads through the events canister wrapper (getLiveEventRosterDetailed) where household RSVP data is needed, else skip the query for principal-text IDs. Never pass a principal to a uuid column.
-- F2 AccountRecoveryBanner: gate the profiles status query to Supabase-auth users only (resolveAuthBackend).
-- F3 AddClubAdminSheet: gate existingMembers/clubBranding/search_invitable_profiles lookups; use club_domain role grants (list_role_grants / my_role_grants) for the member list when membership is ICP-routed.
-- F4 AddressAutocomplete: gate the google-places-search invoke for II users; fall back to the plain manual text input (no placeholder banner).
-- F5 AssociationEventsPanel: gate association-create-club-event invoke; if the events canister has no association-scope create, record NEEDS-CANISTER and gate.
-- F6 MemberSubscriptionPaymentsManager: gate "Mark Paid" and "Send Reminders" for ICP mode (non-IAP payments are Supabase-only by standing rule).
-- F7 PlayHQTeamLinkCard: gate teams.update + playhq-materialise-team-events invoke for ICP mode.
-- F8 PlayerOfMatchSelector: move notification inserts + child lookups inside the withFeatureBackend points gate (or gate them on the same condition).
-- F9 SponsorOrAdCarousel: gate auth.getUser/user_roles/sponsors lookups for II users; read sponsor data via insights/club canister wrappers if a shape exists, else gate.
-- F10 TermsManager: gate class-mode term writes for ICP mode; check whether club_domain terms belong to an existing canister shape before deciding wire vs gate.
-- F11 ClubAnnouncementDialog: relax Zod .uuid() to .string() on ID fields that can carry principal-text IDs under ICP routing.
+## Phase 4 — Competitions / mini-leagues
+- Canisters: admins-only chat toggle read, competition entry-invite accept/decline
+  writes, join-link role param for admin-grant links, children/child-assignment cascade
+  equivalents for delete/duplicate/mock-player flows.
+- Frontend: CompetitionMemberChatCard admins-only, TeamCompetitionsSection invite
+  accept/decline, MiniLeagueAdminJoinLinkCard, ManagePlayersDialog /
+  AddSecondParentDialog / AddMiniLeagueMemberSheet / MiniLeagueSettingsDialog.
 
-## Phase 3 — Deferred (recorded, not done this pass)
+## Phase 5 — Sponsors + remaining read sweep
+- Canister: cross-club sponsor/strip lookup without an explicit club filter (F9).
+- Frontend: SponsorOrAdCarousel, then the remaining ~55 degraded read items
+  (useProfiles, useProfileTeamHistory, useClubSeasons, useChatSharedMedia,
+  EventCancellationRecipients/GroupMap, admin analytics tabs, carousels, link cards) —
+  each wired to a canister read or, where the canister genuinely lacks the shape,
+  added to the canister in the same pass.
 
-- identity_access StableBTreeMap migration (HIGH, large) — separate plan.
-- Unbounded-array → Map/Buffer migration across Motoko canisters (HIGH, largest) — per-domain plan.
-- migration_coordinator parallel awaits; timer_jobs unwrap/expect hardening; cycles_balance() monitoring hooks (MEDIUM).
-
-## Verification per phase
-
-- Motoko: moc --enhanced-migration --check on every touched canister; regenerate .did + bindings if interfaces change; drift check 17/17.
-- Rust: cargo check --target wasm32-unknown-unknown + existing tests.
-- Frontend: tsc clean; targeted vitest for touched files; preview build OK.
+## Technical details
+- Per canister change: exactly ONE new timestamped file in that canister's
+  `src/backend/migrations/` (sorts after 20261001_000000.mo), fully self-contained
+  (inline old+new types, mo:core imports only), OldActor = NewActor of the current
+  chain tail copied exactly; never modify applied migrations.
+- Motoko rules from the writing-motoko skill: no `stable` keyword, no mo:base, dot
+  notation, `??` coalesce, no inline initializers on stable fields, no type annotations
+  on inline lambda call arguments.
+- Verify each canister: `moc $(mops sources) --enhanced-migration src/backend/migrations
+  --check src/main.mo`; regenerate `.did`, then icp-bindgen bindings in BOTH
+  `frontend/src/lab/bindings/<c>` and `frontend/src/lab/generated-contracts/<c>`;
+  `node frontend/scripts/check-candid-drift.mjs` must stay 17/17 green.
+- Frontend gating only via isFeatureRoutedToIcp / resolveAuthBackend /
+  withFeatureBackend / assertSupabaseWritePath — never resolveLocalAuthMode/useIcpLab.
+- After each phase: `node scripts/check-product-type-errors.mjs` clean; vitest shards
+  1/3, 2/3, 3/3 run sequentially and green; roadmap updated with per-area status.
+- If the sandbox wiped /root: reinstall toolchain (`bun add -g ic-mops &&
+  mops toolchain use moc 1.16.1`, `mops install` per canister) before compiling.
