@@ -206,6 +206,19 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'club_id' : IDL.Text,
   });
+  const AssociationEvent = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'deleted' : IDL.Bool,
+    'association_id' : IDL.Text,
+    'description' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'starts_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'ends_at_ms' : IDL.Nat64,
+    'child_event_ids' : IDL.Vec(IDL.Text),
+    'location' : IDL.Opt(IDL.Text),
+  });
   const AttendanceInput = IDL.Record({
     'status' : IDL.Text,
     'subject_kind' : IDL.Text,
@@ -520,6 +533,11 @@ export const idlFactory = ({ IDL }) => {
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_association_events' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AssociationEvent), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_event_groups' : IDL.Func(

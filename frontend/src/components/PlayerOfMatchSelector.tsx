@@ -29,7 +29,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
+import { getLiveEventChild } from "@/live/features/events";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -271,43 +272,53 @@ export default function PlayerOfMatchSelector({
           const previousPoints = balanceAfter - pointsToAward;
 
           // Check reward threshold
-          const { checkRewardThreshold } = await import("@/lib/rewardThresholdCheck");
-          const rewardName = await checkRewardThreshold({
-            userId,
-            clubId,
-            previousPoints,
-            newPoints: balanceAfter,
+          await withFeatureBackend("points", {
+            supabase: async () => {
+              const { checkRewardThreshold } = await import("@/lib/rewardThresholdCheck");
+              const rewardName = await checkRewardThreshold({
+                userId,
+                clubId,
+                previousPoints,
+                newPoints: balanceAfter,
+              });
+              await supabase.from("notifications").insert({
+                user_id: userId,
+                type: "player_of_match",
+                message: rewardName
+                  ? `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${rewardName}!`
+                  : `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
+                related_id: eventId,
+              });
+            },
+            icp: async (ctx) => {
+              // Reward-unlock interpolation stays Supabase-side (threshold
+              // check reads the Supabase rewards tables); the canister gets
+              // the base award body.
+              await fanOutLiveNotifications(ctx, {
+                userIds: [userId],
+                clubId,
+                kind: "player_of_match",
+                body: `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
+                idempotencyKeyPrefix: `pom-${eventId}-${userId}`,
+                relatedId: eventId,
+              });
+            },
           });
-
-          // Send notification with points. Supabase-only: notification_queue
-          // has no "bulk fan-out with reward-name interpolation" equivalent
-          // and the points-award itself already succeeded above, so skip
-          // (rather than throw) for ICP so the award doesn't appear to fail
-          // after already landing on the canister.
-          // NEEDS-CANISTER: player_of_match award notifications have no
-          // notification_queue counterpart.
-          if (!isFeatureRoutedToIcp("points")) {
-            await supabase.from("notifications").insert({
-              user_id: userId,
-              type: "player_of_match",
-              message: rewardName
-                ? `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${rewardName}!`
-                : `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
-              related_id: eventId,
-            });
-          }
         } else if (childId) {
-          // Get child info for notification (no canister equivalent for this
-          // display-only lookup — see live/features/points.ts doc comment).
-          // NEEDS-CANISTER: club_domain/events_domain has no `children` table
-          // read; skip for ICP instead of throwing a uuid-type error.
-          const child = isFeatureRoutedToIcp("points")
-            ? null
-            : (await supabase
+          // Child display record for the notification: Supabase children
+          // row, or events_domain's get_event_child (manager-gated) in ICP.
+          const child = await withFeatureBackend("points", {
+            supabase: async () =>
+              (await supabase
                 .from("children")
                 .select("parent_id, name")
                 .eq("id", childId)
-                .single()).data;
+                .single()).data,
+            icp: async (ctx) => {
+              const c = await getLiveEventChild(ctx, eventId, childId);
+              return { parent_id: c.parent_id ?? null, name: c.name };
+            },
+          });
 
           // Atomic child points increment (+ matching history entry,
           // recorded atomically by award_points on the ICP branch).
@@ -351,56 +362,92 @@ export default function PlayerOfMatchSelector({
           });
           const previousChildPoints = childBalanceAfter - pointsToAward;
 
-          // Check reward threshold for child
-          const { checkRewardThreshold: checkChildReward } = await import("@/lib/rewardThresholdCheck");
-          const childRewardName = await checkChildReward({
-            childId,
-            clubId,
-            previousPoints: previousChildPoints,
-            newPoints: childBalanceAfter,
-          });
-
-          // Notify parent with points (same gate as above — skip rather
-          // than fail part-way for ICP-routed points).
-          if (child?.parent_id && !isFeatureRoutedToIcp("points")) {
-            await supabase.from("notifications").insert({
-              user_id: child.parent_id,
-              type: "player_of_match",
-              message: childRewardName
-                ? `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${childRewardName}!`
-                : `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points!`,
-              related_id: eventId,
-            });
-          }
-        }
-      } else if (!isFeatureRoutedToIcp("points")) {
-        // Send notification without points. No points award happened in this
-        // branch (pointsToAward === 0), so the gate here simply skips the
-        // Supabase-only notification/child lookup for ICP rather than
-        // throwing — matches the points-branch skip behaviour above.
-        if (userId) {
-          await supabase.from("notifications").insert({
-            user_id: userId,
-            type: "player_of_match",
-            message: `🏆 Congratulations! You were selected as Player of the Match!`,
-            related_id: eventId,
-          });
-        } else if (childId) {
-          const { data: child } = await supabase
-            .from("children")
-            .select("parent_id, name")
-            .eq("id", childId)
-            .single();
-
+          // Notify parent with points.
           if (child?.parent_id) {
-            await supabase.from("notifications").insert({
-              user_id: child.parent_id,
-              type: "player_of_match",
-              message: `🏆 ${child.name} was selected as Player of the Match!`,
-              related_id: eventId,
+            await withFeatureBackend("points", {
+              supabase: async () => {
+                const { checkRewardThreshold: checkChildReward } = await import("@/lib/rewardThresholdCheck");
+                const childRewardName = await checkChildReward({
+                  childId,
+                  clubId,
+                  previousPoints: previousChildPoints,
+                  newPoints: childBalanceAfter,
+                });
+                await supabase.from("notifications").insert({
+                  user_id: child.parent_id,
+                  type: "player_of_match",
+                  message: childRewardName
+                    ? `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${childRewardName}!`
+                    : `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points!`,
+                  related_id: eventId,
+                });
+              },
+              icp: async (ctx) => {
+                await fanOutLiveNotifications(ctx, {
+                  userIds: [child.parent_id],
+                  clubId,
+                  kind: "player_of_match",
+                  body: `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points!`,
+                  idempotencyKeyPrefix: `pom-${eventId}-${childId}-parent`,
+                  relatedId: eventId,
+                });
+              },
             });
           }
         }
+      } else {
+        // Send notification without points (pointsToAward === 0).
+        await withFeatureBackend("points", {
+          supabase: async () => {
+            if (userId) {
+              await supabase.from("notifications").insert({
+                user_id: userId,
+                type: "player_of_match",
+                message: `🏆 Congratulations! You were selected as Player of the Match!`,
+                related_id: eventId,
+              });
+            } else if (childId) {
+              const { data: child } = await supabase
+                .from("children")
+                .select("parent_id, name")
+                .eq("id", childId)
+                .single();
+
+              if (child?.parent_id) {
+                await supabase.from("notifications").insert({
+                  user_id: child.parent_id,
+                  type: "player_of_match",
+                  message: `🏆 ${child.name} was selected as Player of the Match!`,
+                  related_id: eventId,
+                });
+              }
+            }
+          },
+          icp: async (ctx) => {
+            if (userId) {
+              await fanOutLiveNotifications(ctx, {
+                userIds: [userId],
+                clubId,
+                kind: "player_of_match",
+                body: `🏆 Congratulations! You were selected as Player of the Match!`,
+                idempotencyKeyPrefix: `pom-nopoints-${eventId}-${userId}`,
+                relatedId: eventId,
+              });
+            } else if (childId) {
+              const child = await getLiveEventChild(ctx, eventId, childId);
+              if (child.parent_id) {
+                await fanOutLiveNotifications(ctx, {
+                  userIds: [child.parent_id],
+                  clubId,
+                  kind: "player_of_match",
+                  body: `🏆 ${child.name} was selected as Player of the Match!`,
+                  idempotencyKeyPrefix: `pom-nopoints-${eventId}-${childId}-parent`,
+                  relatedId: eventId,
+                });
+              }
+            }
+          },
+        });
       }
     },
     onSuccess: () => {

@@ -12,6 +12,9 @@ import { CalendarDays, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { createLiveAssociationEvent, listLiveAssociationEvents } from "@/live/features/events";
 
 interface Props {
   associationId: string;
@@ -25,14 +28,32 @@ export function AssociationEventsPanel({ associationId, isAdmin, clubs }: Props)
   const { data: events = [] } = useQuery({
     queryKey: ["association-events", associationId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("events")
-        .select("id, title, event_date, location_name, club_id, association_event_id")
-        .eq("association_id", associationId)
-        .is("association_event_id", null) // parents only
-        .order("event_date", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("events")
+            .select("id, title, event_date, location_name, club_id, association_event_id")
+            .eq("association_id", associationId)
+            .is("association_event_id", null) // parents only
+            .order("event_date", { ascending: true });
+          if (error) throw error;
+          return data ?? [];
+        },
+        // ICP: association parents live in events_domain's AssociationEvent
+        // store; child_event_ids doubles as the fan-out count source.
+        icp: async (ctx) => {
+          const parents = await listLiveAssociationEvents(ctx, associationId);
+          return parents.map((p) => ({
+            id: p.id,
+            title: p.title,
+            event_date: new Date(Number(p.starts_at_ms)).toISOString(),
+            location_name: p.location ?? null,
+            club_id: p.association_id,
+            association_event_id: null,
+            child_event_ids: p.child_event_ids,
+          }));
+        },
+      });
     },
   });
 
@@ -40,6 +61,13 @@ export function AssociationEventsPanel({ associationId, isAdmin, clubs }: Props)
     queryKey: ["association-event-fanout", associationId, events.map((e) => e.id).join(",")],
     enabled: events.length > 0,
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const map: Record<string, number> = {};
+        for (const e of events as Array<{ id: string; child_event_ids?: string[] }>) {
+          map[e.id] = e.child_event_ids?.length ?? 0;
+        }
+        return map;
+      }
       const ids = events.map((e) => e.id);
       const { data } = await supabase
         .from("events")
@@ -117,6 +145,10 @@ function CreateAssociationEventSheet({
   // member club on/off.
   const { data: participating = new Set<string>() } = useQuery({
     queryKey: ["association-participating-clubs", associationId],
+    // PlayHQ comp/team links are Supabase-only data; in ICP mode there is no
+    // PlayHQ source to derive suggestions from, so default-select every
+    // member club instead of running a query that can only return empty.
+    enabled: resolveAuthBackend() !== "icp",
     queryFn: async () => {
       const { data: comps } = await supabase
         .from("competitions")
@@ -160,25 +192,41 @@ function CreateAssociationEventSheet({
     }
     setSubmitting(true);
     try {
-      // NEEDS-CANISTER: events_domain has no association-scoped multi-club
-      // fan-out create (association-create-club-event is Supabase-only).
-      assertSupabaseWritePath("events", "association-wide multi-club event fan-out (association-create-club-event) has no events_domain counterpart");
       const eventDateIso = new Date(`${date}T${time || "19:00"}:00`).toISOString();
-      const { data, error } = await supabase.functions.invoke("association-create-club-event", {
-        body: {
-          association_id: associationId,
-          club_ids: clubIds,
-          title: title.trim(),
-          description: description.trim() || null,
-          event_date: eventDateIso,
-          start_time: eventDateIso,
-          location_name: location.trim() || null,
-          address: address.trim() || null,
+      const invitedCount = await withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("association-create-club-event", {
+            body: {
+              association_id: associationId,
+              club_ids: clubIds,
+              title: title.trim(),
+              description: description.trim() || null,
+              event_date: eventDateIso,
+              start_time: eventDateIso,
+              location_name: location.trim() || null,
+              address: address.trim() || null,
+            },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          return (data as any).invited_clubs as number;
+        },
+        icp: async (ctx) => {
+          const startsAtMs = new Date(eventDateIso).getTime();
+          return createLiveAssociationEvent(ctx, {
+            associationId,
+            clubIds,
+            title: title.trim(),
+            description: description.trim(),
+            location: location.trim() || null,
+            startsAtMs,
+            // Association socials have no explicit end time in the form —
+            // the canister requires starts < ends, so default to 3 hours.
+            endsAtMs: startsAtMs + 3 * 60 * 60 * 1000,
+          });
         },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success(`Event created and sent to ${(data as any).invited_clubs} club(s)`);
+      toast.success(`Event created and sent to ${invitedCount} club(s)`);
       setOpen(false);
       setTitle(""); setDescription(""); setDate(""); setLocation(""); setAddress("");
       onCreated();

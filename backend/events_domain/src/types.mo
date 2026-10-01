@@ -3,6 +3,23 @@ module {
   // deleted: soft-delete flag added for delete_event/soft_delete_series — existing
   // rows migrate with deleted = false.
   public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool };
+  // Association-scoped fan-out parent (Phase 3, F5) — mirrors the Supabase
+  // events row with association_id set and association_event_id null. Kept
+  // as a separate store so the core Event type (and every existing event
+  // flow) is untouched; child_event_ids links the per-club fan-out events.
+  public type AssociationEvent = {
+    id : Text;
+    association_id : Text;
+    title : Text;
+    description : Text;
+    location : ?Text;
+    starts_at_ms : Nat64;
+    ends_at_ms : Nat64;
+    created_by : Principal;
+    created_at_ms : Nat64;
+    child_event_ids : [Text];
+    deleted : Bool;
+  };
   // Widened to mirror Supabase rsvps: child_id/notes/has_paid/source added on
   // top of the original (event_id, account_id, state, updated_at_ms) shape.
   // Existing rows migrate with child_id = null, notes = "", has_paid = null,

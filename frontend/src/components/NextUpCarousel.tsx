@@ -10,7 +10,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, getMyLiveChildRsvps } from "@/live/features/events";
+import { listLiveChildren } from "@/live/features/membership";
+import { listLivePlayers } from "@/live/features/miniLeagues";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -190,18 +192,27 @@ function getUrgencyBadge(dateStr: string) {
 }
 
 function useChildRsvps(eventId: string, userId: string | undefined) {
-  // II users' `userId` is their principal text, not a Supabase uuid — the
-  // `children`/`child_guardians` lookups below are uuid-typed columns and
-  // throw for principal-shaped values. events_domain has no
-  // children/child_guardians table (child rosters only exist per-event via
-  // get_event_roster), so there is no canister read to substitute here.
-  // NEEDS-CANISTER: household RSVP roll-up (children-by-guardian across all
-  // events) has no events_domain/club_domain counterpart — gate the query
-  // off for II users instead of throwing a uuid-type error.
-  const icpAuth = resolveAuthBackend() === "icp";
+  // Household RSVP roll-up: Supabase mode reads uuid-typed children /
+  // child_guardians / rsvps rows; ICP mode reads events_domain's
+  // my_child_rsvps, which keys off the caller's principal instead.
   return useQuery({
     queryKey: ["child-rsvps-card", eventId, userId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // ICP: household children + RSVPs come from events_domain's
+        // my_child_rsvps, which keys off the caller's principal — no
+        // uuid-typed children/child_guardians lookups.
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as never[],
+          icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
+        });
+        return (rows ?? []).map((r) => ({
+          id: `${r.rsvp.event_id}:${r.rsvp.child_id ?? ""}`,
+          status: r.rsvp.state,
+          child_id: r.rsvp.child_id ?? "",
+          children: r.child ? { name: r.child.name } : null,
+        }));
+      }
       const [ownChildren, guardianLinks] = await Promise.all([
         supabase.from("children").select("id").eq("parent_id", userId!),
         supabase.from("child_guardians").select("child_id").eq("guardian_id", userId!),
@@ -232,7 +243,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
         children: { name: string } | null;
       }>;
     },
-    enabled: !!userId && !icpAuth,
+    enabled: !!userId,
     staleTime: 30 * 1000,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
@@ -268,6 +279,27 @@ function useChildrenForEvent(
       // Mini-league events keep their own roster rule: children rostered to
       // the league, which is not a team assignment.
       if (!event.team_id && miniLeagueId) {
+        if (resolveAuthBackend() === "icp") {
+          // ICP: household children come from club_domain's caller-scoped
+          // list_children; rostered membership from mini_league_domain's
+          // list_players, filtered client-side to the household child ids.
+          const merged = await withFeatureBackend("membership", {
+            supabase: async () => [] as never[],
+            icp: async (ctx) => {
+              const children = await listLiveChildren(ctx);
+              return children.map((c) => ({ id: c.id, name: c.name }));
+            },
+          });
+          if (merged.length === 0) return [];
+          const players = await withFeatureBackend("mini_leagues", {
+            supabase: async () => [] as never[],
+            icp: (ctx) => listLivePlayers(ctx, miniLeagueId),
+          });
+          const allowed = new Set(
+            (players ?? []).map((p) => p.child_id).filter((id): id is string => !!id),
+          );
+          return merged.filter((c) => allowed.has(c.id));
+        }
         const [ownChildren, guardianLinks] = await Promise.all([
           supabase.from("children").select("id, name").eq("parent_id", userId!),
           supabase
@@ -287,22 +319,12 @@ function useChildrenForEvent(
           return true;
         }) as Array<{ id: string; name: string }>;
         if (merged.length === 0) return merged;
-        const players = await withFeatureBackend("mini_leagues", {
-          supabase: async () => {
-            const { data, error } = await supabase
-              .from("mini_league_players")
-              .select("child_id")
-              .eq("mini_league_id", miniLeagueId)
-              .in("child_id", merged.map((c) => c.id));
-            if (error) throw error;
-            return data;
-          },
-          // Gated: filtering players by an arbitrary subset of household
-          // child ids has no canister equivalent (the canister only lists
-          // all players for a mini league). ICP-routed sessions see no
-          // rostered children rather than an unfiltered/incorrect list.
-          icp: async () => [] as { child_id: string | null }[],
-        });
+        const { data: players, error: playersError } = await supabase
+          .from("mini_league_players")
+          .select("child_id")
+          .eq("mini_league_id", miniLeagueId)
+          .in("child_id", merged.map((c) => c.id));
+        if (playersError) throw playersError;
         const allowed = new Set((players || []).map((p: any) => p.child_id).filter(Boolean));
         return merged.filter((c) => allowed.has(c.id));
       }
