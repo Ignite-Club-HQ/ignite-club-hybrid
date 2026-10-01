@@ -556,3 +556,31 @@ export async function setLiveUserMessagingSettings(
     "Set user messaging settings",
   );
 }
+
+// ---------------------------------------------------------------------------
+// Poll delete / group membership removal / leave.
+// ---------------------------------------------------------------------------
+
+export async function deleteLivePoll(ctx: FeatureBackendContext, pollId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_poll(pollId), "Delete poll");
+}
+
+export async function removeLiveGroupMember(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  member: Principal,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(
+    actor.remove_group_member(conversationId, member),
+    "Remove group member",
+  );
+  return toLiveGroupMetadata(raw);
+}
+
+export async function leaveLiveGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.leave_group(conversationId), "Leave group");
+  return toLiveGroupMetadata(raw);
+}

@@ -11,7 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveChildForParentOnTeam } from "@/live/features/club";
 
 interface ParentCandidate {
   user_id: string;
@@ -137,7 +138,6 @@ export default function AddPlayerToParentSheet({
 
   const addPlayer = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "create_child_for_parent_on_team RPC has no club_domain counterpart"); // NEEDS-CANISTER: create_child_for_parent_on_team RPC has no club_domain counterpart
       if (!selectedParentId) throw new Error("Please pick a parent");
       const trimmed = childName.trim();
       if (!trimmed) throw new Error("Please enter the player's name");
@@ -145,14 +145,29 @@ export default function AddPlayerToParentSheet({
       if (yob !== null && (Number.isNaN(yob) || yob < 1990 || yob > new Date().getFullYear())) {
         throw new Error("Please enter a valid year of birth");
       }
-      const { data, error } = await supabase.rpc("create_child_for_parent_on_team", {
-        p_parent_user_id: selectedParentId,
-        p_team_id: teamId,
-        p_name: trimmed,
-        p_year_of_birth: yob,
+
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("create_child_for_parent_on_team", {
+            p_parent_user_id: selectedParentId,
+            p_team_id: teamId,
+            p_name: trimmed,
+            p_year_of_birth: yob,
+          });
+          if (error) throw error;
+          return data as string;
+        },
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          const child = await createLiveChildForParentOnTeam(
+            ctx,
+            teamId,
+            trimmed,
+            Principal.fromText(selectedParentId),
+          );
+          return (child as any).id as string;
+        },
       });
-      if (error) throw error;
-      return data as string;
     },
     onSuccess: () => {
       toast({
