@@ -9,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile, getLiveTeam, saveLiveTeam } from "@/live/features/club";
 
 interface Props {
   teamId: string;
@@ -38,32 +41,59 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   const qc = useQueryClient();
   const [importing, setImporting] = useState(false);
 
+  // In ICP mode the club PlayHQ config and team link fields live on
+  // club_domain; the competition/fixture reads stay Supabase until the
+  // events_domain PlayHQ pass (NEEDS-CANISTER, phases 3/4).
+  const membershipIsIcp = isFeatureRoutedToIcp("membership");
+
   // Gate: only show this card if the club has PlayHQ configured at club level
   const { data: club, isLoading: clubLoading } = useQuery({
     queryKey: ["club-playhq-link", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("playhq_tenant, playhq_org_id")
-        .eq("id", clubId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as { playhq_tenant: string | null; playhq_org_id: string | null } | null;
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("playhq_tenant, playhq_org_id")
+            .eq("id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data as { playhq_tenant: string | null; playhq_org_id: string | null } | null;
+        },
+        icp: async (ctx) => {
+          const profile = (await getLiveClubProfile(ctx, clubId))[0];
+          return {
+            playhq_tenant: profile?.playhq_tenant[0] ?? null,
+            playhq_org_id: profile?.playhq_org_id[0] ?? null,
+          };
+        },
+      }),
   });
   const clubHasPlayHQ = !!(club?.playhq_tenant && club?.playhq_org_id);
 
   const { data: team } = useQuery({
     queryKey: ["team-playhq-link", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("teams")
-        .select("playhq_team_id, playhq_competition_id, playhq_auto_create_events")
-        .eq("id", teamId)
-        .single();
-      if (error) throw error;
-      return data as TeamRow;
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("playhq_team_id, playhq_competition_id, playhq_auto_create_events")
+            .eq("id", teamId)
+            .single();
+          if (error) throw error;
+          return data as TeamRow;
+        },
+        icp: async (ctx) => {
+          const liveTeam = (await getLiveTeam(ctx, teamId))[0];
+          if (!liveTeam) throw new Error("Team not found");
+          return {
+            playhq_team_id: liveTeam.playhq_team_id[0] ?? null,
+            playhq_competition_id: liveTeam.playhq_competition_id[0] ?? null,
+            playhq_auto_create_events: liveTeam.playhq_auto_create_events,
+          } as TeamRow;
+        },
+      }),
     enabled: clubHasPlayHQ,
   });
 
@@ -82,14 +112,16 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
       if (error) throw error;
       return (data ?? []) as Competition[];
     },
-    enabled: clubHasPlayHQ,
+    // NEEDS-CANISTER: PlayHQ competition/fixture reads stay Supabase until
+    // the events_domain PlayHQ pass (phases 3/4).
+    enabled: clubHasPlayHQ && !membershipIsIcp,
   });
 
   const selectedCompId = team?.playhq_competition_id ?? null;
 
   const { data: matches } = useQuery({
     queryKey: ["playhq-comp-teams", selectedCompId],
-    enabled: clubHasPlayHQ && !!selectedCompId,
+    enabled: clubHasPlayHQ && !!selectedCompId && !membershipIsIcp,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competition_matches")
@@ -112,12 +144,35 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
 
   const update = useMutation({
     mutationFn: async (patch: Partial<TeamRow>) => {
-      // PlayHQ integration is Supabase-only; club_domain's team record has no
-      // playhq_team_id/playhq_competition_id/playhq_auto_create_events fields.
-      // NEEDS-CANISTER: club_domain team shape needs PlayHQ link fields.
-      assertSupabaseWritePath("membership", "PlayHQ team link fields (playhq_team_id/playhq_competition_id/playhq_auto_create_events) have no club_domain counterpart");
-      const { error } = await supabase.from("teams").update(patch).eq("id", teamId);
-      if (error) throw error;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("teams").update(patch).eq("id", teamId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fetch-modify-save: the canister takes the whole team record, so
+          // load it, apply the PlayHQ patch, and save it back.
+          const liveTeam = (await getLiveTeam(ctx, teamId))[0];
+          if (!liveTeam) throw new Error("Team not found");
+          await saveLiveTeam(ctx, {
+            ...liveTeam,
+            playhq_team_id:
+              patch.playhq_team_id !== undefined
+                ? patch.playhq_team_id
+                  ? [patch.playhq_team_id]
+                  : []
+                : liveTeam.playhq_team_id,
+            playhq_competition_id:
+              patch.playhq_competition_id !== undefined
+                ? patch.playhq_competition_id
+                  ? [patch.playhq_competition_id]
+                  : []
+                : liveTeam.playhq_competition_id,
+            playhq_auto_create_events:
+              patch.playhq_auto_create_events ?? liveTeam.playhq_auto_create_events,
+          });
+        },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["team-playhq-link", teamId] });
