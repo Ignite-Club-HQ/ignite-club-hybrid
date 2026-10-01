@@ -58,6 +58,8 @@ import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
 import { SeriesEndDateEditor } from "@/components/event/SeriesEndDateEditor";
 import { EventEditScheduleSection } from "@/components/event/EventEditScheduleSection";
 import { eventKeys } from "@/lab/eventQueryKeys";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMiniLeague, listLiveAdmins } from "@/live/features/miniLeagues";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalEvent, setLocalEventRecurrence, updateLocalEvent } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
