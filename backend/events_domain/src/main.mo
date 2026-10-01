@@ -163,7 +163,27 @@ persistent actor {
       index += 1;
     };
     events := events.concat(created);
+    let parent : Types.AssociationEvent = {
+      id = "assoc-" # association_id # "-" # Nat.toText(associationEvents.size() + 1) # "-" # Nat64.toText(nowMs() % 1_000_000_000);
+      association_id; title; description; location; starts_at_ms; ends_at_ms;
+      created_by = caller;
+      created_at_ms = nowMs();
+      child_event_ids = created.map(func(e) = e.id);
+      deleted = false;
+    };
+    associationEvents := associationEvents.concat([parent]);
     #Ok(Nat.toNat16(created.size()))
+  };
+
+  // Association panel read (Phase 3, F5): parents for one association,
+  // visible to anyone the association's club admins would show it to —
+  // callers must be a club admin of the association (or governor/bulk).
+  // child_event_ids carries the fan-out so the panel can show counts.
+  public query ({ caller }) func list_association_events(association_id : Text) : async { #Ok : [Types.AssociationEvent]; #Err : Text } {
+    auth(caller);
+    let allowed = isGovernor(caller) or hasBulkAccess(caller) or hasRole(caller, "club_admin", association_id, null);
+    if (not allowed) return #Err("Association admin required");
+    #Ok(associationEvents.filter(func(a) = a.association_id == association_id and not a.deleted))
   };
 
   // Child display record for award flows (Phase 3, F8): the awarding
