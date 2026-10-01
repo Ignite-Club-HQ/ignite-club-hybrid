@@ -1,6 +1,7 @@
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
+import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Int "mo:core/Int";
 import Principal "mo:core/Principal";
@@ -940,7 +941,7 @@ persistent actor {
       if (r.message_id == message_id) {
         var found = false;
         summary := Array.map<Types.ReactionSummary, Types.ReactionSummary>(summary, func(s) = if (s.emoji == r.emoji) { found := true; { s with count = s.count + 1 } } else { s });
-        if (not found) { summary := summary.concat([{ emoji = r.emoji; count = 1 }]) };
+        if (not found) { summary := summary.concat([{ emoji = r.emoji; count = 1 : Nat32 }]) };
       };
     };
     summary
@@ -1013,7 +1014,7 @@ persistent actor {
     var entries : [Types.RecentConversation] = [];
     for (conversation in conversations.values()) {
       if (conversation.participants.any(func(p) = p.equal(principal)) and not isGroupDeleted(conversation.id)) {
-        let lastSeq = if (conversation.next_sequence == 0) 0 else conversation.next_sequence - 1 : Nat64;
+        let lastSeq : Nat64 = if (conversation.next_sequence == 0) 0 else conversation.next_sequence - 1;
         entries := entries.concat([{ conversation_id = conversation.id; kind = inferConversationKind(conversation); last_message_sequence = lastSeq; last_message_at_ms = null }]);
       };
     };
