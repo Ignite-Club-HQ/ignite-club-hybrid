@@ -37,8 +37,14 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveClubTerms,
+  saveLiveClubTerm,
+  setLiveClubTermStatus,
+  deleteLiveClubTerm,
+  type LiveClubTerm,
+} from "@/live/features/club";
 
 interface TermsManagerProps {
   clubId: string;
@@ -53,28 +59,41 @@ export function TermsManager({ clubId }: TermsManagerProps) {
   const [startDate, setStartDate] = useState<Date>();
   const [endDate, setEndDate] = useState<Date>();
 
-  // NEEDS-CANISTER: club_domain has no terms/class-term table (team records
-  // only) — gate the whole terms surface off for ICP-routed membership
-  // instead of throwing uuid-shaped Supabase errors for II principals.
-  const termsIsIcp = isFeatureRoutedToIcp("membership");
-
+  // Terms live on club_domain in ICP mode (save/list/set_status/delete);
+  // the Supabase branch keeps the terms table.
   const { data: terms = [], isLoading } = useQuery({
     queryKey: ["terms", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("terms")
-        .select("*")
-        .eq("club_id", clubId)
-        .order("start_date", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !termsIsIcp,
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("terms")
+            .select("*")
+            .eq("club_id", clubId)
+            .order("start_date", { ascending: false });
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const canisterTerms = await listLiveClubTerms(ctx, clubId);
+          return canisterTerms
+            .map((t) => ({
+              id: t.id,
+              club_id: t.club_id,
+              name: t.name,
+              start_date: t.start_date,
+              end_date: t.end_date,
+              is_active: t.is_active,
+              status: t.status,
+              created_at_ms: Number(t.created_at_ms),
+            }))
+            .sort((a, b) => b.start_date.localeCompare(a.start_date));
+        },
+      }),
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
       if (!name.trim() || !startDate || !endDate) throw new Error("Missing fields");
 
       if (endDate <= startDate) {
@@ -99,18 +118,37 @@ export function TermsManager({ clubId }: TermsManagerProps) {
         end_date: format(endDate, "yyyy-MM-dd"),
       };
 
-      if (editingTerm) {
-        const { error } = await supabase
-          .from("terms")
-          .update(payload)
-          .eq("id", editingTerm.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("terms")
-          .insert(payload);
-        if (error) throw error;
-      }
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          if (editingTerm) {
+            const { error } = await supabase
+              .from("terms")
+              .update(payload)
+              .eq("id", editingTerm.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from("terms")
+              .insert(payload);
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          // The canister enforces the same no-overlapping-active-terms rule;
+          // an empty id creates, a known id updates in place.
+          const term: LiveClubTerm = {
+            id: editingTerm?.id ?? "",
+            club_id: payload.club_id,
+            name: payload.name,
+            start_date: payload.start_date,
+            end_date: payload.end_date,
+            is_active: editingTerm ? editingTerm.is_active : true,
+            status: editingTerm?.status ?? "active",
+            created_at_ms: BigInt(editingTerm?.created_at_ms ?? 0),
+          };
+          await saveLiveClubTerm(ctx, term);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -124,12 +162,16 @@ export function TermsManager({ clubId }: TermsManagerProps) {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
-      const { error } = await supabase
-        .from("terms")
-        .update({ is_active: isActive, status: isActive ? "active" : "archived" })
-        .eq("id", id);
-      if (error) throw error;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("terms")
+            .update({ is_active: isActive, status: isActive ? "active" : "archived" })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: (ctx) => setLiveClubTermStatus(ctx, id, isActive ? "active" : "archived"),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -137,14 +179,18 @@ export function TermsManager({ clubId }: TermsManagerProps) {
   });
 
   const setTermStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
-      const isActive = status === "active";
-      const { error } = await supabase
-        .from("terms")
-        .update({ status, is_active: isActive })
-        .eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, status }: { id: string; status: "active" | "archived" | "completed" }) => {
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const isActive = status === "active";
+          const { error } = await supabase
+            .from("terms")
+            .update({ status, is_active: isActive })
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: (ctx) => setLiveClubTermStatus(ctx, id, status),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });
@@ -153,9 +199,13 @@ export function TermsManager({ clubId }: TermsManagerProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      assertSupabaseWritePath("membership", "club terms (terms table) has no club_domain counterpart");
-      const { error } = await supabase.from("terms").delete().eq("id", id);
-      if (error) throw error;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("terms").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: (ctx) => deleteLiveClubTerm(ctx, id),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["terms", clubId] });

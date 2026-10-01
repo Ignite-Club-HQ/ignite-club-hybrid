@@ -19,8 +19,15 @@ import {
 } from "@/components/ui/sheet";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubBranding, createLivePendingInvite } from "@/live/features/club";
+import {
+  listLiveRoleGrants,
+  addLiveRoleGrant,
+  searchLiveInvitableProfiles,
+} from "@/live/features/membership";
+import { enqueueLiveNotification } from "@/live/features/notifications";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -55,6 +62,7 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
     id: string;
     display_name: string | null;
     avatar_url: string | null;
+    account_id?: string | null;
   } | null>(null);
   const [customName, setCustomName] = useState("");
   const [customEmail, setCustomEmail] = useState("");
@@ -67,86 +75,156 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
   const debouncedSearch = useDebounce(customName, 300);
   const nativeKbHeight = useNativeKeyboardBottomInset();
 
-  // NEEDS-CANISTER: club_domain has list_role_grants (member list) but no
-  // club branding read or a fuzzy-search-by-name/email lookup equivalent to
-  // search_invitable_profiles — gate all three Supabase lookups off for
-  // ICP-routed membership so they don't throw uuid-shaped errors for II
-  // principals; the member-add flow falls back to the "add pending member by
-  // name" path, which is already gated at the mutation.
+  // In ICP mode all three lookups run against the canisters: club-wide role
+  // grants + branding from club_domain, fuzzy name search from
+  // identity_access. membershipIsIcp remains only to skip the Supabase-only
+  // email send on the pending-invite path.
   const membershipIsIcp = isFeatureRoutedToIcp("membership");
 
   // Fetch existing club admins
   const { data: existingMembers } = useQuery({
     queryKey: ["club-roles", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", clubId)
-        .is("team_id", null);
-      return data?.map(m => m.user_id) || [];
-    },
-    enabled: !!clubId && !membershipIsIcp,
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("club_id", clubId)
+            .is("team_id", null);
+          return data?.map(m => m.user_id) || [];
+        },
+        icp: async (ctx) => {
+          // Club-wide grants only (team-scoped grants don't make someone a
+          // club admin); match by account_id, which is what the ICP search
+          // results carry.
+          const grants = await listLiveRoleGrants(ctx, clubId);
+          return grants
+            .filter((g) => g.team.length === 0)
+            .map((g) => g.account_id);
+        },
+      }),
+    enabled: !!clubId,
   });
 
   // Fetch club branding data for emails
   const { data: clubBranding } = useQuery({
     queryKey: ["club-branding", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("clubs")
-        .select("name, logo_url, contact_email")
-        .eq("id", clubId)
-        .single();
-      return data;
-    },
-    enabled: !!clubId && !membershipIsIcp,
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("clubs")
+            .select("name, logo_url, contact_email")
+            .eq("id", clubId)
+            .single();
+          return data;
+        },
+        icp: async (ctx) => {
+          const branding = await getLiveClubBranding(ctx, clubId);
+          return {
+            name: branding.name,
+            logo_url: branding.logo_url[0] ?? null,
+            contact_email: branding.contact_email[0] ?? null,
+          };
+        },
+      }),
+    enabled: !!clubId,
   });
 
   // Search for existing users
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
     queryKey: ["user-search-club-admin", debouncedSearch, clubId],
-    queryFn: async () => {
-      if (debouncedSearch.length < 2) return [];
-      const { data } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedSearch,
-        _limit: 8,
-        _club_id: clubId ?? null,
-      });
-      return (data || []) as Array<{
-        id: string;
-        display_name: string | null;
-        avatar_url: string | null;
-        masked_email: string | null;
-      }>;
-    },
-    enabled: debouncedSearch.length >= 2 && !membershipIsIcp,
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          if (debouncedSearch.length < 2) return [];
+          const { data } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedSearch,
+            _limit: 8,
+            _club_id: clubId ?? null,
+          });
+          return (data || []) as Array<{
+            id: string;
+            display_name: string | null;
+            avatar_url: string | null;
+            masked_email: string | null;
+            account_id?: string | null;
+          }>;
+        },
+        icp: async (ctx) => {
+          if (debouncedSearch.length < 2) return [];
+          // identity_access search: id is the account's principal (the role-
+          // grant target), account_id is the notification target. II profiles
+          // have no email and avatar_ref is a media blob ref, so those map
+          // to null here.
+          const results = await searchLiveInvitableProfiles(ctx, debouncedSearch, 8);
+          return results.map((r) => ({
+            id: r.id,
+            display_name: r.display_name,
+            avatar_url: null as string | null,
+            masked_email: null as string | null,
+            account_id: r.account_id,
+          }));
+        },
+      }),
+    enabled: debouncedSearch.length >= 2,
   });
 
-  // Filter out existing members
+  // Filter out existing members (account_id in ICP mode, user id otherwise)
   const filteredResults = searchResults.filter(
-    user => !existingMembers?.includes(user.id)
+    user => !existingMembers?.includes(user.account_id ?? user.id)
   );
 
   // Add existing user directly to club
   const addExistingUserMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "club admin role grant via add_role_grant has no notification/email equivalent"); // NEEDS-CANISTER: club admin role grant via add_role_grant has no notification/email equivalent
       if (!selectedUser) throw new Error("No user selected");
+      const userToAdd = selectedUser;
 
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: selectedUser.id,
-        club_id: clubId,
-        role: selectedRole,
-      });
-      if (error) throw error;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").insert({
+            user_id: userToAdd.id,
+            club_id: clubId,
+            role: selectedRole,
+          });
+          if (error) throw error;
 
-      // Send notification
-      await supabase.from("notifications").insert({
-        user_id: selectedUser.id,
-        type: "membership",
-        message: `You have been added to ${clubName} as ${roleConfig[selectedRole].label}`,
-        related_id: clubId,
+          // Send notification
+          await supabase.from("notifications").insert({
+            user_id: userToAdd.id,
+            type: "membership",
+            message: `You have been added to ${clubName} as ${roleConfig[selectedRole].label}`,
+            related_id: clubId,
+          });
+        },
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          await addLiveRoleGrant(
+            ctx,
+            Principal.fromText(userToAdd.id),
+            clubId,
+            selectedRole,
+            null,
+          );
+          // Best-effort in-app notification via notification_queue — a
+          // notification failure must not roll back the role grant.
+          if (userToAdd.account_id) {
+            try {
+              await enqueueLiveNotification(ctx, {
+                id: crypto.randomUUID(),
+                userId: userToAdd.account_id,
+                clubId,
+                kind: "membership",
+                body: `You have been added to ${clubName} as ${roleConfig[selectedRole].label}`,
+                idempotencyKey: crypto.randomUUID(),
+              });
+            } catch (notifyError) {
+              console.warn("Role grant notification failed (best-effort):", notifyError);
+            }
+          }
+        },
       });
     },
     onSuccess: () => {
@@ -170,35 +248,53 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
   // Add pending member (by name) with invite
   const addPendingMemberMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "club-level named pending invite (pending_invites row) has no club_domain counterpart"); // NEEDS-CANISTER: club-level named pending invite (pending_invites row) has no club_domain counterpart
       if (!customName.trim()) throw new Error("Please enter a name");
 
-      // Create a unique token for this specific pending invite
-      const inviteToken = crypto.randomUUID();
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          // Create a unique token for this specific pending invite
+          const inviteToken = crypto.randomUUID();
 
-      // Create pending invite record with the unique token
-      const { error: inviteError } = await supabase.from("pending_invites").insert({
-        club_id: clubId,
-        team_id: null,
-        role: selectedRole as any,
-        invited_user_id: null, // Will be set when user accepts invite
-        invited_by_user_id: user!.id,
-        invited_label: customName.trim(),
-        invited_email: customEmail.trim().toLowerCase() || null,
-        invite_token: inviteToken,
-      } as any);
-      if (inviteError) throw inviteError;
+          // Create pending invite record with the unique token
+          const { error: inviteError } = await supabase.from("pending_invites").insert({
+            club_id: clubId,
+            team_id: null,
+            role: selectedRole as any,
+            invited_user_id: null, // Will be set when user accepts invite
+            invited_by_user_id: user!.id,
+            invited_label: customName.trim(),
+            invited_email: customEmail.trim().toLowerCase() || null,
+            invite_token: inviteToken,
+          } as any);
+          if (inviteError) throw inviteError;
 
-      // Use the pending invite token for name-restricted link
-      const link = `${window.location.origin}/join/p/${inviteToken}`;
-      return { link, email: customEmail.trim(), inviteToken };
+          // Use the pending invite token for name-restricted link
+          const link = `${window.location.origin}/join/p/${inviteToken}`;
+          return { link, email: customEmail.trim(), inviteToken };
+        },
+        icp: async (ctx) => {
+          // club_domain pending invite — the invite id doubles as the
+          // /join/p/<id> share token. The canister record has no label/note
+          // field, so the entered name is only used for the confirmation UI.
+          const { invite } = await createLivePendingInvite(ctx, {
+            kind: "club",
+            clubId,
+            email: customEmail.trim().toLowerCase(),
+            role: selectedRole,
+          });
+          const link = `${window.location.origin}/join/p/${invite.id}`;
+          return { link, email: customEmail.trim(), inviteToken: invite.id };
+        },
+      });
     },
     onSuccess: async ({ link, email, inviteToken }) => {
       setInviteLink(link);
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
 
-      // Auto-send email notification if email was provided
-      if (email) {
+      // Auto-send email notification if email was provided. The send runs
+      // through Supabase, which an Internet Identity session can't call, so
+      // in ICP mode the invite link is shown for manual sharing instead.
+      if (email && !membershipIsIcp) {
         setIsSendingNotification(true);
         let emailSent = false;
         let emailId: string | null = null;
