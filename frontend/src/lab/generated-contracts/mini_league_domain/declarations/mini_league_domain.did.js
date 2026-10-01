@@ -106,6 +106,14 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'min_players_per_side' : IDL.Nat16,
   });
+  const MiniLeagueJoinLink = IDL.Record({
+    'token' : IDL.Text,
+    'mini_league_id' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'revision' : IDL.Nat64,
+  });
   const MiniLeagueSessionAvailability = IDL.Record({
     'id' : IDL.Text,
     'player_id' : IDL.Text,
@@ -196,6 +204,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
         [],
       ),
+    'create_mini_league_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_session' : IDL.Func(
         [
           IDL.Text,
@@ -235,6 +248,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'join_mini_league_by_token' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ClaimedInvite, 'Err' : IDL.Text })],
+        [],
+      ),
     'list_admins' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueAdmin), 'Err' : IDL.Text })],
@@ -268,6 +286,11 @@ export const idlFactory = ({ IDL }) => {
     'list_invites' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_mini_league_join_links' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueJoinLink), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_mini_leagues_by_club' : IDL.Func(
@@ -309,6 +332,16 @@ export const idlFactory = ({ IDL }) => {
     'remove_player' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_mini_league_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rotate_mini_league_join_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         [],
       ),
     'set_availability' : IDL.Func(
