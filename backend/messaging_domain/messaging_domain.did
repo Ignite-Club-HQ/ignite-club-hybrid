@@ -279,6 +279,10 @@ service : {
                                            Err: text;
                                            Ok: Message;
                                          });
+  delete_poll: (poll_id: text) -> (variant {
+                                     Err: text;
+                                     Ok;
+                                   });
   dm_attachments_disabled: (user: principal) -> (bool) query;
   export_state: () -> (variant {
                          Err: text;
@@ -322,6 +326,11 @@ service : {
                        Ok;
                      });
   is_competition_admin: (conversation_id: text) -> (bool) query;
+  leave_group: (conversation_id: text) ->
+   (variant {
+      Err: text;
+      Ok: GroupMetadata;
+    });
   listBulkAccessPrincipals: () ->
    (variant {
       Err: text;
@@ -375,6 +384,11 @@ service : {
    (variant {
       Err: text;
       Ok;
+    });
+  remove_group_member: (conversation_id: text, member: principal) ->
+   (variant {
+      Err: text;
+      Ok: GroupMetadata;
     });
   replay_scheduled_message: (id: text) ->
    (variant {

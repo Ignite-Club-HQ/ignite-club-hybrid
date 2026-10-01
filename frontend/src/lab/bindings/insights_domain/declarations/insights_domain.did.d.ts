@@ -32,9 +32,15 @@ export interface AuditLog {
   'target_user_id' : [] | [string],
 }
 export interface Benchmark {
+  'dau' : [] | [number],
+  'mau' : [] | [number],
+  'wau' : [] | [number],
+  'posters' : [] | [number],
   'value' : number,
   'period' : string,
+  'read_rate' : [] | [number],
   'updated_at_ms' : bigint,
+  'total_members' : [] | [number],
   'metric_key' : string,
 }
 export interface ClientPerfAggregate {
@@ -94,6 +100,13 @@ export interface PerfSampleInput {
   'surface' : string,
   'platform' : string,
   'duration_ms' : number,
+}
+export interface SponsorBenchmarkRow {
+  'ctr' : number,
+  'clicks' : number,
+  'impressions' : number,
+  'sponsor_id' : string,
+  'unique_reach' : number,
 }
 export interface SponsorPerformance {
   'metrics' : Array<{ 'metric' : string, 'value' : number }>,
@@ -159,6 +172,11 @@ export interface _SERVICE {
   'get_benchmarks' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<Benchmark> } |
+      { 'Err' : string }
+  >,
+  'get_sponsor_benchmarks' : ActorMethod<
+    [Array<string>, string, string],
+    { 'Ok' : Array<SponsorBenchmarkRow> } |
       { 'Err' : string }
   >,
   'get_sponsor_performance' : ActorMethod<
@@ -234,7 +252,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'record_sponsor_metric' : ActorMethod<
-    [string, string, number],
+    [string, string, number, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -249,7 +267,17 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'set_benchmark' : ActorMethod<
-    [string, string, number],
+    [
+      string,
+      string,
+      number,
+      [] | [number],
+      [] | [number],
+      [] | [number],
+      [] | [number],
+      [] | [number],
+      [] | [number],
+    ],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

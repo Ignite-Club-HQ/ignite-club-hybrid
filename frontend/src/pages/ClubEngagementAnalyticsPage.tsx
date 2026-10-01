@@ -1708,18 +1708,30 @@ function IcpEngagementTotalsCard({
   field,
   label,
   icon: Icon,
+  benchmark,
 }: {
   b: IcpEngagementBenchmarks | undefined;
   field: keyof IcpEngagementBenchmarks["current"];
   label: string;
   icon: any;
+  /** Optional platform `Benchmark` row (get_benchmarks) with dau/wau/mau/posters/read_rate/total_members. */
+  benchmark?: { dau?: number | null; wau?: number | null; mau?: number | null; posters?: number | null; read_rate?: number | null; total_members?: number | null } | null;
 }) {
   if (!b) return <Skeleton className="h-24 w-full" />;
   const current = Number(b.current[field] || 0);
   const previous = Number(b.previous[field] || 0);
+  const extras: { label: string; value: number }[] = [];
+  if (benchmark) {
+    if (benchmark.total_members != null) extras.push({ label: "Total members", value: benchmark.total_members });
+    if (benchmark.dau != null) extras.push({ label: "DAU", value: benchmark.dau });
+    if (benchmark.wau != null) extras.push({ label: "WAU", value: benchmark.wau });
+    if (benchmark.mau != null) extras.push({ label: "MAU", value: benchmark.mau });
+    if (benchmark.posters != null) extras.push({ label: "Posters", value: benchmark.posters });
+    if (benchmark.read_rate != null) extras.push({ label: "Read rate", value: benchmark.read_rate });
+  }
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-end justify-between gap-3">
           <div>
             <div className="text-3xl font-bold text-primary flex items-center gap-2">
@@ -1733,6 +1745,16 @@ function IcpEngagementTotalsCard({
             <TrendBadge current={current} previous={previous} suffix="%" />
           </div>
         </div>
+        {extras.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+            {extras.map((e) => (
+              <div key={e.label} className="text-center">
+                <div className="text-sm font-semibold">{e.value.toLocaleString()}</div>
+                <div className="text-[10px] text-muted-foreground">{e.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -1746,13 +1768,16 @@ function sumDayPoints(points: EngagementDayPoint[] | undefined): number {
 function IcpSponsorPerformanceCard({
   series,
   totalUniqueReach,
+  sponsorRows,
 }: {
   series: { clicks: EngagementDayPoint[]; impressions: EngagementDayPoint[] } | null | undefined;
   totalUniqueReach: number;
+  /** Per-sponsor get_sponsor_benchmarks rows, when available. */
+  sponsorRows?: { sponsor_id: string; impressions: number; clicks: number; unique_reach: number; ctr: number }[] | null;
 }) {
   if (!series) return <Skeleton className="h-40 w-full" />;
-  const totalClicks = sumDayPoints(series.clicks);
-  const totalImpressions = sumDayPoints(series.impressions);
+  const totalClicks = sponsorRows?.length ? sponsorRows.reduce((a, r) => a + r.clicks, 0) : sumDayPoints(series.clicks);
+  const totalImpressions = sponsorRows?.length ? sponsorRows.reduce((a, r) => a + r.impressions, 0) : sumDayPoints(series.impressions);
   const ctr = totalImpressions ? Math.round((totalClicks / totalImpressions) * 1000) / 10 : 0;
   if (totalClicks === 0 && totalImpressions === 0) {
     return (
@@ -1776,10 +1801,41 @@ function IcpSponsorPerformanceCard({
         <Metric icon={TrendingUp} label="CTR" value={`${ctr}%`} />
         <Metric icon={Users} label="Members Reached" value={totalUniqueReach} hint="unique identified members" />
       </div>
+      {sponsorRows && sponsorRows.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Per-sponsor performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sponsor</TableHead>
+                  <TableHead className="text-right">Impressions</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
+                  <TableHead className="text-right">Unique reach</TableHead>
+                  <TableHead className="text-right">CTR</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sponsorRows.map((r) => (
+                  <TableRow key={r.sponsor_id}>
+                    <TableCell className="font-mono text-xs">{r.sponsor_id}</TableCell>
+                    <TableCell className="text-right">{r.impressions.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{r.clicks.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{r.unique_reach.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{r.ctr.toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Sponsor impressions & clicks over time</CardTitle>
-          <CardDescription className="text-xs">Aggregate across all sponsors for this club (canister has no per-sponsor breakdown yet)</CardDescription>
+          <CardDescription className="text-xs">Aggregate across all sponsors for this club</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-48">

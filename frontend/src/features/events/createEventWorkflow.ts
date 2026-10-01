@@ -1,5 +1,5 @@
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveEvent, createLiveEventSeries, setLiveEventDuty } from "@/live/features/events";
+import { createLiveEvent, createLiveEventSeries, createLiveOpenDuty, setLiveEventDuty } from "@/live/features/events";
 
 export type CreateEventTransactionInput = {
   event: Record<string, unknown>;
@@ -65,7 +65,11 @@ export async function createEventTransaction(
         const first = events[0];
         if (!first) throw new Error("Event series could not be created.");
         for (const duty of input.duties) {
-          await setLiveEventDuty(ctx, first.id, duty.assigned_to ?? "", duty.name);
+          if (duty.assigned_to) {
+            await setLiveEventDuty(ctx, first.id, duty.assigned_to, duty.name);
+          } else {
+            await createLiveOpenDuty(ctx, first.id, duty.name);
+          }
         }
         return first.id;
       }
@@ -75,9 +79,15 @@ export async function createEventTransaction(
       // Best-effort duty sync: the canister has no equivalent of the atomic
       // create_event_with_duties RPC, so duties are written as a separate
       // sequence of calls after the event exists — atomicity with the event
-      // create is not guaranteed on ICP.
+      // create is not guaranteed on ICP. Unassigned duties become open-duty
+      // board entries (create_open_duty) rather than being set-duty'd onto an
+      // empty account id.
       for (const duty of input.duties) {
-        await setLiveEventDuty(ctx, created.id, duty.assigned_to ?? "", duty.name);
+        if (duty.assigned_to) {
+          await setLiveEventDuty(ctx, created.id, duty.assigned_to, duty.name);
+        } else {
+          await createLiveOpenDuty(ctx, created.id, duty.name);
+        }
       }
 
       return created.id;

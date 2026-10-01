@@ -7,6 +7,14 @@ type SponsorPerformance =
    period: text;
    sponsor_id: text;
  };
+type SponsorBenchmarkRow = 
+ record {
+   clicks: nat32;
+   ctr: float64;
+   impressions: nat32;
+   sponsor_id: text;
+   unique_reach: nat32;
+ };
 type PerfSampleInput = 
  record {
    cache_hit: bool;
@@ -81,10 +89,16 @@ type ClientPerfAggregate =
  };
 type Benchmark = 
  record {
+   dau: opt nat32;
+   mau: opt nat32;
    metric_key: text;
    period: text;
+   posters: opt nat32;
+   read_rate: opt float64;
+   total_members: opt nat32;
    updated_at_ms: nat64;
    value: float64;
+   wau: opt nat32;
  };
 type AuditLog = 
  record {
@@ -176,6 +190,12 @@ service : {
       Err: text;
       Ok: vec Benchmark;
     }) query;
+  get_sponsor_benchmarks: (sponsor_ids: vec text, since_period: text,
+   until_period: text) ->
+   (variant {
+      Err: text;
+      Ok: vec SponsorBenchmarkRow;
+    }) query;
   get_sponsor_performance: (sponsor_id: text, period: text) ->
    (variant {
       Err: text;
@@ -256,11 +276,11 @@ service : {
                                                    Err: text;
                                                    Ok;
                                                  });
-  record_sponsor_metric: (sponsor_id: text, metric: text, delta: float64) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
+  record_sponsor_metric: (sponsor_id: text, metric: text, delta: float64,
+   account_id: opt text) -> (variant {
+                               Err: text;
+                               Ok;
+                             });
   record_web_vital: (metric_name: text, metric_value: float64, rating: 
    text, page_path: text) -> (variant {
                                 Err: text;
@@ -270,11 +290,12 @@ service : {
                                         Err: text;
                                         Ok: AdminAlert;
                                       });
-  set_benchmark: (metric_key: text, period: text, value: float64) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
+  set_benchmark: (metric_key: text, period: text, value: float64,
+   total_members: opt nat32, dau: opt nat32, wau: opt nat32, mau: opt nat32,
+   posters: opt nat32, read_rate: opt float64) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
   submit_feedback: (kind: text, title: opt text, message: text, page_url:
    opt text) -> (variant {
                    Err: text;

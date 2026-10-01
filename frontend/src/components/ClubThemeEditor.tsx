@@ -11,6 +11,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveClubThemePalette, setLiveClubHeaderToggles } from "@/live/features/club";
 import { useTheme } from "next-themes";
 
 interface HSLColor {
@@ -255,60 +257,69 @@ export function ClubThemeEditor({
   const [activeTab, setActiveTab] = useState<string>(resolvedTheme === "dark" ? "dark" : "light");
 
   const handleSave = async () => {
-    // NEEDS-CANISTER: club theme (light/dark HSL palette, header logo/name
-    // display toggles) has no shape on club_domain's ClubSettings/ClubProfile
-    // today; only primary_color/secondary_color exist there.
-    try {
-      assertSupabaseWritePath("membership", "club theme colors and header display settings");
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-      return;
-    }
     setSaving(true);
-    
-    const { error } = await supabase
-      .from("clubs")
-      .update({
-        theme_primary_h: primary.h,
-        theme_primary_s: primary.s,
-        theme_primary_l: primary.l,
-        theme_secondary_h: secondary.h,
-        theme_secondary_s: secondary.s,
-        theme_secondary_l: secondary.l,
-        theme_accent_h: accent.h,
-        theme_accent_s: accent.s,
-        theme_accent_l: accent.l,
-        theme_dark_primary_h: darkPrimary.h,
-        theme_dark_primary_s: darkPrimary.s,
-        theme_dark_primary_l: darkPrimary.l,
-        theme_dark_secondary_h: darkSecondary.h,
-        theme_dark_secondary_s: darkSecondary.s,
-        theme_dark_secondary_l: darkSecondary.l,
-        theme_dark_accent_h: darkAccent.h,
-        theme_dark_accent_s: darkAccent.s,
-        theme_dark_accent_l: darkAccent.l,
-        show_logo_in_header: showLogoInHeader,
-        show_name_in_header: showNameInHeader,
-        logo_only_mode: logoOnlyMode,
-      })
-      .eq("id", clubId);
 
-    setSaving(false);
-
-    if (error) {
+    try {
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("clubs")
+            .update({
+              theme_primary_h: primary.h,
+              theme_primary_s: primary.s,
+              theme_primary_l: primary.l,
+              theme_secondary_h: secondary.h,
+              theme_secondary_s: secondary.s,
+              theme_secondary_l: secondary.l,
+              theme_accent_h: accent.h,
+              theme_accent_s: accent.s,
+              theme_accent_l: accent.l,
+              theme_dark_primary_h: darkPrimary.h,
+              theme_dark_primary_s: darkPrimary.s,
+              theme_dark_primary_l: darkPrimary.l,
+              theme_dark_secondary_h: darkSecondary.h,
+              theme_dark_secondary_s: darkSecondary.s,
+              theme_dark_secondary_l: darkSecondary.l,
+              theme_dark_accent_h: darkAccent.h,
+              theme_dark_accent_s: darkAccent.s,
+              theme_dark_accent_l: darkAccent.l,
+              show_logo_in_header: showLogoInHeader,
+              show_name_in_header: showNameInHeader,
+              logo_only_mode: logoOnlyMode,
+            })
+            .eq("id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // club_domain's ClubSettings has a single theme palette (no
+          // separate dark-mode colors) and no logo_only_mode flag.
+          // NEEDS-CANISTER: dark-mode palette + logo_only_mode fields.
+          await setLiveClubThemePalette(
+            ctx,
+            clubId,
+            hslToHex(primary.h, primary.s, primary.l),
+            hslToHex(secondary.h, secondary.s, secondary.l),
+            hslToHex(accent.h, accent.s, accent.l),
+          );
+          await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, showNameInHeader);
+        },
+      });
+    } catch (e: any) {
       toast({
         title: "Error",
-        description: "Failed to save theme. Please try again.",
+        description: e?.message || "Failed to save theme. Please try again.",
         variant: "destructive",
       });
+      setSaving(false);
       return;
     }
 
+    setSaving(false);
     toast({
       title: "Theme saved!",
       description: "Your club's color scheme has been updated.",
     });
-    
+
     onSave?.();
   };
 
@@ -603,14 +614,19 @@ export function ClubThemeEditor({
             checked={showLogoInHeader}
             onCheckedChange={async (checked) => {
               setShowLogoInHeader(checked);
-              
-              // Auto-save immediately
-              const { error } = await supabase
-                .from("clubs")
-                .update({ show_logo_in_header: checked })
-                .eq("id", clubId);
-              
-              if (error) {
+
+              try {
+                await withFeatureBackend("membership", {
+                  supabase: async () => {
+                    const { error } = await supabase
+                      .from("clubs")
+                      .update({ show_logo_in_header: checked })
+                      .eq("id", clubId);
+                    if (error) throw error;
+                  },
+                  icp: (ctx) => setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader),
+                });
+              } catch {
                 toast({
                   title: "Error",
                   description: "Failed to update setting.",
@@ -646,14 +662,19 @@ export function ClubThemeEditor({
             checked={showNameInHeader}
             onCheckedChange={async (checked) => {
               setShowNameInHeader(checked);
-              
-              // Auto-save immediately
-              const { error } = await supabase
-                .from("clubs")
-                .update({ show_name_in_header: checked })
-                .eq("id", clubId);
-              
-              if (error) {
+
+              try {
+                await withFeatureBackend("membership", {
+                  supabase: async () => {
+                    const { error } = await supabase
+                      .from("clubs")
+                      .update({ show_name_in_header: checked })
+                      .eq("id", clubId);
+                    if (error) throw error;
+                  },
+                  icp: (ctx) => setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked),
+                });
+              } catch {
                 toast({
                   title: "Error",
                   description: "Failed to update setting.",

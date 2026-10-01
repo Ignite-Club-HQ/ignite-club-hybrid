@@ -620,6 +620,7 @@ service : {
                                Err: text;
                                Ok: Mutation;
                              });
+  my_role_grants: () -> (vec RoleGrant) query;
   reject_club_join_request: (id: text) ->
    (variant {
       Err: text;

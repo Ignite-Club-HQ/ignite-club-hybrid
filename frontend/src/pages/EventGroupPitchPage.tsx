@@ -17,7 +17,7 @@ import { AddDutySheet } from "@/components/AddDutySheet";
 import { AssignDutySheet } from "@/components/AssignDutySheet";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventDuty, removeLiveEventDuty } from "@/live/features/events";
+import { setLiveGroupDuty, removeLiveGroupDuty } from "@/live/features/events";
 import { getLiveMiniLeague } from "@/live/features/miniLeagues";
 
 // Lazy load PitchBoard for performance
@@ -326,6 +326,18 @@ function SupabaseEventGroupPitchPage() {
   // Add duty mutation
   const addDutyMutation = useMutation({
     mutationFn: async (name: string) => {
+      // Hybrid routing: the canister's set_group_duty creates-or-updates a
+      // group duty row keyed by (group_id, duty name) — a direct match for
+      // adding a new unassigned duty here.
+      const addedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveGroupDuty(ctx, groupId!, name, null);
+          return true;
+        },
+      });
+      if (addedOnIcp) return;
+
       const { error } = await supabase.from("event_group_duties").insert({
         group_id: groupId!,
         name,
@@ -343,24 +355,18 @@ function SupabaseEventGroupPitchPage() {
   // Assign duty mutation
   const assignDutyMutation = useMutation({
     mutationFn: async ({ dutyId, assignedTo }: { dutyId: string; assignedTo: string | null }) => {
-      // Hybrid routing: assigning a group duty maps onto the events_domain
-      // set_duty write (same shape as the main event duty flow in
-      // useEventDutyMutations — keyed by event + account + duty name).
-      // Unassigning (assignedTo === null) has no canister shape and always
-      // stays on Supabase. Provisional: verify duty-name keying against the
-      // live canister post-deploy.
-      const assignedOnIcp = assignedTo
-        ? await withFeatureBackend("events", {
-            supabase: () => false,
-            icp: async (ctx) => {
-              if (!eventId) throw new Error("Missing event ID");
-              const duty = duties?.find((candidate) => candidate.id === dutyId);
-              if (!duty?.name) throw new Error("Duty not found");
-              await setLiveEventDuty(ctx, eventId, assignedTo, duty.name);
-              return true;
-            },
-          })
-        : false;
+      // Hybrid routing: the canister's set_group_duty takes an optional
+      // account, so both assigning and unassigning (assignedTo === null)
+      // map directly onto it — keyed by group + duty name.
+      const assignedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          const duty = duties?.find((candidate) => candidate.id === dutyId);
+          if (!duty?.name) throw new Error("Duty not found");
+          await setLiveGroupDuty(ctx, groupId!, duty.name, assignedTo);
+          return true;
+        },
+      });
       if (assignedOnIcp) return;
 
       const { error } = await supabase
@@ -379,16 +385,14 @@ function SupabaseEventGroupPitchPage() {
   // Delete duty mutation
   const deleteDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
-      // Hybrid routing: removing an assigned group duty maps onto the
-      // events_domain remove_duty write (keyed by event + account); open
-      // (unassigned) duties have no canister shape and stay Supabase-only.
+      // Hybrid routing: the canister's remove_group_duty is keyed by
+      // group + duty name, so it covers both assigned and unassigned duties.
       const duty = duties?.find((candidate) => candidate.id === dutyId);
-      if (duty?.assigned_to) {
+      if (duty?.name) {
         const removedOnIcp = await withFeatureBackend("events", {
           supabase: () => false,
           icp: async (ctx) => {
-            if (!eventId) throw new Error("Missing event ID");
-            await removeLiveEventDuty(ctx, eventId, duty.assigned_to as string);
+            await removeLiveGroupDuty(ctx, groupId!, duty.name);
             return true;
           },
         });

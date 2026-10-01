@@ -1,5 +1,6 @@
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
+  createLiveOpenDuty,
   createLiveRecurringEventSeries,
   getLiveEventsSnapshot,
   setLiveEventDuty,
@@ -147,9 +148,14 @@ export async function syncEventDuties(
       // duty) call and no batch/delete-duty shape, so duty removals
       // (deleteIds) stay Supabase-only — no canister shape for deletion.
       // Atomicity with the Supabase RPC's single-transaction guarantee is
-      // not preserved here.
+      // not preserved here. Unassigned duties become open-duty board entries
+      // (create_open_duty) instead of a set-duty call with an empty account.
       for (const [idx, duty] of duties.entries()) {
-        await setLiveEventDuty(ctx, eventId, duty.assignedTo ?? "", duty.name);
+        if (duty.assignedTo) {
+          await setLiveEventDuty(ctx, eventId, duty.assignedTo, duty.name);
+        } else {
+          await createLiveOpenDuty(ctx, eventId, duty.name);
+        }
         void idx;
       }
       return [];

@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 export interface MentionScope {
   teamId?: string | null;
@@ -39,7 +42,23 @@ export function usePhotoMentionSuggestions(
     queryFn: async (): Promise<MentionUser[]> => {
       let userIds: string[] = [];
 
-      if (scope.teamId) {
+      if (isFeatureRoutedToIcp("membership") && (scope.teamId || scope.clubId)) {
+        // Internet Identity users: resolve the mention audience from the
+        // canister's caller-scoped role grants rather than Supabase
+        // `user_roles` (there is no cross-caller role lookup on the
+        // canister, so this only covers the signed-in caller's own scope).
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
+        });
+        userIds = [
+          ...new Set(
+            grants
+              .filter((g) => (scope.teamId ? g.team === scope.teamId : g.club === scope.clubId))
+              .map((g) => g.user.toText()),
+          ),
+        ];
+      } else if (scope.teamId) {
         const { data: roles } = await supabase
           .from("user_roles")
           .select("user_id")

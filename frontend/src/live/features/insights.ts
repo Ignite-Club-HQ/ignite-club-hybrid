@@ -418,3 +418,16 @@ export async function getLiveSponsorPerformance(
     "Get sponsor performance",
   );
 }
+
+export async function getLiveSponsorBenchmarks(
+  ctx: FeatureBackendContext,
+  sponsorIds: string[],
+  sincePeriod: string,
+  untilPeriod: string,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_sponsor_benchmarks(sponsorIds, sincePeriod, untilPeriod),
+    "Get sponsor benchmarks",
+  );
+}

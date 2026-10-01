@@ -44,10 +44,23 @@ export const idlFactory = ({ IDL }) => {
     'resolved_by' : IDL.Opt(IDL.Principal),
   });
   const Benchmark = IDL.Record({
+    'dau' : IDL.Opt(IDL.Nat32),
+    'mau' : IDL.Opt(IDL.Nat32),
+    'wau' : IDL.Opt(IDL.Nat32),
+    'posters' : IDL.Opt(IDL.Nat32),
     'value' : IDL.Float64,
     'period' : IDL.Text,
+    'read_rate' : IDL.Opt(IDL.Float64),
     'updated_at_ms' : IDL.Nat64,
+    'total_members' : IDL.Opt(IDL.Nat32),
     'metric_key' : IDL.Text,
+  });
+  const SponsorBenchmarkRow = IDL.Record({
+    'ctr' : IDL.Float64,
+    'clicks' : IDL.Nat32,
+    'impressions' : IDL.Nat32,
+    'sponsor_id' : IDL.Text,
+    'unique_reach' : IDL.Nat32,
   });
   const SponsorPerformance = IDL.Record({
     'metrics' : IDL.Vec(
@@ -170,6 +183,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Benchmark), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_sponsor_benchmarks' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(SponsorBenchmarkRow),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_sponsor_performance' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : SponsorPerformance, 'Err' : IDL.Text })],
@@ -269,7 +292,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'record_sponsor_metric' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Float64],
+        [IDL.Text, IDL.Text, IDL.Float64, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -284,7 +307,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_benchmark' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Float64],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Float64,
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Float64),
+        ],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -15,6 +15,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { resendLivePendingInvite } from "@/live/features/club";
 import PendingInviteCard from "./PendingInviteCard";
 import ReconcilePendingInvitesButton from "./ReconcilePendingInvitesButton";
 
@@ -61,13 +63,40 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
 
   const handleResendAll = async () => {
     if (invitesWithEmail.length === 0) return;
-    // NEEDS-CANISTER: resend-invite-email edge function call has no club_domain/mini_league_domain counterpart
+
     if (isFeatureRoutedToIcp("membership")) {
-      toast({
-        title: "Not available yet",
-        description: "Resending invite emails isn't available yet for Internet Identity accounts.",
-        variant: "destructive",
-      });
+      // ICP path: club_domain only exposes resend_pending_invite per-invite
+      // (it reissues the invite payload; there is no "send email" side
+      // effect on canister side — email delivery stays Supabase-only).
+      // NEEDS-CANISTER: actual email dispatch for resend_pending_invite's payload.
+      setIsResendingAll(true);
+      let sentCount = 0;
+      let failCount = 0;
+      for (const invite of invitesWithEmail) {
+        try {
+          await withFeatureBackend("membership", {
+            supabase: async () => {
+              throw new Error("unreachable: already routed to icp");
+            },
+            icp: (ctx) => resendLivePendingInvite(ctx, invite.id),
+          });
+          sentCount++;
+        } catch {
+          failCount++;
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+      setIsResendingAll(false);
+      setShowResendAllDialog(false);
+      if (failCount === 0) {
+        toast({ title: `Resent ${sentCount} invite${sentCount !== 1 ? "s" : ""}` });
+      } else {
+        toast({
+          title: `Resent ${sentCount}, failed ${failCount}`,
+          description: "Some invites could not be resent",
+          variant: failCount === invitesWithEmail.length ? "destructive" : undefined,
+        });
+      }
       return;
     }
     setIsResendingAll(true);

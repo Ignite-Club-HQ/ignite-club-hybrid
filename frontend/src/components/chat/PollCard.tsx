@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLivePollResults, voteLivePoll, closeLivePoll } from "@/live/features/messaging";
+import { getLivePollResults, voteLivePoll, closeLivePoll, deleteLivePoll } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -235,7 +235,15 @@ export function PollCard({ pollId }: PollCardProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: polls have no messaging_domain equivalent.
+      if (icpMode) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => deleteLivePoll(ctx, pollId),
+        });
+        return;
+      }
       assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase.from("polls").delete().eq("id", pollId);
       if (error) throw error;
@@ -301,16 +309,14 @@ export function PollCard({ pollId }: PollCardProps) {
                   <Lock className="h-4 w-4 mr-2" /> Close poll
                 </DropdownMenuItem>
               )}
-              {!icpMode && (
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={() => {
-                    if (confirm("Delete this poll? Votes will be removed.")) deleteMutation.mutate();
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete poll
-                </DropdownMenuItem>
-              )}
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => {
+                  if (confirm("Delete this poll? Votes will be removed.")) deleteMutation.mutate();
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" /> Delete poll
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         )}

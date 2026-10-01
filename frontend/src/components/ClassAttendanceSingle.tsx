@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveAttendance, markLiveAttendance } from "@/live/features/events";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -26,14 +27,16 @@ type AttendanceStatus = "present" | "absent" | "late";
 
 /**
  * This surface is keyed by (term_id, team_id, session_date) — a weekly class
- * schedule slot on the `teams`/`terms` tables — not a Supabase `events` row,
- * so there is no real event id to hand the events_domain canister's
- * mark_attendance/get_attendance calls (see live/features/events.ts). Until
- * class sessions are mapped onto canister events, the ICP branch reports
- * attendance tracking as unavailable rather than inventing a synthetic
- * event id.
+ * schedule slot on the `teams`/`terms` tables — not a Supabase `events` row.
+ * The events_domain canister's mark_attendance/get_attendance calls are keyed
+ * by event_id, so a stable per-session id is synthesised from team + date
+ * (provisional: `${teamId}:${sessionDate}` — verify against the live
+ * canister post-deploy; term switches on the same team/date collide, which
+ * matches the existing single-session-per-day assumption of this UI).
  */
-const ATTENDANCE_NOT_AVAILABLE_ON_ICP = "attendance-not-available-on-icp" as const;
+function liveSessionEventId(teamId: string, sessionDate: string): string {
+  return `${teamId}:${sessionDate}`;
+}
 
 export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleProps) {
   const { user } = useAuth();
@@ -105,14 +108,22 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
           if (error) throw error;
           return data;
         },
-        icp: async () => ATTENDANCE_NOT_AVAILABLE_ON_ICP,
+        icp: async (ctx) => {
+          const rows = await getLiveAttendance(ctx, liveSessionEventId(teamId, sessionDate));
+          return rows.map((r: any) => ({
+            id: `${r.subject_kind}:${r.subject_id}`,
+            child_id: r.subject_kind === "child" ? r.subject_id : null,
+            user_id: r.subject_kind === "member" ? r.subject_id : null,
+            status: r.status,
+          }));
+        },
       });
     },
     enabled: !!termId && !!sessionDate,
   });
 
-  const attendanceUnavailable = attendanceResult === ATTENDANCE_NOT_AVAILABLE_ON_ICP;
-  const attendance = attendanceUnavailable ? [] : attendanceResult;
+  const attendanceUnavailable = false;
+  const attendance = attendanceResult;
 
   const getStatus = (childId: string | null, userId: string | null): AttendanceStatus | null => {
     const record = attendance.find(
@@ -135,8 +146,14 @@ export function ClassAttendanceSingle({ teamId, clubId }: ClassAttendanceSingleP
           });
           if (error) throw error;
         },
-        icp: async () => {
-          throw new Error("Attendance tracking isn't available on this backend yet.");
+        icp: async (ctx) => {
+          await markLiveAttendance(ctx, liveSessionEventId(teamId, sessionDate), [
+            {
+              subjectKind: childId ? "child" : "member",
+              subjectId: (childId ?? userId) as string,
+              status,
+            },
+          ]);
         },
       });
     },

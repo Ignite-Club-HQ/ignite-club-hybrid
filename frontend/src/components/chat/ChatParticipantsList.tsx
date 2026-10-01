@@ -28,6 +28,8 @@ import { useOnlineSet } from "@/hooks/useUserPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { removeLiveGroupMember, leaveLiveGroup } from "@/live/features/messaging";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -165,7 +167,16 @@ export function ChatParticipantsList({
 
   const removeMemberMutation = useMutation({
     mutationFn: async (userId: string) => {
-      // NEEDS-CANISTER: messaging_domain group member removal.
+      if (useIcpLab) {
+        const { Principal } = await import("@icp-sdk/core/principal");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => removeLiveGroupMember(ctx, chatId, Principal.fromText(userId)),
+        });
+        return;
+      }
       assertSupabaseWritePath("messaging", "removing a group member");
       const { error } = await supabase
         .from("group_members")
@@ -187,7 +198,15 @@ export function ChatParticipantsList({
   const leaveGroupMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Not authenticated");
-      // NEEDS-CANISTER: messaging_domain leave-group call.
+      if (useIcpLab) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) => leaveLiveGroup(ctx, chatId),
+        });
+        return;
+      }
       assertSupabaseWritePath("messaging", "leaving a group");
       const { error } = await supabase
         .from("group_members")

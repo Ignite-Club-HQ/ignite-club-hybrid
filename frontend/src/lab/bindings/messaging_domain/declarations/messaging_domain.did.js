@@ -264,6 +264,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_poll' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'dm_attachments_disabled' : IDL.Func(
         [IDL.Principal],
         [IDL.Bool],
@@ -317,6 +322,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'leave_group' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        [],
+      ),
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -383,6 +393,11 @@ export const idlFactory = ({ IDL }) => {
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_group_member' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         [],
       ),
     'replay_scheduled_message' : IDL.Func(

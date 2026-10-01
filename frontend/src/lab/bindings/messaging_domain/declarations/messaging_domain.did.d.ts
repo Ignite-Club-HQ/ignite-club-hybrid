@@ -245,6 +245,7 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'delete_poll' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'forward_message' : ActorMethod<
@@ -282,6 +283,11 @@ export interface _SERVICE {
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_competition_admin' : ActorMethod<[string], boolean>,
+  'leave_group' : ActorMethod<
+    [string],
+    { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
@@ -332,6 +338,11 @@ export interface _SERVICE {
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_group_member' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
   'replay_scheduled_message' : ActorMethod<

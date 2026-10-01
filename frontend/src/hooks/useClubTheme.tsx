@@ -12,6 +12,8 @@ import {
   clearAppliedNotificationClubSwitch,
   getAppliedNotificationClubSwitch,
 } from "@/lib/notificationClubSwitch";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 
 interface HSLColor {
@@ -748,33 +750,44 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!user?.id || isIcp) return [];
+      if (!user?.id) return [];
 
-      // Get user's clubs through their roles
-      const { data: userRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user.id)
-        .not("club_id", "is", null);
-
-      if (rolesError) throw rolesError;
-      const clubIds = [...new Set((userRoles || []).map(r => r.club_id).filter(Boolean))];
-
-      // Also get clubs from teams
-      const { data: teamRoles, error: teamRolesError } = await supabase
-        .from("user_roles")
-        .select("team_id, teams!inner(club_id)")
-        .eq("user_id", user.id)
-        .not("team_id", "is", null);
-      if (teamRolesError) throw teamRolesError;
-
-      if (teamRoles) {
-        teamRoles.forEach(r => {
-          const teamClubId = (r.teams as any)?.club_id;
-          if (teamClubId && !clubIds.includes(teamClubId)) {
-            clubIds.push(teamClubId);
-          }
+      let clubIds: string[];
+      if (isIcp) {
+        // Internet Identity users have no Supabase `user_roles` rows — the
+        // canister's caller-scoped role-grant list is the membership source.
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
         });
+        clubIds = [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))];
+      } else {
+        // Get user's clubs through their roles
+        const { data: userRoles, error: rolesError } = await supabase
+          .from("user_roles")
+          .select("club_id")
+          .eq("user_id", user.id)
+          .not("club_id", "is", null);
+
+        if (rolesError) throw rolesError;
+        clubIds = [...new Set((userRoles || []).map(r => r.club_id).filter(Boolean))];
+
+        // Also get clubs from teams
+        const { data: teamRoles, error: teamRolesError } = await supabase
+          .from("user_roles")
+          .select("team_id, teams!inner(club_id)")
+          .eq("user_id", user.id)
+          .not("team_id", "is", null);
+        if (teamRolesError) throw teamRolesError;
+
+        if (teamRoles) {
+          teamRoles.forEach(r => {
+            const teamClubId = (r.teams as any)?.club_id;
+            if (teamClubId && !clubIds.includes(teamClubId)) {
+              clubIds.push(teamClubId);
+            }
+          });
+        }
       }
 
       if (!clubIds.length) return guardClubListResult(`club-themes:${user.id}`, []);
@@ -875,7 +888,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
 
     },
     retry: 3,
-    enabled: !!user?.id && !isIcp,
+    enabled: !!user?.id,
   });
 
   // ALL clubs the user belongs to (Pro + free) — used to validate active club
@@ -885,21 +898,29 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
-      if (!user?.id || isIcp) return [];
-      const [rolesRes, teamRolesRes] = await Promise.all([
-        supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
-        supabase.from("user_roles").select("teams!inner(club_id)").eq("user_id", user.id).not("team_id", "is", null),
-      ]);
-      // Propagate errors so react-query keeps prior data on a transient
-      // reconnect failure — otherwise the club dropdown briefly empties out.
-      if (rolesRes.error) throw rolesRes.error;
-      if (teamRolesRes.error) throw teamRolesRes.error;
+      if (!user?.id) return [];
       const ids = new Set<string>();
-      (rolesRes.data || []).forEach((r: any) => r.club_id && ids.add(r.club_id));
-      (teamRolesRes.data || []).forEach((r: any) => {
-        const cid = r.teams?.club_id;
-        if (cid) ids.add(cid);
-      });
+      if (isIcp) {
+        const grants = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: (ctx) => myLiveRoleGrants(ctx),
+        });
+        grants.forEach((g) => g.club && ids.add(g.club));
+      } else {
+        const [rolesRes, teamRolesRes] = await Promise.all([
+          supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
+          supabase.from("user_roles").select("teams!inner(club_id)").eq("user_id", user.id).not("team_id", "is", null),
+        ]);
+        // Propagate errors so react-query keeps prior data on a transient
+        // reconnect failure — otherwise the club dropdown briefly empties out.
+        if (rolesRes.error) throw rolesRes.error;
+        if (teamRolesRes.error) throw teamRolesRes.error;
+        (rolesRes.data || []).forEach((r: any) => r.club_id && ids.add(r.club_id));
+        (teamRolesRes.data || []).forEach((r: any) => {
+          const cid = r.teams?.club_id;
+          if (cid) ids.add(cid);
+        });
+      }
       if (!ids.size) return guardClubListResult(`user-clubs:${user.id}`, []);
       const { data: clubs, error: clubsError } = await supabase
         .from("clubs")
@@ -913,7 +934,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       );
     },
     retry: 3,
-    enabled: !!user?.id && !isIcp,
+    enabled: !!user?.id,
 
   });
 
