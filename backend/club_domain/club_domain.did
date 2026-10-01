@@ -338,6 +338,11 @@ service : {
       Err: text;
       Ok: ParentInvite;
     });
+  accept_pending_invite: (id: text) ->
+   (variant {
+      Err: text;
+      Ok: PendingInvite;
+    });
   accept_team_invite: (id: text) -> (variant {
                                        Err: text;
                                        Ok: TeamInvite;

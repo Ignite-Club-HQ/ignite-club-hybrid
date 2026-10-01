@@ -19,6 +19,7 @@ export const idlFactory = ({ IDL }) => {
   const EventGroupPlayer = IDL.Record({
     'account_id' : IDL.Text,
     'group_id' : IDL.Text,
+    'team_letter' : IDL.Opt(IDL.Text),
   });
   const LineupEntry = IDL.Record({
     'member' : IDL.Text,
@@ -77,9 +78,13 @@ export const idlFactory = ({ IDL }) => {
   });
   const EventGroup = IDL.Record({
     'id' : IDL.Text,
+    'pitch_name' : IDL.Opt(IDL.Text),
     'name' : IDL.Text,
     'created_at_ms' : IDL.Nat64,
+    'team_letter' : IDL.Opt(IDL.Text),
+    'ability_band' : IDL.Opt(IDL.Text),
     'event_id' : IDL.Text,
+    'colour' : IDL.Opt(IDL.Text),
   });
   const EventSeries = IDL.Record({
     'id' : IDL.Text,
@@ -220,7 +225,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'add_group_player' : IDL.Func(
-        [IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : EventGroupPlayer, 'Err' : IDL.Text })],
         [],
       ),
@@ -284,7 +289,14 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_event_group' : IDL.Func(
-        [IDL.Text, IDL.Text],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
         [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
         [],
       ),
@@ -444,6 +456,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Bool), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_reminder_log' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'sent_at_ms' : IDL.Opt(IDL.Nat64),
+              'recipients_count' : IDL.Nat32,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -461,6 +486,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'is_paused' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'is_reachable' : IDL.Func(
+        [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
         ['query'],
       ),
@@ -512,6 +542,23 @@ export const idlFactory = ({ IDL }) => {
     'list_series' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Vec(EventSeries)],
+        ['query'],
+      ),
+    'list_series_occurrences' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'id' : IDL.Text,
+                'deleted' : IDL.Bool,
+                'starts_at_ms' : IDL.Nat64,
+                'ends_at_ms' : IDL.Nat64,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'list_team_training_pauses' : IDL.Func(
@@ -611,6 +658,17 @@ export const idlFactory = ({ IDL }) => {
     'set_event_cancelled' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_event_group_appearance' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
         [],
       ),
     'set_group_duty' : IDL.Func(
