@@ -1422,7 +1422,10 @@ export default function EventDetailPage() {
   const userHasPaid = user ? paidUserIds.has(user.id) : false;
 
   const { handlePayNow, isProcessingPayment } = useEventPaymentFlow({
-    supabase, id, event, user, eventPrice, useIcpLab,
+    // Payments cannot move to ICP (Stripe). Gate on the production auth
+    // backend, not the dev-only useIcpLab flag, so real II sessions never
+    // attempt a Stripe checkout.
+    supabase, id, event, user, eventPrice, useIcpLab: useIcpLab || isIcpAuthBackend,
   });
 
 

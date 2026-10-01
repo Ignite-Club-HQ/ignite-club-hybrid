@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface EoiEmbedCardProps {
   clubId: string;
@@ -21,23 +22,30 @@ export function EoiEmbedCard({ clubId, seasonId, seasonSlug, clubSlug }: EoiEmbe
   useEffect(() => {
     // Generate/fetch webhook token
     (async () => {
-      const { data } = await supabase
-        .from("seasons")
-        .select("eoi_webhook_token")
-        .eq("id", seasonId)
-        .maybeSingle();
-      
-      if (data?.eoi_webhook_token) {
-        setWebhookToken(data.eoi_webhook_token);
-      } else {
-        // Generate new token
-        const newToken = crypto.randomUUID();
-        await supabase
-          .from("seasons")
-          .update({ eoi_webhook_token: newToken })
-          .eq("id", seasonId);
-        setWebhookToken(newToken);
-      }
+      const token = await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("seasons")
+            .select("eoi_webhook_token")
+            .eq("id", seasonId)
+            .maybeSingle();
+
+          if (data?.eoi_webhook_token) {
+            return data.eoi_webhook_token;
+          }
+          // Generate new token
+          const newToken = crypto.randomUUID();
+          await supabase
+            .from("seasons")
+            .update({ eoi_webhook_token: newToken })
+            .eq("id", seasonId);
+          return newToken;
+        },
+        // NEEDS-CANISTER: EOI webhook tokens on `seasons` have no canister
+        // equivalent — competition_domain has no EOI concept.
+        icp: async () => null as string | null,
+      });
+      setWebhookToken(token);
     })();
   }, [seasonId]);
 

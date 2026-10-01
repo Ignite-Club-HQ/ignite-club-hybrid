@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { savePitchState } from "../pitchStateUtils";
 import type {
   Goal,
@@ -60,7 +61,9 @@ export function usePitchBoardUnlinkEvent({
       goals,
     });
 
-    if (userId && !teamId.startsWith("event-group-")) {
+    // NEEDS-CANISTER: active_games has no events_domain equivalent; II
+    // sessions have no Supabase session, so skip this deactivation write.
+    if (userId && !teamId.startsWith("event-group-") && resolveAuthBackend() !== "icp") {
       await supabase
         .from("active_games")
         .update({ is_active: false })

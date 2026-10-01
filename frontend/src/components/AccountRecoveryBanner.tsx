@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { requireAccessToken, SessionExpiredError, SESSION_EXPIRED_MESSAGE } from "@/lib/requireAccessToken";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface AccountRecoveryBannerProps {
   userId: string;
@@ -36,6 +37,14 @@ export function AccountRecoveryBanner({ userId, onRecovered }: AccountRecoveryBa
 
   const handleRecover = async () => {
     if (recovering) return;
+    // II sessions have no Supabase session to recover from (requireAccessToken
+    // always throws session_expired for them), and account deletion scheduling
+    // for ICP users is itself gated off in AccountPage. Fail with the same
+    // user-facing message instead of hitting the throw.
+    if (resolveAuthBackend() === "icp") {
+      toast({ title: "Session expired", description: SESSION_EXPIRED_MESSAGE, variant: "destructive" });
+      return;
+    }
     setRecovering(true);
     let token: string;
     try {

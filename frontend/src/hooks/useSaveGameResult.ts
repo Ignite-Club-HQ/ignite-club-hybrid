@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useToast } from "@/hooks/use-toast";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 
@@ -48,6 +49,10 @@ export function useSaveGameResult() {
       ].join(":");
       // De-dupe within a session, unless caller explicitly forces.
       if (!opts?.force && (savedKeyRef.current === key || inFlightRef.current)) return true;
+      // NEEDS-CANISTER: game_results has no events_domain equivalent; II
+      // sessions also have no Supabase session (supabase.auth.getUser() below
+      // would return null anyway). Skip the write under ICP.
+      if (resolveAuthBackend() === "icp") return false;
       inFlightRef.current = true;
 
       try {

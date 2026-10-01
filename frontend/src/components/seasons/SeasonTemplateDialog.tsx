@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface Props {
   open: boolean;
@@ -40,14 +41,24 @@ export function SeasonTemplateDialog({
   const createMut = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Season name is required");
-      const { data, error } = await supabase.rpc("create_season_from_template", {
-        _source_season_id: sourceSeasonId,
-        _new_name: name.trim(),
-        _start_date: startDate || null,
-        _end_date: endDate || null,
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("create_season_from_template", {
+            _source_season_id: sourceSeasonId,
+            _new_name: name.trim(),
+            _start_date: startDate || null,
+            _end_date: endDate || null,
+          });
+          if (error) throw error;
+          return data as string;
+        },
+        // NEEDS-CANISTER: create_season_from_template copies team structure
+        // (teams, rosters) which has no canister equivalent — competition_domain
+        // seasons have no team-template duplication shape.
+        icp: async () => {
+          throw new Error("Creating a season from a template isn't available on this backend yet.");
+        },
       });
-      if (error) throw error;
-      return data as string;
     },
     onSuccess: (newSeasonId) => {
       toast.success("Season created from template");

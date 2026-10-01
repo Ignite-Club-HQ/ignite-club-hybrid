@@ -54,6 +54,10 @@ export async function markNotificationRead(
   notificationId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<string> {
+  // NEEDS-CANISTER: notification_queue mark-read call.
+  if (isFeatureRoutedToIcp("notifications")) {
+    throw new Error("Updating notifications isn't available yet on the Internet Identity notifications backend.");
+  }
   const { error } = await client.from("notifications").update({ is_read: true }).eq("id", notificationId);
   if (error) throw error;
   return notificationId;

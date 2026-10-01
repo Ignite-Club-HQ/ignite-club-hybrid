@@ -485,6 +485,13 @@ export function StartDMDialog({ open: controlledOpen, onOpenChange, mode = "dm",
   // Start single DM mutation
   const startDMMutation = useMutation({
     mutationFn: async (otherUserId: string) => {
+      // NEEDS-CANISTER: this uses canLiveDmUser already for ACL, but DM
+      // conversation creation/lookup itself (get_or_create_dm_conversation)
+      // has no messaging_domain equivalent wired here yet.
+      if (isFeatureRoutedToIcp("messaging")) {
+        throw new Error("Starting direct messages isn't available yet on the Internet Identity messaging backend.");
+      }
+
       const { data, error } = await supabase.rpc("get_or_create_dm_conversation", {
         other_user_id: otherUserId,
       });

@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useToast } from "@/hooks/use-toast";
 import type { PitchPosition } from "@/components/pitch/PositionBadge";
 
@@ -101,6 +102,12 @@ export function useGameStats() {
       opponent,
       silent = false,
     }: SaveGameStatsParams) => {
+      // NEEDS-CANISTER: game_summaries/game_player_stats have no events_domain
+      // equivalent. Skip the write under ICP instead of silently landing in a
+      // Supabase table ICP users cannot read back (or failing with no Supabase session).
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Game stats saving is not yet available for Internet Identity accounts.");
+      }
       const teamId = await resolveGameStatsTeamId([teamIdParam, boardTeamId], eventId);
       if (!teamId) {
         console.error("[useGameStats] No team could be resolved for event", eventId);

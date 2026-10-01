@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 // Product IDs - must match App Store Connect & Google Play Console
 export const IAP_PRODUCT_IDS = {
@@ -62,6 +63,16 @@ export function useInAppPurchase(): UseInAppPurchaseReturn {
     async (productId: string, entityId: string, entityType: "club" | "team"): Promise<boolean> => {
       if (!user) {
         setError("You must be logged in to make purchases");
+        setPurchaseState("error");
+        return false;
+      }
+
+      // NEEDS-DECISION: in-app purchases move real money through Stripe/App
+      // Store/Play billing and cannot be mirrored to an ICP canister. II
+      // sessions have no Supabase session to verify the receipt against, so
+      // block here instead of throwing session_expired deep in the call.
+      if (resolveAuthBackend() === "icp") {
+        setError("Purchases are not available for this sign-in method yet.");
         setPurchaseState("error");
         return false;
       }
