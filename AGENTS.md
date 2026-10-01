@@ -20,3 +20,13 @@
 - pii_access_control keeps pure crypto in src/crypto.mo (SHA-256 CTR + encrypt-then-MAC); all actor-level state has no initializers and is seeded by the migration chain in src/backend/migrations/ (bootstrap 20260913_000000) — required by --enhanced-migration.
 - PII records are keyed pii_id = entity id, field_id = logical field (e.g. "name"); readers list grants decrypt access, enforced canister-side in can_read — never trust browser-supplied reader grants without a verified relationship.
 - Motoko toolchain: moc 1.16.1 via `bun add -g ic-mops && mops toolchain use moc 1.16.1` (binary at /root/.cache/mops/moc/1.16.1/moc; /root is wiped on sandbox resets, reinstall then). Per-canister: `cd backend/<c> && mops install`; compile `moc $(mops sources) --enhanced-migration src/backend/migrations --check src/main.mo`; `--enhanced-migration` takes the migrations DIRECTORY as its argument. .did: same invocation with `--idl src/main.mo` writes main.did in cwd, copy over <c>.did. Bindings: `frontend/node_modules/.bin/icp-bindgen --force --did-file backend/<c>/<c>.did --out-dir` for BOTH frontend/src/lab/bindings/<c> and frontend/src/lab/generated-contracts/<c>. Drift: `node frontend/scripts/check-candid-drift.mjs`.
+
+<!-- ic-skills:managed:start -->
+<!-- state: configured (on-demand) -->
+Fetch the skills index once per session and keep each skill's name, description,
+and SKILL.md URL:
+https://skills.internetcomputer.org/.well-known/skills/index.json
+Before writing ICP code for a task, fetch the matching skill's SKILL.md
+(https://skills.internetcomputer.org/.well-known/skills/{name}/SKILL.md) and follow
+it. Skills are authoritative — prefer them over general knowledge.
+<!-- ic-skills:managed:end -->
