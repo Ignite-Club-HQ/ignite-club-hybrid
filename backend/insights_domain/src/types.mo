@@ -23,7 +23,7 @@ module {
   public type AlertStatus = { #Open; #Resolved };
   public type AdminAlert = { id : Text; alert_type : Text; details : Text; status : AlertStatus; created_at_ms : Nat64; resolved_at_ms : ?Nat64; resolved_by : ?Principal };
 
-  public type AuditLog = { id : Text; action_type : Text; actor : Principal; target_user_id : ?Text; target_user_name : ?Text; details : Text; table_name : Text; created_at_ms : Nat64 };
+  public type AuditLog = { id : Text; action_type : Text; actor_id : Principal; target_user_id : ?Text; target_user_name : ?Text; details : Text; table_name : Text; created_at_ms : Nat64 };
 
   public type FeedbackStatus = { #Open; #InProgress; #Resolved };
   public type Feedback = { id : Text; user : Principal; kind : Text; title : ?Text; message : Text; page_url : ?Text; status : FeedbackStatus; admin_notes : ?Text; created_at_ms : Nat64; updated_at_ms : Nat64 };

@@ -4,7 +4,6 @@ import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
-import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
@@ -203,7 +202,6 @@ persistent actor {
     let inRange = engagementCounters.filter(func(item) =
       item.club_id == club_id and kindEq(item.kind, kind) and item.day >= dayKey(since_ms) and item.day <= dayKey(until_ms)
     );
-    let sorted = inRange.sort(func(a, b) = Order.orElse(Nat64.compare(0, 0), Order.equal)); // placeholder, real sort below
     inRange.map(func(item) = { day = item.day; value = item.count }).sort(func(a, b) = if (a.day == b.day) #equal else if (a.day < b.day) #less else #greater)
   };
 
@@ -271,16 +269,16 @@ persistent actor {
   public shared ({ caller }) func append_audit_log(action_type : Text, table_name : Text, target_user_id : ?Text, target_user_name : ?Text, details : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not valid(action_type)) return #Err("Invalid audit log");
-    auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
+    auditLogs := auditLogs.concat([{ id = freshId("audit"); action_type; actor_id = caller; target_user_id; target_user_name; details; table_name; created_at_ms = nowMs() }]);
     #Ok
   };
 
   // Paginated, optionally filtered by actor and/or action_type/table_name.
-  public query ({ caller }) func list_audit_logs(actor : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
+  public query ({ caller }) func list_audit_logs(actor_filter : ?Principal, action_type : ?Text, table_name : ?Text, offset : Nat32, limit : Nat32) : async { #Ok : { items : [Types.AuditLog]; total : Nat32 }; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let boundedLimit = Nat32.min(limit, 200);
     let matches = auditLogs.filter(func(item) =
-      (actor == null or (switch (actor) { case (?a) a.equal(item.actor); case null true }))
+      (actor_filter == null or (switch (actor_filter) { case (?a) a.equal(item.actor_id); case null true }))
         and (action_type == null or action_type == ?item.action_type)
         and (table_name == null or table_name == ?item.table_name)
     );

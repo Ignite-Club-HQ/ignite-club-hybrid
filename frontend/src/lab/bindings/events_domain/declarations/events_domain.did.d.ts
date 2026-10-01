@@ -16,6 +16,22 @@ export interface Attendance {
   'note' : string,
   'event_id' : string,
 }
+export interface AttendanceInput {
+  'status' : string,
+  'subject_kind' : string,
+  'subject_id' : string,
+  'notes' : string,
+}
+export interface Child {
+  'id' : string,
+  'name' : string,
+  'parent_id' : [] | [string],
+}
+export interface ChildGuardian {
+  'is_primary' : boolean,
+  'child_id' : string,
+  'guardian_id' : string,
+}
 export interface Duty {
   'account_id' : string,
   'duty' : string,
@@ -36,6 +52,26 @@ export interface Event {
   'club_id' : string,
   'location' : [] | [string],
   'event_type' : string,
+}
+export interface EventAttendance {
+  'status' : string,
+  'marked_by' : Principal,
+  'subject_kind' : string,
+  'marked_at_ms' : bigint,
+  'subject_id' : string,
+  'notes' : string,
+  'event_id' : string,
+}
+export interface EventGuest {
+  'id' : string,
+  'added_by' : Principal,
+  'guest_name' : string,
+  'created_at_ms' : bigint,
+  'event_id' : string,
+}
+export interface EventRoster {
+  'guests' : Array<EventGuest>,
+  'rsvps' : Array<RsvpWithChild>,
 }
 export interface EventSeries {
   'id' : string,
@@ -96,19 +132,54 @@ export interface RosterEntry {
 }
 export interface Rsvp {
   'account_id' : string,
+  'source' : string,
   'updated_at_ms' : bigint,
+  'child_id' : [] | [string],
   'state' : string,
+  'notes' : string,
   'event_id' : string,
+  'has_paid' : [] | [boolean],
 }
+export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
 export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'add_event_guest' : ActorMethod<
+    [string, string],
+    { 'Ok' : EventGuest } |
+      { 'Err' : string }
+  >,
   'add_lineup' : ActorMethod<
     [string, string, string, [] | [string]],
     { 'Ok' : LineupEntry } |
+      { 'Err' : string }
+  >,
+  'admin_link_guardian' : ActorMethod<
+    [string, string, boolean],
+    { 'Ok' : ChildGuardian } |
+      { 'Err' : string }
+  >,
+  'admin_update_rsvp_status' : ActorMethod<
+    [string, string, [] | [string], string],
+    { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'admin_upsert_child' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : Child } |
+      { 'Err' : string }
+  >,
+  'admin_upsert_rsvp' : ActorMethod<
+    [string, string, [] | [string], string, string],
+    { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'child_is_in_event_audience' : ActorMethod<
+    [string, string],
+    { 'Ok' : boolean } |
       { 'Err' : string }
   >,
   'complete_duty' : ActorMethod<
@@ -128,6 +199,23 @@ export interface _SERVICE {
       bigint,
     ],
     { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'create_recurring_series' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      string,
+      string,
+      string,
+      [] | [string],
+      string,
+      bigint,
+      bigint,
+      [] | [number],
+      [] | [bigint],
+    ],
+    { 'Ok' : { 'series' : EventSeries, 'events' : Array<Event> } } |
       { 'Err' : string }
   >,
   'create_series' : ActorMethod<
@@ -151,13 +239,26 @@ export interface _SERVICE {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'detach_occurrence' : ActorMethod<
+    [string],
+    { 'Ok' : Event } |
+      { 'Err' : string }
+  >,
+  'event_roster' : ActorMethod<
+    [string],
+    { 'Ok' : EventRoster } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<
     [],
     {
         'Ok' : {
           'lineups' : Array<LineupEntry>,
+          'eventGuests' : Array<EventGuest>,
+          'eventAttendance' : Array<EventAttendance>,
           'schema' : number,
           'series' : Array<EventSeries>,
+          'children' : Array<Child>,
           'recurrences' : Array<Recurrence>,
           'attendance' : Array<Attendance>,
           'events' : Array<Event>,
@@ -165,10 +266,16 @@ export interface _SERVICE {
           'duties' : Array<Duty>,
           'governor' : Principal,
           'roster' : Array<RosterEntry>,
+          'childGuardians' : Array<ChildGuardian>,
           'roles' : Array<RoleGrant>,
           'rsvps' : Array<Rsvp>,
         }
       } |
+      { 'Err' : string }
+  >,
+  'get_attendance' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
   >,
   'get_event_roster' : ActorMethod<
@@ -197,6 +304,16 @@ export interface _SERVICE {
     [[] | [string], [] | [string]],
     Array<EventSeries>
   >,
+  'mark_attendance' : ActorMethod<
+    [string, Array<AttendanceInput>],
+    { 'Ok' : Array<EventAttendance> } |
+      { 'Err' : string }
+  >,
+  'my_attendance' : ActorMethod<[[] | [string]], Array<EventAttendance>>,
+  'my_child_rsvps' : ActorMethod<
+    [[] | [string], [] | [string]],
+    Array<RsvpWithChild>
+  >,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -205,6 +322,11 @@ export interface _SERVICE {
   >,
   'remove_duty' : ActorMethod<
     [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_event_guest' : ActorMethod<
+    [string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

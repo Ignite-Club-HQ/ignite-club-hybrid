@@ -142,7 +142,7 @@ persistent actor {
           let already = cooldowns.filter(func(item) = item.user_id == user_id and item.club_id == club_id and item.action_type == action_type and item.scope_id == scope_id and item.awarded_date == today);
           var sum : Nat32 = 0;
           for (item in already.values()) { sum += item.points_awarded };
-          let amountNat = Nat32.fromNat(Int.abs(Int32.toInt(amount)));
+          let amountNat = Nat.toNat32(Int.abs(Int32.toInt(amount)));
           if (sum + amountNat > cap) return #Err("Cooldown limit reached");
           let id = "cd-" # club_id # "-" # Nat.toText(cooldowns.size());
           cooldowns := cooldowns.concat([{ id; user_id; club_id; action_type; scope_id; awarded_date = today; points_awarded = amountNat; created_at_ms = ts }]);
@@ -430,7 +430,7 @@ persistent actor {
         let newBalance = switch (current.user_id, current.child_id) {
           case (?uid, _) { let bal = findUserPoints(current.club_id, uid) + refund; setUserPoints(current.club_id, uid, bal); bal };
           case (_, ?cid) { let bal = findChildPoints(current.club_id, cid) + refund; setChildPoints(current.club_id, cid, bal); bal };
-          case (_, _) 0;
+          case (_, _) (0 : Int32);
         };
         let historyEntry : Types.PointsHistoryEntry = {
           id = "ph-" # current.club_id # "-" # Nat.toText(pointsHistory.size());

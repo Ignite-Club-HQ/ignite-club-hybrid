@@ -17,7 +17,7 @@ module {
     claimed_by : ?Principal; ability_rating : ?Nat16; notes : ?Text; created_at_ms : Nat64; updated_at_ms : Nat64;
   };
   type MiniLeagueInvite = {
-    token : Text; mini_league_id : Text; player_id : ?Text; label : ?Text; status : Text;
+    token : Text; mini_league_id : Text; player_id : ?Text; label_text : ?Text; status : Text;
     claimed_by : ?Principal; created_by : Principal; created_at_ms : Nat64; claimed_at_ms : ?Nat64;
   };
   type MiniLeagueGroup = {
