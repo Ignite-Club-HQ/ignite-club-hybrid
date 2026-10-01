@@ -37,6 +37,15 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     getPrivacyConsent: (accountId: string, purpose: string) => call(() => actor.get_privacy_consent(accountId, purpose)),
     setPrivacyConsent: (accountId: string, purpose: string, granted: boolean) =>
       call(() => actor.set_privacy_consent(accountId, purpose, granted)),
+    getMyEntitlements: () => call(() => actor.get_my_entitlements()),
+    isPro: (principal: Parameters<_SERVICE['is_pro']>[0]) => call(() => actor.is_pro(principal)),
+    redeemEntitlement: (
+      productId: string,
+      transactionId: string,
+      expiresAtMs: bigint,
+      source: string,
+      signatureHex: string,
+    ) => call(() => actor.redeem_entitlement(productId, transactionId, expiresAtMs, source, signatureHex)),
     dispose() { disposed = true; },
   };
 }
