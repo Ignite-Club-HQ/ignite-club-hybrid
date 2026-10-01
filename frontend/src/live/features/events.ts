@@ -425,3 +425,262 @@ export async function getLiveAccountRosterScope(
     clubIds: Array.from(clubIds),
   };
 }
+
+// ============================================================================
+// Newly-upgraded events_domain surfaces (mark_attendance / get_attendance /
+// my_attendance, event_roster, my_child_rsvps, child_is_in_event_audience,
+// admin_upsert_child / admin_link_guardian, add/remove_event_guest,
+// create_recurring_series / detach_occurrence, admin_upsert_rsvp /
+// admin_update_rsvp_status). All provisional until verified against a
+// deployed canister — see the per-function notes below.
+// ============================================================================
+
+export interface LiveAttendanceInput {
+  /** "member" | "child" — mirrors the Supabase class_attendance child_id/user_id split. */
+  subjectKind: string;
+  subjectId: string;
+  status: string;
+  notes?: string | null;
+}
+
+/**
+ * Mark attendance for one or more subjects (members/children) against an
+ * event. Counterpart of the Supabase `class_attendance` upsert flow — the
+ * canister keys attendance by event_id rather than (term_id, team_id,
+ * session_date), so callers that mark attendance per-class-session
+ * (ClassAttendanceSingle/Manager) must synthesize a stable per-session
+ * event_id (provisional: `${teamId}:${sessionDate}`) until classes gain a
+ * first-class events_domain Event row.
+ */
+export async function markLiveAttendance(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  records: LiveAttendanceInput[],
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.mark_attendance(
+      eventId,
+      records.map((r) => ({
+        subject_kind: r.subjectKind,
+        subject_id: r.subjectId,
+        status: r.status,
+        notes: r.notes ?? "",
+      })),
+    ),
+    "Mark attendance",
+  );
+}
+
+/** All attendance rows recorded against a single event. */
+export async function getLiveAttendance(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_attendance(eventId), "Get attendance");
+}
+
+/**
+ * The caller's own attendance rows (by signed-in principal), optionally
+ * scoped to one event. Plain query result (no Ok/Err variant).
+ */
+export async function getMyLiveAttendance(ctx: FeatureBackendContext, eventId?: string | null) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.my_attendance(candidOpt(eventId));
+}
+
+/**
+ * Canonical per-event roster (guests + RSVPs-with-child) from the upgraded
+ * `event_roster` query. This is the ICP-mode substitute for the Supabase
+ * `get_targeted_event_attendance_roster` / event_guests / rsvps reads, which
+ * return empty for II-authenticated (principal, not UUID) callers.
+ */
+export async function getLiveEventRosterDetailed(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.event_roster(eventId), "Get event roster");
+}
+
+/**
+ * The caller's linked children's RSVPs, optionally scoped to one event
+ * and/or club. Counterpart of the Supabase guardian-scoped `rsvps` read for
+ * children, which relies on UUID-keyed `child_guardians` rows that
+ * principal-based callers never match. Plain query result (no Ok/Err).
+ */
+export async function getMyLiveChildRsvps(
+  ctx: FeatureBackendContext,
+  eventId?: string | null,
+  clubId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.my_child_rsvps(candidOpt(eventId), candidOpt(clubId));
+}
+
+/** Whether a child is part of an event's audience (roster/guardian scope). */
+export async function isChildInLiveEventAudience(
+  ctx: FeatureBackendContext,
+  childId: string,
+  eventId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.child_is_in_event_audience(childId, eventId),
+    "Check child event audience",
+  );
+}
+
+/**
+ * Admin child-record upsert. Counterpart of the Supabase `children` table
+ * write used by child-management flows; provisional — `parentId` here is the
+ * events_domain `Child.parent_id` field, not necessarily the same identifier
+ * space as Supabase `children.parent_id` (account id vs UUID), verify post-deploy.
+ */
+export async function adminUpsertLiveChild(
+  ctx: FeatureBackendContext,
+  id: string,
+  name: string,
+  parentId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.admin_upsert_child(id, name, candidOpt(parentId)),
+    "Upsert child",
+  );
+}
+
+/**
+ * Link a guardian to a child. Counterpart of the Supabase `child_guardians`
+ * upsert RPC used by child/guardian admin flows.
+ */
+export async function adminLinkLiveGuardian(
+  ctx: FeatureBackendContext,
+  childId: string,
+  guardianId: string,
+  isPrimary: boolean,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.admin_link_guardian(childId, guardianId, isPrimary),
+    "Link guardian",
+  );
+}
+
+/**
+ * Add a guest to an event. Counterpart of the Supabase `event_guests` insert
+ * used by EventGuestsManager. `addedBy` is the caller's account id
+ * (principal text) — the canister derives the caller from the signed-in
+ * identity, so this is informational only / unused server-side today.
+ */
+export async function addLiveEventGuest(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  guestName: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_event_guest(eventId, guestName), "Add guest");
+}
+
+/** Remove a guest from an event. Counterpart of the `event_guests` delete. */
+export async function removeLiveEventGuest(ctx: FeatureBackendContext, guestId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_event_guest(guestId), "Remove guest");
+}
+
+export interface LiveRecurringEventSeriesInput {
+  clubId: string;
+  teamId?: string | null;
+  title: string;
+  description: string;
+  eventType: string;
+  location?: string | null;
+  frequency: string;
+  firstStartsAtMs: number | Date;
+  firstEndsAtMs: number | Date;
+  /** Exactly one of occurrences/untilMs is normally supplied; both are optional canister-side. */
+  occurrences?: number | null;
+  untilMs?: number | Date | null;
+}
+
+/**
+ * Create a recurring series bounded by an occurrence count OR an end date
+ * (the upgraded counterpart of `create_series`, which required `until_ms`).
+ * This is the canister-side match for EditEventPage's
+ * `convertEventToRecurringSeries` / EventsPage's "create series" flows.
+ */
+export async function createLiveRecurringEventSeries(
+  ctx: FeatureBackendContext,
+  input: LiveRecurringEventSeriesInput,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_recurring_series(
+      input.clubId,
+      candidOpt(input.teamId),
+      input.title,
+      input.description,
+      input.eventType,
+      candidOpt(input.location),
+      input.frequency,
+      toNat64(input.firstStartsAtMs),
+      toNat64(input.firstEndsAtMs),
+      candidOpt(input.occurrences),
+      input.untilMs == null ? [] : [toNat64(input.untilMs)],
+    ),
+    "Create recurring event series",
+  );
+}
+
+/**
+ * Detach a single occurrence from its series so future series edits/deletes
+ * no longer touch it. Counterpart of a "remove this event from the series"
+ * action — no Supabase RPC equivalent exists today (Supabase recurring
+ * events do not support detaching a single occurrence), so this is an
+ * ICP-only capability until a matching Supabase RPC ships.
+ */
+export async function detachLiveEventOccurrence(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.detach_occurrence(eventId), "Detach occurrence");
+}
+
+/**
+ * Admin RSVP upsert (set/override another account's or child's RSVP).
+ * Counterpart of the Supabase `admin_upsert_rsvp` RPC used by
+ * useEventRsvpMutations' admin mutations. `accountId` is the acting-on
+ * account's id (principal text, provisional).
+ */
+export async function adminUpsertLiveRsvp(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+  status: string,
+  options?: { childId?: string | null; notes?: string | null },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.admin_upsert_rsvp(
+      eventId,
+      accountId,
+      candidOpt(options?.childId),
+      status,
+      options?.notes ?? "",
+    ),
+    "Admin upsert RSVP",
+  );
+}
+
+/**
+ * Admin RSVP status update by (event, account, child) rather than by RSVP
+ * row id — the canister has no row-id lookup, so Supabase's
+ * `admin_update_rsvp_status(p_rsvp_id, ...)` is matched by key instead.
+ * Counterpart of the Supabase `admin_update_rsvp_status` RPC.
+ */
+export async function adminUpdateLiveRsvpStatus(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+  status: string,
+  childId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.admin_update_rsvp_status(eventId, accountId, candidOpt(childId), status),
+    "Admin update RSVP status",
+  );
+}
