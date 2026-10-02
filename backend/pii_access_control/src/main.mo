@@ -273,7 +273,7 @@ persistent actor {
   // authorization is required. Writers use it to encrypt new records without
   // any canister call; readers use it to verify derived vetKeys.
   public shared func pii_vetkey_verification_key() : async Blob {
-    await ManagementCanister.vetKdPublicKey(null, vetkdContext(), vetkdKeyId());
+    await ManagementCanister.vetKdPublicKey(null, vetkdContext(), vetkdKeyId<system>());
   };
 
   // Relays the caller's vetKeys for the requested records, each encrypted
@@ -300,7 +300,7 @@ persistent actor {
           log_audit(caller, pii_id, field_id, "vetkey_derive", allowed, "PII vetKey derivation");
           if (allowed) {
             let encryptedKey = await ManagementCanister.vetKdDeriveKey(
-              ibeIdentity(pii_id, field_id), vetkdContext(), vetkdKeyId(), transport_public_key
+              ibeIdentity(pii_id, field_id), vetkdContext(), vetkdKeyId<system>(), transport_public_key
             );
             out := out.concat([?encryptedKey]);
           } else {
