@@ -271,6 +271,7 @@ service : {
                        Err: text;
                        Ok;
                      });
+  is_app_admin: () -> (bool) query;
   list_active_ads: () -> (vec AppAd) query;
   list_admin_alerts: (status: opt AlertStatus) ->
    (variant {
