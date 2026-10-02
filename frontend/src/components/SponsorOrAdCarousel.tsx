@@ -97,7 +97,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           // the caller holds any role in), then the same per-club strip
           // setting read the filtered path uses.
           const grants = await myLiveRoleGrants(ctx);
-          const clubIds = [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))];
+          const clubIds = [...new Set(grants.flatMap((g) => g.club))];
           for (const candidateClubId of clubIds) {
             if (await isEventsStripEnabledForClub(candidateClubId)) {
               return { allowed: true, effectiveClubId: candidateClubId };
@@ -270,7 +270,7 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           // club (sponsor records live in club_domain).
           const clubIds = effectiveClubFilter
             ? [effectiveClubFilter]
-            : [...new Set((await myLiveRoleGrants(ctx)).map((g) => g.club).filter((c): c is string => !!c))];
+            : [...new Set((await myLiveRoleGrants(ctx)).flatMap((g) => g.club))];
           for (const clubId of clubIds) {
             const sponsors = await listLiveSponsors(ctx, clubId);
             if (sponsors.some((s) => s.is_active)) return true;
