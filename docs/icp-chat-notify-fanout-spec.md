@@ -1,7 +1,17 @@
 # ICP chat notification fan-out — canister-side recipient expansion
 
-Status: spec, not yet implemented (2026-10-02). Recorded as a NEEDS-CANISTER
-follow-up after the chat-notify wiring pass.
+Status: implemented canister-side (2026-10-02). messaging_domain gained
+notificationQueueCanister state + set_notification_queue_canister and a
+fire-and-forget fan-out hook on all four postMessage call sites
+(send_message, broadcast_announcement, forward_message,
+replay_scheduled_message); notification_queue gained messagingDomainCanister
+state + set_messaging_domain_canister and hardened record_chat_notify_batch
+caller rules (trusted canister vs sender==caller, mute list ignored for
+non-canister callers). Migrations: messaging_domain 20261006_010000,
+notification_queue 20261002_110000. Deploy rules recorded in
+backend/AGENTS.md. Frontend unchanged: recordLiveChatNotifyBatch stays as
+the manual/recovery path; idempotency via chatMessageProcessed(message_id)
+makes the overlap with the hook harmless (the hook's message id wins).
 
 ## Problem
 
