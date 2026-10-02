@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveSponsors,
+  listLiveTeams,
+  listLiveTeamSponsorAllocations,
+  setLiveTeamSponsorAllocation,
+} from "@/live/features/club";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Users } from "lucide-react";
@@ -34,83 +41,114 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
   // Fetch all active sponsors for the club
   const { data: sponsors = [], isLoading: loadingSponsors } = useQuery({
     queryKey: ["sponsors", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url")
-        .eq("club_id", clubId)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      
-      if (error) throw error;
-      return data as Sponsor[];
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url")
+            .eq("club_id", clubId)
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+
+          if (error) throw error;
+          return data as Sponsor[];
+        },
+        icp: async (ctx) => {
+          const liveSponsors = await listLiveSponsors(ctx, clubId);
+          return liveSponsors
+            .filter((s) => s.is_active)
+            .map((s): Sponsor => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }));
+        },
+      }),
   });
 
   // Fetch all teams for the club
   const { data: teams = [], isLoading: loadingTeams } = useQuery({
     queryKey: ["club-teams", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("club_id", clubId)
-        .is("deleted_at", null)
-        .order("name", { ascending: true });
-      
-      if (error) throw error;
-      return data as Team[];
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("club_id", clubId)
+            .is("deleted_at", null)
+            .order("name", { ascending: true });
+
+          if (error) throw error;
+          return data as Team[];
+        },
+        icp: async (ctx) => {
+          const liveTeams = await listLiveTeams(ctx, clubId);
+          return liveTeams
+            .filter((t) => t.deleted_at_ms.length === 0)
+            .map((t): Team => ({ id: t.id, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
   });
 
   // Fetch all allocations for teams in this club
   const { data: allocations = [], isLoading: loadingAllocations } = useQuery({
     queryKey: ["club-team-sponsor-allocations", clubId],
-    queryFn: async () => {
-      const teamIds = teams.map(t => t.id);
-      if (teamIds.length === 0) return [];
-      
-      const { data, error } = await supabase
-        .from("team_sponsor_allocations")
-        .select("team_id, sponsor_id")
-        .in("team_id", teamIds);
-      
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const teamIds = teams.map(t => t.id);
+          if (teamIds.length === 0) return [];
+
+          const { data, error } = await supabase
+            .from("team_sponsor_allocations")
+            .select("team_id, sponsor_id")
+            .in("team_id", teamIds);
+
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          return listLiveTeamSponsorAllocations(ctx, clubId);
+        },
+      }),
     enabled: teams.length > 0,
   });
 
   const toggleAllocationMutation = useMutation({
-    mutationFn: async ({ teamId, sponsorId, allocated }: { teamId: string; sponsorId: string; allocated: boolean }) => {
-      if (allocated) {
-        const { error } = await supabase
-          .from("team_sponsor_allocations")
-          .insert({ team_id: teamId, sponsor_id: sponsorId });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("team_sponsor_allocations")
-          .delete()
-          .eq("team_id", teamId)
-          .eq("sponsor_id", sponsorId);
-        if (error) throw error;
-        
-        // If this was the active sponsor, clear it
-        const { data: team } = await supabase
-          .from("teams")
-          .select("sponsor_id")
-          .eq("id", teamId)
-          .single();
-        
-        if (team?.sponsor_id === sponsorId) {
-          await supabase
-            .from("teams")
-            .update({ sponsor_id: null })
-            .eq("id", teamId);
-        }
-      }
-    },
+    mutationFn: async ({ teamId, sponsorId, allocated }: { teamId: string; sponsorId: string; allocated: boolean }) =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          if (allocated) {
+            const { error } = await supabase
+              .from("team_sponsor_allocations")
+              .insert({ team_id: teamId, sponsor_id: sponsorId });
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from("team_sponsor_allocations")
+              .delete()
+              .eq("team_id", teamId)
+              .eq("sponsor_id", sponsorId);
+            if (error) throw error;
+
+            // If this was the active sponsor, clear it
+            const { data: team } = await supabase
+              .from("teams")
+              .select("sponsor_id")
+              .eq("id", teamId)
+              .single();
+
+            if (team?.sponsor_id === sponsorId) {
+              await supabase
+                .from("teams")
+                .update({ sponsor_id: null })
+                .eq("id", teamId);
+            }
+          }
+        },
+        icp: async (ctx) => {
+          await setLiveTeamSponsorAllocation(ctx, sponsorId, teamId, allocated);
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-team-sponsor-allocations", clubId] });
       queryClient.invalidateQueries({ queryKey: ["team-sponsor-allocations"] });
@@ -174,7 +212,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
           Allocate specific sponsors to each team (separate from club rotation)
         </p>
       </div>
-      
+
       <Accordion type="multiple" className="space-y-2">
         {teams.map((team) => (
           <AccordionItem key={team.id} value={team.id} className="border rounded-lg px-3">
@@ -186,18 +224,18 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
                 {sponsors.map((sponsor) => {
                   const allocated = isAllocated(team.id, sponsor.id);
                   return (
-                    <div 
-                      key={sponsor.id} 
+                    <div
+                      key={sponsor.id}
                       className="flex items-center gap-3 p-2 rounded-lg border border-border"
                     >
                       <Checkbox
                         id={`${team.id}-${sponsor.id}`}
                         checked={allocated}
-                        onCheckedChange={(checked) => 
-                          toggleAllocationMutation.mutate({ 
+                        onCheckedChange={(checked) =>
+                          toggleAllocationMutation.mutate({
                             teamId: team.id,
-                            sponsorId: sponsor.id, 
-                            allocated: checked === true 
+                            sponsorId: sponsor.id,
+                            allocated: checked === true
                           })
                         }
                         disabled={toggleAllocationMutation.isPending}
@@ -208,7 +246,7 @@ export function ClubTeamSponsorAllocator({ clubId }: ClubTeamSponsorAllocatorPro
                           {sponsor.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <Label 
+                      <Label
                         htmlFor={`${team.id}-${sponsor.id}`}
                         className="font-medium flex-1 cursor-pointer text-sm"
                       >
