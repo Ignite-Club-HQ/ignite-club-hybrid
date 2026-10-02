@@ -17,7 +17,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
+// NEEDS-CANISTER: messaging_domain has no attachment-restriction surface, so
+// this tool is Supabase-only. Every query and mutation is gated so no II
+// principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 
 export default SupabaseAdminDmAttachmentsPage;
 
