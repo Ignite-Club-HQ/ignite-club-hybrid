@@ -14,7 +14,7 @@ import {
 } from "@/live/features/miniLeagues";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -402,7 +402,7 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           {/* League Identity */}
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="relative cursor-pointer group shrink-0" onClick={() => logoInputRef.current?.click()}>
+              <div className={`relative shrink-0 ${isIcpMediaUploadUnavailable() ? "" : "cursor-pointer group"}`} onClick={isIcpMediaUploadUnavailable() ? undefined : () => logoInputRef.current?.click()}>
                 <Avatar className="h-16 w-16 border-2 border-dashed border-muted-foreground/30 group-hover:border-primary transition-colors">
                   {editLogoUrl ? <AvatarImage src={editLogoUrl} alt="League logo" /> : null}
                   <AvatarFallback className="bg-muted">
