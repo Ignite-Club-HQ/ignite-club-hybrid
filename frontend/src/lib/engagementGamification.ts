@@ -159,30 +159,21 @@ export async function checkEngagementStreak({
         return { streak: s, canAward: !!awarded };
       },
       icp: async (ctx) => {
-        const page = await listLivePointsHistory(ctx, clubId, subjectForUser(userId), 0, 500);
-        const days = new Set(
-          page.items
-            .filter((i) => ENGAGEMENT_SOURCE_TYPES.has(i.source_type))
-            .map((i) => dayKey(Number(i.created_at_ms))),
-        );
-        let s = 0;
-        const cursor = new Date();
-        // No engagement yet today → the streak ending yesterday still counts.
-        if (!days.has(dayKey(cursor.getTime()))) cursor.setUTCDate(cursor.getUTCDate() - 1);
-        while (days.has(dayKey(cursor.getTime()))) {
-          s++;
-          cursor.setUTCDate(cursor.getUTCDate() - 1);
-        }
-        // Weekly dedup: a weekly_chat_streak entry since Monday (UTC) means
-        // the bonus was already paid this week. Best-effort: the 500-item
-        // history window may not span the full week for very active users.
+        // The canister computes the streak (consecutive UTC days ending
+        // today or yesterday) — same contract as the Supabase RPC.
+        const s = await getLiveEngagementStreak(ctx, clubId, userId);
+        if (s < 3) return { streak: s, canAward: false };
+        // Weekly dedup is scope-based: one award per ISO week via
+        // awardLivePointsOnce ("Already awarded" is a no-op), mirroring the
+        // try_award_streak_bonus RPC's weekly uniqueness.
         const now = new Date();
         const mondayOffset = (now.getUTCDay() + 6) % 7;
         const weekStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - mondayOffset);
+        const page = await listLivePointsHistory(ctx, clubId, subjectForUser(userId), 0, 500);
         const awardedThisWeek = page.items.some(
           (i) => i.source_type === "weekly_chat_streak" && Number(i.created_at_ms) >= weekStartMs,
         );
-        return { streak: s, canAward: s >= 3 && !awardedThisWeek };
+        return { streak: s, canAward: !awardedThisWeek };
       },
     });
 
@@ -243,12 +234,17 @@ export async function checkEngagementStreak({
         // `award_points` records the matching history entry atomically —
         // do not also call recordPointsHistory here (it no-ops on this
         // branch anyway, see live/features/points.ts doc comment).
-        const entry = await awardLivePoints(
+        // Scope the dedup to the ISO week (not the streak length) so the
+        // once-per-week rule survives a longer streak next week.
+        const now = new Date();
+        const mondayOffset = (now.getUTCDay() + 6) % 7;
+        const weekStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - mondayOffset);
+        const entry = await awardLivePointsOnce(
           ctx,
           clubId,
           subjectForUser(userId),
           'weekly_chat_streak',
-          `streak:${streak}`,
+          `week:${weekStartMs}`,
           bonusPoints,
           `🔥 ${streakLabel} engagement streak bonus!`,
         );
