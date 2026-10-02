@@ -1115,6 +1115,92 @@ persistent actor {
     }
   };
 
+  // ---- Atomic replace-all-groups batch (auto-generate / copy-from-previous) ----
+  // Builds every group + its players + its per-group duties in one call so a
+  // mid-way failure never leaves half-created matches behind. When
+  // delete_existing is true, all current groups/players/duties for the event
+  // are dropped first (mirrors the Supabase replace_event_groups RPC).
+  public shared ({ caller }) func replace_event_groups(event_id : Text, groups : [Types.GroupSpecInput], delete_existing : Bool) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (groups.any(func(g) = not valid(g.name))) return #Err("Invalid group name");
+    if (delete_existing) {
+      let existingIds = eventGroups.filter(func(g) = g.event_id == event_id).map(func(g) = g.id);
+      eventGroups := eventGroups.filter(func(g) = g.event_id != event_id);
+      eventGroupPlayers := eventGroupPlayers.filter(func(p) = not existingIds.any(func(id) = id == p.group_id));
+      eventGroupDuties := eventGroupDuties.filter(func(d) = not existingIds.any(func(id) = id == d.group_id));
+    };
+    let base = eventGroups.size();
+    var newGroups : [Types.EventGroup] = [];
+    var newPlayers : [Types.EventGroupPlayer] = [];
+    var newDuties : [Types.EventGroupDuty] = [];
+    var createdIds : [Text] = [];
+    var index = 0;
+    for (spec in groups.values()) {
+      let id = "grp-" # event_id # "-" # Nat.toText(base + index);
+      newGroups := newGroups.concat([{ id; event_id; name = spec.name; created_at_ms = nowMs(); team_letter = null; colour = spec.team_a_colour; team_b_colour = spec.team_b_colour; display_order = spec.display_order; ability_band = spec.ability_band; pitch_name = spec.pitch_name }]);
+      newPlayers := newPlayers.concat(spec.players.map(func(p) : Types.EventGroupPlayer = { group_id = id; account_id = p.account_id; team_letter = p.team_letter }));
+      newDuties := newDuties.concat(spec.duties.map(func(d) : Types.EventGroupDuty = { group_id = id; duty = d.duty; account_id = d.account_id }));
+      createdIds := createdIds.concat([id]);
+      index += 1;
+    };
+    eventGroups := eventGroups.concat(newGroups);
+    eventGroupPlayers := eventGroupPlayers.concat(newPlayers);
+    eventGroupDuties := eventGroupDuties.concat(newDuties);
+    #Ok(createdIds)
+  };
+
+  // ---- Event-level duty listing (assignee-keyed duties, used by match duty distribution) ----
+  public query ({ caller }) func list_duties(event_id : Text) : async { #Ok : [Types.Duty]; #Err : Text } {
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) { if (not canView(caller, event)) return #Err("Forbidden"); #Ok(duties.filter(func(item) = item.event_id == event_id)) };
+    }
+  };
+
+  // ---- Self-service child roster + child-team-assignment ----
+  // Caller-scoped: every child the caller is a guardian of (own children via
+  // Child.parent_id, plus any linked via ChildGuardian), same provisional
+  // guardian_id-is-principal-text convention as my_child_rsvps.
+  public query ({ caller }) func my_children() : async [Types.Child] {
+    auth(caller);
+    let callerId = Principal.toText(caller);
+    let guardedIds = childGuardians.filter(func(g) = g.guardian_id == callerId).map(func(g) = g.child_id);
+    children.filter(func(c) = (c.parent_id == ?callerId) or guardedIds.any(func(id) = id == c.id))
+  };
+
+  public shared ({ caller }) func admin_upsert_child_team_assignment(child_id : Text, team_id : Text, club_id : Text) : async { #Ok : Types.ChildTeamAssignment; #Err : Text } {
+    auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller) and not hasRole(caller, "club_admin", club_id, null)) return #Err("Admin required");
+    if (not valid(child_id) or not valid(team_id) or not valid(club_id)) return #Err("Invalid assignment");
+    let value : Types.ChildTeamAssignment = { child_id; team_id; club_id };
+    childTeamAssignments := childTeamAssignments.filter(func(item) = not (item.child_id == child_id and item.team_id == team_id));
+    childTeamAssignments := childTeamAssignments.concat([value]);
+    #Ok(value)
+  };
+
+  public shared ({ caller }) func remove_child_team_assignment(child_id : Text, team_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Admin required");
+    childTeamAssignments := childTeamAssignments.filter(func(item) = not (item.child_id == child_id and item.team_id == team_id));
+    #Ok
+  };
+
+  // Scoped to club membership (same visibility convention as list_team_training_pauses).
+  public query ({ caller }) func list_child_team_assignments(club_id : Text, team_id : Text) : async { #Ok : [Types.ChildTeamAssignment]; #Err : Text } {
+    if (not isClubMember(caller, club_id)) return #Err("Forbidden");
+    #Ok(childTeamAssignments.filter(func(item) = item.club_id == club_id and item.team_id == team_id))
+  };
+
+  // Every team a given child is assigned to, scoped to the caller being that
+  // child's guardian (or governor/bulk) — used to scope RSVP eligibility.
+  public query ({ caller }) func my_child_team_assignments(child_id : Text) : async { #Ok : [Types.ChildTeamAssignment]; #Err : Text } {
+    auth(caller);
+    let callerId = Principal.toText(caller);
+    let isMyChild = childGuardians.any(func(g) = g.child_id == child_id and g.guardian_id == callerId)
+      or children.any(func(c) = c.id == child_id and c.parent_id == ?callerId);
+    if (not isMyChild and not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Forbidden");
+    #Ok(childTeamAssignments.filter(func(item) = item.child_id == child_id))
+  };
+
   // ---- (9) Mini-league-player RSVPs ----
   func subjectEquals(a : Types.RsvpSubject, b : Types.RsvpSubject) : Bool {
     switch (a, b) {
@@ -1585,8 +1671,8 @@ persistent actor {
     }
   };
 
-  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp] }; #Err : Text } {
+  public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    #Ok({ schema = 4; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps })
+    #Ok({ schema = 5; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments })
   };
 };
