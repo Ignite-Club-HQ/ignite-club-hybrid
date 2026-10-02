@@ -174,6 +174,9 @@ export function AddSecondParentDialog({
           if (!selectedUser) throw new Error("No user selected");
           const resolvedChildId = await ensureChildId();
           await linkLiveGuardian(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
+          // Seed the new guardian's read grant on the child's PII name record
+          // (best effort — never fails the link).
+          await grantLiveGuardianChildNameRead(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
           // Keep the mini_league_domain guardian-status lookup
           // (get_player_guardian_status, used by ManagePlayersDialog's
           // pending-status column) in sync with the club_domain link above.
