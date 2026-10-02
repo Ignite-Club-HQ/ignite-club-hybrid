@@ -47,3 +47,8 @@
 - AssociationEventsPanel: `location[0] ?? null` for the association-event location opt.
 - MemberSubscriptionPaymentsManager: icp list branch maps canister MemberPayment onto the Supabase row shape (opt unwraps, created_at_ms → ISO timestamps, payment_status "paid", stripe_payment_intent_id null); Mark Paid icp branch now discards the returned MemberPayment to match the void supabase branch.
 - Gates: check-product-type-errors 0 diagnostics (exit 0); HomePage.nextUpFreshness contract tests 4/4; preview build OK.
+
+## Phase 5 — sponsors (partial, this pass)
+- club_domain: TeamSponsorAllocation type + teamSponsorAllocations store via migration 20261002_010000 (data-preserving); list_team_sponsor_allocations (unauthenticated display read, matching list_sponsors), set_team_sponsor_allocation (club-admin gated), delete_sponsor cascade. Compiles clean; drift 17/17.
+- Wired: SponsorOrAdCarousel (F9, cross-club lookup via my_role_grants), MessagesSponsorCarousel, ClubSponsorSection, MultiClubSponsorCarousel (ICP Pro gate = per-account identity_access entitlement), ClubTeamSponsorAllocator (reads + set write). Type gate 0 errors.
+- OPEN: AppAdCarousel house ads (app_ad_settings/app_ads have no canister shape — NEEDS-CANISTER, must not render a gap); remaining ~55 degraded read sweep; MiniLeagueParentJoinLinkCard claim flow.
