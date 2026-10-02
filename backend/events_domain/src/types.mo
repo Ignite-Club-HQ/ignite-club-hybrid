@@ -56,9 +56,12 @@ module {
   // Mirrors Supabase event_guests: ad-hoc guest additions on an event not
   // tied to a member/child RSVP.
   public type EventGuest = { id : Text; event_id : Text; guest_name : Text; added_by : Principal; created_at_ms : Nat64 };
-  // Minimal mirror of Supabase children (id/name/parent_id) — just enough to
-  // enrich roster reads; full child records stay in Supabase.
-  public type Child = { id : Text; name : Text; parent_id : ?Text };
+  // Minimal child reference — deliberately nameless. Child names are PII
+  // and live only in pii_access_control; clients resolve display names via
+  // its get_decrypted_pii_batch (club-scoped read grants let club members
+  // read them). This canister stores only the id and parent linkage needed
+  // to enrich roster reads.
+  public type Child = { id : Text; parent_id : ?Text };
   // Mirrors Supabase child_guardians. guardian_id is a PROVISIONAL text id
   // matched against Principal.toText(caller), same convention as my_rsvps.
   public type ChildGuardian = { child_id : Text; guardian_id : Text; is_primary : Bool };
