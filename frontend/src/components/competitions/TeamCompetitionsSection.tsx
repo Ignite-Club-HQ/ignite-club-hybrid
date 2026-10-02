@@ -27,7 +27,17 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
   const { user } = useAuth();
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
-  const { data: entries = [] } = useQuery({
+  type CompetitionEntryRow = {
+    id: string;
+    status: string;
+    competition_id: string;
+    team_id?: string;
+    division_id: string | null;
+    competitions: { name: string; sport: string | null; season: string | null; status?: string } | null;
+    competition_divisions: { name: string } | null;
+  };
+
+  const { data: entries = [] } = useQuery<CompetitionEntryRow[]>({
     queryKey: ["team-competition-entries", teamId],
     enabled: !!teamId,
     queryFn: () =>
@@ -38,7 +48,7 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
             .select("id, status, competition_id, division_id, competitions:competition_id(name, sport, season, status), competition_divisions:division_id(name)")
             .eq("team_id", teamId)
             .in("status", ["invited", "accepted"]);
-          return data ?? [];
+          return (data ?? []) as unknown as CompetitionEntryRow[];
         },
         icp: async (ctx) => {
           const entries = await listLiveEntriesByTeam(ctx, teamId);
