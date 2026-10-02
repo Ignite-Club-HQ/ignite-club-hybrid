@@ -109,5 +109,6 @@ module {
     var redemptions : [RewardRedemption];
     var cooldowns : [PointsCooldown];
     var bulkAccessPrincipals : [Principal];
+    var clubPointsSettings : [ClubPointsSettings];
   };
 }
