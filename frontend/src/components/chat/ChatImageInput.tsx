@@ -972,7 +972,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 locked?: boolean;
               };
               const actions: Action[] = [];
-              actions.push({
+              if (!isIcpMediaUploadUnavailable()) actions.push({
                 key: "photo",
                 label: "Photo / Video",
                 hint: "Camera roll",
@@ -985,7 +985,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 },
               });
 
-              if (showVaultPicker && clubId) {
+              if (showVaultPicker && clubId && !isIcpMediaUploadUnavailable()) {
                 actions.push({
                   key: "file",
                   label: "File or Folder",
