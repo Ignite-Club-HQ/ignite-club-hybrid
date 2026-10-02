@@ -10,10 +10,11 @@ import { PageLoading } from "@/components/ui/page-loading";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
+// NEEDS-CANISTER: deleted-chat restore and DM attachment restrictions have no
+// messaging_domain methods yet (canister only exposes soft_delete_group), so
+// both tools are Supabase-only and stay off the ICP link list.
 const ICP_LAB_ADMIN_LINKS: { to: string; label: string }[] = [
   { to: "/admin/users", label: "Manage users" },
-  { to: "/admin/deleted-chats", label: "Deleted chats" },
-  { to: "/admin/dm-attachments", label: "DM attachments" },
   { to: "/admin/feedback", label: "Feedback" },
   { to: "/admin/active-games", label: "Active games" },
 ];
