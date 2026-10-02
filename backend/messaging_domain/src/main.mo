@@ -9,6 +9,7 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Call "mo:ic/Call";
 import IC "mo:ic/Types";
@@ -45,6 +46,10 @@ persistent actor {
   var blockedUsers : [Types.BlockedUser];
   var typingPings : [Types.TypingPing];
   var pinnedMessages : [Types.PinnedMessage];
+  // Governor-set notification_queue canister id for the chat notify fan-out
+  // hook. Fail-closed while unset: messages send fine, no chat notifications
+  // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
+  var notificationQueueCanister : ?Principal;
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -270,6 +275,78 @@ persistent actor {
     msg
   };
 
+  // ===================== Chat notification fan-out =====================
+  // After a message is persisted, expand the recipient set canister-side
+  // (conversation/group membership minus sender, minus blocked pairs) and
+  // push it to notification_queue together with the mute list — the browser
+  // has no legitimate access to other members' mute state, so the expansion
+  // must happen here. Fire-and-forget: the send response never waits on the
+  // notify leg and a failure is swallowed; notification_queue dedupes by
+  // message_id, so a retry or duplicate hook call is safe.
+
+  public shared ({ caller }) func set_notification_queue_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    notificationQueueCanister := ?id;
+    #Ok
+  };
+
+  func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {
+    if (body == "") {
+      switch (attachment) {
+        case (?a) { if (a.kind == "image" or a.kind == "photo") { "Photo" } else { "File" } };
+        case null { "" };
+      }
+    } else {
+      var preview = "";
+      var count = 0;
+      label chars for (c in body.chars()) {
+        if (count >= 140) { break chars };
+        preview := preview # Char.toText(c);
+        count += 1;
+      };
+      preview
+    }
+  };
+
+  func fanOutChatNotify(msg : Types.Message) : async () {
+    switch (notificationQueueCanister) {
+      case null {};
+      case (?nq) {
+        var conv : ?Types.Conversation = null;
+        for (c in conversations.values()) { if (c.id == msg.conversation_id) { conv := ?c } };
+        switch (conv) {
+          case null {};
+          case (?conversation) {
+            let members = switch (getGroupMetadataFor(conversation.id)) {
+              case (?meta) { if (meta.members.size() > 0) { meta.members } else { conversation.participants } };
+              case null { conversation.participants };
+            };
+            var recipients : [Text] = [];
+            var muted : [Text] = [];
+            for (p in members.values()) {
+              // notification_queue caps batches at 500 recipients.
+              if (recipients.size() < 500 and not p.equal(msg.sender) and not isBlockedPair(msg.sender, p)) {
+                let recipient = Principal.toText(p);
+                recipients := recipients.concat([recipient]);
+                if (mutePreferences.any(func(m) = m.user.equal(p) and m.conversation_id == conversation.id and m.muted)) {
+                  muted := muted.concat([recipient]);
+                };
+              };
+            };
+            let queue : actor {
+              record_chat_notify_batch : shared (Text, Text, Text, Text, [Text], [Text]) -> async { #Ok : Nat16; #Err : Text };
+            } = actor (Principal.toText(nq));
+            try {
+              ignore await queue.record_chat_notify_batch(msg.id, conversation.id, Principal.toText(msg.sender), chatNotifyPreview(msg.body, msg.attachment), recipients, muted);
+            } catch (_) {};
+          };
+        };
+      };
+    };
+  };
+
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -304,7 +381,11 @@ persistent actor {
     };
     switch (findConversationIndex(conversation_id)) {
       case null { #Err("Conversation not found") };
-      case (?i) { #Ok(postMessage(i, caller, body, idempotency_key, attachment)) };
+      case (?i) {
+        let posted = postMessage(i, caller, body, idempotency_key, attachment);
+        ignore fanOutChatNotify(posted);
+        #Ok(posted)
+      };
     }
   };
 
@@ -346,7 +427,8 @@ persistent actor {
             if (m.conversation_id == conv.id and m.idempotency_key == key) { already := true };
           };
           if (not already) {
-            ignore postMessage(i, caller, body, key, null);
+            let posted = postMessage(i, caller, body, key, null);
+            ignore fanOutChatNotify(posted);
             delivered += 1;
           };
         };
@@ -972,6 +1054,7 @@ persistent actor {
               if (m.conversation_id == to_conversation_id and m.idempotency_key == key) { return #Ok(m) };
             };
             let posted = postMessage(ci, caller, orig.body, key, orig.attachment);
+            ignore fanOutChatNotify(posted);
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
             #Ok(posted)
           };
@@ -1009,6 +1092,7 @@ persistent actor {
           case null { #Err("Conversation not found") };
           case (?ci) {
             let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null);
+            ignore fanOutChatNotify(posted);
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
             scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
             #Ok(updated)

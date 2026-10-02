@@ -19,6 +19,18 @@ persistent actor {
   var preferences : [Types.Preferences];
   var push_settings : ?Types.PushAlertSettings;
   var chat_notified_messages : [Text];
+  // Governor-set messaging_domain canister id. Calls to
+  // record_chat_notify_batch from this principal are trusted (recipients and
+  // mute list accepted as-is); any other caller may only fan out their own
+  // messages. Fail-closed while unset. See docs/icp-chat-notify-fanout-spec.md.
+  var messagingDomainCanister : ?Principal;
+
+  public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
+    messagingDomainCanister := ?id;
+    #Ok
+  };
 
   func authenticated(caller : Principal) {
     if (caller.equal(Principal.anonymous())) { Runtime.trap("Forbidden") };
@@ -808,11 +820,23 @@ persistent actor {
       return #Err("Invalid chat notify fields");
     };
     if (recipients.size() > 500) { return #Err("Invalid recipient count") };
+    // Caller rules: the configured messaging_domain canister is trusted
+    // (it expands recipients and mutes canister-side). Any other caller may
+    // only fan out their own messages, and their mute list is ignored —
+    // mute state is private to messaging_domain.
+    let fromMessagingDomain = switch (messagingDomainCanister) {
+      case (?md) { md.equal(caller) };
+      case null { false };
+    };
+    if (not fromMessagingDomain and Principal.toText(caller) != sender) {
+      return #Err("Sender must match caller");
+    };
+    let effective_mute_list = if (fromMessagingDomain) { mute_list } else { [] };
     if (chatMessageProcessed(message_id)) { return #Ok(0) };
     let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
     var created : Nat16 = 0;
     for (recipient in recipients.values()) {
-      let muted = mute_list.any(func(m) = m == recipient);
+      let muted = effective_mute_list.any(func(m) = m == recipient);
       if (valid(recipient) and recipient != sender and not muted and recipientAllowed(recipient, "message_chat")) {
         let id = "chat-" # message_id # "-" # recipient;
         switch (get(id)) {
