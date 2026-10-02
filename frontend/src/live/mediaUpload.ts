@@ -1,6 +1,7 @@
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
+import { resolveAuthBackend } from "./authBackendMode";
 import { encryptPiiValue } from "./piiVetKeys";
 import { grantLiveClubPiiRead, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
@@ -28,6 +29,18 @@ import type { LiveBlobRef } from "./mediaStorage";
  * by everyone). The club read grant, derived from a `clubs/<clubId>/` path
  * prefix, is best-effort like every other grant.
  */
+
+/**
+ * True when media uploads cannot succeed for the current session: the member
+ * is on the ICP backend and no media_blob_store canister is configured yet.
+ * UI surfaces use this to HIDE upload controls for Internet Identity members
+ * (blocked options must not be visible), rather than throwing on submit.
+ * Supabase-mode sessions always return false — their uploads work as before.
+ */
+export function isIcpMediaUploadUnavailable(): boolean {
+  if (resolveAuthBackend() !== "icp") return false;
+  return !isBlobStoreConfigured(getActiveIcpTarget());
+}
 
 export interface BlobMediaUpload {
   /** On-chain URL to persist in place of a Supabase storage URL. */
