@@ -158,6 +158,93 @@ export async function revokeLivePiiRead(
 }
 
 /**
+ * Grants every member of a club read access to one PII field (verified
+ * live canister-side via club_domain's has_club_staff_role). Lets club
+ * staff render names — e.g. a coach viewing an event roster — without a
+ * per-principal grant. Caller must own the record (or be governor).
+ */
+export async function grantLivePiiReadClub(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  clubId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.grant_pii_read_club(piiId, fieldId, clubId), "Grant PII read to club");
+}
+
+export async function revokeLivePiiReadClub(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  clubId: string,
+) {
+  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  return unwrapCandid(actor.revoke_pii_read_club(piiId, fieldId, clubId), "Revoke PII read from club");
+}
+
+/**
+ * Best-effort club-scoped read grant for one PII field. Logged, never
+ * thrown — the grant can be retried later by the record owner.
+ */
+export async function grantLiveClubPiiRead(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  clubId: string,
+): Promise<void> {
+  try {
+    await grantLivePiiReadClub(ctx, piiId, fieldId, clubId);
+  } catch (error) {
+    console.error("[vault] club PII read grant failed", {
+      piiId,
+      fieldId,
+      clubId,
+      message: (error as Error)?.message,
+    });
+  }
+}
+
+/** Best-effort club-scoped read grant for a child's `name` field. */
+export async function grantLiveClubChildNameRead(
+  ctx: FeatureBackendContext,
+  childId: string,
+  clubId: string,
+): Promise<void> {
+  await grantLiveClubPiiRead(ctx, childId, "name", clubId);
+}
+
+/**
+ * Best-effort batch decrypt returning a pii_id -> plaintext map. Missing
+ * entries mean "no access / not registered" — callers fall back to a
+ * neutral label, never an error state. Logged, never thrown.
+ */
+export async function resolveLivePiiTextBatch(
+  ctx: FeatureBackendContext,
+  piiIds: string[],
+  fieldId: string,
+  operation: string,
+  purpose: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (piiIds.length === 0) return out;
+  try {
+    const rows = await getLiveDecryptedPiiBatch(ctx, piiIds, fieldId, operation, purpose);
+    const decoder = new TextDecoder();
+    for (const row of rows) {
+      out.set(row.pii_id, decoder.decode(Uint8Array.from(row.plaintext)));
+    }
+  } catch (error) {
+    console.error("[vault] PII batch decrypt failed", {
+      fieldId,
+      count: piiIds.length,
+      message: (error as Error)?.message,
+    });
+  }
+  return out;
+}
+
+/**
  * Field-id conventions for non-vault PII records (kept in sync with the
  * reads in homeFeed.ts / inboxPreviewSources.ts):
  * - child name      -> pii_id = child id,        field_id = "name"
