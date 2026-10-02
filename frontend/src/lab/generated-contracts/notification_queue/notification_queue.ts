@@ -314,6 +314,13 @@ export interface notification_queueInterface {
     record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
     recover(): Promise<ResultNat16>;
     schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
+    set_messaging_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     transfer_governorship(new_governor: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -449,6 +456,16 @@ export class Notification_queue implements notification_queueInterface {
     async schedule_message(arg0: string, arg1: string, arg2: ChatType, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string, arg8: string | null, arg9: string | null, arg10: bigint, arg11: Recurrence, arg12: bigint | null): Promise<ScheduledResult> {
         const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n51(arg2), to_candid_opt_n22(arg3), to_candid_opt_n22(arg4), to_candid_opt_n22(arg5), to_candid_opt_n22(arg6), arg7, to_candid_opt_n22(arg8), to_candid_opt_n22(arg9), arg10, to_candid_Recurrence_n53(arg11), to_candid_opt_n29(arg12));
         return from_candid_ScheduledResult_n8(result);
+    }
+    async set_messaging_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_messaging_domain_canister(arg0);
+        return from_candid_variant_n25(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";

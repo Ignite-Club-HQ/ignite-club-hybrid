@@ -459,6 +459,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_notification_queue_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_recap_config' : ActorMethod<
     [[] | [RecapConfig]],
     { 'Ok' : null } |

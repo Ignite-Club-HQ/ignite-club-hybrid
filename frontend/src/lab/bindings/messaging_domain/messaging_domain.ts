@@ -633,6 +633,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_notification_queue_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_recap_config(config: RecapConfig | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1257,6 +1264,16 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_mute_preference(arg0, arg1);
+        return from_candid_variant_n1(result);
+    }
+    async set_notification_queue_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_notification_queue_canister(arg0);
         return from_candid_variant_n1(result);
     }
     async set_recap_config(arg0: RecapConfig | null): Promise<{

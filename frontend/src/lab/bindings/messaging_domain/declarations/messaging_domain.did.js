@@ -528,6 +528,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_notification_queue_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_recap_config' : IDL.Func(
         [IDL.Opt(RecapConfig)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
