@@ -25,6 +25,9 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { liveListAllOnlineUsers } from "@/live/features/messaging";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 
 type WindowMinutes = 2 | 5 | 15 | 60;
 
@@ -44,51 +47,80 @@ export default function OnlineUsersTab() {
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["admin-online-users", windowMinutes],
-    queryFn: async () => {
-      const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
-      const { data: presence, error } = await supabase
-        .from("user_presence" as any)
-        .select("user_id, last_seen_at, platform, user_agent")
-        .gte("last_seen_at", cutoff)
-        .order("last_seen_at", { ascending: false });
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+          const { data: presence, error } = await supabase
+            .from("user_presence" as any)
+            .select("user_id, last_seen_at, platform, user_agent")
+            .gte("last_seen_at", cutoff)
+            .order("last_seen_at", { ascending: false });
 
-      if (error) throw error;
-      const rows = (presence as any[]) || [];
+          if (error) throw error;
+          const rows = (presence as any[]) || [];
 
-      const userIds = [...new Set(rows.map((r) => r.user_id))];
-      if (userIds.length === 0) return [];
+          const userIds = [...new Set(rows.map((r) => r.user_id))];
+          if (userIds.length === 0) return [];
 
-      const { data: profiles } = await selectCachedProfilesByIds(userIds);
+          const { data: profiles } = await selectCachedProfilesByIds(userIds);
 
-      // Emails live in auth.users — fetch via the admin-gated RPC.
-      // Failures here are non-fatal; we just render the row without an email.
-      const emailMap: Record<string, string> = {};
-      try {
-        const { data: emailRows } = await supabase.rpc(
-          "admin_get_user_emails" as any,
-          { user_ids: userIds } as any,
-        );
-        (emailRows as any[] | null)?.forEach((row: any) => {
-          if (row?.id && row?.email) emailMap[row.id] = row.email;
-        });
-      } catch {
-        // Caller is not an app_admin or RPC is unavailable; render without emails.
-      }
+          // Emails live in auth.users — fetch via the admin-gated RPC.
+          // Failures here are non-fatal; we just render the row without an email.
+          const emailMap: Record<string, string> = {};
+          try {
+            const { data: emailRows } = await supabase.rpc(
+              "admin_get_user_emails" as any,
+              { user_ids: userIds } as any,
+            );
+            (emailRows as any[] | null)?.forEach((row: any) => {
+              if (row?.id && row?.email) emailMap[row.id] = row.email;
+            });
+          } catch {
+            // Caller is not an app_admin or RPC is unavailable; render without emails.
+          }
 
-      const profileMap: Record<string, any> = {};
-      (profiles || []).forEach((p: any) => {
-        profileMap[p.id] = p;
-      });
+          const profileMap: Record<string, any> = {};
+          (profiles || []).forEach((p: any) => {
+            profileMap[p.id] = p;
+          });
 
-      return rows.map((r) => ({
-        userId: r.user_id,
-        lastSeenAt: r.last_seen_at,
-        platform: r.platform || "unknown",
-        displayName: profileMap[r.user_id]?.display_name || "Unknown User",
-        email: emailMap[r.user_id] || null,
-        avatarUrl: profileMap[r.user_id]?.avatar_url || null,
-      }));
-    },
+          return rows.map((r) => ({
+            userId: r.user_id,
+            lastSeenAt: r.last_seen_at,
+            platform: r.platform || "unknown",
+            displayName: profileMap[r.user_id]?.display_name || "Unknown User",
+            email: emailMap[r.user_id] || null,
+            avatarUrl: profileMap[r.user_id]?.avatar_url || null,
+          }));
+        },
+        icp: async (ctx) => {
+          // The canister returns everyone seen in its fixed 90s window; the
+          // selected window is applied client-side. Emails are unavailable
+          // by design (identity_access holds no email directory).
+          const online = await liveListAllOnlineUsers(ctx);
+          const cutoffMs = Date.now() - windowMinutes * 60 * 1000;
+          const rows = online
+            .filter((o) => Number(o.last_seen_ms) >= cutoffMs)
+            .sort((a, b) => Number(b.last_seen_ms) - Number(a.last_seen_ms));
+          if (rows.length === 0) return [];
+          const ids = rows.map((o) => o.user.toText());
+          const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
+          const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
+          return rows.map((o) => {
+            const id = o.user.toText();
+            const profile = profileMap.get(id) as any;
+            return {
+              userId: id,
+              lastSeenAt: new Date(Number(o.last_seen_ms)).toISOString(),
+              platform: o.platform[0] || "unknown",
+              displayName: profile?.display_name || "Unknown User",
+              email: null,
+              avatarUrl: profile?.avatar_url || null,
+            };
+          });
+        },
+      }),
     refetchInterval: 30_000,
   });
 
