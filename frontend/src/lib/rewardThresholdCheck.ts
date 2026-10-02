@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveClubRewards } from "@/live/features/points";
 
 /**
@@ -55,13 +57,13 @@ export async function checkRewardThreshold({
     const notifyUserId = userId || (childId ? await getParentId(childId) : null);
 
     if (notifyUserId) {
-      // Notifications table has no canister equivalent — always write via Supabase.
-      await supabase.from("notifications").insert({
-        user_id: notifyUserId,
-        type: "reward_unlocked",
+      // Routed: notification_queue under ICP, the Supabase table otherwise.
+      await sendGamificationNotification({
+        userId: notifyUserId,
+        clubId,
+        kind: "reward_unlocked",
         message: `🎁 Reward unlocked! You've earned: ${reward.name}!`,
-        related_id: clubId,
-        club_id: clubId,
+        dedupHours: 0,
       });
     }
 
@@ -73,6 +75,12 @@ export async function checkRewardThreshold({
 }
 
 async function getParentId(childId: string): Promise<string | null> {
+  // Supabase-only: the club_domain Child record links to the parent's
+  // principal, not their app account id, so a child→parent account lookup
+  // has no canister equivalent. ICP callers always pass userId directly, so
+  // this is unreachable for II sessions — the guard is belt-and-braces.
+  // NEEDS-CANISTER: child→parent account id resolution.
+  if (isFeatureRoutedToIcp("points")) return null;
   const { data } = await supabase
     .from("children")
     .select("parent_id")

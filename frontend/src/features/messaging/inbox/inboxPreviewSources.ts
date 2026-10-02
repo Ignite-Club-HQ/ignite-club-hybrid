@@ -7,7 +7,85 @@ import {
   selectCachedProfilesByIds,
 } from "@/lib/profileCache";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import type { FeatureBackendContext } from "@/live/featureRouter";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { getLiveMyRoleGrants, listLiveMembershipClubs, listLiveMembershipTeams } from "@/live/features/membership";
+import { listLiveMessagesPage, recentLiveConversations } from "@/live/features/messaging";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
+
+async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
+  const identity = await getCurrentInternetIdentity();
+  if (!identity) throw new Error("Internet Identity session required");
+  return { identity, target: getActiveIcpTarget() };
+}
+
+/**
+ * Fetches the most recent message body for each club/team-scoped ICP
+ * conversation and groups it by the scope id (the conversation id doubles
+ * as the club/team id for these conversations — the same convention
+ * `useUnreadMessageCounts`/`unreadMessageCounts.ts` rely on for the
+ * `my_unread_counts` buckets). `recent_conversations` only reports the
+ * latest sequence number, so each scope id's actual message body is fetched
+ * with a one-row `list_messages_page` call cursored just before that
+ * sequence.
+ */
+async function fetchIcpLatestMessagesByScope(
+  ctx: FeatureBackendContext,
+  scopeIds: ReadonlySet<string>,
+  kind: "club" | "team",
+): Promise<Record<string, InboxPreview>> {
+  if (scopeIds.size === 0) return {};
+  const principal = ctx.identity.getPrincipal();
+  const conversations = await recentLiveConversations(ctx, principal, 100);
+  const relevant = conversations.filter(
+    (conversation: any) => conversation.kind === kind && scopeIds.has(conversation.conversation_id),
+  );
+  if (relevant.length === 0) return {};
+
+  const latestByScope = new Map<string, { body: string; createdAtMs: number; sender: any }>();
+  await Promise.all(
+    relevant.map(async (conversation: any) => {
+      const lastSequence = Number(conversation.last_message_sequence ?? 0);
+      if (lastSequence <= 0) return;
+      const page = await listLiveMessagesPage(
+        ctx,
+        conversation.conversation_id,
+        lastSequence - 1,
+        1,
+      );
+      const message = page.messages?.[0];
+      if (!message) return;
+      latestByScope.set(conversation.conversation_id, {
+        body: message.body,
+        createdAtMs: Number(message.created_at_ms),
+        sender: message.sender,
+      });
+    }),
+  );
+
+  const senderIds = Array.from(new Set(
+    Array.from(latestByScope.values()).map((entry) => entry.sender.toText()),
+  ));
+  const profiles = senderIds.length > 0 ? await listLiveProfilesByIds(ctx, senderIds) : [];
+  const nameByPrincipal: Record<string, string> = {};
+  for (const profile of profiles as any[]) {
+    const principalText = profile.principal?.toText?.() ?? profile.id;
+    if (principalText && profile.display_name) nameByPrincipal[principalText] = profile.display_name;
+  }
+
+  const latestMessages: Record<string, InboxPreview> = {};
+  for (const [scopeId, entry] of latestByScope) {
+    latestMessages[scopeId] = {
+      text: entry.body,
+      author: nameByPrincipal[entry.sender.toText()] ?? "",
+      created_at: new Date(entry.createdAtMs).toISOString(),
+      image_url: null,
+    };
+  }
+  return latestMessages;
+}
 
 export interface InboxClub {
   id: string;
@@ -51,7 +129,25 @@ export async function fetchMemberClubsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
-  if (resolveAuthBackend() === "icp") return { clubs: [], latestMessages: {} };
+  if (resolveAuthBackend() === "icp") {
+    const ctx = await getIcpFeatureBackendContext();
+    const roleGrants = await getLiveMyRoleGrants(ctx);
+    const clubIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+    )] as string[];
+    if (clubIds.length === 0) return { clubs: [] as InboxClub[], latestMessages: {} };
+    const allClubs = await listLiveMembershipClubs(ctx);
+    const clubs: InboxClub[] = (allClubs as any[])
+      .filter((club) => clubIds.includes(club.id) && club.deleted_at_ms?.[0] === undefined)
+      .map((club) => ({
+        id: club.id,
+        name: club.name,
+        logo_url: club.logo_url?.[0] ?? null,
+        sport: null,
+      }));
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)), "club");
+    return { clubs, latestMessages };
+  }
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return {
@@ -121,7 +217,42 @@ export async function fetchTeamsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
-  if (resolveAuthBackend() === "icp") return { teams: [], latestMessages: {} };
+  if (resolveAuthBackend() === "icp") {
+    const ctx = await getIcpFeatureBackendContext();
+    const roleGrants = await getLiveMyRoleGrants(ctx);
+    const teamIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.team_id?.[0]).filter(Boolean),
+    )] as string[];
+    const clubIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+    )] as string[];
+    if (teamIds.length === 0 || clubIds.length === 0) return { teams: [] as InboxTeam[], latestMessages: {} };
+    const allClubs = await listLiveMembershipClubs(ctx);
+    const clubById = new Map((allClubs as any[]).map((club) => [club.id, club]));
+    const teamLists = await Promise.all(clubIds.map((clubId) => listLiveMembershipTeams(ctx, clubId)));
+    const teams: InboxTeam[] = [];
+    for (const teamList of teamLists) {
+      for (const team of teamList as any[]) {
+        if (!teamIds.includes(team.id)) continue;
+        if (team.deleted_at_ms?.[0] !== undefined) continue;
+        const club = clubById.get(team.club_id);
+        if (!club || club.deleted_at_ms?.[0] !== undefined) continue;
+        teams.push({
+          id: team.id,
+          name: team.name,
+          logo_url: team.logo_url?.[0] ?? null,
+          clubs: {
+            id: club.id,
+            name: club.name,
+            logo_url: club.logo_url?.[0] ?? null,
+            sport: null,
+          },
+        });
+      }
+    }
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)), "team");
+    return { teams, latestMessages };
+  }
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return { teams: snapshot.teams, latestMessages: snapshot.latestTeamMessages };

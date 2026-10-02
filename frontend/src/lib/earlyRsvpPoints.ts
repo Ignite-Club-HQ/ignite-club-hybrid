@@ -2,7 +2,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { differenceInDays, parseISO } from "date-fns";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { sendGamificationNotification } from "@/lib/gamificationNotify";
+import { icpCallerHasProEntitlement } from "@/lib/icpPointsPro";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { awardLivePoints, subjectFor } from "@/live/features/points";
 
 const EARLY_RSVP_DAYS_THRESHOLD = 3;
@@ -31,18 +34,30 @@ export async function awardEarlyRsvpPoints({
   clubName,
 }: AwardEarlyRsvpPointsParams): Promise<boolean> {
   try {
-    // Check if club has Pro subscription and points system enabled
-    const { data: clubSub } = await supabase
-      .from("club_subscriptions")
-      .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, disable_points_system")
-      .eq("club_id", clubId)
-      .maybeSingle();
+    const pointsOnIcp = isFeatureRoutedToIcp("points");
 
-    const hasPro = clubSub?.is_pro || clubSub?.is_pro_football || 
-                   clubSub?.admin_pro_override || clubSub?.admin_pro_football_override;
+    if (pointsOnIcp) {
+      // ICP branch: no per-club subscription row exists — the caller's own
+      // identity_access entitlement is the Pro signal (same simplification
+      // as useClubProAccess). An II principal has no Supabase session, so
+      // the club_subscriptions read below must never run for them.
+      // NEEDS-CANISTER: the club-level disable_points_system kill switch has
+      // no club_domain settings field yet.
+      if (!(await icpCallerHasProEntitlement())) return false;
+    } else {
+      // Check if club has Pro subscription and points system enabled
+      const { data: clubSub } = await supabase
+        .from("club_subscriptions")
+        .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, disable_points_system")
+        .eq("club_id", clubId)
+        .maybeSingle();
 
-    if (!hasPro || clubSub?.disable_points_system) {
-      return false;
+      const hasPro = clubSub?.is_pro || clubSub?.is_pro_football ||
+                     clubSub?.admin_pro_override || clubSub?.admin_pro_football_override;
+
+      if (!hasPro || clubSub?.disable_points_system) {
+        return false;
+      }
     }
 
     // Check if event is at least 3 days away
@@ -54,30 +69,37 @@ export async function awardEarlyRsvpPoints({
       return false;
     }
 
-    // Check if points were already awarded for this RSVP
-    const { data: rsvp } = await supabase
-      .from("rsvps")
-      .select("early_rsvp_points_awarded")
-      .eq("id", rsvpId)
-      .single();
+    if (!pointsOnIcp) {
+      // Check if points were already awarded for this RSVP
+      const { data: rsvp } = await supabase
+        .from("rsvps")
+        .select("early_rsvp_points_awarded")
+        .eq("id", rsvpId)
+        .single();
 
-    if (rsvp?.early_rsvp_points_awarded) {
-      return false;
+      if (rsvp?.early_rsvp_points_awarded) {
+        return false;
+      }
+
+      // Mark RSVP as having awarded points FIRST (optimistic lock)
+      // If another request already set this, we'll know from the update count
+      const { data: updatedRsvp, error: markError } = await supabase
+        .from("rsvps")
+        .update({ early_rsvp_points_awarded: true })
+        .eq("id", rsvpId)
+        .eq("early_rsvp_points_awarded", false)
+        .select("id")
+        .maybeSingle();
+
+      if (markError || !updatedRsvp) {
+        return false; // Another request already marked it
+      }
     }
-
-    // Mark RSVP as having awarded points FIRST (optimistic lock)
-    // If another request already set this, we'll know from the update count
-    const { data: updatedRsvp, error: markError } = await supabase
-      .from("rsvps")
-      .update({ early_rsvp_points_awarded: true })
-      .eq("id", rsvpId)
-      .eq("early_rsvp_points_awarded", false)
-      .select("id")
-      .maybeSingle();
-
-    if (markError || !updatedRsvp) {
-      return false; // Another request already marked it
-    }
+    // NEEDS-CANISTER (ICP branch): the events canister RSVP record has no
+    // early_rsvp_points_awarded flag, so the optimistic lock above cannot
+    // run. Cross-day dedup relies on award_points' scope dedup (action_type
+    // "early_rsvp" + scope_id rsvpId), which covers same-day repeats; a
+    // cancelled-and-rebooked RSVP on a later day could re-award.
 
     // Atomic points increment — child or user. Routed through the
     // club_points_domain award_points wrapper under ICP so the balance and
@@ -121,7 +143,9 @@ export async function awardEarlyRsvpPoints({
       });
     } catch (updateError) {
       console.error("Failed to award early RSVP points:", updateError);
-      await supabase.from("rsvps").update({ early_rsvp_points_awarded: false }).eq("id", rsvpId);
+      if (!pointsOnIcp) {
+        await supabase.from("rsvps").update({ early_rsvp_points_awarded: false }).eq("id", rsvpId);
+      }
       return false;
     }
     previousPoints = balanceAfter - EARLY_RSVP_POINTS;
@@ -139,34 +163,44 @@ export async function awardEarlyRsvpPoints({
       description: `Early RSVP bonus (${daysUntilEvent} days before event)`,
     });
 
-    // Get club's custom points name
-    const { data: clubData } = await supabase
-      .from("clubs")
-      .select("points_display_name")
-      .eq("id", clubId)
-      .single();
-    const pointsName = (clubData as any)?.points_display_name || 'reward points';
+    // Get club's custom points name.
+    // NEEDS-CANISTER (ICP branch): club_domain has no points_display_name
+    // setting, so ICP notifications use the default "reward points".
+    let pointsName = 'reward points';
+    if (!pointsOnIcp) {
+      const { data: clubData } = await supabase
+        .from("clubs")
+        .select("points_display_name")
+        .eq("id", clubId)
+        .single();
+      pointsName = (clubData as any)?.points_display_name || 'reward points';
+    }
 
-    // Create notification (always notify the parent user)
-    await supabase.from("notifications").insert({
-      user_id: userId,
-      type: "early_rsvp_points",
+    // Create notification (always notify the parent user) — routed to the
+    // active notifications backend.
+    await sendGamificationNotification({
+      userId,
+      clubId,
+      kind: "early_rsvp_points",
       message: `🎯 Early bird bonus! ${childId ? 'Your child' : 'You'} earned +${EARLY_RSVP_POINTS} ${pointsName} for RSVPing ${daysUntilEvent} days before the event. Keep it up!`,
-      related_id: clubId,
-      club_id: clubId,
+      dedupHours: 0,
     });
 
-    // Check reward threshold
+    // Check reward threshold — always notify the parent account, so pass
+    // userId in both backends (childId-only lookups are Supabase-only).
     const rewardName = await checkRewardThreshold({
-      userId: childId ? undefined : userId,
+      userId,
       childId: childId || undefined,
       clubId,
       previousPoints,
       newPoints: balanceAfter,
     });
 
-    // Send email notification (fire and forget)
-    supabase.functions.invoke("send-points-notification-email", {
+    // Send email notification (fire and forget). Points email is not one of
+    // the approved Supabase exceptions for ICP sessions, so it stays off
+    // when points are routed to the canister.
+    if (!pointsOnIcp) {
+      supabase.functions.invoke("send-points-notification-email", {
       body: {
         recipientUserId: userId,
         pointsAwarded: EARLY_RSVP_POINTS,
@@ -176,7 +210,8 @@ export async function awardEarlyRsvpPoints({
         rewardUnlocked: !!rewardName,
         rewardName,
       },
-    }).catch((err) => console.error("Failed to send points email:", err));
+      }).catch((err) => console.error("Failed to send points email:", err));
+    }
 
     return true;
   } catch (error) {
