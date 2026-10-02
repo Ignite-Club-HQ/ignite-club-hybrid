@@ -81,7 +81,7 @@ module {
     cta_label : ?Text; bg_color : ?Text; text_color : ?Text;
   };
   public type AdEvent = { id : Text; ad_id : Text; event_type : Text; context : Text; user : Principal; created_at_ms : Nat64 };
-  public type AdEventSummary = { ad_id : Text; views : Nat32; clicks : Nat32 };
+  public type AdEventSummary = { ad_id : Text; context : Text; views : Nat32; clicks : Nat32 };
 
   public type State = {
     var governor : Principal;

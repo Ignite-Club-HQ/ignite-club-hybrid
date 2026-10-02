@@ -578,17 +578,28 @@ persistent actor {
     #Ok
   };
 
-  // Per-ad view/click counts since since_ms, for the admin ads table.
+  // All location settings, for the admin ads settings tab.
+  public query ({ caller }) func list_ad_settings() : async { #Ok : [Types.AppAdSetting]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(adSettings.sort(func(a, b) = Text.compare(a.location, b.location)))
+  };
+
+  // Per-ad, per-context view/click counts since since_ms, for the admin ads table.
   public query ({ caller }) func ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
-    #Ok(ads.map(func(a) : Types.AdEventSummary {
+    #Ok(ads.flatMap(func(a) : [Types.AdEventSummary] {
       let mine = inRange.filter(func(e) = e.ad_id == a.id);
-      {
-        ad_id = a.id;
-        views = Nat.toNat32(mine.filter(func(e) = e.event_type == "view").size());
-        clicks = Nat.toNat32(mine.filter(func(e) = e.event_type == "click").size());
-      }
+      let contexts = mine.foldLeft([] : [Text], func(acc, e) = if (acc.any(func(c) = c == e.context)) acc else acc.concat([e.context]));
+      contexts.map(func(ctx) : Types.AdEventSummary {
+        let scoped = mine.filter(func(e) = e.context == ctx);
+        {
+          ad_id = a.id;
+          context = ctx;
+          views = Nat.toNat32(scoped.filter(func(e) = e.event_type == "view").size());
+          clicks = Nat.toNat32(scoped.filter(func(e) = e.event_type == "click").size());
+        }
+      })
     }))
   };
 }
