@@ -6,8 +6,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import {
+  createLiveEventGroup,
+  renameLiveEventGroup,
+  deleteLiveEventGroup,
+  listLiveEventGroups,
+  addLiveGroupPlayer,
+  listLiveGroupPlayers,
+  moveLiveGroupPlayer,
+  swapLiveGroupPlayers,
+  setLiveGroupDuty,
+  listLiveGroupDuties,
+  setLiveEventGroupAppearance,
+  replaceLiveEventGroups,
+  listLiveDuties,
+  listLiveMiniLeagueRsvps,
+  type LiveGroupSpecInput,
+} from "@/live/features/events";
 
 import type { Json } from "@/integrations/supabase/types";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -116,8 +131,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
     queryKey: ["event-groups", eventId],
     // NEEDS-CANISTER: event_groups/event_group_players (mini-league match
     // groups) have no events_domain/mini_league_domain equivalent.
-    enabled: !!eventId && !isFeatureRoutedToIcp("mini_leagues"),
-    queryFn: async () => {
+    enabled: !!eventId,
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => {
       const { data: groupsData, error } = await supabase
         .from("event_groups")
         .select("*")
@@ -166,7 +182,40 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         });
       }
       return groupsWithPlayers;
-    },
+      },
+      icp: async (ctx) => {
+        const [rawGroups, players] = await Promise.all([
+          listLiveEventGroups(ctx, eventId),
+          listLivePlayers(ctx, miniLeagueId),
+        ]);
+        const playerInfo = new Map(players.map((p) => [p.id, p]));
+        const groupsWithPlayers: EventGroup[] = await Promise.all(
+          rawGroups.map(async (g) => {
+            const playerLinks = await listLiveGroupPlayers(ctx, g.id);
+            const groupPlayers: GroupPlayer[] = playerLinks.map((pl) => {
+              const info = playerInfo.get(pl.account_id);
+              return {
+                id: pl.account_id,
+                name: info?.name || "Unknown",
+                ability_rating: info?.ability_rating.length ? info.ability_rating[0] : 3,
+                team: pl.team_letter.length ? (pl.team_letter[0] as "a" | "b") : null,
+              };
+            });
+            return {
+              id: g.id,
+              name: g.name,
+              ability_band: g.ability_band.length ? g.ability_band[0] : null,
+              pitch_name: g.pitch_name.length ? g.pitch_name[0] : null,
+              display_order: g.display_order,
+              team_a_color: g.colour.length ? g.colour[0] : "#ef4444",
+              team_b_color: g.team_b_colour.length ? g.team_b_colour[0] : "#3b82f6",
+              players: groupPlayers,
+            };
+          }),
+        );
+        return groupsWithPlayers.sort((a, b) => a.display_order - b.display_order);
+      },
+    }),
     staleTime: 0,
     refetchOnMount: "always",
   });
