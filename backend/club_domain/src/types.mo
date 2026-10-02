@@ -143,6 +143,13 @@ module {
     is_team_only : Bool;
     exposure_percentage : ?Nat8;
   };
+  // Mirrors the Supabase team_sponsor_allocations table: which sponsors a
+  // team displays under its own name in the sponsor strips (as opposed to
+  // the club-level rotation). The club scope is derived from the sponsor.
+  public type TeamSponsorAllocation = {
+    sponsor_id : Text;
+    team_id : Text;
+  };
   // Shell-team fields mirror the Supabase `teams.shell_*` columns: a
   // club admin can pre-create a "shell" team for a coach/manager who has
   // not signed up yet, mint a claim token, and the invited person claims

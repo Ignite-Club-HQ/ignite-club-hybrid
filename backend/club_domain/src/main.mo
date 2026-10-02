@@ -54,6 +54,7 @@ persistent actor {
   var clubTerms : [Types.ClubTerm];
   var removedMembers : [Types.RemovedMember];
   var memberPayments : [Types.MemberPayment];
+  var teamSponsorAllocations : [Types.TeamSponsorAllocation];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -260,6 +261,40 @@ persistent actor {
     #Ok(res)
   };
 
+  // Team sponsor allocations (Supabase team_sponsor_allocations counterpart).
+  // Read stance matches list_sponsors: sponsor strips render for every
+  // member, so the read is unauthenticated; writes are club-admin gated via
+  // the sponsor's owning club.
+  public query func list_team_sponsor_allocations(club_id : Text) : async { #Ok : [Types.TeamSponsorAllocation]; #Err : Text } {
+    var res : [Types.TeamSponsorAllocation] = [];
+    for (a in teamSponsorAllocations.values()) {
+      switch (sponsors.find(func(s) = s.id == a.sponsor_id)) {
+        case (?sponsor) { if (sponsor.club_id == club_id) res := res.concat([a]) };
+        case null {};
+      };
+    };
+    #Ok(res)
+  };
+
+  public shared ({ caller }) func set_team_sponsor_allocation(sponsor_id : Text, team_id : Text, allocated : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (sponsors.find(func(s) = s.id == sponsor_id)) {
+      case null { #Err("Sponsor not found") };
+      case (?sponsor) {
+        if (not isAdmin(caller, sponsor.club_id)) return #Err("Club admin required");
+        if (allocated) {
+          let exists = teamSponsorAllocations.find(func(a) = a.sponsor_id == sponsor_id and a.team_id == team_id) != null;
+          if (not exists) {
+            teamSponsorAllocations := teamSponsorAllocations.concat([{ sponsor_id = sponsor_id; team_id = team_id }]);
+          };
+        } else {
+          teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = not (a.sponsor_id == sponsor_id and a.team_id == team_id));
+        };
+        #Ok
+      };
+    }
+  };
+
   // Hard delete — the Supabase sponsor manager deletes rows outright, so
   // the canister matches (is_active remains available for soft hiding).
   public shared ({ caller }) func delete_sponsor(id : Text) : async { #Ok; #Err : Text } {
@@ -269,6 +304,7 @@ persistent actor {
       case (?sponsor) {
         if (not isAdmin(caller, sponsor.club_id)) return #Err("Club admin required");
         sponsors := sponsors.filter(func(s) = s.id != id);
+        teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.sponsor_id != id);
         #Ok
       };
     }
