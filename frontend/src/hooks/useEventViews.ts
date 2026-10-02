@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLiveEventView, getLiveEventViewCount } from "@/live/features/events";
+import { recordLiveEventView, getLiveEventViewCount, listLiveEventViews, listLiveMyViewedEventIds } from "@/live/features/events";
 
 /**
  * Hook to track when a user views an event.
@@ -115,16 +115,17 @@ export function useEventViewsAdmin(eventId: string | undefined, enabled: boolean
           if (error) throw error;
           return data || [];
         },
-        // NEEDS-CANISTER: events_domain only tracks an aggregate view count
-        // (get_event_view_count), not a per-user view list — admins see the
-        // total count surfaced via getLiveEventViewCount elsewhere, not this
-        // per-viewer breakdown.
+        // Admin per-viewer breakdown backed by events_domain's own
+        // EventView rows (viewer principal + viewed_at_ms).
         icp: async (ctx) => {
-          const count = await getLiveEventViewCount(ctx, eventId!);
-          return Array.from({ length: Number(count) }, (_, i) => ({
-            id: `icp-view-${i}`,
-            user_id: null,
-            viewed_at: null,
+          const rows = (await listLiveEventViews(ctx, eventId!)) as Array<{
+            viewer: { toText(): string };
+            viewed_at_ms: bigint;
+          }>;
+          return rows.map((row, i) => ({
+            id: `icp-view-${eventId}-${i}`,
+            user_id: row.viewer.toText(),
+            viewed_at: new Date(Number(row.viewed_at_ms)).toISOString(),
           })) as { id: string; user_id: string | null; viewed_at: string | null }[];
         },
       }),
@@ -148,25 +149,30 @@ export function useUserEventViews(userId: string | undefined, eventIds: string[]
 
   return useQuery({
     queryKey: ["user-event-views", userId, cacheKey],
-    // NEEDS-CANISTER: events_domain has no per-user viewed-event-ids table
-    // (only a per-event aggregate count) — per-user view badges stay
-    // Supabase-only until that's added.
-    enabled: !!userId && normalizedIds.length > 0 && !isFeatureRoutedToIcp("events"),
-    queryFn: async () => {
-      if (normalizedIds.length === 0) return new Set<string>();
+    enabled: !!userId && normalizedIds.length > 0,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          if (normalizedIds.length === 0) return new Set<string>();
 
-      const { data, error } = await supabase
-        .from("event_views")
-        .select("event_id")
-        .eq("user_id", userId!)
-        .in("event_id", normalizedIds);
+          const { data, error } = await supabase
+            .from("event_views")
+            .select("event_id")
+            .eq("user_id", userId!)
+            .in("event_id", normalizedIds);
 
-      if (error) throw error;
-      return new Set<string>(
-        (data ?? []).flatMap((view) =>
-          typeof view.event_id === "string" ? [view.event_id] : [],
-        ),
-      );
-    },
+          if (error) throw error;
+          return new Set<string>(
+            (data ?? []).flatMap((view) =>
+              typeof view.event_id === "string" ? [view.event_id] : [],
+            ),
+          );
+        },
+        icp: async (ctx) => {
+          if (normalizedIds.length === 0) return new Set<string>();
+          const viewedIds = await listLiveMyViewedEventIds(ctx, normalizedIds);
+          return new Set<string>(viewedIds);
+        },
+      }),
   });
 }

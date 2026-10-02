@@ -800,3 +800,52 @@ export async function unmarkLiveMemberPaid(ctx: FeatureBackendContext, id: strin
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.unmark_member_paid(id), "Unmark member paid");
 }
+
+// ---------------------------------------------------------------------------
+// Seasons (draft|active|closed|archived) and engagement analytics
+// (workstream B) — distinct from ClubTerm. save_season is admin-gated.
+// ---------------------------------------------------------------------------
+
+export type LiveSeason = Parameters<ClubDomainActor["save_season"]>[0];
+
+export async function listLiveSeasons(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_seasons(clubId), "List seasons");
+}
+
+export async function getLiveCurrentSeason(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_current_season(clubId), "Get current season");
+}
+
+export async function saveLiveSeason(ctx: FeatureBackendContext, season: LiveSeason) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_season(season), "Save season");
+}
+
+/** canister counterpart of the Supabase `profile_team_history` RPC. */
+export async function listLiveProfileTeamHistory(ctx: FeatureBackendContext, profileId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.profile_team_history(profileId);
+}
+
+/** Admin-gated invite-acceptance analytics over accepted PendingInvite rows. */
+export async function listLiveAcceptedInvites(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  sinceMs: bigint,
+  untilMs: bigint,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_accepted_invites(clubId, sinceMs, untilMs), "List accepted invites");
+}
+
+export async function getLiveInviteStats(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  sinceMs: bigint,
+  untilMs: bigint,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.invite_stats(clubId, sinceMs, untilMs), "Invite stats");
+}

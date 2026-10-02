@@ -3,6 +3,10 @@ import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { recordLiveUserActivity } from "@/live/features/insights";
 
 // Generate a unique session ID per browser session
 const SESSION_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -66,6 +70,14 @@ export function useActivityTracking() {
   const icpRouted = resolveAuthBackend() === "icp";
   const activeLogIdRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(Date.now());
+  // Dual-write bookkeeping for the insights_domain canister, kept separate
+  // from activeLogIdRef/startTimeRef above: those are gated off entirely
+  // when the signed-in account has no Supabase session (icpRouted), but the
+  // "analytics" feature can be ICP-routed independently of the auth backend.
+  const icpPageStartRef = useRef<number>(Date.now());
+  const icpCurrentPathRef = useRef<string | null>(null);
+  const icpCurrentLabelRef = useRef<string>("Unknown");
+  const icpCurrentClubIdRef = useRef<string | null>(null);
   const flushIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -84,6 +96,33 @@ export function useActivityTracking() {
         _activity_log_id: activeLogIdRef.current,
         _duration_seconds: elapsed,
       });
+    } catch {
+      // Silently fail - activity tracking is non-critical
+    }
+  }, []);
+
+
+  // Best-effort dual-write of the current page's elapsed time to the
+  // insights_domain canister. Never blocks or throws — instrumentation must
+  // never interfere with navigation or the Supabase activity log above.
+  const flushIcpActivity = useCallback(async () => {
+    if (!isFeatureRoutedToIcp("analytics")) return;
+    const path = icpCurrentPathRef.current;
+    if (!path) return;
+    const elapsed = Math.round((Date.now() - icpPageStartRef.current) / 1000);
+    if (elapsed < 1) return;
+    try {
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return;
+      await recordLiveUserActivity(
+        { identity, target: getActiveIcpTarget() },
+        identity.getPrincipal().toText(),
+        icpCurrentClubIdRef.current,
+        path,
+        icpCurrentLabelRef.current,
+        SESSION_ID,
+        elapsed,
+      );
     } catch {
       // Silently fail - activity tracking is non-critical
     }
@@ -146,6 +185,19 @@ export function useActivityTracking() {
     }
   }, [user, flushDuration, icpRouted]);
 
+  // ICP dual-write: track page changes independent of the Supabase-only
+  // gate above (fires whenever the "analytics" feature is ICP-routed,
+  // regardless of which backend the signed-in account authenticates
+  // against).
+  useEffect(() => {
+    flushIcpActivity();
+    icpCurrentPathRef.current = location.pathname;
+    icpCurrentLabelRef.current = getPageLabel(location.pathname);
+    icpCurrentClubIdRef.current = extractClubIdFromPath(location.pathname);
+    icpPageStartRef.current = Date.now();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   // Track page changes (debounced)
   useEffect(() => {
     if (!user || icpRouted) return;
@@ -170,8 +222,9 @@ export function useActivityTracking() {
         clearInterval(flushIntervalRef.current);
       }
       flushDuration();
+      flushIcpActivity();
     };
-  }, [location.pathname, user?.id, icpRouted]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.pathname, user?.id, icpRouted, flushIcpActivity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cache the current access token so the unload handler (which can't await)
   // has a fresh JWT to send. Without the user's JWT, the PATCH runs as the
@@ -198,6 +251,7 @@ export function useActivityTracking() {
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
         flushDuration();
+        flushIcpActivity();
       }
     };
 
@@ -243,5 +297,5 @@ export function useActivityTracking() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [flushDuration]);
+  }, [flushDuration, flushIcpActivity]);
 }

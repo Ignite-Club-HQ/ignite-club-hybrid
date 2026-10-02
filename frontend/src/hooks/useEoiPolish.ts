@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resendLiveEoiInvite, bulkResendLiveEoiInvites } from "@/live/features/competitions";
 
 /** Resend the magic-link invite for a given EOI submission. */
 export function useResendEoiInvite() {
@@ -15,10 +16,14 @@ export function useResendEoiInvite() {
           });
           if (error) throw error;
         },
-        // NEEDS-CANISTER: EOI invites have no canister equivalent — there is
-        // no EOI submission entity or email fan-out on the competition canister.
-        icp: async () => {
-          throw new Error("Resending EOI invites isn't available on this backend yet.");
+        // The canister call is the bookkeeping half (invite_sent_at/count);
+        // actual email delivery still goes through the Supabase edge function
+        // below since there is no email fan-out on the canister.
+        icp: async (ctx) => {
+          await resendLiveEoiInvite(ctx, submissionId);
+          await supabase.functions.invoke("send-eoi-invite", {
+            body: { submission_id: submissionId },
+          });
         },
       }),
     onSuccess: () => {
@@ -51,9 +56,19 @@ export function useBulkResendEoiInvites() {
           }
           return { ok, fail };
         },
-        // NEEDS-CANISTER: see useResendEoiInvite above.
-        icp: async () => {
-          throw new Error("Resending EOI invites isn't available on this backend yet.");
+        // Canister call is the bookkeeping half; email delivery stays on Supabase.
+        icp: async (ctx) => {
+          await bulkResendLiveEoiInvites(ctx, submissionIds);
+          let ok = 0;
+          let fail = 0;
+          for (const id of submissionIds) {
+            const { error } = await supabase.functions.invoke("send-eoi-invite", {
+              body: { submission_id: id },
+            });
+            if (error) fail++;
+            else ok++;
+          }
+          return { ok, fail };
         },
       }),
     onSuccess: ({ ok, fail }) => {

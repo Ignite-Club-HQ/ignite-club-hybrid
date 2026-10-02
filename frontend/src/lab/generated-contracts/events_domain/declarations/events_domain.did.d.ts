@@ -10,6 +10,16 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ActiveGame {
+  'id' : string,
+  'board_session_id' : string,
+  'team_id' : [] | [string],
+  'updated_at_ms' : bigint,
+  'user_id' : Principal,
+  'timer_state_json' : string,
+  'is_active' : boolean,
+  'pitch_state_json' : string,
+}
 export interface AssociationEvent {
   'id' : string,
   'title' : string,
@@ -134,6 +144,53 @@ export interface EventView {
   'event_id' : string,
   'viewer' : Principal,
 }
+export interface GamePlayerStat {
+  'started_on_pitch' : boolean,
+  'minutes_played' : number,
+  'team_id' : string,
+  'user_id' : [] | [string],
+  'substitutions_count' : number,
+  'goals_scored' : number,
+  'event_id' : string,
+  'fill_in_player_name' : [] | [string],
+  'positions_played' : Array<string>,
+  'jersey_number' : [] | [number],
+}
+export interface GamePlayerStatInput {
+  'started_on_pitch' : boolean,
+  'minutes_played' : number,
+  'user_id' : [] | [string],
+  'substitutions_count' : number,
+  'goals_scored' : number,
+  'fill_in_player_name' : [] | [string],
+  'positions_played' : Array<string>,
+  'jersey_number' : [] | [number],
+}
+export interface GameResult {
+  'id' : string,
+  'saved_by' : Principal,
+  'period_scores_json' : string,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'sport' : string,
+  'mvp_player_name' : [] | [string],
+  'away_label' : string,
+  'away_score' : number,
+  'mvp_player_id' : [] | [string],
+  'event_id' : [] | [string],
+  'home_label' : string,
+  'home_score' : number,
+  'player_stats_json' : string,
+}
+export interface GameSummary {
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'half_duration' : number,
+  'event_id' : string,
+  'total_game_time' : number,
+  'formation_used' : [] | [string],
+  'total_substitutions' : number,
+}
 export interface LineupEntry {
   'member' : string,
   'slot' : string,
@@ -172,6 +229,20 @@ export interface OpenDuty {
   'duty' : string,
   'created_at_ms' : bigint,
   'event_id' : string,
+}
+export interface PitchBoardSettings {
+  'max_spread_minutes' : number,
+  'formation' : [] | [string],
+  'rotate_gk_at_halftime' : boolean,
+  'show_lineup_picker' : boolean,
+  'team_id' : string,
+  'rotation_speed' : number,
+  'updated_at_ms' : bigint,
+  'team_size' : number,
+  'disable_batch_subs' : boolean,
+  'minutes_per_half' : number,
+  'disable_position_swaps' : boolean,
+  'show_match_header' : boolean,
 }
 export interface PushReachability {
   'user' : Principal,
@@ -270,6 +341,7 @@ export interface _SERVICE {
     { 'Ok' : Rsvp } |
       { 'Err' : string }
   >,
+  'check_event_membership' : ActorMethod<[string, string], boolean>,
   'child_is_in_event_audience' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
@@ -359,6 +431,11 @@ export interface _SERVICE {
     { 'Ok' : TeamTrainingPause } |
       { 'Err' : string }
   >,
+  'deactivate_active_game' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_event' : ActorMethod<[string], { 'Ok' : Event } | { 'Err' : string }>,
   'delete_event_group' : ActorMethod<
     [string],
@@ -419,6 +496,11 @@ export interface _SERVICE {
       } |
       { 'Err' : string }
   >,
+  'get_active_game' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : [] | [ActiveGame] } |
+      { 'Err' : string }
+  >,
   'get_attendance' : ActorMethod<
     [string],
     { 'Ok' : Array<EventAttendance> } |
@@ -444,9 +526,24 @@ export interface _SERVICE {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'get_game_result' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [GameResult] } |
+      { 'Err' : string }
+  >,
+  'get_game_summary' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [GameSummary] } |
+      { 'Err' : string }
+  >,
   'get_lineup_snapshot' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : [] | [LineupSnapshot] } |
+      { 'Err' : string }
+  >,
+  'get_pitch_board_settings' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [PitchBoardSettings] } |
       { 'Err' : string }
   >,
   'get_push_reachable' : ActorMethod<
@@ -492,7 +589,17 @@ export interface _SERVICE {
     { 'Ok' : Array<EventGroup> } |
       { 'Err' : string }
   >,
+  'list_event_views' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EventView> } |
+      { 'Err' : string }
+  >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'list_game_player_stats' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GamePlayerStat> } |
+      { 'Err' : string }
+  >,
   'list_group_duties' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroupDuty> } |
@@ -506,6 +613,11 @@ export interface _SERVICE {
   'list_mini_league_rsvps' : ActorMethod<
     [string],
     { 'Ok' : Array<MiniLeagueRsvp> } |
+      { 'Err' : string }
+  >,
+  'list_my_viewed_event_ids' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<string> } |
       { 'Err' : string }
   >,
   'list_open_duties' : ActorMethod<
@@ -597,6 +709,33 @@ export interface _SERVICE {
     { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
+  'save_game_player_stats' : ActorMethod<
+    [string, string, Array<GamePlayerStatInput>],
+    { 'Ok' : Array<GamePlayerStat> } |
+      { 'Err' : string }
+  >,
+  'save_game_result' : ActorMethod<
+    [
+      string,
+      [] | [string],
+      string,
+      string,
+      string,
+      number,
+      number,
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+    ],
+    { 'Ok' : GameResult } |
+      { 'Err' : string }
+  >,
+  'save_game_summary' : ActorMethod<
+    [string, string, number, number, [] | [string], number],
+    { 'Ok' : GameSummary } |
+      { 'Err' : string }
+  >,
   'save_lineup_snapshot' : ActorMethod<
     [
       string,
@@ -608,6 +747,23 @@ export interface _SERVICE {
       Array<LineupPlayer>,
     ],
     { 'Ok' : LineupSnapshot } |
+      { 'Err' : string }
+  >,
+  'save_pitch_board_settings' : ActorMethod<
+    [
+      string,
+      number,
+      boolean,
+      boolean,
+      boolean,
+      number,
+      number,
+      number,
+      [] | [string],
+      boolean,
+      boolean,
+    ],
+    { 'Ok' : PitchBoardSettings } |
       { 'Err' : string }
   >,
   'set_attendance' : ActorMethod<
@@ -673,6 +829,11 @@ export interface _SERVICE {
   'swap_group_players' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'sync_active_game' : ActorMethod<
+    [[] | [string], string, string, string],
+    { 'Ok' : ActiveGame } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 module {
   type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
@@ -110,7 +111,7 @@ module {
       var roleRequests = old.roleRequests;
       var teamInvites = old.teamInvites;
       var teamInviteLinks = old.teamInviteLinks;
-      var pendingInvites = old.pendingInvites.map<NewPendingInvite>(func(i) {
+      var pendingInvites = Array.map<OldPendingInvite, NewPendingInvite>(old.pendingInvites, func(i) {
         { i with accepted_at_ms = null; accepted_by = null }
       });
       var teamCreationRequests = old.teamCreationRequests;

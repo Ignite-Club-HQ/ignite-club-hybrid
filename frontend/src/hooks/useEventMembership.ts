@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { checkLiveEventMembership } from "@/live/features/events";
 
 /**
  * Whether the current user (or any of their children) is a member of the
@@ -41,10 +43,17 @@ export function useEventMembership(event: {
     queryFn: async (): Promise<boolean> => {
       if (!user) return false;
 
-      // NEEDS-CANISTER: events_domain has no user_roles/children/
-      // child_team_assignments/child_guardians membership tables. Fail open
-      // (assume membership) under ICP routing so RSVP prompts are never
-      // wrongly hidden from an actual member.
+      // Under ICP, defer to events_domain's own check_event_membership
+      // (roster/rsvp/attendance/duty rows for this account). RESIDUAL
+      // LIMITATION: a guardian whose only link is via a child record owned
+      // by club_domain reads as not-a-member here — see backend/AGENTS.md /
+      // frontend/roadmap.md.
+      if (isFeatureRoutedToIcp("events") && event.id) {
+        return withFeatureBackend("events", {
+          supabase: async () => true,
+          icp: async (ctx) => checkLiveEventMembership(ctx, user.id, event.id!),
+        });
+      }
       if (isFeatureRoutedToIcp("events")) return true;
 
       /** Membership against a concrete set of team ids. */

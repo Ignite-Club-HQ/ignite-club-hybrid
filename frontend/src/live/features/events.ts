@@ -1154,3 +1154,234 @@ export async function setLiveEventGroupAppearance(
     "Set event group appearance",
   );
 }
+
+// ============================================================================
+// Workstream D: pitch board settings, game summary/stats, cross-sport game
+// result, active-game mirror, admin event-view list / per-user viewed-ids,
+// and event membership check.
+// ============================================================================
+
+export interface LivePitchBoardSettingsInput {
+  teamId: string;
+  rotationSpeed: number;
+  disablePositionSwaps: boolean;
+  disableBatchSubs: boolean;
+  rotateGkAtHalftime: boolean;
+  minutesPerHalf: number;
+  maxSpreadMinutes: number;
+  teamSize: number;
+  formation?: string | null;
+  showMatchHeader: boolean;
+  showLineupPicker: boolean;
+}
+
+export async function getLivePitchBoardSettings(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_pitch_board_settings(teamId),
+    "Get pitch board settings",
+  );
+}
+
+export async function saveLivePitchBoardSettings(
+  ctx: FeatureBackendContext,
+  input: LivePitchBoardSettingsInput,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_pitch_board_settings(
+      input.teamId,
+      input.rotationSpeed,
+      input.disablePositionSwaps,
+      input.disableBatchSubs,
+      input.rotateGkAtHalftime,
+      input.minutesPerHalf,
+      input.maxSpreadMinutes,
+      input.teamSize,
+      candidOpt(input.formation),
+      input.showMatchHeader,
+      input.showLineupPicker,
+    ),
+    "Save pitch board settings",
+  );
+}
+
+export async function saveLiveGameSummary(
+  ctx: FeatureBackendContext,
+  input: {
+    eventId: string;
+    teamId: string;
+    totalGameTime: number;
+    halfDuration: number;
+    formationUsed?: string | null;
+    totalSubstitutions: number;
+  },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_game_summary(
+      input.eventId,
+      input.teamId,
+      input.totalGameTime,
+      input.halfDuration,
+      candidOpt(input.formationUsed),
+      input.totalSubstitutions,
+    ),
+    "Save game summary",
+  );
+}
+
+export async function getLiveGameSummary(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_game_summary(eventId), "Get game summary");
+}
+
+export interface LiveGamePlayerStatInput {
+  userId?: string | null;
+  fillInPlayerName?: string | null;
+  jerseyNumber?: number | null;
+  minutesPlayed: number;
+  positionsPlayed: string[];
+  substitutionsCount: number;
+  startedOnPitch: boolean;
+  goalsScored: number;
+}
+
+export async function saveLiveGamePlayerStats(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  teamId: string,
+  stats: LiveGamePlayerStatInput[],
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_game_player_stats(
+      eventId,
+      teamId,
+      stats.map((s) => ({
+        user_id: candidOpt(s.userId),
+        fill_in_player_name: candidOpt(s.fillInPlayerName),
+        jersey_number: candidOpt(s.jerseyNumber),
+        minutes_played: s.minutesPlayed,
+        positions_played: s.positionsPlayed,
+        substitutions_count: s.substitutionsCount,
+        started_on_pitch: s.startedOnPitch,
+        goals_scored: s.goalsScored,
+      })),
+    ),
+    "Save game player stats",
+  );
+}
+
+export async function listLiveGamePlayerStats(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats");
+}
+
+export interface LiveGameResultInput {
+  teamId: string;
+  eventId?: string | null;
+  sport: string;
+  homeLabel: string;
+  awayLabel: string;
+  homeScore: number;
+  awayScore: number;
+  periodScoresJson: string;
+  playerStatsJson: string;
+  mvpPlayerId?: string | null;
+  mvpPlayerName?: string | null;
+}
+
+export async function saveLiveGameResult(
+  ctx: FeatureBackendContext,
+  input: LiveGameResultInput,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_game_result(
+      input.teamId,
+      candidOpt(input.eventId),
+      input.sport,
+      input.homeLabel,
+      input.awayLabel,
+      input.homeScore,
+      input.awayScore,
+      input.periodScoresJson,
+      input.playerStatsJson,
+      candidOpt(input.mvpPlayerId),
+      candidOpt(input.mvpPlayerName),
+    ),
+    "Save game result",
+  );
+}
+
+export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_game_result(eventId), "Get game result");
+}
+
+export async function syncLiveActiveGame(
+  ctx: FeatureBackendContext,
+  input: {
+    teamId?: string | null;
+    timerStateJson: string;
+    pitchStateJson: string;
+    boardSessionId: string;
+  },
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.sync_active_game(
+      candidOpt(input.teamId),
+      input.timerStateJson,
+      input.pitchStateJson,
+      input.boardSessionId,
+    ),
+    "Sync active game",
+  );
+}
+
+export async function deactivateLiveActiveGame(
+  ctx: FeatureBackendContext,
+  teamId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.deactivate_active_game(candidOpt(teamId)), "Deactivate active game");
+}
+
+export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: string | null) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_active_game(candidOpt(teamId)), "Get active game");
+}
+
+/** Admin per-viewer event-view list (event_views rows for one event). */
+export async function listLiveEventViews(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_event_views(eventId), "List event views");
+}
+
+/** Which of the given event ids the caller has already viewed. */
+export async function listLiveMyViewedEventIds(
+  ctx: FeatureBackendContext,
+  eventIds: string[],
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_my_viewed_event_ids(eventIds),
+    "List my viewed event ids",
+  );
+}
+
+/**
+ * Whether `userId` is a member of the audience for `eventId`, evaluated
+ * against events_domain's own roster/rsvp/attendance/duty rows. Plain query
+ * result (returns a bare bool, no Ok/Err variant).
+ */
+export async function checkLiveEventMembership(
+  ctx: FeatureBackendContext,
+  userId: string,
+  eventId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.check_event_membership(userId, eventId);
+}

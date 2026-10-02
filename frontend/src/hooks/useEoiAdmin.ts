@@ -2,6 +2,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveEoiSubmissions,
+  getLiveEoiStats,
+  updateLiveEoiStatus,
+  assignLiveEoiTeam,
+  deleteLiveEoi,
+  mapLiveEoiSubmission,
+} from "@/live/features/competitions";
 
 export type EoiSubmission = Database["public"]["Tables"]["eoi_submissions"]["Row"];
 export type EoiStatus = Database["public"]["Enums"]["eoi_status"];
@@ -23,10 +31,10 @@ export function useEoiSubmissions(clubId?: string, seasonId?: string | null) {
           if (error) throw error;
           return data ?? [];
         },
-        // NEEDS-CANISTER: competition_domain has no EOI submission entity —
-        // eoi_submissions has no canister equivalent yet (needs e.g.
-        // list_eoi_submissions(club_id, season_id?)).
-        icp: async () => [] as EoiSubmission[],
+        icp: async (ctx) => {
+          const subs = await listLiveEoiSubmissions(ctx, clubId, seasonId ?? null);
+          return subs.map(mapLiveEoiSubmission) as EoiSubmission[];
+        },
       });
     },
     enabled: !!clubId,
@@ -47,9 +55,21 @@ export function useEoiStats(clubId?: string, seasonId?: string | null) {
           if (error) throw error;
           return data?.[0] ?? null;
         },
-        // NEEDS-CANISTER: competition_domain has no EOI stats aggregation
-        // (needs e.g. get_eoi_stats(club_id, season_id?)).
-        icp: async () => null,
+        icp: async (ctx) => {
+          const stats = await getLiveEoiStats(ctx, clubId, seasonId ?? null);
+          return {
+            allocated: Number(stats.allocated),
+            confirmed: Number(stats.confirmed),
+            conversion_rate: stats.conversion_rate,
+            new_players: Number(stats.new_players),
+            registered: Number(stats.registered),
+            returning_players: Number(stats.returning_players),
+            submitted: Number(stats.submitted),
+            total: Number(stats.total),
+            views: Number(stats.views),
+            withdrawn: Number(stats.withdrawn),
+          };
+        },
       });
     },
     enabled: !!clubId,
@@ -71,10 +91,8 @@ export function useUpdateEoiStatus() {
           const { error } = await supabase.from("eoi_submissions").update(patch).eq("id", id);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: competition_domain has no EOI submission entity —
-        // eoi_submissions has no canister equivalent yet.
-        icp: async () => {
-          throw new Error("Updating expression-of-interest status isn't available on this backend yet.");
+        icp: async (ctx) => {
+          await updateLiveEoiStatus(ctx, id, status);
         },
       }),
     onSuccess: () => {
@@ -98,9 +116,8 @@ export function useAssignEoiTeam() {
           const { error } = await supabase.from("eoi_submissions").update(patch).eq("id", id);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: no canister concept of EOI-to-team assignment.
-        icp: async () => {
-          throw new Error("Assigning EOI submissions to a team isn't available on this backend yet.");
+        icp: async (ctx) => {
+          await assignLiveEoiTeam(ctx, id, teamId);
         },
       }),
     onSuccess: () => {
@@ -119,9 +136,8 @@ export function useDeleteEoi() {
           const { error } = await supabase.from("eoi_submissions").delete().eq("id", id);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: no canister concept of EOI submissions to delete.
-        icp: async () => {
-          throw new Error("Deleting an EOI submission isn't available on this backend yet.");
+        icp: async (ctx) => {
+          await deleteLiveEoi(ctx, id);
         },
       }),
     onSuccess: () => {

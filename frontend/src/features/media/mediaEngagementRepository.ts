@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { recordLivePhotoEngagement } from "@/live/features/insights";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
 import {
   addLiveComment,
   addLiveReaction,
@@ -10,6 +14,22 @@ import {
 } from "@/live/features/media";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
+
+// Best-effort dual-write of a photo engagement counter to insights_domain
+// when the "analytics" feature is ICP-routed. Independent of the "media"
+// feature routing above (which fully replaces the Supabase reaction/comment
+// rows) — this only feeds the engagement dashboards and must never block or
+// fail the primary write.
+async function recordAnalyticsPhotoEngagement(photoId: string, kind: "Reaction" | "Comment") {
+  if (!isFeatureRoutedToIcp("analytics")) return;
+  try {
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) return;
+    await recordLivePhotoEngagement({ identity, target: getActiveIcpTarget() }, photoId, kind);
+  } catch {
+    // instrumentation only
+  }
+}
 
 /**
  * Media engagement writes (reactions, comments).
@@ -37,6 +57,7 @@ export async function replaceMediaReaction(
         reaction_type: input.reactionType,
       });
       if (insertError) throw insertError;
+      await recordAnalyticsPhotoEngagement(input.photoId, "Reaction");
     },
     icp: async (ctx) => {
       // The canister keys reactions by (asset, user), so add_reaction already
@@ -82,6 +103,7 @@ export async function createMediaComment(
         reply_to_id: input.replyToId || null,
       });
       if (error) throw error;
+      await recordAnalyticsPhotoEngagement(input.photoId, "Comment");
     },
     icp: async (ctx) => {
       // The canister comment shape has no reply threading; replyToId is

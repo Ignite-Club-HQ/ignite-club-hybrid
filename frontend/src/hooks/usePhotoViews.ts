@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { recordLivePhotoEngagement } from "@/live/features/insights";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
 
 // Stable no-op ref callback used when no userId/photoId is available.
 const noopRef = (_el: HTMLElement | null) => {};
@@ -78,6 +81,20 @@ export function useRecordPhotoView(userId: string | undefined) {
         .from("photo_views")
         .insert({ photo_id: photoId, user_id: userId });
       if (error) throw error;
+
+      // Best-effort dual-write of the view counter to insights_domain when
+      // the "analytics" feature is ICP-routed; failures never block the
+      // Supabase view row above.
+      if (isFeatureRoutedToIcp("analytics")) {
+        try {
+          const identity = await getCurrentInternetIdentity();
+          if (identity) {
+            await recordLivePhotoEngagement({ identity, target: getActiveIcpTarget() }, photoId, "View");
+          }
+        } catch {
+          // instrumentation only
+        }
+      }
     },
     onSuccess: (_data, photoId) => {
       // Optimistically bump count in any cached query. We intentionally do

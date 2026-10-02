@@ -200,6 +200,12 @@ export interface _SERVICE {
    */
   'get_profile' : ActorMethod<[], Result_9>,
   /**
+   * Batch profile lookup by account id (principal text / user id), used by
+   * the frontend profile cache to resolve many ids in one round trip.
+   * Unknown ids are skipped rather than causing an error.
+   */
+  'get_profiles_by_ids' : ActorMethod<[Array<string>], Array<Profile>>,
+  /**
    * The terms acceptance record for an arbitrary account: the account owner
    * or the governor only.
    */

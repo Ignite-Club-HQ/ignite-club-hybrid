@@ -176,6 +176,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_profile' : IDL.Func([], [Result_9], ['query']),
+    'get_profiles_by_ids' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Vec(Profile)],
+        ['query'],
+      ),
     'get_terms_acceptance' : IDL.Func([IDL.Text], [Result_10], ['query']),
     'grant_role' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],

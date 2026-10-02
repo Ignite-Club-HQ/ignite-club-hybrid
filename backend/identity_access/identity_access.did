@@ -145,6 +145,10 @@ service : (Init) -> {
   get_privacy_consent : (text, text) -> (Result_5) query;
   // The caller's own profile, or an error when none has been set yet.
   get_profile : () -> (Result_9) query;
+  // Batch profile lookup by account id (principal text / user id), used by
+  // the frontend profile cache to resolve many ids in one round trip.
+  // Unknown ids are skipped rather than causing an error.
+  get_profiles_by_ids : (vec text) -> (vec Profile) query;
   // The terms acceptance record for an arbitrary account: the account owner
   // or the governor only.
   get_terms_acceptance : (text) -> (Result_10) query;
