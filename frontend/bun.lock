@@ -24,6 +24,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@icp-sdk/auth": "^9.0.0",
         "@icp-sdk/core": "^5.4.0",
+        "@icp-sdk/vetkeys": "^0.7.0",
         "@radix-ui/react-accordion": "^1.2.11",
         "@radix-ui/react-alert-dialog": "^1.1.14",
         "@radix-ui/react-avatar": "^1.1.10",
@@ -299,6 +300,8 @@
     "@icp-sdk/core": ["@icp-sdk/core@5.4.0", "", { "dependencies": { "@dfinity/cbor": "^0.2.3", "@noble/curves": "^1.9.7", "@noble/hashes": "^1.8.0", "@scure/bip32": "^1.7.0", "@scure/bip39": "^1.6.0", "asn1js": "^3.0.7" } }, "sha512-yedhCkHIhCxI65W8id99Mi8fUgSyqKSTbD57AphquNcFV2/3Rjykng0/6H08mHswKydDcv6Y0+e8aPdrznewCw=="],
 
     "@icp-sdk/signer": ["@icp-sdk/signer@5.6.3", "", { "peerDependencies": { "@icp-sdk/core": "^5" } }, "sha512-wkQJ+MFBIdhCMXKc3NYAgiCSSqB3Gh9UnuzoP9DisPA6gMQ1mTXG9cO5eyEdfJyR08xTx9AsK7MEOBhxwd41YA=="],
+
+    "@icp-sdk/vetkeys": ["@icp-sdk/vetkeys@0.7.0", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@icp-sdk/vetkeys/-/vetkeys-0.7.0.tgz", { "dependencies": { "@noble/curves": "^1.9.7", "@noble/hashes": "^1.8.0", "idb-keyval": "^6.3.0" }, "peerDependencies": { "@icp-sdk/core": "^5.0.0 || ^6.0.0" } }, "sha512-Elf5597qanu1KJd6mxZ3Wy7/QGBheErRiz4aGVs/XzFzgUWpOJr7Hvl+Vs6y/1xW/ejaoQDrbDhsjSjEejDaJA=="],
 
     "@isaacs/cliui": ["@isaacs/cliui@8.0.2", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@isaacs/cliui/-/cliui-8.0.2.tgz", { "dependencies": { "string-width": "^5.1.2", "string-width-cjs": "npm:string-width@^4.2.0", "strip-ansi": "^7.0.1", "strip-ansi-cjs": "npm:strip-ansi@^6.0.1", "wrap-ansi": "^8.1.0", "wrap-ansi-cjs": "npm:wrap-ansi@^7.0.0" } }, ""],
 
@@ -907,6 +910,8 @@
     "iconv-lite": ["iconv-lite@0.6.3", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/iconv-lite/-/iconv-lite-0.6.3.tgz", { "dependencies": { "safer-buffer": ">= 2.1.2 < 3.0.0" } }, ""],
 
     "idb": ["idb@7.1.1", "", {}, "sha512-gchesWBzyvGHRO9W8tzUWFDycow5gwjvFKfyV9FF32Y7F50yZMp7mP+T2mJIWFx49zicqyC4uefHM17o6xKIVQ=="],
+
+    "idb-keyval": ["idb-keyval@6.3.0", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/idb-keyval/-/idb-keyval-6.3.0.tgz", {}, "sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow=="],
 
     "ieee754": ["ieee754@1.2.1", "https://europe-west1-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/ieee754/-/ieee754-1.2.1.tgz", {}, ""],
 

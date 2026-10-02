@@ -51,10 +51,12 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface DecryptedPii {
+export interface EncryptedPii {
+    master_key_id: string;
+    ciphertext: Uint8Array;
     pii_id: string;
+    nonce: Uint8Array;
     field_id: string;
-    plaintext: Uint8Array;
 }
 export interface AuditRecord {
     allowed: boolean;
@@ -69,24 +71,6 @@ export interface PiiDeleteResult {
     shredded_at: bigint;
     key_destroyed: boolean;
 }
-export interface EncryptedPii {
-    master_key_id: string;
-    ciphertext: Uint8Array;
-    pii_id: string;
-    nonce: Uint8Array;
-    field_id: string;
-}
-export interface KeyRotationResult {
-    new_key_id: string;
-    old_key_id: string;
-    rotated_at: bigint;
-}
-export interface KeyMetadata {
-    status: Variant_Active_Shredded_RotationPending_Revoked;
-    key_id: string;
-    created_at: bigint;
-    rotation_due_at: bigint;
-}
 export interface AuditFilter {
     opt_from_ts?: bigint;
     opt_to_ts?: bigint;
@@ -94,51 +78,34 @@ export interface AuditFilter {
     opt_principal?: Principal;
     opt_field_id?: string;
 }
-export enum Variant_Active_Shredded_RotationPending_Revoked {
-    Active = "Active",
-    Shredded = "Shredded",
-    RotationPending = "RotationPending",
-    Revoked = "Revoked"
-}
 /**
  * / PII Access Control Canister
- * / Encrypts and mediates access to personally identifiable information (PII)
- * / Enforces field-level access policies and maintains audit trail
+ * / Mediates access to personally identifiable information (PII) with
+ * / field-level access policies and an audit trail.
  * /
- * / Encryption construction (interim, pre-vetKeys):
- * / - Master secrets are 32 random bytes obtained from the management canister's
- * /   `raw_rand` (via `mo:core/Random.blob`, which calls raw_rand directly) on
- * /   `initialize_master_key` / `rotate_key`. Secrets are kept per key_id in
- * /   stable state so records encrypted under a retired key remain decryptable.
- * /   No method ever returns secret material; only opaque key_ids/metadata leave
- * /   the canister.
- * / - Per-field key = SHA-256(master_secret || pii_id || field_id).
- * / - Nonces are 12 random bytes drawn fresh from raw_rand for every
- * /   `register_pii` call (register_pii is already an update call, so this is
- * /   a plain `await`).
- * / - Confidentiality: SHA-256-based CTR-mode keystream, where each 32-byte
- * /   keystream block is SHA-256(field_key || nonce || counter_be32), counter
- * /   starting at 0 and incrementing per 32-byte block, XORed with plaintext.
- * / - Integrity: encrypt-then-MAC. tag = SHA-256(field_key || nonce ||
- * /   ciphertext). The tag (32 bytes) is appended to the ciphertext bytes
- * /   stored/returned in `EncryptedPii.ciphertext` (no public record shape
- * /   changed). Decryption recomputes and compares the tag before returning
- * /   plaintext, failing closed (#Err) on any mismatch, truncated input, or
- * /   unknown master_key_id.
- * / - `derive_media_key` uses a separate raw_rand-generated 32-byte
- * /   `media_root_secret` (created lazily on first use) and returns
- * /   SHA-256(media_root_secret || child_id || authorizer || purpose),
- * /   32 bytes, still gated by the same authorization checks as before.
- * /
- * / This is a meaningful improvement over the previous XOR/timestamp
- * / "synthetic encryption" placeholder, but it is still symmetric key material
- * / held in canister heap/stable memory. Production deployment should still
- * / migrate to:
- * / - vetKeys for child media key derivation and/or field key derivation,
- * /   removing raw master secret material from canister memory entirely
- * / - Hardware Security Module (HSM) or KMS-backed custody for the true root
- * /   of trust, with this canister only holding derived, scoped key handles
- * / - External vault for secret workload identity
+ * / Encryption construction (vetKeys / IBE):
+ * / - The canister holds NO key material. Values are encrypted client-side
+ * /   with identity-based encryption (IBE) under the subnet's vetKD master
+ * /   key: the writer derives this canister's IBE public key offline (master
+ * /   public key -> canister key -> context subkey) and encrypts to the
+ * /   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
+ * /   write, so first registration of a record needs no key ceremony.
+ * / - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
+ * /   exact same authorization as the old decrypt path (governor, domain
+ * /   owner, granted readers, verified guardians, club-scoped read grants
+ * /   verified live via club_domain) and only then relays the vetKey for the
+ * /   record's identity, encrypted under the caller's one-time transport key.
+ * /   The subnet never sees the raw key; the canister only relays the
+ * /   still-encrypted key and never sees plaintext.
+ * / - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
+ * /   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
+ * /   deliberately exposes only the management-canister relay.
+ * / - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
+ * /   production). It is captured at first install and immutable for the life
+ * /   of the derived keys — the deploy script MUST set it before first use.
+ * / - `vetkd_derive_key` costs cycles per derivation; readers cache derived
+ * /   vetKeys client-side per session, so each (pii_id, field_id) costs one
+ * /   derivation per reader session.
  */
 export interface pii_access_controlInterface {
     add_guardian_relationship(guardian: Principal, child_id: string): Promise<{
@@ -156,13 +123,6 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    derive_media_key(child_id: string, authorizer: Principal, purpose: string, expiry_seconds: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Uint8Array;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
     emergency_shutdown(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -170,28 +130,20 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    get_decrypted_pii(pii_id: string, field_id: string, operation: string, purpose: string): Promise<{
+    get_encrypted_pii_batch(pii_ids: Array<string>, field_id: string, operation: string, purpose: string): Promise<{
         __kind__: "Ok";
-        Ok: DecryptedPii;
+        Ok: Array<EncryptedPii>;
     } | {
         __kind__: "Err";
         Err: string;
     }>;
-    get_decrypted_pii_batch(pii_ids: Array<string>, field_id: string, operation: string, purpose: string): Promise<{
+    get_encrypted_pii_vetkeys_batch(pii_ids: Array<string>, field_id: string, transport_public_key: Uint8Array): Promise<{
         __kind__: "Ok";
-        Ok: Array<DecryptedPii>;
+        Ok: Array<Uint8Array | null>;
     } | {
         __kind__: "Err";
         Err: string;
     }>;
-    get_encrypted_pii(pii_id: string, field_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: EncryptedPii;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    get_key_metadata(): Promise<Array<KeyMetadata>>;
     grant_pii_read(pii_id: string, field_id: string, reader: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -206,15 +158,9 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    initialize_master_key(initial_key_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: string;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
     my_guardian_children(): Promise<Array<string>>;
-    register_pii(pii_id: string, field_id: string, plaintext: Uint8Array, domain_owner: Principal): Promise<{
+    pii_vetkey_verification_key(): Promise<Uint8Array>;
+    register_pii(pii_id: string, field_id: string, ciphertext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
     } | {
@@ -242,13 +188,6 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rotate_key(new_key_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: KeyRotationResult;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
     set_club_domain_canister(canister: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -264,7 +203,7 @@ export interface pii_access_controlInterface {
         Err: string;
     }>;
 }
-import type { AuditFilter as _AuditFilter, DecryptedPii as _DecryptedPii, EncryptedPii as _EncryptedPii, KeyMetadata as _KeyMetadata, KeyRotationResult as _KeyRotationResult, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
+import type { AuditFilter as _AuditFilter, EncryptedPii as _EncryptedPii, PiiDeleteResult as _PiiDeleteResult } from "./declarations/pii_access_control.did";
 export class Pii_access_control implements pii_access_controlInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async add_guardian_relationship(arg0: Principal, arg1: string): Promise<{
@@ -291,16 +230,6 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.delete_pii(arg0, arg1);
         return from_candid_variant_n4(result);
     }
-    async derive_media_key(arg0: string, arg1: Principal, arg2: string, arg3: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Uint8Array;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.derive_media_key(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n5(result);
-    }
     async emergency_shutdown(): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -311,39 +240,25 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.emergency_shutdown();
         return from_candid_variant_n1(result);
     }
-    async get_decrypted_pii(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
+    async get_encrypted_pii_batch(arg0: Array<string>, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
-        Ok: DecryptedPii;
+        Ok: Array<EncryptedPii>;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.get_decrypted_pii(arg0, arg1, arg2, arg3);
+        const result = await this.actor.get_encrypted_pii_batch(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n5(result);
+    }
+    async get_encrypted_pii_vetkeys_batch(arg0: Array<string>, arg1: string, arg2: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Uint8Array | null>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_encrypted_pii_vetkeys_batch(arg0, arg1, arg2);
         return from_candid_variant_n6(result);
-    }
-    async get_decrypted_pii_batch(arg0: Array<string>, arg1: string, arg2: string, arg3: string): Promise<{
-        __kind__: "Ok";
-        Ok: Array<DecryptedPii>;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.get_decrypted_pii_batch(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n7(result);
-    }
-    async get_encrypted_pii(arg0: string, arg1: string): Promise<{
-        __kind__: "Ok";
-        Ok: EncryptedPii;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.get_encrypted_pii(arg0, arg1);
-        return from_candid_variant_n8(result);
-    }
-    async get_key_metadata(): Promise<Array<KeyMetadata>> {
-        const result = await this.actor.get_key_metadata();
-        return from_candid_vec_n9(result);
     }
     async grant_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";
@@ -365,18 +280,12 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
-    async initialize_master_key(arg0: string): Promise<{
-        __kind__: "Ok";
-        Ok: string;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize_master_key(arg0);
-        return from_candid_variant_n13(result);
-    }
     async my_guardian_children(): Promise<Array<string>> {
         const result = await this.actor.my_guardian_children();
+        return result;
+    }
+    async pii_vetkey_verification_key(): Promise<Uint8Array> {
+        const result = await this.actor.pii_vetkey_verification_key();
         return result;
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
@@ -387,7 +296,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n8(result);
+        return from_candid_variant_n9(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -419,16 +328,6 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.revoke_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
-    async rotate_key(arg0: string): Promise<{
-        __kind__: "Ok";
-        Ok: KeyRotationResult;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.rotate_key(arg0);
-        return from_candid_variant_n14(result);
-    }
     async set_club_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -450,34 +349,8 @@ export class Pii_access_control implements pii_access_controlInterface {
         return from_candid_variant_n1(result);
     }
 }
-function from_candid_KeyMetadata_n10(value: _KeyMetadata): KeyMetadata {
-    return from_candid_record_n11(value);
-}
-function from_candid_record_n11(value: {
-    status: {
-        Active: null;
-    } | {
-        Shredded: null;
-    } | {
-        RotationPending: null;
-    } | {
-        Revoked: null;
-    };
-    key_id: string;
-    created_at: bigint;
-    rotation_due_at: bigint;
-}): {
-    status: Variant_Active_Shredded_RotationPending_Revoked;
-    key_id: string;
-    created_at: bigint;
-    rotation_due_at: bigint;
-} {
-    return {
-        status: from_candid_variant_n12(value.status),
-        key_id: value.key_id,
-        created_at: value.created_at,
-        rotation_due_at: value.rotation_due_at
-    };
+function from_candid_opt_n8(value: [] | [Uint8Array]): Uint8Array | null {
+    return value.length === 0 ? null : value[0];
 }
 function from_candid_variant_n1(value: {
     Ok: null;
@@ -486,55 +359,6 @@ function from_candid_variant_n1(value: {
 }): {
     __kind__: "Ok";
     Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n12(value: {
-    Active: null;
-} | {
-    Shredded: null;
-} | {
-    RotationPending: null;
-} | {
-    Revoked: null;
-}): Variant_Active_Shredded_RotationPending_Revoked {
-    return "Active" in value ? Variant_Active_Shredded_RotationPending_Revoked.Active : "Shredded" in value ? Variant_Active_Shredded_RotationPending_Revoked.Shredded : "RotationPending" in value ? Variant_Active_Shredded_RotationPending_Revoked.RotationPending : "Revoked" in value ? Variant_Active_Shredded_RotationPending_Revoked.Revoked : value;
-}
-function from_candid_variant_n13(value: {
-    Ok: string;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: string;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n14(value: {
-    Ok: _KeyRotationResult;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: KeyRotationResult;
 } | {
     __kind__: "Err";
     Err: string;
@@ -567,12 +391,12 @@ function from_candid_variant_n4(value: {
     } : value;
 }
 function from_candid_variant_n5(value: {
-    Ok: Uint8Array;
+    Ok: Array<_EncryptedPii>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Uint8Array;
+    Ok: Array<EncryptedPii>;
 } | {
     __kind__: "Err";
     Err: string;
@@ -586,44 +410,25 @@ function from_candid_variant_n5(value: {
     } : value;
 }
 function from_candid_variant_n6(value: {
-    Ok: _DecryptedPii;
+    Ok: Array<[] | [Uint8Array]>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: DecryptedPii;
+    Ok: Array<Uint8Array | null>;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_vec_n7(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n7(value: {
-    Ok: Array<_DecryptedPii>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<DecryptedPii>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n8(value: {
+function from_candid_variant_n9(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;
@@ -642,8 +447,8 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n9(value: Array<_KeyMetadata>): Array<KeyMetadata> {
-    return value.map((x)=>from_candid_KeyMetadata_n10(x));
+function from_candid_vec_n7(value: Array<[] | [Uint8Array]>): Array<Uint8Array | null> {
+    return value.map((x)=>from_candid_opt_n8(x));
 }
 function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
     return to_candid_record_n3(value);
