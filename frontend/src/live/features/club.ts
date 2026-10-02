@@ -472,6 +472,15 @@ export async function unarchiveLiveTeam(ctx: FeatureBackendContext, teamId: stri
 /**
  * Team-creation request approve/reject.
  */
+export type LiveTeamCreationRequest = Awaited<
+  ReturnType<ClubDomainActor["list_team_creation_requests"]>
+>[number];
+
+export async function listLiveTeamCreationRequests(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_team_creation_requests(clubId), "List team creation requests");
+}
+
 export async function approveLiveTeamCreationRequest(ctx: FeatureBackendContext, requestId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(

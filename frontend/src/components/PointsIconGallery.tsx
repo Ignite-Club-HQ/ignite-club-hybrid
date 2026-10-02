@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/imageCompression";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 
 // Import all gallery icons
 import wolfIcon from "@/assets/points-icons/wolf.png";
@@ -52,6 +54,18 @@ export function PointsIconGallery({ clubId, currentIconUrl, onIconSelect }: Poin
       const response = await fetch(icon.src);
       const blob = await response.blob();
       const fileName = `${clubId}/points-icon/${icon.name.toLowerCase()}-${Date.now()}.png`;
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath: `clubs/${clubId}/${fileName}`,
+        file: blob,
+        mime: "image/png",
+      });
+      if (blobUpload) {
+        onIconSelect(blobUpload.url);
+        return;
+      }
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Media uploads are not available yet for Internet Identity accounts");
+      }
       const { error: uploadError } = await supabase.storage
         .from("club-logos")
         .upload(fileName, blob, { contentType: "image/png", upsert: true });
@@ -136,6 +150,18 @@ export function PointsIconGallery({ clubId, currentIconUrl, onIconSelect }: Poin
               try {
                 const result = await compressImage(file);
                 const fileName = `${clubId}/points-icon/${Date.now()}-${file.name}`;
+                const blobUpload = await tryUploadMediaToBlobStore({
+                  storagePath: `clubs/${clubId}/${fileName}`,
+                  file: result.file,
+                  mime: result.file.type || "image/png",
+                });
+                if (blobUpload) {
+                  onIconSelect(blobUpload.url);
+                  return;
+                }
+                if (resolveAuthBackend() === "icp") {
+                  throw new Error("Media uploads are not available yet for Internet Identity accounts");
+                }
                 const { error: uploadError } = await supabase.storage
                   .from("club-logos")
                   .upload(fileName, result.file);

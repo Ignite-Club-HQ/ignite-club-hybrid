@@ -11,6 +11,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Plus, Trash2, ExternalLink, BarChart3, Eye, MousePointer, Settings, ArrowLeft, Pencil, Upload, Loader2 } from "lucide-react";
 import { subDays } from "date-fns";
 import {
@@ -93,6 +95,12 @@ async function uploadAdImage(file: File): Promise<string> {
   const fileExt = file.name.split(".").pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
   const filePath = `ads/${fileName}`;
+  // Platform-level ad creatives have no club scope, so the blob store's
+  // club-grant path prefix does not apply — readers could not decrypt an
+  // on-chain URL. Gate ICP mode off Supabase storage entirely instead.
+  if (resolveAuthBackend() === "icp") {
+    throw new Error("Ad creative uploads are not available yet for Internet Identity accounts");
+  }
   const { error: uploadError } = await supabase.storage
     .from("app-ads")
     .upload(filePath, file, { cacheControl: "31536000" });
