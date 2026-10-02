@@ -88,12 +88,14 @@ interface UserProfile {
 }
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabUserDirectory } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 
 export default function ManageUsersPage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
+  const isIcp = useIcpLab || resolveAuthBackend() === "icp";
+  if (isIcp) {
     return <IcpLabManageUsersPage />;
   }
   return <SupabaseManageUsersPage />;
@@ -136,7 +138,7 @@ function IcpLabManageUsersPage() {
         <h1 className="text-lg font-bold">Users</h1>
       </div>
       <p className="text-sm text-muted-foreground">
-        {directory?.source === "icp"
+        {resolveAuthBackend() === "icp" ? "Loaded from the Internet Identity canisters. Account status changes, bans, and role edits are disabled." : directory?.source === "icp"
           ? "Loaded from the local identity_access canister. Account status changes, bans, and role edits are disabled."
           : "The local identity_access canister is not configured. Showing a synthetic read-only preview; no Supabase request was made."}
       </p>
@@ -464,6 +466,8 @@ function SupabaseManageUsersPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async ({ userId, immediate, gdprRequest = false }: { userId: string; immediate: boolean; gdprRequest?: boolean }) => {
+      // NEEDS-CANISTER: admin-delete-account not yet available on canister
+      if (resolveAuthBackend() === "icp") throw new Error("Account deletion is not yet available for Internet Identity accounts.");
       const { data, error } = await supabase.functions.invoke('admin-delete-account', {
         body: { userId, immediate, gdprRequest }
       });

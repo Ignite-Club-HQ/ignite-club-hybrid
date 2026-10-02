@@ -89,11 +89,23 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
     mutationFn: async (request: (typeof requests)[0]) =>
       withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: approval only flips request status on club_domain —
-          // team creation, role grant and notification still have no
-          // canister counterpart, so they stay Supabase-only even once this
-          // request record is routed to ICP.
+          // NEEDS-CANISTER: team creation and role grant still have no
+          // canister counterpart. Notification is best-effort.
           await approveLiveTeamCreationRequest(ctx, request.id);
+          try {
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await fanOutLiveNotifications(ctx, {
+              userIds: [request.requested_by],
+              clubId,
+              kind: "team_approved",
+              body: `Your team "${request.name}" has been approved!`,
+              idempotencyKeyPrefix: `team-approval-${request.id}-${Date.now()}`,
+              // No teamId available yet as team creation is not canister-side
+              relatedId: clubId, 
+            });
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
         },
         supabase: async () => {
       // Create the team

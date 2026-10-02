@@ -209,9 +209,42 @@ export default function ManageRolesDialog({
             });
           }
         },
-        // Best-effort in-app notification via notification_queue — a
-        // notification failure must not roll back the role changes.
-        icp: async (ctx) => {
+                icp: async (ctx) => {
+          const user = Principal.fromText(userId);
+          for (const r of additions) {
+            await addLiveRoleGrant(ctx, user, clubId, r.value, teamId);
+          }
+          for (const r of removals) {
+            await removeLiveRoleGrant(ctx, user, clubId, r.role, teamId);
+          }
+
+          // Best-effort in-app notification via notification_queue — a
+          // notification failure must not roll back the role changes.
+          try {
+            const parts: string[] = [];
+            if (additions.length > 0) {
+              parts.push(`added: ${additions.map((r) => r.label).join(", ")}`);
+            }
+            if (removals.length > 0) {
+              parts.push(
+                `removed: ${removals.map((r) => ROLE_LABEL[r.role] ?? r.role).join(", ")}`,
+              );
+            }
+            if (parts.length > 0) {
+              const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+              await fanOutLiveNotifications(ctx, {
+                userIds: [userId],
+                clubId,
+                kind: "membership",
+                body: `Your roles in ${teamName} were updated — ${parts.join("; ")}`,
+                idempotencyKeyPrefix: `membership-update-${userId}-${teamId}-${Date.now()}`,
+                relatedId: teamId,
+              });
+            }
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
+        },
 
           try {
             const parts: string[] = [];

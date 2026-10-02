@@ -59,6 +59,7 @@ function IcpCompetitionDetailPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const localIcpPersona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const [seasonName, setSeasonName] = useState("");
   const [registrationTeamId, setRegistrationTeamId] = useState("");
@@ -242,6 +243,7 @@ function SupabaseCompetitionDetailPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const inviteFromUrl = searchParams.get("invite") === "1";
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const { toast } = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -1263,6 +1265,7 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
 function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen, onDone }: { competitionId: string; organizerClubId?: string | null; divisions: any[]; defaultOpen?: boolean; onDone: () => void }) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const [open, setOpen] = useState(!!defaultOpen);
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [teamId, setTeamId] = useState("");

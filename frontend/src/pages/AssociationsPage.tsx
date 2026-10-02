@@ -9,6 +9,8 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 import { getLocalLabAssociations } from "@/lab/fixtureDataLayer";
 
 export default function AssociationsPage() {
@@ -56,18 +58,40 @@ function SupabaseAssociationsPage() {
     queryKey: ["my-associations", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .eq("role", "association_admin");
-      const ids = Array.from(new Set((roles ?? []).map((r: any) => r.club_id).filter(Boolean)));
-      if (ids.length === 0) return [];
-      const { data } = await supabase
-        .from("clubs")
-        .select("id, name, logo_url, kind")
-        .in("id", ids);
-      return data ?? [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("club_id")
+            .eq("user_id", user!.id)
+            .eq("role", "association_admin");
+          const ids = Array.from(new Set((roles ?? []).map((r: any) => r.club_id).filter(Boolean)));
+          if (ids.length === 0) return [];
+          const { data } = await supabase
+            .from("clubs")
+            .select("id, name, logo_url, kind")
+            .in("id", ids);
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          const associationAdminClubIds = grants
+            .filter(g => g.role === "association_admin")
+            .map(g => g.club_id);
+          
+          if (associationAdminClubIds.length === 0) return [];
+          
+          const clubs = await listLiveMembershipClubs(ctx);
+          return clubs
+            .filter(c => associationAdminClubIds.includes(c.id))
+            .map(c => ({
+              id: c.id,
+              name: c.name,
+              logo_url: c.logo_url[0] ?? null,
+              kind: "association" // canister shape doesn't have kind, but this is the Associations page
+            }));
+        }
+      });
     },
   });
 

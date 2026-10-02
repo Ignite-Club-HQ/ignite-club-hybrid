@@ -20,6 +20,7 @@ import { getLocalLabClubList } from "@/lab/fixtureDataLayer";
 export default function StartTeamPage() {
   usePageTitle("Start a team");
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const { activeClubFilter } = useClubTheme();
 
   const { toast } = useToast();
@@ -53,6 +54,10 @@ export default function StartTeamPage() {
   });
 
   const goPersonal = async () => {
+    if (isIcp) {
+      toast({ title: "Personal teams are not supported for Internet Identity yet", variant: "destructive" });
+      return;
+    }
     if (!user || working) return;
     if (useIcpLab) {
       toast({

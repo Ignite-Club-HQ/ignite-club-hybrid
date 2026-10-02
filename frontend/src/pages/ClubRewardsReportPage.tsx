@@ -44,6 +44,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubDetail, getLocalLabRewardRedemptions, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveRedemptions } from "@/live/features/points";
 
 interface ReportRedemption {
@@ -77,6 +79,7 @@ export default function ClubRewardsReportPage() {
     queryKey: ["club-subscription", clubId],
     queryFn: async () => {
       if (useIcpLab) return { is_pro: true, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false };
+      if (isFeatureRoutedToIcp("membership")) return { is_pro: true }; // NEEDS-CANISTER: default to Pro for ICP for now
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -92,13 +95,21 @@ export default function ClubRewardsReportPage() {
     queryKey: ["is-app-admin", user?.id],
     queryFn: async () => {
       if (useIcpLab) return true;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user!.id)
+            .eq("role", "app_admin")
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(g => g.role === "app_admin");
+        }
+      });
     },
     enabled: !!user,
   });
@@ -107,14 +118,22 @@ export default function ClubRewardsReportPage() {
     queryKey: ["is-club-admin-rewards-report", user?.id, clubId],
     queryFn: async () => {
       if (useIcpLab) return true;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "club_admin")
-        .eq("club_id", clubId!)
-        .maybeSingle();
-      return !!data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user!.id)
+            .eq("role", "club_admin")
+            .eq("club_id", clubId!)
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(g => g.role === "club_admin" && g.club_id === clubId!);
+        }
+      });
     },
     enabled: !!user && !!clubId,
   });
@@ -131,13 +150,22 @@ export default function ClubRewardsReportPage() {
           .filter((team) => team.club_id === clubId)
           .map(({ id, name }) => ({ id, name }));
       }
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("club_id", clubId!)
-        .order("name");
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("club_id", clubId!)
+            .order("name");
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { listLiveTeams } = await import("@/live/features/club");
+          const teams = await listLiveTeams(ctx, clubId!);
+          return teams.map(t => ({ id: t.id, name: t.name }));
+        }
+      });
     },
     enabled: !!clubId && hasPro,
   });
@@ -150,13 +178,23 @@ export default function ClubRewardsReportPage() {
         const localClub = getLocalLabClubDetail(clubId!);
         return localClub ? { name: localClub.name } : null;
       }
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("name")
-        .eq("id", clubId!)
-        .single();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("name")
+            .eq("id", clubId!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { getLiveClubProfile } = await import("@/live/features/club");
+          const profileOpt = await getLiveClubProfile(ctx, clubId!);
+          const profile = profileOpt[0];
+          return profile ? { name: profile.name } : null;
+        }
+      });
     },
     enabled: !!clubId,
   });
