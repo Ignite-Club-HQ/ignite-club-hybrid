@@ -404,6 +404,20 @@ export async function sendLiveSystemMessage(
   unwrapCandid(await actor.send_system_message(toUser, body, idempotencyKey), "Send system message");
 }
 
+/**
+ * Post-signup welcome DM. Any authenticated caller may trigger it for
+ * themselves; the canister posts it from the governor (the support
+ * identity) and derives the idempotency key from the caller, so repeated
+ * calls are safe no-ops. Fire-and-forget from the caller's perspective.
+ */
+export async function sendLiveWelcomeMessage(
+  ctx: FeatureBackendContext,
+  body: string,
+): Promise<void> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  unwrapCandid(await actor.send_welcome_message(body), "Send welcome message");
+}
+
 /** Minimum supported app versions per platform, governor-configured on the canister. */
 export async function getLiveMinimumAppVersions(
   ctx: FeatureBackendContext,
