@@ -1674,7 +1674,6 @@ persistent actor {
       #Err("Preview fetch failed: " # Error.message(e))
     }
   };
-};
 
   // How many participants of the conversation (excluding the caller) sent a
   // heartbeat within the last 90 seconds. Mirrors the Supabase presence
