@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory, type PointsSourceType } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { awardLivePoints, subjectForUser } from "@/live/features/points";
 import {
   checkLeaderboardPosition,
