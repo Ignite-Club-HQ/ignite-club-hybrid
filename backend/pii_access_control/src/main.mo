@@ -124,7 +124,7 @@ persistent actor {
   // IBE identity for a record: pii_id, unit separator, field_id. Neither id
   // may contain the separator (ids are UUIDs / "prefix:..." slugs).
   func ibeIdentity(pii_id : Text, field_id : Text) : Blob {
-    Text.encodeUtf8(pii_id # "" # field_id)
+    Text.encodeUtf8(pii_id # "\u{1F}" # field_id)
   };
 
   // ==================== State ====================

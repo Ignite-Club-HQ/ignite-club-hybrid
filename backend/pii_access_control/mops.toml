@@ -9,3 +9,4 @@ main = "src/main.mo"
 
 [dependencies]
 core = "2.6.1"
+ic-vetkeys = "0.6.0"
