@@ -1431,11 +1431,21 @@ export async function saveLiveGamePlayerStats(
   stats: LiveGamePlayerStatInput[],
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  // Fill-in names become opaque PII references before crossing to the
+  // canister; plaintext never reaches events_domain.
+  const withRefs = await Promise.all(
+    stats.map(async (s) => ({
+      ...s,
+      fillInPlayerName: s.fillInPlayerName?.trim()
+        ? await registerFillInNameRef(ctx, eventId, teamId, s.fillInPlayerName.trim())
+        : s.fillInPlayerName ?? null,
+    })),
+  );
   return unwrapCandid(
     actor.save_game_player_stats(
       eventId,
       teamId,
-      stats.map((s) => ({
+      withRefs.map((s) => ({
         user_id: candidOpt(s.userId),
         fill_in_player_name: candidOpt(s.fillInPlayerName),
         jersey_number: candidOpt(s.jerseyNumber),
