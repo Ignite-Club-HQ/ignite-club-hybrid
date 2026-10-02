@@ -1,10 +1,13 @@
 import {
   getBackendRoutingConfig,
+  readCachedClubBackendHint,
   resolveBackendForCountry,
+  resolveClubBackendOverride,
   type BackendProvider,
 } from "./backendRouting";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
+import { getUserClubIds } from "./userClubs";
 
 /**
  * Decides which sign-in screen `/auth` shows — Supabase (email/password +
@@ -37,8 +40,19 @@ export function isIcpAuthAvailable(): boolean {
  * `resolveBackendForCountry`: ICP is never returned before canisters exist.
  */
 export function resolveAuthBackend(): BackendProvider {
+  const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  return resolveBackendForCountry(getBackendRoutingConfig(), country, isIcpAuthAvailable());
+  // A per-club backend pin (whole app per club member) wins over the country
+  // rules. Post-auth the pin comes from live membership ids; pre-auth — which
+  // is when this function decides the /auth screen — it comes from the hint
+  // cached by the last post-auth check.
+  const clubIds = getUserClubIds();
+  const pin = clubIds.length > 0
+    ? resolveClubBackendOverride(config, clubIds)
+    : readCachedClubBackendHint();
+  if (pin === "supabase") return "supabase";
+  if (pin === "icp") return isIcpAuthAvailable() ? "icp" : "supabase";
+  return resolveBackendForCountry(config, country, isIcpAuthAvailable());
 }
 
 /** True when `/auth` should show the Internet Identity passkey screen. */
