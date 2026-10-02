@@ -22,6 +22,9 @@ import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { registerLiveAsset } from "@/live/features/media";
+import { recordLivePhotoUpload } from "@/live/features/insights";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { sha256Hex } from "@/live/blobStoreProtocol";
 import {
   isIOSEnvironment,
@@ -515,6 +518,21 @@ export function UploadPhotoSheet({
         console.error("Failed to cleanup orphaned storage file:", cleanupError);
       }
       throw insertError || new Error("Insert failed");
+    }
+
+    // Best-effort dual-write of the photo-upload counter to insights_domain
+    // when the "analytics" feature is ICP-routed. Supabase stays the system
+    // of record for the photo row above; this only feeds the engagement
+    // dashboards and must never block or fail the upload.
+    if (clubId && isFeatureRoutedToIcp("analytics")) {
+      try {
+        const identity = await getCurrentInternetIdentity();
+        if (identity) {
+          await recordLivePhotoUpload({ identity, target: getActiveIcpTarget() }, clubId, insertedPhoto.id);
+        }
+      } catch {
+        // instrumentation only — never blocks the primary upload
+      }
     }
 
     // One-way mirror: gallery upload → vault "Gallery Uploads" folder

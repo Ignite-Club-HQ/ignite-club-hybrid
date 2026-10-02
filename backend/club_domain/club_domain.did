@@ -76,6 +76,17 @@ type Snapshot =
               };
    schema: nat32;
  };
+type Season = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   end_date: text;
+   id: text;
+   name: text;
+   start_date: text;
+   status: text;
+   updated_at_ms: nat64;
+ };
 type RoleRequest = 
  record {
    account_id: text;
@@ -110,8 +121,25 @@ type RemovedMember =
    removed_by: principal;
    user: principal;
  };
+type ProfileTeamHistoryEntry = 
+ record {
+   club_id: text;
+   club_name: text;
+   joined_at_ms: nat64;
+   membership_id: text;
+   season_end_date: text;
+   season_id: text;
+   season_name: text;
+   season_start_date: text;
+   season_status: text;
+   team_id: text;
+   team_level_age: opt text;
+   team_name: text;
+ };
 type PendingInvite = 
  record {
+   accepted_at_ms: opt nat64;
+   accepted_by: opt principal;
    child_id: opt text;
    club_id: text;
    created_at_ms: nat64;
@@ -193,6 +221,11 @@ type Link =
    draft: Draft;
    id: text;
    sort_order: nat32;
+ };
+type InviteStats = 
+ record {
+   accepted: nat;
+   total: nat;
  };
 type InvitePayload = 
  record {
@@ -376,6 +409,12 @@ type Account =
    principals: vec principal;
    version: nat64;
  };
+type AcceptedInvite = 
+ record {
+   accepted_at_ms: nat64;
+   id: text;
+   invited_user_id: text;
+ };
 service : {
   accept_identity_link: (id: nat64) -> (variant {
                                           Err: text;
@@ -547,6 +586,11 @@ service : {
       Err: text;
       Ok: opt ClubSettings;
     }) query;
+  get_current_season: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt Season;
+    }) query;
   get_link: (id: text) -> (variant {
                              Err: text;
                              Ok: Listing;
@@ -600,12 +644,22 @@ service : {
                        Err: text;
                        Ok;
                      });
+  invite_stats: (club_id: text, since_ms: nat64, until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: InviteStats;
+    }) query;
   is_member_removed: (club: text, user: principal) -> (bool) query;
   link_guardian: (child_id: text, user: principal) ->
    (variant {
       Err: text;
       Ok;
     });
+  list_accepted_invites: (club_id: text, since_ms: nat64, until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: vec AcceptedInvite;
+    }) query;
   list_children: () -> (variant {
                           Err: text;
                           Ok: vec Child;
@@ -664,6 +718,11 @@ service : {
       Err: text;
       Ok: vec RoleRequest;
     }) query;
+  list_seasons: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec Season;
+    }) query;
   list_sponsors: (club_id: text) ->
    (variant {
       Err: text;
@@ -715,6 +774,8 @@ service : {
                                Ok: Mutation;
                              });
   my_role_grants: () -> (vec RoleGrant) query;
+  profile_team_history: (profile_id: text) ->
+   (vec ProfileTeamHistoryEntry) query;
   reject_club_join_request: (id: text) ->
    (variant {
       Err: text;
@@ -819,6 +880,10 @@ service : {
                                          Err: text;
                                          Ok: ClubTerm;
                                        });
+  save_season: (season: Season) -> (variant {
+                                      Err: text;
+                                      Ok: Season;
+                                    });
   save_sponsor: (sponsor: ClubSponsor) ->
    (variant {
       Err: text;

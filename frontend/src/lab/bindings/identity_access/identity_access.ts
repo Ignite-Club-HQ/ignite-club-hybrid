@@ -297,6 +297,7 @@ export interface identity_accessInterface {
     get_my_entitlements(): Promise<Result_8>;
     get_privacy_consent(arg0: string, arg1: string): Promise<Result_5>;
     get_profile(): Promise<Result_9>;
+    get_profiles_by_ids(arg0: Array<string>): Promise<Array<Profile>>;
     get_terms_acceptance(arg0: string): Promise<Result_10>;
     grant_role(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<Result_2>;
     grant_role_scoped(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null): Promise<Result_2>;
@@ -372,6 +373,10 @@ export class Identity_access implements identity_accessInterface {
     async get_profile(): Promise<Result_9> {
         const result = await this.actor.get_profile();
         return from_candid_Result_9_n32(result);
+    }
+    async get_profiles_by_ids(arg0: Array<string>): Promise<Array<Profile>> {
+        const result = await this.actor.get_profiles_by_ids(arg0);
+        return from_candid_vec_n22(result);
     }
     async get_terms_acceptance(arg0: string): Promise<Result_10> {
         const result = await this.actor.get_terms_acceptance(arg0);

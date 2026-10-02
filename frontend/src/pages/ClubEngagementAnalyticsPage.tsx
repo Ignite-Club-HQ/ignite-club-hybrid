@@ -91,7 +91,7 @@ import {
   countLivePhotos,
   getLivePhotoEngagementTotals,
 } from "@/live/features/insights";
-import { listLiveSponsors } from "@/live/features/club";
+import { listLiveSponsors, listLiveAcceptedInvites, getLiveInviteStats } from "@/live/features/club";
 import {
   listLiveCompetitions,
   listLiveCompetitionEntries,
@@ -410,17 +410,22 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: newMembers = [] } = useQuery({
     queryKey: ["club-engagement-new-members", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from("pending_invites")
-        .select("id, invited_user_id, accepted_at, club_id")
-        .not("accepted_at", "is", null)
-        .gte("accepted_at", range.start.toISOString())
-        .lte("accepted_at", range.end.toISOString())
-        .limit(5000);
-      if (!isPlatform) q = q.eq("club_id", clubId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          let q = supabase
+            .from("pending_invites")
+            .select("id, invited_user_id, accepted_at, club_id")
+            .not("accepted_at", "is", null)
+            .gte("accepted_at", range.start.toISOString())
+            .lte("accepted_at", range.end.toISOString())
+            .limit(5000);
+          if (!isPlatform) q = q.eq("club_id", clubId!);
+          const { data, error } = await q;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: (ctx) => listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(range.start.getTime()), BigInt(range.end.getTime())),
+      });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -428,17 +433,22 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: prevNewMembers = [] } = useQuery({
     queryKey: ["club-engagement-new-members-prev", clubId, mode, prevRange.start.toISOString(), prevRange.end.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from("pending_invites")
-        .select("id, accepted_at, club_id")
-        .not("accepted_at", "is", null)
-        .gte("accepted_at", prevRange.start.toISOString())
-        .lte("accepted_at", prevRange.end.toISOString())
-        .limit(5000);
-      if (!isPlatform) q = q.eq("club_id", clubId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          let q = supabase
+            .from("pending_invites")
+            .select("id, accepted_at, club_id")
+            .not("accepted_at", "is", null)
+            .gte("accepted_at", prevRange.start.toISOString())
+            .lte("accepted_at", prevRange.end.toISOString())
+            .limit(5000);
+          if (!isPlatform) q = q.eq("club_id", clubId!);
+          const { data, error } = await q;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: (ctx) => listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(prevRange.start.getTime()), BigInt(prevRange.end.getTime())),
+      });
     },
     enabled: queryReady && !!access?.isAdmin,
   });
@@ -448,18 +458,28 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: inviteStats } = useQuery({
     queryKey: ["club-engagement-invites", clubId, mode, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      let q = supabase
-        .from("pending_invites")
-        .select("id, accepted_at, created_at, status")
-        .gte("created_at", range.start.toISOString())
-        .lte("created_at", range.end.toISOString())
-        .limit(10000);
-      if (!isPlatform) q = q.eq("club_id", clubId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      const total = (data || []).length;
-      const accepted = (data || []).filter((i) => !!i.accepted_at).length;
-      return { total, accepted, rate: total ? Math.round((accepted / total) * 100) : 0 };
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          let q = supabase
+            .from("pending_invites")
+            .select("id, accepted_at, created_at, status")
+            .gte("created_at", range.start.toISOString())
+            .lte("created_at", range.end.toISOString())
+            .limit(10000);
+          if (!isPlatform) q = q.eq("club_id", clubId!);
+          const { data, error } = await q;
+          if (error) throw error;
+          const total = (data || []).length;
+          const accepted = (data || []).filter((i) => !!i.accepted_at).length;
+          return { total, accepted, rate: total ? Math.round((accepted / total) * 100) : 0 };
+        },
+        icp: async (ctx) => {
+          const stats = await getLiveInviteStats(ctx, requireIcpClubId(), BigInt(range.start.getTime()), BigInt(range.end.getTime()));
+          const total = Number(stats.total);
+          const accepted = Number(stats.accepted);
+          return { total, accepted, rate: total ? Math.round((accepted / total) * 100) : 0 };
+        },
+      });
     },
     enabled: queryReady && !!access?.isAdmin,
   });

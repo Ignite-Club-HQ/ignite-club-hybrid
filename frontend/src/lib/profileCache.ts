@@ -14,6 +14,8 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 
 export interface CachedProfile {
   id: string;
@@ -71,15 +73,28 @@ async function flushBatch() {
   if (ids.length === 0) return;
 
   try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name, avatar_url")
-      .in("id", ids);
-    if (error) throw error;
+    const rows = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url")
+          .in("id", ids);
+        if (error) throw error;
+        return (data ?? []) as CachedProfile[];
+      },
+      icp: async (ctx) => {
+        const profiles = await listLiveProfilesByIds(ctx, ids);
+        return profiles.map((p): CachedProfile => ({
+          id: p.account_id,
+          display_name: p.display_name,
+          avatar_url: p.avatar_ref[0] ?? null,
+        }));
+      },
+    });
 
     const now = Date.now();
     const byId = new Map<string, CachedProfile>();
-    for (const p of data ?? []) byId.set(p.id, p as CachedProfile);
+    for (const p of rows) byId.set(p.id, p);
 
     for (const id of ids) {
       const profile = byId.get(id) ?? null;

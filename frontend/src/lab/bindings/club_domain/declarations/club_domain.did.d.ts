@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AcceptedInvite {
+  'id' : string,
+  'invited_user_id' : string,
+  'accepted_at_ms' : bigint,
+}
 export interface Account {
   'id' : string,
   'legacy_subject' : Principal,
@@ -161,6 +166,7 @@ export interface InvitePayload {
   'subject' : string,
   'body' : string,
 }
+export interface InviteStats { 'total' : bigint, 'accepted' : bigint }
 export interface Link {
   'id' : string,
   'sort_order' : number,
@@ -215,12 +221,28 @@ export interface PendingInvite {
   'kind' : string,
   'resent_at_ms' : [] | [bigint],
   'role' : [] | [string],
+  'accepted_by' : [] | [Principal],
   'team_id' : [] | [string],
   'email' : string,
   'child_id' : [] | [string],
   'created_at_ms' : bigint,
+  'accepted_at_ms' : [] | [bigint],
   'invited_by' : Principal,
   'club_id' : string,
+}
+export interface ProfileTeamHistoryEntry {
+  'season_start_date' : string,
+  'season_id' : string,
+  'team_id' : string,
+  'season_name' : string,
+  'team_level_age' : [] | [string],
+  'team_name' : string,
+  'joined_at_ms' : bigint,
+  'membership_id' : string,
+  'season_end_date' : string,
+  'club_name' : string,
+  'club_id' : string,
+  'season_status' : string,
 }
 export interface RemovedMember {
   'club' : string,
@@ -251,6 +273,16 @@ export interface RoleRequest {
   'user' : Principal,
   'created_at_ms' : bigint,
   'decided_by' : [] | [Principal],
+}
+export interface Season {
+  'id' : string,
+  'status' : string,
+  'name' : string,
+  'updated_at_ms' : bigint,
+  'end_date' : string,
+  'created_at_ms' : bigint,
+  'start_date' : string,
+  'club_id' : string,
 }
 export interface Snapshot {
   'schema' : number,
@@ -485,6 +517,11 @@ export interface _SERVICE {
     { 'Ok' : [] | [ClubSettings] } |
       { 'Err' : string }
   >,
+  'get_current_season' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [Season] } |
+      { 'Err' : string }
+  >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
   'get_my_theme_preference' : ActorMethod<
     [],
@@ -537,10 +574,20 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'invite_stats' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : InviteStats } |
+      { 'Err' : string }
+  >,
   'is_member_removed' : ActorMethod<[string, Principal], boolean>,
   'link_guardian' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'list_accepted_invites' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : Array<AcceptedInvite> } |
       { 'Err' : string }
   >,
   'list_children' : ActorMethod<
@@ -603,6 +650,11 @@ export interface _SERVICE {
     { 'Ok' : Array<RoleRequest> } |
       { 'Err' : string }
   >,
+  'list_seasons' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Season> } |
+      { 'Err' : string }
+  >,
   'list_sponsors' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubSponsor> } |
@@ -650,6 +702,10 @@ export interface _SERVICE {
   >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
+  'profile_team_history' : ActorMethod<
+    [string],
+    Array<ProfileTeamHistoryEntry>
+  >,
   'reject_club_join_request' : ActorMethod<
     [string],
     { 'Ok' : ClubJoinRequest } |
@@ -760,6 +816,7 @@ export interface _SERVICE {
     { 'Ok' : ClubTerm } |
       { 'Err' : string }
   >,
+  'save_season' : ActorMethod<[Season], { 'Ok' : Season } | { 'Err' : string }>,
   'save_sponsor' : ActorMethod<
     [ClubSponsor],
     { 'Ok' : ClubSponsor } |

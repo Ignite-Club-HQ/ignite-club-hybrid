@@ -402,3 +402,178 @@ export async function trimLiveCompetitionRounds(
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.trim_rounds(competitionId, maxRound), "Trim rounds");
 }
+
+/**
+ * EOI (expression-of-interest) submissions — competition_domain's
+ * eoiSubmissions entity, counterpart of the Supabase eoi_submissions table
+ * and its RPCs. Resend/bulk-resend email delivery stays on Supabase; only
+ * the bookkeeping (invite_sent_at/count) lives here.
+ */
+
+export async function listLiveEoiSubmissions(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  seasonId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_eoi_submissions(clubId, candidOpt(seasonId)),
+    "List EOI submissions",
+  );
+}
+
+export async function getLiveEoiStats(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  seasonId?: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_eoi_stats(clubId, candidOpt(seasonId)), "Get EOI stats");
+}
+
+export async function getLiveMyPendingEois(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_my_pending_eois(), "Get my pending EOIs");
+}
+
+export async function suggestLiveEoiTeams(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.suggest_eoi_teams(seasonId), "Suggest EOI teams");
+}
+
+export async function confirmLiveEoiPlacement(ctx: FeatureBackendContext, submissionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.confirm_eoi_placement(submissionId), "Confirm EOI placement");
+}
+
+export async function claimLiveEoiByToken(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.claim_eoi_by_token(token), "Claim EOI submission");
+}
+
+export interface LiveEoiSubmissionUpdate {
+  extraNotes?: string | null;
+  preferredTeammates?: string | null;
+  preferredPosition?: string | null;
+}
+
+export async function updateLiveEoiSubmission(
+  ctx: FeatureBackendContext,
+  id: string,
+  patch: LiveEoiSubmissionUpdate,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_eoi_submission(
+      id,
+      candidOpt(patch.extraNotes),
+      candidOpt(patch.preferredTeammates),
+      candidOpt(patch.preferredPosition),
+    ),
+    "Update EOI submission",
+  );
+}
+
+export async function updateLiveEoiStatus(ctx: FeatureBackendContext, id: string, status: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.update_eoi_status(id, status), "Update EOI status");
+}
+
+export async function assignLiveEoiTeam(
+  ctx: FeatureBackendContext,
+  id: string,
+  teamId: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.assign_eoi_team(id, candidOpt(teamId)), "Assign EOI team");
+}
+
+export async function deleteLiveEoi(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_eoi(id), "Delete EOI submission");
+}
+
+export async function allocateLiveEoiToTeam(
+  ctx: FeatureBackendContext,
+  id: string,
+  teamId: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.allocate_eoi_to_team(id, candidOpt(teamId)), "Allocate EOI to team");
+}
+
+/** Bookkeeping half of the resend flow — marks invite_sent_at/count; email delivery stays on Supabase. */
+export async function resendLiveEoiInvite(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.resend_eoi_invite(id), "Resend EOI invite");
+}
+
+export async function bulkResendLiveEoiInvites(ctx: FeatureBackendContext, ids: string[]) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.bulk_resend_eoi_invites(ids), "Bulk resend EOI invites");
+}
+
+/** Per-competition engagement rollup (active teams, matches, results, broadcasts-excluded). */
+export async function getLiveCompetitionEngagementSummary(
+  ctx: FeatureBackendContext,
+  competitionIds: string[],
+  sinceMs: number | Date,
+  untilMs: number | Date,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.competition_engagement_summary(
+      competitionIds,
+      BigInt(sinceMs instanceof Date ? sinceMs.getTime() : sinceMs),
+      BigInt(untilMs instanceof Date ? untilMs.getTime() : untilMs),
+    ),
+    "Get competition engagement summary",
+  );
+}
+
+/**
+ * Maps the canister EoiSubmission (opt nat64 ms timestamps, opt principal)
+ * into the Supabase eoi_submissions row shape the hooks/UI already expect.
+ */
+export function mapLiveEoiSubmission(s: any) {
+  const ms = (v: [] | [bigint]): string | null => (v.length === 0 ? null : new Date(Number(v[0])).toISOString());
+  const opt = (v: [] | [string]): string | null => (v.length === 0 ? null : v[0]);
+  const optNum = (v: [] | [number]): number | null => (v.length === 0 ? null : v[0]);
+  return {
+    age_group: opt(s.age_group),
+    allocated_at: ms(s.allocated_at_ms),
+    assigned_team_id: opt(s.assigned_team_id),
+    child_id: opt(s.child_id),
+    claim_token: s.claim_token,
+    claimed_at: ms(s.claimed_at_ms),
+    club_id: s.club_id,
+    confirmed_at: ms(s.confirmed_at_ms),
+    created_at: new Date(Number(s.created_at_ms)).toISOString(),
+    extra_notes: opt(s.extra_notes),
+    game_days: s.game_days,
+    id: s.id,
+    invite_sent_at: ms(s.invite_sent_at_ms),
+    invite_sent_count: s.invite_sent_count,
+    notes: opt(s.notes),
+    parent_confirmed_at: ms(s.parent_confirmed_at_ms),
+    parent_email: s.parent_email,
+    parent_mobile: opt(s.parent_mobile),
+    parent_name: s.parent_name,
+    parent_user_id: s.parent_user_id.length === 0 ? null : s.parent_user_id[0].toText(),
+    player_dob: opt(s.player_dob),
+    player_gender: opt(s.player_gender),
+    player_name: s.player_name,
+    preferred_position: opt(s.preferred_position),
+    preferred_teammates: opt(s.preferred_teammates),
+    registered_at: ms(s.registered_at_ms),
+    returning_player: s.returning_player,
+    season_id: s.season_id,
+    skill_level: optNum(s.skill_level),
+    source: s.source,
+    status: s.status,
+    submitted_at: new Date(Number(s.submitted_at_ms)).toISOString(),
+    training_days: s.training_days,
+    updated_at: new Date(Number(s.updated_at_ms)).toISOString(),
+    withdrawn_at: ms(s.withdrawn_at_ms),
+  };
+}

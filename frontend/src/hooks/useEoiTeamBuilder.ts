@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { suggestLiveEoiTeams, allocateLiveEoiToTeam } from "@/live/features/competitions";
 
 export type EoiTeamSuggestion = {
   age_group: string;
@@ -27,9 +28,15 @@ export function useEoiTeamSuggestions(seasonId?: string | null) {
             submission_ids: r.submission_ids ?? [],
           })) ?? [];
         },
-        // NEEDS-CANISTER: competition_domain has no EOI submission entity to
-        // suggest team groupings from (needs e.g. suggest_eoi_teams(season_id)).
-        icp: async () => [] as EoiTeamSuggestion[],
+        icp: async (ctx) => {
+          const rows = await suggestLiveEoiTeams(ctx, seasonId);
+          return rows.map((r) => ({
+            age_group: r.age_group,
+            player_count: Number(r.player_count),
+            avg_skill: r.avg_skill,
+            submission_ids: r.submission_ids,
+          }));
+        },
       });
     },
     enabled: !!seasonId,
@@ -54,9 +61,8 @@ export function useAllocateEoiToTeam() {
           });
           if (error) throw error;
         },
-        // NEEDS-CANISTER: no canister concept of EOI-to-team allocation.
-        icp: async () => {
-          throw new Error("Allocating EOI submissions to a team isn't available on this backend yet.");
+        icp: async (ctx) => {
+          await allocateLiveEoiToTeam(ctx, submissionId, teamId);
         },
       }),
     onSuccess: () => {
@@ -87,9 +93,10 @@ export function useAllocateEoisBulk() {
             if (error) throw error;
           }
         },
-        // NEEDS-CANISTER: see useAllocateEoiToTeam above.
-        icp: async () => {
-          throw new Error("Allocating EOI submissions to a team isn't available on this backend yet.");
+        icp: async (ctx) => {
+          for (const id of submissionIds) {
+            await allocateLiveEoiToTeam(ctx, id, teamId);
+          }
         },
       }),
     onSuccess: () => {
