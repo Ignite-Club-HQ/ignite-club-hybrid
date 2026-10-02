@@ -34,7 +34,7 @@ import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
-import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink } from "@/live/features/miniLeagues";
+import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -1312,7 +1312,13 @@ function SupabaseJoinTeamPage() {
       // getLiveJoinLinkByToken and claimed via claim_admin_join_link below.
       const isIcpAdminJoinLink =
         (pendingInviteData?.metadata as { kind?: string } | null)?.kind === "league_admin_join_link";
-      if (membershipIcpRouted && targetsMiniLeague && !isIcpAdminJoinLink) {
+      // Parent (player-role) mini-league join links are canister-backed too:
+      // the roster player is minted at the child-add step via
+      // join_mini_league_by_token, which needs the child's name, so the join
+      // step itself only needs to let the flow through.
+      const isIcpParentJoinLink =
+        (pendingInviteData?.metadata as { kind?: string } | null)?.kind === "mini_league_parent_join_link";
+      if (membershipIcpRouted && targetsMiniLeague && !isIcpAdminJoinLink && !isIcpParentJoinLink) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
         );
@@ -1332,6 +1338,11 @@ function SupabaseJoinTeamPage() {
               return ["league_admin" as AppRole];
             },
           });
+        }
+        if (isIcpParentJoinLink) {
+          // Nothing to claim at join time: the token was validated during
+          // invite resolution, and the child-add step mints the roster player.
+          return ["parent" as AppRole];
         }
         throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
       }
@@ -1832,6 +1843,19 @@ function SupabaseJoinTeamPage() {
         toast({ title: `Linked to ${addedLabel}!` });
       } else if (childName.trim()) {
         addedLabel = childName.trim();
+        // ICP: mini-league parent join links mint the roster player directly
+        // on the mini_league_domain canister (idempotent per parent + child
+        // name), replacing the children + child_mini_league_assignments writes.
+        const icpHandled = leagueLinkMiniLeagueId
+          ? await withFeatureBackend("mini_leagues", {
+              supabase: async () => false,
+              icp: async (ctx) => {
+                await joinLiveMiniLeagueByToken(ctx, token!, addedLabel);
+                return true;
+              },
+            })
+          : false;
+        if (!icpHandled) {
         // Create new child
         const { data: newChild, error: childErr } = await supabase
           .from("children")
@@ -1886,6 +1910,7 @@ function SupabaseJoinTeamPage() {
           }
         }
         toast({ title: `${addedLabel} added to ${inviteEntityName}!` });
+        }
       }
 
 

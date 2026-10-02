@@ -6,7 +6,13 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveMiniLeagueJoinLink,
+  listLiveMiniLeagueJoinLinks,
+  revokeLiveMiniLeagueJoinLink,
+  rotateLiveMiniLeagueJoinLink,
+} from "@/live/features/miniLeagues";
 import { MiniLeagueJoinLinkCard } from "./MiniLeagueJoinLinkCard";
 import {
   buildMiniLeagueJoinLinkQrFilename,
@@ -41,7 +47,9 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
 
   const { data: link, isLoading, isError, refetch } = useQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
       const { data, error } = await supabase
         .from("pending_invites")
         .select("id, invite_token, created_at, metadata")
@@ -53,16 +61,41 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
         .limit(1);
       if (error) throw error;
       return (data?.[0] as JoinLinkRow | undefined) ?? null;
-    },
+        },
+        icp: async (ctx) => {
+          const links = await listLiveMiniLeagueJoinLinks(ctx, miniLeagueId);
+          const active = links
+            .filter((l) => l.role === "player" && !l.revoked)
+            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))[0];
+          if (!active) return null;
+          return {
+            id: active.token,
+            invite_token: active.token,
+            created_at: new Date(Number(active.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      }),
     staleTime: 30_000,
   });
 
   const createOrRotate = useMutation({
     mutationFn: async ({ rotate }: { rotate: boolean }) => {
-      // NEEDS-CANISTER: mini_league_domain has create_invite/claim_invite for
-      // single-player invites, but no generic role-grant join-link shape
-      // backed by pending_invites (admin-grant / parent-join semantics).
-      assertSupabaseWritePath("mini_leagues", "creating a mini-league join link");
+      const icpResult = await withFeatureBackend("mini_leagues", {
+        supabase: async () => null as JoinLinkRow | null,
+        icp: async (ctx) => {
+          const created = link
+            ? await rotateLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player")
+            : await createLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player");
+          return {
+            id: created.token,
+            invite_token: created.token,
+            created_at: new Date(Number(created.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      });
+      if (icpResult) return icpResult;
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
         await supabase.from("pending_invites").delete().eq("id", link.id);
@@ -100,10 +133,15 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
   const revoke = useMutation({
     mutationFn: async () => {
       if (!link) return;
-      // NEEDS-CANISTER: see createOrRotate above.
-      assertSupabaseWritePath("mini_leagues", "revoking a mini-league join link");
-      const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
-      if (error) throw error;
+      await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await revokeLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
