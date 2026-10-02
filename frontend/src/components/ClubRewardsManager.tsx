@@ -679,7 +679,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         </div>
       </div>
 
-      {/* Team Override Settings */}
+      {/* Team Override Settings — NEEDS-CANISTER: disable_team_pom_rewards
+          has no canister equivalent, so the lock is hidden for II members
+          rather than failing closed on tap. */}
+      {resolveAuthBackend() !== "icp" && (
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
@@ -698,6 +701,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           />
         </div>
       </Card>
+      )}
 
       {/* Points System Toggle */}
       <Card className="p-4 space-y-4">
