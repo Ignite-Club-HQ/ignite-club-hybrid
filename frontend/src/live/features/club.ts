@@ -2,6 +2,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
+import { registerLivePiiText } from "./vault";
 
 /**
  * Club data -> club_domain canister. Shared by the membership and news
