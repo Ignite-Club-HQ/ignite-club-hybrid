@@ -216,7 +216,6 @@ export interface ChildTeamAssignment {
 }
 export interface Child {
     id: string;
-    name: string;
     parent_id?: string;
 }
 export interface ChildGuardian {
@@ -444,7 +443,7 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    admin_upsert_child(id: string, name: string, parent_id: string | null): Promise<{
+    admin_upsert_child(id: string, parent_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: Child;
     } | {
@@ -1217,14 +1216,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.admin_update_rsvp_status(arg0, arg1, to_candid_opt_n3(arg2), arg3);
         return from_candid_variant_n15(result);
     }
-    async admin_upsert_child(arg0: string, arg1: string, arg2: string | null): Promise<{
+    async admin_upsert_child(arg0: string, arg1: string | null): Promise<{
         __kind__: "Ok";
         Ok: Child;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.admin_upsert_child(arg0, arg1, to_candid_opt_n3(arg2));
+        const result = await this.actor.admin_upsert_child(arg0, to_candid_opt_n3(arg1));
         return from_candid_variant_n19(result);
     }
     async admin_upsert_child_team_assignment(arg0: string, arg1: string, arg2: string): Promise<{
@@ -2594,16 +2593,13 @@ function from_candid_record_n17(value: {
 }
 function from_candid_record_n21(value: {
     id: string;
-    name: string;
     parent_id: [] | [string];
 }): {
     id: string;
-    name: string;
     parent_id?: string;
 } {
     return {
         id: value.id,
-        name: value.name,
         parent_id: record_opt_to_undefined(from_candid_opt_n7(value.parent_id))
     };
 }
