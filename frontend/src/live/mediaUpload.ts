@@ -1,6 +1,9 @@
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
+import { encryptPiiValue } from "./piiVetKeys";
+import { grantLiveClubPiiRead, registerLivePii } from "./features/vault";
+import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
 
 /**
@@ -15,6 +18,15 @@ import type { LiveBlobRef } from "./mediaStorage";
  * photo/vault row instead of a Supabase storage URL. A configured-but-failed
  * upload throws rather than silently diverting bytes to Supabase (same rule
  * as featureRouter.ts).
+ *
+ * Encryption: bytes are IBE-encrypted in the browser (identity
+ * `<storagePath>"blob"`) before leaving the device, so the blob
+ * store only ever holds ciphertext. The matching pii_access_control record
+ * (pii_id = storagePath, field_id = "blob", domain owner = uploader) gates
+ * who may derive the decryption vetKey — it is REQUIRED, so a registration
+ * failure fails the whole upload (an orphaned blob would be undecryptable
+ * by everyone). The club read grant, derived from a `clubs/<clubId>/` path
+ * prefix, is best-effort like every other grant.
  */
 
 export interface BlobMediaUpload {
@@ -33,6 +45,23 @@ export async function tryUploadMediaToBlobStore(args: {
   if (!isBlobStoreConfigured(target)) return null;
   const identity = await getCurrentInternetIdentity();
   if (!identity) return null;
+  const ctx = { target, identity };
   const bytes = new Uint8Array(await args.file.arrayBuffer());
-  return uploadBytesToBlobStore(target, identity, args.storagePath, bytes, args.mime);
+  const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
+  const result = await uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
+  // The stored record's ciphertext is only a content-hash marker — the real
+  // bytes are served by the blob store. What matters is that the record
+  // exists so the vetKey relay can authorize readers against it.
+  await registerLivePii(
+    ctx,
+    args.storagePath,
+    MEDIA_BLOB_PII_FIELD,
+    new TextEncoder().encode(result.blobRef.content_hash),
+    identity.getPrincipal(),
+  );
+  const clubMatch = /^clubs\/([^/]+)\//.exec(args.storagePath);
+  if (clubMatch) {
+    await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubMatch[1]);
+  }
+  return result;
 }

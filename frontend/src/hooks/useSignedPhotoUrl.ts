@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
 
 // In-memory cache for signed URLs (hydrated from localStorage on load)
 const urlCache = new Map<string, { url: string; expiresAt: number }>();
@@ -40,6 +41,9 @@ function schedulePersist() {
       const now = Date.now();
       let n = 0;
       for (const [k, v] of urlCache) {
+        // blob: object URLs (decrypted ICP media) die with the session —
+        // persisting them would resurrect dead URLs on the next load.
+        if (v.url.startsWith("blob:")) continue;
         if (v.expiresAt > now) {
           obj[k] = v;
           if (++n >= 500) break;
@@ -153,6 +157,11 @@ async function createSignedUrlViaFunction(url: string): Promise<string | null> {
 
 
 export async function resolveSignedUrl(url: string): Promise<string> {
+  // ICP blob-store URLs serve IBE ciphertext: fetch + decrypt in-browser
+  // (never fall back to the raw URL). Returns null for non-blob URLs.
+  const icpObjectUrl = await resolveIcpBlobObjectUrl(url);
+  if (icpObjectUrl) return icpObjectUrl;
+
   const privatePath = extractPrivateStoragePath(url);
   if (!privatePath) {
     return url;
