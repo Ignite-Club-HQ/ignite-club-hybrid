@@ -165,8 +165,8 @@ module {
       });
       var userMessagingSettings = old.userMessagingSettings;
       var recapConfig = old.recapConfig;
-      var presence = [];
-      var blockedUsers = [];
+      var presence = old.presence;
+      var blockedUsers = old.blockedUsers;
     }
   };
 };
