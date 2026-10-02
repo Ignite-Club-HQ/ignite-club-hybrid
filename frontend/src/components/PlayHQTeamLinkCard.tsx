@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { assertSupabaseWritePath } from "@/live/featureGuards";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveTeam, saveLiveTeam } from "@/live/features/club";
+import { listLivePlayHQCompetitions, listLivePlayHQFixtures } from "@/live/features/events";
 
 interface Props {
   teamId: string;
@@ -42,9 +42,10 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   const [importing, setImporting] = useState(false);
 
   // In ICP mode the club PlayHQ config and team link fields live on
-  // club_domain; the competition/fixture reads stay Supabase until the
-  // events_domain PlayHQ pass (NEEDS-CANISTER, phases 3/4).
-  const membershipIsIcp = isFeatureRoutedToIcp("membership");
+  // club_domain; competition/fixture reads route through events_domain
+  // (set_playhq_config / list_playhq_competitions / list_playhq_fixtures).
+  // Import/materialise-into-events stays Supabase-only (no canister
+  // counterpart for that write).
 
   // Gate: only show this card if the club has PlayHQ configured at club level
   const { data: club, isLoading: clubLoading } = useQuery({
@@ -103,34 +104,57 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   // even if `parent_org_id` hasn't been wired up on this club yet.
   const { data: comps } = useQuery({
     queryKey: ["playhq-comps-for-team", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competitions")
-        .select("id, name, season")
-        .eq("source", "playhq")
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as Competition[];
-    },
-    // NEEDS-CANISTER: PlayHQ competition/fixture reads stay Supabase until
-    // the events_domain PlayHQ pass (phases 3/4).
-    enabled: clubHasPlayHQ && !membershipIsIcp,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .select("id, name, season")
+            .eq("source", "playhq")
+            .order("name");
+          if (error) throw error;
+          return (data ?? []) as Competition[];
+        },
+        icp: async (ctx) => {
+          const tenant = club?.playhq_tenant ?? "";
+          const orgId = club?.playhq_org_id ?? "";
+          const rows = await listLivePlayHQCompetitions(ctx, tenant, orgId);
+          return rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            season: r.season[0] ?? null,
+          })) as Competition[];
+        },
+      }),
+    enabled: clubHasPlayHQ,
   });
 
   const selectedCompId = team?.playhq_competition_id ?? null;
 
   const { data: matches } = useQuery({
     queryKey: ["playhq-comp-teams", selectedCompId],
-    enabled: clubHasPlayHQ && !!selectedCompId && !membershipIsIcp,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competition_matches")
-        .select("external_home_team_id, external_away_team_id, home_team_name, away_team_name")
-        .eq("competition_id", selectedCompId!)
-        .eq("source", "playhq");
-      if (error) throw error;
-      return (data ?? []) as MatchRow[];
-    },
+    enabled: clubHasPlayHQ && !!selectedCompId,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competition_matches")
+            .select("external_home_team_id, external_away_team_id, home_team_name, away_team_name")
+            .eq("competition_id", selectedCompId!)
+            .eq("source", "playhq");
+          if (error) throw error;
+          return (data ?? []) as MatchRow[];
+        },
+        icp: async (ctx) => {
+          const rows = await listLivePlayHQFixtures(ctx, selectedCompId!);
+          return rows.map((r) => ({
+            external_home_team_id: r.external_home_team_id[0] ?? null,
+            external_away_team_id: r.external_away_team_id[0] ?? null,
+            home_team_name: r.home_team_name[0] ?? null,
+            away_team_name: r.away_team_name[0] ?? null,
+          })) as MatchRow[];
+        },
+      }),
   });
 
   const playhqTeams = useMemo(() => {
