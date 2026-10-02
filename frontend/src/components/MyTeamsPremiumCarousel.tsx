@@ -954,7 +954,8 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       }
       return counts;
     },
-    enabled: teamIds.length > 0 && deferredReady,
+    // Media bytes stay on Supabase by design; photo counts skip in ICP mode.
+    enabled: teamIds.length > 0 && deferredReady && !isIcp,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -979,7 +980,9 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       if (error) return [] as CompetitionRow[];
       return (data || []) as CompetitionRow[];
     },
-    enabled: teamIds.length > 0,
+    // NEEDS-CANISTER: per-team active competition names — the competition
+    // canister has no team->competitions lookup shape yet.
+    enabled: teamIds.length > 0 && !isIcp,
     staleTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -1099,7 +1102,8 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       }
       return map;
     },
-    enabled: teamIds.length > 0 && deferredReady,
+    // Member counts/avatars read Supabase profiles + media bytes; skip in ICP mode.
+    enabled: teamIds.length > 0 && deferredReady && !isIcp,
     staleTime: 10 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
