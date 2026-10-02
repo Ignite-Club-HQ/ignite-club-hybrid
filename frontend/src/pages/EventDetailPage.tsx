@@ -514,23 +514,22 @@ export default function EventDetailPage() {
           return fetchEventDuties(provider, id!);
         },
         icp: async (ctx) => {
-          const rows = (await listLiveDuties(ctx, id!)) as Array<{
-            id: string; event_id: string; name: string; assigned_to: [] | [string]; status: string;
-          }>;
-          const assigneeIds = Array.from(
-            new Set(rows.map((d) => (Array.isArray(d.assigned_to) ? d.assigned_to[0] : null)).filter(Boolean) as string[]),
-          );
+          // Canister Duty shape (events_domain .did): { account_id, duty,
+          // completed, event_id } — no `id`/`name`/`assigned_to`/`status`
+          // fields. Map it into the Supabase-shaped duty row the rest of the
+          // page expects rather than casting onto a mismatched shape.
+          const rows = await listLiveDuties(ctx, id!);
+          const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
           const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
           const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
           return rows.map((d) => {
-            const assignedTo = Array.isArray(d.assigned_to) && d.assigned_to.length > 0 ? d.assigned_to[0] : null;
-            const p = assignedTo ? profileMap.get(assignedTo) : null;
+            const p = d.account_id ? profileMap.get(d.account_id) : null;
             return {
-              id: d.id,
+              id: `${d.event_id}:${d.account_id}:${d.duty}`,
               event_id: d.event_id,
-              name: d.name,
-              assigned_to: assignedTo,
-              status: d.status,
+              name: d.duty,
+              assigned_to: d.account_id || null,
+              status: d.completed ? "completed" : "open",
               profiles: p ? { display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null } : null,
             };
           });

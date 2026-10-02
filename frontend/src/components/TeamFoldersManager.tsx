@@ -85,10 +85,10 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
     enabled: !!clubId,
   });
 
+  const isIcp = resolveAuthBackend() === "icp";
+
   const createFolderMutation = useMutation({
     mutationFn: async (params: { name: string; description: string; color: string }) => {
-      // NEEDS-CANISTER: team_folders has no club_domain equivalent.
-      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase.from("team_folders").insert({
         club_id: clubId,
         name: params.name,
@@ -112,7 +112,6 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   const updateFolderMutation = useMutation({
     mutationFn: async () => {
       if (!editingFolder) return;
-      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("team_folders")
         .update({
@@ -138,7 +137,6 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const { error } = await supabase
         .from("team_folders")
         .delete()
@@ -157,7 +155,6 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
 
   const reorderFoldersMutation = useMutation({
     mutationFn: async (reorderedFolders: { id: string; sort_order: number }[]) => {
-      if (resolveAuthBackend() === "icp") throw new Error("Team folders are not yet available for Internet Identity accounts.");
       const updates = reorderedFolders.map(({ id, sort_order }) =>
         supabase.from("team_folders").update({ sort_order }).eq("id", id)
       );
@@ -233,6 +230,12 @@ export default function TeamFoldersManager({ clubId, isAdmin, classMode = false 
   };
 
   if (!isAdmin) return null;
+  // NEEDS-CANISTER: team_folders (organising teams into club-admin-defined
+  // folders) has no club_domain equivalent yet — vault_domain's folder CRUD
+  // is a separate feature (media/vault files), not this team-grouping
+  // concept. Hide the manage UI for Internet Identity accounts rather than
+  // firing failing uuid-keyed Supabase writes. See roadmap.md.
+  if (isIcp) return null;
 
   return (
     <div className="space-y-3">
