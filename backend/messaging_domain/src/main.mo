@@ -1453,13 +1453,228 @@ persistent actor {
 
   // Record the caller's heartbeat. The frontend calls this on an interval;
   // online counts are derived at read time from last_seen_ms.
-  public shared ({ caller }) func presence_heartbeat() : async { #Ok; #Err : Text } {
+  public shared ({ caller }) func presence_heartbeat(platform : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
     let now = nowMs();
     presence := presence.filter(func(entry) = not entry.user.equal(caller));
-    presence := presence.concat([{ user = caller; last_seen_ms = now }]);
+    presence := presence.concat([{ user = caller; last_seen_ms = now; platform }]);
     #Ok
   };
+
+  // Every user with a heartbeat inside the 90-second online window. App
+  // admin only — this is the OnlineUsersPage/OnlineUsersTab admin surface,
+  // not something members should be able to enumerate.
+  public query ({ caller }) func list_all_online_users() : async { #Ok : [Types.OnlineUser]; #Err : Text } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
+    let now = nowMs();
+    let windowMs : Nat64 = 90_000;
+    let online = presence.filter(func(entry) = entry.last_seen_ms + windowMs >= now);
+    #Ok(online.map<Types.PresencePing, Types.OnlineUser>(func(entry) = { user = entry.user; last_seen_ms = entry.last_seen_ms; platform = entry.platform }))
+  };
+
+  // ===================== System messages (welcome DM) =====================
+
+  // Governor-only: posts a message into the caller<->target DM, creating the
+  // conversation if needed. Bypasses the block check — system announcements
+  // (e.g. the post-signup welcome DM) must always deliver.
+  public shared ({ caller }) func send_system_message(to_user : Principal, body : Text, idempotency_key : Text) : async { #Ok : Types.Message; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (to_user.equal(Principal.anonymous()) or to_user.equal(caller)) return #Err("Invalid DM target");
+    if (body == "" or body.size() > 4000) return #Err("Invalid message body");
+    if (not valid(idempotency_key)) return #Err("Invalid idempotency key");
+    // Idempotent: a retried send returns the already-posted message.
+    for (m in messages.values()) {
+      if (m.sender.equal(caller) and m.idempotency_key == idempotency_key) {
+        return #Ok(m);
+      };
+    };
+    let aText = Principal.toText(caller);
+    let bText = Principal.toText(to_user);
+    let (loP, hiP) = if (aText < bText) { (caller, to_user) } else { (to_user, caller) };
+    var conv_id : ?Text = null;
+    for (link in dmLinks.values()) {
+      if (link.a.equal(loP) and link.b.equal(hiP)) { conv_id := ?link.conversation_id };
+    };
+    switch (conv_id) {
+      case null {
+        let conversation : Types.Conversation = {
+          id = "dm-" # Nat.toText(conversations.size() + 1);
+          club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
+        };
+        conversations := conversations.concat([conversation]);
+        dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
+        conv_id := ?conversation.id;
+      };
+      case (?_) {};
+    };
+    switch (findConversationIndex(switch (conv_id) { case (?id) id; case null return #Err("Conversation not found") })) {
+      case null { #Err("Conversation not found") };
+      case (?i) {
+        let posted = postMessage(i, caller, body, idempotency_key, null);
+        ignore fanOutChatNotify(posted);
+        #Ok(posted)
+      };
+    }
+  };
+
+  // ===================== Minimum app versions (force update) =====================
+
+  // Public read: the native update prompt checks this before/without login.
+  public query func get_minimum_app_versions() : async { #Ok : [(Text, Text)]; #Err : Text } {
+    #Ok(minimumAppVersions)
+  };
+
+  public shared ({ caller }) func set_minimum_app_versions(versions : [(Text, Text)]) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (versions.size() > 16) return #Err("Too many platforms");
+    for ((platform, version) in versions.values()) {
+      if (not valid(platform) or not valid(version)) return #Err("Invalid version entry");
+    };
+    minimumAppVersions := versions;
+    #Ok
+  };
+
+  // ===================== Link preview (HTTPS outcall) =====================
+
+  // Extract the content attribute of <meta property="..."> / <title> from a
+  // HTML page. Tolerant substring search, not a parser — misses just mean a
+  // null field and the frontend falls back to a plain host card.
+  func findMetaContent(body : Text, property : Text) : ?Text {
+    let chars = Text.toArray(body);
+    let needles = [
+      Text.toArray("property=\"" # property # "\" content=\""),
+      Text.toArray("name=\"" # property # "\" content=\""),
+      Text.toArray("content=\""), // only used after a property/name hit below
+    ];
+    ignore needles;
+    // Try both attribute orders: property-then-content and content-then-property.
+    let pNeedles = [Text.toArray("property=\"" # property # "\""), Text.toArray("name=\"" # property # "\"")];
+    let size = chars.size();
+    for (pn in pNeedles.values()) {
+      var i = 0;
+      label outer while (i + pn.size() < size and i < 8192) {
+        var matched = true;
+        var j = 0;
+        while (j < pn.size()) {
+          if (chars[i + j] != pn[j]) { matched := false; j := pn.size() } else { j += 1 };
+        };
+        if (matched) {
+          // Find the nearest content=" within this tag (bounded look-ahead).
+          let cNeedle = Text.toArray("content=\"");
+          var k = i + pn.size();
+          let limit = if (i + 512 < size) { i + 512 } else { size };
+          while (k + cNeedle.size() < limit) {
+            var cMatched = true;
+            var m = 0;
+            while (m < cNeedle.size()) {
+              if (chars[k + m] != cNeedle[m]) { cMatched := false; m := cNeedle.size() } else { m += 1 };
+            };
+            if (chars[k] == '>') { k := limit }; // left the tag without a hit
+            if (cMatched) {
+              var value = "";
+              var p = k + cNeedle.size();
+              label read while (p < size and value.size() < 500) {
+                let c = chars[p];
+                if (c == '\u{22}') { return ?value };
+                value := value # Text.fromArray([c]);
+                p += 1;
+              };
+              return null;
+            };
+            k += 1;
+          };
+        };
+        i += 1;
+      };
+    };
+    null
+  };
+
+  func findTitleTag(body : Text) : ?Text {
+    let chars = Text.toArray(body);
+    let open = Text.toArray("<title>");
+    let close = Text.toArray("</title>");
+    let size = chars.size();
+    var i = 0;
+    while (i + open.size() < size and i < 8192) {
+      var matched = true;
+      var j = 0;
+      while (j < open.size()) {
+        if (chars[i + j] != open[j]) { matched := false; j := open.size() } else { j += 1 };
+      };
+      if (matched) {
+        var value = "";
+        var p = i + open.size();
+        label read while (p + close.size() <= size and value.size() < 500) {
+          var isClose = true;
+          var m = 0;
+          while (m < close.size()) {
+            if (chars[p + m] != close[m]) { isClose := false; m := close.size() } else { m += 1 };
+          };
+          if (isClose) { return ?value };
+          value := value # Text.fromArray([chars[p]]);
+          p += 1;
+        };
+        return null;
+      };
+      i += 1;
+    };
+    null
+  };
+
+  // Fetch a page and extract preview metadata. Any authenticated user may
+  // call (chat link previews are a member feature); the URL must be a public
+  // https:// address. Replicated GET: reads are idempotent, so consensus
+  // mode is safe and the cheaper default.
+  public shared ({ caller }) func fetch_link_preview(url : Text) : async { #Ok : Types.LinkPreview; #Err : Text } {
+    auth(caller);
+    if (not Text.startsWith(url, #text "https://") or url.size() > 2048) return #Err("URL must be a public https:// address");
+    let request : IC.HttpRequestArgs = {
+      url;
+      max_response_bytes = ?(64_000 : Nat64);
+      headers = [
+        { name = "User-Agent"; value = "IgniteLinkPreview/1.0" },
+        { name = "Accept"; value = "text/html" },
+      ];
+      body = null;
+      method = #get;
+      transform = ?{
+        function = recapTransform;
+        context = Blob.fromArray([]);
+      };
+      is_replicated = ?true;
+    };
+    try {
+      let response = await Call.httpRequest(request);
+      if (response.status < 200 or response.status >= 300) {
+        return #Err("Preview fetch returned status " # Nat.toText(response.status));
+      };
+      let bodyText = switch (Text.decodeUtf8(response.body)) {
+        case (?t) { t };
+        case null { return #Err("Preview response was not valid UTF-8") };
+      };
+      let title = switch (findMetaContent(bodyText, "og:title")) {
+        case (?t) { ?t };
+        case null { findTitleTag(bodyText) };
+      };
+      let description = switch (findMetaContent(bodyText, "og:description")) {
+        case (?d) { ?d };
+        case null { findMetaContent(bodyText, "description") };
+      };
+      #Ok({
+        title = switch (title) { case (?t) { ?truncateText(t, 300) }; case null { null } };
+        description = switch (description) { case (?d) { ?truncateText(d, 500) }; case null { null } };
+        image = findMetaContent(bodyText, "og:image");
+        site_name = findMetaContent(bodyText, "og:site_name");
+      })
+    } catch (e) {
+      #Err("Preview fetch failed: " # Error.message(e))
+    }
+  };
+};
 
   // How many participants of the conversation (excluding the caller) sent a
   // heartbeat within the last 90 seconds. Mirrors the Supabase presence
