@@ -73,7 +73,10 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function RealtimeHealthPage() {
   const useIcpLab = isFeatureRoutedToIcp("admin");
-  if (useIcpLab) {
+  // Also gate on the auth backend: an Internet Identity session has no
+  // Supabase auth, and the presence probe below would otherwise open an
+  // unauthenticated `app-presence` channel against Supabase.
+  if (useIcpLab || resolveAuthBackend() === "icp") {
     return <IcpUnavailablePage title="Realtime health monitoring is unavailable in ICP lab mode" description="This dashboard monitors Supabase realtime infrastructure and has no equivalent ICP service contract." />;
   }
   return <SupabaseRealtimeHealthPage />;
