@@ -397,7 +397,7 @@ export default function ClubSetupWizardPage() {
             teamId: isTeamRole ? invite.teamId ?? null : null,
             role: invite.role,
           });
-          return created.id as string;
+          return created.invite.id as string;
         },
         supabase: async () => {
           const token = crypto.randomUUID();
