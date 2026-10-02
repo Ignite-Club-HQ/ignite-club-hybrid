@@ -20,6 +20,10 @@ module {
     deleted_at_ms : ?Nat64;
     deleted_by : ?Principal;
     mini_league_id : ?Text;
+    // Display metadata mirroring the Supabase team_folders columns.
+    sort_order : Nat32;
+    description : ?Text;
+    color : ?Text;
   };
 
   public type VaultFile = {

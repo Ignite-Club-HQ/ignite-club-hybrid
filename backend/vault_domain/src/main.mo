@@ -122,6 +122,9 @@ persistent actor {
     name : Text,
     restricted_roles : [Text],
     mini_league_id : ?Text,
+    sort_order : Nat32,
+    description : ?Text,
+    color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller) and not hasRole(caller, club, team)) return #Err("Club role required");
@@ -129,6 +132,8 @@ persistent actor {
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
     switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
+    switch (description) { case (?d) { if (not validLong(d, 500)) return #Err("Invalid description") }; case null {} };
+    switch (color) { case (?c) { if (not validLong(c, 32)) return #Err("Invalid color") }; case null {} };
     switch (parent_id) {
       case (?parent) {
         if (not valid(parent)) return #Err("Invalid parent");
@@ -149,6 +154,9 @@ persistent actor {
       deleted_at_ms = null;
       deleted_by = null;
       mini_league_id;
+      sort_order;
+      description;
+      color;
     };
     folders := folders.concat([folder]);
     #Ok(folder)
@@ -158,15 +166,20 @@ persistent actor {
     id : Text,
     name : Text,
     restricted_roles : [Text],
+    sort_order : Nat32,
+    description : ?Text,
+    color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
     auth(caller);
     if (not validLong(name, 160)) return #Err("Invalid folder name");
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
+    switch (description) { case (?d) { if (not validLong(d, 500)) return #Err("Invalid description") }; case null {} };
+    switch (color) { case (?c) { if (not validLong(c, 32)) return #Err("Invalid color") }; case null {} };
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
       case (?folder) {
         if (not isGovernor(caller) and not hasRole(caller, folder.club, folder.team)) return #Err("Club role required");
-        let updated : Types.VaultFolder = { folder with name; restricted_roles };
+        let updated : Types.VaultFolder = { folder with name; restricted_roles; sort_order; description; color };
         folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
       };
