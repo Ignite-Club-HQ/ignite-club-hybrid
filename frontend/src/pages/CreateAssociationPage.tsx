@@ -9,36 +9,13 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveClub } from "@/live/features/club";
+import { slugifyClubName } from "@/lib/eoiUtils";
 
 export default function CreateAssociationPage() {
   const navigate = useNavigate();
   usePageTitle("New association");
-  const useIcpLab = resolveAuthBackend() === "icp";
-
-  if (useIcpLab) {
-    return (
-      <div className="container max-w-xl mx-auto px-4 py-10">
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-6 space-y-4 text-center">
-          <Info className="h-10 w-10 mx-auto text-muted-foreground" />
-          <h1 className="text-lg font-semibold">Preview only</h1>
-          <p className="text-sm text-muted-foreground">
-            Association creation is a local preview in ICP lab mode; no data is persisted until an
-            association_domain service is built and wired here.
-          </p>
-          <Button variant="outline" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Go back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return <SupabaseCreateAssociationPage />;
-}
-
-function SupabaseCreateAssociationPage() {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
   const { hasAnyClubPro, isLoading: proLoading } = useUserHasAnyClubPro();
@@ -52,27 +29,50 @@ function SupabaseCreateAssociationPage() {
   const submit = async () => {
     if (!name.trim() || !user) return;
     setSaving(true);
-    const { data: club, error } = await supabase
-      .from("clubs")
-      .insert({ name: name.trim(), description: description.trim() || null, kind: "association" })
-      .select("id")
-      .single();
-    if (error || !club) {
+    try {
+      const clubId = await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: club_domain's ClubProfile has no `kind` field, so
+          // an association is persisted as a regular club record; create_club
+          // auto-grants the caller "club_admin" (not a distinct
+          // "association_admin" role — that scoped role has no canister
+          // counterpart yet).
+          const profile = await createLiveClub(
+            ctx,
+            crypto.randomUUID(),
+            name.trim(),
+            slugifyClubName(name.trim()) || `association-${Date.now()}`,
+            description.trim() || "",
+          );
+          return profile.id;
+        },
+        supabase: async () => {
+          const { data: club, error } = await supabase
+            .from("clubs")
+            .insert({ name: name.trim(), description: description.trim() || null, kind: "association" })
+            .select("id")
+            .single();
+          if (error || !club) {
+            throw new Error(error?.message || "Could not create association");
+          }
+          const { error: roleErr } = await supabase.from("user_roles").insert({
+            user_id: user.id,
+            club_id: club.id,
+            role: "association_admin",
+          });
+          if (roleErr) {
+            toast({ title: "Created, but couldn't assign admin role", description: roleErr.message, variant: "destructive" });
+          }
+          return club.id as string;
+        },
+      });
+      setSaving(false);
+      toast({ title: "Association created" });
+      navigate(`/associations/${clubId}`);
+    } catch (error: any) {
       setSaving(false);
       toast({ title: "Could not create association", description: error?.message, variant: "destructive" });
-      return;
     }
-    const { error: roleErr } = await supabase.from("user_roles").insert({
-      user_id: user.id,
-      club_id: club.id,
-      role: "association_admin",
-    });
-    setSaving(false);
-    if (roleErr) {
-      toast({ title: "Created, but couldn't assign admin role", description: roleErr.message, variant: "destructive" });
-    }
-    toast({ title: "Association created" });
-    navigate(`/associations/${club.id}`);
   };
 
   const handleDescInput = (e: React.FormEvent<HTMLTextAreaElement>) => {

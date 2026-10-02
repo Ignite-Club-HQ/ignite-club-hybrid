@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   eventId: string;
@@ -27,11 +28,18 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  // NEEDS-CANISTER: events_domain has no per-match goalkeeper-assignment
+  // store (Supabase `match_goalkeepers` has no canister counterpart) —
+  // silently disable admin assignment controls for Internet Identity
+  // accounts instead of throwing or showing an "unavailable" state.
+  const isIcp = resolveAuthBackend() === "icp";
+  const effectiveIsAdmin = isAdmin && !isIcp;
   const [open, setOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: keepers = [], isLoading } = useQuery({
     queryKey: ["match-goalkeepers", eventId, (rsvps || []).length],
+    enabled: !isIcp,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("match_goalkeepers" as any)
@@ -80,7 +88,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
       if (error) throw error;
       return (data || []).map((r: any) => r.user_id);
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcp,
   });
 
   const addMutation = useMutation({
@@ -161,7 +169,7 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
                       </span>
                     </div>
                   </div>
-                  {isAdmin && (
+                  {effectiveIsAdmin && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -175,11 +183,11 @@ export default function MatchGoalkeepersSelector({ eventId, teamId, isAdmin, rsv
               ))}
             </div>
           ) : (
-            !isAdmin && (
+            !effectiveIsAdmin && (
               <p className="text-sm text-muted-foreground">No goalkeeper recorded</p>
             )
           )}
-          {isAdmin && (
+          {effectiveIsAdmin && (
             <Button
               variant="outline"
               className="w-full border-emerald-500/50 text-emerald-700 hover:bg-emerald-500/10"

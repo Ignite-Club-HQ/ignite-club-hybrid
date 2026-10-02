@@ -85,23 +85,18 @@ type Step = 1 | 2 | 3 | 4 | 5;
 export default function SignupProPage() {
   const navigate = useNavigate();
   const useIcpLab = resolveAuthBackend() === "icp";
+
+  // Non-IAP payment flow (external Pro checkout) — not available for
+  // Internet Identity users; redirect silently instead of showing an
+  // unavailable-state card.
+  useEffect(() => {
+    if (useIcpLab) {
+      navigate("/", { replace: true });
+    }
+  }, [useIcpLab, navigate]);
+
   if (useIcpLab) {
-    return (
-      <div className="container max-w-lg mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-4 text-center">
-            <Crown className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Pro signup is unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Account creation, subscriptions, trials, and payment checkout remain external provider boundaries.
-            </p>
-            <Button variant="outline" onClick={() => navigate(-1)}>
-              <ChevronLeft className="mr-2 h-4 w-4" /> Go back
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
 
   return <SupabaseSignupProPage />;

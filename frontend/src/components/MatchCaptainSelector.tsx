@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface MatchCaptainSelectorProps {
   eventId: string;
@@ -42,12 +43,19 @@ export default function MatchCaptainSelector({
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // NEEDS-CANISTER: events_domain has no per-match captain-assignment store
+  // (Supabase `match_captains` has no canister counterpart) — silently
+  // disable admin assignment controls for Internet Identity accounts
+  // instead of throwing or showing an "unavailable" state.
+  const isIcp = resolveAuthBackend() === "icp";
+  const effectiveIsAdmin = isAdmin && !isIcp;
   const [selectDialogOpen, setSelectDialogOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const { data: captain, isLoading } = useQuery({
     queryKey: ["match-captain", eventId],
+    enabled: !isIcp,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("match_captains")
@@ -78,7 +86,7 @@ export default function MatchCaptainSelector({
       if (error) throw error;
       return (data || []).map((r: any) => r.user_id);
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcp,
   });
 
   const assignMutation = useMutation({
@@ -169,7 +177,7 @@ export default function MatchCaptainSelector({
                   </span>
                 </div>
               </div>
-              {isAdmin && (
+              {effectiveIsAdmin && (
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
@@ -189,7 +197,7 @@ export default function MatchCaptainSelector({
                 </div>
               )}
             </div>
-          ) : isAdmin ? (
+          ) : effectiveIsAdmin ? (
             <div className="space-y-2">
               <Button
                 variant="outline"

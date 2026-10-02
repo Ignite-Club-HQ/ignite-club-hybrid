@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
@@ -91,13 +92,19 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const shouldStabilizeIOSLayout = isIOSEnvironment();
   const { user } = useAuth();
   const navigate = useNavigate();
+  // NEEDS-CANISTER: no canister concept of teams.club_id lookup, club
+  // sport, active live-board games, or vault_files metadata yet (storage
+  // upload itself is the allowed media-bytes exception and stays
+  // Supabase-only). Cleanly disable these metadata queries for Internet
+  // Identity accounts instead of surfacing an error.
+  const isIcp = resolveAuthBackend() === "icp";
   const queryClient = useQueryClient();
   const { hasAccess: hasProAccess } = useScheduleProAccess({ team_id: teamId ?? null, club_id: clubId ?? null } as any);
 
   // Resolve the clubId for upgrade navigation when only teamId is known.
   const { data: upgradeClubId } = useQuery({
     queryKey: ["chat-input-upgrade-club", clubId, teamId],
-    enabled: !clubId && !!teamId,
+    enabled: !clubId && !!teamId && !isIcp,
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const { data } = await supabase.from("teams").select("club_id").eq("id", teamId!).maybeSingle();
@@ -160,7 +167,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       const { data } = await supabase.from("clubs").select("sport").eq("id", clubId).maybeSingle();
       return (data?.sport ?? null) as string | null;
     },
-    enabled: !!clubId && showBoardPicker,
+    enabled: !!clubId && showBoardPicker && !isIcp,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -184,7 +191,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       }
       return (activeCount ?? 0) > 0;
     },
-    enabled: !!user?.id && !!teamId && showBoardPicker,
+    enabled: !!user?.id && !!teamId && showBoardPicker && !isIcp,
     staleTime: 60 * 1000,
     refetchInterval: menuOpen ? 30 * 1000 : false,
   });
@@ -320,6 +327,12 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (isIcp) {
+      // NEEDS-CANISTER: no vault_files canister counterpart — silently
+      // no-op instead of uploading an attachment no one can reference.
+      if (docInputRef.current) docInputRef.current.value = "";
+      return;
+    }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       toast.error("File must be less than 10MB");
       if (docInputRef.current) docInputRef.current.value = "";
