@@ -1,3 +1,8 @@
+type TeamSponsorAllocation = 
+ record {
+   sponsor_id: text;
+   team_id: text;
+ };
 type TeamPlayerPosition = 
  record {
    member_id: text;
@@ -679,6 +684,11 @@ service : {
       Err: text;
       Ok: vec TeamInvite;
     }) query;
+  list_team_sponsor_allocations: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec TeamSponsorAllocation;
+    }) query;
   list_teams: (club_id: text) ->
    (variant {
       Err: text;
@@ -845,6 +855,11 @@ service : {
                                    });
   set_team_player_position: (team_id: text, member_id: text, position:
    text) -> (variant {
+               Err: text;
+               Ok;
+             });
+  set_team_sponsor_allocation: (sponsor_id: text, team_id: text, allocated:
+   bool) -> (variant {
                Err: text;
                Ok;
              });
