@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -60,7 +60,7 @@ async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
 }
 
 export function ClubBackendEnforcement() {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const { toast } = useToast();
 
   useEffect(() => {

@@ -7,7 +7,7 @@ import { END_GAME_REQUEST_EVENT, type EndGameRequestDetail } from "./endGameRequ
 import { useGameStats } from "@/hooks/useGameStats";
 import { showBrowserNotification, requestNotificationPermission } from "@/lib/notifications";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { usePitchBoardNotifications } from "@/hooks/usePitchBoardNotifications";
 import type { Json } from "@/integrations/supabase/types";
@@ -116,7 +116,7 @@ const toServerAnchoredTimerState = (t: TimerState) => {
 // recalculateRemainingPlan is imported from pitchStateUtils
 
 export default function GlobalSubMonitor() {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const { savePartialGameStats } = useGameStats();
   const { pitchBoardNotificationsEnabled } = usePitchBoardNotifications();
   const [pendingAutoSub, setPendingAutoSub] = useState<SubstitutionEvent | null>(null);
