@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type TrainingDefaultStatus = "going" | "not_going";
 
@@ -29,7 +30,11 @@ export interface TrainingDefaultRow {
  */
 export function useTrainingDefault({ teamId, childId, userId }: Args) {
   const qc = useQueryClient();
-  const enabled = !!teamId && (!!childId || !!userId);
+  // NEEDS-CANISTER: club_domain has no recurring-default-RSVP store yet
+  // (Supabase `child_training_defaults` has no canister counterpart) —
+  // silently no-op for Internet Identity users instead of a "not available" state.
+  const isIcp = resolveAuthBackend() === "icp";
+  const enabled = !isIcp && !!teamId && (!!childId || !!userId);
 
   const queryKey = ["training-default", teamId, childId ?? null, userId ?? null];
 
@@ -52,6 +57,7 @@ export function useTrainingDefault({ teamId, childId, userId }: Args) {
 
   const upsert = useMutation({
     mutationFn: async (status: TrainingDefaultStatus) => {
+      if (isIcp) return;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
@@ -84,7 +90,7 @@ export function useTrainingDefault({ teamId, childId, userId }: Args) {
 
   const clear = useMutation({
     mutationFn: async () => {
-      if (!query.data) return;
+      if (isIcp || !query.data) return;
       const { error } = await supabase
         .from("child_training_defaults")
         .update({ deleted_at: new Date().toISOString() })
