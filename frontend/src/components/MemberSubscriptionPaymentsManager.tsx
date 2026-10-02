@@ -179,7 +179,28 @@ export default function MemberSubscriptionPaymentsManager({
         icp: async (ctx) => {
           const rows = await listLiveMemberPayments(ctx, clubId, paymentPeriod, activeTab);
           const wanted = new Set(allUserIds);
-          return rows.filter((p) => wanted.has(p.user_id));
+          // Map the canister's MemberPayment onto the Supabase row shape:
+          // opt fields unwrap, created_at_ms serves as both timestamps, and
+          // canister rows are bookkeeping-only (always "paid", never Stripe).
+          return rows.filter((p) => wanted.has(p.user_id)).map((p) => {
+            const iso = new Date(Number(p.created_at_ms)).toISOString();
+            return {
+              amount: p.amount,
+              child_id: p.child_id[0] ?? null,
+              club_id: p.club_id,
+              created_at: iso,
+              id: p.id,
+              marked_by: p.marked_by.toText(),
+              notes: p.notes[0] ?? null,
+              paid_at: iso,
+              payment_period: p.payment_period,
+              payment_status: "paid",
+              payment_type: p.payment_type,
+              stripe_payment_intent_id: null,
+              updated_at: iso,
+              user_id: p.user_id,
+            };
+          });
         },
       });
     },
@@ -243,8 +264,8 @@ export default function MemberSubscriptionPaymentsManager({
           const { error } = await supabase.from("member_subscription_payments").insert(insertData);
           if (error) throw error;
         },
-        icp: (ctx) =>
-          markLiveMemberPaid(ctx, {
+        icp: async (ctx) => {
+          await markLiveMemberPaid(ctx, {
             clubId,
             userId: targetUserId,
             childId: selectedMember.isChild ? selectedMember.childId ?? null : null,
@@ -252,7 +273,8 @@ export default function MemberSubscriptionPaymentsManager({
             paymentType: activeTab,
             amount: amount ? parseFloat(amount) : 0,
             notes: notes.trim() || null,
-          }),
+          });
+        },
       });
     },
     onSuccess: () => {
