@@ -51,6 +51,7 @@ import { useEventGroupMap } from "@/hooks/useEventGroupMap";
 import { useEventViewTracking } from "@/hooks/useEventViews";
 import { resolveRsvpAudience } from "@/lib/rsvpAudience";
 import { resolveRsvpChildren, resolveEventChildRoster } from "@/lib/resolveEventChildScope";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { useNotificationNudge } from "@/hooks/useNotificationNudge";
 import { NotificationNudgeBanner } from "@/components/NotificationNudgeBanner";
 import { RsvpNoteSheet } from "@/components/rsvp/RsvpNoteSheet";
@@ -281,12 +282,23 @@ export default function EventDetailPage() {
           const roster = (await getLiveEventRosterDetailed(ctx, id)) as {
             rsvps?: Array<{
               rsvp: { account_id: string; child_id: [] | [string]; state: string; notes: string };
-              child: [] | [{ id: string; name: string }];
+              child: [] | [{ id: string }];
             }>;
           };
+          // Child names are PII: they live only on pii_access_control and
+          // are decrypted here (club-scoped read grants let club members
+          // read them). Best effort — a name the caller cannot read falls
+          // back to the no-enrichment rendering, never an error state.
+          const childIds = [...new Set(
+            (roster.rsvps ?? [])
+              .map(({ rsvp }) => (Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null))
+              .filter((c): c is string => !!c),
+          )];
+          const childNames = await resolveLivePiiTextBatch(ctx, childIds, "name", "event_roster", "Event roster child names");
           const rows = (roster.rsvps ?? []).map(({ rsvp, child }) => {
             const childId = Array.isArray(rsvp.child_id) && rsvp.child_id.length > 0 ? rsvp.child_id[0] : null;
             const childRow = Array.isArray(child) && child.length > 0 ? child[0] : null;
+            const childName = childId ? childNames.get(childId) : undefined;
             return {
               id: `${id}:${rsvp.account_id}:${childId ?? "self"}`,
               event_id: id,
@@ -296,7 +308,7 @@ export default function EventDetailPage() {
               notes: rsvp.notes || null,
               source: "user",
               profiles: null,
-              children: childRow ? { id: childRow.id, name: childRow.name } : null,
+              children: childRow && childName ? { id: childRow.id, name: childName } : null,
               mini_league_players: null,
             };
           });
@@ -391,11 +403,17 @@ export default function EventDetailPage() {
         icp: async (ctx) => {
           if (!id) throw new Error("Missing event ID");
           const roster = await getLiveEventRosterDetailed(ctx, id);
+          // Guest names are PII: new guests store an opaque "guest:…"
+          // reference resolved via pii_access_control; legacy rows hold the
+          // plaintext name and render as-is. Best effort — an unreadable
+          // reference renders as "Guest", never an error state.
+          const refs = roster.guests.map((g) => g.guest_name).filter((n) => n.startsWith("guest:"));
+          const guestNames = await resolveLivePiiTextBatch(ctx, refs, "guest_name", "event_roster", "Event guest names");
           return roster.guests.map((g) => ({
             id: g.id,
             event_id: g.event_id,
             added_by: g.added_by.toText(),
-            guest_name: g.guest_name,
+            guest_name: g.guest_name.startsWith("guest:") ? (guestNames.get(g.guest_name) ?? "Guest") : g.guest_name,
             added_by_name: "A member",
           }));
         },
