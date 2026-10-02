@@ -316,7 +316,9 @@ export default function PlayerOfMatchSelector({
                 .single()).data,
             icp: async (ctx) => {
               const c = await getLiveEventChild(ctx, eventId, childId);
-              return { parent_id: c.parent_id ?? null, name: c.name };
+              // Empty string = no linked parent; the child?.parent_id truthy
+              // guards below treat it the same as Supabase's null.
+              return { parent_id: c.parent_id[0] ?? "", name: c.name };
             },
           });
 
@@ -435,9 +437,10 @@ export default function PlayerOfMatchSelector({
               });
             } else if (childId) {
               const child = await getLiveEventChild(ctx, eventId, childId);
-              if (child.parent_id) {
+              const parentId = child.parent_id[0];
+              if (parentId) {
                 await fanOutLiveNotifications(ctx, {
-                  userIds: [child.parent_id],
+                  userIds: [parentId],
                   clubId,
                   kind: "player_of_match",
                   body: `🏆 ${child.name} was selected as Player of the Match!`,

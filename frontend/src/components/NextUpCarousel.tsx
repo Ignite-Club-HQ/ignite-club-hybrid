@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, getMyLiveChildRsvps } from "@/live/features/events";
-import { listLiveChildren } from "@/live/features/membership";
+import { fetchLiveHomeChildren } from "@/live/features/homeFeed";
 import { listLivePlayers } from "@/live/features/miniLeagues";
 import { resolveRsvpChildren } from "@/lib/resolveEventChildScope";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -206,12 +206,16 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
           supabase: async () => [] as never[],
           icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
         });
-        return (rows ?? []).map((r) => ({
-          id: `${r.rsvp.event_id}:${r.rsvp.child_id ?? ""}`,
-          status: r.rsvp.state,
-          child_id: r.rsvp.child_id ?? "",
-          children: r.child ? { name: r.child.name } : null,
-        }));
+        return (rows ?? []).map((r) => {
+          const child = r.child[0];
+          const childId = r.rsvp.child_id[0] ?? "";
+          return {
+            id: `${r.rsvp.event_id}:${childId}`,
+            status: r.rsvp.state,
+            child_id: childId,
+            children: child ? { name: child.name } : null,
+          };
+        });
       }
       const [ownChildren, guardianLinks] = await Promise.all([
         supabase.from("children").select("id").eq("parent_id", userId!),
@@ -286,8 +290,10 @@ function useChildrenForEvent(
           const merged = await withFeatureBackend("membership", {
             supabase: async () => [] as never[],
             icp: async (ctx) => {
-              const children = await listLiveChildren(ctx);
-              return children.map((c) => ({ id: c.id, name: c.name }));
+              // club_domain Child records carry no display name; names are
+              // PII-decrypted through fetchLiveHomeChildren.
+              const children = await fetchLiveHomeChildren(ctx);
+              return children.map((c) => ({ id: c.id, name: c.name ?? "" }));
             },
           });
           if (merged.length === 0) return [];
@@ -296,7 +302,7 @@ function useChildrenForEvent(
             icp: (ctx) => listLivePlayers(ctx, miniLeagueId),
           });
           const allowed = new Set(
-            (players ?? []).map((p) => p.child_id).filter((id): id is string => !!id),
+            (players ?? []).map((p) => p.child_id[0]).filter((id): id is string => !!id),
           );
           return merged.filter((c) => allowed.has(c.id));
         }
