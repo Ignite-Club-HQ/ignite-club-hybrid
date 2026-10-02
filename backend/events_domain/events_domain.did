@@ -341,7 +341,6 @@ type ChildGuardian =
 type Child = 
  record {
    id: text;
-   name: text;
    parent_id: opt text;
  };
 type AttendanceInput = 
@@ -419,7 +418,7 @@ service : {
                                  Err: text;
                                  Ok: Rsvp;
                                });
-  admin_upsert_child: (id: text, name: text, parent_id: opt text) ->
+  admin_upsert_child: (id: text, parent_id: opt text) ->
    (variant {
       Err: text;
       Ok: Child;
