@@ -260,6 +260,10 @@ service : {
    opt text, body: text, image_url: opt text, reply_to_id: opt text,
    scheduled_for_ms: nat64, recurrence: Recurrence, recurrence_until_ms:
    opt nat64) -> (ScheduledResult);
+  set_messaging_domain_canister: (id: principal) -> (variant {
+                                                       Err: text;
+                                                       Ok;
+                                                     });
   transfer_governorship: (new_governor: principal) ->
    (variant {
       Err: text;

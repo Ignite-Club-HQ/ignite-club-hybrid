@@ -521,6 +521,11 @@ service : {
       Err: text;
       Ok;
     });
+  set_notification_queue_canister: (id: principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   set_recap_config: (config: opt RecapConfig) -> (variant {
                                                     Err: text;
                                                     Ok;
