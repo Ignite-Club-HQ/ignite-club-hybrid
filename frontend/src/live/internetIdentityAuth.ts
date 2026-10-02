@@ -1,6 +1,7 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { clearLiveAgentCache } from "./icpAgent";
+import { clearPiiVetKeyCache } from "./piiVetKeys";
 
 /**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/internetIdentityAuth.ts`.
@@ -167,6 +168,7 @@ export async function signOutInternetIdentity(): Promise<void> {
   activeClient = undefined;
   activeTarget = undefined;
   clearLiveAgentCache();
+  clearPiiVetKeyCache();
   await client?.signOut();
   client?.dispose?.();
 }
@@ -178,5 +180,6 @@ export function resetInternetIdentityAuthForTests(): void {
   warmupPromise = undefined;
   accountProvisionerOverride = undefined;
   clearLiveAgentCache();
+  clearPiiVetKeyCache();
 }
 
