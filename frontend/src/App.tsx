@@ -445,6 +445,7 @@ const App = () => {
             <PitchBoardResumeRedirect />
             <MessagesBootstrapPrefetcher />
 
+            <ClubBackendEnforcement>
             <Suspense fallback={<PageLoader />}>
               <RouteErrorBoundary>
               <Routes>
@@ -578,6 +579,7 @@ const App = () => {
               </Routes>
               </RouteErrorBoundary>
             </Suspense>
+            </ClubBackendEnforcement>
             <CookieConsentBanner />
             <IOSInstallPrompt />
             <PushNotificationManager />
