@@ -106,7 +106,7 @@ export default function OnlineUsersTab() {
           if (rows.length === 0) return [];
           const ids = rows.map((o) => o.user.toText());
           const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
-          const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
+          const profileMap = new Map<string, any>(profiles.map((p: any) => [p.id, p] as [string, any]));
           return rows.map((o) => {
             const id = o.user.toText();
             const profile = profileMap.get(id) as any;

@@ -39,7 +39,7 @@ export async function getLiveClubSettings(ctx: FeatureBackendContext, clubId: st
   return unwrapCandid(actor.get_club_settings(clubId), "Get club settings");
 }
 
-export type LiveClubSubscription = Parameters<ClubDomainActor["save_club_subscription"]>[1];
+export type LiveClubSubscription = Parameters<ClubDomainActor["save_club_subscription"]>[0];
 
 /** Club subscription row (Pro flags, plan, points-module state); null when unset. Member-readable canister-side. */
 export async function getLiveClubSubscription(
@@ -47,7 +47,7 @@ export async function getLiveClubSubscription(
   clubId: string,
 ): Promise<LiveClubSubscription | null> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const row = unwrapCandid(actor.get_club_subscription(clubId), "Get club subscription");
+  const row = await unwrapCandid(actor.get_club_subscription(clubId), "Get club subscription");
   return row.length ? row[0] : null;
 }
 
@@ -57,7 +57,7 @@ export async function saveLiveClubSubscription(
   subscription: LiveClubSubscription,
 ): Promise<void> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  unwrapCandid(actor.save_club_subscription(subscription), "Save club subscription");
+  await unwrapCandid(actor.save_club_subscription(subscription), "Save club subscription");
 }
 
 /** Case-insensitive team-name uniqueness check within a club (ignores soft-deleted teams). */
@@ -78,7 +78,7 @@ export async function getLiveClubLink(
   linkId: string,
 ): Promise<{ id: string; title: string; url: string } | null> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const row = unwrapCandid(actor.get_club_link(linkId), "Get club link");
+  const row = await unwrapCandid(actor.get_club_link(linkId), "Get club link");
   const link = row.length ? row[0] : null;
   // Only active links resolve to a URL — mirrors the Supabase branch's
   // "This link is no longer available" state for inactive/deleted rows.

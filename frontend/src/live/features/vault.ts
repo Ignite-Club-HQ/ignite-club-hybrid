@@ -348,7 +348,7 @@ export async function listLiveVaultFiles(ctx: FeatureBackendContext, folderId: s
 /** Single folder read; null when the folder is missing or the caller cannot view it. */
 export async function getLiveVaultFolder(ctx: FeatureBackendContext, folderId: string) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
-  const row = unwrapCandid(actor.get_folder(folderId), "Get vault folder");
+  const row = await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
   return row.length ? row[0] : null;
 }
 
@@ -448,6 +448,9 @@ export async function createLiveVaultFolder(
       name,
       restrictedRoles,
       candidOpt(miniLeagueId),
+      0,
+      [],
+      [],
     ),
     "Create vault folder",
   );
@@ -460,8 +463,21 @@ export async function updateLiveVaultFolder(
   restrictedRoles: string[],
 ) {
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  // update_folder overwrites sort_order/description/color wholesale, so
+  // fetch the current row first and preserve the fields this wrapper
+  // doesn't expose (rename/role changes must not clobber ordering).
+  const current = await unwrapCandid(actor.get_folder(folderId), "Get vault folder");
+  const existing = current.length ? current[0] : null;
+  if (!existing) throw new Error("Update vault folder failed: folder not found");
   return unwrapCandid(
-    actor.update_folder(folderId, name, restrictedRoles),
+    actor.update_folder(
+      folderId,
+      name,
+      restrictedRoles,
+      existing.sort_order,
+      existing.description,
+      existing.color,
+    ),
     "Update vault folder",
   );
 }

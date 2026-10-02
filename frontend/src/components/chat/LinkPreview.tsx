@@ -70,10 +70,11 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
         icp: async (ctx) => {
           const p = await fetchLiveLinkPreview(ctx, fetchUrl);
           return {
-            title: p.title[0],
-            description: p.description[0],
-            image: p.image[0],
-            siteName: p.site_name[0],
+            url: fetchUrl,
+            title: p.title[0] ?? undefined,
+            description: p.description[0] ?? undefined,
+            image: p.image[0] ?? undefined,
+            siteName: p.site_name[0] ?? undefined,
           };
         },
       });

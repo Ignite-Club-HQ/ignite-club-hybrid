@@ -36,6 +36,7 @@ import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { sendLiveWelcomeMessage } from "@/live/features/messaging";
 
 
 interface PendingInvite {

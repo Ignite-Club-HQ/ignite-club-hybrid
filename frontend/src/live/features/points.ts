@@ -156,7 +156,7 @@ export async function getLiveClubPointsSettings(
   clubId: string,
 ): Promise<{ display_name: [] | [string]; disabled: boolean } | null> {
   const a = await actor(ctx);
-  const row = unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
+  const row = await unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
   return row.length ? row[0] : null;
 }
 
