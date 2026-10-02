@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, getMyLiveChildRsvps } from "@/live/features/events";
 import { fetchLiveHomeChildren } from "@/live/features/homeFeed";
