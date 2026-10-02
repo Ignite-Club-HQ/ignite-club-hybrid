@@ -1519,6 +1519,49 @@ persistent actor {
     }
   };
 
+  // Any authenticated caller may trigger their OWN post-signup welcome DM.
+  // The sender is always the governor (the support identity) and the
+  // idempotency key is derived from the caller, so it is safe to call on
+  // every sign-in — only the first call posts a message.
+  public shared ({ caller }) func send_welcome_message(body : Text) : async { #Ok : Types.Message; #Err : Text } {
+    auth(caller);
+    if (caller.equal(governor)) return #Err("Governor cannot welcome themselves");
+    if (body == "" or body.size() > 4000) return #Err("Invalid message body");
+    let idempotency_key = "welcome:" # Principal.toText(caller);
+    for (m in messages.values()) {
+      if (m.idempotency_key == idempotency_key) {
+        return #Ok(m);
+      };
+    };
+    let aText = Principal.toText(governor);
+    let bText = Principal.toText(caller);
+    let (loP, hiP) = if (aText < bText) { (governor, caller) } else { (caller, governor) };
+    var conv_id : ?Text = null;
+    for (link in dmLinks.values()) {
+      if (link.a.equal(loP) and link.b.equal(hiP)) { conv_id := ?link.conversation_id };
+    };
+    switch (conv_id) {
+      case null {
+        let conversation : Types.Conversation = {
+          id = "dm-" # Nat.toText(conversations.size() + 1);
+          club_id = "dm"; team_id = null; participants = [loP, hiP]; next_sequence = 1;
+        };
+        conversations := conversations.concat([conversation]);
+        dmLinks := dmLinks.concat([{ a = loP; b = hiP; conversation_id = conversation.id }]);
+        conv_id := ?conversation.id;
+      };
+      case (?_) {};
+    };
+    switch (findConversationIndex(switch (conv_id) { case (?id) id; case null return #Err("Conversation not found") })) {
+      case null { #Err("Conversation not found") };
+      case (?i) {
+        let posted = postMessage(i, governor, body, idempotency_key, null);
+        ignore fanOutChatNotify(posted);
+        #Ok(posted)
+      };
+    }
+  };
+
   // ===================== Minimum app versions (force update) =====================
 
   // Public read: the native update prompt checks this before/without login.

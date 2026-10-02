@@ -86,6 +86,13 @@ type ClubReward =
    team_id: opt text;
    updated_at_ms: nat64;
  };
+type ClubPointsSettings = 
+ record {
+   club_id: text;
+   disabled: bool;
+   display_name: opt text;
+   updated_at_ms: nat64;
+ };
 type ChildClubPoints = 
  record {
    child_id: text;
@@ -111,6 +118,12 @@ service : {
       Err: text;
       Ok: PointsHistoryEntry;
     });
+  award_points_once: (club_id: text, subject: Subject, action_type: text,
+   scope_id: text, amount: int32, description: text, source_id: opt text,
+   season_id: opt text) -> (variant {
+                              Err: text;
+                              Ok: PointsHistoryEntry;
+                            });
   cancel_redemption: (id: text) ->
    (variant {
       Err: text;
@@ -152,6 +165,16 @@ service : {
    (variant {
       Err: text;
       Ok: int32;
+    }) query;
+  get_club_points_settings: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt ClubPointsSettings;
+    }) query;
+  get_engagement_streak: (club_id: text, user_id: text) ->
+   (variant {
+      Err: text;
+      Ok: nat32;
     }) query;
   get_leaderboard: (club_id: text, subjectKind: variant {
                                                   Child;
@@ -205,6 +228,11 @@ service : {
       Err: text;
       Ok;
     });
+  save_club_points_settings: (club_id: text, display_name: opt text,
+   disabled: bool) -> (variant {
+                         Err: text;
+                         Ok: ClubPointsSettings;
+                       });
   transfer_governorship: (new_governor: principal) ->
    (variant {
       Err: text;

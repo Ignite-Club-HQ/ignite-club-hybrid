@@ -534,6 +534,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'send_welcome_message' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_ai_catch_up' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

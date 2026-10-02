@@ -4,9 +4,9 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import LegalPageEmbed from "@/components/LegalPageEmbed";
 import { Button } from "@/components/ui/button";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubLink } from "@/live/features/club";
 
 /**
  * Renders a club-managed link inside the app (native in-app web view).
@@ -15,23 +15,26 @@ import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
 export default function ClubLinkEmbedPage() {
   const { linkId } = useParams<{ linkId: string }>();
   const navigate = useNavigate();
-  const isIcp = resolveAuthBackend() === "icp";
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  const providerKey = useIcpLab ? "icp" : "supabase";
+  const providerKey = resolveAuthBackend() === "icp" ? "icp" : "supabase";
 
   const { data, isLoading } = useQuery({
     queryKey: ["club-link", linkId, providerKey],
     enabled: !!linkId,
     queryFn: async () => {
-      // NEEDS-CANISTER: Club links for II
-      if (useIcpLab) return getLocalLabClubLink(linkId!);
-      const { data, error } = await supabase
-        .from("club_links")
-        .select("id, title, url")
-        .eq("id", linkId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      // ICP branch resolves against club_domain's club listings; inactive
+      // links return null, matching the "no longer available" state below.
+      return withFeatureBackend("news", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_links")
+            .select("id, title, url")
+            .eq("id", linkId!)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: (ctx) => getLiveClubLink(ctx, linkId!),
+      });
     },
   });
 
@@ -47,9 +50,7 @@ export default function ClubLinkEmbedPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background p-6 text-center">
         <p className="text-sm text-muted-foreground">
-          {useIcpLab
-            ? "Club link embedding is not enabled in ICP lab mode. No external page was opened."
-            : "This link is no longer available."}
+          This link is no longer available.
         </p>
         <Button variant="outline" onClick={() => navigate(-1)}>
           Go back

@@ -22,6 +22,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam, addLiveRoleGrant, getLiveMyRoleGrants } from "@/live/features/membership";
+import { checkLiveTeamNameUnique } from "@/live/features/club";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
@@ -259,7 +260,12 @@ export default function CreateTeamPage() {
         .is("deleted_at", null)
         .ilike("name", name.trim())
         .maybeSingle(),
-      icp: async () => ({ data: null }), // NEEDS-CANISTER: duplicate name check not yet available on canister
+      icp: async (ctx) => {
+        // Canister does the case-insensitive check (ignoring soft-deleted
+        // teams); map it onto the same "existing row" shape as Supabase.
+        const unique = await checkLiveTeamNameUnique(ctx, clubId!, name.trim());
+        return { data: unique ? null : { id: "duplicate" } };
+      },
     });
 
     if (existingTeam) {

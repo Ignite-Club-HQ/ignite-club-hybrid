@@ -373,9 +373,72 @@ export async function softDeleteLiveGroup(ctx: FeatureBackendContext, conversati
 // ---------------------------------------------------------------------------
 
 /** Record the caller's heartbeat; call on an interval while chat is open. */
-export async function livePresenceHeartbeat(ctx: FeatureBackendContext) {
+export async function livePresenceHeartbeat(ctx: FeatureBackendContext, platform?: string | null) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.presence_heartbeat(), "Presence heartbeat");
+  return unwrapCandid(actor.presence_heartbeat(candidOpt(platform ?? null)), "Presence heartbeat");
+}
+
+/** All users seen online in the last 90s. App-admin/governor only canister-side. */
+export async function liveListAllOnlineUsers(
+  ctx: FeatureBackendContext,
+): Promise<{ user: Principal; last_seen_ms: bigint; platform: [] | [string] }[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const result = await actor.list_all_online_users();
+  if ("Err" in result) throw new Error(`List online users failed: ${result.Err}`);
+  return result.Ok;
+}
+
+/**
+ * Governor-only system DM (welcome message). Idempotent per
+ * `idempotencyKey`; the canister finds-or-creates the DM conversation and
+ * bypasses block checks. Throws on #Err so callers fall back to the
+ * Supabase edge-function path or skip silently.
+ */
+export async function sendLiveSystemMessage(
+  ctx: FeatureBackendContext,
+  toUser: Principal,
+  body: string,
+  idempotencyKey: string,
+): Promise<void> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  unwrapCandid(await actor.send_system_message(toUser, body, idempotencyKey), "Send system message");
+}
+
+/**
+ * Post-signup welcome DM. Any authenticated caller may trigger it for
+ * themselves; the canister posts it from the governor (the support
+ * identity) and derives the idempotency key from the caller, so repeated
+ * calls are safe no-ops. Fire-and-forget from the caller's perspective.
+ */
+export async function sendLiveWelcomeMessage(
+  ctx: FeatureBackendContext,
+  body: string,
+): Promise<void> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  unwrapCandid(await actor.send_welcome_message(body), "Send welcome message");
+}
+
+/** Minimum supported app versions per platform, governor-configured on the canister. */
+export async function getLiveMinimumAppVersions(
+  ctx: FeatureBackendContext,
+): Promise<[string, string][]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const result = await actor.get_minimum_app_versions();
+  if ("Err" in result) throw new Error(`Get minimum app versions failed: ${result.Err}`);
+  return result.Ok;
+}
+
+/**
+ * Server-side link preview via the canister's HTTPS outcall (replicated
+ * read, no API key needed). Replaces the Supabase fetch-link-preview edge
+ * function in ICP mode.
+ */
+export async function fetchLiveLinkPreview(
+  ctx: FeatureBackendContext,
+  url: string,
+): Promise<{ title: [] | [string]; description: [] | [string]; image: [] | [string]; site_name: [] | [string] }> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(await actor.fetch_link_preview(url), "Fetch link preview");
 }
 
 /**

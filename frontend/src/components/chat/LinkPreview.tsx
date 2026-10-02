@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { fetchLiveLinkPreview } from "@/live/features/messaging";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { runWhenChatScrollIdle } from "@/lib/chatScrollActivity";
@@ -45,8 +47,6 @@ const isAppDomain = (url: string): boolean => {
 };
 
 async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
-  // NEEDS-CANISTER: fetch-link-preview
-  if (resolveAuthBackend() === "icp") return null;
   if (previewCache.has(url)) return previewCache.get(url)!;
   const existing = inflight.get(url);
   if (existing) return existing;
@@ -57,10 +57,26 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
       if (!fetchUrl.startsWith('http://') && !fetchUrl.startsWith('https://')) {
         fetchUrl = `https://${fetchUrl}`;
       }
-      const { data, error } = await supabase.functions.invoke("fetch-link-preview", {
-        body: { url: fetchUrl },
+      // ICP: messaging_domain fetches the page and parses the og meta
+      // canister-side (replicated HTTPS outcall); same metadata shape.
+      const data = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("fetch-link-preview", {
+            body: { url: fetchUrl },
+          });
+          if (error) throw error;
+          return data as LinkPreviewData | null;
+        },
+        icp: async (ctx) => {
+          const p = await fetchLiveLinkPreview(ctx, fetchUrl);
+          return {
+            title: p.title[0],
+            description: p.description[0],
+            image: p.image[0],
+            siteName: p.site_name[0],
+          };
+        },
       });
-      if (error) throw error;
       const hasContent = data && (data.title || data.description || data.image);
       // In chat history we reserve a fixed h-20 slot for URL previews before
       // metadata returns. If the edge function succeeds but finds no title / image,

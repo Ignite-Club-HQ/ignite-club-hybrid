@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
@@ -56,7 +57,7 @@ export function useChatOnlineCount(
     const beat = () => {
       withFeatureBackend("messaging", {
         supabase: async () => {},
-        icp: (ctx) => livePresenceHeartbeat(ctx),
+        icp: (ctx) => livePresenceHeartbeat(ctx, Capacitor.isNativePlatform() ? Capacitor.getPlatform() : "web"),
       }).catch(() => {});
     };
     beat();

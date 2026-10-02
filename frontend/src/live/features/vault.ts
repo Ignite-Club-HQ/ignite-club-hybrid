@@ -345,6 +345,13 @@ export async function listLiveVaultFiles(ctx: FeatureBackendContext, folderId: s
   return unwrapCandid(actor.list_files(folderId), "List vault files");
 }
 
+/** Single folder read; null when the folder is missing or the caller cannot view it. */
+export async function getLiveVaultFolder(ctx: FeatureBackendContext, folderId: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  const row = unwrapCandid(actor.get_folder(folderId), "Get vault folder");
+  return row.length ? row[0] : null;
+}
+
 export async function listLiveVaultClubFiles(
   ctx: FeatureBackendContext,
   clubId: string,

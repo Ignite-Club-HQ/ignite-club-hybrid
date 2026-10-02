@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMinimumAppVersions } from "@/live/features/messaging";
 import { consumePendingForceUpdatePrompt } from '@/lib/notificationLaunchHandler';
 import {
   AlertDialog,
@@ -54,11 +56,15 @@ export function NativeAppUpdatePrompt() {
         const info = await App.getInfo();
         const currentVersion = info.version;
         if (!currentVersion) return;
-        // NEEDS-CANISTER: public-minimum-app-version
-        if (resolveAuthBackend() === "icp") return;
-
-        const { data } = await supabase.functions.invoke('public-minimum-app-version', { method: 'GET' });
-        const minVersions = data?.value as Record<string, string> | undefined;
+        // ICP: messaging_domain serves the governor-configured minimum
+        // versions as a public query — same { platform: version } shape.
+        const minVersions = await withFeatureBackend("messaging", {
+          supabase: async () => {
+            const { data } = await supabase.functions.invoke('public-minimum-app-version', { method: 'GET' });
+            return (data?.value ?? {}) as Record<string, string>;
+          },
+          icp: async (ctx) => Object.fromEntries(await getLiveMinimumAppVersions(ctx)),
+        });
         const requiredVersion = minVersions?.[platform];
         if (!requiredVersion) return;
 
