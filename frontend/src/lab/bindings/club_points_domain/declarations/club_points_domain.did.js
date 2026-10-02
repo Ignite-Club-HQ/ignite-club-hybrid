@@ -83,6 +83,12 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'points' : IDL.Int32,
   });
+  const ClubPointsSettings = IDL.Record({
+    'updated_at_ms' : IDL.Nat64,
+    'display_name' : IDL.Opt(IDL.Text),
+    'disabled' : IDL.Bool,
+    'club_id' : IDL.Text,
+  });
   const LeaderboardEntry = IDL.Record({
     'subject_id' : IDL.Text,
     'points' : IDL.Int32,
@@ -114,6 +120,20 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Text),
           IDL.Opt(IDL.Text),
           IDL.Opt(IDL.Nat32),
+        ],
+        [IDL.Variant({ 'Ok' : PointsHistoryEntry, 'Err' : IDL.Text })],
+        [],
+      ),
+    'award_points_once' : IDL.Func(
+        [
+          IDL.Text,
+          Subject,
+          IDL.Text,
+          IDL.Text,
+          IDL.Int32,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
         ],
         [IDL.Variant({ 'Ok' : PointsHistoryEntry, 'Err' : IDL.Text })],
         [],
@@ -174,6 +194,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_points_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubPointsSettings), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_engagement_streak' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_leaderboard' : IDL.Func(
         [
           IDL.Text,
@@ -227,6 +257,11 @@ export const idlFactory = ({ IDL }) => {
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_points_settings' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

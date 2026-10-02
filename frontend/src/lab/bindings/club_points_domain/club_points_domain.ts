@@ -106,6 +106,12 @@ export interface HistoryPage {
     total: bigint;
     items: Array<PointsHistoryEntry>;
 }
+export interface ClubPointsSettings {
+    updated_at_ms: bigint;
+    display_name?: string;
+    disabled: boolean;
+    club_id: string;
+}
 export interface UserClubPoints {
     updated_at_ms: bigint;
     user_id: string;
@@ -165,6 +171,13 @@ export interface club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    award_points_once(club_id: string, subject: Subject, action_type: string, scope_id: string, amount: number, description: string, source_id: string | null, season_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: PointsHistoryEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     cancel_redemption(id: string): Promise<{
         __kind__: "Ok";
         Ok: RewardRedemption;
@@ -211,6 +224,20 @@ export interface club_points_domainInterface {
         Err: string;
     }>;
     get_child_points(club_id: string, child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_club_points_settings(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_engagement_streak(club_id: string, user_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
     } | {
@@ -287,6 +314,13 @@ export interface club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     transfer_governorship(new_governor: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -302,7 +336,7 @@ export interface club_points_domainInterface {
         Err: string;
     }>;
 }
-import type { ChildClubPoints as _ChildClubPoints, ClubReward as _ClubReward, HistoryPage as _HistoryPage, LeaderboardEntry as _LeaderboardEntry, PointsCooldown as _PointsCooldown, PointsHistoryEntry as _PointsHistoryEntry, RewardRedemption as _RewardRedemption, RoleGrant as _RoleGrant, Subject as _Subject, UserClubPoints as _UserClubPoints } from "./declarations/club_points_domain.did";
+import type { ChildClubPoints as _ChildClubPoints, ClubPointsSettings as _ClubPointsSettings, ClubReward as _ClubReward, HistoryPage as _HistoryPage, LeaderboardEntry as _LeaderboardEntry, PointsCooldown as _PointsCooldown, PointsHistoryEntry as _PointsHistoryEntry, RewardRedemption as _RewardRedemption, RoleGrant as _RoleGrant, Subject as _Subject, UserClubPoints as _UserClubPoints } from "./declarations/club_points_domain.did";
 export class Club_points_domain implements club_points_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
@@ -333,6 +367,16 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.award_points(arg0, to_candid_Subject_n8(arg1), arg2, arg3, arg4, arg5, to_candid_opt_n10(arg6), to_candid_opt_n10(arg7), to_candid_opt_n11(arg8));
+        return from_candid_variant_n12(result);
+    }
+    async award_points_once(arg0: string, arg1: Subject, arg2: string, arg3: string, arg4: number, arg5: string, arg6: string | null, arg7: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: PointsHistoryEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.award_points_once(arg0, to_candid_Subject_n8(arg1), arg2, arg3, arg4, arg5, to_candid_opt_n10(arg6), to_candid_opt_n10(arg7));
         return from_candid_variant_n12(result);
     }
     async cancel_redemption(arg0: string): Promise<{
@@ -405,6 +449,26 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.get_child_points(arg0, arg1);
         return from_candid_variant_n26(result);
     }
+    async get_club_points_settings(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_club_points_settings(arg0);
+        return from_candid_variant_n27(result);
+    }
+    async get_engagement_streak(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_engagement_streak(arg0, arg1);
+        return from_candid_variant_n31(result);
+    }
     async get_leaderboard(arg0: string, arg1: Variant_User_Child, arg2: string, arg3: bigint): Promise<{
         __kind__: "Ok";
         Ok: Array<LeaderboardEntry>;
@@ -412,8 +476,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.get_leaderboard(arg0, to_candid_variant_n27(arg1), arg2, arg3);
-        return from_candid_variant_n28(result);
+        const result = await this.actor.get_leaderboard(arg0, to_candid_variant_n32(arg1), arg2, arg3);
+        return from_candid_variant_n33(result);
     }
     async get_user_points(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -453,7 +517,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_variant_n29(result);
+        return from_candid_variant_n34(result);
     }
     async list_points_history(arg0: string, arg1: Subject | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -462,8 +526,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_points_history(arg0, to_candid_opt_n30(arg1), arg2, arg3);
-        return from_candid_variant_n31(result);
+        const result = await this.actor.list_points_history(arg0, to_candid_opt_n35(arg1), arg2, arg3);
+        return from_candid_variant_n36(result);
     }
     async list_redemptions(arg0: string, arg1: Subject | null): Promise<{
         __kind__: "Ok";
@@ -472,8 +536,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_redemptions(arg0, to_candid_opt_n30(arg1));
-        return from_candid_variant_n34(result);
+        const result = await this.actor.list_redemptions(arg0, to_candid_opt_n35(arg1));
+        return from_candid_variant_n39(result);
     }
     async list_rewards(arg0: string, arg1: string | null, arg2: boolean): Promise<{
         __kind__: "Ok";
@@ -483,7 +547,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
-        return from_candid_variant_n35(result);
+        return from_candid_variant_n40(result);
     }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -504,6 +568,16 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
         return from_candid_variant_n1(result);
+    }
+    async save_club_points_settings(arg0: string, arg1: string | null, arg2: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: ClubPointsSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
+        return from_candid_variant_n41(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -526,11 +600,14 @@ export class Club_points_domain implements club_points_domainInterface {
         return from_candid_variant_n15(result);
     }
 }
+function from_candid_ClubPointsSettings_n29(value: _ClubPointsSettings): ClubPointsSettings {
+    return from_candid_record_n30(value);
+}
 function from_candid_ClubReward_n16(value: _ClubReward): ClubReward {
     return from_candid_record_n17(value);
 }
-function from_candid_HistoryPage_n32(value: _HistoryPage): HistoryPage {
-    return from_candid_record_n33(value);
+function from_candid_HistoryPage_n37(value: _HistoryPage): HistoryPage {
+    return from_candid_record_n38(value);
 }
 function from_candid_PointsHistoryEntry_n13(value: _PointsHistoryEntry): PointsHistoryEntry {
     return from_candid_record_n14(value);
@@ -540,6 +617,9 @@ function from_candid_RewardRedemption_n3(value: _RewardRedemption): RewardRedemp
 }
 function from_candid_RoleGrant_n23(value: _RoleGrant): RoleGrant {
     return from_candid_record_n24(value);
+}
+function from_candid_opt_n28(value: [] | [_ClubPointsSettings]): ClubPointsSettings | null {
+    return value.length === 0 ? null : from_candid_ClubPointsSettings_n29(value[0]);
 }
 function from_candid_opt_n5(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
@@ -694,7 +774,25 @@ function from_candid_record_n24(value: {
         club_id: value.club_id
     };
 }
-function from_candid_record_n33(value: {
+function from_candid_record_n30(value: {
+    updated_at_ms: bigint;
+    display_name: [] | [string];
+    disabled: boolean;
+    club_id: string;
+}): {
+    updated_at_ms: bigint;
+    display_name?: string;
+    disabled: boolean;
+    club_id: string;
+} {
+    return {
+        updated_at_ms: value.updated_at_ms,
+        display_name: record_opt_to_undefined(from_candid_opt_n6(value.display_name)),
+        disabled: value.disabled,
+        club_id: value.club_id
+    };
+}
+function from_candid_record_n38(value: {
     total: bigint;
     items: Array<_PointsHistoryEntry>;
 }): {
@@ -882,7 +980,45 @@ function from_candid_variant_n26(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n27(value: {
+    Ok: [] | [_ClubPointsSettings];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ClubPointsSettings | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n28(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n31(value: {
+    Ok: number;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n33(value: {
     Ok: Array<_LeaderboardEntry>;
 } | {
     Err: string;
@@ -901,7 +1037,7 @@ function from_candid_variant_n28(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n29(value: {
+function from_candid_variant_n34(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -920,7 +1056,7 @@ function from_candid_variant_n29(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n31(value: {
+function from_candid_variant_n36(value: {
     Ok: _HistoryPage;
 } | {
     Err: string;
@@ -933,13 +1069,13 @@ function from_candid_variant_n31(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_HistoryPage_n32(value.Ok)
+        Ok: from_candid_HistoryPage_n37(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n39(value: {
     Ok: Array<_RewardRedemption>;
 } | {
     Err: string;
@@ -958,7 +1094,7 @@ function from_candid_variant_n34(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n35(value: {
+function from_candid_variant_n40(value: {
     Ok: Array<_ClubReward>;
 } | {
     Err: string;
@@ -972,6 +1108,25 @@ function from_candid_variant_n35(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: from_candid_vec_n20(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n41(value: {
+    Ok: _ClubPointsSettings;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ClubPointsSettings;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_ClubPointsSettings_n29(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -998,10 +1153,10 @@ function to_candid_opt_n10(value: string | null): [] | [string] {
 function to_candid_opt_n11(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n30(value: Subject | null): [] | [_Subject] {
+function to_candid_opt_n35(value: Subject | null): [] | [_Subject] {
     return value === null ? candid_none() : candid_some(to_candid_Subject_n8(value));
 }
-function to_candid_variant_n27(value: Variant_User_Child): {
+function to_candid_variant_n32(value: Variant_User_Child): {
     User: null;
 } | {
     Child: null;

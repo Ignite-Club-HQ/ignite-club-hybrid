@@ -16,6 +16,12 @@ export interface ChildClubPoints {
   'club_id' : string,
   'points' : number,
 }
+export interface ClubPointsSettings {
+  'updated_at_ms' : bigint,
+  'display_name' : [] | [string],
+  'disabled' : boolean,
+  'club_id' : string,
+}
 export interface ClubReward {
   'id' : string,
   'points_required' : number,
@@ -116,6 +122,20 @@ export interface _SERVICE {
     { 'Ok' : PointsHistoryEntry } |
       { 'Err' : string }
   >,
+  'award_points_once' : ActorMethod<
+    [
+      string,
+      Subject,
+      string,
+      string,
+      number,
+      string,
+      [] | [string],
+      [] | [string],
+    ],
+    { 'Ok' : PointsHistoryEntry } |
+      { 'Err' : string }
+  >,
   'cancel_redemption' : ActorMethod<
     [string],
     { 'Ok' : RewardRedemption } |
@@ -165,6 +185,16 @@ export interface _SERVICE {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'get_club_points_settings' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubPointsSettings] } |
+      { 'Err' : string }
+  >,
+  'get_engagement_streak' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'get_leaderboard' : ActorMethod<
     [string, { 'User' : null } | { 'Child' : null }, string, bigint],
     { 'Ok' : Array<LeaderboardEntry> } |
@@ -209,6 +239,11 @@ export interface _SERVICE {
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'save_club_points_settings' : ActorMethod<
+    [string, [] | [string], boolean],
+    { 'Ok' : ClubPointsSettings } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<
