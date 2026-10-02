@@ -25,6 +25,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveUserActivity } from "@/live/features/insights";
 
 type TimePeriod = "7d" | "14d" | "30d" | "90d";
 
@@ -57,24 +59,46 @@ export default function UserAnalyticsTab() {
     },
   });
 
-  // Fetch activity data
+  // Fetch activity data. ICP branch reads insights_domain's list_user_activity
+  // (admin-gated, capped at 500 most-recent rows per call) instead of the
+  // Supabase user_activity_logs table.
   const { data: activityData, isLoading } = useQuery({
     queryKey: ["admin-user-analytics", period, clubFilter],
-    queryFn: async () => {
-      let query = supabase
-        .from("user_activity_logs" as any)
-        .select("user_id, page_path, page_label, session_id, started_at, duration_seconds, club_id")
-        .gte("started_at", startDate.toISOString())
-        .order("started_at", { ascending: false });
+    queryFn: async () =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          let query = supabase
+            .from("user_activity_logs" as any)
+            .select("user_id, page_path, page_label, session_id, started_at, duration_seconds, club_id")
+            .gte("started_at", startDate.toISOString())
+            .order("started_at", { ascending: false });
 
-      if (clubFilter !== "all") {
-        query = query.eq("club_id", clubFilter);
-      }
+          if (clubFilter !== "all") {
+            query = query.eq("club_id", clubFilter);
+          }
 
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data as any[]) || [];
-    },
+          const { data, error } = await query;
+          if (error) throw error;
+          return (data as any[]) || [];
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveUserActivity(
+            ctx,
+            clubFilter !== "all" ? clubFilter : null,
+            startDate.getTime(),
+            Date.now(),
+          );
+          return rows.map((row) => ({
+            user_id: row.user_id,
+            page_path: row.page_path,
+            page_label: row.page_label,
+            session_id: row.session_id,
+            started_at: new Date(Number(row.started_at_ms)).toISOString(),
+            duration_seconds: Number(row.duration_seconds),
+            club_id: row.club_id[0] ?? null,
+          }));
+        },
+      }),
   });
 
   // Fetch profiles for all users in the activity data

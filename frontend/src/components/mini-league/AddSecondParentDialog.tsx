@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLivePendingInvite, createLiveChildForParentInClub, linkLiveGuardian } from "@/live/features/club";
+import { linkLiveMiniLeagueGuardian } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Principal } from "@icp-sdk/core/principal";
 import type { Database, Json } from "@/integrations/supabase/types";
@@ -169,11 +170,21 @@ export function AddSecondParentDialog({
           if (!selectedUser) throw new Error("No user selected");
           const resolvedChildId = await ensureChildId();
           await linkLiveGuardian(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
+          // Keep the mini_league_domain guardian-status lookup
+          // (get_player_guardian_status, used by ManagePlayersDialog's
+          // pending-status column) in sync with the club_domain link above.
+          await linkLiveMiniLeagueGuardian(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
+          // Notification parity with the Supabase branch: include the
+          // actor's display name and phrasing ("<actor> added you as a
+          // parent of <player> in <league>") so II users get an identical
+          // fan-out body, not just the same notification kind.
+          const { data: actor } = user?.id ? await selectCachedProfileById(user.id) : { data: null };
+          const actorName = actor?.display_name || "An admin";
           await fanOutLiveNotifications(ctx, {
             userIds: [selectedUser.id],
             clubId,
             kind: "guardian_added",
-            body: `You were added as a parent of ${playerName} in ${miniLeagueName}`,
+            body: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
             idempotencyKeyPrefix: `guardian-added-${resolvedChildId}-${selectedUser.id}`,
             relatedId: resolvedChildId,
           });
