@@ -129,7 +129,25 @@ export async function fetchMemberClubsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
-  if (resolveAuthBackend() === "icp") return { clubs: [], latestMessages: {} };
+  if (resolveAuthBackend() === "icp") {
+    const ctx = await getIcpFeatureBackendContext();
+    const roleGrants = await getLiveMyRoleGrants(ctx);
+    const clubIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+    )] as string[];
+    if (clubIds.length === 0) return { clubs: [] as InboxClub[], latestMessages: {} };
+    const allClubs = await listLiveMembershipClubs(ctx);
+    const clubs: InboxClub[] = (allClubs as any[])
+      .filter((club) => clubIds.includes(club.id) && club.deleted_at_ms?.[0] === undefined)
+      .map((club) => ({
+        id: club.id,
+        name: club.name,
+        logo_url: club.logo_url?.[0] ?? null,
+        sport: null,
+      }));
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)), "club");
+    return { clubs, latestMessages };
+  }
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return {
@@ -199,7 +217,42 @@ export async function fetchTeamsWithMessages(
   userId: string,
   useIcpLab: boolean,
 ) {
-  if (resolveAuthBackend() === "icp") return { teams: [], latestMessages: {} };
+  if (resolveAuthBackend() === "icp") {
+    const ctx = await getIcpFeatureBackendContext();
+    const roleGrants = await getLiveMyRoleGrants(ctx);
+    const teamIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.team_id?.[0]).filter(Boolean),
+    )] as string[];
+    const clubIds = [...new Set(
+      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+    )] as string[];
+    if (teamIds.length === 0 || clubIds.length === 0) return { teams: [] as InboxTeam[], latestMessages: {} };
+    const allClubs = await listLiveMembershipClubs(ctx);
+    const clubById = new Map((allClubs as any[]).map((club) => [club.id, club]));
+    const teamLists = await Promise.all(clubIds.map((clubId) => listLiveMembershipTeams(ctx, clubId)));
+    const teams: InboxTeam[] = [];
+    for (const teamList of teamLists) {
+      for (const team of teamList as any[]) {
+        if (!teamIds.includes(team.id)) continue;
+        if (team.deleted_at_ms?.[0] !== undefined) continue;
+        const club = clubById.get(team.club_id);
+        if (!club || club.deleted_at_ms?.[0] !== undefined) continue;
+        teams.push({
+          id: team.id,
+          name: team.name,
+          logo_url: team.logo_url?.[0] ?? null,
+          clubs: {
+            id: club.id,
+            name: club.name,
+            logo_url: club.logo_url?.[0] ?? null,
+            sport: null,
+          },
+        });
+      }
+    }
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)), "team");
+    return { teams, latestMessages };
+  }
   if (useIcpLab) {
     const snapshot = fixtureData.getLocalLabMessagesSnapshot(userId);
     return { teams: snapshot.teams, latestMessages: snapshot.latestTeamMessages };
