@@ -19,6 +19,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getPasswordResetRedirectUrl } from "@/lib/passwordResetRedirect";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -171,6 +172,11 @@ export function ForgotPasswordDialog({ open, onOpenChange, defaultEmail = "" }: 
       if (!defaultEmail) setEmail("");
     }, 300);
   };
+
+  // Internet Identity accounts have no Supabase password to reset — the
+  // auth screen already hides the trigger for II sessions; this is
+  // belt-and-braces.
+  if (resolveAuthBackend() === "icp") return null;
 
   const emailInputClasses = cn(
     "pl-10 h-12 bg-white text-foreground border transition-colors rounded-xl",

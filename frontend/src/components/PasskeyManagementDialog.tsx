@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePasskey } from "@/hooks/usePasskey";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Passkey {
   id: string;
@@ -244,6 +245,11 @@ export function PasskeyManagementDialog({ open, onOpenChange }: PasskeyManagemen
       handleDelete(confirmDeleteId);
     }
   };
+
+  // Passkeys are stored against the Supabase account; Internet Identity
+  // sessions have none — the settings trigger is already hidden for II
+  // sessions; this is belt-and-braces.
+  if (resolveAuthBackend() === "icp") return null;
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {

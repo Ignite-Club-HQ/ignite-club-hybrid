@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { z } from "zod";
 
 const passwordSchema = z
@@ -40,6 +41,10 @@ export function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialo
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+
+  // Internet Identity accounts have no Supabase password — the trigger
+  // buttons are already hidden for II sessions; this is belt-and-braces.
+  if (resolveAuthBackend() === "icp") return null;
 
   const reset = () => {
     setPassword("");
