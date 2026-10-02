@@ -21,8 +21,13 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import {
   BACKEND_ROUTING_CACHE_KEY,
+  CLUB_BACKEND_HINT_KEY,
   applyBackendRoutingConfig,
+  cacheClubBackendHint,
   getBackendRoutingConfig,
+  readCachedClubBackendHint,
+  resolveBackendForUser,
+  resolveClubBackendOverride,
   type BackendRoutingConfig,
 } from "./backendRouting";
 import { loadBackendRoutingConfig } from "./loadBackendRouting";
@@ -34,6 +39,7 @@ const icpConfig: BackendRoutingConfig = {
     { id: "icp/main/v1", backend: "icp", kind: "icp-mainnet", alias: "main", version: "v1", enabled: true },
   ],
   countryTargets: {},
+  clubBackendOverrides: {},
 };
 
 const supabaseConfig: BackendRoutingConfig = {
@@ -41,6 +47,7 @@ const supabaseConfig: BackendRoutingConfig = {
   countryRules: {},
   targets: [],
   countryTargets: {},
+  clubBackendOverrides: {},
 };
 
 beforeEach(() => {

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveAuthBackend, useIcpAuthScreen } from "./authBackendMode";
-import { applyBackendRoutingConfig } from "./backendRouting";
+import { applyBackendRoutingConfig, cacheClubBackendHint } from "./backendRouting";
 import { applyIcpAdminOverrides } from "./icpAdminOverrides";
 import { setProfileCountry } from "./userCountry";
+import { clearUserClubIds, setUserClubIds } from "./userClubs";
 
 const VALID_CANISTER_ID = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
@@ -10,6 +11,8 @@ function resetState(): void {
   applyBackendRoutingConfig(null);
   applyIcpAdminOverrides(null);
   setProfileCountry(null);
+  clearUserClubIds();
+  cacheClubBackendHint(null);
 }
 
 afterEach(resetState);
