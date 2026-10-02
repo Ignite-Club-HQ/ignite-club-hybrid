@@ -77,7 +77,11 @@ module {
   public type PushReachability = { user : Principal; reachable : Bool; updated_at_ms : Nat64 };
 
   // ---- Event groups / players / duties (NEEDS-CANISTER #5) ----
-  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64; team_letter : ?Text; colour : ?Text; ability_band : ?Text; pitch_name : ?Text };
+  public type EventGroup = { id : Text; event_id : Text; name : Text; created_at_ms : Nat64; team_letter : ?Text; colour : ?Text; team_b_colour : ?Text; display_order : Nat16; ability_band : ?Text; pitch_name : ?Text };
+  // Players + per-group duties supplied to replace_event_groups when creating a group in the same atomic batch.
+  public type GroupPlayerInput = { account_id : Text; team_letter : ?Text };
+  public type GroupDutyInput = { duty : Text; account_id : ?Text };
+  public type GroupSpecInput = { name : Text; ability_band : ?Text; pitch_name : ?Text; display_order : Nat16; team_a_colour : ?Text; team_b_colour : ?Text; players : [GroupPlayerInput]; duties : [GroupDutyInput] };
   public type EventGroupPlayer = { group_id : Text; account_id : Text; team_letter : ?Text };
   // account_id = null -> open duty within a group, same convention as
   // OpenDuty below.
@@ -183,6 +187,11 @@ module {
   // player without an account can RSVP via their mini_league_players row id.
   public type RsvpSubject = { #account : Text; #mini_league_player : Text };
   public type MiniLeagueRsvp = { event_id : Text; subject : RsvpSubject; state : Text; updated_at_ms : Nat64 };
+
+  // ---- Self-service child roster + child->team assignment (events-domain fix) ----
+  // Mirrors Supabase child_team_assignments, scoped with club_id so
+  // list_child_team_assignments can authorise on club membership.
+  public type ChildTeamAssignment = { child_id : Text; team_id : Text; club_id : Text };
 
   public type State = {
     var governor : Principal;

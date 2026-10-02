@@ -31,6 +31,9 @@ export interface BroadcastResult {
   'delivered' : number,
 }
 export interface ClubDmSettings {
+  'ai_catch_up_enabled' : boolean,
+  'allowed_roles' : Array<string>,
+  'force_disable_previews' : boolean,
   'attachments_disabled' : boolean,
   'club_id' : string,
   'dm_disabled' : boolean,
@@ -260,6 +263,11 @@ export interface _SERVICE {
   >,
   'delete_poll' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
+  'enable_ai_catch_up_for_all_members' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'forward_message' : ActorMethod<
     [string, string],
@@ -390,8 +398,23 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'set_club_ai_catch_up' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_club_dm_allowed_roles' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_club_dm_settings' : ActorMethod<
     [string, boolean, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_club_message_privacy' : ActorMethod<
+    [string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

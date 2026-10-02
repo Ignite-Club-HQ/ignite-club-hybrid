@@ -4,8 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveClubMessagePrivacy } from "@/live/features/messaging";
 
 interface Props {
   clubId: string;
@@ -29,12 +30,18 @@ export function ClubMessagePrivacySettings({ clubId }: Props) {
 
   const updateMutation = useMutation({
     mutationFn: async (force_disable_message_previews: boolean) => {
-      assertSupabaseWritePath("messaging", "message preview privacy toggle");
-      const { error } = await supabase
-        .from("clubs")
-        .update({ force_disable_message_previews })
-        .eq("id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("clubs")
+            .update({ force_disable_message_previews })
+            .eq("id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveClubMessagePrivacy(ctx, clubId, force_disable_message_previews);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-message-privacy", clubId] });

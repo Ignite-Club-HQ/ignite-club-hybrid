@@ -16,8 +16,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveClubAiCatchUp, enableLiveAiCatchUpForAllMembers } from "@/live/features/messaging";
 
 interface Props {
   clubId: string;
@@ -55,12 +56,18 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
 
   const updateMutation = useMutation({
     mutationFn: async (ai_catch_up_enabled: boolean) => {
-      assertSupabaseWritePath("messaging", "AI chat recap toggle");
-      const { error } = await supabase
-        .from("clubs")
-        .update({ ai_catch_up_enabled } as any)
-        .eq("id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("clubs")
+            .update({ ai_catch_up_enabled } as any)
+            .eq("id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveClubAiCatchUp(ctx, clubId, ai_catch_up_enabled);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-ai-catchup", clubId] });
@@ -73,13 +80,17 @@ export function ClubAICatchUpSettings({ clubId }: Props) {
 
   const enableAllMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("messaging", "bulk-enable AI chat recap for all members");
-      const { data, error } = await supabase.rpc(
-        "enable_ai_catch_up_for_all_club_members" as any,
-        { p_club_id: clubId }
-      );
-      if (error) throw error;
-      return (data as number) ?? 0;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc(
+            "enable_ai_catch_up_for_all_club_members" as any,
+            { p_club_id: clubId }
+          );
+          if (error) throw error;
+          return (data as number) ?? 0;
+        },
+        icp: async (ctx) => enableLiveAiCatchUpForAllMembers(ctx, clubId),
+      });
     },
     onSuccess: (count) => {
       toast.success(

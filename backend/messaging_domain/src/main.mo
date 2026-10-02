@@ -1066,18 +1066,81 @@ persistent actor {
 
   // ===================== Per-club DM settings =====================
 
+  func defaultClubDmSettings(club_id : Text) : Types.ClubDmSettings {
+    { club_id; dm_disabled = false; attachments_disabled = false; allowed_roles = ["app_admin", "club_admin", "team_admin"]; force_disable_previews = false; ai_catch_up_enabled = true }
+  };
+
+  func requireClubAdmin(caller : Principal, club_id : Text) : ?Text {
+    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null) and not hasRole(caller, "club_admin", ?club_id, null)) return ?"Club admin required";
+    if (not valid(club_id)) return ?"Invalid club";
+    null
+  };
+
   public shared ({ caller }) func set_club_dm_settings(club_id : Text, dm_disabled : Bool, attachments_disabled : Bool) : async { #Ok; #Err : Text } {
     auth(caller);
-    if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null) and not hasRole(caller, "club_admin", ?club_id, null)) return #Err("Club admin required");
-    if (not valid(club_id)) return #Err("Invalid club");
+    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    let existing = defaultClubDmSettings(club_id);
+    let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null existing };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
-    clubDmSettings := clubDmSettings.concat([{ club_id; dm_disabled; attachments_disabled }]);
+    clubDmSettings := clubDmSettings.concat([{ current with club_id; dm_disabled; attachments_disabled }]);
     #Ok
+  };
+
+  public shared ({ caller }) func set_club_dm_allowed_roles(club_id : Text, allowed_roles : [Text]) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
+    clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
+    clubDmSettings := clubDmSettings.concat([{ current with club_id; allowed_roles }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func set_club_message_privacy(club_id : Text, force_disable_previews : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
+    clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
+    clubDmSettings := clubDmSettings.concat([{ current with club_id; force_disable_previews }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func set_club_ai_catch_up(club_id : Text, ai_catch_up_enabled : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
+    clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
+    clubDmSettings := clubDmSettings.concat([{ current with club_id; ai_catch_up_enabled }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func enable_ai_catch_up_for_all_members(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    var count : Nat32 = 0;
+    for (m in clubMemberships.values()) {
+      if (m.club_id == club_id) {
+        let already = userMessagingSettings.find(func(s) = s.user.equal(m.user));
+        switch (already) {
+          case (?s) {
+            if (not s.ai_catchup_enabled) {
+              userMessagingSettings := userMessagingSettings.filter(func(x) = not x.user.equal(m.user));
+              userMessagingSettings := userMessagingSettings.concat([{ s with ai_catchup_enabled = true }]);
+              count += 1;
+            };
+          };
+          case null {
+            userMessagingSettings := userMessagingSettings.concat([{ user = m.user; hide_message_preview = false; ai_catchup_enabled = true }]);
+            count += 1;
+          };
+        };
+      };
+    };
+    #Ok(count)
   };
 
   public query func get_club_dm_settings(club_id : Text) : async Types.ClubDmSettings {
     for (s in clubDmSettings.values()) { if (s.club_id == club_id) { return s } };
-    { club_id; dm_disabled = false; attachments_disabled = false }
+    defaultClubDmSettings(club_id)
   };
 
   // ===================== Per-user messaging settings =====================

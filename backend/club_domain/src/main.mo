@@ -1718,6 +1718,8 @@ persistent actor {
       media_sponsors_enabled = false; media_header_sponsors_enabled = false; events_sponsor_strip_enabled = false; chat_thread_ads_enabled = false;
       theme_primary_color = null; theme_secondary_color = null; theme_accent_color = null;
       header_logo_enabled = true; header_club_name_enabled = true; invite_email_style = null; club_switcher_hint = null;
+      theme_enabled = true; logo_only_mode = false;
+      theme_dark_primary_color = null; theme_dark_secondary_color = null; theme_dark_accent_color = null;
     }
   };
 
@@ -1733,10 +1735,42 @@ persistent actor {
     settings := settings.concat([updated]);
   };
 
-  public shared ({ caller }) func set_club_theme_palette(club_id : Text, primary : ?Text, secondary : ?Text, accent : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+  public shared ({ caller }) func set_club_theme_palette(club_id : Text, primary : ?Text, secondary : ?Text, accent : ?Text, dark_primary : ?Text, dark_secondary : ?Text, dark_accent : ?Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with theme_primary_color = primary; theme_secondary_color = secondary; theme_accent_color = accent };
+    let updated : Types.ClubSettings = {
+      currentSettingsFor(club_id) with
+      theme_primary_color = primary; theme_secondary_color = secondary; theme_accent_color = accent;
+      theme_dark_primary_color = dark_primary; theme_dark_secondary_color = dark_secondary; theme_dark_accent_color = dark_accent;
+    };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func set_club_theme_enabled(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with theme_enabled = enabled };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func set_club_logo_only_mode(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with logo_only_mode = enabled };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
+  public shared ({ caller }) func clear_club_theme(club_id : Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = {
+      currentSettingsFor(club_id) with
+      theme_primary_color = null; theme_secondary_color = null; theme_accent_color = null;
+      theme_dark_primary_color = null; theme_dark_secondary_color = null; theme_dark_accent_color = null;
+    };
     putSettings(updated);
     #Ok(updated)
   };

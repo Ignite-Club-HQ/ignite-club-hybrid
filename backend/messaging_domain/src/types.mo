@@ -147,7 +147,7 @@ module {
   public type MessageWithReactions = { message : Message; reactions : [ReactionSummary] };
 
   // --- Per-club DM settings ---
-  public type ClubDmSettings = { club_id : Text; dm_disabled : Bool; attachments_disabled : Bool };
+  public type ClubDmSettings = { club_id : Text; dm_disabled : Bool; attachments_disabled : Bool; allowed_roles : [Text]; force_disable_previews : Bool; ai_catch_up_enabled : Bool };
 
   // --- Per-user messaging settings ---
   public type UserMessagingSettings = { user : Principal; hide_message_preview : Bool; ai_catchup_enabled : Bool };

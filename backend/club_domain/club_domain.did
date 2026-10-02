@@ -349,11 +349,16 @@ type ClubSettings =
    header_club_name_enabled: bool;
    header_logo_enabled: bool;
    invite_email_style: opt text;
+   logo_only_mode: bool;
    media_header_sponsors_enabled: bool;
    media_sponsors_enabled: bool;
    membership_open: bool;
    public_directory: bool;
    theme_accent_color: opt text;
+   theme_dark_accent_color: opt text;
+   theme_dark_primary_color: opt text;
+   theme_dark_secondary_color: opt text;
+   theme_enabled: bool;
    theme_primary_color: opt text;
    theme_secondary_color: opt text;
  };
@@ -505,6 +510,11 @@ service : {
                                         Err: text;
                                         Ok: ClubTeam;
                                       });
+  clear_club_theme: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: ClubSettings;
+    });
   create_child_for_parent_in_club: (club_id: text, parent: principal) ->
    (variant {
       Err: text;
@@ -947,6 +957,11 @@ service : {
       Err: text;
       Ok: ClubSettings;
     });
+  set_club_logo_only_mode: (club_id: text, enabled: bool) ->
+   (variant {
+      Err: text;
+      Ok: ClubSettings;
+    });
   set_club_switcher_hint: (club_id: text, hint: opt text) ->
    (variant {
       Err: text;
@@ -957,11 +972,18 @@ service : {
       Err: text;
       Ok: ClubTerm;
     });
+  set_club_theme_enabled: (club_id: text, enabled: bool) ->
+   (variant {
+      Err: text;
+      Ok: ClubSettings;
+    });
   set_club_theme_palette: (club_id: text, primary: opt text, secondary:
-   opt text, accent: opt text) -> (variant {
-                                     Err: text;
-                                     Ok: ClubSettings;
-                                   });
+   opt text, accent: opt text, dark_primary: opt text, dark_secondary:
+   opt text, dark_accent: opt text) ->
+   (variant {
+      Err: text;
+      Ok: ClubSettings;
+    });
   set_team_player_position: (team_id: text, member_id: text, position:
    text) -> (variant {
                Err: text;

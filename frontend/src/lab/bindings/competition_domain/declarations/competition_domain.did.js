@@ -334,6 +334,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_competition_join_links' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(CompetitionJoinLink),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'list_competition_roles' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(RoleGrant), 'Err' : IDL.Text })],

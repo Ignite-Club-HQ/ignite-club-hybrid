@@ -325,6 +325,11 @@ service : {
       Err: text;
       Ok: vec CompetitionInvite;
     }) query;
+  list_competition_join_links: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec CompetitionJoinLink;
+    }) query;
   list_competition_roles: (competition_id: text) ->
    (variant {
       Err: text;

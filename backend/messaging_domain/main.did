@@ -220,9 +220,12 @@ type ClubMembership =
  };
 type ClubDmSettings = 
  record {
+   ai_catch_up_enabled: bool;
+   allowed_roles: vec text;
    attachments_disabled: bool;
    club_id: text;
    dm_disabled: bool;
+   force_disable_previews: bool;
  };
 type BroadcastResult = 
  record {
@@ -306,6 +309,11 @@ service : {
                                      Ok;
                                    });
   dm_attachments_disabled: (user: principal) -> (bool) query;
+  enable_ai_catch_up_for_all_members: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: nat32;
+    });
   export_state: () -> (variant {
                          Err: text;
                          Ok: State;
@@ -446,11 +454,26 @@ service : {
                                            Err: text;
                                            Ok: Message;
                                          });
+  set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  set_club_dm_allowed_roles: (club_id: text, allowed_roles: vec text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   set_club_dm_settings: (club_id: text, dm_disabled: bool,
    attachments_disabled: bool) -> (variant {
                                      Err: text;
                                      Ok;
                                    });
+  set_club_message_privacy: (club_id: text, force_disable_previews: bool) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   set_dm_attachments_disabled: (user: principal, disabled: bool) ->
    (variant {
       Err: text;

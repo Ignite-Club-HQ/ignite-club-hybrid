@@ -548,6 +548,42 @@ persistent actor {
     #Ok(res)
   };
 
+  public shared ({ caller }) func update_scheduled_message(
+    id : Text,
+    author : Text,
+    body : ?Text,
+    image_url : ?Text,
+    scheduled_for_ms : ?Nat64,
+    recurrence : ?Types.Recurrence,
+    recurrence_until_ms : ?Nat64,
+  ) : async Types.ScheduledResult {
+    authenticated(caller);
+    switch (findScheduledIndex(id)) {
+      case null { #Err("Unknown scheduled message") };
+      case (?index) {
+        let item = scheduled[index];
+        if (item.author != author) { return #Err("Author mismatch") };
+        if (item.status != #Pending) { return #Err("Only pending messages can be edited") };
+        let newBody = switch (body) { case (?b) { if (not valid(b)) { return #Err("Invalid body") }; b }; case null { item.body } };
+        let newImage = switch (image_url) { case (?_) { image_url }; case null { item.image_url } };
+        let newScheduledFor = switch (scheduled_for_ms) { case (?s) { if (s == 0) { return #Err("scheduled_for_ms required") }; s }; case null { item.scheduled_for_ms } };
+        let newRecurrence = switch (recurrence) { case (?r) { r }; case null { item.recurrence } };
+        let newRecurrenceUntil = switch (recurrence_until_ms) { case (?_) { recurrence_until_ms }; case null { item.recurrence_until_ms } };
+        let updated = {
+          item with
+          body = newBody;
+          image_url = newImage;
+          scheduled_for_ms = newScheduledFor;
+          recurrence = newRecurrence;
+          recurrence_until_ms = newRecurrenceUntil;
+          updated_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000);
+        };
+        replaceScheduled(index, updated);
+        #Ok(updated)
+      };
+    }
+  };
+
   public shared ({ caller }) func cancel_scheduled(id : Text, author : Text) : async Types.ScheduledResult {
     authenticated(caller);
     switch (findScheduledIndex(id)) {

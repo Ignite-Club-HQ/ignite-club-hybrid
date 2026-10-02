@@ -308,6 +308,11 @@ export interface _SERVICE {
     { 'Ok' : Array<CompetitionInvite> } |
       { 'Err' : string }
   >,
+  'list_competition_join_links' : ActorMethod<
+    [string],
+    { 'Ok' : Array<CompetitionJoinLink> } |
+      { 'Err' : string }
+  >,
   'list_competition_roles' : ActorMethod<
     [string],
     { 'Ok' : Array<RoleGrant> } |
