@@ -78,6 +78,30 @@ export async function fetchVaultAccessibleClubs(
   isAppAdmin: boolean,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultClubSummary[]> {
+  return withFeatureBackend("vault", {
+    supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
+    icp: async (ctx) => {
+      const { listLiveClubs } = await import("@/live/features/club");
+      const clubs = await listLiveClubs(ctx);
+      const isPro = await fetchIcpCallerIsPro(ctx);
+      // Byte accounting for the storage bar stays on Supabase (media bytes
+      // are an approved Supabase area); ICP reports 0 so the bar renders
+      // empty rather than erroring.
+      return clubs.map((club) => ({
+        id: club.id,
+        name: club.name,
+        is_pro: isPro,
+        storage_used_bytes: 0,
+      }));
+    },
+  });
+}
+
+async function fetchVaultAccessibleClubsSupabase(
+  userId: string,
+  isAppAdmin: boolean,
+  client: IgniteSupabaseClient,
+): Promise<VaultClubSummary[]> {
   if (isAppAdmin) {
     const { data } = await client
       .from("clubs")
@@ -117,29 +141,50 @@ export async function fetchVaultClubHasPro(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<boolean> {
-  const { data } = await client
-    .from("club_subscriptions")
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { data } = await client
+        .from("club_subscriptions")
     .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
     .eq("club_id", clubId)
     .maybeSingle();
-  return hasVaultProEntitlement(data);
+      return hasVaultProEntitlement(data);
+    },
+    // Per-principal IAP entitlement; no per-club Pro mapping on ICP.
+    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+  });
 }
 
 export async function fetchVaultTeamHasPro(
   teamId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<boolean> {
-  const { data } = await client
-    .from("team_subscriptions")
+  return withFeatureBackend("vault", {
+    supabase: async () => {
+      const { data } = await client
+        .from("team_subscriptions")
     .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
     .eq("team_id", teamId)
     .maybeSingle();
-  return hasVaultProEntitlement(data);
+      return hasVaultProEntitlement(data);
+    },
+    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+  });
 }
 
 export async function fetchVaultAnyProAccess(
   userId: string,
   client: IgniteSupabaseClient = supabase,
+): Promise<boolean> {
+  return withFeatureBackend("vault", {
+    supabase: async () => fetchVaultAnyProAccessSupabase(userId, client),
+    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+  });
+}
+
+async function fetchVaultAnyProAccessSupabase(
+  userId: string,
+  client: IgniteSupabaseClient,
 ): Promise<boolean> {
   const { data: roles } = await client
     .from("user_roles")
