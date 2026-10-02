@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
