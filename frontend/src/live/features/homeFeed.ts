@@ -3,7 +3,7 @@ import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import { getLiveClubProfile } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
 import { listLiveChildren } from "./membership";
-import { getLiveDecryptedPiiBatch } from "./vault";
+import { resolveLivePiiTextBatch } from "./vault";
 
 /**
  * Home feed -> identity_access (roles), events_domain (events + RSVPs) and
@@ -224,17 +224,16 @@ export async function fetchLiveHomeChildren(
   const children = await listLiveChildren(ctx);
   const nameByChildId = new Map<string, string>();
   try {
-    const decrypted = await getLiveDecryptedPiiBatch(
+    const decrypted = await resolveLivePiiTextBatch(
       ctx,
       children.map((child) => child.id),
       "name",
       "home_feed",
       "Display child names on the home feed",
     );
-    const decoder = new TextDecoder();
-    for (const record of decrypted) {
-      const name = decoder.decode(record.plaintext).trim();
-      if (name) nameByChildId.set(record.pii_id, name);
+    for (const [childId, name] of decrypted) {
+      const trimmed = name.trim();
+      if (trimmed) nameByChildId.set(childId, trimmed);
     }
   } catch {
     // Best effort: a PII read failure must not blank the home children list.
