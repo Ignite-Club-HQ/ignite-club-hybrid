@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { fetchLiveLinkPreview } from "@/live/features/messaging";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { runWhenChatScrollIdle } from "@/lib/chatScrollActivity";
@@ -68,11 +70,11 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
         icp: async (ctx) => {
           const p = await fetchLiveLinkPreview(ctx, fetchUrl);
           return {
-            title: p.title[0] ?? null,
-            description: p.description[0] ?? null,
-            image: p.image[0] ?? null,
-            site_name: p.site_name[0] ?? null,
-          } as LinkPreviewData;
+            title: p.title[0],
+            description: p.description[0],
+            image: p.image[0],
+            siteName: p.site_name[0],
+          };
         },
       });
       const hasContent = data && (data.title || data.description || data.image);
