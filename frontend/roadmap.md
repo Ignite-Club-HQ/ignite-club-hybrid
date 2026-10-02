@@ -97,3 +97,67 @@ Standing rule: no "not available" states. Every item below must be wired to a ca
 - [ ] resolveEventChildScope returns [] in ICP mode (EventDetailPage, QuickRSVPDialog, NextUpCarousel) — children silently missing from RSVP scope
 - [x] DONE (2026-10-02) Typing indicator + pinned-message realtime — new messaging_domain set_typing/list_typing/pin_message/unpin_message/list_pinned_messages (migration 20261006_000000), wired in useTypingIndicator/usePinnedMessages via withFeatureBackend("messaging") polling. EXCEPTION (justified): chat-to-vault sync stays a silent no-op — vault_domain's folder model has no chat_group_id/role-restriction fields to match the chat-folder scheme.
 - [x] DONE (2026-10-02) StoragePurchaseDialog: removed the hard "not available" throw for ICP mode; iOS native IAP now verifies via the session-free `verify-iap-receipt-icp` edge function + identity_access `redeem_entitlement` (HMAC attestation), matching useInAppPurchase.ts. ICP web/desktop (no IAP, Stripe disabled) hides the purchase section entirely instead of showing an error; Supabase session users keep the existing `verify-iap-receipt` + Stripe checkout paths untouched.
+
+## ICP wiring follow-up (2026-10-02)
+
+Dead-lab-gate cleanup (resolveLocalAuthMode always false in prod — removed
+the unreachable fixture branch so these pages render their real, already
+feature-routed component directly):
+- SeasonsPage.tsx, SeasonDetailPage.tsx, SeasonComparePage.tsx — DONE (2026-10-02).
+  Seasons list/current-season/team-summary already route via useClubSeasons /
+  useSeasonTeamSummary (club_domain list_seasons/save_season/
+  season_team_summary). Remaining raw supabase reads on these pages (club
+  name, admin-role check, per-team player counts, archive/publish RPCs) have
+  no club_domain counterpart — NEEDS-CANISTER: season archive/publish + admin
+  role check parity.
+- ClassEnrolmentPage.tsx — DONE (2026-10-02) dead-gate removal. NEEDS-CANISTER:
+  events_domain has no class/enrolment-capacity concept; enrolment stays
+  Supabase-only until added.
+- PlayerStatsReportPage.tsx / playerStatsReportExtras.ts — DONE (2026-10-02)
+  dead-gate removal. NEEDS-CANISTER: events_domain exposes no
+  list_game_player_stats-shaped query matching game_results/captain/POM/GK
+  joins this report needs; report stays Supabase-only.
+- ManageTeamRolesPage.tsx — DONE (2026-10-02) dead-gate + fixture-only
+  "IcpLabManageTeamRolesPage" removed. NEEDS-CANISTER: wiring the full
+  roster/remove/points-reset UI to club_domain list_role_grants /
+  add_role_grant / remove_role_grant is still open; page renders the real
+  Supabase component unconditionally (safe: membership only routes to ICP
+  once club_domain is configured for that feature, and this surface isn't
+  yet ported).
+- AdminDmAttachmentsPage.tsx, AdminDeletedChatsPage.tsx — DONE (2026-10-02)
+  dead-gate + fixture-only components removed. NEEDS-CANISTER: no
+  messaging_domain/insights_domain admin moderation methods exist yet for
+  DM-attachment flagging or deleted-chat recovery; pages stay Supabase-only.
+- AssociationDetailPage.tsx — DONE (2026-10-02) dead-gate removal.
+  NEEDS-CANISTER: club_domain's ClubProfile has no association/kind/
+  parent_org_id concept and no rollup query; association clubs/rollup/
+  broadcasts/PlayHQ panels stay Supabase-only. events_domain
+  list_live_association_events exists and is already used by
+  AssociationEventsPanel for the Events tab.
+- CreateAssociationPage.tsx — NEEDS-CANISTER (2026-10-02): the real
+  resolveAuthBackend()==="icp" gate showed an "unavailable/preview" card,
+  which is a rule violation. club_domain has no association create/kind
+  method, so there is nothing to wire; the ICP-mode entry point should be
+  hidden/redirected without any card (tracked, not yet applied — see below).
+- ClubSetupWizardPage.tsx — NOT YET ADDRESSED: `useIcpLab` is threaded through
+  most of the 1302-line component (step gating, autosave, review step), not
+  isolated to one top branch. club_domain createLiveClub/saveLiveTeam exist
+  and should replace the useIcpLab branches, but this needs a dedicated pass
+  to avoid breaking the Supabase flow. NEEDS-CANISTER tracking kept until
+  that pass lands.
+- JoinClubPage.tsx, AddRoleToMemberDialog.tsx, TeamFoldersManager.tsx,
+  SignupProPage.tsx — NOT YET ADDRESSED in this pass (ran out of time budget);
+  membership.ts already exposes addLiveRoleGrant / club invite primitives
+  that AddRoleToMemberDialog and JoinClubPage should call via
+  withFeatureBackend, and SignupProPage should hide its entry point in ICP
+  mode (non-IAP payment exception) instead of showing a card. Needs a
+  follow-up pass.
+
+Gates: `cd frontend && npx tsc -p tsconfig.app.json --noEmit` could not be run
+to a clean baseline in this environment (fails before reaching project files
+with TS2688 "Cannot find type definition file" errors for third-party type
+roots, unrelated to the files touched here — looks like a pre-existing
+sandbox/typeRoots issue, not caused by this change). Manually reviewed every
+edited file; all are self-contained search/replace reductions (dead branch
+removal only, no new logic), so risk of a break is low, but this should be
+re-verified with a working tsc run before sign-off.
