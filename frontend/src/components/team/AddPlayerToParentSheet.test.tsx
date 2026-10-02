@@ -7,12 +7,27 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   toast: vi.fn(),
   releaseCreate: null as null | ((value: { data: string; error: null }) => void),
+  withFeatureBackend: vi.fn(
+    (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+      providers.supabase(),
+  ),
+  createLiveChildForParentOnTeam: vi.fn(),
+  registerLiveChildNamePii: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: mocks.rpc },
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: mocks.withFeatureBackend,
+}));
+vi.mock("@/live/features/club", () => ({
+  createLiveChildForParentOnTeam: mocks.createLiveChildForParentOnTeam,
+}));
+vi.mock("@/live/features/vault", () => ({
+  registerLiveChildNamePii: mocks.registerLiveChildNamePii,
+}));
 
 import AddPlayerToParentSheet from "./AddPlayerToParentSheet";
 
@@ -30,6 +45,7 @@ function renderSheet(onOpenChange = vi.fn()) {
       onOpenChange={onOpenChange}
       teamId="team-1"
       teamName="Under 10 Blue"
+      clubId="club-1"
       defaultParentUserId="parent-1"
       rawMembers={[{
         user_id: "parent-1",
