@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
@@ -292,14 +293,31 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       fileName = `general/${user.id}/${timestamp}.${extension}`;
     }
 
-    const { error: uploadError } = await supabase.storage
-      .from("chat-attachments")
-      .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" });
+    // ICP blob store: when a media_blob_store canister is configured and the
+    // member is signed in with Internet Identity, bytes go on-chain. With no
+    // blob store configured there is no II-safe fallback — a raw Supabase
+    // Storage upload would have no auth — so fail loudly rather than
+    // silently diverting bytes to Supabase.
+    // NEEDS-CANISTER: remove the isIcp throw once the blob store is deployed.
+    const blobUpload = await tryUploadMediaToBlobStore({
+      storagePath: fileName,
+      file: fileToUpload,
+      mime: contentType,
+    });
+    let publicUrl: string;
+    if (blobUpload) {
+      publicUrl = blobUpload.url;
+    } else {
+      if (isIcp) throw new Error("Media uploads are not available yet for Internet Identity accounts");
+      const { error: uploadError } = await supabase.storage
+        .from("chat-attachments")
+        .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" });
 
-    if (uploadError) throw new Error(uploadError.message || "Failed to upload image");
+      if (uploadError) throw new Error(uploadError.message || "Failed to upload image");
 
-    const { data } = supabase.storage.from("chat-attachments").getPublicUrl(fileName);
-    let publicUrl = data.publicUrl;
+      const { data } = supabase.storage.from("chat-attachments").getPublicUrl(fileName);
+      publicUrl = data.publicUrl;
+    }
 
     // Measure intrinsic dimensions (best-effort) and encode them into the URL
     // so the chat row estimator can reserve the correct height on first paint

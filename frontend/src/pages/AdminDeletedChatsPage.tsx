@@ -42,6 +42,11 @@ const RETENTION_DAYS = 30;
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
+// NEEDS-CANISTER: messaging_domain only exposes soft_delete_group — there is
+// no list-deleted/restore/purge surface, so this tool is Supabase-only. Every
+// query and mutation is gated so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
+
 export default SupabaseAdminDeletedChatsPage;
 
 function SupabaseAdminDeletedChatsPage() {
@@ -68,7 +73,7 @@ function SupabaseAdminDeletedChatsPage() {
           .map((r) => r.club_id as string),
       };
     },
-    enabled: !!user?.id && resolveAuthBackend() !== "icp",
+    enabled: !!user?.id && !isIcpPageMode(),
   });
 
   const isAppAdmin = !!access?.isAppAdmin;
@@ -113,11 +118,12 @@ function SupabaseAdminDeletedChatsPage() {
         club_name: r.club_id ? clubMap.get(r.club_id) ?? null : null,
       }));
     },
-    enabled: hasAccess && resolveAuthBackend() !== "icp",
+    enabled: hasAccess && !isIcpPageMode(),
   });
 
   const restoreMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase
         .from("chat_groups")
         .update({ deleted_at: null, deleted_by: null } as any)
@@ -135,6 +141,7 @@ function SupabaseAdminDeletedChatsPage() {
 
   const purgeMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase.from("chat_groups").delete().eq("id", id);
       if (error) throw error;
     },

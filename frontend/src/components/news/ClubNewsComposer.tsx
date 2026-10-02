@@ -18,6 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { createLiveNewsPost } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -170,6 +172,19 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
   const uploadToBucket = async (file: File, clubIdForPath: string) => {
     const ext = file.name.split(".").pop() || "bin";
     const path = `news/${clubIdForPath}/${crypto.randomUUID()}.${ext}`;
+    // ICP blob store: when configured + II session, bytes go on-chain.
+    // NEEDS-CANISTER: with no blob store configured there is no II-safe
+    // fallback (a raw Supabase Storage upload has no auth), so fail loudly
+    // instead of silently diverting news attachments to Supabase.
+    const blobUpload = await tryUploadMediaToBlobStore({
+      storagePath: path,
+      file,
+      mime: file.type || "application/octet-stream",
+    });
+    if (blobUpload) return blobUpload.url;
+    if (resolveAuthBackend() === "icp") {
+      throw new Error("Media uploads are not available yet for Internet Identity accounts");
+    }
     const { error: upErr } = await supabase.storage
       .from("club-logos")
       .upload(path, file, { upsert: false, contentType: file.type || undefined });

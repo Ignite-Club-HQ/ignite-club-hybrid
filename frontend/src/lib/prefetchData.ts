@@ -4,10 +4,14 @@ import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { cacheRoles } from "@/lib/rolesCache";
 import { cacheClubs, cacheTeams, getCachedClubs, getCachedTeams } from "@/lib/clubTeamCache";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const MESSAGES_PER_PAGE = 15;
 
 export async function prefetchUserData(queryClient: QueryClient, userId: string) {
+  // ICP-mode users have no Supabase session or rows — prefetching would only
+  // warm the cache with empty/stale results ahead of the routed live queries.
+  if (resolveAuthBackend() === "icp") return;
   // Run prefetch in background - never block UI
   doPrefetch(queryClient, userId).catch(console.error);
 }

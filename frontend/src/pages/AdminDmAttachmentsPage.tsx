@@ -17,7 +17,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
+// NEEDS-CANISTER: messaging_domain has no attachment-restriction surface, so
+// this tool is Supabase-only. Every query and mutation is gated so no II
+// principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 
 export default SupabaseAdminDmAttachmentsPage;
 
@@ -39,7 +44,7 @@ function SupabaseAdminDmAttachmentsPage() {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isIcpPageMode(),
   });
 
   const { data: restrictions, isLoading } = useQuery({
@@ -52,7 +57,7 @@ function SupabaseAdminDmAttachmentsPage() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!isAppAdmin,
+    enabled: !!isAppAdmin && !isIcpPageMode(),
   });
 
   const { data: clubs } = useQuery({
@@ -61,7 +66,7 @@ function SupabaseAdminDmAttachmentsPage() {
       const { data } = await supabase.from("clubs").select("id, name").order("name");
       return data || [];
     },
-    enabled: !!isAppAdmin,
+    enabled: !!isAppAdmin && !isIcpPageMode(),
   });
 
   const restrictedClubIds = new Set((restrictions || []).filter((r: any) => r.scope === "club").map((r: any) => r.club_id));
@@ -77,11 +82,12 @@ function SupabaseAdminDmAttachmentsPage() {
         .in("id", Array.from(restrictedUserIds));
       return data || [];
     },
-    enabled: !!isAppAdmin,
+    enabled: !!isAppAdmin && !isIcpPageMode(),
   });
 
   const addClubMutation = useMutation({
     mutationFn: async (clubId: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase
         .from("dm_attachment_restrictions")
         .insert({ scope: "club", club_id: clubId, created_by: user!.id });
@@ -96,6 +102,7 @@ function SupabaseAdminDmAttachmentsPage() {
 
   const addUserMutation = useMutation({
     mutationFn: async (userId: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase
         .from("dm_attachment_restrictions")
         .insert({ scope: "user", user_id: userId, created_by: user!.id });
@@ -111,6 +118,7 @@ function SupabaseAdminDmAttachmentsPage() {
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase.from("dm_attachment_restrictions").delete().eq("id", id);
       if (error) throw error;
     },
@@ -127,6 +135,7 @@ function SupabaseAdminDmAttachmentsPage() {
   const [searching, setSearching] = useState(false);
 
   const handleSearchUsers = async () => {
+    if (isIcpPageMode()) return;
     const q = userSearch.trim();
     if (q.length < 2) return;
     setSearching(true);
