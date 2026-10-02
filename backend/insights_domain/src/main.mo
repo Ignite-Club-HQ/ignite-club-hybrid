@@ -499,7 +499,7 @@ persistent actor {
     if (not valid(location)) return #Err("Invalid location");
     let now = nowMs();
     if (adSettings.any(func(s) = s.location == location)) {
-      adSettings := adSettings.map(func(s) = if (s.location == location) { location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now } else s);
+      adSettings := adSettings.map(func(s) = if (s.location == location) ({ location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now }) else s);
     } else {
       adSettings := adSettings.concat([{ location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now }]);
     };
