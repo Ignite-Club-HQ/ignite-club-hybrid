@@ -45,8 +45,6 @@ const isAppDomain = (url: string): boolean => {
 };
 
 async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
-  // NEEDS-CANISTER: fetch-link-preview
-  if (resolveAuthBackend() === "icp") return null;
   if (previewCache.has(url)) return previewCache.get(url)!;
   const existing = inflight.get(url);
   if (existing) return existing;

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMinimumAppVersions } from "@/live/features/messaging";
 import { consumePendingForceUpdatePrompt } from '@/lib/notificationLaunchHandler';
 import {
   AlertDialog,
