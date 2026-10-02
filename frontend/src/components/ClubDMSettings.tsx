@@ -14,8 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { toast } from "sonner";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveClubDmAllowedRoles, setLiveClubDmSettings } from "@/live/features/messaging";
 
 interface ClubDMSettingsProps {
   clubId: string;
@@ -64,18 +65,28 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
   // Upsert settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: async (newSettings: { dm_enabled?: boolean; allowed_roles?: string[] }) => {
-      assertSupabaseWritePath("messaging", "club DM enablement/allowed roles");
-      const { error } = await supabase
-        .from("club_dm_settings")
-        .upsert({
-          club_id: clubId,
-          dm_enabled: newSettings.dm_enabled ?? settings?.dm_enabled ?? true,
-          allowed_roles: newSettings.allowed_roles ?? settings?.allowed_roles ?? DEFAULT_ROLES,
-        }, {
-          onConflict: "club_id",
-        });
-      
-      if (error) throw error;
+      const dmEnabled = newSettings.dm_enabled ?? settings?.dm_enabled ?? true;
+      const allowedRoles = newSettings.allowed_roles ?? settings?.allowed_roles ?? DEFAULT_ROLES;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_dm_settings")
+            .upsert({
+              club_id: clubId,
+              dm_enabled: dmEnabled,
+              allowed_roles: allowedRoles,
+            }, {
+              onConflict: "club_id",
+            });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveClubDmSettings(ctx, clubId, !dmEnabled, false);
+          if (newSettings.allowed_roles) {
+            await setLiveClubDmAllowedRoles(ctx, clubId, allowedRoles);
+          }
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-dm-settings", clubId] });

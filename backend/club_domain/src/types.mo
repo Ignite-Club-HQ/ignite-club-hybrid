@@ -127,6 +127,11 @@ module {
     header_club_name_enabled : Bool;
     invite_email_style : ?Text;
     club_switcher_hint : ?Text;
+    theme_enabled : Bool;
+    logo_only_mode : Bool;
+    theme_dark_primary_color : ?Text;
+    theme_dark_secondary_color : ?Text;
+    theme_dark_accent_color : ?Text;
   };
   // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
   // exposure_percentage is the strip rotation share (0-100).
