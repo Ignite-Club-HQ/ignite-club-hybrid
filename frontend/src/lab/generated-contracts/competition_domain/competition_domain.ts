@@ -95,6 +95,7 @@ export interface CompetitionJoinLink {
     competition_id: string;
 }
 export interface ChatSettings {
+    admins_only: boolean;
     revision: bigint;
     competition_id: string;
     chat_enabled: boolean;
@@ -257,6 +258,13 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    invite_team(competition_id: string, team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     is_competition_admin(competition_id: string): Promise<{
         __kind__: "Ok";
         Ok: boolean;
@@ -320,6 +328,13 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_entries_by_team(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_invites_by_invitee(): Promise<{
         __kind__: "Ok";
         Ok: Array<CompetitionInvite>;
@@ -369,6 +384,13 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    respond_to_entry_invite(competition_id: string, team_id: string, accept: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     revoke_competition_join_link(competition_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -383,7 +405,7 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    set_chat_settings(competition_id: string, chat_enabled: boolean, expected_revision: bigint): Promise<{
+    set_chat_settings(competition_id: string, chat_enabled: boolean, admins_only: boolean, expected_revision: bigint): Promise<{
         __kind__: "Ok";
         Ok: ChatSettings;
     } | {
@@ -596,6 +618,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.initialize();
         return from_candid_variant_n6(result);
     }
+    async invite_team(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.invite_team(arg0, arg1);
+        return from_candid_variant_n11(result);
+    }
     async is_competition_admin(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: boolean;
@@ -686,6 +718,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.list_entries(arg0);
         return from_candid_variant_n38(result);
     }
+    async list_entries_by_team(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<TeamEntry>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_entries_by_team(arg0);
+        return from_candid_variant_n38(result);
+    }
     async list_invites_by_invitee(): Promise<{
         __kind__: "Ok";
         Ok: Array<CompetitionInvite>;
@@ -756,6 +798,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.remove_competition_role(arg0, arg1, arg2, to_candid_opt_n7(arg3));
         return from_candid_variant_n6(result);
     }
+    async respond_to_entry_invite(arg0: string, arg1: string, arg2: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: TeamEntry;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.respond_to_entry_invite(arg0, arg1, arg2);
+        return from_candid_variant_n11(result);
+    }
     async revoke_competition_join_link(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -776,14 +828,14 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.rotate_competition_join_link(arg0);
         return from_candid_variant_n16(result);
     }
-    async set_chat_settings(arg0: string, arg1: boolean, arg2: bigint): Promise<{
+    async set_chat_settings(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<{
         __kind__: "Ok";
         Ok: ChatSettings;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_chat_settings(arg0, arg1, arg2);
+        const result = await this.actor.set_chat_settings(arg0, arg1, arg2, arg3);
         return from_candid_variant_n31(result);
     }
     async set_match_result(arg0: string, arg1: number, arg2: number, arg3: bigint): Promise<{

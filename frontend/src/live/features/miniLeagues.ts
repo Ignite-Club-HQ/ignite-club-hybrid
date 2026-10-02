@@ -109,6 +109,21 @@ export async function setLiveMiniLeagueStatus(ctx: FeatureBackendContext, id: st
   return unwrapCandid(actor.set_mini_league_status(id, status), "Set mini league status");
 }
 
+/** Deletes a league and every row scoped to it (sessions, players, groups,
+ *  duties, availability, invites, admins, join links). Mirrors the Supabase
+ *  FK cascade. */
+export async function deleteLiveMiniLeague(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_mini_league(id), "Delete mini league");
+}
+
+/** Clones a league with its roster under a new id. Sessions, groups, duties
+ *  and availability are not copied — same as the Supabase duplicate flow. */
+export async function duplicateLiveMiniLeague(ctx: FeatureBackendContext, id: string, newName: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.duplicate_mini_league(id, newName), "Duplicate mini league");
+}
+
 // ---------------------------------------------------------------------------
 // Sessions
 // ---------------------------------------------------------------------------
@@ -449,25 +464,53 @@ export async function grantLiveMiniLeagueRole(
 // Join links
 // ---------------------------------------------------------------------------
 
-/** Shareable rotating-token join links, counterpart of the invite flow above. */
-export async function createLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+/** Shareable rotating-token join links, counterpart of the invite flow above.
+ *  Each league holds at most one active link per role: "player" links mint a
+ *  roster player on claim, "admin" links grant league-admin rights. */
+export type LiveJoinLinkRole = "player" | "admin";
+
+export async function createLiveMiniLeagueJoinLink(
+  ctx: FeatureBackendContext,
+  miniLeagueId: string,
+  role: LiveJoinLinkRole = "player",
+) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.create_mini_league_join_link(miniLeagueId), "Create mini league join link");
+  return unwrapCandid(actor.create_mini_league_join_link(miniLeagueId, role), "Create mini league join link");
 }
 
-export async function rotateLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+export async function rotateLiveMiniLeagueJoinLink(
+  ctx: FeatureBackendContext,
+  miniLeagueId: string,
+  role: LiveJoinLinkRole = "player",
+) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.rotate_mini_league_join_link(miniLeagueId), "Rotate mini league join link");
+  return unwrapCandid(actor.rotate_mini_league_join_link(miniLeagueId, role), "Rotate mini league join link");
 }
 
-export async function revokeLiveMiniLeagueJoinLink(ctx: FeatureBackendContext, miniLeagueId: string) {
+export async function revokeLiveMiniLeagueJoinLink(
+  ctx: FeatureBackendContext,
+  miniLeagueId: string,
+  role: LiveJoinLinkRole = "player",
+) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.revoke_mini_league_join_link(miniLeagueId), "Revoke mini league join link");
+  return unwrapCandid(actor.revoke_mini_league_join_link(miniLeagueId, role), "Revoke mini league join link");
 }
 
 export async function listLiveMiniLeagueJoinLinks(ctx: FeatureBackendContext, miniLeagueId: string) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_mini_league_join_links(miniLeagueId), "List mini league join links");
+}
+
+/** Resolves a join-link token to its league and role for the claim page. */
+export async function getLiveJoinLinkByToken(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_join_link_by_token(token), "Get join link");
+}
+
+/** Claims an admin join link: grants the caller league-admin rights. */
+export async function claimLiveAdminJoinLink(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.claim_admin_join_link(token), "Claim admin join link");
 }
 
 export async function joinLiveMiniLeagueByToken(

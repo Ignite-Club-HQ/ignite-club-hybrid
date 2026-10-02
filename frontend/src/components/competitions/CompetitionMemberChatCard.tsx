@@ -4,7 +4,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveCompetitionChatSettings,
+  setLiveCompetitionChatSettings,
+} from "@/live/features/competitions";
 
 interface Props {
   competitionId: string;
@@ -14,6 +18,9 @@ interface Props {
  * Opt-in competition-wide chat. Enabling it creates (or restores) the
  * "<Competition> – All Members" thread; membership is synced server-side from
  * team roles of entered teams.
+ *
+ * Backend-routed: Supabase `competitions` columns or the competition_domain
+ * canister's chat-settings record, depending on placement settings.
  */
 export function CompetitionMemberChatCard({ competitionId }: Props) {
   const { toast } = useToast();
@@ -22,37 +29,60 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["competition-member-chat", competitionId],
     enabled: !!competitionId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("competitions")
-        .select("member_chat_enabled, member_chat_admins_only")
-        .eq("id", competitionId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("competitions")
+            .select("member_chat_enabled, member_chat_admins_only")
+            .eq("id", competitionId)
+            .maybeSingle();
+          if (error) throw error;
+          return {
+            enabled: !!data?.member_chat_enabled,
+            adminsOnly: !!data?.member_chat_admins_only,
+            revision: 0,
+          };
+        },
+        icp: async (ctx) => {
+          const settings = await getLiveCompetitionChatSettings(ctx, competitionId);
+          return {
+            enabled: settings.chat_enabled,
+            adminsOnly: settings.admins_only,
+            revision: Number(settings.revision),
+          };
+        },
+      }),
   });
 
-  const enabled = !!data?.member_chat_enabled;
-  const adminsOnly = !!data?.member_chat_admins_only;
+  const enabled = !!data?.enabled;
+  const adminsOnly = !!data?.adminsOnly;
 
-  const update = async (patch: {
-    member_chat_enabled?: boolean;
-    member_chat_admins_only?: boolean;
-  }) => {
-    // NEEDS-CANISTER: competition_domain has no member-chat settings fields.
+  const update = async (nextEnabled: boolean, nextAdminsOnly: boolean) => {
     try {
-      assertSupabaseWritePath("competitions", "toggling competition-wide chat settings");
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("competitions")
+            .update({
+              member_chat_enabled: nextEnabled,
+              member_chat_admins_only: nextAdminsOnly,
+            })
+            .eq("id", competitionId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveCompetitionChatSettings(
+            ctx,
+            competitionId,
+            nextEnabled,
+            nextAdminsOnly,
+            data?.revision ?? 0,
+          );
+        },
+      });
     } catch (err: any) {
       toast({ title: "Could not update", description: err.message, variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase
-      .from("competitions")
-      .update(patch)
-      .eq("id", competitionId);
-    if (error) {
-      toast({ title: "Could not update", description: error.message, variant: "destructive" });
       return;
     }
     qc.invalidateQueries({ queryKey: ["competition-member-chat", competitionId] });
@@ -82,7 +112,7 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
             id="member-chat-enabled"
             checked={enabled}
             disabled={isLoading}
-            onCheckedChange={(next) => update({ member_chat_enabled: next })}
+            onCheckedChange={(next) => update(next, adminsOnly)}
           />
         </div>
 
@@ -97,7 +127,7 @@ export function CompetitionMemberChatCard({ competitionId }: Props) {
             id="member-chat-admins-only"
             checked={adminsOnly}
             disabled={isLoading || !enabled}
-            onCheckedChange={(next) => update({ member_chat_admins_only: next })}
+            onCheckedChange={(next) => update(enabled, next)}
           />
         </div>
       </CardContent>

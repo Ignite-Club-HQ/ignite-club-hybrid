@@ -83,6 +83,7 @@ export interface MiniLeagueJoinLink {
   'token' : string,
   'mini_league_id' : string,
   'revoked' : boolean,
+  'role' : string,
   'created_by' : Principal,
   'created_at_ms' : bigint,
   'revision' : bigint,
@@ -152,6 +153,11 @@ export interface _SERVICE {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  'claim_admin_join_link' : ActorMethod<
+    [string],
+    { 'Ok' : { 'mini_league_id' : string, 'club_id' : string } } |
+      { 'Err' : string }
+  >,
   'claim_duty' : ActorMethod<
     [string, string],
     { 'Ok' : MiniLeagueGroupDuty } |
@@ -198,7 +204,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'create_mini_league_join_link' : ActorMethod<
-    [string],
+    [string, string],
     { 'Ok' : MiniLeagueJoinLink } |
       { 'Err' : string }
   >,
@@ -216,9 +222,24 @@ export interface _SERVICE {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  'delete_mini_league' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'duplicate_mini_league' : ActorMethod<
+    [string, string],
+    { 'Ok' : MiniLeague } |
+      { 'Err' : string }
+  >,
   'get_availability' : ActorMethod<
     [string, string],
     { 'Ok' : [] | [MiniLeagueSessionAvailability] } |
+      { 'Err' : string }
+  >,
+  'get_join_link_by_token' : ActorMethod<
+    [string],
+    { 'Ok' : MiniLeagueJoinLink } |
       { 'Err' : string }
   >,
   'get_mini_league' : ActorMethod<
@@ -292,12 +313,12 @@ export interface _SERVICE {
   >,
   'remove_player' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'revoke_mini_league_join_link' : ActorMethod<
-    [string],
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
   'rotate_mini_league_join_link' : ActorMethod<
-    [string],
+    [string, string],
     { 'Ok' : MiniLeagueJoinLink } |
       { 'Err' : string }
   >,

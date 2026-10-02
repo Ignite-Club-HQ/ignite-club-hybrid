@@ -19,7 +19,8 @@ import { Loader2, UserPlus, Search, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLivePendingInvite, createLiveChildForParentInClub } from "@/live/features/club";
+import { createLivePendingInvite, createLiveChildForParentInClub, linkLiveGuardian } from "@/live/features/club";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Principal } from "@icp-sdk/core/principal";
 import type { Database, Json } from "@/integrations/supabase/types";
 
@@ -139,29 +140,45 @@ export function AddSecondParentDialog({
 
   // Link an existing user directly as a guardian (no email invite)
   const linkExistingMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedUser) throw new Error("No user selected");
-      if (!user?.id) throw new Error("Not signed in");
-      const resolvedChildId = await ensureChildId();
-      const { error } = await supabase.from("child_guardians").insert({
-        child_id: resolvedChildId,
-        guardian_id: selectedUser.id,
-        relationship_type: "parent",
-        is_primary: false,
-      } as any);
-      if (error && !error.message?.toLowerCase().includes("duplicate")) throw error;
+    mutationFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          if (!selectedUser) throw new Error("No user selected");
+          if (!user?.id) throw new Error("Not signed in");
+          const resolvedChildId = await ensureChildId();
+          const { error } = await supabase.from("child_guardians").insert({
+            child_id: resolvedChildId,
+            guardian_id: selectedUser.id,
+            relationship_type: "parent",
+            is_primary: false,
+          } as any);
+          if (error && !error.message?.toLowerCase().includes("duplicate")) throw error;
 
-      // Notify the linked parent (in-app notification — push fires via trigger)
-      const { data: actor } = await selectCachedProfileById(user.id);
-      const actorName = actor?.display_name || "An admin";
-      await supabase.from("notifications").insert({
-        user_id: selectedUser.id,
-        type: "guardian_added",
-        message: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
-        club_id: clubId,
-        related_id: resolvedChildId,
-      } as any);
-    },
+          // Notify the linked parent (in-app notification — push fires via trigger)
+          const { data: actor } = await selectCachedProfileById(user.id);
+          const actorName = actor?.display_name || "An admin";
+          await supabase.from("notifications").insert({
+            user_id: selectedUser.id,
+            type: "guardian_added",
+            message: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
+            club_id: clubId,
+            related_id: resolvedChildId,
+          } as any);
+        },
+        icp: async (ctx) => {
+          if (!selectedUser) throw new Error("No user selected");
+          const resolvedChildId = await ensureChildId();
+          await linkLiveGuardian(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
+          await fanOutLiveNotifications(ctx, {
+            userIds: [selectedUser.id],
+            clubId,
+            kind: "guardian_added",
+            body: `You were added as a parent of ${playerName} in ${miniLeagueName}`,
+            idempotencyKeyPrefix: `guardian-added-${resolvedChildId}-${selectedUser.id}`,
+            relatedId: resolvedChildId,
+          });
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mini-league-players", miniLeagueId] });
       queryClient.invalidateQueries({ queryKey: ["child_guardians"] });

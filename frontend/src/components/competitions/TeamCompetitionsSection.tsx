@@ -9,7 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  listLiveCompetitions,
+  listLiveEntriesByTeam,
+  respondLiveEntryInvite,
+} from "@/live/features/competitions";
 
 interface Props {
   teamId: string;
@@ -22,39 +27,85 @@ export default function TeamCompetitionsSection({ teamId, canManage }: Props) {
   const { user } = useAuth();
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
-  const { data: entries = [] } = useQuery({
+  type CompetitionEntryRow = {
+    id: string;
+    status: string;
+    competition_id: string;
+    team_id?: string;
+    division_id: string | null;
+    competitions: { name: string; sport: string | null; season: string | null; status?: string } | null;
+    competition_divisions: { name: string } | null;
+  };
+
+  const { data: entries = [] } = useQuery<CompetitionEntryRow[]>({
     queryKey: ["team-competition-entries", teamId],
     enabled: !!teamId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("competition_entries")
-        .select("id, status, competition_id, division_id, competitions:competition_id(name, sport, season, status), competition_divisions:division_id(name)")
-        .eq("team_id", teamId)
-        .in("status", ["invited", "accepted"]);
-      return data ?? [];
-    },
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("competition_entries")
+            .select("id, status, competition_id, division_id, competitions:competition_id(name, sport, season, status), competition_divisions:division_id(name)")
+            .eq("team_id", teamId)
+            .in("status", ["invited", "accepted"]);
+          return (data ?? []) as unknown as CompetitionEntryRow[];
+        },
+        icp: async (ctx) => {
+          const entries = await listLiveEntriesByTeam(ctx, teamId);
+          // Resolve competition names per entry club. Divisions are stored as
+          // names inside the canister's season record, so the division label
+          // comes through directly when the id matches.
+          const byClub = new Map<string, { id: string; name: string; season: string }[]>();
+          return Promise.all(
+            entries
+              .filter((e) => e.status === "invited" || e.status === "accepted")
+              .map(async (e) => {
+                let comps = byClub.get(e.club_id);
+                if (!comps) {
+                  comps = await listLiveCompetitions(ctx, e.club_id);
+                  byClub.set(e.club_id, comps);
+                }
+                const competition = comps.find((c) => c.id === e.competition_id);
+                return {
+                  id: `${e.competition_id}:${e.team_id}`,
+                  status: e.status,
+                  competition_id: e.competition_id,
+                  team_id: e.team_id,
+                  division_id: e.division_id[0] ?? null,
+                  competitions: competition
+                    ? { name: competition.name, sport: null as string | null, season: competition.season }
+                    : null,
+                  competition_divisions: e.division_id[0] ? { name: e.division_id[0] } : null,
+                };
+              }),
+          );
+        },
+      }),
   });
 
   const respond = async (entryId: string, status: "accepted" | "declined") => {
     setRespondingId(entryId);
-    // NEEDS-CANISTER: competition_domain has no entry invite accept/decline
-    // write (register_team is a different, admin-driven shape).
     try {
-      assertSupabaseWritePath("competitions", "accepting/declining a competition invite");
+      await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("competition_entries")
+            .update({ status, responded_by: user?.id, responded_at: new Date().toISOString() })
+            .eq("id", entryId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // ICP entry ids are "<competition_id>:<team_id>" (see query above).
+          const [competitionId, entryTeamId] = entryId.split(":");
+          await respondLiveEntryInvite(ctx, competitionId, entryTeamId, status === "accepted");
+        },
+      });
     } catch (err: any) {
       setRespondingId(null);
       toast({ title: "Could not respond", description: err.message, variant: "destructive" });
       return;
     }
-    const { error } = await supabase
-      .from("competition_entries")
-      .update({ status, responded_by: user?.id, responded_at: new Date().toISOString() })
-      .eq("id", entryId);
     setRespondingId(null);
-    if (error) {
-      toast({ title: "Could not respond", description: error.message, variant: "destructive" });
-      return;
-    }
     toast({ title: status === "accepted" ? "Invite accepted" : "Invite declined" });
     qc.invalidateQueries({ queryKey: ["team-competition-entries", teamId] });
   };

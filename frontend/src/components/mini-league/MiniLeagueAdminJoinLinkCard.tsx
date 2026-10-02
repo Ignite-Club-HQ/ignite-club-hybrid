@@ -17,7 +17,13 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveMiniLeagueJoinLink,
+  listLiveMiniLeagueJoinLinks,
+  revokeLiveMiniLeagueJoinLink,
+  rotateLiveMiniLeagueJoinLink,
+} from "@/live/features/miniLeagues";
 import { MiniLeagueJoinLinkCard } from "./MiniLeagueJoinLinkCard";
 import {
   buildMiniLeagueJoinLinkQrFilename,
@@ -53,48 +59,85 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
 
   const { data: link, isLoading, isError, refetch } = useQuery({
     queryKey,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pending_invites")
-        .select("id, invite_token, created_at, metadata")
-        .eq("club_id", clubId)
-        .eq("role", MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.role as any)
-        .eq("status", "pending")
-        .contains("metadata", { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId })
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return (data?.[0] as JoinLinkRow | undefined) ?? null;
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("pending_invites")
+            .select("id, invite_token, created_at, metadata")
+            .eq("club_id", clubId)
+            .eq("role", MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.role as any)
+            .eq("status", "pending")
+            .contains("metadata", { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId })
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (error) throw error;
+          return (data?.[0] as JoinLinkRow | undefined) ?? null;
+        },
+        icp: async (ctx) => {
+          const links = await listLiveMiniLeagueJoinLinks(ctx, miniLeagueId);
+          const active = links
+            .filter((l) => l.role === "admin" && !l.revoked)
+            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))[0];
+          if (!active) return null;
+          return {
+            id: active.token,
+            invite_token: active.token,
+            created_at: new Date(Number(active.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      }),
     staleTime: 30_000,
   });
 
   const { data: pendingCount } = useQuery({
     queryKey: ["mini-league-pending-admin-count", miniLeagueId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pending_invites")
-        .select("id, metadata")
-        .eq("club_id", clubId)
-        .eq("role", MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.role as any)
-        .eq("status", "pending")
-        .not("invited_email", "is", null);
-      if (error) throw error;
-      return (data || []).filter(
-        (r) =>
-          (r.metadata as any)?.mini_league_id === miniLeagueId &&
-          (r.metadata as any)?.kind !== MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind,
-      ).length;
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("pending_invites")
+            .select("id, metadata")
+            .eq("club_id", clubId)
+            .eq("role", MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.role as any)
+            .eq("status", "pending")
+            .not("invited_email", "is", null);
+          if (error) throw error;
+          return (data || []).filter(
+            (r) =>
+              (r.metadata as any)?.mini_league_id === miniLeagueId &&
+              (r.metadata as any)?.kind !== MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind,
+          ).length;
+        },
+        // Named league-admin invites are a Supabase-only flow; in ICP mode
+        // admins are granted directly or via the join link, so there are
+        // never pending named invites to count.
+        icp: async () => 0,
+      }),
     staleTime: 30_000,
   });
 
   const createOrRotate = useMutation({
     mutationFn: async ({ rotate }: { rotate: boolean }) => {
-      // NEEDS-CANISTER: mini_league_domain has create_invite/claim_invite for
-      // single-player invites, but no generic role-grant join-link shape
-      // backed by pending_invites (admin-grant / parent-join semantics).
-      assertSupabaseWritePath("mini_leagues", "creating a mini-league join link");
+      const icpResult = await withFeatureBackend("mini_leagues", {
+        supabase: async () => null as JoinLinkRow | null,
+        icp: async (ctx) => {
+          const created =
+            rotate || !link
+              ? link
+                ? await rotateLiveMiniLeagueJoinLink(ctx, miniLeagueId, "admin")
+                : await createLiveMiniLeagueJoinLink(ctx, miniLeagueId, "admin")
+              : await rotateLiveMiniLeagueJoinLink(ctx, miniLeagueId, "admin");
+          return {
+            id: created.token,
+            invite_token: created.token,
+            created_at: new Date(Number(created.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_ADMIN_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      });
+      if (icpResult) return icpResult;
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
         await supabase.from("pending_invites").delete().eq("id", link.id);
@@ -132,10 +175,15 @@ export default function MiniLeagueAdminJoinLinkCard({ miniLeagueId, miniLeagueNa
   const revoke = useMutation({
     mutationFn: async () => {
       if (!link) return;
-      // NEEDS-CANISTER: see createOrRotate above.
-      assertSupabaseWritePath("mini_leagues", "revoking a mini-league join link");
-      const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
-      if (error) throw error;
+      await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await revokeLiveMiniLeagueJoinLink(ctx, miniLeagueId, "admin");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });

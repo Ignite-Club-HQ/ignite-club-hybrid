@@ -34,6 +34,7 @@ import { getLocalLabClaimableTeam } from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
+import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink } from "@/live/features/miniLeagues";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -158,26 +159,58 @@ function SupabaseJoinTeamPage() {
   // Fetch pending invite details using RPC function (for name-restricted invites)
   const { data: pendingInviteData, isLoading: pendingInviteLoading, error: pendingInviteError, isError: pendingInviteIsError } = useQuery({
     queryKey: membershipKeys.pendingInviteToken(token),
-    queryFn: async () => {
-      console.log("[JoinTeam] Fetching pending invite for token:", token);
-      try {
-        const { data, error } = await supabase
-          .rpc("get_pending_invite_by_token", { _token: token! });
-        console.log("[JoinTeam] RPC response:", { data, error });
-        if (error) {
-          console.error("[JoinTeam] RPC error:", error);
-          throw error;
-        }
-        if (data && data.length > 0) {
-          return data[0];
-        }
-        console.log("[JoinTeam] No invite found for token");
-        return null;
-      } catch (err) {
-        console.error("[JoinTeam] Exception fetching invite:", err);
-        throw err;
-      }
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          console.log("[JoinTeam] Fetching pending invite for token:", token);
+          try {
+            const { data, error } = await supabase
+              .rpc("get_pending_invite_by_token", { _token: token! });
+            console.log("[JoinTeam] RPC response:", { data, error });
+            if (error) {
+              console.error("[JoinTeam] RPC error:", error);
+              throw error;
+            }
+            if (data && data.length > 0) {
+              return data[0];
+            }
+            console.log("[JoinTeam] No invite found for token");
+            return null;
+          } catch (err) {
+            console.error("[JoinTeam] Exception fetching invite:", err);
+            throw err;
+          }
+        },
+        // ICP: /join/p/ tokens are mini-league join links minted on the
+        // mini_league_domain canister (role "admin" grants league-admin
+        // rights; role "player" adds a roster player). Resolve the token to
+        // the same row shape the Supabase RPC returns so the shared join UI
+        // works unchanged.
+        icp: async (ctx) => {
+          const link = await getLiveJoinLinkByToken(ctx, token!);
+          if (!link || link.revoked) return null;
+          const league = await getLiveMiniLeague(ctx, link.mini_league_id);
+          const isAdmin = link.role === "admin";
+          return {
+            id: link.token,
+            club_id: league?.club_id ?? null,
+            team_id: null,
+            team_name: league?.name ?? "Mini league",
+            team_logo_url: null,
+            club_name: "",
+            club_logo_url: null,
+            role: isAdmin ? "league_admin" : "parent",
+            invited_label: null,
+            invited_email: null,
+            invited_by_user_id: null,
+            status: "pending",
+            metadata: {
+              mini_league_id: link.mini_league_id,
+              kind: isAdmin ? "league_admin_join_link" : "mini_league_parent_join_link",
+            },
+          };
+        },
+      }),
     enabled: !!token && isPendingInvite,
     retry: 2,
     retryDelay: 1000,
@@ -1275,7 +1308,11 @@ function SupabaseJoinTeamPage() {
         !!(pendingInviteData?.metadata as { mini_league_id?: string } | null)?.mini_league_id ||
         !!(invite && "metadata" in invite &&
           (invite.metadata as { mini_league_id?: string } | null | undefined)?.mini_league_id);
-      if (membershipIcpRouted && targetsMiniLeague) {
+      // Admin-grant mini-league join links are canister-backed: resolved via
+      // getLiveJoinLinkByToken and claimed via claim_admin_join_link below.
+      const isIcpAdminJoinLink =
+        (pendingInviteData?.metadata as { kind?: string } | null)?.kind === "league_admin_join_link";
+      if (membershipIcpRouted && targetsMiniLeague && !isIcpAdminJoinLink) {
         throw new Error(
           "Joining a mini-league isn't available for Internet Identity accounts yet. Please sign in with email/password to accept this invite.",
         );
@@ -1284,8 +1321,18 @@ function SupabaseJoinTeamPage() {
       // Named/pending invites (pending_invites table: name-restricted
       // invites, child metadata provisioning) also have no canister shape
       // yet — block them for II accounts as before. Regular shareable team
-      // invites are handled below via getLiveTeamInvite/acceptLiveTeamInvite.
+      // invites are handled below via getLiveTeamInvite/acceptLiveTeamInvite,
+      // and admin-grant mini-league join links are claimed on the canister.
       if (membershipIcpRouted && isPendingInvite) {
+        if (isIcpAdminJoinLink) {
+          return withFeatureBackend("membership", {
+            supabase: async () => ["league_admin" as AppRole],
+            icp: async (ctx) => {
+              await claimLiveAdminJoinLink(ctx, token!);
+              return ["league_admin" as AppRole];
+            },
+          });
+        }
         throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
       }
 
