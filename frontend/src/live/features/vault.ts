@@ -158,6 +158,94 @@ export async function revokeLivePiiRead(
 }
 
 /**
+ * Field-id conventions for non-vault PII records (kept in sync with the
+ * reads in homeFeed.ts / inboxPreviewSources.ts):
+ * - child name      -> pii_id = child id,        field_id = "name"
+ * - invite email    -> pii_id = invite id,       field_id = "email"
+ * - user display name -> pii_id = principal text, field_id = "display_name"
+ *
+ * Ownership: the caller who creates the record is its domain owner (the club
+ * admin acts as data controller for children they create; a user owns their
+ * own profile record). Owners grant guardians read access via
+ * `grant_pii_read`; guardians additionally self-register the verified
+ * relationship when they accept an invite (acceptParentInvite.ts).
+ */
+
+const textEncoder = new TextEncoder();
+
+/**
+ * Registers a child's name on pii_access_control and grants the parent read
+ * access. Best effort: the child record itself already exists on club_domain,
+ * so a PII failure is logged, never thrown — the grant can be retried later.
+ * The caller becomes the record's domain owner.
+ */
+export async function registerLiveChildNamePii(
+  ctx: FeatureBackendContext,
+  childId: string,
+  childName: string,
+  parent: Principal,
+): Promise<void> {
+  const owner = ctx.identity.getPrincipal();
+  try {
+    await registerLivePii(ctx, childId, "name", textEncoder.encode(childName), owner);
+    await grantLivePiiRead(ctx, childId, "name", parent);
+  } catch (error) {
+    console.error("[vault] child name PII registration failed", {
+      childId,
+      message: (error as Error)?.message,
+    });
+  }
+}
+
+/**
+ * Best-effort read grant of a child's `name` field to a newly linked
+ * guardian. Succeeds when the caller owns the record or is a verified
+ * guardian; otherwise the canister rejects it and the grant can be seeded
+ * later by the owner. Never throws.
+ */
+export async function grantLiveGuardianChildNameRead(
+  ctx: FeatureBackendContext,
+  childId: string,
+  guardian: Principal,
+): Promise<void> {
+  try {
+    await grantLivePiiRead(ctx, childId, "name", guardian);
+  } catch (error) {
+    console.error("[vault] guardian name-read grant failed", {
+      childId,
+      message: (error as Error)?.message,
+    });
+  }
+}
+
+/**
+ * Registers a caller-owned free-text PII field (invite email, own display
+ * name). Best effort — logged, never thrown.
+ */
+export async function registerLivePiiText(
+  ctx: FeatureBackendContext,
+  piiId: string,
+  fieldId: string,
+  text: string,
+): Promise<void> {
+  try {
+    await registerLivePii(
+      ctx,
+      piiId,
+      fieldId,
+      textEncoder.encode(text),
+      ctx.identity.getPrincipal(),
+    );
+  } catch (error) {
+    console.error("[vault] PII registration failed", {
+      piiId,
+      fieldId,
+      message: (error as Error)?.message,
+    });
+  }
+}
+
+/**
  * Folder/file metadata surface on vault_domain.
  *
  * NOTE: untested against a live canister until deployment. The canister
