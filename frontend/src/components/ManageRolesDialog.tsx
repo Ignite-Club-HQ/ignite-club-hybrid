@@ -209,17 +209,25 @@ export default function ManageRolesDialog({
             });
           }
         },
-        // No notification equivalent on the canister; add/remove the role
+        // Best-effort in-app notification via notification_queue — a
+        // notification failure must not roll back the role changes.
+        icp: async (ctx) => {
+
+          try {
+            const parts: string[] = [];
+            if (additions.length > 0) {
+            if (removals.length > 0) {
+              parts.push(
+              );
+            if (parts.length > 0) {
+              await fanOutLiveNotifications(ctx, {
+                userIds: [userId],
+                clubId,
+                kind: "membership",
+                relatedId: teamId,
+            console.error("Failed to send ICP notification:", e);
         // grants per role change (team-scoped).
         icp: async (ctx) => {
-          const user = Principal.fromText(userId);
-          for (const r of additions) {
-            await addLiveRoleGrant(ctx, user, clubId, r.value, teamId);
-          }
-          for (const r of removals) {
-            await removeLiveRoleGrant(ctx, user, clubId, r.role, teamId);
-          }
-        },
       });
 
       // Invalidate the affected user's role cache (e.g. team_admin gained/lost).

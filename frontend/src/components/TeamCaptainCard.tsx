@@ -103,6 +103,21 @@ export default function TeamCaptainCard({
         },
         icp: async (ctx) => {
           await addLiveTeamCaptain(ctx, clubId, teamId, Principal.fromText(selectedUserId));
+          // Best-effort in-app notification via notification_queue — a
+          // notification failure must not roll back the captain assignment.
+          try {
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await fanOutLiveNotifications(ctx, {
+              userIds: [selectedUserId],
+              clubId,
+              kind: "membership",
+              body: `You are now Captain of ${teamName} and can help manage the team`,
+              idempotencyKeyPrefix: `captain-assignment-${selectedUserId}-${teamId}-${Date.now()}`,
+              relatedId: teamId,
+            });
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
         },
       });
     },

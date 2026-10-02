@@ -21,7 +21,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { saveLiveMembershipTeam, addLiveRoleGrant } from "@/live/features/membership";
+import { saveLiveMembershipTeam, addLiveRoleGrant, getLiveMyRoleGrants } from "@/live/features/membership";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
@@ -92,24 +93,32 @@ export default function CreateTeamPage() {
     queryKey: ["is-club-admin", clubId, user?.id, providerKey],
     queryFn: async () => {
       if (useIcpLab) return true;
-      // Check for app_admin role
-      const { data: appAdminRole } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      if (appAdminRole) return true;
-      
-      // Check for club_admin role for this club
-      const { data: clubAdminRole } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("club_id", clubId!)
-        .eq("role", "club_admin")
-        .maybeSingle();
-      return !!clubAdminRole;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          // Check for app_admin role
+          const { data: appAdminRole } = await supabase
+            .from("user_roles")
+            .select("id")
+            .eq("user_id", user!.id)
+            .eq("role", "app_admin")
+            .maybeSingle();
+          if (appAdminRole) return true;
+          
+          // Check for club_admin role for this club
+          const { data: clubAdminRole } = await supabase
+            .from("user_roles")
+            .select("id")
+            .eq("user_id", user!.id)
+            .eq("club_id", clubId!)
+            .eq("role", "club_admin")
+            .maybeSingle();
+          return !!clubAdminRole;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(g => g.role === "club_admin" && g.club_id === clubId!);
+        }
+      });
     },
     enabled: !!clubId && !!user,
   });
@@ -135,6 +144,7 @@ export default function CreateTeamPage() {
     queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return null;
+      if (isFeatureRoutedToIcp("membership")) return null; // NEEDS-CANISTER: club subscriptions not yet on canister
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -150,6 +160,7 @@ export default function CreateTeamPage() {
     queryKey: ["team-folders", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return [];
+      if (isFeatureRoutedToIcp("membership")) return []; // NEEDS-CANISTER: team folders not yet on canister
       const { data, error } = await supabase
         .from("team_folders")
         .select("*")
@@ -227,13 +238,16 @@ export default function CreateTeamPage() {
     setSaving(true);
 
     // Check for duplicate team name in the same club
-    const { data: existingTeam } = await supabase
-      .from("teams")
-      .select("id")
-      .eq("club_id", clubId!)
-      .is("deleted_at", null)
-      .ilike("name", name.trim())
-      .maybeSingle();
+    const { data: existingTeam } = await withFeatureBackend("membership", {
+      supabase: async () => supabase
+        .from("teams")
+        .select("id")
+        .eq("club_id", clubId!)
+        .is("deleted_at", null)
+        .ilike("name", name.trim())
+        .maybeSingle(),
+      icp: async () => ({ data: null }), // NEEDS-CANISTER: duplicate name check not yet available on canister
+    });
 
     if (existingTeam) {
       setSaving(false);
@@ -395,11 +409,63 @@ export default function CreateTeamPage() {
     // equivalents — provisional until then.
     const membershipOnIcp = isFeatureRoutedToIcp("membership");
 
-    // Upload logo to storage if one was selected
-    if (logoFile && !membershipOnIcp) {
+        // Upload logo to storage if one was selected
+    if (logoFile) {
       try {
         const fileExt = logoFile.name.split('.').pop();
         const fileName = `${clubId}/${team.id}/${Date.now()}.${fileExt}`;
+        const storagePath = `club-logos/${fileName}`;
+
+        const blobUpload = await tryUploadMediaToBlobStore({
+          storagePath,
+          file: logoFile,
+          mime: logoFile.type,
+        });
+
+        if (blobUpload) {
+          // If membership is on ICP, the team lives on the canister, but
+          // logo_url was already saved in saveLiveMembershipTeam if it was
+          // available. Wait, in CreateTeamPage, saveLiveMembershipTeam is
+          // called BEFORE logo upload.
+          // Actually, saveLiveMembershipTeam takes logo_url: [].
+          // So we need to update it if it's on ICP.
+          if (membershipOnIcp) {
+            await withFeatureBackend("membership", {
+              supabase: async () => {}, // No-op
+              icp: async (ctx) => {
+                const { getLiveTeam, saveLiveTeam } = await import("@/live/features/club");
+                const existing = await getLiveTeam(ctx, team.id);
+                if (existing[0]) {
+                  await saveLiveTeam(ctx, { ...existing[0], logo_url: [blobUpload.url] });
+                }
+              }
+            });
+          } else {
+            await supabase
+              .from("teams")
+              .update({ logo_url: blobUpload.url })
+              .eq("id", team.id);
+          }
+        } else if (!membershipOnIcp) {
+          const { error: uploadError } = await supabase.storage
+            .from('club-logos')
+            .upload(fileName, logoFile, { upsert: true });
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage
+              .from('club-logos')
+              .getPublicUrl(fileName);
+
+            await supabase
+              .from("teams")
+              .update({ logo_url: urlData.publicUrl })
+              .eq("id", team.id);
+          }
+        }
+      } catch (error) {
+        console.error('Team logo upload error:', error);
+      }
+    }/${team.id}/${Date.now()}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('club-logos')

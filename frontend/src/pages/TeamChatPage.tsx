@@ -193,7 +193,7 @@ export default function TeamChatPage() {
   // Mark team message notifications as read when opening this thread.
   // Uses optimistic + fire-and-forget to clear the bell badge immediately.
   useEffect(() => {
-    if (useIcpLab || !user || !teamId) return;
+    if (useIcpLab || !user || !teamId || resolveAuthBackend() === "icp") return;
     markChatScopeNotificationsRead({
       userId: user.id,
       scope: { kind: "team", teamId },
@@ -1170,7 +1170,7 @@ export default function TeamChatPage() {
   // pushes can arrive before the latest query contains the new row, especially
   // on Android cold-starts, so replace first paint with a small target window.
   useEffect(() => {
-    if (!targetMessageId || !teamId || !authReady || useIcpLab) return;
+    if (!targetMessageId || !teamId || !authReady || useIcpLab || resolveAuthBackend() === "icp") return;
     let cancelled = false;
 
     const hydrateTargetWindow = async () => {
@@ -1235,7 +1235,7 @@ export default function TeamChatPage() {
   }, [teamId, teamRealtimeMode, teamPollIntervalMs, queryClient, useIcpLab]);
 
   useEffect(() => {
-    if (!teamId || useIcpLab) return;
+    if (!teamId || useIcpLab || resolveAuthBackend() === "icp") return;
     if (teamRealtimeMode === "polling") return;
 
     const channel = supabase

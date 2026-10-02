@@ -43,7 +43,7 @@ export default function MyRolesPage() {
     return <IcpMyRolesPage />;
   }
 
-  return <SupabaseMyRolesPage />;
+  return <HybridMyRolesPage />;
 }
 
 function IcpMyRolesPage() {
@@ -131,7 +131,7 @@ function IcpMyRolesPage() {
   );
 }
 
-function SupabaseMyRolesPage() {
+function HybridMyRolesPage() {
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
   const navigate = useNavigate();

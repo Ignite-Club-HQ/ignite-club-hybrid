@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SPORT_EMOJIS, getSportEmoji, isClassModeSport, isTeamOnlySport } from "@/lib/sportEmojis";
 import { shouldUseNativePicker, pickNativePhoto } from "@/lib/nativePhotoPicker";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
@@ -122,14 +124,30 @@ export default function EditClubPage() {
 
       const ext = mimeToExtension(result.mimeType);
       const fileName = `${id}/${Date.now()}.${ext}`;
+      const storagePath = `club-logos/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('club-logos')
-        .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
-      if (uploadError) throw uploadError;
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath,
+        file: result.blob,
+        mime: result.mimeType,
+      });
 
-      const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
-      setLogoUrl(urlData.publicUrl);
+      if (blobUpload) {
+        setLogoUrl(blobUpload.url);
+      } else {
+        // Fail closed for ICP users: if they are routed to ICP but the blob store
+        // isn't ready, they cannot upload to Supabase.
+        if (isFeatureRoutedToIcp("membership")) {
+          throw new Error("Media storage is not configured for Internet Identity accounts.");
+        }
+        const { error: uploadError } = await supabase.storage
+          .from('club-logos')
+          .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
+        setLogoUrl(urlData.publicUrl);
+      }
       toast({ title: "Logo uploaded", description: "Your club logo has been uploaded successfully." });
     } catch (error) {
       if (!isCancelledSelectionError(error)) {
@@ -157,18 +175,33 @@ export default function EditClubPage() {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${id}/${Date.now()}.${fileExt}`;
+      const storagePath = `club-logos/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('club-logos')
-        .upload(fileName, file, { upsert: true });
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath,
+        file,
+        mime: file.type,
+      });
 
-      if (uploadError) throw uploadError;
+      if (blobUpload) {
+        setLogoUrl(blobUpload.url);
+      } else {
+        // Fail closed for ICP users
+        if (isFeatureRoutedToIcp("membership")) {
+          throw new Error("Media storage is not configured for Internet Identity accounts.");
+        }
+        const { error: uploadError } = await supabase.storage
+          .from('club-logos')
+          .upload(fileName, file, { upsert: true });
 
-      const { data: urlData } = supabase.storage
-        .from('club-logos')
-        .getPublicUrl(fileName);
+        if (uploadError) throw uploadError;
 
-      setLogoUrl(urlData.publicUrl);
+        const { data: urlData } = supabase.storage
+          .from('club-logos')
+          .getPublicUrl(fileName);
+
+        setLogoUrl(urlData.publicUrl);
+      }
       toast({
         title: "Logo uploaded",
         description: "Your club logo has been uploaded successfully.",
