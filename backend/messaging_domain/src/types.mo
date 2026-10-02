@@ -58,6 +58,13 @@ module {
   // blocker -> blocked pair; enforced on DMs in both directions.
   public type BlockedUser = { blocker : Principal; blocked : Principal; created_at_ms : Nat64 };
 
+  // --- Typing indicators (ephemeral; TTL-filtered at read time) ---
+  public type TypingPing = { user : Principal; conversation_id : Text; name : Text; last_typed_ms : Nat64 };
+  public type TypingUser = { user : Principal; name : Text };
+
+  // --- Pinned messages ---
+  public type PinnedMessage = { id : Text; conversation_id : Text; message_id : Text; pinned_by : Principal; created_at_ms : Nat64 };
+
   public type State = {
     schema : Nat32;
     governor : Principal;
@@ -82,6 +89,8 @@ module {
     reactions : [Reaction];
     clubDmSettings : [ClubDmSettings];
     userMessagingSettings : [UserMessagingSettings];
+    typingPings : [TypingPing];
+    pinnedMessages : [PinnedMessage];
   };
 
   // --- Group management (roles, bulk membership, soft-delete, join requests) ---

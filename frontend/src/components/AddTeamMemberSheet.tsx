@@ -45,7 +45,8 @@ import { useAddTeamMemberSearch } from "@/hooks/useAddTeamMemberSearch";
 import { useAddExistingTeamMemberMutation } from "@/hooks/useAddExistingTeamMemberMutation";
 import { useAddPendingTeamMemberMutation } from "@/hooks/useAddPendingTeamMemberMutation";
 import { useAddBulkTeamMembersMutation } from "@/hooks/useAddBulkTeamMembersMutation";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveTeamInviteLink } from "@/live/features/club";
 
 interface BulkMember {
   id: string;
@@ -345,32 +346,42 @@ export default function AddTeamMemberSheet({ teamId, teamName, clubId, teamType 
 
   // Get or create generic invite link for the selected role (used for existing users or when no name restriction)
   const getOrCreateInviteLink = async (role: TeamRole): Promise<string> => {
-    assertSupabaseWritePath("membership", "generic role-based team_invites row (no email) has no club_domain counterpart; create_team_invite requires an email"); // NEEDS-CANISTER: generic role-based team_invites row (no email) has no club_domain counterpart; create_team_invite requires an email
-    // First check for existing invite
-    const { data: existingInvite } = await supabase
-      .from("team_invites")
-      .select("token")
-      .eq("team_id", teamId)
-      .eq("role", role)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    return withFeatureBackend("membership", {
+      supabase: async () => {
+        // First check for existing invite
+        const { data: existingInvite } = await supabase
+          .from("team_invites")
+          .select("token")
+          .eq("team_id", teamId)
+          .eq("role", role)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-    if (existingInvite?.token) {
-      return `${window.location.origin}/join/${existingInvite.token}`;
-    }
+        if (existingInvite?.token) {
+          return `${window.location.origin}/join/${existingInvite.token}`;
+        }
 
-    // Create new invite
-    const token = crypto.randomUUID();
-    const { error } = await supabase.from("team_invites").insert({
-      team_id: teamId,
-      role: role,
-      token: token,
-      created_by: user!.id,
-    } as any);
+        // Create new invite
+        const token = crypto.randomUUID();
+        const { error } = await supabase.from("team_invites").insert({
+          team_id: teamId,
+          role: role,
+          token: token,
+          created_by: user!.id,
+        } as any);
 
-    if (error) throw error;
-    return `${window.location.origin}/join/${token}`;
+        if (error) throw error;
+        return `${window.location.origin}/join/${token}`;
+      },
+      icp: async (ctx) => {
+        const link = (await createLiveTeamInviteLink(ctx, clubId, teamId, role)) as {
+          token?: string;
+        } | undefined;
+        if (!link?.token) throw new Error("Failed to create team invite link");
+        return `${window.location.origin}/join/${link.token}`;
+      },
+    });
   };
 
   const addExistingUserMutation = useAddExistingTeamMemberMutation({

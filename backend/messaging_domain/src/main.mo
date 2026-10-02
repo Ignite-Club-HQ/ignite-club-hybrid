@@ -43,6 +43,8 @@ persistent actor {
   var recapConfig : ?Types.RecapConfig;
   var presence : [Types.PresencePing];
   var blockedUsers : [Types.BlockedUser];
+  var typingPings : [Types.TypingPing];
+  var pinnedMessages : [Types.PinnedMessage];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
