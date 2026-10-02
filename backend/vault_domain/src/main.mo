@@ -216,6 +216,19 @@ persistent actor {
       canViewFolder(caller, item)))
   };
 
+  // Single-folder lookup, same visibility rule as list_folders: folders with
+  // restricted_roles are invisible to callers lacking one of those roles.
+  public query ({ caller }) func get_folder(id : Text) : async { #Ok : ?Types.VaultFolder; #Err : Text } {
+    auth(caller);
+    switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Ok(null) };
+      case (?folder) {
+        if (not canViewFolder(caller, folder)) return #Ok(null);
+        #Ok(?folder)
+      };
+    }
+  };
+
   public shared ({ caller }) func register_file(
     id : Text,
     folder_id : Text,
