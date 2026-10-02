@@ -11,6 +11,8 @@ import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabOnlineUsers } from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 export default function OnlineUsersPage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
@@ -51,17 +53,24 @@ function SupabaseOnlineUsersPage() {
   const navigate = useNavigate();
 
   const { data: isAppAdmin, isLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
+    queryKey: ["is-app-admin", user?.id, isIcp],
     queryFn: async () => {
-      // NEEDS-CANISTER: Presence and app admin checks for II
       if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("role", "app_admin")
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const grants = await myLiveRoleGrants(ctx);
+          return grants.some((g) => g.role === "app_admin");
+        },
+      });
     },
     enabled: !!user?.id,
   });
