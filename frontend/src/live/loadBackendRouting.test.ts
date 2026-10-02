@@ -127,3 +127,49 @@ describe("loadBackendRoutingConfig precedence", () => {
     expect(getBackendRoutingConfig().defaultBackend).toBe("supabase");
   });
 });
+
+describe("per-club backend overrides", () => {
+  const config: BackendRoutingConfig = {
+    ...supabaseConfig,
+    clubBackendOverrides: { "club-icp": "icp", "club-supabase": "supabase" },
+  };
+
+  it("returns null when no member club is pinned", () => {
+    expect(resolveClubBackendOverride(config, [])).toBeNull();
+    expect(resolveClubBackendOverride(config, ["club-other"])).toBeNull();
+  });
+
+  it("resolves an ICP pin and a Supabase pin", () => {
+    expect(resolveClubBackendOverride(config, ["club-icp"])).toBe("icp");
+    expect(resolveClubBackendOverride(config, ["club-supabase"])).toBe("supabase");
+  });
+
+  it("lets a Supabase pin win when a member belongs to clubs pinned both ways", () => {
+    expect(resolveClubBackendOverride(config, ["club-icp", "club-supabase"])).toBe("supabase");
+  });
+
+  it("a club pin wins over country rules and the global default", () => {
+    expect(resolveBackendForUser(config, "AU", ["club-supabase"], true)).toBe("supabase");
+    expect(resolveBackendForUser(config, null, ["club-icp"], true)).toBe("icp");
+  });
+
+  it("keeps the ICP safety net: an ICP pin still falls back without canisters", () => {
+    expect(resolveBackendForUser(config, null, ["club-icp"], false)).toBe("supabase");
+  });
+
+  it("falls back to country rules when no member club is pinned", () => {
+    expect(resolveBackendForUser(icpConfig, "AU", ["club-other"], true)).toBe("icp");
+    expect(resolveBackendForUser(icpConfig, "US", [], true)).toBe("icp");
+  });
+
+  it("round-trips the cached club backend hint", () => {
+    expect(readCachedClubBackendHint()).toBeNull();
+    cacheClubBackendHint("icp");
+    expect(readCachedClubBackendHint()).toBe("icp");
+    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBe("icp");
+    cacheClubBackendHint("supabase");
+    expect(readCachedClubBackendHint()).toBe("supabase");
+    cacheClubBackendHint(null);
+    expect(readCachedClubBackendHint()).toBeNull();
+  });
+});

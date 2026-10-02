@@ -79,3 +79,52 @@ describe("resolveAuthBackend", () => {
     expect(resolveAuthBackend()).toBe("supabase");
   });
 });
+
+describe("resolveAuthBackend with per-club overrides", () => {
+  const clubPinnedConfig = {
+    defaultBackend: "supabase" as const,
+    countryRules: {},
+    targets: [],
+    countryTargets: {},
+    clubBackendOverrides: { "club-icp": "icp" as const, "club-supabase": "supabase" as const },
+  };
+
+  it("shows ICP auth when a member club is pinned to ICP and canisters exist", () => {
+    applyBackendRoutingConfig(clubPinnedConfig);
+    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
+    setUserClubIds(["club-icp"]);
+    expect(resolveAuthBackend()).toBe("icp");
+    expect(useIcpAuthScreen()).toBe(true);
+  });
+
+  it("keeps Supabase auth when a member club is pinned to ICP but no canisters exist", () => {
+    applyBackendRoutingConfig(clubPinnedConfig);
+    setUserClubIds(["club-icp"]);
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+
+  it("a Supabase club pin wins over an ICP-only country rule", () => {
+    applyBackendRoutingConfig({ ...clubPinnedConfig, countryRules: { DE: "icp" as const } });
+    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
+    setProfileCountry("DE");
+    setUserClubIds(["club-supabase"]);
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+
+  it("pre-auth falls back to the cached club backend hint", () => {
+    applyBackendRoutingConfig(clubPinnedConfig);
+    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
+    cacheClubBackendHint("icp");
+    expect(resolveAuthBackend()).toBe("icp");
+    cacheClubBackendHint("supabase");
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+
+  it("live membership ids take precedence over a stale cached hint", () => {
+    applyBackendRoutingConfig(clubPinnedConfig);
+    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
+    cacheClubBackendHint("icp");
+    setUserClubIds(["club-supabase"]);
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+});
