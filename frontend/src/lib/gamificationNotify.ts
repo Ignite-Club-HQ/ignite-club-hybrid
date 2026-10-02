@@ -33,6 +33,7 @@ export async function sendGamificationNotification({
   relatedId?: string | null;
   /** related_id used for the dedup lookup; null = dedup on type alone. */
   dedupRelatedId?: string | null;
+  /** Dedup window in hours; 0 = no dedup (mirrors undeduped callers). */
   dedupHours: number;
   /** ICP-only dedup aid: require the recent inbox body to contain this. */
   dedupBodyMatch?: string | null;
@@ -40,17 +41,19 @@ export async function sendGamificationNotification({
   const insertRelatedId = relatedId ?? clubId;
   await withFeatureBackend("notifications", {
     supabase: async () => {
-      const since = new Date(Date.now() - dedupHours * 3_600_000).toISOString();
-      let query = supabase
-        .from("notifications")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("type", kind)
-        .gte("created_at", since)
-        .limit(1);
-      if (dedupRelatedId) query = query.eq("related_id", dedupRelatedId);
-      const { data: recentNotif } = await query;
-      if (recentNotif && recentNotif.length > 0) return;
+      if (dedupHours > 0) {
+        const since = new Date(Date.now() - dedupHours * 3_600_000).toISOString();
+        let query = supabase
+          .from("notifications")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("type", kind)
+          .gte("created_at", since)
+          .limit(1);
+        if (dedupRelatedId) query = query.eq("related_id", dedupRelatedId);
+        const { data: recentNotif } = await query;
+        if (recentNotif && recentNotif.length > 0) return;
+      }
       await supabase.from("notifications").insert({
         user_id: userId,
         type: kind,
@@ -60,15 +63,17 @@ export async function sendGamificationNotification({
       });
     },
     icp: async (ctx) => {
-      const inbox = await listLiveInbox(ctx, userId, clubId, 500);
-      const sinceMs = Date.now() - dedupHours * 3_600_000;
-      const dupe = inbox.some(
-        (n) =>
-          n.kind === kind &&
-          Number(n.created_at_ms) >= sinceMs &&
-          (!dedupBodyMatch || n.body.includes(dedupBodyMatch)),
-      );
-      if (dupe) return;
+      if (dedupHours > 0) {
+        const inbox = await listLiveInbox(ctx, userId, clubId, 500);
+        const sinceMs = Date.now() - dedupHours * 3_600_000;
+        const dupe = inbox.some(
+          (n) =>
+            n.kind === kind &&
+            Number(n.created_at_ms) >= sinceMs &&
+            (!dedupBodyMatch || n.body.includes(dedupBodyMatch)),
+        );
+        if (dupe) return;
+      }
       await enqueueLiveNotification(ctx, {
         id: crypto.randomUUID(),
         userId,

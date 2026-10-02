@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isLiveAppAdmin } from "@/live/features/insights";
 
 /**
  * Single authoritative source of app-admin permission detection.
@@ -22,24 +23,30 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
  * - `isAppAdmin` is `true` ONLY when the lookup resolved and found the role.
  *   Loading, error and unauthenticated states all resolve to `false`, so a
  *   failed or unresolved query can never grant privileged UI.
- * - Backend RLS remains the final authorization layer; this is UI gating only.
+ * - Backend authorization remains the final layer; this is UI gating only.
+ *
+ * Routing: Supabase checks the `user_roles` table; the ICP branch asks
+ * insights_domain's `is_app_admin` (the "admin" feature area), so an app
+ * admin signed in with Internet Identity still sees the admin tooling.
  */
 export const isAppAdminQueryKey = (userId: string | null | undefined) =>
   ["is-app-admin", userId] as const;
 
 export async function fetchIsAppAdmin(userId: string): Promise<boolean> {
-  // Admin tooling is Supabase-only by design; ICP principals have no
-  // corresponding user_roles row shape, so short-circuit to non-admin.
-  if (resolveAuthBackend() === "icp") return false;
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("role", "app_admin")
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return !!data;
+  return withFeatureBackend("admin", {
+    supabase: async () => {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("role", "app_admin")
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return !!data;
+    },
+    icp: async (ctx) => isLiveAppAdmin(ctx),
+  });
 }
 
 export interface UseIsAppAdminResult {

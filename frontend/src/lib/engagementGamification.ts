@@ -1,12 +1,24 @@
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { awardLivePoints, listLiveClubRewards, subjectForUser } from "@/live/features/points";
+import {
+  awardLivePoints,
+  getLiveLeaderboard,
+  listLiveClubRewards,
+  listLivePointsHistory,
+  subjectForUser,
+} from "@/live/features/points";
 
 /**
  * Gamification helpers that run after engagement points are awarded.
  * All functions are fire-and-forget safe.
+ *
+ * Every read/write is routed: the points branch talks to club_points_domain
+ * (or the Supabase RPCs), and every notification goes through
+ * sendGamificationNotification, which routes to notification_queue under
+ * ICP. Nothing here may touch Supabase for an Internet Identity principal.
  */
 
 type EngagementAction = 'chat_message' | 'photo_upload' | 'photo_comment';
@@ -51,6 +63,11 @@ export function buildEngagementNotification(
 
 /**
  * Checks if user's leaderboard rank improved and sends a notification.
+ *
+ * Supabase: `get_user_leaderboard_rank` RPC (all-time ignite_points order).
+ * ICP: club_points_domain `get_leaderboard` with the "all" window (any value
+ * other than "week"/"month" sums all history, matching the RPC's ordering);
+ * the user ranks by their position in the top-20 page, 0 when not ranked.
  */
 export async function checkLeaderboardPosition({
   userId,
@@ -59,56 +76,62 @@ export async function checkLeaderboardPosition({
   userId: string;
   clubId: string;
 }): Promise<void> {
-  // The canister exposes `get_leaderboard` (points-ordered, no documented "window"
-  // value list or guaranteed total ordering semantics) but no direct "this user's
-  // rank" query like the Supabase `get_user_leaderboard_rank` RPC. Scanning the full
-  // leaderboard client-side to reconstruct a rank would be guesswork against an
-  // undocumented contract, so this stays Supabase-only regardless of routing.
   try {
-    const { data: rank } = await supabase.rpc('get_user_leaderboard_rank', {
-      _user_id: userId,
-      _club_id: clubId,
+    const rank = await withFeatureBackend("points", {
+      supabase: async () => {
+        const { data } = await supabase.rpc('get_user_leaderboard_rank', {
+          _user_id: userId,
+          _club_id: clubId,
+        });
+        return (data ?? 0) as number;
+      },
+      icp: async (ctx) => {
+        const entries = await getLiveLeaderboard(ctx, clubId, "User", "all", 20);
+        const idx = entries.findIndex((e) => e.subject_id === userId);
+        return idx >= 0 ? idx + 1 : 0;
+      },
     });
 
     if (!rank || rank <= 0) return;
 
-    // Store/compare rank in a simple notification approach:
     // Only notify for top 20 positions (meaningful leaderboard territory)
     if (rank > 20) return;
-
-    // Check if we already notified for this rank recently (within 24h)
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: recentNotif } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("type", "leaderboard_update")
-      .gte("created_at", oneDayAgo)
-      .limit(1);
-
-    if (recentNotif && recentNotif.length > 0) return;
 
     const suffix = rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th';
     const emoji = rank <= 3 ? '🏆' : rank <= 10 ? '🔥' : '📈';
 
-    await supabase.from("notifications").insert({
-      user_id: userId,
-      type: "leaderboard_update",
+    await sendGamificationNotification({
+      userId,
+      clubId,
+      kind: "leaderboard_update",
       message: `${emoji} You're now #${rank}${suffix} on the leaderboard! Keep going!`,
-      related_id: clubId,
-      club_id: clubId,
+      dedupHours: 24,
     });
   } catch (error) {
     console.error("Error checking leaderboard position:", error);
   }
 }
 
+/** Points history source types that count as "engagement" for streaks. */
+const ENGAGEMENT_SOURCE_TYPES = new Set(["chat_engagement", "photo_upload", "photo_comment"]);
+
+const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 /**
  * Checks for weekly engagement streaks and awards bonus points.
  * Streak tiers:
  * - 3 days: +2 bonus pts
- * - 5 days: +3 bonus pts  
+ * - 5 days: +3 bonus pts
  * - 7 days: +5 bonus pts (full week)
+ *
+ * Supabase: `get_engagement_streak` / `try_award_streak_bonus` RPCs (atomic
+ * weekly dedup). ICP: no canister equivalent exists, so the streak is
+ * reconstructed client-side from the points history (consecutive UTC days
+ * with an engagement entry) and the weekly dedup is a best-effort history
+ * scan for a weekly_chat_streak entry inside the current ISO week —
+ * race-tolerant because this path is fire-and-forget and the award itself
+ * is additionally scope-deduped by award_points for same-day repeats.
+ * NEEDS-CANISTER: atomic streak computation + weekly dedup.
  */
 export async function checkEngagementStreak({
   userId,
@@ -118,9 +141,49 @@ export async function checkEngagementStreak({
   clubId: string;
 }): Promise<void> {
   try {
-    const { data: streak } = await supabase.rpc('get_engagement_streak', {
-      _user_id: userId,
-      _club_id: clubId,
+    const { streak, canAward } = await withFeatureBackend("points", {
+      supabase: async () => {
+        const { data: streakData } = await supabase.rpc('get_engagement_streak', {
+          _user_id: userId,
+          _club_id: clubId,
+        });
+        const s = (streakData ?? 0) as number;
+        if (s < 3) return { streak: s, canAward: false };
+        const bonus = s >= 7 ? 5 : s >= 5 ? 3 : 2;
+        const { data: awarded } = await supabase.rpc('try_award_streak_bonus', {
+          _user_id: userId,
+          _club_id: clubId,
+          _streak_length: s,
+          _bonus_points: bonus,
+        });
+        return { streak: s, canAward: !!awarded };
+      },
+      icp: async (ctx) => {
+        const page = await listLivePointsHistory(ctx, clubId, subjectForUser(userId), 0, 500);
+        const days = new Set(
+          page.items
+            .filter((i) => ENGAGEMENT_SOURCE_TYPES.has(i.source_type))
+            .map((i) => dayKey(Number(i.created_at_ms))),
+        );
+        let s = 0;
+        const cursor = new Date();
+        // No engagement yet today → the streak ending yesterday still counts.
+        if (!days.has(dayKey(cursor.getTime()))) cursor.setUTCDate(cursor.getUTCDate() - 1);
+        while (days.has(dayKey(cursor.getTime()))) {
+          s++;
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
+        }
+        // Weekly dedup: a weekly_chat_streak entry since Monday (UTC) means
+        // the bonus was already paid this week. Best-effort: the 500-item
+        // history window may not span the full week for very active users.
+        const now = new Date();
+        const mondayOffset = (now.getUTCDay() + 6) % 7;
+        const weekStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - mondayOffset);
+        const awardedThisWeek = page.items.some(
+          (i) => i.source_type === "weekly_chat_streak" && Number(i.created_at_ms) >= weekStartMs,
+        );
+        return { streak: s, canAward: s >= 3 && !awardedThisWeek };
+      },
     });
 
     if (!streak) return;
@@ -141,37 +204,18 @@ export async function checkEngagementStreak({
     } else {
       // No bonus yet — send motivation if streak is 2
       if (streak === 2) {
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const { data: recentNotif } = await supabase
-          .from("notifications")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("type", "streak_progress")
-          .gte("created_at", oneDayAgo)
-          .limit(1);
-
-        if (!recentNotif || recentNotif.length === 0) {
-          await supabase.from("notifications").insert({
-            user_id: userId,
-            type: "streak_progress",
-            message: "🔥 2-day streak! Come back tomorrow for bonus points!",
-            related_id: clubId,
-            club_id: clubId,
-          });
-        }
+        await sendGamificationNotification({
+          userId,
+          clubId,
+          kind: "streak_progress",
+          message: "🔥 2-day streak! Come back tomorrow for bonus points!",
+          dedupHours: 24,
+        });
       }
       return;
     }
 
-    // Try to award streak bonus (atomic dedup)
-    const { data: awarded } = await supabase.rpc('try_award_streak_bonus', {
-      _user_id: userId,
-      _club_id: clubId,
-      _streak_length: streak,
-      _bonus_points: bonusPoints,
-    });
-
-    if (!awarded) return; // Already awarded this week
+    if (!canAward) return; // Already awarded this week
 
     // Increment points — scoped to the club
     const balanceAfter = await withFeatureBackend("points", {
@@ -213,12 +257,12 @@ export async function checkEngagementStreak({
     });
 
     // Send notification
-    await supabase.from("notifications").insert({
-      user_id: userId,
-      type: "streak_bonus",
+    await sendGamificationNotification({
+      userId,
+      clubId,
+      kind: "streak_bonus",
       message: `🔥 ${streakLabel} streak! +${bonusPoints} bonus reward points!`,
-      related_id: clubId,
-      club_id: clubId,
+      dedupHours: 0,
     });
 
     // Check reward thresholds
@@ -280,25 +324,15 @@ export async function checkRewardProximity({
     // Only alert if within 20% of the reward
     if (pointsNeeded > threshold) return;
 
-    // Don't spam — check if we already sent a proximity alert for this reward recently
-    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: recentNotif } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("type", "reward_proximity")
-      .eq("related_id", nextReward.id)
-      .gte("created_at", twoDaysAgo)
-      .limit(1);
-
-    if (recentNotif && recentNotif.length > 0) return;
-
-    await supabase.from("notifications").insert({
-      user_id: userId,
-      type: "reward_proximity",
+    await sendGamificationNotification({
+      userId,
+      clubId,
+      kind: "reward_proximity",
       message: `🎁 Only ${pointsNeeded} points from unlocking "${nextReward.name}"! Keep engaging!`,
-      related_id: nextReward.id,
-      club_id: clubId,
+      relatedId: nextReward.id,
+      dedupRelatedId: nextReward.id,
+      dedupHours: 48,
+      dedupBodyMatch: nextReward.name,
     });
   } catch (error) {
     console.error("Error checking reward proximity:", error);
