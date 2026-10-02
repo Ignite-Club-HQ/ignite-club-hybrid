@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import LegalPageEmbed from "@/components/LegalPageEmbed";
 import { Button } from "@/components/ui/button";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
 
 /**

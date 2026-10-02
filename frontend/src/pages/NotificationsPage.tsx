@@ -23,6 +23,7 @@ import { resolveTeamInviteRoute } from "@/lib/resolveNotificationRoute";
 import { filterClubScopedNotifications } from "@/lib/filterClubScopedNotifications";
 import { setPendingChatJump, withChatJumpNonce, type ChatJumpKind } from "@/lib/pendingChatJump";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   chatTargetPath,
   resolveChatTargetForMessageId,

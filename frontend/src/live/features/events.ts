@@ -652,9 +652,13 @@ export async function adminUpsertLiveChild(
   name: string,
   parentId?: string | null,
 ) {
+  // events_domain Child records are nameless (PII hardening); the name lives
+  // on pii_access_control under pii_id=child id and is registered by the
+  // caller (registerLiveChildNamePii), never sent to the canister.
+  void name;
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.admin_upsert_child(id, name, candidOpt(parentId)),
+    actor.admin_upsert_child(id, candidOpt(parentId)),
     "Upsert child",
   );
 }
@@ -1462,7 +1466,7 @@ export async function saveLiveGamePlayerStats(
 
 export async function listLiveGamePlayerStats(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const stats = unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats") as Array<{
+  const stats = unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats") as unknown as Array<{
     fill_in_player_name: [] | [string];
     [key: string]: unknown;
   }>;
@@ -1524,7 +1528,7 @@ export async function saveLiveGameResult(
 
 export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(actor.get_game_result(eventId), "Get game result") as
+  const result = unwrapCandid(actor.get_game_result(eventId), "Get game result") as unknown as
     | []
     | [{ mvp_player_name: [] | [string]; [key: string]: unknown }];
   if (result.length === 0) return result;

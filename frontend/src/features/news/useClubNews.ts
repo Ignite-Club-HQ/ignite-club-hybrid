@@ -192,7 +192,7 @@ export function useNewsPublishableClubs() {
         },
         icp: async (ctx) => {
           const grants = await getLiveMyRoleGrants(ctx);
-          const adminClubIds = Array.from(new Set(grants.filter(g => g.role === "club_admin").map(g => g.club_id)));
+          const adminClubIds = Array.from(new Set(grants.filter(g => g.role === "club_admin").flatMap(g => g.club)));
           if (adminClubIds.length === 0) return [];
           const clubs = await listLiveMembershipClubs(ctx);
           return clubs.filter(c => adminClubIds.includes(c.id)).map(c => ({ id: c.id, name: c.name }));

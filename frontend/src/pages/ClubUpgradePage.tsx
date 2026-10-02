@@ -179,7 +179,7 @@ export default function ClubUpgradePage() {
         },
         icp: async (ctx) => {
           const grants = await getLiveMyRoleGrants(ctx);
-          return grants.some(g => (g.role === "club_admin" || g.role === "app_admin") && g.club_id === clubId!);
+          return grants.some(g => (g.role === "club_admin" || g.role === "app_admin") && (g.club[0] ?? null) === clubId!);
         }
       });
     },

@@ -162,14 +162,14 @@ function HybridMyRolesPage() {
       icp: async (ctx) => {
         const grants = await myLiveRoleGrants(ctx);
         return grants.map(g => ({
-          id: `${g.club_id}-${g.role}-${g.team_id[0] || 'global'}`,
+          id: `${g.club[0] ?? "global"}-${g.role}-${g.team[0] || 'global'}`,
           role: g.role,
-          club_id: g.club_id,
-          team_id: g.team_id[0] || null,
+          club_id: g.club[0] ?? null,
+          team_id: g.team[0] || null,
           // ICP roles don't carry club/team names in the grant record yet.
           // Fallback to placeholders; richer name hydration belongs in a hook.
-          clubs: { id: g.club_id, name: "Club", logo_url: null },
-          teams: g.team_id[0] ? { id: g.team_id[0], name: "Team", club_id: g.club_id, clubs: { name: "Club" } } : null
+          clubs: { id: g.club[0] ?? "", name: "Club", logo_url: null },
+          teams: g.team[0] ? { id: g.team[0], name: "Team", club_id: g.club[0] ?? null, clubs: { name: "Club" } } : null
         }));
       }
     }),

@@ -15,6 +15,7 @@ import { useMemo } from "react";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isLocalCompetitionCanisterUnavailable, listLocalCompetitions } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { listLiveCompetitions, listLiveCompetitionsMulti } from "@/live/features/competitions";
 import { listLiveMembershipClubs } from "@/live/features/membership";
 
@@ -116,7 +117,6 @@ function SupabaseCompetitionsPage() {
   const { data: adminClubs = [] } = useQuery({
     queryKey: ["competitions-admin-clubs", user?.id],
     enabled: !isIcp && !!user,
-    enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase
         .from("user_roles")

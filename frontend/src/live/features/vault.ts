@@ -39,9 +39,11 @@ export async function getLiveEncryptedPii(
   ctx: FeatureBackendContext,
   piiId: string,
   fieldId: string,
+  operation = "read_pii",
+  purpose = "Read PII field",
 ) {
-  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_encrypted_pii(piiId, fieldId), "Get encrypted PII");
+  const rows = await getLiveEncryptedPiiBatch(ctx, [piiId], fieldId, operation, purpose);
+  return rows.find((row) => row.pii_id === piiId) ?? null;
 }
 
 /**

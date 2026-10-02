@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { compressImage } from "@/lib/imageCompression";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 
 // Import all gallery icons
 import wolfIcon from "@/assets/points-icons/wolf.png";
@@ -128,6 +128,7 @@ export function PointsIconGallery({ clubId, currentIconUrl, onIconSelect }: Poin
         })}
 
         {/* Custom upload */}
+        {!isIcpMediaUploadUnavailable() && (
         <label className="flex flex-col items-center gap-1 p-1.5 rounded-lg border-2 border-dashed border-muted-foreground/30 hover:border-primary cursor-pointer transition-colors">
           {uploadingIcon ? (
             <div className="h-9 w-9 flex items-center justify-center">
@@ -178,6 +179,7 @@ export function PointsIconGallery({ clubId, currentIconUrl, onIconSelect }: Poin
             }}
           />
         </label>
+        )}
       </div>
     </div>
   );

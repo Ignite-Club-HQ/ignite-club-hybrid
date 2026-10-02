@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Reply, Pencil, Trash2, Flag, ShieldAlert, MoreHorizontal, ChevronLeft, Copy, Link, ExternalLink, ImageIcon, Check, Pin, PinOff, ImagePlus, Loader2, Forward } from "lucide-react";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { stripMentionFormatting } from "@/lib/messagePreview";
 import {
   Sheet,
@@ -260,8 +261,9 @@ export function MessageActionSheet({
     }
   }
 
-  // Publish to media gallery
-  if (canPublishToGallery && hasImage && onPublishToGallery) {
+  // Publish to media gallery — hidden entirely for Internet Identity
+  // members (NEEDS-CANISTER: no media_domain publish equivalent yet).
+  if (canPublishToGallery && hasImage && onPublishToGallery && !isFeatureRoutedToIcp("media")) {
     const label = isPublishingToGallery
       ? "Publishing…"
       : isPublishedToGallery

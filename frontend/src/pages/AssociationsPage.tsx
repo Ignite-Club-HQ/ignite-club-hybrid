@@ -77,7 +77,7 @@ function SupabaseAssociationsPage() {
           const grants = await getLiveMyRoleGrants(ctx);
           const associationAdminClubIds = grants
             .filter(g => g.role === "association_admin")
-            .map(g => g.club_id);
+            .flatMap(g => g.club);
           
           if (associationAdminClubIds.length === 0) return [];
           

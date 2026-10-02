@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
@@ -972,7 +972,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 locked?: boolean;
               };
               const actions: Action[] = [];
-              actions.push({
+              if (!isIcpMediaUploadUnavailable()) actions.push({
                 key: "photo",
                 label: "Photo / Video",
                 hint: "Camera roll",
@@ -985,7 +985,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
                 },
               });
 
-              if (showVaultPicker && clubId) {
+              if (showVaultPicker && clubId && !isIcpMediaUploadUnavailable()) {
                 actions.push({
                   key: "file",
                   label: "File or Folder",

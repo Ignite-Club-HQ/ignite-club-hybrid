@@ -116,7 +116,7 @@ export default function CreateTeamPage() {
         },
         icp: async (ctx) => {
           const grants = await getLiveMyRoleGrants(ctx);
-          return grants.some(g => g.role === "club_admin" && g.club_id === clubId!);
+          return grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId!);
         }
       });
     },
@@ -192,6 +192,19 @@ export default function CreateTeamPage() {
     reader.readAsDataURL(file);
   };
 
+
+  // Non-admin team requests have no canister counterpart — hide the whole
+  // form for ICP-routed clubs rather than offering a submit that fails.
+  if (!isClubAdmin && isFeatureRoutedToIcp("membership") && !useIcpLab) {
+    return (
+      <div className="container max-w-lg mx-auto px-4 py-12 text-center space-y-3">
+        <h1 className="text-xl font-semibold">Team requests</h1>
+        <p className="text-muted-foreground">
+          Ask a club admin to create the team directly.
+        </p>
+      </div>
+    );
+  }
 
   const handleSubmit = async () => {
     const label = entityLabelLower(club);

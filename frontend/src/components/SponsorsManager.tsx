@@ -19,7 +19,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { 
   Plus, 
   Pencil, 
@@ -582,12 +582,14 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
                     {name.charAt(0).toUpperCase() || "S"}
                   </AvatarFallback>
                 </Avatar>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleLogoChange}
-                  className="max-w-[200px]"
-                />
+                {!isIcpMediaUploadUnavailable() && (
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoChange}
+                    className="max-w-[200px]"
+                  />
+                )}
               </div>
             </div>
 

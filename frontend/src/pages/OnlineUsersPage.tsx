@@ -9,6 +9,7 @@ import OnlineUsersTab from "@/components/admin/OnlineUsersTab";
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabOnlineUsers } from "@/lab/fixtureDataLayer";
 
 export default function OnlineUsersPage() {
