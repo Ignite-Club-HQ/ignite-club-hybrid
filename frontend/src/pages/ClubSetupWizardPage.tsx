@@ -34,6 +34,7 @@ import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams } from "@/live/features/club";
+import { candidOpt } from "@/live/features/candid";
 import { addLiveRoleGrant, createLivePendingInvite } from "@/live/features/membership";
 import { Principal } from "@icp-sdk/core/principal";
 import {
