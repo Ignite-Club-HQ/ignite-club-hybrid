@@ -69,6 +69,20 @@ export interface MiniLeaguePlayer {
     parent_user_id?: string;
     notes?: string;
 }
+export interface PlayerGuardianStatus {
+    pending: boolean;
+    parent_linked: boolean;
+    guardian_count: bigint;
+}
+export interface MiniLeagueSessionAvailability {
+    id: string;
+    player_id: string;
+    status: string;
+    session_id: string;
+    marked_by?: Principal;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+}
 export interface MiniLeagueGroup {
     id: string;
     linked_event_id?: string;
@@ -80,15 +94,6 @@ export interface MiniLeagueGroup {
     ability_band?: string;
     display_order: number;
     target_size: number;
-}
-export interface MiniLeagueSessionAvailability {
-    id: string;
-    player_id: string;
-    status: string;
-    session_id: string;
-    marked_by?: Principal;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
 }
 export interface MiniLeague {
     id: string;
@@ -129,6 +134,15 @@ export interface MiniLeagueInvite {
     created_at_ms: bigint;
     label_text?: string;
 }
+export interface MiniLeagueJoinLink {
+    token: string;
+    mini_league_id: string;
+    revoked: boolean;
+    role: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    revision: bigint;
+}
 export interface MiniLeagueGroupDuty {
     id: string;
     status: string;
@@ -140,15 +154,6 @@ export interface MiniLeagueGroupDuty {
     assigned_to?: string;
     group_id: string;
     points?: number;
-}
-export interface MiniLeagueJoinLink {
-    token: string;
-    mini_league_id: string;
-    revoked: boolean;
-    role: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    revision: bigint;
 }
 export interface MiniLeagueSession {
     id: string;
@@ -303,6 +308,13 @@ export interface mini_league_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_player_guardian_status(player_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: PlayerGuardianStatus;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     grant_role(principal: Principal, role: string, club_id: string, team_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -320,6 +332,13 @@ export interface mini_league_domainInterface {
     join_mini_league_by_token(token: string, player_name: string): Promise<{
         __kind__: "Ok";
         Ok: ClaimedInvite;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    link_mini_league_guardian(child_id: string, guardian_user_id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -482,7 +501,7 @@ export interface mini_league_domainInterface {
         Err: string;
     }>;
 }
-import type { ClaimedInvite as _ClaimedInvite, MiniLeague as _MiniLeague, MiniLeagueAdmin as _MiniLeagueAdmin, MiniLeagueGroup as _MiniLeagueGroup, MiniLeagueGroupDuty as _MiniLeagueGroupDuty, MiniLeagueGroupPlayer as _MiniLeagueGroupPlayer, MiniLeagueInvite as _MiniLeagueInvite, MiniLeagueJoinLink as _MiniLeagueJoinLink, MiniLeaguePlayer as _MiniLeaguePlayer, MiniLeagueSession as _MiniLeagueSession, MiniLeagueSessionAvailability as _MiniLeagueSessionAvailability } from "./declarations/mini_league_domain.did";
+import type { ClaimedInvite as _ClaimedInvite, MiniLeague as _MiniLeague, MiniLeagueAdmin as _MiniLeagueAdmin, MiniLeagueGroup as _MiniLeagueGroup, MiniLeagueGroupDuty as _MiniLeagueGroupDuty, MiniLeagueGroupPlayer as _MiniLeagueGroupPlayer, MiniLeagueInvite as _MiniLeagueInvite, MiniLeagueJoinLink as _MiniLeagueJoinLink, MiniLeaguePlayer as _MiniLeaguePlayer, MiniLeagueSession as _MiniLeagueSession, MiniLeagueSessionAvailability as _MiniLeagueSessionAvailability, PlayerGuardianStatus as _PlayerGuardianStatus } from "./declarations/mini_league_domain.did";
 export class Mini_league_domain implements mini_league_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async add_admin(arg0: string, arg1: Principal): Promise<{
@@ -678,6 +697,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.get_mini_league(arg0);
         return from_candid_variant_n30(result);
     }
+    async get_player_guardian_status(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: PlayerGuardianStatus;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_player_guardian_status(arg0);
+        return from_candid_variant_n39(result);
+    }
     async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -708,6 +737,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.join_mini_league_by_token(arg0, arg1);
         return from_candid_variant_n22(result);
     }
+    async link_mini_league_guardian(arg0: string, arg1: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.link_mini_league_guardian(arg0, arg1);
+        return from_candid_variant_n34(result);
+    }
     async list_admins(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Array<MiniLeagueAdmin>;
@@ -716,7 +755,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_admins(arg0);
-        return from_candid_variant_n39(result);
+        return from_candid_variant_n40(result);
     }
     async list_duties(arg0: string): Promise<{
         __kind__: "Ok";
@@ -726,7 +765,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_duties(arg0);
-        return from_candid_variant_n41(result);
+        return from_candid_variant_n42(result);
     }
     async list_group_players(arg0: string): Promise<{
         __kind__: "Ok";
@@ -736,7 +775,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_group_players(arg0);
-        return from_candid_variant_n43(result);
+        return from_candid_variant_n44(result);
     }
     async list_groups(arg0: string): Promise<{
         __kind__: "Ok";
@@ -746,7 +785,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_groups(arg0);
-        return from_candid_variant_n45(result);
+        return from_candid_variant_n46(result);
     }
     async list_invites(arg0: string): Promise<{
         __kind__: "Ok";
@@ -756,7 +795,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_invites(arg0);
-        return from_candid_variant_n47(result);
+        return from_candid_variant_n48(result);
     }
     async list_mini_league_join_links(arg0: string): Promise<{
         __kind__: "Ok";
@@ -766,11 +805,11 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_mini_league_join_links(arg0);
-        return from_candid_variant_n49(result);
+        return from_candid_variant_n50(result);
     }
     async list_mini_leagues_by_club(arg0: string): Promise<Array<MiniLeague>> {
         const result = await this.actor.list_mini_leagues_by_club(arg0);
-        return from_candid_vec_n50(result);
+        return from_candid_vec_n51(result);
     }
     async list_players(arg0: string): Promise<{
         __kind__: "Ok";
@@ -780,7 +819,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_players(arg0);
-        return from_candid_variant_n51(result);
+        return from_candid_variant_n52(result);
     }
     async list_session_availability(arg0: string): Promise<{
         __kind__: "Ok";
@@ -790,7 +829,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_session_availability(arg0);
-        return from_candid_variant_n53(result);
+        return from_candid_variant_n54(result);
     }
     async list_sessions(arg0: string): Promise<{
         __kind__: "Ok";
@@ -800,15 +839,15 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_sessions(arg0);
-        return from_candid_variant_n55(result);
+        return from_candid_variant_n56(result);
     }
     async my_availability(): Promise<Array<MiniLeagueSessionAvailability>> {
         const result = await this.actor.my_availability();
-        return from_candid_vec_n54(result);
+        return from_candid_vec_n55(result);
     }
     async my_leagues(): Promise<Array<MiniLeague>> {
         const result = await this.actor.my_leagues();
-        return from_candid_vec_n50(result);
+        return from_candid_vec_n51(result);
     }
     async remove_admin(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
@@ -858,7 +897,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_availability(arg0, arg1, arg2);
-        return from_candid_variant_n57(result);
+        return from_candid_variant_n58(result);
     }
     async set_mini_league_status(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1521,6 +1560,25 @@ function from_candid_variant_n35(value: {
     } : value;
 }
 function from_candid_variant_n39(value: {
+    Ok: _PlayerGuardianStatus;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: PlayerGuardianStatus;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n40(value: {
     Ok: Array<_MiniLeagueAdmin>;
 } | {
     Err: string;
@@ -1533,13 +1591,13 @@ function from_candid_variant_n39(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n40(value.Ok)
+        Ok: from_candid_vec_n41(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n41(value: {
+function from_candid_variant_n42(value: {
     Ok: Array<_MiniLeagueGroupDuty>;
 } | {
     Err: string;
@@ -1552,13 +1610,13 @@ function from_candid_variant_n41(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n42(value.Ok)
+        Ok: from_candid_vec_n43(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n43(value: {
+function from_candid_variant_n44(value: {
     Ok: Array<_MiniLeagueGroupPlayer>;
 } | {
     Err: string;
@@ -1571,13 +1629,13 @@ function from_candid_variant_n43(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n44(value.Ok)
+        Ok: from_candid_vec_n45(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n45(value: {
+function from_candid_variant_n46(value: {
     Ok: Array<_MiniLeagueGroup>;
 } | {
     Err: string;
@@ -1590,13 +1648,13 @@ function from_candid_variant_n45(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n46(value.Ok)
+        Ok: from_candid_vec_n47(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n47(value: {
+function from_candid_variant_n48(value: {
     Ok: Array<_MiniLeagueInvite>;
 } | {
     Err: string;
@@ -1609,13 +1667,13 @@ function from_candid_variant_n47(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n48(value.Ok)
+        Ok: from_candid_vec_n49(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
+function from_candid_variant_n50(value: {
     Ok: Array<_MiniLeagueJoinLink>;
 } | {
     Err: string;
@@ -1634,7 +1692,7 @@ function from_candid_variant_n49(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n51(value: {
+function from_candid_variant_n52(value: {
     Ok: Array<_MiniLeaguePlayer>;
 } | {
     Err: string;
@@ -1647,13 +1705,13 @@ function from_candid_variant_n51(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n52(value.Ok)
+        Ok: from_candid_vec_n53(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n53(value: {
+function from_candid_variant_n54(value: {
     Ok: Array<_MiniLeagueSessionAvailability>;
 } | {
     Err: string;
@@ -1666,13 +1724,13 @@ function from_candid_variant_n53(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n54(value.Ok)
+        Ok: from_candid_vec_n55(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n55(value: {
+function from_candid_variant_n56(value: {
     Ok: Array<_MiniLeagueSession>;
 } | {
     Err: string;
@@ -1685,13 +1743,13 @@ function from_candid_variant_n55(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n56(value.Ok)
+        Ok: from_candid_vec_n57(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n57(value: {
+function from_candid_variant_n58(value: {
     Ok: _MiniLeagueSessionAvailability;
 } | {
     Err: string;
@@ -1729,31 +1787,31 @@ function from_candid_variant_n7(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n40(value: Array<_MiniLeagueAdmin>): Array<MiniLeagueAdmin> {
+function from_candid_vec_n41(value: Array<_MiniLeagueAdmin>): Array<MiniLeagueAdmin> {
     return value.map((x)=>from_candid_MiniLeagueAdmin_n2(x));
 }
-function from_candid_vec_n42(value: Array<_MiniLeagueGroupDuty>): Array<MiniLeagueGroupDuty> {
+function from_candid_vec_n43(value: Array<_MiniLeagueGroupDuty>): Array<MiniLeagueGroupDuty> {
     return value.map((x)=>from_candid_MiniLeagueGroupDuty_n20(x));
 }
-function from_candid_vec_n44(value: Array<_MiniLeagueGroupPlayer>): Array<MiniLeagueGroupPlayer> {
+function from_candid_vec_n45(value: Array<_MiniLeagueGroupPlayer>): Array<MiniLeagueGroupPlayer> {
     return value.map((x)=>from_candid_MiniLeagueGroupPlayer_n13(x));
 }
-function from_candid_vec_n46(value: Array<_MiniLeagueGroup>): Array<MiniLeagueGroup> {
+function from_candid_vec_n47(value: Array<_MiniLeagueGroup>): Array<MiniLeagueGroup> {
     return value.map((x)=>from_candid_MiniLeagueGroup_n24(x));
 }
-function from_candid_vec_n48(value: Array<_MiniLeagueInvite>): Array<MiniLeagueInvite> {
+function from_candid_vec_n49(value: Array<_MiniLeagueInvite>): Array<MiniLeagueInvite> {
     return value.map((x)=>from_candid_MiniLeagueInvite_n27(x));
 }
-function from_candid_vec_n50(value: Array<_MiniLeague>): Array<MiniLeague> {
+function from_candid_vec_n51(value: Array<_MiniLeague>): Array<MiniLeague> {
     return value.map((x)=>from_candid_MiniLeague_n31(x));
 }
-function from_candid_vec_n52(value: Array<_MiniLeaguePlayer>): Array<MiniLeaguePlayer> {
+function from_candid_vec_n53(value: Array<_MiniLeaguePlayer>): Array<MiniLeaguePlayer> {
     return value.map((x)=>from_candid_MiniLeaguePlayer_n8(x));
 }
-function from_candid_vec_n54(value: Array<_MiniLeagueSessionAvailability>): Array<MiniLeagueSessionAvailability> {
+function from_candid_vec_n55(value: Array<_MiniLeagueSessionAvailability>): Array<MiniLeagueSessionAvailability> {
     return value.map((x)=>from_candid_MiniLeagueSessionAvailability_n37(x));
 }
-function from_candid_vec_n56(value: Array<_MiniLeagueSession>): Array<MiniLeagueSession> {
+function from_candid_vec_n57(value: Array<_MiniLeagueSession>): Array<MiniLeagueSession> {
     return value.map((x)=>from_candid_MiniLeagueSession_n16(x));
 }
 function to_candid_opt_n5(value: string | null): [] | [string] {

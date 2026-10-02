@@ -125,6 +125,11 @@ export interface MiniLeagueSessionAvailability {
   'updated_at_ms' : bigint,
   'created_at_ms' : bigint,
 }
+export interface PlayerGuardianStatus {
+  'pending' : boolean,
+  'parent_linked' : boolean,
+  'guardian_count' : bigint,
+}
 export interface _SERVICE {
   'add_admin' : ActorMethod<
     [string, Principal],
@@ -247,6 +252,11 @@ export interface _SERVICE {
     { 'Ok' : MiniLeague } |
       { 'Err' : string }
   >,
+  'get_player_guardian_status' : ActorMethod<
+    [string],
+    { 'Ok' : PlayerGuardianStatus } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -256,6 +266,11 @@ export interface _SERVICE {
   'join_mini_league_by_token' : ActorMethod<
     [string, string],
     { 'Ok' : ClaimedInvite } |
+      { 'Err' : string }
+  >,
+  'link_mini_league_guardian' : ActorMethod<
+    [string, Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'list_admins' : ActorMethod<

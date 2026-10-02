@@ -140,6 +140,15 @@ export const idlFactory = ({ IDL }) => {
     'message' : IDL.Text,
     'admin_notes' : IDL.Opt(IDL.Text),
   });
+  const UserActivityEntry = IDL.Record({
+    'page_path' : IDL.Text,
+    'started_at_ms' : IDL.Nat64,
+    'session_id' : IDL.Text,
+    'duration_seconds' : IDL.Nat32,
+    'user_id' : IDL.Text,
+    'club_id' : IDL.Opt(IDL.Text),
+    'page_label' : IDL.Text,
+  });
   const PerfAggregate = IDL.Record({
     'source' : IDL.Text,
     'count' : IDL.Nat32,
@@ -147,6 +156,12 @@ export const idlFactory = ({ IDL }) => {
     'p50_ms' : IDL.Nat32,
     'p95_ms' : IDL.Nat32,
     'avg_ms' : IDL.Float64,
+  });
+  const PhotoEngagementTotal = IDL.Record({
+    'views' : IDL.Nat,
+    'photo_id' : IDL.Text,
+    'comments' : IDL.Nat,
+    'reactions' : IDL.Nat,
   });
   const ClientPerfEntry = IDL.Record({
     'metric' : IDL.Text,
@@ -161,6 +176,11 @@ export const idlFactory = ({ IDL }) => {
     'surface' : IDL.Text,
     'platform' : IDL.Text,
     'duration_ms' : IDL.Nat32,
+  });
+  const PhotoEngagementKind = IDL.Variant({
+    'View' : IDL.Null,
+    'Comment' : IDL.Null,
+    'Reaction' : IDL.Null,
   });
   
   return IDL.Service({
@@ -220,6 +240,11 @@ export const idlFactory = ({ IDL }) => {
     'club_engagement_totals' : IDL.Func(
         [IDL.Text, IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : EngagementTotals, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'count_photos' : IDL.Func(
+        [IDL.Text, IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         ['query'],
       ),
     'create_ad' : IDL.Func(
@@ -317,10 +342,25 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'list_user_activity' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(UserActivityEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'my_feedback' : IDL.Func([], [IDL.Vec(Feedback)], ['query']),
     'perf_aggregate' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Nat64, IDL.Nat64],
         [IDL.Variant({ 'Ok' : PerfAggregate, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'photo_engagement_totals' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(PhotoEngagementTotal),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'record_active_user' : IDL.Func(
@@ -353,6 +393,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'record_photo_engagement' : IDL.Func(
+        [IDL.Text, PhotoEngagementKind],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_photo_upload' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'record_rsvp_completed' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -370,6 +420,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'record_sponsor_metric' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Float64, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_user_activity' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Text, IDL.Text, IDL.Nat32],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

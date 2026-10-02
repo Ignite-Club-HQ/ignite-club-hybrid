@@ -27,8 +27,14 @@ persistent actor {
   var adSettings : [Types.AppAdSetting];
   var ads : [Types.AppAd];
   var adEvents : [Types.AdEvent];
+  var photoUploads : [Types.PhotoUpload];
+  var photoEngagementEvents : [Types.PhotoEngagementEvent];
+  var userActivity : [Types.UserActivityEntry];
 
   transient let MAX_BATCH = 50;
+  // list_user_activity is capped at this many rows per call (most-recent-first)
+  // to bound message size — callers needing more must narrow since_ms/until_ms.
+  transient let MAX_ACTIVITY_LIST = 500;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
@@ -604,5 +610,80 @@ persistent actor {
       };
     };
     #Ok(result)
+  };
+  // ================= Photo counters (upload + engagement) =================
+  // Lightweight counters only — media bytes stay in Supabase. Lets the
+  // engagement analytics UI show photo upload counts and per-photo
+  // view/reaction/comment totals without this canister holding any media.
+
+  public shared ({ caller }) func record_photo_upload(club_id : Text, photo_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(photo_id)) return #Err("Invalid photo upload");
+    photoUploads := photoUploads.concat([{ photo_id; club_id; uploaded_at_ms = nowMs() }]);
+    #Ok
+  };
+
+  public shared ({ caller }) func record_photo_engagement(photo_id : Text, kind : Types.PhotoEngagementKind) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(photo_id)) return #Err("Invalid photo engagement");
+    photoEngagementEvents := photoEngagementEvents.concat([{ photo_id; kind; created_at_ms = nowMs() }]);
+    #Ok
+  };
+
+  // Count of photos uploaded to a club within [since_ms, until_ms).
+  public query ({ caller }) func count_photos(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Nat; #Err : Text } {
+    if (not isClubAdmin(caller, club_id)) return #Err("Club admin required");
+    #Ok(photoUploads.filter(func(item) = item.club_id == club_id and item.uploaded_at_ms >= since_ms and item.uploaded_at_ms < until_ms).size())
+  };
+
+  // Per-photo view/reaction/comment totals for the requested photo ids
+  // (bounded to 300 ids per call, matching the prior Supabase chunking).
+  public query ({ caller }) func photo_engagement_totals(photo_ids : [Text]) : async { #Ok : [Types.PhotoEngagementTotal]; #Err : Text } {
+    auth(caller);
+    if (photo_ids.size() == 0) return #Ok([]);
+    if (photo_ids.size() > 300) return #Err("Too many photo ids");
+    #Ok(photo_ids.map(func(photo_id : Text) : Types.PhotoEngagementTotal {
+      let matches = photoEngagementEvents.filter(func(item) = item.photo_id == photo_id);
+      {
+        photo_id;
+        views = matches.filter(func(item) = item.kind == #View).size();
+        reactions = matches.filter(func(item) = item.kind == #Reaction).size();
+        comments = matches.filter(func(item) = item.kind == #Comment).size();
+      }
+    }))
+  };
+
+  // ================= Per-session user activity log =================
+  // Records one page-view/session row (mirrors the former user_activity_logs
+  // table). `duration_seconds` is the elapsed time known at record time —
+  // callers that track start-then-update locally (as the Supabase RPC pair
+  // did) should call this once per page view with the final duration.
+
+  public shared ({ caller }) func record_user_activity(
+    user_id : Text,
+    club_id : ?Text,
+    page_path : Text,
+    page_label : Text,
+    session_id : Text,
+    duration_seconds : Nat32,
+  ) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(user_id) or not valid(page_path) or not valid(page_label) or not valid(session_id)) return #Err("Invalid activity entry");
+    userActivity := userActivity.concat([{ user_id; club_id; page_path; page_label; session_id; started_at_ms = nowMs(); duration_seconds }]);
+    #Ok
+  };
+
+  // Admin-gated page-view drill-down over [since_ms, until_ms), optionally
+  // scoped to one club. Capped at MAX_ACTIVITY_LIST (500) most-recent rows —
+  // callers needing a larger window should narrow since_ms/until_ms rather
+  // than paginate, matching this canister's other bounded list queries.
+  public query ({ caller }) func list_user_activity(club_id : ?Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.UserActivityEntry]; #Err : Text } {
+    if (not isAppAdmin(caller) and (switch (club_id) { case (?c) not isClubAdmin(caller, c); case null true })) return #Err("Admin required");
+    let matches = userActivity.filter(func(item) =
+      (club_id == null or club_id == item.club_id) and item.started_at_ms >= since_ms and item.started_at_ms < until_ms
+    );
+    let sorted = matches.sort(func(a, b) = Nat64.compare(b.started_at_ms, a.started_at_ms));
+    let end = Nat.min(MAX_ACTIVITY_LIST, sorted.size());
+    #Ok(sorted.sliceToArray(0, end))
   };
 }

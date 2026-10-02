@@ -429,6 +429,17 @@ fn get_profile() -> Outcome<Profile> {
         .ok_or("Profile not set".into())
 }
 
+/// Batch profile lookup by account id (principal text / user id), used by
+/// the frontend profile cache to resolve many ids in one round trip.
+/// Unknown ids are skipped rather than causing an error.
+#[ic_cdk::query]
+fn get_profiles_by_ids(ids: Vec<String>) -> Vec<Profile> {
+    let state = state();
+    ids.iter()
+        .filter_map(|id| state.profiles.iter().find(|p| &p.account_id == id).cloned())
+        .collect()
+}
+
 /// Case-insensitive substring search over display names — the ICP-mode
 /// counterpart of the Supabase `search_invitable_profiles` RPC, used by the
 /// "add an existing member" pickers. Returns at most `limit` (capped at 25)

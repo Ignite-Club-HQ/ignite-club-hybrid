@@ -152,6 +152,35 @@ module {
     revision : Nat64;
   };
 
+  // Mirrors the slice of public.children used by the mini-league
+  // pending-status lookup (ManagePlayersDialog) and its delete cascade:
+  // `parent_user_id` mirrors `children.parent_id`, `claimed_by` mirrors
+  // whichever principal claimed an invite bound to this child's player.
+  public type MiniLeagueChild = {
+    id : Text;
+    parent_user_id : ?Principal;
+    claimed_by : ?Principal;
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+  };
+
+  // Mirrors public.child_guardians (the columns used by the pending-status
+  // count: one row per additional parent/guardian linked to a child).
+  public type MiniLeagueGuardian = {
+    child_id : Text;
+    guardian_user_id : Principal;
+    created_at_ms : Nat64;
+  };
+
+  // Result of get_player_guardian_status(), matching exactly what
+  // ManagePlayersDialog computes client-side from Supabase's
+  // children.parent_id + child_guardians count.
+  public type PlayerGuardianStatus = {
+    parent_linked : Bool;
+    guardian_count : Nat;
+    pending : Bool;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -165,5 +194,7 @@ module {
     var availability : [MiniLeagueSessionAvailability];
     var admins : [MiniLeagueAdmin];
     var joinLinks : [MiniLeagueJoinLink];
+    var children : [MiniLeagueChild];
+    var guardians : [MiniLeagueGuardian];
   };
 }

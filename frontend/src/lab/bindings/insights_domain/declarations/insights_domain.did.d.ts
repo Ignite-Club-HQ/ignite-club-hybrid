@@ -145,6 +145,15 @@ export interface PerfSampleInput {
   'platform' : string,
   'duration_ms' : number,
 }
+export type PhotoEngagementKind = { 'View' : null } |
+  { 'Comment' : null } |
+  { 'Reaction' : null };
+export interface PhotoEngagementTotal {
+  'views' : bigint,
+  'photo_id' : string,
+  'comments' : bigint,
+  'reactions' : bigint,
+}
 export interface SponsorBenchmarkRow {
   'ctr' : number,
   'clicks' : number,
@@ -156,6 +165,15 @@ export interface SponsorPerformance {
   'metrics' : Array<{ 'metric' : string, 'value' : number }>,
   'period' : string,
   'sponsor_id' : string,
+}
+export interface UserActivityEntry {
+  'page_path' : string,
+  'started_at_ms' : bigint,
+  'session_id' : string,
+  'duration_seconds' : number,
+  'user_id' : string,
+  'club_id' : [] | [string],
+  'page_label' : string,
 }
 export interface _SERVICE {
   'ad_event_summary' : ActorMethod<
@@ -211,6 +229,11 @@ export interface _SERVICE {
   'club_engagement_totals' : ActorMethod<
     [string, bigint, bigint],
     { 'Ok' : EngagementTotals } |
+      { 'Err' : string }
+  >,
+  'count_photos' : ActorMethod<
+    [string, bigint, bigint],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'create_ad' : ActorMethod<
@@ -269,10 +292,20 @@ export interface _SERVICE {
     { 'Ok' : { 'total' : number, 'items' : Array<Feedback> } } |
       { 'Err' : string }
   >,
+  'list_user_activity' : ActorMethod<
+    [[] | [string], bigint, bigint],
+    { 'Ok' : Array<UserActivityEntry> } |
+      { 'Err' : string }
+  >,
   'my_feedback' : ActorMethod<[], Array<Feedback>>,
   'perf_aggregate' : ActorMethod<
     [string, [] | [string], bigint, bigint],
     { 'Ok' : PerfAggregate } |
+      { 'Err' : string }
+  >,
+  'photo_engagement_totals' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<PhotoEngagementTotal> } |
       { 'Err' : string }
   >,
   'record_active_user' : ActorMethod<
@@ -305,6 +338,16 @@ export interface _SERVICE {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'record_photo_engagement' : ActorMethod<
+    [string, PhotoEngagementKind],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'record_photo_upload' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'record_rsvp_completed' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -322,6 +365,11 @@ export interface _SERVICE {
   >,
   'record_sponsor_metric' : ActorMethod<
     [string, string, number, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'record_user_activity' : ActorMethod<
+    [string, [] | [string], string, string, string, number],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

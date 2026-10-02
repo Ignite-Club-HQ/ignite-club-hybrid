@@ -83,6 +83,27 @@ module {
   public type AdEvent = { id : Text; ad_id : Text; event_type : Text; context : Text; user : Principal; created_at_ms : Nat64 };
   public type AdEventSummary = { ad_id : Text; context : Text; views : Nat32; clicks : Nat32 };
 
+  // ---- Photo counters (lightweight; media bytes stay in Supabase) ----
+  // One row per uploaded photo, used to count uploads within a club/time
+  // window (count_photos) without storing any media bytes here.
+  public type PhotoUpload = { photo_id : Text; club_id : Text; uploaded_at_ms : Nat64 };
+  public type PhotoEngagementKind = { #View; #Reaction; #Comment };
+  // One row per engagement event (view/reaction/comment) keyed by photo id;
+  // summed per-kind by photo_engagement_totals.
+  public type PhotoEngagementEvent = { photo_id : Text; kind : PhotoEngagementKind; created_at_ms : Nat64 };
+  public type PhotoEngagementTotal = { photo_id : Text; views : Nat; reactions : Nat; comments : Nat };
+
+  // ---- Per-session user activity log (page-view drill-down) ----
+  public type UserActivityEntry = {
+    user_id : Text;
+    club_id : ?Text;
+    page_path : Text;
+    page_label : Text;
+    session_id : Text;
+    started_at_ms : Nat64;
+    duration_seconds : Nat32;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -100,5 +121,8 @@ module {
     var adSettings : [AppAdSetting];
     var ads : [AppAd];
     var adEvents : [AdEvent];
+    var photoUploads : [PhotoUpload];
+    var photoEngagementEvents : [PhotoEngagementEvent];
+    var userActivity : [UserActivityEntry];
   };
 }

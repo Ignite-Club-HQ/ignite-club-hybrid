@@ -124,6 +124,11 @@ export const idlFactory = ({ IDL }) => {
     'updated_at_ms' : IDL.Nat64,
     'created_at_ms' : IDL.Nat64,
   });
+  const PlayerGuardianStatus = IDL.Record({
+    'pending' : IDL.Bool,
+    'parent_linked' : IDL.Bool,
+    'guardian_count' : IDL.Nat,
+  });
   
   return IDL.Service({
     'add_admin' : IDL.Func(
@@ -267,6 +272,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_player_guardian_status' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PlayerGuardianStatus, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -280,6 +290,11 @@ export const idlFactory = ({ IDL }) => {
     'join_mini_league_by_token' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : ClaimedInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'link_mini_league_guardian' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'list_admins' : IDL.Func(
