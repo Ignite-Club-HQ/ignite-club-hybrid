@@ -171,7 +171,10 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
 
   const uploadToBucket = async (file: File, clubIdForPath: string) => {
     const ext = file.name.split(".").pop() || "bin";
-    const path = `news/${clubIdForPath}/${crypto.randomUUID()}.${ext}`;
+    // Must use the clubs/<clubId>/ prefix: the blob store's club-wide read
+    // grant is derived from that prefix — news/<clubId>/ paths would upload
+    // fine but be undecryptable for other club members.
+    const path = `clubs/${clubIdForPath}/news/${crypto.randomUUID()}.${ext}`;
     // ICP blob store: when configured + II session, bytes go on-chain.
     // NEEDS-CANISTER: with no blob store configured there is no II-safe
     // fallback (a raw Supabase Storage upload has no auth), so fail loudly
