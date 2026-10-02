@@ -1462,7 +1462,22 @@ export async function saveLiveGamePlayerStats(
 
 export async function listLiveGamePlayerStats(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats");
+  const stats = unwrapCandid(actor.list_game_player_stats(eventId), "List game player stats") as Array<{
+    fill_in_player_name: [] | [string];
+    [key: string]: unknown;
+  }>;
+  // Fill-in names are opaque PII references on the canister; resolve them
+  // best effort. An unreadable reference renders as a neutral label, never
+  // an error state; legacy plaintext rows render as-is.
+  const refs = stats
+    .map((s) => (s.fill_in_player_name.length > 0 ? s.fill_in_player_name[0] : null))
+    .filter((n): n is string => !!n && n.startsWith("fillin:"));
+  const names = await resolveNameRefs(ctx, refs, "List game player stats");
+  return stats.map((s) => {
+    const raw = s.fill_in_player_name.length > 0 ? s.fill_in_player_name[0] : null;
+    if (!raw || !raw.startsWith("fillin:")) return s;
+    return { ...s, fill_in_player_name: [names.get(raw) ?? "Fill-in player"] as [string] };
+  });
 }
 
 export interface LiveGameResultInput {
@@ -1484,6 +1499,11 @@ export async function saveLiveGameResult(
   input: LiveGameResultInput,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  // The MVP name becomes an opaque PII reference before crossing to the
+  // canister; plaintext never reaches events_domain.
+  const mvpName = input.mvpPlayerName?.trim()
+    ? await registerMvpNameRef(ctx, input, input.mvpPlayerName.trim())
+    : input.mvpPlayerName ?? null;
   return unwrapCandid(
     actor.save_game_result(
       input.teamId,
@@ -1496,7 +1516,7 @@ export async function saveLiveGameResult(
       input.periodScoresJson,
       input.playerStatsJson,
       candidOpt(input.mvpPlayerId),
-      candidOpt(input.mvpPlayerName),
+      candidOpt(mvpName),
     ),
     "Save game result",
   );
@@ -1504,7 +1524,17 @@ export async function saveLiveGameResult(
 
 export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_game_result(eventId), "Get game result");
+  const result = unwrapCandid(actor.get_game_result(eventId), "Get game result") as
+    | []
+    | [{ mvp_player_name: [] | [string]; [key: string]: unknown }];
+  if (result.length === 0) return result;
+  // The MVP name is an opaque PII reference; resolve it best effort. An
+  // unreadable reference renders as a neutral label, never an error state;
+  // legacy plaintext rows render as-is.
+  const raw = result[0].mvp_player_name.length > 0 ? result[0].mvp_player_name[0] : null;
+  if (!raw || !raw.startsWith("mvp:")) return result;
+  const names = await resolveNameRefs(ctx, [raw], "Get game result");
+  return [{ ...result[0], mvp_player_name: [names.get(raw) ?? "Player"] as [string] }];
 }
 
 export async function syncLiveActiveGame(
