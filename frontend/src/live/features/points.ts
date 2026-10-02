@@ -99,6 +99,77 @@ export async function awardLivePoints(
   );
 }
 
+/**
+ * Awards points once per (club, subject, actionType, scopeId) — the
+ * canister-side counterpart of the Supabase early_rsvp_points_awarded
+ * optimistic lock. The dedup check and the award are atomic in one update
+ * call. An "Already awarded" #Err is returned by the canister when the
+ * award was already made; callers should treat that as a no-op, not an
+ * error to surface.
+ */
+export async function awardLivePointsOnce(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  subject: Subject,
+  actionType: string,
+  scopeId: string,
+  amount: number,
+  description: string,
+  sourceId?: string | null,
+  seasonId?: string | null,
+): Promise<PointsHistoryEntry> {
+  const a = await actor(ctx);
+  return unwrapCandid(
+    a.award_points_once(
+      clubId,
+      subject,
+      actionType,
+      scopeId,
+      amount,
+      description,
+      candidOpt(sourceId ?? null),
+      candidOpt(seasonId ?? null),
+    ),
+    "Award points once",
+  );
+}
+
+/**
+ * Consecutive UTC days (ending today or yesterday) with an engagement entry
+ * — the canister-side counterpart of the Supabase `get_engagement_streak`
+ * RPC. Self-readable (and club staff) per the canister's canReadSubject rule.
+ */
+export async function getLiveEngagementStreak(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  userId: string,
+): Promise<number> {
+  const a = await actor(ctx);
+  const result = await a.get_engagement_streak(clubId, userId);
+  if ("Err" in result) throw new Error(`Get engagement streak failed: ${result.Err}`);
+  return Number(result.Ok);
+}
+
+/** Per-club points-module settings (kill switch + display name); null when unset (defaults). */
+export async function getLiveClubPointsSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<{ display_name: [] | [string]; disabled: boolean } | null> {
+  const a = await actor(ctx);
+  const row = unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
+  return row.length ? row[0] : null;
+}
+
+export async function saveLiveClubPointsSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  displayName: string | null,
+  disabled: boolean,
+): Promise<void> {
+  const a = await actor(ctx);
+  unwrapCandid(a.save_club_points_settings(clubId, candidOpt(displayName ?? null), disabled), "Save club points settings");
+}
+
 export async function getLiveUserPoints(
   ctx: FeatureBackendContext,
   clubId: string,
