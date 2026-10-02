@@ -39,6 +39,49 @@ export async function getLiveClubSettings(ctx: FeatureBackendContext, clubId: st
   return unwrapCandid(actor.get_club_settings(clubId), "Get club settings");
 }
 
+export type LiveClubSubscription = Parameters<ClubDomainActor["save_club_subscription"]>[1];
+
+/** Club subscription row (Pro flags, plan, points-module state); null when unset. Member-readable canister-side. */
+export async function getLiveClubSubscription(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<LiveClubSubscription | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const row = unwrapCandid(actor.get_club_subscription(clubId), "Get club subscription");
+  return row.length ? row[0] : null;
+}
+
+/** Governor/app-admin only canister-side; club admins cannot self-upgrade. */
+export async function saveLiveClubSubscription(
+  ctx: FeatureBackendContext,
+  subscription: LiveClubSubscription,
+): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  unwrapCandid(actor.save_club_subscription(subscription.club_id, subscription), "Save club subscription");
+}
+
+/** Case-insensitive team-name uniqueness check within a club (ignores soft-deleted teams). */
+export async function checkLiveTeamNameUnique(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  name: string,
+): Promise<boolean> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const result = await actor.check_team_name_unique(clubId, name);
+  if ("Err" in result) throw new Error(`Team name check failed: ${result.Err}`);
+  return result.Ok;
+}
+
+/** Looks up a club link by id (searches club listings); null when unknown. */
+export async function getLiveClubLink(
+  ctx: FeatureBackendContext,
+  linkId: string,
+): Promise<{ id: string; title: string; url: string } | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const row = unwrapCandid(actor.get_club_link(linkId), "Get club link");
+  return row.length ? row[0] : null;
+}
+
 export async function saveLiveClubSettings(ctx: FeatureBackendContext, settings: LiveClubSettings) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.save_club_settings(settings), "Save club settings");
