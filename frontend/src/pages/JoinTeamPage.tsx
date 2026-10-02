@@ -1843,6 +1843,19 @@ function SupabaseJoinTeamPage() {
         toast({ title: `Linked to ${addedLabel}!` });
       } else if (childName.trim()) {
         addedLabel = childName.trim();
+        // ICP: mini-league parent join links mint the roster player directly
+        // on the mini_league_domain canister (idempotent per parent + child
+        // name), replacing the children + child_mini_league_assignments writes.
+        const icpHandled = leagueLinkMiniLeagueId
+          ? await withFeatureBackend("mini_leagues", {
+              supabase: async () => false,
+              icp: async (ctx) => {
+                await joinLiveMiniLeagueByToken(ctx, token!, addedLabel);
+                return true;
+              },
+            })
+          : false;
+        if (!icpHandled) {
         // Create new child
         const { data: newChild, error: childErr } = await supabase
           .from("children")
