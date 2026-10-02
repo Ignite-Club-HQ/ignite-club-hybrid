@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { channel, removeChannel, channels } = vi.hoisted(() => ({ channel: vi.fn(), removeChannel: vi.fn(), channels: new Map<string, any>() }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { channel, removeChannel } }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  useQuery: () => ({ data: [], isLoading: false }),
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 
 import { useTypingIndicator } from "./useTypingIndicator";
 
