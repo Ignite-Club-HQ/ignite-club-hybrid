@@ -17,6 +17,7 @@ import {
   linkLiveGuardian,
 } from "@/live/features/club";
 import {
+  grantLiveClubChildNameRead,
   grantLiveGuardianChildNameRead,
   registerLiveChildNamePii,
 } from "@/live/features/vault";
@@ -313,6 +314,9 @@ export function useAddExistingTeamMemberMutation({
                     // Names live on pii_access_control, not club_domain —
                     // register the name and grant the parent read access.
                     await registerLiveChildNamePii(ctx, childId, child.name.trim(), userPrincipal);
+                    // Club-scoped read grant so coaches/members can render
+                    // the name on rosters.
+                    await grantLiveClubChildNameRead(ctx, childId, clubId);
                   }
                 }
                 if (!childId) throw new Error("No child id returned from canister");

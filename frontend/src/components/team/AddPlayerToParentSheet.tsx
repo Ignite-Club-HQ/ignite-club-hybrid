@@ -13,7 +13,7 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveChildForParentOnTeam } from "@/live/features/club";
-import { registerLiveChildNamePii } from "@/live/features/vault";
+import { grantLiveClubChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
 
 interface ParentCandidate {
   user_id: string;
@@ -174,6 +174,9 @@ export default function AddPlayerToParentSheet({
           // Names live on pii_access_control, not club_domain — register the
           // name and grant the parent read access (best effort).
           await registerLiveChildNamePii(ctx, childId, trimmed, parentPrincipal);
+          // Club-scoped read grant so coaches/members can render the name
+          // on rosters (verified live via club_domain at read time).
+          await grantLiveClubChildNameRead(ctx, childId, clubId);
           return childId;
         },
       });
