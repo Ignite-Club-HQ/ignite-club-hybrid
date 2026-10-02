@@ -17,8 +17,6 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabPlayerStatsReport } from "@/lab/fixtureDataLayer";
 
 interface Team {
   id: string;
@@ -38,38 +36,7 @@ interface GameEvent {
   opponent: string | null;
 }
 
-export default function PlayerStatsReportPage() {
-  const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
-    const report = getLocalLabPlayerStatsReport("team-icp-001");
-    return (
-      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold">Player Stats Report</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Showing a synthetic ICP lab player stats report. Exporting is disabled.
-        </p>
-        <div className="space-y-2">
-          {report.rows.map((row) => (
-            <Card key={row.user_id}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <span className="text-sm font-medium">{row.display_name}</span>
-                <span className="text-xs text-muted-foreground">{row.games_played} games · {row.goals} goals · {row.assists} assists</span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return <SupabasePlayerStatsReportPage />;
-}
+export default SupabasePlayerStatsReportPage;
 
 function SupabasePlayerStatsReportPage() {
   const { user } = useAuth();
