@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 export interface InviteDedupeMatch {
   user_id: string;
@@ -87,18 +88,26 @@ export async function lookupInvitableUserByEmail(opts: {
   const email = (opts.email ?? "").trim().toLowerCase();
   if (!isPlausibleInvitableEmail(email)) return null;
 
-  const { data, error } = await supabase.rpc("lookup_invitable_user_by_email", {
-    _email: email,
-    _club_id: opts.clubId ?? null,
-    _team_id: opts.teamId ?? null,
-    _mini_league_id: opts.miniLeagueId ?? null,
+  return withFeatureBackend("membership", {
+    supabase: async () => {
+      const { data, error } = await supabase.rpc("lookup_invitable_user_by_email", {
+        _email: email,
+        _club_id: opts.clubId ?? null,
+        _team_id: opts.teamId ?? null,
+        _mini_league_id: opts.miniLeagueId ?? null,
+      });
+
+      if (error) {
+        // Don't block the invite flow on a lookup error — just skip dedupe.
+        console.warn("[inviteEmailDedupe] lookup failed", error.message);
+        return null;
+      }
+
+      return parseDedupeResponse(data);
+    },
+    // NEEDS-CANISTER: club_domain has no email-indexed account lookup (and
+    // Internet Identity accounts have no email on file), so dedupe-by-email
+    // has no ICP equivalent — no-op and fall back to the normal invite path.
+    icp: async () => null,
   });
-
-  if (error) {
-    // Don't block the invite flow on a lookup error — just skip dedupe.
-    console.warn("[inviteEmailDedupe] lookup failed", error.message);
-    return null;
-  }
-
-  return parseDedupeResponse(data);
 }

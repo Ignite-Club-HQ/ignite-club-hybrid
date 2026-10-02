@@ -1766,7 +1766,9 @@ export default function ClubDetailPage() {
             icp: async (ctx) => {
               try {
                 const { getLiveClubSettings, saveLiveClubSettings } = await import("@/live/features/club");
-                const settings = await getLiveClubSettings(ctx, id!);
+                const settingsOpt = await getLiveClubSettings(ctx, id!);
+                const settings = settingsOpt[0];
+                if (!settings) throw new Error("Club settings not found");
                 await saveLiveClubSettings(ctx, { ...settings, [field]: checked });
                 return null;
               } catch (e) {
@@ -1786,7 +1788,6 @@ export default function ClubDetailPage() {
         return (
           <ClubSponsorsSection
             hasProAccess={hasProAccess}
-            useIcpLab={useIcpLab}
             toggleValues={{
               media_sponsors_enabled: !!(club as any)?.media_sponsors_enabled,
               media_header_sponsors_enabled: !!(club as any)?.media_header_sponsors_enabled,

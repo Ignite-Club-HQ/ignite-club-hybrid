@@ -505,7 +505,7 @@ function ChatMessageInner({
     mutationFn: async (reactionId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
         // Removing a reaction on the canister is toggling the same emoji.
-        const existing = getCurrentReactions().find((r) => r.id === reactionId);
+        const existing = (msg.reactions || []).find((r: any) => r.id === reactionId);
         if (existing) {
           await withFeatureBackend("messaging", {
             supabase: async () => {},

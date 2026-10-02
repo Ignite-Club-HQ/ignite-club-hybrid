@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Trophy, ExternalLink } from "lucide-react";
 import { detectGameBoardKind, type GameBoardKind } from "@/lib/sportDetection";
 import { BoardViewerDialog } from "./BoardViewerDialog";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface BoardLinkCardProps {
   gameId: string;
@@ -21,9 +22,14 @@ export const BoardLinkCard = memo(function BoardLinkCard({
 }: BoardLinkCardProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  // NEEDS-CANISTER: live pitch-board (active_games) has no canister
+  // counterpart. Hide the card entirely for II users instead of firing
+  // Supabase.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["board-link-card", gameId],
+    enabled: !!gameId && !isIcp,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("active_games")
@@ -35,13 +41,12 @@ export const BoardLinkCard = memo(function BoardLinkCard({
       if (error) throw error;
       return data;
     },
-    enabled: !!gameId,
     staleTime: 5 * 1000,
   });
 
   // Realtime: refresh card whenever this active_games row changes
   useEffect(() => {
-    if (!gameId) return;
+    if (!gameId || isIcp) return;
     const channel = supabase
       .channel(`board-card-${gameId}`)
       .on(
@@ -88,6 +93,8 @@ export const BoardLinkCard = memo(function BoardLinkCard({
     },
     [view]
   );
+
+  if (isIcp) return null;
 
   if (isLoading) {
     // Match loaded card height (icon column + 3 text rows + p-2.5 ≈ 80px)

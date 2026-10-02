@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Player } from "@/components/pitch/types";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -45,6 +46,13 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
     }
     // Skip mini-league event-group "teams" — they sync via event_groups.
     if (teamId.startsWith("event-group-")) {
+      setRemoteFillIns([]);
+      return;
+    }
+    // NEEDS-CANISTER: live pitch-board fill-in sync has no canister
+    // counterpart (active_games is a Supabase-only realtime feature). No-op
+    // for II users rather than firing Supabase.
+    if (resolveAuthBackend() === "icp") {
       setRemoteFillIns([]);
       return;
     }

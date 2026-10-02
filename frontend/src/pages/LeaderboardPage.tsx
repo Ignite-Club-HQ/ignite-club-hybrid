@@ -14,6 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabClubList, getLocalLabLeaderboard, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveLeaderboard, subjectForUser } from "@/live/features/points";
 
 type WindowKey = "week" | "month" | "all";
 type Scope = "club" | "team" | "teams";
@@ -52,6 +55,11 @@ export default function LeaderboardPage() {
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  // Points/rewards is routed to the club_points_domain canister per-club —
+  // when active, read the club-wide leaderboard from the canister instead of
+  // the Supabase RPCs. Team-scoped rankings have no canister equivalent yet.
+  // NEEDS-CANISTER: per-team/"teams" leaderboards and display-name joins.
+  const isIcpPoints = isFeatureRoutedToIcp("points");
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [scope, setScope] = useState<Scope>("club");
@@ -64,6 +72,7 @@ export default function LeaderboardPage() {
     queryFn: async () => {
       if (!user?.id) return [];
       if (useIcpLab) return getLocalLabClubList().map(({ id, name }) => ({ id, name }));
+      if (isIcpPoints) return []; // NEEDS-CANISTER: no cross-club membership lookup on the canister
       const { data, error } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, deleted_at)")
@@ -101,6 +110,7 @@ export default function LeaderboardPage() {
           .filter((team) => team.club_id === clubId)
           .map(({ id, name }) => ({ id, name }));
       }
+      if (isIcpPoints) return []; // NEEDS-CANISTER: team leaderboards have no canister equivalent
       const { data, error } = await supabase.rpc("list_leaderboard_teams", { _club_id: clubId });
       if (error) throw error;
       return (data ?? []) as { id: string; name: string }[];
@@ -125,6 +135,24 @@ export default function LeaderboardPage() {
         const selectedClubId = clubId ?? "club-icp-001";
         return getLocalLabLeaderboard(selectedClubId) as Row[];
       }
+      if (isIcpPoints) {
+        if (!clubId) return [];
+        const entries = await withFeatureBackend("points", {
+          supabase: () => [],
+          icp: (ctx) => getLiveLeaderboard(ctx, clubId, "User", windowKey, 50),
+        });
+        // NEEDS-CANISTER: canister entries have no display name/avatar join and
+        // no "is_viewer" flag — render by subject id only.
+        return entries.map((e, i) => ({
+          rank: i + 1,
+          user_id: e.subject_id,
+          display_name: null,
+          avatar_url: null,
+          points: e.points,
+          is_viewer: e.subject_id === user?.id,
+          hidden: false,
+        })) as Row[];
+      }
       if (scope === "club") {
         if (!clubId) return [];
         const { data, error } = await supabase.rpc("get_club_leaderboard", {
@@ -148,7 +176,7 @@ export default function LeaderboardPage() {
       }
       return [];
     },
-    enabled: scope === "club" ? !!clubId : scope === "team" ? !!teamId : false,
+    enabled: isIcpPoints ? scope === "club" && !!clubId : scope === "club" ? !!clubId : scope === "team" ? !!teamId : false,
   });
 
   // Teams ranking
@@ -166,6 +194,7 @@ export default function LeaderboardPage() {
             points: 120 - index * 20,
           }));
       }
+      if (isIcpPoints) return []; // NEEDS-CANISTER: team leaderboards have no canister equivalent
       const { data, error } = await supabase.rpc("get_teams_leaderboard", {
         _club_id: clubId,
         _window: windowKey,
@@ -174,7 +203,7 @@ export default function LeaderboardPage() {
       if (error) throw error;
       return (data ?? []) as TeamRow[];
     },
-    enabled: scope === "teams" && !!clubId,
+    enabled: scope === "teams" && !!clubId && !isIcpPoints,
   });
 
   const topRows = useMemo(() => (rows ?? []).filter((r) => r.rank <= 50 && !r.hidden), [rows]);
@@ -205,13 +234,15 @@ export default function LeaderboardPage() {
       )}
 
       {/* Scope tabs */}
-      <Tabs value={scope} onValueChange={(v) => setScope(v as Scope)} className="mb-3">
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="club"><Trophy className="h-4 w-4 mr-1.5" />Club</TabsTrigger>
-          <TabsTrigger value="teams"><Users className="h-4 w-4 mr-1.5" />Teams</TabsTrigger>
-          <TabsTrigger value="team"><Users className="h-4 w-4 mr-1.5" />My Team</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {!isIcpPoints && (
+        <Tabs value={scope} onValueChange={(v) => setScope(v as Scope)} className="mb-3">
+          <TabsList className="grid grid-cols-3 w-full">
+            <TabsTrigger value="club"><Trophy className="h-4 w-4 mr-1.5" />Club</TabsTrigger>
+            <TabsTrigger value="teams"><Users className="h-4 w-4 mr-1.5" />Teams</TabsTrigger>
+            <TabsTrigger value="team"><Users className="h-4 w-4 mr-1.5" />My Team</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {scope === "team" && (
         <div className="mb-3">

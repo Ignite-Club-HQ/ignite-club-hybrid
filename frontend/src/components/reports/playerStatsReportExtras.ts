@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Match-level context + per-player honours for the Player Stats report.
@@ -142,6 +143,10 @@ export async function fetchReportExtras(
     scorersByPlayer: {},
     totals: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 },
   };
+
+  // NEEDS-CANISTER: player-stats reporting has no canister yet — an II
+  // principal has no Supabase session, so return the empty report shape.
+  if (resolveAuthBackend() === "icp") return empty;
 
   let eventsQuery = supabase
     .from("events")
