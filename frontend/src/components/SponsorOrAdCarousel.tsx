@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, listLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
@@ -64,42 +64,49 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
         return { allowed, effectiveClubId: allowed ? activeClubFilter : null };
       }
 
-      // II users have no Supabase session (auth.getUser() returns null) and
-      // `user_roles.user_id` is uuid-typed, so there is no club to discover
-      // this way for a principal-text id. NEEDS-CANISTER: resolving "which of
-      // my clubs has the events sponsor strip enabled" without an explicit
-      // club filter has no club_domain counterpart (list_role_grants is
-      // scoped by club, not by caller-across-all-clubs).
-      if (resolveAuthBackend() === "icp") {
-        return { allowed: false, effectiveClubId: null as string | null };
-      }
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return { allowed: false, effectiveClubId: null as string | null };
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { allowed: false, effectiveClubId: null as string | null };
+          const { data: directRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user.id);
+          if (rolesError) throw rolesError;
 
-      const { data: directRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user.id);
-      if (rolesError) throw rolesError;
+          const clubIds = new Set<string>();
+          (directRoles ?? []).forEach((r: any) => { if (r.club_id) clubIds.add(r.club_id); });
+          const teamIds = (directRoles ?? []).map((r: any) => r.team_id).filter(Boolean);
+          if (teamIds.length) {
+            const { data: teams, error: teamsError } = await supabase
+              .from("teams").select("club_id").in("id", teamIds);
+            if (teamsError) throw teamsError;
+            (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
+          }
+          if (clubIds.size === 0) return { allowed: false, effectiveClubId: null as string | null };
 
-      const clubIds = new Set<string>();
-      (directRoles ?? []).forEach((r: any) => { if (r.club_id) clubIds.add(r.club_id); });
-      const teamIds = (directRoles ?? []).map((r: any) => r.team_id).filter(Boolean);
-      if (teamIds.length) {
-        const { data: teams, error: teamsError } = await supabase
-          .from("teams").select("club_id").in("id", teamIds);
-        if (teamsError) throw teamsError;
-        (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
-      }
-      if (clubIds.size === 0) return { allowed: false, effectiveClubId: null };
-
-      for (const candidateClubId of clubIds) {
-        if (await isEventsStripEnabledForClub(candidateClubId)) {
-          return { allowed: true, effectiveClubId: candidateClubId };
-        }
-      }
-      return { allowed: false, effectiveClubId: null as string | null };
+          for (const candidateClubId of clubIds) {
+            if (await isEventsStripEnabledForClub(candidateClubId)) {
+              return { allowed: true, effectiveClubId: candidateClubId };
+            }
+          }
+          return { allowed: false, effectiveClubId: null as string | null };
+        },
+        icp: async (ctx) => {
+          // Caller-scoped "which of my clubs" via my_role_grants (every club
+          // the caller holds any role in), then the same per-club strip
+          // setting read the filtered path uses.
+          const grants = await myLiveRoleGrants(ctx);
+          const clubIds = [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))];
+          for (const candidateClubId of clubIds) {
+            if (await isEventsStripEnabledForClub(candidateClubId)) {
+              return { allowed: true, effectiveClubId: candidateClubId };
+            }
+          }
+          return { allowed: false, effectiveClubId: null as string | null };
+        },
+      });
     },
     enabled: isEventsPlacement,
   });
