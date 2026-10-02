@@ -16,6 +16,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: player-stats reporting has no canister shape yet — in ICP
+// mode every query on this page is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
 
 interface Team {

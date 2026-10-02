@@ -5,6 +5,12 @@ import { RotateCcw, Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: team role management UI is not yet wired to the membership
+// canister wrappers — in ICP mode every query/mutation here is disabled so no
+// II principal reaches Supabase from this page.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
