@@ -99,6 +99,57 @@ persistent actor {
     #Ok(entry)
   };
 
+  // Entry-invite flow: the competition manager invites a team (status
+  // "invited"); an admin of that team accepts or declines. Mirrors the
+  // Supabase competition_entries status transitions read by
+  // TeamCompetitionsSection.
+  func canManageEntryTeam(caller : Principal, club_id : Text, team_id : Text) : Bool {
+    if (isGovernor(caller)) return true;
+    roles.any(func(grant) {
+      grant.user.equal(caller) and grant.competition_id == club_id and (
+        grant.role == "club_admin" or
+        ((grant.role == "team_admin" or grant.role == "coach") and grant.team_id == ?team_id)
+      )
+    })
+  };
+
+  public shared ({ caller }) func invite_team(competition_id : Text, team_id : Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    let competition_club = switch (competitions.find(func(item) = item.id == competition_id)) {
+      case (?competition) competition.club_id;
+      case null return #Err("Competition not found");
+    };
+    if (not valid(team_id)) return #Err("Invalid team");
+    if (entries.any(func(item) = item.competition_id == competition_id and item.team_id == team_id)) return #Err("Team already entered");
+    let entry : Types.TeamEntry = { competition_id; team_id; club_id = competition_club; status = "invited"; division_id = null };
+    entries := entries.concat([entry]);
+    #Ok(entry)
+  };
+
+  public shared ({ caller }) func respond_to_entry_invite(competition_id : Text, team_id : Text, accept : Bool) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    auth(caller);
+    switch (entries.find(func(item) = item.competition_id == competition_id and item.team_id == team_id)) {
+      case null { #Err("Entry invite not found") };
+      case (?current) {
+        if (current.status != "invited") return #Err("Entry invite already answered");
+        if (not canManageEntryTeam(caller, current.club_id, team_id)) return #Err("Team admin required");
+        let updated : Types.TeamEntry = { current with status = if (accept) "accepted" else "declined" };
+        entries := entries.map(func(item) = if (item.competition_id == competition_id and item.team_id == team_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public query ({ caller }) func list_entries_by_team(team_id : Text) : async { #Ok : [Types.TeamEntry]; #Err : Text } {
+    auth(caller);
+    #Ok(entries.filter(func(item) {
+      item.team_id == team_id and (
+        canManageEntryTeam(caller, item.club_id, team_id) or canManageCompetition(caller, item.competition_id)
+      )
+    }))
+  };
+
   // Assigns a registered team to a division (null clears the assignment).
   public shared ({ caller }) func assign_division(competition_id : Text, team_id : Text, division_id : ?Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
     auth(caller);
@@ -395,16 +446,16 @@ persistent actor {
     auth(caller);
     switch (findChatSettings(competition_id)) {
       case (?settings) #Ok(settings);
-      case null #Ok({ competition_id; chat_enabled = true; revision = 0 : Nat64 });
+      case null #Ok({ competition_id; chat_enabled = true; admins_only = false; revision = 0 : Nat64 });
     }
   };
 
-  public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
+  public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, admins_only : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
     auth(caller);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let current_revision : Nat64 = switch (findChatSettings(competition_id)) { case (?s) s.revision; case null 0 };
     if (current_revision != expected_revision) return #Err("Chat settings revision conflict");
-    let updated : Types.ChatSettings = { competition_id; chat_enabled; revision = current_revision + 1 };
+    let updated : Types.ChatSettings = { competition_id; chat_enabled; admins_only; revision = current_revision + 1 };
     chatSettings := chatSettings.filter(func(item) = item.competition_id != competition_id);
     chatSettings := chatSettings.concat([updated]);
     #Ok(updated)
