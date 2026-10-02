@@ -37,6 +37,9 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubPointsSettings } from "@/live/features/points";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
