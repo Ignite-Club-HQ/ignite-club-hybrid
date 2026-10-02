@@ -59,6 +59,10 @@ persistent actor {
   var seasonTeamSummaries : [Types.SeasonTeamSummary];
   var seasonPlayerStats : [Types.SeasonPlayerStat];
 
+  // Governor-set notification_queue canister id for the manual-payment fee
+  // reminder fan-out (Phase 3 F6). Fail-closed while unset.
+  var notificationQueueCanister : ?Principal;
+
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
     if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
@@ -2100,4 +2104,56 @@ persistent actor {
     }
   };
 
-};
+
+  // ---- Notification queue wiring + fee-reminder fan-out (Phase 3, F6) ----
+  public shared ({ caller }) func set_notification_queue_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    notificationQueueCanister := ?id;
+    #Ok
+  };
+
+  // Reminds every club member who has no `mark_member_paid` record for the
+  // given period/type — i.e. everyone still "pending" for that fee. Fails
+  // closed with a clear error while no notification_queue canister is
+  // configured, mirroring messaging_domain's fan-out hook.
+  public shared ({ caller }) func send_fee_reminders(club_id : Text, payment_period : Text, payment_type : Text, message : Text) : async { #Ok : Nat16; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (payment_period == "" or payment_type == "" or message == "") return #Err("Invalid reminder fields");
+    switch (notificationQueueCanister) {
+      case null { #Err("Notification queue not configured") };
+      case (?nq) {
+        var members : [Text] = [];
+        for (r in accountRoles.values()) {
+          switch (r.club) {
+            case (?c) {
+              if (c == club_id and members.size() < 500 and members.find(func(m) = m == r.account_id) == null) {
+                members := members.concat([r.account_id]);
+              };
+            };
+            case null {};
+          };
+        };
+        let pending = members.filter(func(m) = not memberPayments.any(func(p) = p.club_id == club_id and p.payment_period == payment_period and p.payment_type == payment_type and p.user_id == m));
+        if (pending.size() == 0) return #Ok(0);
+        let queue : actor {
+          fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+        } = actor (Principal.toText(nq));
+        let keyPrefix = "fee-reminder-" # club_id # "-" # payment_period # "-" # payment_type # "-" # Nat64.toText(nowMs());
+        try {
+          await queue.fan_out(pending, club_id, "payment_reminder", message, keyPrefix, null)
+        } catch (_) { #Err("Notification queue call failed") }
+      };
+    };
+  };
+
+  // ---- Cross-club sponsor/strip lookup (Phase 5, F9) ----
+  // Same unauthenticated read stance as list_sponsors (sponsor strips render
+  // for every member) but without a club filter, for carousels that rotate
+  // sponsors across every club (e.g. SponsorOrAdCarousel).
+  public query func list_all_sponsors() : async { #Ok : [Types.ClubSponsor]; #Err : Text } {
+    #Ok(sponsors)
+  };
+}

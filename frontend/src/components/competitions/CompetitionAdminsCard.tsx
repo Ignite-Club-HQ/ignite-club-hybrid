@@ -146,16 +146,11 @@ export function CompetitionAdminsCard({
           });
           if (error) throw error;
 
-          const { resolveAuthBackend } = await import("@/live/authBackendMode");
-          if (resolveAuthBackend() === "icp") {
-            // NEEDS-CANISTER: Competition admin notifications stay Supabase-only
-          } else {
-            await supabase.from("notifications").insert({
+          await supabase.from("notifications").insert({
             user_id: target.id,
             type: "membership",
             message: `You have been added as an admin of ${competitionName}`,
             related_id: competitionId,
-          }
           });
         },
         icp: async (ctx) => { await addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin"); },

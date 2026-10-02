@@ -623,6 +623,11 @@ export interface _SERVICE {
     { 'Ok' : Array<AcceptedInvite> } |
       { 'Err' : string }
   >,
+  'list_all_sponsors' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubSponsor> } |
+      { 'Err' : string }
+  >,
   'list_children' : ActorMethod<
     [],
     { 'Ok' : Array<Child> } |
@@ -880,6 +885,11 @@ export interface _SERVICE {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'send_fee_reminders' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'set_club_header_toggles' : ActorMethod<
     [string, boolean, boolean],
     { 'Ok' : ClubSettings } |
@@ -921,6 +931,11 @@ export interface _SERVICE {
       [] | [string],
     ],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_notification_queue_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_team_player_position' : ActorMethod<

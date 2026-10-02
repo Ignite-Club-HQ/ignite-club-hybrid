@@ -937,3 +937,34 @@ export async function getLiveInviteStats(
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.invite_stats(clubId, sinceMs, untilMs), "Invite stats");
 }
+
+/**
+ * Cross-club sponsor/strip lookup without an explicit club filter (Phase 5,
+ * F9) — the canister counterpart of looping `list_sponsors` over every club
+ * the caller belongs to. Used by SponsorOrAdCarousel's cross-club read.
+ */
+export async function listAllLiveSponsors(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_all_sponsors(), "List all sponsors");
+}
+
+/**
+ * Bulk fee-reminder fan-out (Phase 3, F6) — reminds every club member with
+ * no `mark_member_paid` record for the given period/type. Fails closed with
+ * a plain error (surfaced as the mutation's normal error toast, not a
+ * degraded banner) when the notification_queue canister isn't configured.
+ * Returns the number of reminders sent.
+ */
+export async function sendLiveFeeReminders(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  paymentPeriod: string,
+  paymentType: string,
+  message: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.send_fee_reminders(clubId, paymentPeriod, paymentType, message),
+    "Send fee reminders",
+  );
+}
