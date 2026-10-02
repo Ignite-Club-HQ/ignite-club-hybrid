@@ -220,12 +220,17 @@ export default function JoinClubPage() {
         .eq("id", invite.id);
 
       // Send notification to the new member
-      await supabase.from("notifications").insert({
-        user_id: user.id,
-        type: "membership",
-        message: `You've joined ${invite.clubs?.name} as ${roleLabels[roleToAdd]}`,
-        related_id: invite.club_id,
-      });
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        // NEEDS-CANISTER: Join club notifications stay Supabase-only
+      } else {
+        await supabase.from("notifications").insert({
+          user_id: user.id,
+          type: "membership",
+          message: `You've joined ${invite.clubs?.name} as ${roleLabels[roleToAdd]}`,
+          related_id: invite.club_id,
+        });
+      }
 
       return roleToAdd;
     },

@@ -245,22 +245,6 @@ export default function ManageRolesDialog({
             console.error("Failed to send ICP notification:", e);
           }
         },
-
-          try {
-            const parts: string[] = [];
-            if (additions.length > 0) {
-            if (removals.length > 0) {
-              parts.push(
-              );
-            if (parts.length > 0) {
-              await fanOutLiveNotifications(ctx, {
-                userIds: [userId],
-                clubId,
-                kind: "membership",
-                relatedId: teamId,
-            console.error("Failed to send ICP notification:", e);
-        // grants per role change (team-scoped).
-        icp: async (ctx) => {
       });
 
       // Invalidate the affected user's role cache (e.g. team_admin gained/lost).

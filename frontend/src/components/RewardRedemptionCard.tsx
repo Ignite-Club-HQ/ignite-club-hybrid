@@ -531,7 +531,12 @@ export default function RewardRedemptionCard() {
           }));
 
         if (notifications.length > 0) {
-          await supabase.from("notifications").insert(notifications);
+          const { resolveAuthBackend } = await import("@/live/authBackendMode");
+          if (resolveAuthBackend() === "icp") {
+            // NEEDS-CANISTER: Reward notifications stay Supabase-only
+          } else {
+            await supabase.from("notifications").insert(notifications);
+          }
         }
       }
     },

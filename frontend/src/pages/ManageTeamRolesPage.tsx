@@ -113,12 +113,17 @@ function SupabaseManageTeamRolesPage() {
       if (error) throw error;
       
       // Send notification to the user about role removal
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: `Your ${roleName} role has been removed from ${team?.name || "the team"}`,
-        related_id: teamId,
-      });
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        // NEEDS-CANISTER: Team role removal notifications stay Supabase-only
+      } else {
+        await supabase.from("notifications").insert({
+          user_id: userId,
+          type: "membership",
+          message: `Your ${roleName} role has been removed from ${team?.name || "the team"}`,
+          related_id: teamId,
+        });
+      }
     },
     onSuccess: () => {
       if (teamId) refreshTeamRoleChange(queryClient, teamId);

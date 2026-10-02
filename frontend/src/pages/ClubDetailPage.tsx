@@ -983,15 +983,35 @@ export default function ClubDetailPage() {
 
       // 7. Notify members only after the club deletion committed
       if (allMemberIds.length > 0) {
-        const { error: notifyErr } = await supabase.from("notifications").insert(
-          allMemberIds.map((uid) => ({
-            user_id: uid,
-            type: "membership",
-            message: `${club?.name || "A club"} has been deleted`,
-            related_id: null,
-          })),
-        );
-        if (notifyErr) outcome.notificationError = safeErrMessage(notifyErr);
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {
+            const { error: notifyErr } = await supabase.from("notifications").insert(
+              allMemberIds.map((uid) => ({
+                user_id: uid,
+                type: "membership",
+                message: `${club?.name || "A club"} has been deleted`,
+                related_id: null,
+              })),
+            );
+            if (notifyErr) outcome.notificationError = safeErrMessage(notifyErr);
+          },
+          icp: async (ctx) => {
+            try {
+              await fanOutLiveNotifications(ctx, {
+                userIds: allMemberIds,
+                clubId: id!,
+                kind: "membership",
+                body: `${club?.name || "A club"} has been deleted`,
+                idempotencyKeyPrefix: `club-deletion-${id}-${Date.now()}`,
+                relatedId: null,
+              });
+            } catch (e) {
+              outcome.notificationError = e instanceof Error ? e.message : String(e);
+            }
+          }
+        });
       }
 
       setShowDeleteDialog(false);

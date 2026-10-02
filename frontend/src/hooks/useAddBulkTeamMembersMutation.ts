@@ -324,12 +324,17 @@ export function useAddBulkTeamMembersMutation({
           );
 
 
-          await supabase.from("notifications").insert({
-            user_id: member.selectedUser.id,
-            type: "membership",
-            message: `You have been added to ${teamName} as ${roleOptions.find(r => r.value === memberRole)?.label}`,
-            related_id: teamId,
-          });
+          const { resolveAuthBackend } = await import("@/live/authBackendMode");
+          if (resolveAuthBackend() === "icp") {
+            // NEEDS-CANISTER: Membership notifications stay Supabase-only
+          } else {
+            await supabase.from("notifications").insert({
+              user_id: member.selectedUser.id,
+              type: "membership",
+              message: `You have been added to ${teamName} as ${roleOptions.find(r => r.value === memberRole)?.label}`,
+              related_id: teamId,
+            });
+          }
 
           results.push({
             name: member.selectedUser.display_name || member.name.trim(),

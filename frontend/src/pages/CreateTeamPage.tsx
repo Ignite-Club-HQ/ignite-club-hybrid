@@ -409,7 +409,7 @@ export default function CreateTeamPage() {
     // equivalents — provisional until then.
     const membershipOnIcp = isFeatureRoutedToIcp("membership");
 
-        // Upload logo to storage if one was selected
+            // Upload logo to storage if one was selected
     if (logoFile) {
       try {
         const fileExt = logoFile.name.split('.').pop();
@@ -423,12 +423,6 @@ export default function CreateTeamPage() {
         });
 
         if (blobUpload) {
-          // If membership is on ICP, the team lives on the canister, but
-          // logo_url was already saved in saveLiveMembershipTeam if it was
-          // available. Wait, in CreateTeamPage, saveLiveMembershipTeam is
-          // called BEFORE logo upload.
-          // Actually, saveLiveMembershipTeam takes logo_url: [].
-          // So we need to update it if it's on ICP.
           if (membershipOnIcp) {
             await withFeatureBackend("membership", {
               supabase: async () => {}, // No-op
@@ -465,28 +459,7 @@ export default function CreateTeamPage() {
       } catch (error) {
         console.error('Team logo upload error:', error);
       }
-    }/${team.id}/${Date.now()}.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('club-logos')
-          .upload(fileName, logoFile, { upsert: true });
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from('club-logos')
-            .getPublicUrl(fileName);
-
-          await supabase
-            .from("teams")
-            .update({ logo_url: urlData.publicUrl })
-            .eq("id", team.id);
-        }
-      } catch (error) {
-        console.error('Team logo upload error:', error);
-      }
     }
-
-    // Handle admin assignment
     if (adminAssignment?.type === 'existing_user' && adminAssignment.userId) {
       let roleError: unknown = null;
       try {

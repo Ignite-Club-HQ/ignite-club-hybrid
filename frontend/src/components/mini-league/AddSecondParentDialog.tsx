@@ -164,13 +164,18 @@ export function AddSecondParentDialog({
           // Notify the linked parent (in-app notification — push fires via trigger)
           const { data: actor } = await selectCachedProfileById(user.id);
           const actorName = actor?.display_name || "An admin";
-          await supabase.from("notifications").insert({
-            user_id: selectedUser.id,
-            type: "guardian_added",
-            message: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
-            club_id: clubId,
-            related_id: resolvedChildId,
-          } as any);
+          const { resolveAuthBackend } = await import("@/live/authBackendMode");
+          if (resolveAuthBackend() === "icp") {
+            // NEEDS-CANISTER: Guardian notifications stay Supabase-only
+          } else {
+            await supabase.from("notifications").insert({
+              user_id: selectedUser.id,
+              type: "guardian_added",
+              message: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
+              club_id: clubId,
+              related_id: resolvedChildId,
+            } as any);
+          }
         },
         icp: async (ctx) => {
           if (!selectedUser) throw new Error("No user selected");

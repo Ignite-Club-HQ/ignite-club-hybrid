@@ -240,12 +240,19 @@ export function useAddExistingTeamMemberMutation({
                 : "the second parent";
           }
 
-          const { error: notificationError } = await supabase.from("notifications").insert({
-            user_id: selectedUser.id,
-            type: "membership",
-            message: `You have been added to ${teamName} as ${selectedRoleLabel}`,
-            related_id: teamId,
-          });
+          const { resolveAuthBackend } = await import("@/live/authBackendMode");
+          let notificationError = null;
+          if (resolveAuthBackend() === "icp") {
+            // NEEDS-CANISTER: Membership notifications stay Supabase-only
+          } else {
+            const result = await supabase.from("notifications").insert({
+              user_id: selectedUser.id,
+              type: "membership",
+              message: `You have been added to ${teamName} as ${selectedRoleLabel}`,
+              related_id: teamId,
+            });
+            notificationError = result.error;
+          }
 
           return {
             secondParentInviteLink: secondParent.inviteLink ?? null,

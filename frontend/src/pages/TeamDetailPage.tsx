@@ -968,15 +968,35 @@ export default function TeamDetailPage() {
       // 3. Deletion committed — now notify.
       let notificationError: string | null = null;
       if (recipientIds.length > 0) {
-        const { error: notifyError } = await supabase.from("notifications").insert(
-          recipientIds.map((uid) => ({
-            user_id: uid,
-            type: "membership",
-            message: `${team?.name || "A team"} has been deleted`,
-            related_id: team?.club_id,
-          })),
-        );
-        if (notifyError) notificationError = notifyError.message;
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {
+            const { error: notifyError } = await supabase.from("notifications").insert(
+              recipientIds.map((uid) => ({
+                user_id: uid,
+                type: "membership",
+                message: `${team?.name || "A team"} has been deleted`,
+                related_id: team?.club_id,
+              })),
+            );
+            if (notifyError) notificationError = notifyError.message;
+          },
+          icp: async (ctx) => {
+            try {
+              await fanOutLiveNotifications(ctx, {
+                userIds: recipientIds,
+                clubId: team!.club_id,
+                kind: "membership",
+                body: `${team?.name || "A team"} has been deleted`,
+                idempotencyKeyPrefix: `team-deletion-${id}-${Date.now()}`,
+                relatedId: team!.club_id,
+              });
+            } catch (e) {
+              notificationError = e instanceof Error ? e.message : String(e);
+            }
+          }
+        });
       }
 
       queryClient.invalidateQueries({ queryKey: ["team", id] });
@@ -1805,7 +1825,24 @@ export default function TeamDetailPage() {
               // Internet Identity accounts; removes every role grant the
               // member holds in this team's club (no per-team scoping and no
               // notification equivalent on the canister).
-              icp: (ctx) => removeLiveMember(ctx, team!.club_id, Principal.fromText(removeMember.userId)),
+              icp: async (ctx) => {
+                await removeLiveMember(ctx, team!.club_id, Principal.fromText(removeMember.userId));
+                // Best-effort in-app notification via notification_queue — a
+                // notification failure must not roll back the member removal.
+                try {
+                  const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+                  await fanOutLiveNotifications(ctx, {
+                    userIds: [removeMember.userId],
+                    clubId: team!.club_id,
+                    kind: "membership",
+                    body: `You have been removed from ${team?.name || "the team"}`,
+                    idempotencyKeyPrefix: `membership-removal-${removeMember.userId}-${id}-${Date.now()}`,
+                    relatedId: id,
+                  });
+                } catch (e) {
+                  console.error("Failed to send ICP notification:", e);
+                }
+              },
             });
             refreshRemovedTeamMember(queryClient, id);
             toast({ title: "Member removed" });

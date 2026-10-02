@@ -488,12 +488,17 @@ export function PendingInviteWelcomeDialog() {
 
                   // Send notification
                   const playerName = meta.player_name || meta.children?.[0]?.name || "Your child";
-                  await supabase.from("notifications").insert({
-                    user_id: user.id,
-                    type: "membership",
-                    message: `${playerName} has been added to a league`,
-                    related_id: miniLeagueId,
-                  });
+                  const { resolveAuthBackend } = await import("@/live/authBackendMode");
+                  if (resolveAuthBackend() === "icp") {
+                    // NEEDS-CANISTER: League join notifications stay Supabase-only
+                  } else {
+                    await supabase.from("notifications").insert({
+                      user_id: user.id,
+                      type: "membership",
+                      message: `${playerName} has been added to a league`,
+                      related_id: miniLeagueId,
+                    });
+                  }
 
                   // Send child-added email
                   try {

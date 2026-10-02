@@ -530,11 +530,14 @@ function SupabaseManageUsersPage() {
       });
       if (error) throw error;
 
-      const { error: notifyError } = await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: "You have been granted App Admin privileges",
-      });
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      const notifyError = resolveAuthBackend() === "icp" 
+        ? null // NEEDS-CANISTER: App Admin notifications stay Supabase-only
+        : (await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "membership",
+            message: "You have been granted App Admin privileges",
+          })).error;
       if (notifyError) throw new RoleNotificationError(notifyError.message);
     },
     onSuccess: (_, { displayName }) => {
@@ -566,11 +569,14 @@ function SupabaseManageUsersPage() {
       const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
       if (error) throw error;
 
-      const { error: notifyError } = await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: "Your App Admin privileges have been removed",
-      });
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      const notifyError = resolveAuthBackend() === "icp"
+        ? null // NEEDS-CANISTER: App Admin notifications stay Supabase-only
+        : (await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "membership",
+            message: "Your App Admin privileges have been removed",
+          })).error;
       if (notifyError) throw new RoleNotificationError(notifyError.message);
     },
     onSuccess: () => {
@@ -616,7 +622,10 @@ function SupabaseManageUsersPage() {
         type: "membership",
         message: `You have been assigned the ${role.replace('_', ' ')} role`,
       }));
-      const { error: notifyError } = await supabase.from("notifications").insert(notifications);
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      const notifyError = resolveAuthBackend() === "icp"
+        ? null // NEEDS-CANISTER: Bulk role notifications stay Supabase-only
+        : (await supabase.from("notifications").insert(notifications)).error;
       if (notifyError) throw new RoleNotificationError(notifyError.message);
     },
     onSuccess: () => {
@@ -681,7 +690,10 @@ function SupabaseManageUsersPage() {
         type: "membership",
         message: `Your ${role.replace('_', ' ')} role has been removed`,
       }));
-      const { error: notifyError } = await supabase.from("notifications").insert(notifications);
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      const notifyError = resolveAuthBackend() === "icp"
+        ? null // NEEDS-CANISTER: Bulk role notifications stay Supabase-only
+        : (await supabase.from("notifications").insert(notifications)).error;
       if (notifyError) throw new RoleNotificationError(notifyError.message);
     },
     onSuccess: () => {
@@ -757,13 +769,31 @@ function SupabaseManageUsersPage() {
       });
 
       const pointsText = points > 0 ? `+${points}` : `${points}`;
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "points_awarded",
-        message: reason
-          ? `You received ${pointsText} points from ${clubName}: "${reason}"`
-          : `You received ${pointsText} points from ${clubName}`,
-        related_id: clubId,
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+      await withFeatureBackend("notifications", {
+        supabase: async () => {
+          await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "points_awarded",
+            message: reason
+              ? `You received ${pointsText} points from ${clubName}: "${reason}"`
+              : `You received ${pointsText} points from ${clubName}`,
+            related_id: clubId,
+          });
+        },
+        icp: async (ctx) => {
+          await fanOutLiveNotifications(ctx, {
+            userIds: [userId],
+            clubId,
+            kind: "points_awarded",
+            body: reason
+              ? `You received ${pointsText} points from ${clubName}: "${reason}"`
+              : `You received ${pointsText} points from ${clubName}`,
+            idempotencyKeyPrefix: `points-awarded-${userId}-${clubId}-${Date.now()}`,
+            relatedId: clubId,
+          });
+        }
       });
 
       // Check reward threshold

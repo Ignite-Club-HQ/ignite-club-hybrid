@@ -5,7 +5,8 @@ import { readHomeSectionSnapshot, writeHomeSectionSnapshot } from "@/lib/homeSec
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabNewsPost, getLocalLabNewsPosts, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveNews, listLiveNewsMulti } from "@/live/features/club";
+import { listLiveNews, listLiveNewsMulti, listLiveTeams, getLiveTeam } from "@/live/features/club";
+import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 
 /**
  * Map a club_domain NewsPost onto the club_news row shape the UI consumes.
@@ -170,22 +171,33 @@ export function useNewsPublishableClubs() {
     queryKey: ["news-publishable-clubs", user?.id],
     queryFn: async () => {
       if (useIcpLab) return [];
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("club_id, role")
-        .eq("user_id", user!.id)
-        .in("role", ["club_admin"]);
-      if (error) throw error;
-      const ids = Array.from(
-        new Set((data || []).map((r) => r.club_id).filter(Boolean) as string[]),
-      );
-      if (ids.length === 0) return [];
-      const { data: clubs, error: clubErr } = await supabase
-        .from("clubs")
-        .select("id, name")
-        .in("id", ids);
-      if (clubErr) throw clubErr;
-      return (clubs || []) as Array<{ id: string; name: string }>;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("user_roles")
+            .select("club_id, role")
+            .eq("user_id", user!.id)
+            .in("role", ["club_admin"]);
+          if (error) throw error;
+          const ids = Array.from(
+            new Set((data || []).map((r) => r.club_id).filter(Boolean) as string[]),
+          );
+          if (ids.length === 0) return [];
+          const { data: clubs, error: clubErr } = await supabase
+            .from("clubs")
+            .select("id, name")
+            .in("id", ids);
+          if (clubErr) throw clubErr;
+          return (clubs || []) as Array<{ id: string; name: string }>;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          const adminClubIds = Array.from(new Set(grants.filter(g => g.role === "club_admin").map(g => g.club_id)));
+          if (adminClubIds.length === 0) return [];
+          const clubs = await listLiveMembershipClubs(ctx);
+          return clubs.filter(c => adminClubIds.includes(c.id)).map(c => ({ id: c.id, name: c.name }));
+        }
+      });
     },
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
@@ -202,13 +214,21 @@ export function useClubTeamsForNews(clubId?: string | null) {
           .filter((team) => team.club_id === clubId)
           .map(({ id, name }) => ({ id, name }));
       }
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("club_id", clubId!)
-        .order("name");
-      if (error) throw error;
-      return (data || []) as Array<{ id: string; name: string }>;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("club_id", clubId!)
+            .order("name");
+          if (error) throw error;
+          return (data || []) as Array<{ id: string; name: string }>;
+        },
+        icp: async (ctx) => {
+          const teams = await listLiveTeams(ctx, clubId!);
+          return teams.map(t => ({ id: t.id, name: t.name }));
+        }
+      });
     },
     enabled: !!clubId,
     staleTime: 5 * 60 * 1000,
@@ -231,9 +251,19 @@ export function useTeamNamesByIds(teamIds?: string[] | null) {
           .filter((team) => ids.includes(team.id))
           .map(({ id, name }) => ({ id, name }));
       }
-      const { data, error } = await supabase.from("teams").select("id, name").in("id", ids);
-      if (error) throw error;
-      return (data || []) as Array<{ id: string; name: string }>;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.from("teams").select("id, name").in("id", ids);
+          if (error) throw error;
+          return (data || []) as Array<{ id: string; name: string }>;
+        },
+        icp: async (ctx) => {
+          // list_teams requires a club_id; fetch each team individually.
+          // Inefficient, but matches the deep-link use case documented above.
+          const teams = await Promise.all(ids.map(id => getLiveTeam(ctx, id)));
+          return teams.map(t => t[0]).filter(Boolean).map(t => ({ id: t!.id, name: t!.name }));
+        }
+      });
     },
     enabled: ids.length > 0,
     staleTime: 5 * 60 * 1000,
