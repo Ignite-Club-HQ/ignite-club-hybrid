@@ -130,4 +130,34 @@ describe("AddPlayerToParentSheet — canonical child creation", () => {
     })));
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["team-children", "team-1"] });
   });
+
+  it("ICP: creates the child with club/team/parent args and registers the name on the PII canister", async () => {
+    mocks.withFeatureBackend.mockImplementation(
+      (_feature: string, providers: { icp: (ctx: unknown) => unknown }) =>
+        providers.icp({ identity: {}, target: {} }),
+    );
+    mocks.createLiveChildForParentOnTeam.mockResolvedValue({ id: "child-1" });
+    mocks.registerLiveChildNamePii.mockResolvedValue(undefined);
+
+    renderSheet();
+    fireEvent.change(screen.getByLabelText("Player name"), { target: { value: "Ava Smith" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add player" }));
+
+    await waitFor(() =>
+      expect(mocks.createLiveChildForParentOnTeam).toHaveBeenCalledWith(
+        expect.anything(),
+        "club-1",
+        "team-1",
+        expect.objectContaining({ _isPrincipal: true }),
+      ),
+    );
+    await waitFor(() =>
+      expect(mocks.registerLiveChildNamePii).toHaveBeenCalledWith(
+        expect.anything(),
+        "child-1",
+        "Ava Smith",
+        expect.objectContaining({ _isPrincipal: true }),
+      ),
+    );
+  });
 });
