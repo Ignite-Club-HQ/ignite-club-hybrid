@@ -96,3 +96,4 @@ Standing rule: no "not available" states. Every item below must be wired to a ca
 - [ ] useUpdateScheduledMessage throws in ICP mode — add canister update method or cancel+reschedule flow
 - [ ] resolveEventChildScope returns [] in ICP mode (EventDetailPage, QuickRSVPDialog, NextUpCarousel) — children silently missing from RSVP scope
 - [ ] Typing indicator / pinned-message realtime / chat-to-vault sync disabled in ICP mode — wire via canister or record as justified exception
+- [x] DONE (2026-10-02) StoragePurchaseDialog: removed the hard "not available" throw for ICP mode; iOS native IAP now verifies via the session-free `verify-iap-receipt-icp` edge function + identity_access `redeem_entitlement` (HMAC attestation), matching useInAppPurchase.ts. ICP web/desktop (no IAP, Stripe disabled) hides the purchase section entirely instead of showing an error; Supabase session users keep the existing `verify-iap-receipt` + Stripe checkout paths untouched.
