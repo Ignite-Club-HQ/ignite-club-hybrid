@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AdEventSummary {
+  'clicks' : number,
+  'ad_id' : string,
+  'views' : number,
+}
 export interface AdminAlert {
   'id' : string,
   'status' : AlertStatus,
@@ -21,6 +26,44 @@ export interface AdminAlert {
 }
 export type AlertStatus = { 'Open' : null } |
   { 'Resolved' : null };
+export interface AppAd {
+  'id' : string,
+  'link_url' : [] | [string],
+  'subtext' : [] | [string],
+  'image_url' : [] | [string],
+  'text_color' : [] | [string],
+  'headline' : [] | [string],
+  'name' : string,
+  'description' : [] | [string],
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'logo_url' : [] | [string],
+  'cta_label' : [] | [string],
+  'is_active' : boolean,
+  'ad_type' : string,
+  'display_order' : number,
+  'bg_color' : [] | [string],
+}
+export interface AppAdInput {
+  'link_url' : [] | [string],
+  'subtext' : [] | [string],
+  'image_url' : [] | [string],
+  'text_color' : [] | [string],
+  'headline' : [] | [string],
+  'name' : string,
+  'description' : [] | [string],
+  'logo_url' : [] | [string],
+  'cta_label' : [] | [string],
+  'ad_type' : string,
+  'bg_color' : [] | [string],
+}
+export interface AppAdSetting {
+  'is_enabled' : boolean,
+  'updated_at_ms' : bigint,
+  'override_sponsors' : boolean,
+  'show_only_when_no_sponsors' : boolean,
+  'location' : string,
+}
 export interface AuditLog {
   'id' : string,
   'target_user_name' : [] | [string],
@@ -114,6 +157,11 @@ export interface SponsorPerformance {
   'sponsor_id' : string,
 }
 export interface _SERVICE {
+  'ad_event_summary' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<AdEventSummary> } |
+      { 'Err' : string }
+  >,
   'append_audit_log' : ActorMethod<
     [string, string, [] | [string], [] | [string], string],
     { 'Ok' : null } |
@@ -164,11 +212,18 @@ export interface _SERVICE {
     { 'Ok' : EngagementTotals } |
       { 'Err' : string }
   >,
+  'create_ad' : ActorMethod<
+    [AppAdInput],
+    { 'Ok' : AppAd } |
+      { 'Err' : string }
+  >,
   'create_admin_alert' : ActorMethod<
     [string, string],
     { 'Ok' : AdminAlert } |
       { 'Err' : string }
   >,
+  'delete_ad' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<Benchmark> } |
@@ -190,11 +245,13 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'list_active_ads' : ActorMethod<[], Array<AppAd>>,
   'list_admin_alerts' : ActorMethod<
     [[] | [AlertStatus]],
     { 'Ok' : Array<AdminAlert> } |
       { 'Err' : string }
   >,
+  'list_ads' : ActorMethod<[], { 'Ok' : Array<AppAd> } | { 'Err' : string }>,
   'list_audit_logs' : ActorMethod<
     [[] | [Principal], [] | [string], [] | [string], number, number],
     { 'Ok' : { 'total' : number, 'items' : Array<AuditLog> } } |
@@ -213,6 +270,11 @@ export interface _SERVICE {
   >,
   'record_active_user' : ActorMethod<
     [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'record_ad_event' : ActorMethod<
+    [string, string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -266,6 +328,11 @@ export interface _SERVICE {
     { 'Ok' : AdminAlert } |
       { 'Err' : string }
   >,
+  'set_ad_active' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_benchmark' : ActorMethod<
     [
       string,
@@ -291,9 +358,19 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'update_ad' : ActorMethod<
+    [string, AppAdInput],
+    { 'Ok' : AppAd } |
+      { 'Err' : string }
+  >,
   'update_feedback_status' : ActorMethod<
     [string, FeedbackStatus, [] | [string]],
     { 'Ok' : Feedback } |
+      { 'Err' : string }
+  >,
+  'upsert_ad_setting' : ActorMethod<
+    [string, boolean, boolean, boolean],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
 }

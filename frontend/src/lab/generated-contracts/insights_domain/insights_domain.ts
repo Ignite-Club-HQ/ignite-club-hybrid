@@ -80,6 +80,13 @@ export interface AuditLog {
     table_name: string;
     target_user_id?: string;
 }
+export interface AppAdSetting {
+    is_enabled: boolean;
+    updated_at_ms: bigint;
+    override_sponsors: boolean;
+    show_only_when_no_sponsors: boolean;
+    location: string;
+}
 export interface AdminAlert {
     id: string;
     status: AlertStatus;
@@ -128,6 +135,24 @@ export interface PerfAggregate {
     p95_ms: number;
     avg_ms: number;
 }
+export interface AppAdInput {
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    logo_url?: string;
+    cta_label?: string;
+    ad_type: string;
+    bg_color?: string;
+}
+export interface AdEventSummary {
+    clicks: number;
+    ad_id: string;
+    views: number;
+}
 export interface EngagementDayPoint {
     day: string;
     value: number;
@@ -147,6 +172,24 @@ export interface ClientPerfEntry {
     path: string;
     value_ms: number;
 }
+export interface AppAd {
+    id: string;
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    logo_url?: string;
+    cta_label?: string;
+    is_active: boolean;
+    ad_type: string;
+    display_order: number;
+    bg_color?: string;
+}
 export interface SponsorPerformance {
     metrics: Array<{
         metric: string;
@@ -165,6 +208,13 @@ export enum FeedbackStatus {
     Resolved = "Resolved"
 }
 export interface insights_domainInterface {
+    ad_event_summary(since_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdEventSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     append_audit_log(action_type: string, table_name: string, target_user_id: string | null, target_user_name: string | null, details: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -231,6 +281,13 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    create_ad(input: AppAdInput): Promise<{
+        __kind__: "Ok";
+        Ok: AppAd;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     create_admin_alert(alert_type: string, details: string): Promise<{
         __kind__: "Ok";
         Ok: AdminAlert;
@@ -238,6 +295,14 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    delete_ad(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_ad_setting(location: string): Promise<AppAdSetting | null>;
     get_benchmarks(metric_keys: Array<string>): Promise<{
         __kind__: "Ok";
         Ok: Array<Benchmark>;
@@ -273,9 +338,17 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_active_ads(): Promise<Array<AppAd>>;
     list_admin_alerts(status: AlertStatus | null): Promise<{
         __kind__: "Ok";
         Ok: Array<AdminAlert>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_ads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAd>;
     } | {
         __kind__: "Err";
         Err: string;
@@ -309,6 +382,13 @@ export interface insights_domainInterface {
         Err: string;
     }>;
     record_active_user(club_id: string, account_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    record_ad_event(ad_id: string, event_type: string, context: string): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -385,6 +465,13 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_ad_active(id: string, is_active: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_benchmark(metric_key: string, period: string, value: number, total_members: number | null, dau: number | null, wau: number | null, mau: number | null, posters: number | null, read_rate: number | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -406,6 +493,13 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    update_ad(id: string, input: AppAdInput): Promise<{
+        __kind__: "Ok";
+        Ok: AppAd;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     update_feedback_status(id: string, status: FeedbackStatus, admin_notes: string | null): Promise<{
         __kind__: "Ok";
         Ok: Feedback;
@@ -413,10 +507,27 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    upsert_ad_setting(location: string, is_enabled: boolean, override_sponsors: boolean, show_only_when_no_sponsors: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
 }
-import type { AdminAlert as _AdminAlert, AlertStatus as _AlertStatus, AuditLog as _AuditLog, Benchmark as _Benchmark, ClientPerfAggregate as _ClientPerfAggregate, EngagementBenchmarks as _EngagementBenchmarks, EngagementDayPoint as _EngagementDayPoint, EngagementTotals as _EngagementTotals, Feedback as _Feedback, FeedbackStatus as _FeedbackStatus, PerfAggregate as _PerfAggregate, SponsorBenchmarkRow as _SponsorBenchmarkRow, SponsorPerformance as _SponsorPerformance } from "./declarations/insights_domain.did";
+import type { AdEventSummary as _AdEventSummary, AdminAlert as _AdminAlert, AlertStatus as _AlertStatus, AppAd as _AppAd, AppAdInput as _AppAdInput, AppAdSetting as _AppAdSetting, AuditLog as _AuditLog, Benchmark as _Benchmark, ClientPerfAggregate as _ClientPerfAggregate, EngagementBenchmarks as _EngagementBenchmarks, EngagementDayPoint as _EngagementDayPoint, EngagementTotals as _EngagementTotals, Feedback as _Feedback, FeedbackStatus as _FeedbackStatus, PerfAggregate as _PerfAggregate, SponsorBenchmarkRow as _SponsorBenchmarkRow, SponsorPerformance as _SponsorPerformance } from "./declarations/insights_domain.did";
 export class Insights_domain implements insights_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
+    async ad_event_summary(arg0: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AdEventSummary>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ad_event_summary(arg0);
+        return from_candid_variant_n1(result);
+    }
     async append_audit_log(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -424,8 +535,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.append_audit_log(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3), arg4);
-        return from_candid_variant_n2(result);
+        const result = await this.actor.append_audit_log(arg0, arg1, to_candid_opt_n2(arg2), to_candid_opt_n2(arg3), arg4);
+        return from_candid_variant_n3(result);
     }
     async client_perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -434,8 +545,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.client_perf_aggregate(arg0, to_candid_opt_n1(arg1), arg2, arg3);
-        return from_candid_variant_n3(result);
+        const result = await this.actor.client_perf_aggregate(arg0, to_candid_opt_n2(arg1), arg2, arg3);
+        return from_candid_variant_n4(result);
     }
     async club_engagement_active_users(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -445,7 +556,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_active_users(arg0, arg1, arg2);
-        return from_candid_variant_n4(result);
+        return from_candid_variant_n5(result);
     }
     async club_engagement_benchmarks(arg0: string, arg1: bigint, arg2: bigint, arg3: bigint, arg4: bigint): Promise<{
         __kind__: "Ok";
@@ -455,7 +566,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_benchmarks(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_variant_n5(result);
+        return from_candid_variant_n6(result);
     }
     async club_engagement_message_volume(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -465,7 +576,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_message_volume(arg0, arg1, arg2);
-        return from_candid_variant_n4(result);
+        return from_candid_variant_n5(result);
     }
     async club_engagement_rsvp_completion_series(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -475,7 +586,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_rsvp_completion_series(arg0, arg1, arg2);
-        return from_candid_variant_n4(result);
+        return from_candid_variant_n5(result);
     }
     async club_engagement_sponsor_performance(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -488,7 +599,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_sponsor_performance(arg0, arg1, arg2);
-        return from_candid_variant_n6(result);
+        return from_candid_variant_n7(result);
     }
     async club_engagement_total_unique_reach(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -498,7 +609,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_total_unique_reach(arg0, arg1, arg2);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async club_engagement_totals(arg0: string, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -508,7 +619,17 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.club_engagement_totals(arg0, arg1, arg2);
-        return from_candid_variant_n8(result);
+        return from_candid_variant_n9(result);
+    }
+    async create_ad(arg0: AppAdInput): Promise<{
+        __kind__: "Ok";
+        Ok: AppAd;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.create_ad(to_candid_AppAdInput_n10(arg0));
+        return from_candid_variant_n12(result);
     }
     async create_admin_alert(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -518,7 +639,21 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.create_admin_alert(arg0, arg1);
-        return from_candid_variant_n9(result);
+        return from_candid_variant_n16(result);
+    }
+    async delete_ad(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_ad(arg0);
+        return from_candid_variant_n3(result);
+    }
+    async get_ad_setting(arg0: string): Promise<AppAdSetting | null> {
+        const result = await this.actor.get_ad_setting(arg0);
+        return from_candid_opt_n23(result);
     }
     async get_benchmarks(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -528,7 +663,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_benchmarks(arg0);
-        return from_candid_variant_n16(result);
+        return from_candid_variant_n24(result);
     }
     async get_sponsor_benchmarks(arg0: Array<string>, arg1: string, arg2: string): Promise<{
         __kind__: "Ok";
@@ -538,7 +673,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_sponsor_benchmarks(arg0, arg1, arg2);
-        return from_candid_variant_n22(result);
+        return from_candid_variant_n30(result);
     }
     async get_sponsor_performance(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -548,7 +683,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_sponsor_performance(arg0, arg1);
-        return from_candid_variant_n23(result);
+        return from_candid_variant_n31(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -557,8 +692,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n1(arg3));
-        return from_candid_variant_n2(result);
+        const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n2(arg3));
+        return from_candid_variant_n3(result);
     }
     async initialize(): Promise<{
         __kind__: "Ok";
@@ -568,7 +703,11 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.initialize();
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
+    }
+    async list_active_ads(): Promise<Array<AppAd>> {
+        const result = await this.actor.list_active_ads();
+        return from_candid_vec_n32(result);
     }
     async list_admin_alerts(arg0: AlertStatus | null): Promise<{
         __kind__: "Ok";
@@ -577,8 +716,18 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_admin_alerts(to_candid_opt_n24(arg0));
-        return from_candid_variant_n27(result);
+        const result = await this.actor.list_admin_alerts(to_candid_opt_n33(arg0));
+        return from_candid_variant_n36(result);
+    }
+    async list_ads(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AppAd>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_ads();
+        return from_candid_variant_n38(result);
     }
     async list_audit_logs(arg0: Principal | null, arg1: string | null, arg2: string | null, arg3: number, arg4: number): Promise<{
         __kind__: "Ok";
@@ -590,8 +739,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_audit_logs(to_candid_opt_n29(arg0), to_candid_opt_n1(arg1), to_candid_opt_n1(arg2), arg3, arg4);
-        return from_candid_variant_n30(result);
+        const result = await this.actor.list_audit_logs(to_candid_opt_n39(arg0), to_candid_opt_n2(arg1), to_candid_opt_n2(arg2), arg3, arg4);
+        return from_candid_variant_n40(result);
     }
     async list_feedback(arg0: FeedbackStatus | null, arg1: number, arg2: number): Promise<{
         __kind__: "Ok";
@@ -603,12 +752,12 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_feedback(to_candid_opt_n36(arg0), arg1, arg2);
-        return from_candid_variant_n39(result);
+        const result = await this.actor.list_feedback(to_candid_opt_n45(arg0), arg1, arg2);
+        return from_candid_variant_n48(result);
     }
     async my_feedback(): Promise<Array<Feedback>> {
         const result = await this.actor.my_feedback();
-        return from_candid_vec_n41(result);
+        return from_candid_vec_n50(result);
     }
     async perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -617,8 +766,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.perf_aggregate(arg0, to_candid_opt_n1(arg1), arg2, arg3);
-        return from_candid_variant_n46(result);
+        const result = await this.actor.perf_aggregate(arg0, to_candid_opt_n2(arg1), arg2, arg3);
+        return from_candid_variant_n55(result);
     }
     async record_active_user(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -628,7 +777,17 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_active_user(arg0, arg1);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
+    }
+    async record_ad_event(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.record_ad_event(arg0, arg1, arg2);
+        return from_candid_variant_n3(result);
     }
     async record_client_perf(arg0: Array<ClientPerfEntry>): Promise<{
         __kind__: "Ok";
@@ -638,7 +797,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_client_perf(arg0);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async record_message_sent(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -648,7 +807,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_message_sent(arg0, arg1);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async record_perf_sample(arg0: string, arg1: string, arg2: number, arg3: boolean, arg4: string): Promise<{
         __kind__: "Ok";
@@ -658,7 +817,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_perf_sample(arg0, arg1, arg2, arg3, arg4);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async record_perf_samples_batch(arg0: Array<PerfSampleInput>): Promise<{
         __kind__: "Ok";
@@ -668,7 +827,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_perf_samples_batch(arg0);
-        return from_candid_variant_n7(result);
+        return from_candid_variant_n8(result);
     }
     async record_rsvp_completed(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -678,7 +837,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_rsvp_completed(arg0, arg1);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async record_sponsor_click(arg0: string): Promise<{
         __kind__: "Ok";
@@ -688,7 +847,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_sponsor_click(arg0);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async record_sponsor_impression(arg0: string): Promise<{
         __kind__: "Ok";
@@ -698,7 +857,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_sponsor_impression(arg0);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async record_sponsor_metric(arg0: string, arg1: string, arg2: number, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -707,8 +866,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.record_sponsor_metric(arg0, arg1, arg2, to_candid_opt_n1(arg3));
-        return from_candid_variant_n2(result);
+        const result = await this.actor.record_sponsor_metric(arg0, arg1, arg2, to_candid_opt_n2(arg3));
+        return from_candid_variant_n3(result);
     }
     async record_web_vital(arg0: string, arg1: number, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
@@ -718,7 +877,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_web_vital(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
     }
     async resolve_admin_alert(arg0: string): Promise<{
         __kind__: "Ok";
@@ -728,7 +887,17 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.resolve_admin_alert(arg0);
-        return from_candid_variant_n9(result);
+        return from_candid_variant_n16(result);
+    }
+    async set_ad_active(arg0: string, arg1: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_ad_active(arg0, arg1);
+        return from_candid_variant_n3(result);
     }
     async set_benchmark(arg0: string, arg1: string, arg2: number, arg3: number | null, arg4: number | null, arg5: number | null, arg6: number | null, arg7: number | null, arg8: number | null): Promise<{
         __kind__: "Ok";
@@ -737,8 +906,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n47(arg3), to_candid_opt_n47(arg4), to_candid_opt_n47(arg5), to_candid_opt_n47(arg6), to_candid_opt_n47(arg7), to_candid_opt_n48(arg8));
-        return from_candid_variant_n2(result);
+        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n56(arg3), to_candid_opt_n56(arg4), to_candid_opt_n56(arg5), to_candid_opt_n56(arg6), to_candid_opt_n56(arg7), to_candid_opt_n57(arg8));
+        return from_candid_variant_n3(result);
     }
     async submit_feedback(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -747,8 +916,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.submit_feedback(arg0, to_candid_opt_n1(arg1), arg2, to_candid_opt_n1(arg3));
-        return from_candid_variant_n49(result);
+        const result = await this.actor.submit_feedback(arg0, to_candid_opt_n2(arg1), arg2, to_candid_opt_n2(arg3));
+        return from_candid_variant_n58(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -758,7 +927,17 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.transfer_governorship(arg0);
-        return from_candid_variant_n2(result);
+        return from_candid_variant_n3(result);
+    }
+    async update_ad(arg0: string, arg1: AppAdInput): Promise<{
+        __kind__: "Ok";
+        Ok: AppAd;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.update_ad(arg0, to_candid_AppAdInput_n10(arg1));
+        return from_candid_variant_n12(result);
     }
     async update_feedback_status(arg0: string, arg1: FeedbackStatus, arg2: string | null): Promise<{
         __kind__: "Ok";
@@ -767,44 +946,114 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n37(arg1), to_candid_opt_n1(arg2));
-        return from_candid_variant_n49(result);
+        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n46(arg1), to_candid_opt_n2(arg2));
+        return from_candid_variant_n58(result);
+    }
+    async upsert_ad_setting(arg0: string, arg1: boolean, arg2: boolean, arg3: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.upsert_ad_setting(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n3(result);
     }
 }
-function from_candid_AdminAlert_n10(value: _AdminAlert): AdminAlert {
-    return from_candid_record_n11(value);
+function from_candid_AdminAlert_n17(value: _AdminAlert): AdminAlert {
+    return from_candid_record_n18(value);
 }
-function from_candid_AlertStatus_n12(value: _AlertStatus): AlertStatus {
-    return from_candid_variant_n13(value);
+function from_candid_AlertStatus_n19(value: _AlertStatus): AlertStatus {
+    return from_candid_variant_n20(value);
 }
-function from_candid_AuditLog_n33(value: _AuditLog): AuditLog {
-    return from_candid_record_n34(value);
+function from_candid_AppAd_n13(value: _AppAd): AppAd {
+    return from_candid_record_n14(value);
 }
-function from_candid_Benchmark_n18(value: _Benchmark): Benchmark {
-    return from_candid_record_n19(value);
+function from_candid_AuditLog_n43(value: _AuditLog): AuditLog {
+    return from_candid_record_n44(value);
 }
-function from_candid_FeedbackStatus_n44(value: _FeedbackStatus): FeedbackStatus {
-    return from_candid_variant_n45(value);
+function from_candid_Benchmark_n26(value: _Benchmark): Benchmark {
+    return from_candid_record_n27(value);
 }
-function from_candid_Feedback_n42(value: _Feedback): Feedback {
-    return from_candid_record_n43(value);
+function from_candid_FeedbackStatus_n53(value: _FeedbackStatus): FeedbackStatus {
+    return from_candid_variant_n54(value);
 }
-function from_candid_opt_n14(value: [] | [bigint]): bigint | null {
+function from_candid_Feedback_n51(value: _Feedback): Feedback {
+    return from_candid_record_n52(value);
+}
+function from_candid_opt_n15(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n15(value: [] | [Principal]): Principal | null {
+function from_candid_opt_n21(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n20(value: [] | [number]): number | null {
+function from_candid_opt_n22(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n21(value: [] | [number]): number | null {
+function from_candid_opt_n23(value: [] | [_AppAdSetting]): AppAdSetting | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n35(value: [] | [string]): string | null {
+function from_candid_opt_n28(value: [] | [number]): number | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n11(value: {
+function from_candid_opt_n29(value: [] | [number]): number | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n14(value: {
+    id: string;
+    link_url: [] | [string];
+    subtext: [] | [string];
+    image_url: [] | [string];
+    text_color: [] | [string];
+    headline: [] | [string];
+    name: string;
+    description: [] | [string];
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    logo_url: [] | [string];
+    cta_label: [] | [string];
+    is_active: boolean;
+    ad_type: string;
+    display_order: number;
+    bg_color: [] | [string];
+}): {
+    id: string;
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    logo_url?: string;
+    cta_label?: string;
+    is_active: boolean;
+    ad_type: string;
+    display_order: number;
+    bg_color?: string;
+} {
+    return {
+        id: value.id,
+        link_url: record_opt_to_undefined(from_candid_opt_n15(value.link_url)),
+        subtext: record_opt_to_undefined(from_candid_opt_n15(value.subtext)),
+        image_url: record_opt_to_undefined(from_candid_opt_n15(value.image_url)),
+        text_color: record_opt_to_undefined(from_candid_opt_n15(value.text_color)),
+        headline: record_opt_to_undefined(from_candid_opt_n15(value.headline)),
+        name: value.name,
+        description: record_opt_to_undefined(from_candid_opt_n15(value.description)),
+        updated_at_ms: value.updated_at_ms,
+        created_at_ms: value.created_at_ms,
+        logo_url: record_opt_to_undefined(from_candid_opt_n15(value.logo_url)),
+        cta_label: record_opt_to_undefined(from_candid_opt_n15(value.cta_label)),
+        is_active: value.is_active,
+        ad_type: value.ad_type,
+        display_order: value.display_order,
+        bg_color: record_opt_to_undefined(from_candid_opt_n15(value.bg_color))
+    };
+}
+function from_candid_record_n18(value: {
     id: string;
     status: _AlertStatus;
     alert_type: string;
@@ -823,15 +1072,15 @@ function from_candid_record_n11(value: {
 } {
     return {
         id: value.id,
-        status: from_candid_AlertStatus_n12(value.status),
+        status: from_candid_AlertStatus_n19(value.status),
         alert_type: value.alert_type,
         created_at_ms: value.created_at_ms,
         details: value.details,
-        resolved_at_ms: record_opt_to_undefined(from_candid_opt_n14(value.resolved_at_ms)),
-        resolved_by: record_opt_to_undefined(from_candid_opt_n15(value.resolved_by))
+        resolved_at_ms: record_opt_to_undefined(from_candid_opt_n21(value.resolved_at_ms)),
+        resolved_by: record_opt_to_undefined(from_candid_opt_n22(value.resolved_by))
     };
 }
-function from_candid_record_n19(value: {
+function from_candid_record_n27(value: {
     dau: [] | [number];
     mau: [] | [number];
     wau: [] | [number];
@@ -855,19 +1104,19 @@ function from_candid_record_n19(value: {
     metric_key: string;
 } {
     return {
-        dau: record_opt_to_undefined(from_candid_opt_n20(value.dau)),
-        mau: record_opt_to_undefined(from_candid_opt_n20(value.mau)),
-        wau: record_opt_to_undefined(from_candid_opt_n20(value.wau)),
-        posters: record_opt_to_undefined(from_candid_opt_n20(value.posters)),
+        dau: record_opt_to_undefined(from_candid_opt_n28(value.dau)),
+        mau: record_opt_to_undefined(from_candid_opt_n28(value.mau)),
+        wau: record_opt_to_undefined(from_candid_opt_n28(value.wau)),
+        posters: record_opt_to_undefined(from_candid_opt_n28(value.posters)),
         value: value.value,
         period: value.period,
-        read_rate: record_opt_to_undefined(from_candid_opt_n21(value.read_rate)),
+        read_rate: record_opt_to_undefined(from_candid_opt_n29(value.read_rate)),
         updated_at_ms: value.updated_at_ms,
-        total_members: record_opt_to_undefined(from_candid_opt_n20(value.total_members)),
+        total_members: record_opt_to_undefined(from_candid_opt_n28(value.total_members)),
         metric_key: value.metric_key
     };
 }
-function from_candid_record_n31(value: {
+function from_candid_record_n41(value: {
     total: number;
     items: Array<_AuditLog>;
 }): {
@@ -876,10 +1125,10 @@ function from_candid_record_n31(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n32(value.items)
+        items: from_candid_vec_n42(value.items)
     };
 }
-function from_candid_record_n34(value: {
+function from_candid_record_n44(value: {
     id: string;
     target_user_name: [] | [string];
     action_type: string;
@@ -900,16 +1149,16 @@ function from_candid_record_n34(value: {
 } {
     return {
         id: value.id,
-        target_user_name: record_opt_to_undefined(from_candid_opt_n35(value.target_user_name)),
+        target_user_name: record_opt_to_undefined(from_candid_opt_n15(value.target_user_name)),
         action_type: value.action_type,
         actor_id: value.actor_id,
         created_at_ms: value.created_at_ms,
         details: value.details,
         table_name: value.table_name,
-        target_user_id: record_opt_to_undefined(from_candid_opt_n35(value.target_user_id))
+        target_user_id: record_opt_to_undefined(from_candid_opt_n15(value.target_user_id))
     };
 }
-function from_candid_record_n40(value: {
+function from_candid_record_n49(value: {
     total: number;
     items: Array<_Feedback>;
 }): {
@@ -918,10 +1167,10 @@ function from_candid_record_n40(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n41(value.items)
+        items: from_candid_vec_n50(value.items)
     };
 }
-function from_candid_record_n43(value: {
+function from_candid_record_n52(value: {
     id: string;
     status: _FeedbackStatus;
     title: [] | [string];
@@ -946,25 +1195,82 @@ function from_candid_record_n43(value: {
 } {
     return {
         id: value.id,
-        status: from_candid_FeedbackStatus_n44(value.status),
-        title: record_opt_to_undefined(from_candid_opt_n35(value.title)),
+        status: from_candid_FeedbackStatus_n53(value.status),
+        title: record_opt_to_undefined(from_candid_opt_n15(value.title)),
         kind: value.kind,
         user: value.user,
-        page_url: record_opt_to_undefined(from_candid_opt_n35(value.page_url)),
+        page_url: record_opt_to_undefined(from_candid_opt_n15(value.page_url)),
         updated_at_ms: value.updated_at_ms,
         created_at_ms: value.created_at_ms,
         message: value.message,
-        admin_notes: record_opt_to_undefined(from_candid_opt_n35(value.admin_notes))
+        admin_notes: record_opt_to_undefined(from_candid_opt_n15(value.admin_notes))
     };
 }
-function from_candid_variant_n13(value: {
+function from_candid_variant_n1(value: {
+    Ok: Array<_AdEventSummary>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<AdEventSummary>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n12(value: {
+    Ok: _AppAd;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: AppAd;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_AppAd_n13(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n16(value: {
+    Ok: _AdminAlert;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: AdminAlert;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_AdminAlert_n17(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n20(value: {
     Open: null;
 } | {
     Resolved: null;
 }): AlertStatus {
     return "Open" in value ? AlertStatus.Open : "Resolved" in value ? AlertStatus.Resolved : value;
 }
-function from_candid_variant_n16(value: {
+function from_candid_variant_n24(value: {
     Ok: Array<_Benchmark>;
 } | {
     Err: string;
@@ -977,13 +1283,13 @@ function from_candid_variant_n16(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n17(value.Ok)
+        Ok: from_candid_vec_n25(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n2(value: {
+function from_candid_variant_n3(value: {
     Ok: null;
 } | {
     Err: string;
@@ -1002,7 +1308,7 @@ function from_candid_variant_n2(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n22(value: {
+function from_candid_variant_n30(value: {
     Ok: Array<_SponsorBenchmarkRow>;
 } | {
     Err: string;
@@ -1021,7 +1327,7 @@ function from_candid_variant_n22(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n23(value: {
+function from_candid_variant_n31(value: {
     Ok: _SponsorPerformance;
 } | {
     Err: string;
@@ -1040,7 +1346,7 @@ function from_candid_variant_n23(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n27(value: {
+function from_candid_variant_n36(value: {
     Ok: Array<_AdminAlert>;
 } | {
     Err: string;
@@ -1053,13 +1359,32 @@ function from_candid_variant_n27(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n28(value.Ok)
+        Ok: from_candid_vec_n37(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n3(value: {
+function from_candid_variant_n38(value: {
+    Ok: Array<_AppAd>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<AppAd>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n32(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n4(value: {
     Ok: _ClientPerfAggregate;
 } | {
     Err: string;
@@ -1078,7 +1403,7 @@ function from_candid_variant_n3(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n30(value: {
+function from_candid_variant_n40(value: {
     Ok: {
         total: number;
         items: Array<_AuditLog>;
@@ -1097,13 +1422,13 @@ function from_candid_variant_n30(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n31(value.Ok)
+        Ok: from_candid_record_n41(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n39(value: {
+function from_candid_variant_n48(value: {
     Ok: {
         total: number;
         items: Array<_Feedback>;
@@ -1122,13 +1447,13 @@ function from_candid_variant_n39(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n40(value.Ok)
+        Ok: from_candid_record_n49(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n4(value: {
+function from_candid_variant_n5(value: {
     Ok: Array<_EngagementDayPoint>;
 } | {
     Err: string;
@@ -1147,7 +1472,7 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n45(value: {
+function from_candid_variant_n54(value: {
     Open: null;
 } | {
     InProgress: null;
@@ -1156,7 +1481,7 @@ function from_candid_variant_n45(value: {
 }): FeedbackStatus {
     return "Open" in value ? FeedbackStatus.Open : "InProgress" in value ? FeedbackStatus.InProgress : "Resolved" in value ? FeedbackStatus.Resolved : value;
 }
-function from_candid_variant_n46(value: {
+function from_candid_variant_n55(value: {
     Ok: _PerfAggregate;
 } | {
     Err: string;
@@ -1175,7 +1500,7 @@ function from_candid_variant_n46(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
+function from_candid_variant_n58(value: {
     Ok: _Feedback;
 } | {
     Err: string;
@@ -1188,13 +1513,13 @@ function from_candid_variant_n49(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Feedback_n42(value.Ok)
+        Ok: from_candid_Feedback_n51(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n5(value: {
+function from_candid_variant_n6(value: {
     Ok: _EngagementBenchmarks;
 } | {
     Err: string;
@@ -1213,7 +1538,7 @@ function from_candid_variant_n5(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
+function from_candid_variant_n7(value: {
     Ok: {
         clicks: Array<_EngagementDayPoint>;
         impressions: Array<_EngagementDayPoint>;
@@ -1238,7 +1563,7 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n7(value: {
+function from_candid_variant_n8(value: {
     Ok: number;
 } | {
     Err: string;
@@ -1257,7 +1582,7 @@ function from_candid_variant_n7(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n8(value: {
+function from_candid_variant_n9(value: {
     Ok: _EngagementTotals;
 } | {
     Err: string;
@@ -1276,62 +1601,88 @@ function from_candid_variant_n8(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n9(value: {
-    Ok: _AdminAlert;
-} | {
-    Err: string;
+function from_candid_vec_n25(value: Array<_Benchmark>): Array<Benchmark> {
+    return value.map((x)=>from_candid_Benchmark_n26(x));
+}
+function from_candid_vec_n32(value: Array<_AppAd>): Array<AppAd> {
+    return value.map((x)=>from_candid_AppAd_n13(x));
+}
+function from_candid_vec_n37(value: Array<_AdminAlert>): Array<AdminAlert> {
+    return value.map((x)=>from_candid_AdminAlert_n17(x));
+}
+function from_candid_vec_n42(value: Array<_AuditLog>): Array<AuditLog> {
+    return value.map((x)=>from_candid_AuditLog_n43(x));
+}
+function from_candid_vec_n50(value: Array<_Feedback>): Array<Feedback> {
+    return value.map((x)=>from_candid_Feedback_n51(x));
+}
+function to_candid_AlertStatus_n34(value: AlertStatus): _AlertStatus {
+    return to_candid_variant_n35(value);
+}
+function to_candid_AppAdInput_n10(value: AppAdInput): _AppAdInput {
+    return to_candid_record_n11(value);
+}
+function to_candid_FeedbackStatus_n46(value: FeedbackStatus): _FeedbackStatus {
+    return to_candid_variant_n47(value);
+}
+function to_candid_opt_n2(value: string | null): [] | [string] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n33(value: AlertStatus | null): [] | [_AlertStatus] {
+    return value === null ? candid_none() : candid_some(to_candid_AlertStatus_n34(value));
+}
+function to_candid_opt_n39(value: Principal | null): [] | [Principal] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n45(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
+    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n46(value));
+}
+function to_candid_opt_n56(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n57(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_record_n11(value: {
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    logo_url?: string;
+    cta_label?: string;
+    ad_type: string;
+    bg_color?: string;
 }): {
-    __kind__: "Ok";
-    Ok: AdminAlert;
-} | {
-    __kind__: "Err";
-    Err: string;
+    link_url: [] | [string];
+    subtext: [] | [string];
+    image_url: [] | [string];
+    text_color: [] | [string];
+    headline: [] | [string];
+    name: string;
+    description: [] | [string];
+    logo_url: [] | [string];
+    cta_label: [] | [string];
+    ad_type: string;
+    bg_color: [] | [string];
 } {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_AdminAlert_n10(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
+    return {
+        link_url: value.link_url ? candid_some(value.link_url) : candid_none(),
+        subtext: value.subtext ? candid_some(value.subtext) : candid_none(),
+        image_url: value.image_url ? candid_some(value.image_url) : candid_none(),
+        text_color: value.text_color ? candid_some(value.text_color) : candid_none(),
+        headline: value.headline ? candid_some(value.headline) : candid_none(),
+        name: value.name,
+        description: value.description ? candid_some(value.description) : candid_none(),
+        logo_url: value.logo_url ? candid_some(value.logo_url) : candid_none(),
+        cta_label: value.cta_label ? candid_some(value.cta_label) : candid_none(),
+        ad_type: value.ad_type,
+        bg_color: value.bg_color ? candid_some(value.bg_color) : candid_none()
+    };
 }
-function from_candid_vec_n17(value: Array<_Benchmark>): Array<Benchmark> {
-    return value.map((x)=>from_candid_Benchmark_n18(x));
-}
-function from_candid_vec_n28(value: Array<_AdminAlert>): Array<AdminAlert> {
-    return value.map((x)=>from_candid_AdminAlert_n10(x));
-}
-function from_candid_vec_n32(value: Array<_AuditLog>): Array<AuditLog> {
-    return value.map((x)=>from_candid_AuditLog_n33(x));
-}
-function from_candid_vec_n41(value: Array<_Feedback>): Array<Feedback> {
-    return value.map((x)=>from_candid_Feedback_n42(x));
-}
-function to_candid_AlertStatus_n25(value: AlertStatus): _AlertStatus {
-    return to_candid_variant_n26(value);
-}
-function to_candid_FeedbackStatus_n37(value: FeedbackStatus): _FeedbackStatus {
-    return to_candid_variant_n38(value);
-}
-function to_candid_opt_n1(value: string | null): [] | [string] {
-    return value === null ? candid_none() : candid_some(value);
-}
-function to_candid_opt_n24(value: AlertStatus | null): [] | [_AlertStatus] {
-    return value === null ? candid_none() : candid_some(to_candid_AlertStatus_n25(value));
-}
-function to_candid_opt_n29(value: Principal | null): [] | [Principal] {
-    return value === null ? candid_none() : candid_some(value);
-}
-function to_candid_opt_n36(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
-    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n37(value));
-}
-function to_candid_opt_n47(value: number | null): [] | [number] {
-    return value === null ? candid_none() : candid_some(value);
-}
-function to_candid_opt_n48(value: number | null): [] | [number] {
-    return value === null ? candid_none() : candid_some(value);
-}
-function to_candid_variant_n26(value: AlertStatus): {
+function to_candid_variant_n35(value: AlertStatus): {
     Open: null;
 } | {
     Resolved: null;
@@ -1342,7 +1693,7 @@ function to_candid_variant_n26(value: AlertStatus): {
         Resolved: null
     } : value;
 }
-function to_candid_variant_n38(value: FeedbackStatus): {
+function to_candid_variant_n47(value: FeedbackStatus): {
     Open: null;
 } | {
     InProgress: null;
