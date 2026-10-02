@@ -371,4 +371,33 @@ module {
     decided_at_ms : ?Nat64;
     decided_by : ?Principal;
   };
+
+  // Season analytics — canister counterpart of the Supabase
+  // season_team_summary / season_player_stats RPCs. Precomputed per
+  // season+team (analytics are not derivable from existing stores since
+  // club_domain has no events/attendance data model), kept fresh via
+  // admin-gated save calls.
+  public type SeasonTeamSummary = {
+    season_id : Text;
+    club_id : Text;
+    team_id : Text;
+    team_name : Text;
+    events_count : Nat32;
+    avg_attendance_pct : Float;
+    roster_size : Nat32;
+    updated_at_ms : Nat64;
+  };
+
+  public type SeasonPlayerStat = {
+    season_id : Text;
+    club_id : Text;
+    team_id : Text;
+    club_player_id : Text;
+    player_name : Text;
+    events_total : Nat32;
+    events_attended : Nat32;
+    attendance_pct : Float;
+    games_played : Nat32;
+    updated_at_ms : Nat64;
+  };
 }

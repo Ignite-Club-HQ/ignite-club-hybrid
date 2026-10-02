@@ -201,4 +201,25 @@ module {
     var children : [Child];
     var childGuardians : [ChildGuardian];
   };
+
+  // ---- Workstream G: PlayHQ fixture/competition reads (HTTPS outcall) ----
+  // Config is governor-set and holds a scoped PlayHQ API key — never
+  // hardcoded. Mirrors messaging_domain's RecapConfig pattern.
+  public type PlayHQConfig = { api_key : Text; base_url : Text; updated_at_ms : Nat64 };
+
+  // Only the fields PlayHQTeamLinkCard actually renders (id/name/season) are
+  // parsed out of PlayHQ's nested competition JSON — see findJsonStringValue
+  // / extractJsonObjectArray in main.mo for the tolerant flat-object parser
+  // and frontend/roadmap.md for the documented limitation.
+  public type PlayHQCompetition = { id : Text; name : Text; season : ?Text };
+
+  // Mirrors the shape PlayHQTeamLinkCard reads off Supabase's
+  // competition_matches table (external_home_team_id/away_team_id +
+  // home/away team names) so the card's playhqTeams derivation is unchanged.
+  public type PlayHQMatch = {
+    external_home_team_id : ?Text;
+    external_away_team_id : ?Text;
+    home_team_name : ?Text;
+    away_team_name : ?Text;
+  };
 }

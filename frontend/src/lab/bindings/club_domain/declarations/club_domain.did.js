@@ -317,6 +317,28 @@ export const idlFactory = ({ IDL }) => {
     'removed_at_ms' : IDL.Nat64,
     'removed_by' : IDL.Principal,
   });
+  const SeasonPlayerStat = IDL.Record({
+    'season_id' : IDL.Text,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'player_name' : IDL.Text,
+    'club_player_id' : IDL.Text,
+    'events_total' : IDL.Nat32,
+    'attendance_pct' : IDL.Float64,
+    'events_attended' : IDL.Nat32,
+    'games_played' : IDL.Nat32,
+    'club_id' : IDL.Text,
+  });
+  const SeasonTeamSummary = IDL.Record({
+    'season_id' : IDL.Text,
+    'avg_attendance_pct' : IDL.Float64,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'roster_size' : IDL.Nat32,
+    'team_name' : IDL.Text,
+    'events_count' : IDL.Nat32,
+    'club_id' : IDL.Text,
+  });
   const TeamCaptain = IDL.Record({
     'user' : IDL.Principal,
     'team_id' : IDL.Text,
@@ -697,6 +719,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(RoleRequest), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_season_player_stats' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonPlayerStat), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_season_team_summary' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(SeasonTeamSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_seasons' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Season), 'Err' : IDL.Text })],
@@ -897,6 +929,16 @@ export const idlFactory = ({ IDL }) => {
     'save_season' : IDL.Func(
         [Season],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_season_player_stat' : IDL.Func(
+        [SeasonPlayerStat],
+        [IDL.Variant({ 'Ok' : SeasonPlayerStat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_season_team_summary' : IDL.Func(
+        [SeasonTeamSummary],
+        [IDL.Variant({ 'Ok' : SeasonTeamSummary, 'Err' : IDL.Text })],
         [],
       ),
     'save_sponsor' : IDL.Func(

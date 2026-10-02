@@ -280,11 +280,28 @@ export const idlFactory = ({ IDL }) => {
     'positions_played' : IDL.Vec(IDL.Text),
     'jersey_number' : IDL.Opt(IDL.Nat16),
   });
+  const PlayHQCompetition = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'season' : IDL.Opt(IDL.Text),
+  });
+  const PlayHQMatch = IDL.Record({
+    'external_away_team_id' : IDL.Opt(IDL.Text),
+    'external_home_team_id' : IDL.Opt(IDL.Text),
+    'away_team_name' : IDL.Opt(IDL.Text),
+    'home_team_name' : IDL.Opt(IDL.Text),
+  });
   const AttendanceInput = IDL.Record({
     'status' : IDL.Text,
     'subject_kind' : IDL.Text,
     'subject_id' : IDL.Text,
     'notes' : IDL.Text,
+  });
+  const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const HttpRequestResult = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(HttpHeader),
   });
   const GamePlayerStatInput = IDL.Record({
     'started_on_pitch' : IDL.Bool,
@@ -295,6 +312,11 @@ export const idlFactory = ({ IDL }) => {
     'fill_in_player_name' : IDL.Opt(IDL.Text),
     'positions_played' : IDL.Vec(IDL.Text),
     'jersey_number' : IDL.Opt(IDL.Nat16),
+  });
+  const PlayHQConfig = IDL.Record({
+    'base_url' : IDL.Text,
+    'api_key' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
   });
   
   return IDL.Service({
@@ -686,6 +708,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(OpenDuty), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_playhq_competitions' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PlayHQCompetition), 'Err' : IDL.Text })],
+        [],
+      ),
+    'list_playhq_fixtures' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PlayHQMatch), 'Err' : IDL.Text })],
+        [],
+      ),
     'list_reminders' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(ReminderLog), 'Err' : IDL.Text })],
@@ -739,6 +771,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'my_rsvps' : IDL.Func([], [IDL.Vec(Rsvp)], ['query']),
+    'playhqTransform' : IDL.Func(
+        [
+          IDL.Record({
+            'context' : IDL.Vec(IDL.Nat8),
+            'response' : HttpRequestResult,
+          }),
+        ],
+        [HttpRequestResult],
+        ['query'],
+      ),
     'record_event_view' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -882,6 +924,11 @@ export const idlFactory = ({ IDL }) => {
     'set_mini_league_rsvp' : IDL.Func(
         [IDL.Text, RsvpSubject, IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueRsvp, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_playhq_config' : IDL.Func(
+        [IDL.Opt(PlayHQConfig)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_push_reachable' : IDL.Func(

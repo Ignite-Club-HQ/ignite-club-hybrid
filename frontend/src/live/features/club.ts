@@ -823,6 +823,41 @@ export async function saveLiveSeason(ctx: FeatureBackendContext, season: LiveSea
   return unwrapCandid(actor.save_season(season), "Save season");
 }
 
+// ---------------------------------------------------------------------------
+// Season analytics — canister counterpart of the Supabase
+// season_team_summary / season_player_stats RPCs. Read-only from the
+// hook's perspective; save_* are admin-gated upserts used to keep the
+// precomputed stores fresh (club_domain has no events/attendance model to
+// derive these from).
+// ---------------------------------------------------------------------------
+
+export type LiveSeasonTeamSummary = Parameters<ClubDomainActor["save_season_team_summary"]>[0];
+export type LiveSeasonPlayerStat = Parameters<ClubDomainActor["save_season_player_stat"]>[0];
+
+export async function listLiveSeasonTeamSummary(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_season_team_summary(seasonId), "List season team summary");
+}
+
+export async function listLiveSeasonPlayerStats(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_season_player_stats(seasonId, teamId), "List season player stats");
+}
+
+export async function saveLiveSeasonTeamSummary(ctx: FeatureBackendContext, entry: LiveSeasonTeamSummary) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_season_team_summary(entry), "Save season team summary");
+}
+
+export async function saveLiveSeasonPlayerStat(ctx: FeatureBackendContext, entry: LiveSeasonPlayerStat) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_season_player_stat(entry), "Save season player stat");
+}
+
 /** canister counterpart of the Supabase `profile_team_history` RPC. */
 export async function listLiveProfileTeamHistory(ctx: FeatureBackendContext, profileId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);

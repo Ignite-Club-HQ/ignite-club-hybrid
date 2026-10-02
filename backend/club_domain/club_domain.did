@@ -76,6 +76,30 @@ type Snapshot =
               };
    schema: nat32;
  };
+type SeasonTeamSummary = 
+ record {
+   avg_attendance_pct: float64;
+   club_id: text;
+   events_count: nat32;
+   roster_size: nat32;
+   season_id: text;
+   team_id: text;
+   team_name: text;
+   updated_at_ms: nat64;
+ };
+type SeasonPlayerStat = 
+ record {
+   attendance_pct: float64;
+   club_id: text;
+   club_player_id: text;
+   events_attended: nat32;
+   events_total: nat32;
+   games_played: nat32;
+   player_name: text;
+   season_id: text;
+   team_id: text;
+   updated_at_ms: nat64;
+ };
 type Season = 
  record {
    club_id: text;
@@ -718,6 +742,16 @@ service : {
       Err: text;
       Ok: vec RoleRequest;
     }) query;
+  list_season_player_stats: (season_id: text, team_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec SeasonPlayerStat;
+    }) query;
+  list_season_team_summary: (season_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec SeasonTeamSummary;
+    }) query;
   list_seasons: (club_id: text) ->
    (variant {
       Err: text;
@@ -884,6 +918,16 @@ service : {
                                       Err: text;
                                       Ok: Season;
                                     });
+  save_season_player_stat: (entry: SeasonPlayerStat) ->
+   (variant {
+      Err: text;
+      Ok: SeasonPlayerStat;
+    });
+  save_season_team_summary: (entry: SeasonTeamSummary) ->
+   (variant {
+      Err: text;
+      Ok: SeasonTeamSummary;
+    });
   save_sponsor: (sponsor: ClubSponsor) ->
    (variant {
       Err: text;

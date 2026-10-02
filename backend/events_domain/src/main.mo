@@ -6,6 +6,11 @@ import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
+import Text "mo:core/Text";
+import Blob "mo:core/Blob";
+import Error "mo:core/Error";
+import Call "mo:ic/Call";
+import IC "mo:ic/Types";
 import Types "types";
 
 persistent actor {
@@ -41,6 +46,7 @@ persistent actor {
   var gamePlayerStats : [Types.GamePlayerStat];
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
+  var playHQConfig : ?Types.PlayHQConfig;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -1334,6 +1340,246 @@ persistent actor {
     let hasDuty = duties.any(func(item) = item.event_id == event_id and item.account_id == user_id);
     if (hasDuty) return true;
     false
+  };
+
+  // ===================== Workstream G: PlayHQ reads (HTTPS outcall) =====================
+  // Governor-set config holding the scoped PlayHQ API key — node providers
+  // can read canister state, so only ever store a limited/scoped key here.
+  // Import/materialise-team-events remains Supabase-only (previously
+  // decided); these are read-only competition/fixture lookups mirroring
+  // PlayHQTeamLinkCard's Supabase queries.
+  public shared ({ caller }) func set_playhq_config(config : ?Types.PlayHQConfig) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    switch (config) {
+      case (?c) {
+        if (not Text.startsWith(c.base_url, #text "https://") or c.base_url.size() > 2048) return #Err("Base URL must be a public https:// URL");
+        if (c.api_key == "") return #Err("Invalid PlayHQ config");
+      };
+      case null {};
+    };
+    playHQConfig := config;
+    #Ok
+  };
+
+  public query func playhqTransform({
+    context : Blob;
+    response : IC.HttpRequestResult;
+  }) : async IC.HttpRequestResult {
+    { response with headers = [] };
+  };
+
+  // Tolerant flat-object JSON helpers. There is no JSON library in this
+  // repo's mops deps; rather than hand-roll a full recursive-descent parser,
+  // these extract only the fields PlayHQTeamLinkCard actually displays
+  // (competition id/name/season name, fixture team ids/names). See
+  // frontend/roadmap.md for the documented limitation: deeply nested or
+  // differently-shaped PlayHQ payloads may yield partial/empty results
+  // rather than a hard parse error.
+  func findJsonStringValue(body : Text, key : Text) : ?Text {
+    let needle = "\"" # key # "\"";
+    let parts = Text.toArray(body);
+    let n = Text.toArray(needle);
+    let size = parts.size();
+    var i = 0;
+    label search while (i + n.size() < size) {
+      var matched = true;
+      var j = 0;
+      while (j < n.size()) {
+        if (parts[i + j] != n[j]) { matched := false; j := n.size() } else { j += 1 };
+      };
+      if (matched) {
+        var k = i + n.size();
+        while (k < size and parts[k] != '\u{22}') {
+          if (parts[k] == '}' or parts[k] == ',') { return null };
+          k += 1;
+        };
+        if (k >= size) return null;
+        k += 1;
+        var value = "";
+        var escaped = false;
+        label read while (k < size) {
+          let c = parts[k];
+          if (escaped) {
+            value := value # (switch (c) { case ('n') { "\n" }; case ('t') { "\t" }; case ('r') { "\r" }; case (_) { Text.fromArray([c]) } });
+            escaped := false;
+          } else if (c == '\\') {
+            escaped := true;
+          } else if (c == '\u{22}') {
+            return ?value;
+          } else {
+            value := value # Text.fromArray([c]);
+          };
+          k += 1;
+        };
+        return null;
+      };
+      i += 1;
+    };
+    null
+  };
+
+  // Finds `"key":[` then balances brackets to return the raw array body
+  // (without the surrounding `[`/`]`). Returns "" if not found.
+  func extractJsonArray(body : Text, key : Text) : Text {
+    let needle = "\"" # key # "\":[";
+    let parts = Text.toArray(body);
+    let n = Text.toArray(needle);
+    let size = parts.size();
+    var i = 0;
+    label search while (i + n.size() <= size) {
+      var matched = true;
+      var j = 0;
+      while (j < n.size()) {
+        if (parts[i + j] != n[j]) { matched := false; j := n.size() } else { j += 1 };
+      };
+      if (matched) {
+        var depth = 1;
+        var k = i + n.size();
+        let start = k;
+        while (k < size and depth > 0) {
+          if (parts[k] == '[') { depth += 1 } else if (parts[k] == ']') { depth -= 1 };
+          if (depth > 0) { k += 1 };
+        };
+        return Text.fromArray(Array.tabulate<Char>(k - start, func(idx) = parts[start + idx]));
+      };
+      i += 1;
+    };
+    ""
+  };
+
+  // Splits a JSON array body (as returned by extractJsonArray) into the raw
+  // text of each top-level `{...}` object, ignoring nested braces.
+  func splitJsonObjects(arrText : Text) : [Text] {
+    let parts = Text.toArray(arrText);
+    let size = parts.size();
+    var objects : [Text] = [];
+    var i = 0;
+    while (i < size) {
+      if (parts[i] == '{') {
+        var depth = 1;
+        let start = i;
+        var k = i + 1;
+        while (k < size and depth > 0) {
+          if (parts[k] == '{') { depth += 1 } else if (parts[k] == '}') { depth -= 1 };
+          k += 1;
+        };
+        objects := objects.concat([Text.fromArray(Array.tabulate<Char>(k - start, func(idx) = parts[start + idx]))]);
+        i := k;
+      } else {
+        i += 1;
+      };
+    };
+    objects
+  };
+
+  // Finds `"key":{...}` and returns the raw object text (with braces), or
+  // "" if not found. Used to reach into PlayHQ's nested `season` object.
+  func extractJsonObject(body : Text, key : Text) : Text {
+    let needle = "\"" # key # "\":{";
+    let parts = Text.toArray(body);
+    let n = Text.toArray(needle);
+    let size = parts.size();
+    var i = 0;
+    label search while (i + n.size() <= size) {
+      var matched = true;
+      var j = 0;
+      while (j < n.size()) {
+        if (parts[i + j] != n[j]) { matched := false; j := n.size() } else { j += 1 };
+      };
+      if (matched) {
+        var depth = 1;
+        let start = i + n.size() - 1;
+        var k = i + n.size();
+        while (k < size and depth > 0) {
+          if (parts[k] == '{') { depth += 1 } else if (parts[k] == '}') { depth -= 1 };
+          k += 1;
+        };
+        return Text.fromArray(Array.tabulate<Char>(k - start, func(idx) = parts[start + idx]));
+      };
+      i += 1;
+    };
+    ""
+  };
+
+  func playhqHttpGet(path : Text) : async* { #Ok : Text; #Err : Text } {
+    let config = switch (playHQConfig) {
+      case null { return #Err("PlayHQ not configured") };
+      case (?c) { c };
+    };
+    let request : IC.HttpRequestArgs = {
+      url = config.base_url # path;
+      max_response_bytes = ?(2_000_000 : Nat64);
+      headers = [
+        { name = "x-api-key"; value = config.api_key },
+        { name = "Accept"; value = "application/json" },
+      ];
+      body = null;
+      method = #get;
+      transform = ?{ function = playhqTransform; context = Blob.fromArray([]) };
+      // Non-replicated: a GET against a third-party read API, avoiding ~13x
+      // duplicate charges per call across subnet nodes (see messaging_domain
+      // generate_chat_recap for the same reasoning).
+      is_replicated = ?false;
+    };
+    try {
+      let response = await Call.httpRequest(request);
+      if (response.status < 200 or response.status >= 300) {
+        return #Err("PlayHQ returned status " # Nat.toText(response.status));
+      };
+      switch (Text.decodeUtf8(response.body)) {
+        case (?t) { #Ok(t) };
+        case null { #Err("PlayHQ response was not valid UTF-8") };
+      }
+    } catch (e) {
+      #Err("PlayHQ request failed: " # Error.message(e))
+    }
+  };
+
+  // Mirrors PlayHQTeamLinkCard's Supabase `competitions` read: id/name/season
+  // for the tenant+org the club has configured (club_domain owns those two
+  // values; the frontend passes them straight through).
+  public shared ({ caller }) func list_playhq_competitions(tenant : Text, org_id : Text) : async { #Ok : [Types.PlayHQCompetition]; #Err : Text } {
+    auth(caller);
+    if (not valid(tenant) or not valid(org_id)) return #Err("Invalid tenant/org");
+    switch (await* playhqHttpGet("/v1/" # tenant # "/organisations/" # org_id # "/competitions")) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(bodyText)) {
+        let arr = extractJsonArray(bodyText, "competitions");
+        let objs = splitJsonObjects(if (arr == "") bodyText else arr);
+        #Ok(Array.map<Text, Types.PlayHQCompetition>(objs, func(obj) {
+          let id = switch (findJsonStringValue(obj, "id")) { case (?v) v; case null "" };
+          let name = switch (findJsonStringValue(obj, "name")) { case (?v) v; case null "" };
+          let seasonObj = extractJsonObject(obj, "season");
+          let season = if (seasonObj == "") null else findJsonStringValue(seasonObj, "name");
+          { id; name; season }
+        }))
+      };
+    }
+  };
+
+  // Mirrors PlayHQTeamLinkCard's Supabase `competition_matches` read: the
+  // external home/away team ids + names for a given competition's fixture.
+  public shared ({ caller }) func list_playhq_fixtures(competition_id : Text) : async { #Ok : [Types.PlayHQMatch]; #Err : Text } {
+    auth(caller);
+    if (not valid(competition_id)) return #Err("Invalid competition id");
+    switch (await* playhqHttpGet("/v1/competitions/" # competition_id # "/fixture")) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(bodyText)) {
+        let arr = extractJsonArray(bodyText, "matches");
+        let objs = splitJsonObjects(if (arr == "") bodyText else arr);
+        #Ok(Array.map<Text, Types.PlayHQMatch>(objs, func(obj) {
+          let homeObj = extractJsonObject(obj, "homeTeam");
+          let awayObj = extractJsonObject(obj, "awayTeam");
+          {
+            external_home_team_id = if (homeObj == "") null else findJsonStringValue(homeObj, "id");
+            external_away_team_id = if (awayObj == "") null else findJsonStringValue(awayObj, "id");
+            home_team_name = if (homeObj == "") null else findJsonStringValue(homeObj, "name");
+            away_team_name = if (awayObj == "") null else findJsonStringValue(awayObj, "name");
+          }
+        }))
+      };
+    }
   };
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp] }; #Err : Text } {

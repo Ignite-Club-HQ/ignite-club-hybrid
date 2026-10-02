@@ -191,6 +191,12 @@ export interface GameSummary {
   'formation_used' : [] | [string],
   'total_substitutions' : number,
 }
+export interface HttpHeader { 'value' : string, 'name' : string }
+export interface HttpRequestResult {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<HttpHeader>,
+}
 export interface LineupEntry {
   'member' : string,
   'slot' : string,
@@ -243,6 +249,22 @@ export interface PitchBoardSettings {
   'minutes_per_half' : number,
   'disable_position_swaps' : boolean,
   'show_match_header' : boolean,
+}
+export interface PlayHQCompetition {
+  'id' : string,
+  'name' : string,
+  'season' : [] | [string],
+}
+export interface PlayHQConfig {
+  'base_url' : string,
+  'api_key' : string,
+  'updated_at_ms' : bigint,
+}
+export interface PlayHQMatch {
+  'external_away_team_id' : [] | [string],
+  'external_home_team_id' : [] | [string],
+  'away_team_name' : [] | [string],
+  'home_team_name' : [] | [string],
 }
 export interface PushReachability {
   'user' : Principal,
@@ -625,6 +647,16 @@ export interface _SERVICE {
     { 'Ok' : Array<OpenDuty> } |
       { 'Err' : string }
   >,
+  'list_playhq_competitions' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<PlayHQCompetition> } |
+      { 'Err' : string }
+  >,
+  'list_playhq_fixtures' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PlayHQMatch> } |
+      { 'Err' : string }
+  >,
   'list_reminders' : ActorMethod<
     [string],
     { 'Ok' : Array<ReminderLog> } |
@@ -669,6 +701,10 @@ export interface _SERVICE {
     Array<RsvpWithChild>
   >,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
+  'playhqTransform' : ActorMethod<
+    [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
+    HttpRequestResult
+  >,
   'record_event_view' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -799,6 +835,11 @@ export interface _SERVICE {
   'set_mini_league_rsvp' : ActorMethod<
     [string, RsvpSubject, string],
     { 'Ok' : MiniLeagueRsvp } |
+      { 'Err' : string }
+  >,
+  'set_playhq_config' : ActorMethod<
+    [[] | [PlayHQConfig]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_push_reachable' : ActorMethod<

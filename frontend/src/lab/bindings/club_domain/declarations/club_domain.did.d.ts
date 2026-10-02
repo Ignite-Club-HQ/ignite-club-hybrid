@@ -284,6 +284,28 @@ export interface Season {
   'start_date' : string,
   'club_id' : string,
 }
+export interface SeasonPlayerStat {
+  'season_id' : string,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'player_name' : string,
+  'club_player_id' : string,
+  'events_total' : number,
+  'attendance_pct' : number,
+  'events_attended' : number,
+  'games_played' : number,
+  'club_id' : string,
+}
+export interface SeasonTeamSummary {
+  'season_id' : string,
+  'avg_attendance_pct' : number,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'roster_size' : number,
+  'team_name' : string,
+  'events_count' : number,
+  'club_id' : string,
+}
 export interface Snapshot {
   'schema' : number,
   'clubs' : Array<[string, Listing]>,
@@ -650,6 +672,16 @@ export interface _SERVICE {
     { 'Ok' : Array<RoleRequest> } |
       { 'Err' : string }
   >,
+  'list_season_player_stats' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<SeasonPlayerStat> } |
+      { 'Err' : string }
+  >,
+  'list_season_team_summary' : ActorMethod<
+    [string],
+    { 'Ok' : Array<SeasonTeamSummary> } |
+      { 'Err' : string }
+  >,
   'list_seasons' : ActorMethod<
     [string],
     { 'Ok' : Array<Season> } |
@@ -817,6 +849,16 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'save_season' : ActorMethod<[Season], { 'Ok' : Season } | { 'Err' : string }>,
+  'save_season_player_stat' : ActorMethod<
+    [SeasonPlayerStat],
+    { 'Ok' : SeasonPlayerStat } |
+      { 'Err' : string }
+  >,
+  'save_season_team_summary' : ActorMethod<
+    [SeasonTeamSummary],
+    { 'Ok' : SeasonTeamSummary } |
+      { 'Err' : string }
+  >,
   'save_sponsor' : ActorMethod<
     [ClubSponsor],
     { 'Ok' : ClubSponsor } |
