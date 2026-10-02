@@ -88,6 +88,8 @@ import {
   getLiveSponsorBenchmarks,
   listLiveAds,
   getLiveAdEventSummary,
+  countLivePhotos,
+  getLivePhotoEngagementTotals,
 } from "@/live/features/insights";
 import { listLiveSponsors } from "@/live/features/club";
 import {
@@ -599,45 +601,74 @@ function SupabaseClubEngagementAnalyticsPage({
   }, [totals]);
 
   // ---------- Media: photo uploads (use total) + per-photo engagement (capped sample) ----------
+  // ICP branch routes to insights_domain's lightweight photo counters
+  // (count_photos / photo_engagement_totals) — media bytes stay in Supabase,
+  // only upload/view/reaction/comment counts are mirrored there (see
+  // record_photo_upload/record_photo_engagement call sites).
   const { data: photos = [] } = useQuery({
     queryKey: ["club-engagement-photos", clubId, mode, range.start.toISOString(), range.end.toISOString()],
-    queryFn: async () => {
-      let q = supabase
-        .from("photos")
-        .select("id")
-        .is("deleted_at", null)
-        .gte("created_at", range.start.toISOString())
-        .lte("created_at", range.end.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (!isPlatform) q = q.eq("club_id", clubId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          let q = supabase
+            .from("photos")
+            .select("id")
+            .is("deleted_at", null)
+            .gte("created_at", range.start.toISOString())
+            .lte("created_at", range.end.toISOString())
+            .order("created_at", { ascending: false })
+            .limit(1000);
+          if (!isPlatform) q = q.eq("club_id", clubId!);
+          const { data, error } = await q;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const count = await countLivePhotos(ctx, requireIcpClubId(), range.start.getTime(), range.end.getTime());
+          // count_photos only returns a total (no ids, no per-photo join) — synthesize
+          // placeholder rows so the existing `photos.length` consumer stays correct.
+          return Array.from({ length: Number(count) }, (_, i) => ({ id: `icp-photo-${i}` }));
+        },
+      }),
     enabled: queryReady && !!access?.isAdmin,
   });
 
   const { data: photoEngagement } = useQuery({
-    queryKey: ["club-engagement-photo-engagement", photos.map((p) => p.id).slice(0, 300)],
-    queryFn: async () => {
-      const ids = photos.map((p) => p.id);
-      if (ids.length === 0) return { views: 0, reactions: 0, comments: 0 };
-      let views = 0, reactions = 0, comments = 0;
-      const chunk = 100;
-      for (let i = 0; i < ids.length; i += chunk) {
-        const slice = ids.slice(i, i + chunk);
-        const [v, r, c] = await Promise.all([
-          supabase.from("photo_views").select("id", { count: "exact", head: true }).in("photo_id", slice),
-          supabase.from("photo_reactions").select("id", { count: "exact", head: true }).in("photo_id", slice),
-          supabase.from("photo_comments").select("id", { count: "exact", head: true }).in("photo_id", slice),
-        ]);
-        views += v.count || 0;
-        reactions += r.count || 0;
-        comments += c.count || 0;
-      }
-      return { views, reactions, comments };
-    },
+    queryKey: ["club-engagement-photo-engagement", mode, photos.map((p) => p.id).slice(0, 300)],
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const ids = photos.map((p) => p.id);
+          if (ids.length === 0) return { views: 0, reactions: 0, comments: 0 };
+          let views = 0, reactions = 0, comments = 0;
+          const chunk = 100;
+          for (let i = 0; i < ids.length; i += chunk) {
+            const slice = ids.slice(i, i + chunk);
+            const [v, r, c] = await Promise.all([
+              supabase.from("photo_views").select("id", { count: "exact", head: true }).in("photo_id", slice),
+              supabase.from("photo_reactions").select("id", { count: "exact", head: true }).in("photo_id", slice),
+              supabase.from("photo_comments").select("id", { count: "exact", head: true }).in("photo_id", slice),
+            ]);
+            views += v.count || 0;
+            reactions += r.count || 0;
+            comments += c.count || 0;
+          }
+          return { views, reactions, comments };
+        },
+        icp: async (ctx) => {
+          const ids = photos.map((p) => p.id).slice(0, 300);
+          if (ids.length === 0) return { views: 0, reactions: 0, comments: 0 };
+          const totals = await getLivePhotoEngagementTotals(ctx, ids);
+          return totals.reduce(
+            (acc, row) => ({
+              views: acc.views + Number(row.views),
+              reactions: acc.reactions + Number(row.reactions),
+              comments: acc.comments + Number(row.comments),
+            }),
+            { views: 0, reactions: 0, comments: 0 },
+          );
+        },
+      }),
     enabled: !!access?.isAdmin && photos.length > 0,
   });
 

@@ -55,6 +55,7 @@ persistent actor {
   var removedMembers : [Types.RemovedMember];
   var memberPayments : [Types.MemberPayment];
   var teamSponsorAllocations : [Types.TeamSponsorAllocation];
+  var seasons : [Types.Season];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -1232,6 +1233,8 @@ persistent actor {
       created_at_ms = now;
       status = "pending";
       resent_at_ms = null;
+      accepted_at_ms = null;
+      accepted_by = null;
     };
     pendingInvites := pendingInvites.concat([invite]);
     #Ok({ invite; payload = invitePayloadFor(invite) })
@@ -1329,7 +1332,7 @@ persistent actor {
             case null {};
           };
         };
-        let accepted : Types.PendingInvite = { invite with status = "accepted" };
+        let accepted : Types.PendingInvite = { invite with status = "accepted"; accepted_at_ms = ?nowMs(); accepted_by = ?caller };
         pendingInvites := pendingInvites.map(func(i) = if (i.id == id) accepted else i);
         #Ok(accepted)
       };
@@ -1868,6 +1871,100 @@ persistent actor {
         #Ok
       };
     }
+  };
+
+  // ---- Seasons (draft|active|closed|archived) — distinct from ClubTerm.
+  // save_season creates when id is "", else updates in place. get_current_season
+  // returns the first season with status "active" for the club. ----
+
+  func validSeasonStatus(status : Text) : Bool {
+    status == "draft" or status == "active" or status == "closed" or status == "archived"
+  };
+
+  public query ({ caller }) func list_seasons(club_id : Text) : async { #Ok : [Types.Season]; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(seasons.filter(func(s) = s.club_id == club_id))
+  };
+
+  public query ({ caller }) func get_current_season(club_id : Text) : async { #Ok : ?Types.Season; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(seasons.find(func(s) = s.club_id == club_id and s.status == "active"))
+  };
+
+  public shared ({ caller }) func save_season(season : Types.Season) : async { #Ok : Types.Season; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, season.club_id)) return #Err("Club admin required");
+    if (season.name == "" or season.name.size() > 200) return #Err("Invalid name");
+    if (not validSeasonStatus(season.status)) return #Err("Invalid status");
+    let now = nowMs();
+    let existing = if (season.id == "") null else seasons.find(func(s) = s.id == season.id);
+    let stored : Types.Season = {
+      id = if (season.id == "") "season-" # season.club_id # "-" # Nat.toText(seasons.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000) else season.id;
+      club_id = season.club_id;
+      name = season.name;
+      status = season.status;
+      start_date = season.start_date;
+      end_date = season.end_date;
+      created_at_ms = switch (existing) { case (?e) e.created_at_ms; case null now };
+      updated_at_ms = now;
+    };
+    seasons := seasons.filter(func(s) = s.id != stored.id).concat([stored]);
+    #Ok(stored)
+  };
+
+  // ---- profile_team_history: join accountRoles (team-scoped grants) with
+  // teams/profiles/seasons for a given profile (account) id. membership_id is
+  // synthesized as account_id#team_id since accountRoles has no own id.
+  // joined_at_ms is 0 when no membership timestamp exists. ----
+  public query ({ caller }) func profile_team_history(profile_id : Text) : async [Types.ProfileTeamHistoryEntry] {
+    auth(caller);
+    let grants = accountRoles.filter(func(g) = g.account_id == profile_id and g.team != null);
+    grants.map(func(g) : Types.ProfileTeamHistoryEntry {
+      let teamId = switch (g.team) { case (?t) t; case null "" };
+      let team = teams.find(func(t) = t.id == teamId);
+      let clubId = switch (team) { case (?t) t.club_id; case null (switch (g.club) { case (?c) c; case null "" }) };
+      let club = profiles.find(func(p) = p.id == clubId);
+      let season = seasons.find(func(s) = s.club_id == clubId and s.status == "active");
+      {
+        membership_id = profile_id # "-" # teamId;
+        team_id = teamId;
+        team_name = switch (team) { case (?t) t.name; case null "" };
+        team_level_age = switch (team) { case (?t) t.age_group; case null null };
+        club_id = clubId;
+        club_name = switch (club) { case (?c) c.name; case null "" };
+        season_id = switch (season) { case (?s) s.id; case null "" };
+        season_name = switch (season) { case (?s) s.name; case null "" };
+        season_status = switch (season) { case (?s) s.status; case null "" };
+        season_start_date = switch (season) { case (?s) s.start_date; case null "" };
+        season_end_date = switch (season) { case (?s) s.end_date; case null "" };
+        joined_at_ms = 0;
+      }
+    })
+  };
+
+  // ---- Invite-acceptance analytics over pendingInvites, admin gated. ----
+
+  public query ({ caller }) func list_accepted_invites(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : [Types.AcceptedInvite]; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let rows = pendingInvites.filter(func(i) =
+      i.club_id == club_id and i.status == "accepted" and
+      (switch (i.accepted_at_ms) { case (?ts) ts >= since_ms and ts <= until_ms; case null false }));
+    #Ok(rows.map(func(i) : Types.AcceptedInvite {
+      {
+        id = i.id;
+        invited_user_id = switch (i.accepted_by) { case (?p) Principal.toText(p); case null "" };
+        accepted_at_ms = switch (i.accepted_at_ms) { case (?ts) ts; case null 0 };
+      }
+    }))
+  };
+
+  public query ({ caller }) func invite_stats(club_id : Text, since_ms : Nat64, until_ms : Nat64) : async { #Ok : Types.InviteStats; #Err : Text } {
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let inRange = pendingInvites.filter(func(i) = i.club_id == club_id and i.created_at_ms >= since_ms and i.created_at_ms <= until_ms);
+    let accepted = inRange.filter(func(i) = i.accepted_at_ms != null).size();
+    #Ok({ total = inRange.size(); accepted })
   };
 
   // ---- Manual member payment ledger (Phase 3, F6) ----

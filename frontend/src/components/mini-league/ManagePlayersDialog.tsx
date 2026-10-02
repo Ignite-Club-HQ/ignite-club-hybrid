@@ -6,7 +6,7 @@ const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-leag
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer } from "@/live/features/miniLeagues";
+import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer, getLivePlayerGuardianStatus } from "@/live/features/miniLeagues";
 import { Principal } from "@icp-sdk/core/principal";
 import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -264,9 +264,10 @@ export function ManagePlayersDialog({
   const { data: pendingMeta } = useQuery({
     queryKey: ["mini-league-players-pending-meta", miniLeagueId, childIdsForPending],
     queryFn: async () => {
-      // NEEDS-CANISTER: children/child_guardians pending-status lookup has no
-      // canister equivalent; skip the raw Supabase read under ICP routing.
-      if (childIdsForPending.length === 0 || isFeatureRoutedToIcp("mini_leagues")) return { childParent: new Map<string, string | null>(), guardianCount: new Map<string, number>() };
+      if (childIdsForPending.length === 0) return { childParent: new Map<string, string | null>(), guardianCount: new Map<string, number>() };
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return { childParent: new Map<string, string | null>(), guardianCount: new Map<string, number>() };
+      }
       const [{ data: childRows }, { data: guardianRows }] = await Promise.all([
         supabase.from("children").select("id, parent_id").in("id", childIdsForPending),
         supabase.from("child_guardians").select("child_id").in("child_id", childIdsForPending),
@@ -279,9 +280,32 @@ export function ManagePlayersDialog({
     enabled: open && childIdsForPending.length > 0,
   });
 
+  // ICP: get_player_guardian_status mirrors the Supabase children.parent_id +
+  // child_guardians count exactly, one call per player with a child_id.
+  const playerIdsForIcpPending = isFeatureRoutedToIcp("mini_leagues")
+    ? [...new Set((players || []).map(p => p.id))]
+    : [];
+  const { data: icpPendingStatuses } = useQuery({
+    queryKey: ["mini-league-players-guardian-status", miniLeagueId, playerIdsForIcpPending],
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => new Map<string, boolean>(),
+        icp: async (ctx) => {
+          const entries = await Promise.all(
+            playerIdsForIcpPending.map(async (id) => [id, (await getLivePlayerGuardianStatus(ctx, id)).pending] as const),
+          );
+          return new Map(entries);
+        },
+      }),
+    enabled: open && playerIdsForIcpPending.length > 0,
+  });
+
   const isPlayerPending = (player: MiniLeaguePlayer) => {
-    // ICP: pending means no parent linked and nobody has claimed the invite.
-    if (isFeatureRoutedToIcp("mini_leagues")) return !player.parent_user_id && !player.claimed_by;
+    // ICP: delegate to get_player_guardian_status, which matches the
+    // Supabase children.parent_id + child_guardians computation exactly.
+    if (isFeatureRoutedToIcp("mini_leagues")) {
+      return icpPendingStatuses?.get(player.id) ?? (!player.parent_user_id && !player.claimed_by);
+    }
     if (player.parent_user_id) return false;
     if (!player.child_id) return true;
     const childParent = pendingMeta?.childParent.get(player.child_id) ?? null;
@@ -389,10 +413,10 @@ export function ManagePlayersDialog({
             }
           }
         },
-        // NEEDS-CANISTER: mini_league_domain has no child_mini_league_assignments/
-        // children tables, so the cascade cleanup below has no canister
-        // equivalent — the player row itself is removed on-canister, but the
-        // linked child/assignment rows (Supabase-only) are left untouched.
+        // Canister-side cascade: remove_player / removeLiveMember drop the
+        // mini_league_domain MiniLeagueChild + guardian rows once no other
+        // player references the same child_id (mirrors the Supabase
+        // children/child_guardians cascade above).
         // Round-4 design decision: removal is a soft delete on club_domain
         // (records kept, hidden, reversible via "Removed players" below).
         // Players linked to a club member (parent_user_id set) are soft

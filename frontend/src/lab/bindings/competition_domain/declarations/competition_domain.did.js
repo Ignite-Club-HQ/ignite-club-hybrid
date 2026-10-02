@@ -26,12 +26,57 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'competition_id' : IDL.Text,
   });
+  const EoiSubmission = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'registered_at_ms' : IDL.Opt(IDL.Nat64),
+    'preferred_teammates' : IDL.Opt(IDL.Text),
+    'submitted_at_ms' : IDL.Nat64,
+    'claim_token' : IDL.Text,
+    'assigned_team_id' : IDL.Opt(IDL.Text),
+    'claimed_at_ms' : IDL.Opt(IDL.Nat64),
+    'source' : IDL.Text,
+    'season_id' : IDL.Text,
+    'parent_email' : IDL.Text,
+    'invite_sent_at_ms' : IDL.Opt(IDL.Nat64),
+    'updated_at_ms' : IDL.Nat64,
+    'returning_player' : IDL.Bool,
+    'extra_notes' : IDL.Opt(IDL.Text),
+    'parent_mobile' : IDL.Opt(IDL.Text),
+    'player_name' : IDL.Text,
+    'child_id' : IDL.Opt(IDL.Text),
+    'confirmed_at_ms' : IDL.Opt(IDL.Nat64),
+    'preferred_position' : IDL.Opt(IDL.Text),
+    'created_at_ms' : IDL.Nat64,
+    'invite_sent_count' : IDL.Nat16,
+    'parent_user_id' : IDL.Opt(IDL.Principal),
+    'game_days' : IDL.Vec(IDL.Text),
+    'notes' : IDL.Opt(IDL.Text),
+    'training_days' : IDL.Vec(IDL.Text),
+    'player_dob' : IDL.Opt(IDL.Text),
+    'player_gender' : IDL.Opt(IDL.Text),
+    'allocated_at_ms' : IDL.Opt(IDL.Nat64),
+    'revision' : IDL.Nat64,
+    'club_id' : IDL.Text,
+    'skill_level' : IDL.Opt(IDL.Nat16),
+    'parent_confirmed_at_ms' : IDL.Opt(IDL.Nat64),
+    'withdrawn_at_ms' : IDL.Opt(IDL.Nat64),
+    'age_group' : IDL.Opt(IDL.Text),
+    'parent_name' : IDL.Text,
+  });
   const TeamEntry = IDL.Record({
     'status' : IDL.Text,
     'team_id' : IDL.Text,
     'division_id' : IDL.Opt(IDL.Text),
     'competition_id' : IDL.Text,
     'club_id' : IDL.Text,
+  });
+  const CompetitionEngagementSummary = IDL.Record({
+    'total_matches' : IDL.Nat,
+    'active_teams' : IDL.Nat,
+    'broadcasts' : IDL.Nat,
+    'results_entered' : IDL.Nat,
+    'competition_id' : IDL.Text,
   });
   const Competition = IDL.Record({
     'id' : IDL.Text,
@@ -93,6 +138,7 @@ export const idlFactory = ({ IDL }) => {
   const State = IDL.Record({
     'seasons' : IDL.Vec(Season),
     'schema' : IDL.Nat32,
+    'eoiSubmissions' : IDL.Vec(EoiSubmission),
     'entries' : IDL.Vec(TeamEntry),
     'matches' : IDL.Vec(Match),
     'tokens' : IDL.Vec(JoinToken),
@@ -102,6 +148,24 @@ export const idlFactory = ({ IDL }) => {
     'competitionJoinLinks' : IDL.Vec(CompetitionJoinLink),
     'competitions' : IDL.Vec(Competition),
     'roles' : IDL.Vec(RoleGrant),
+  });
+  const EoiStats = IDL.Record({
+    'conversion_rate' : IDL.Float64,
+    'new_players' : IDL.Nat,
+    'total' : IDL.Nat,
+    'submitted' : IDL.Nat,
+    'views' : IDL.Nat,
+    'allocated' : IDL.Nat,
+    'confirmed' : IDL.Nat,
+    'returning_players' : IDL.Nat,
+    'withdrawn' : IDL.Nat,
+    'registered' : IDL.Nat,
+  });
+  const EoiTeamSuggestion = IDL.Record({
+    'player_count' : IDL.Nat,
+    'avg_skill' : IDL.Float64,
+    'submission_ids' : IDL.Vec(IDL.Text),
+    'age_group' : IDL.Text,
   });
   
   return IDL.Service({
@@ -120,14 +184,54 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
         [],
       ),
+    'allocate_eoi_to_team' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
+        [],
+      ),
     'assign_division' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
         [],
       ),
+    'assign_eoi_team' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
+        [],
+      ),
+    'bulk_resend_eoi_invites' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({ 'ok' : IDL.Nat, 'fail' : IDL.Nat }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'claim_eoi_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
+        [],
+      ),
     'claim_join_token' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
+    'competition_engagement_summary' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Int, IDL.Int],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(CompetitionEngagementSummary),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'confirm_eoi_placement' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
         [],
       ),
     'create_competition' : IDL.Func(
@@ -155,6 +259,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_eoi' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_match' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -173,6 +282,16 @@ export const idlFactory = ({ IDL }) => {
     'get_chat_settings' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_eoi_stats' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_my_pending_eois' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
         ['query'],
       ),
     'grant_role' : IDL.Func(
@@ -240,6 +359,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_eoi_submissions' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_invites_by_invitee' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
@@ -273,6 +397,11 @@ export const idlFactory = ({ IDL }) => {
     'remove_competition_role' : IDL.Func(
         [IDL.Text, IDL.Principal, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'resend_eoi_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
         [],
       ),
     'respond_to_entry_invite' : IDL.Func(
@@ -310,6 +439,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
+    'suggest_eoi_teams' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EoiTeamSuggestion), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'transfer_governorship' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -318,6 +452,16 @@ export const idlFactory = ({ IDL }) => {
     'trim_rounds' : IDL.Func(
         [IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_eoi_status' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_eoi_submission' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : EoiSubmission, 'Err' : IDL.Text })],
         [],
       ),
     'update_match_details' : IDL.Func(

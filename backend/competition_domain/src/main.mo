@@ -1,7 +1,7 @@
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
-import Float "mo:core/Float";
+import Int "mo:core/Int";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -663,11 +663,11 @@ persistent actor {
     var groups : [Types.EoiTeamSuggestion] = [];
     for (item in candidates.values()) {
       let ag = switch (item.age_group) { case (?a) a; case null "Unknown" };
-      let skill = switch (item.skill_level) { case (?s) Float.fromInt(Nat16.toNat(s)); case null 3.0 };
+      let skill = switch (item.skill_level) { case (?s) Int.toFloat(Nat16.toNat(s)); case null 3.0 };
       switch (groups.find(func(g) = g.age_group == ag)) {
         case (?existing) {
           let newCount = existing.player_count + 1;
-          let newAvg = ((existing.avg_skill * Float.fromInt(existing.player_count)) + skill) / Float.fromInt(newCount);
+          let newAvg = ((existing.avg_skill * Int.toFloat(existing.player_count)) + skill) / Int.toFloat(newCount);
           let updated : Types.EoiTeamSuggestion = { age_group = ag; player_count = newCount; avg_skill = newAvg; submission_ids = existing.submission_ids.concat([item.id]) };
           groups := groups.map(func(g) = if (g.age_group == ag) updated else g);
         };
