@@ -9,7 +9,6 @@ import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
 import { useAuth } from "@/hooks/useAuth";
 import { readAdTierHint, writeAdTierHint, type AdTierHint } from "@/lib/adTierHint";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface SponsorOrAdCarouselProps {
   location: "home" | "events" | "messages" | "event-detail" | "schedule";
