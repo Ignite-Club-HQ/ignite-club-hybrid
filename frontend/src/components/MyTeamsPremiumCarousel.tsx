@@ -16,6 +16,123 @@ import { cacheTeams, getCachedClub } from "@/lib/clubTeamCache";
 import { getSignedPhotoUrls } from "@/hooks/useSignedPhotoUrl";
 import { setCachedCarousel, getCachedCarouselWithTs } from "@/lib/myTeamsCarouselCache";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
+import { listLiveEvents } from "@/live/features/events";
+
+/**
+ * ICP-mode items loader for the carousel: role grants + teams/clubs from the
+ * club canister, mini-leagues from the mini-league canister. PlayHQ managed-
+ * competition cards stay Supabase-only (approved exception).
+ * NEEDS-CANISTER: team/club sport and trial (is_pro/pro_expires_at) fields.
+ */
+async function fetchIcpCarouselItems(
+  ctx: FeatureBackendContext,
+  activeClubFilter: string | null,
+): Promise<TeamOrLeague[]> {
+  const grants = (await getLiveMyRoleGrants(ctx)) as unknown as {
+    club: [] | [string];
+    team: [] | [string];
+    role: string;
+  }[];
+  const teamIds = [...new Set(grants.filter((g) => g.team[0]).map((g) => g.team[0]!))];
+  const leagueAdminClubIds = [...new Set(
+    grants.filter((g) => g.club[0] && g.role === "league_admin").map((g) => g.club[0]!),
+  )];
+
+  const clubMeta = new Map<string, { name: string; logo_url: string | null }>();
+  const getClubMeta = async (clubId: string) => {
+    let meta = clubMeta.get(clubId);
+    if (!meta) {
+      try {
+        const opt = (await getLiveClubProfile(ctx, clubId)) as any;
+        const p = Array.isArray(opt) ? opt[0] : opt;
+        meta = { name: p?.name ?? "", logo_url: p?.logo_url?.[0] ?? null };
+      } catch {
+        meta = { name: "", logo_url: null };
+      }
+      clubMeta.set(clubId, meta);
+    }
+    return meta;
+  };
+
+  const result: TeamOrLeague[] = [];
+
+  await Promise.all(
+    teamIds.map(async (teamId) => {
+      try {
+        const raw = (await getLiveTeam(ctx, teamId)) as any;
+        const team = Array.isArray(raw) ? raw[0] : raw;
+        if (!team || team.archived || team.deleted_at_ms?.length) return;
+        if (activeClubFilter && team.club_id !== activeClubFilter) return;
+        const teamRoles = grants.filter((g) => g.team[0] === teamId);
+        const clubRoles = grants.filter((g) => g.club[0] === team.club_id);
+        const canManage =
+          teamRoles.some((g) => ["coach", "team_admin"].includes(g.role)) ||
+          clubRoles.some((g) => ["club_admin", "app_admin"].includes(g.role));
+        const meta = await getClubMeta(team.club_id);
+        result.push({
+          id: team.id,
+          name: team.name,
+          logo_url: team.logo_url?.[0] ?? null,
+          club_logo_url: meta.logo_url,
+          type: "team",
+          club_name: meta.name,
+          sport: null,
+          club_id: team.club_id,
+          canManage,
+        });
+      } catch { /* team not visible to caller */ }
+    }),
+  );
+
+  const leagueIds = new Set<string>();
+  try {
+    const mine = (await listMyLiveMiniLeagues(ctx)) as any[];
+    for (const l of mine || []) if (l?.id) leagueIds.add(l.id);
+  } catch { /* no leagues */ }
+  await Promise.all(
+    leagueAdminClubIds.map(async (clubId) => {
+      try {
+        const ls = (await listLiveMiniLeaguesByClub(ctx, clubId)) as any[];
+        for (const l of ls || []) if (l?.id) leagueIds.add(l.id);
+      } catch { /* club not visible */ }
+    }),
+  );
+  await Promise.all(
+    [...leagueIds].map(async (leagueId) => {
+      try {
+        const raw = (await getLiveMiniLeague(ctx, leagueId)) as any;
+        const league = Array.isArray(raw) ? raw[0] : raw;
+        if (!league || league.status === "deleted" || league.status === "archived") return;
+        if (activeClubFilter && league.club_id !== activeClubFilter) return;
+        const meta = await getClubMeta(league.club_id);
+        result.push({
+          id: league.id,
+          name: league.name,
+          logo_url: league.logo_url?.[0] ?? null,
+          club_logo_url: meta.logo_url,
+          type: "league",
+          club_name: meta.name,
+          sport: null,
+          club_id: league.club_id,
+          canManage: leagueAdminClubIds.includes(league.club_id),
+        });
+      } catch { /* league not visible */ }
+    }),
+  );
+
+  return result.sort((a, b) => {
+    if (a.canManage && !b.canManage) return -1;
+    if (!a.canManage && b.canManage) return 1;
+    if (a.type === "team" && b.type === "league") return -1;
+    if (a.type === "league" && b.type === "team") return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
 
 // Render Supabase storage URLs through the image-transform endpoint at a tiny
 // width so the 28×28 avatar thumbnails don't download full-resolution originals.
@@ -443,6 +560,7 @@ interface ManagedPlayhqCompetitionRow {
 
 export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarouselProps = {}) {
   const { user, initialized } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const { activeClubFilter } = useClubTheme();
 
@@ -482,6 +600,13 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     queryFn: async () => {
       if (!user) return [];
 
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          // Unreachable: this branch only runs when ICP mode is active.
+          supabase: async () => [] as TeamOrLeague[],
+          icp: (ctx) => fetchIcpCarouselItems(ctx, activeClubFilter ?? null),
+        });
+      }
 
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
@@ -656,6 +781,39 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
         return title;
       };
 
+      // ICP mode: next event per team from the events canister.
+      // NEEDS-CANISTER: per-mini-league next event (canister events carry no
+      // mini_league_id link) and the is_bye flag.
+      if (isIcp) {
+        return withFeatureBackend("events", {
+          // Unreachable: this branch only runs when ICP mode is active.
+          supabase: async () => map,
+          icp: async (ctx) => {
+            const nowMs = Date.now();
+            await Promise.all(
+              teamIds.map(async (teamId) => {
+                try {
+                  const events = (await listLiveEvents(ctx, null, teamId)) as any[];
+                  const next = events
+                    .filter((e) => !e.deleted && !e.cancelled && Number(e.starts_at_ms) >= nowMs)
+                    .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))[0];
+                if (next) {
+                    const start = new Date(Number(next.starts_at_ms));
+                    map[teamId] = {
+                      title: buildLabel(next.event_type, null, next.title, false),
+                      dateLabel: formatShortDate(start.toISOString()),
+                      type: next.event_type,
+                      eventDate: start.toISOString(),
+                    };
+                  }
+                } catch { /* team vanished */ }
+              }),
+            );
+            return map;
+          },
+        });
+      }
+
       // PER-SCOPE FAN-OUT: one `.in(...)` query with a global limit lets a
       // busy team's fixture list consume the whole window and starve quieter
       // teams of their "next event" label. Bound each team individually.
@@ -766,7 +924,8 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
 
       return map;
     },
-    enabled: teamIds.length > 0 && deferredReady,
+    // Media bytes stay on Supabase by design; photo thumbnails skip in ICP mode.
+    enabled: teamIds.length > 0 && deferredReady && !isIcp,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
