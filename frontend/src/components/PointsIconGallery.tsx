@@ -179,6 +179,7 @@ export function PointsIconGallery({ clubId, currentIconUrl, onIconSelect }: Poin
             }}
           />
         </label>
+        )}
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { createLiveNewsPost } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
@@ -383,14 +383,16 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
                 </Button>
               </div>
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImagePlus className="mr-2 h-4 w-4" /> Add image
-              </Button>
+              {!isIcpMediaUploadUnavailable() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImagePlus className="mr-2 h-4 w-4" /> Add image
+                </Button>
+              )}
             )}
             <input
               ref={fileInputRef}
@@ -442,6 +444,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               </div>
             )}
 
+            {!isIcpMediaUploadUnavailable() && (
             <Button
               type="button"
               variant="outline"
@@ -452,6 +455,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               <ImagePlus className="mr-2 h-4 w-4" />
               {extraImages.length >= NEWS_MAX_IMAGES ? "Image limit reached" : "Add more images"}
             </Button>
+            )}
             {extraImages.length === 0 && (
               <p className="text-xs text-muted-foreground">
                 Uploaded images will show an <span className="font-medium text-foreground">Insert here</span> option.
@@ -517,6 +521,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               </div>
             )}
 
+            {!isIcpMediaUploadUnavailable() && (
             <Button
               type="button"
               variant="outline"
@@ -527,6 +532,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               <Paperclip className="mr-2 h-4 w-4" />
               {docFiles.length >= NEWS_MAX_FILES ? "File limit reached" : "Attach files"}
             </Button>
+            )}
             <p className="text-xs text-muted-foreground">
               PDFs, documents or spreadsheets up to {formatFileSize(NEWS_ATTACHMENT_MAX_BYTES)} each.
             </p>
