@@ -1385,3 +1385,62 @@ export async function checkLiveEventMembership(
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return actor.check_event_membership(userId, eventId);
 }
+
+// ============================================================================
+// PlayHQ reads (Phase 4): club-level API credentials + read-only
+// competition/fixture lookups now live on events_domain. Import and
+// materialise-into-events stay Supabase-only (no canister counterpart) —
+// only these reads move.
+// ============================================================================
+
+export interface LivePlayHQConfigInput {
+  baseUrl: string;
+  apiKey: string;
+}
+
+/** Admin-only: stores the club's PlayHQ API credentials on events_domain. */
+export async function setLivePlayHQConfig(
+  ctx: FeatureBackendContext,
+  config: LivePlayHQConfigInput | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_playhq_config(
+      candidOpt(
+        config
+          ? {
+              base_url: config.baseUrl,
+              api_key: config.apiKey,
+              updated_at_ms: toNat64(Date.now()),
+            }
+          : null,
+      ),
+    ),
+    "Set PlayHQ config",
+  );
+}
+
+/** PlayHQ competitions visible to the caller's club (tenant/org scoped). */
+export async function listLivePlayHQCompetitions(
+  ctx: FeatureBackendContext,
+  tenant: string,
+  orgId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_playhq_competitions(tenant, orgId),
+    "List PlayHQ competitions",
+  );
+}
+
+/** PlayHQ fixtures (matches) for one competition. */
+export async function listLivePlayHQFixtures(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_playhq_fixtures(competitionId),
+    "List PlayHQ fixtures",
+  );
+}
