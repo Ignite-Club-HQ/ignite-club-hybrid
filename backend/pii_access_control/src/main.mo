@@ -132,6 +132,14 @@ persistent actor {
     children : [Text]; // pii_id set
   };
 
+  // A club-scoped read grant: members of `club_id` (per club_domain) may
+  // read the (pii_id, field_id) record via the decrypt methods.
+  public type ClubReadGrant = {
+    pii_id : Text;
+    field_id : Text;
+    club_id : Text;
+  };
+
   type MasterSecretEntry = {
     key_id : Text;
     secret : [Nat8]; // 32 bytes, from raw_rand. Never exposed via any public method.
@@ -160,6 +168,17 @@ persistent actor {
   // grant_pii_read authorization. Seeded empty, populated via
   // add_guardian_relationship.
   var guardian_relationships : [GuardianRelationship];
+
+  // Club-scoped read grants: any principal holding a role in `club_id`
+  // (verified via club_domain's has_club_staff_role at read time) may read
+  // the record. Lets club staff (e.g. a coach viewing an event roster) read
+  // child/guest names without a per-principal grant.
+  var club_read_grants : [ClubReadGrant];
+
+  // Principal of the club_domain canister used to verify club membership
+  // for club-scoped read grants. Set post-deploy by the governor via
+  // set_club_domain_canister; while unset, club grants never authorize.
+  var club_domain_canister : ?Principal;
 
   // ==================== Helper Functions ====================
 
@@ -192,6 +211,45 @@ persistent actor {
   // access without requiring an explicit per-field grant.
   func can_read(caller : Principal, r : PiiRecord) : Bool {
     isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller)) or isVerifiedGuardian(caller, r.pii_id)
+  };
+
+  // Club ids holding a club-scoped read grant for this record (deduped).
+  func grantClubIds(pii_id : Text, field_id : Text) : [Text] {
+    var ids : [Text] = [];
+    for (g in club_read_grants.values()) {
+      if (g.pii_id == pii_id and g.field_id == field_id and not ids.any(func(c) = c == g.club_id)) {
+        ids := ids.concat([g.club_id]);
+      };
+    };
+    ids
+  };
+
+  // Verifies the caller's club membership for each club id via club_domain.
+  // Fails closed: an unset canister id or any call error yields no
+  // authorized clubs, so a misconfigured deployment denies rather than
+  // leaks.
+  func clubsWhereStaff(caller : Principal, clubIds : [Text]) : async [Text] {
+    switch (club_domain_canister) {
+      case null { [] };
+      case (?cid) {
+        let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        var ok : [Text] = [];
+        for (club_id in clubIds.values()) {
+          try {
+            if (await clubDomain.has_club_staff_role(caller, club_id)) {
+              ok := ok.concat([club_id]);
+            };
+          } catch (_) {};
+        };
+        ok
+      };
+    }
+  };
+
+  func canReadViaClub(r : PiiRecord, allowedClubs : [Text]) : Bool {
+    club_read_grants.any(
+      func(g) = g.pii_id == r.pii_id and g.field_id == r.field_id and allowedClubs.any(func(c) = c == g.club_id)
+    )
   };
 
   func log_audit(requesting_principal : Principal, pii_id : Text, field_id : Text, operation : Text, allowed : Bool, purpose : Text) {
