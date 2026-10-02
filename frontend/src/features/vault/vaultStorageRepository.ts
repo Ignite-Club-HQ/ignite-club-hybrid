@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -127,6 +128,14 @@ export async function fetchVaultStorageSubscription(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageSubscription> {
+  // Defense-in-depth: VaultPage only calls this repository from Supabase-only
+  // query paths today, but guard here too so an II principal can never fire
+  // this Supabase read if a future caller forgets to route around it.
+  // NEEDS-CANISTER: no club storage-purchase equivalent exists on any
+  // canister yet, so ICP callers get the "no purchased storage" default.
+  if (resolveAuthBackend() === "icp") {
+    return { storage_purchased_gb: 0, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
+  }
   const { data } = await client
     .from("club_subscriptions")
     .select("storage_purchased_gb, scheduled_storage_downgrade_gb, storage_downgrade_at")
@@ -143,6 +152,14 @@ export async function fetchVaultStorageBreakdown(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageBreakdown> {
+  // Defense-in-depth: VaultPage only calls this repository from Supabase-only
+  // query paths today, but guard here too so an II principal can never fire
+  // these Supabase reads if a future caller forgets to route around it.
+  // NEEDS-CANISTER: no club storage-usage breakdown equivalent exists on any
+  // canister yet, so ICP callers get an empty breakdown.
+  if (resolveAuthBackend() === "icp") {
+    return emptyVaultStorageBreakdown();
+  }
   const { data: photos } = await client
     .from("photos")
     .select("file_size, team_id, mini_league_id")

@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export interface ReturningPlayer {
   club_player_id: string;
@@ -51,22 +52,28 @@ export function ReturningMembersStep({
   onAssignmentsChange,
 }: Props) {
   const [filter, setFilter] = useState("");
+  // NEEDS-CANISTER: season rollover has no canister yet — an II principal
+  // has no Supabase session, so skip both RPCs and show the empty state.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: players = [], isLoading } = useQuery({
     queryKey: ["returning-players", sourceSeasonId],
     queryFn: async (): Promise<ReturningPlayer[]> => {
+      if (isIcp) return [];
       const { data, error } = await supabase.rpc("get_returning_players", {
         _source_season_id: sourceSeasonId,
       });
       if (error) throw error;
       return (data ?? []) as ReturningPlayer[];
     },
+    enabled: !isIcp,
   });
 
   const { data: targetTeams = [] } = useQuery({
     queryKey: ["season-target-teams", targetSeasonId],
-    enabled: !!targetSeasonId,
+    enabled: !!targetSeasonId && !isIcp,
     queryFn: async (): Promise<TargetTeam[]> => {
+      if (isIcp) return [];
       const { data, error } = await supabase
         .from("teams")
         .select("id, name")

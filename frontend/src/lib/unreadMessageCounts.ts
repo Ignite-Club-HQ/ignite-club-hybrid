@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { MESSAGE_NOTIFICATION_TYPES } from "@/lib/notificationTypes";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 export interface UnreadMessageCounts {
   broadcast: number;
@@ -31,6 +32,31 @@ export const getTotalUnreadMessageCount = (counts: UnreadMessageCounts): number 
 };
 
 export async function fetchUnreadMessageCounts(userId: string): Promise<UnreadMessageCounts> {
+  return withFeatureBackend("messaging", {
+    supabase: () => fetchUnreadMessageCountsSupabase(userId),
+    icp: async (ctx) => {
+      const { myLiveUnreadCounts } = await import("@/live/features/messaging");
+      const summaries = await myLiveUnreadCounts(ctx);
+      const counts = createEmptyUnreadMessageCounts();
+      for (const s of summaries) {
+        if (s.kind === "broadcast") {
+          counts.broadcast += s.count;
+        } else if (s.kind === "team") {
+          counts.teams[s.conversationId] = s.count;
+        } else if (s.kind === "club") {
+          counts.clubs[s.conversationId] = s.count;
+        } else if (s.kind === "group" || s.kind === "competition") {
+          counts.groups[s.conversationId] = s.count;
+        } else if (s.kind === "dm") {
+          counts.dms[s.conversationId] = s.count;
+        }
+      }
+      return counts;
+    },
+  });
+}
+
+async function fetchUnreadMessageCountsSupabase(userId: string): Promise<UnreadMessageCounts> {
   // Fast path: single RPC round-trip. Falls back to the legacy multi-query
   // path on any error so a regression cannot break the inbox.
   try {

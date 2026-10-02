@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default SupabaseSeasonComparePage;
 
@@ -26,23 +27,26 @@ function SupabaseSeasonComparePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // NEEDS-CANISTER: season comparison has no canister yet — an II principal
+  // has no Supabase session, so the access/club checks below are skipped.
+  const isIcp = resolveAuthBackend() === "icp";
   const [leftId, setLeftId] = useState<string | undefined>(searchParams.get("a") || undefined);
   const [rightId, setRightId] = useState<string | undefined>(searchParams.get("b") || undefined);
 
   const { data: club } = useQuery({
     queryKey: ["club-basic", clubId],
     queryFn: async () => {
-      if (!clubId) return null;
+      if (!clubId || isIcp) return null;
       const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcp,
   });
 
   const { data: canAccess, isLoading: accessLoading } = useQuery({
     queryKey: ["can-compare-seasons", clubId, user?.id],
     queryFn: async () => {
-      if (!clubId || !user?.id) return false;
+      if (!clubId || !user?.id || isIcp) return false;
       const [appAdmin, clubAdmin, coach] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
@@ -56,7 +60,7 @@ function SupabaseSeasonComparePage() {
       ]);
       return !!appAdmin.data || !!clubAdmin.data || (coach.data && coach.data.length > 0);
     },
-    enabled: !!clubId && !!user?.id,
+    enabled: !!clubId && !!user?.id && !isIcp,
   });
 
   const { data: seasons = [], isLoading: seasonsLoading } = useClubSeasons(clubId);

@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { listLiveTeams, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { listLiveTeams, getLiveTeam } from "@/live/features/club";
 import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -480,56 +480,71 @@ function SupabaseVaultPage() {
       if (!urlFolderId || initialLoadComplete || !userClubs) return;
       
       try {
-        // Fetch the folder to get its details
-        const { data: folder, error } = await supabase
-          .from("vault_folders")
-          .select("*, teams!vault_folders_team_id_fkey(id, name, club_id), clubs!club_id(id, name)")
-          .eq("id", urlFolderId)
-          .maybeSingle();
-        
-        if (error || !folder) {
+        const result = await withFeatureBackend("vault", {
+          supabase: async () => {
+            // Fetch the folder to get its details
+            const { data: folder, error } = await supabase
+              .from("vault_folders")
+              .select("*, teams!vault_folders_team_id_fkey(id, name, club_id), clubs!club_id(id, name)")
+              .eq("id", urlFolderId)
+              .maybeSingle();
+
+            if (error || !folder) return null;
+
+            // Build folder path by traversing parent folders
+            const path: { id: string; name: string }[] = [];
+            let currentFolderId = folder.parent_id;
+
+            while (currentFolderId) {
+              const { data: parentFolder } = await supabase
+                .from("vault_folders")
+                .select("id, name, parent_id")
+                .eq("id", currentFolderId)
+                .maybeSingle();
+
+              if (parentFolder) {
+                path.unshift({ id: parentFolder.id, name: parentFolder.name });
+                currentFolderId = parentFolder.parent_id;
+              } else {
+                break;
+              }
+            }
+
+            path.push({ id: folder.id, name: folder.name });
+
+            let clubName = folder.clubs?.name || "Unknown Club";
+            if (folder.team_id && folder.teams) {
+              const { data: club } = await supabase
+                .from("clubs")
+                .select("name")
+                .eq("id", folder.teams.club_id)
+                .maybeSingle();
+              clubName = club?.name || "Unknown Club";
+            }
+
+            return { folder, path, clubName };
+          },
+          // NEEDS-CANISTER: the vault_domain canister has no single-folder
+          // lookup by id (only folder listings scoped to a club), so a
+          // deep link straight to a folder id cannot be resolved on ICP yet.
+          icp: async () => null,
+        });
+
+        if (!result) {
           toast.error("Folder not found or access denied");
           navigate("/vault", { replace: true });
           setInitialLoadComplete(true);
           return;
         }
 
-        // Build folder path by traversing parent folders
-        const path: { id: string; name: string }[] = [];
-        let currentFolderId = folder.parent_id;
-        
-        while (currentFolderId) {
-          const { data: parentFolder } = await supabase
-            .from("vault_folders")
-            .select("id, name, parent_id")
-            .eq("id", currentFolderId)
-            .maybeSingle();
-          
-          if (parentFolder) {
-            path.unshift({ id: parentFolder.id, name: parentFolder.name });
-            currentFolderId = parentFolder.parent_id;
-          } else {
-            break;
-          }
-        }
-        
-        // Add the target folder to path
-        path.push({ id: folder.id, name: folder.name });
+        const { folder, path, clubName } = result;
         setFolderPath(path);
 
-        // Set the view based on folder type
         if (folder.team_id && folder.teams) {
-          const clubId = folder.teams.club_id;
-          const { data: club } = await supabase
-            .from("clubs")
-            .select("name")
-            .eq("id", clubId)
-            .maybeSingle();
-          
           setCurrentView({
             type: "team",
-            clubId: clubId,
-            clubName: club?.name || "Unknown Club",
+            clubId: folder.teams.club_id,
+            clubName,
             teamId: folder.team_id,
             teamName: folder.teams.name,
             folderId: folder.id,
@@ -608,11 +623,24 @@ function SupabaseVaultPage() {
           }
         } else if (teamId) {
           // Navigate directly to team vault
-          const { data: team } = await supabase
-            .from("teams")
-            .select("id, name, club_id")
-            .eq("id", teamId)
-            .maybeSingle();
+          const team = await withFeatureBackend("vault", {
+            supabase: async () => {
+              const { data } = await supabase
+                .from("teams")
+                .select("id, name, club_id")
+                .eq("id", teamId)
+                .maybeSingle();
+              return data;
+            },
+            icp: async (ctx) => {
+              try {
+                const t: any = await getLiveTeam(ctx, teamId);
+                return { id: t.id, name: t.name, club_id: t.club_id ?? t.club };
+              } catch {
+                return null;
+              }
+            },
+          });
 
           if (team) {
             const club = userClubs.find(c => c.id === team.club_id);
