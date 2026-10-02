@@ -60,7 +60,7 @@ async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
 }
 
 export function ClubBackendEnforcement() {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const { toast } = useToast();
 
   useEffect(() => {

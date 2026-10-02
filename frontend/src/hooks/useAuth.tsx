@@ -1258,6 +1258,17 @@ export function useAuth() {
   return context;
 }
 
+/**
+ * Null-safe auth read for always-mounted app-shell components (gates,
+ * prefetchers, enforcement monitors). They must never blank the app if the
+ * auth context is momentarily unavailable (e.g. a stale HMR module copy) —
+ * they treat null as signed-out and render nothing until the real context
+ * settles.
+ */
+export function useOptionalAuth(): AuthContextType | null {
+  return useContext(AuthContext);
+}
+
 /** Local ICP session seam for staged frontend migration work. */
 export function IcpAuthProvider({ children, persona = "member" }: { children: ReactNode; persona?: string }) {
   const [session, setSession] = useState<InternetIdentitySession | null>(() => {

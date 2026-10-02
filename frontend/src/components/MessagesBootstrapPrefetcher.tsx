@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { useMessagesPageBootstrap } from "@/hooks/useMessagesPageBootstrap";
 
 /**
@@ -13,7 +13,9 @@ import { useMessagesPageBootstrap } from "@/hooks/useMessagesPageBootstrap";
  * queries during initial mount.
  */
 export function MessagesBootstrapPrefetcher() {
-  const { user, initialized } = useAuth();
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
+  const initialized = auth?.initialized ?? false;
   const [idle, setIdle] = useState(false);
 
   useEffect(() => {

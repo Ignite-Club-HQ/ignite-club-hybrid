@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import {
   PITCH_STATE_KEY,
@@ -50,7 +50,7 @@ const hasAnyGameState = (): boolean => {
  * this wrapper is purely about not paying the mount cost in the common idle case.
  */
 export default function GlobalSubMonitorGate() {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const [hasGame, setHasGame] = useState<boolean>(() => hasAnyGameState());
 
   // Poll cheaply for game state changes. We can't only rely on storage events
