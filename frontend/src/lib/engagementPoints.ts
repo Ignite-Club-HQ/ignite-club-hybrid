@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { recordPointsHistory, type PointsSourceType } from "@/lib/pointsHistory";
 import { checkRewardThreshold } from "@/lib/rewardThresholdCheck";
+import { icpCallerHasProEntitlement } from "@/lib/icpPointsPro";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { awardLivePoints, subjectForUser } from "@/live/features/points";
@@ -77,14 +78,7 @@ export async function awardEngagementPoints({
       // run here (an II principal has no Supabase session).
       // NEEDS-CANISTER: the club-level disable_points_system kill switch has
       // no club_domain settings field yet.
-      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
-      const identity = await getCurrentInternetIdentity();
-      if (!identity) return false;
-      const principal = identity.getPrincipal().toText();
-      const { getCachedIcpIsPro, fetchIcpEntitlements } = await import("@/live/identityEntitlements");
-      const isPro = getCachedIcpIsPro(principal)
-        || (await fetchIcpEntitlements(identity, principal)).isPro;
-      if (!isPro) return false;
+      if (!(await icpCallerHasProEntitlement())) return false;
     } else {
       // Check if club has Pro subscription and points system enabled
       const { data: clubSub } = await supabase
