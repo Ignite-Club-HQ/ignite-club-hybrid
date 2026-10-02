@@ -28,6 +28,9 @@ vi.mock("@/live/features/club", () => ({
 vi.mock("@/live/features/vault", () => ({
   registerLiveChildNamePii: mocks.registerLiveChildNamePii,
 }));
+vi.mock("@icp-sdk/core/principal", () => ({
+  Principal: { fromText: (text: string) => ({ _isPrincipal: true, text }) },
+}));
 
 import AddPlayerToParentSheet from "./AddPlayerToParentSheet";
 
