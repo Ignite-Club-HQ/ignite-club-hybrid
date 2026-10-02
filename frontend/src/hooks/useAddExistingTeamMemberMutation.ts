@@ -11,6 +11,7 @@ import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { addLiveRoleGrant } from "@/live/features/membership";
+import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import {
   createLiveChildForParentOnTeam,
   createLivePendingInvite,
@@ -379,8 +380,26 @@ export function useAddExistingTeamMemberMutation({
             }
           }
 
-          // Notifications and all email-sending are Supabase-only; skipped
-          // under ICP per the locked decision (not treated as a failure).
+          // Best-effort notification fan-out via the routed notification
+          // helper (notification_queue canister). Email-sending remains
+          // Supabase-only. Never blocks the core add — logged and swallowed
+          // on failure, same as the other best-effort steps above.
+          let notificationFailed = false;
+          let notificationErrorMessage: string | null = null;
+          try {
+            await sendGamificationNotification({
+              userId: selectedUser.id,
+              clubId,
+              kind: "membership",
+              message: `You have been added to ${teamName} as ${selectedRoleLabel}`,
+              relatedId: teamId,
+              dedupHours: 0,
+            });
+          } catch (error) {
+            console.error("[AddTeamMember][ICP] notification failed:", error);
+            notificationFailed = true;
+            notificationErrorMessage = (error as Error)?.message ?? "Notification failed";
+          }
 
           if (failed.length > 0) {
             const succeededText = succeeded.length > 0 ? `${succeeded.join(", ")}, but ` : "";
@@ -397,8 +416,8 @@ export function useAddExistingTeamMemberMutation({
             secondParentInviteEmail,
             secondParentFailure,
             roleWasDuplicate: false,
-            notificationFailed: false,
-            notificationError: null,
+            notificationFailed,
+            notificationError: notificationErrorMessage,
             icp: true,
           };
         },
