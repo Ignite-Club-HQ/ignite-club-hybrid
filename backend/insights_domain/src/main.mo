@@ -482,6 +482,10 @@ persistent actor {
     }))
   };
 
+  public query ({ caller }) func is_app_admin() : async Bool {
+    isAppAdmin(caller)
+  };
+
   // ================= House ads (app_ad_settings / app_ads) =================
   // App-global, operator-managed display config + ad content. Display reads
   // are open (mirroring list_sponsors); writes are app-admin gated.
