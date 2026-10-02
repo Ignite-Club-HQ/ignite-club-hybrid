@@ -90,6 +90,94 @@ module {
   // Unassigned duty that any eligible member can claim via claim_open_duty.
   public type OpenDuty = { id : Text; event_id : Text; duty : Text; claimed_by : ?Text; created_at_ms : Nat64 };
 
+  // ---- Workstream D: pitch board settings / game stats / game results / active game ----
+  // Mirrors Supabase team_subscriptions pitch-board columns, keyed by team_id.
+  public type PitchBoardSettings = {
+    team_id : Text;
+    rotation_speed : Nat16;
+    disable_position_swaps : Bool;
+    disable_batch_subs : Bool;
+    rotate_gk_at_halftime : Bool;
+    minutes_per_half : Nat16;
+    max_spread_minutes : Nat16;
+    team_size : Nat16;
+    formation : ?Text;
+    show_match_header : Bool;
+    show_lineup_picker : Bool;
+    updated_at_ms : Nat64;
+  };
+
+  // Mirrors Supabase game_summaries, replace-by-event-id semantics.
+  public type GameSummary = {
+    event_id : Text;
+    team_id : Text;
+    total_game_time : Nat32;
+    half_duration : Nat32;
+    formation_used : ?Text;
+    total_substitutions : Nat16;
+    updated_at_ms : Nat64;
+  };
+
+  // Mirrors Supabase game_player_stats rows. Caller passes event_id/team_id
+  // once to save_game_player_stats; each input row omits them.
+  public type GamePlayerStatInput = {
+    user_id : ?Text;
+    fill_in_player_name : ?Text;
+    jersey_number : ?Nat16;
+    minutes_played : Nat32;
+    positions_played : [Text];
+    substitutions_count : Nat16;
+    started_on_pitch : Bool;
+    goals_scored : Nat16;
+  };
+  public type GamePlayerStat = {
+    event_id : Text;
+    team_id : Text;
+    user_id : ?Text;
+    fill_in_player_name : ?Text;
+    jersey_number : ?Nat16;
+    minutes_played : Nat32;
+    positions_played : [Text];
+    substitutions_count : Nat16;
+    started_on_pitch : Bool;
+    goals_scored : Nat16;
+  };
+
+  // Mirrors Supabase game_results. period_scores/player_stats are opaque
+  // JSON blobs (Text) — the canister has no cross-sport score/stat schema,
+  // so it stores exactly what the client serializes (mirrors the Supabase
+  // jsonb columns) and returns it back unparsed.
+  public type GameResult = {
+    id : Text;
+    team_id : Text;
+    event_id : ?Text;
+    sport : Text;
+    home_label : Text;
+    away_label : Text;
+    home_score : Nat32;
+    away_score : Nat32;
+    period_scores_json : Text;
+    player_stats_json : Text;
+    mvp_player_id : ?Text;
+    mvp_player_name : ?Text;
+    saved_by : Principal;
+    updated_at_ms : Nat64;
+  };
+
+  // Mirrors Supabase active_games — server-side mirror used to drive
+  // halftime/sub push notifications. timer_state_json/pitch_state_json are
+  // opaque JSON blobs (Text), mirroring the Supabase jsonb columns.
+  public type ActiveGame = {
+    id : Text;
+    user_id : Principal;
+    team_id : ?Text;
+    timer_state_json : Text;
+    pitch_state_json : Text;
+    board_session_id : Text;
+    is_active : Bool;
+    updated_at_ms : Nat64;
+  };
+
   // ---- Mini-league-player RSVPs (NEEDS-CANISTER #9) ----
   // Separate from Rsvp (which is keyed by account_id) so a mini-league
   // player without an account can RSVP via their mini_league_players row id.
