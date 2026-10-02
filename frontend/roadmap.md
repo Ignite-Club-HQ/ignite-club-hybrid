@@ -84,3 +84,15 @@
   - competitions: DONE (2026-10-02) — ICP branch lists club competitions and keeps only those with an accepted/registered entry from this club (canister has no team soft-delete join; accepted status parity is close enough for the analytics list).
   - CompetitionPanel stats: DONE (2026-10-02) — ICP branch computes active teams, fixtures and results-entered from competition_domain list_entries/list_matches (accepted|registered entries, completed matches). Broadcast count intentionally reads Supabase competition_broadcasts in both modes by design (the send-competition-broadcast edge function writes there in both modes — an allowed exception, not a gap); competition_engagement_summary was built on competition_domain in the EOI pass.
 - UserAnalyticsTab.tsx (admin "analytics" feature) — activityData: DONE (2026-10-02) — insights_domain gained list_user_activity (per-session page-view log) with record_user_activity dual-write from useActivityTracking; tab routed via withFeatureBackend("analytics").
+
+## Triple-check audit — unapproved Supabase dependencies in ICP mode (2026-10-02)
+Standing rule: no "not available" states. Every item below must be wired to a canister (existing method or new) — no exceptions beyond the designed list (media bytes, push, Drive import, non-IAP payments, game-stats email, competition broadcasts, PlayHQ import/materialise, admin/routing config).
+
+- [ ] assertSupabaseWritePath call sites (~41 across 16 files) — throws for II users; wire each to its canister:
+  - messaging: PollCard (4), ChatDetailsSheet (2), ChatParticipantsList (5), ClubDMSettings (2), ClubMessagePrivacySettings (2), ClubAICatchUpSettings (3)
+  - club: AddClubRoleToMemberDialog (2), AddTeamMemberSheet (2), useAddBulkTeamMembersMutation (2), ClubThemeEditor (3), FindOrCreateClubWizard (3)
+  - competitions: CompetitionShareJoinLink (3), PlayHQTeamLinkCard (2 — verify sites vs allowed PlayHQ exception)
+  - events: EventGroupsManager (9), AttendanceSection (2), AssociationEventsPanel (1)
+- [ ] useUpdateScheduledMessage throws in ICP mode — add canister update method or cancel+reschedule flow
+- [ ] resolveEventChildScope returns [] in ICP mode (EventDetailPage, QuickRSVPDialog, NextUpCarousel) — children silently missing from RSVP scope
+- [ ] Typing indicator / pinned-message realtime / chat-to-vault sync disabled in ICP mode — wire via canister or record as justified exception
