@@ -31,6 +31,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { getLiveEventChild } from "@/live/features/events";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 
 interface PlayerOfMatchSelectorProps {
   eventId: string;
@@ -316,9 +317,13 @@ export default function PlayerOfMatchSelector({
                 .single()).data,
             icp: async (ctx) => {
               const c = await getLiveEventChild(ctx, eventId, childId);
+              // Child names live on pii_access_control (events_domain stores
+              // nameless Child records); resolve best-effort for the
+              // notification/ledger text.
+              const names = await resolveLivePiiTextBatch(ctx, [childId], "name", "player_of_match", "Player of the Match child name");
               // Empty string = no linked parent; the child?.parent_id truthy
               // guards below treat it the same as Supabase's null.
-              return { parent_id: c.parent_id[0] ?? "", name: c.name };
+              return { parent_id: c.parent_id[0] ?? "", name: names.get(childId) ?? "Your child" };
             },
           });
 
@@ -439,11 +444,13 @@ export default function PlayerOfMatchSelector({
               const child = await getLiveEventChild(ctx, eventId, childId);
               const parentId = child.parent_id[0];
               if (parentId) {
+                const names = await resolveLivePiiTextBatch(ctx, [childId], "name", "player_of_match", "Player of the Match child name");
+                const childName = names.get(childId) ?? "Your child";
                 await fanOutLiveNotifications(ctx, {
                   userIds: [parentId],
                   clubId,
                   kind: "player_of_match",
-                  body: `🏆 ${child.name} was selected as Player of the Match!`,
+                  body: `🏆 ${childName} was selected as Player of the Match!`,
                   idempotencyKeyPrefix: `pom-nopoints-${eventId}-${childId}-parent`,
                   relatedId: eventId,
                 });

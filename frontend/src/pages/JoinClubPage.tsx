@@ -83,7 +83,6 @@ export default function JoinClubPage() {
       }
       return null;
     },
-    enabled: !!token,
   });
 
   // Fetch user's existing roles in this club
@@ -99,7 +98,6 @@ export default function JoinClubPage() {
         .eq("club_id", invite!.club_id);
       return data?.map(r => r.role as AppRole) || [];
     },
-    enabled: !!invite?.club_id && !!user,
   });
 
   // Fetch user's profile to check if profile is complete
@@ -112,7 +110,6 @@ export default function JoinClubPage() {
       const { data } = await selectCachedProfileById(user!.id);
       return data;
     },
-    enabled: !!user,
     staleTime: 0,
     refetchOnMount: 'always',
   });

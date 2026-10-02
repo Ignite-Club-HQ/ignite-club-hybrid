@@ -16,6 +16,7 @@ import { getEventEligibleTeamIds } from "@/lib/eventAudience";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyChildren, getLiveMyChildTeamAssignments } from "@/live/features/events";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 
 export type RsvpChild = { id: string; name: string; parent_id?: string | null };
@@ -100,9 +101,18 @@ async function intersectWithTeamsIcp(
 /** The caller's own children (events_domain `my_children`), mapped to the shared RsvpChild shape. */
 async function getIcpCandidateChildren(ctx: FeatureBackendContext): Promise<RsvpChild[]> {
   const children = await getLiveMyChildren(ctx);
+  // events_domain Child records are nameless (PII hardening) — names resolve
+  // best-effort from pii_access_control under pii_id=child id, field "name".
+  const names = await resolveLivePiiTextBatch(
+    ctx,
+    children.map((c) => c.id),
+    "name",
+    "rsvp_scope",
+    "RSVP child names",
+  );
   return children.map((c) => ({
     id: c.id,
-    name: c.name,
+    name: names.get(c.id) ?? "Child",
     parent_id: c.parent_id.length ? c.parent_id[0] : null,
   }));
 }

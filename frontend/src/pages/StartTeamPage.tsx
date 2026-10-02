@@ -9,6 +9,7 @@ import { selectCachedProfileById } from "@/lib/profileCache";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLocalLabClubList } from "@/lab/fixtureDataLayer";
 
 
