@@ -130,7 +130,7 @@ module {
       var series = old.series;
       var eventAttendance = old.eventAttendance;
       var eventGuests = old.eventGuests;
-      var children = old.children.map(func(c : OldChild) : Child = { id = c.id; parent_id = c.parent_id });
+      var children = Array.map<OldChild, Child>(old.children, func(c) = { id = c.id; parent_id = c.parent_id });
       var childGuardians = old.childGuardians;
       var bulkAccessPrincipals = old.bulkAccessPrincipals;
       var coachNotes = old.coachNotes;
