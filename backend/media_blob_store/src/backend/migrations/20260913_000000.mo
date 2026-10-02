@@ -16,12 +16,14 @@ module {
     chunk_count : Nat32;
     chunks : [?Blob];
   };
+  type OldActor = {};
   type NewActor = {
     var blobs : [BlobRecord];
     var pending_uploads : [PendingUpload];
     var next_upload_seq : Nat64;
   };
-  public func migration() : NewActor {
+  // Initial bootstrap: seeds empty state.
+  public func migration(_old : OldActor) : NewActor {
     {
       var blobs = [];
       var pending_uploads = [];

@@ -1,12 +1,12 @@
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
-import Iter "mo:core/Iter";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
-import Sha256 "mo:core/Sha256";
+import Nat8 "mo:core/Nat8";
+import Sha256 "mo:sha2/Sha256";
 import Text "mo:core/Text";
 
 // media_blob_store — on-chain store for encrypted media bytes.
@@ -78,9 +78,9 @@ persistent actor MediaBlobStore {
 
   // ==================== State (seeded by migration chain) ====================
 
-  var blobs : [BlobRecord] = [];
-  var pending_uploads : [PendingUpload] = [];
-  var next_upload_seq : Nat64 = 0;
+  var blobs : [BlobRecord];
+  var pending_uploads : [PendingUpload];
+  var next_upload_seq : Nat64;
 
   // ==================== Helpers ====================
 
@@ -115,10 +115,9 @@ persistent actor MediaBlobStore {
 
   func hexDigest(bytes : Blob) : Text {
     let digest = Sha256.fromBlob(#sha256, bytes);
-    let chars = Iter.toArray(digest.vals());
     let hexDigits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
     var out = "";
-    for (byte in chars.vals()) {
+    for (byte in digest.values()) {
       out #= hexDigits[Nat8.toNat(byte) / 16] # hexDigits[Nat8.toNat(byte) % 16];
     };
     out
@@ -181,17 +180,15 @@ persistent actor MediaBlobStore {
         if (upload.chunks.any(func(chunk) { chunk == null })) {
           return #Err("Missing chunks");
         };
-        let assembled = Blob.fromArray(
-          Array.concat(
-            upload.chunks.map(func(chunk) {
-              switch (chunk) {
-                case (?bytes) { Blob.toArray(bytes) };
-                case null { [] };
-              }
-            })
-          )
-        );
-        if (Nat64.fromNat(assembled.size()) != upload.total_size) {
+        var assembledArray : [Nat8] = [];
+        for (chunk in upload.chunks.values()) {
+          switch (chunk) {
+            case (?bytes) { assembledArray := assembledArray.concat(Blob.toArray(bytes)) };
+            case null {};
+          };
+        };
+        let assembled = Array.toBlob(assembledArray);
+        if (Nat.toNat64(assembled.size()) != upload.total_size) {
           return #Err("Accumulated byte count does not match total_size");
         };
         let content_hash = hexDigest(assembled);
@@ -285,9 +282,9 @@ persistent actor MediaBlobStore {
   public query func health() : async Health {
     {
       version = "1";
-      blob_count = Nat64.fromNat(blobs.size());
-      total_bytes = Nat64.fromNat(
-        blobs.foldLeft(0, func(acc : Nat, record : BlobRecord) { acc + record.bytes.size() })
+      blob_count = Nat.toNat64(blobs.size());
+      total_bytes = Nat.toNat64(
+        blobs.foldLeft(0, func(acc : Nat, record : BlobRecord) : Nat = acc + record.bytes.size())
       );
     }
   };
