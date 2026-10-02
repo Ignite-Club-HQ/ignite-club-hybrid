@@ -2,6 +2,7 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
+import { registerLivePiiText } from "./vault";
 
 /**
  * Club data -> club_domain canister. Shared by the membership and news
@@ -328,7 +329,7 @@ export async function createLivePendingInvite(
   },
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  const result = unwrapCandid(
     actor.create_pending_invite(
       input.kind,
       input.clubId,
@@ -339,6 +340,14 @@ export async function createLivePendingInvite(
     ),
     "Create pending invite",
   );
+  // Register the invitee email on pii_access_control (pii_id = invite id,
+  // field_id = "email", owner = the inviting caller). Best effort — the
+  // invite itself already exists and must not fail on a PII write.
+  const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
+  if (inviteId) {
+    await registerLivePiiText(ctx, inviteId, "email", input.email);
+  }
+  return result;
 }
 
 export async function listLivePendingInvitesByClub(ctx: FeatureBackendContext, clubId: string) {
@@ -392,13 +401,13 @@ export async function adminLinkLiveChildToParent(
 
 export async function createLiveChildForParentOnTeam(
   ctx: FeatureBackendContext,
+  clubId: string,
   teamId: string,
-  childName: string,
   parent: Parameters<ClubDomainActor["create_child_for_parent_on_team"]>[2],
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.create_child_for_parent_on_team(teamId, childName, parent),
+    actor.create_child_for_parent_on_team(clubId, teamId, parent),
     "Create child for parent",
   );
 }

@@ -7,12 +7,30 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   toast: vi.fn(),
   releaseCreate: null as null | ((value: { data: string; error: null }) => void),
+  withFeatureBackend: vi.fn(
+    (_feature: string, providers: { supabase: () => unknown; icp: (ctx: unknown) => unknown }) =>
+      providers.supabase(),
+  ),
+  createLiveChildForParentOnTeam: vi.fn(),
+  registerLiveChildNamePii: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: mocks.rpc },
 }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: mocks.toast }) }));
+vi.mock("@/live/featureRouter", () => ({
+  withFeatureBackend: mocks.withFeatureBackend,
+}));
+vi.mock("@/live/features/club", () => ({
+  createLiveChildForParentOnTeam: mocks.createLiveChildForParentOnTeam,
+}));
+vi.mock("@/live/features/vault", () => ({
+  registerLiveChildNamePii: mocks.registerLiveChildNamePii,
+}));
+vi.mock("@icp-sdk/core/principal", () => ({
+  Principal: { fromText: (text: string) => ({ _isPrincipal: true, text }) },
+}));
 
 import AddPlayerToParentSheet from "./AddPlayerToParentSheet";
 
@@ -30,6 +48,7 @@ function renderSheet(onOpenChange = vi.fn()) {
       onOpenChange={onOpenChange}
       teamId="team-1"
       teamName="Under 10 Blue"
+      clubId="club-1"
       defaultParentUserId="parent-1"
       rawMembers={[{
         user_id: "parent-1",
@@ -113,5 +132,35 @@ describe("AddPlayerToParentSheet — canonical child creation", () => {
       variant: "destructive",
     })));
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ["team-children", "team-1"] });
+  });
+
+  it("ICP: creates the child with club/team/parent args and registers the name on the PII canister", async () => {
+    mocks.withFeatureBackend.mockImplementation(
+      (_feature: string, providers: { icp: (ctx: unknown) => unknown }) =>
+        providers.icp({ identity: {}, target: {} }),
+    );
+    mocks.createLiveChildForParentOnTeam.mockResolvedValue({ id: "child-1" });
+    mocks.registerLiveChildNamePii.mockResolvedValue(undefined);
+
+    renderSheet();
+    fireEvent.change(screen.getByLabelText("Player name"), { target: { value: "Ava Smith" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add player" }));
+
+    await waitFor(() =>
+      expect(mocks.createLiveChildForParentOnTeam).toHaveBeenCalledWith(
+        expect.anything(),
+        "club-1",
+        "team-1",
+        expect.objectContaining({ _isPrincipal: true }),
+      ),
+    );
+    await waitFor(() =>
+      expect(mocks.registerLiveChildNamePii).toHaveBeenCalledWith(
+        expect.anything(),
+        "child-1",
+        "Ava Smith",
+        expect.objectContaining({ _isPrincipal: true }),
+      ),
+    );
   });
 });

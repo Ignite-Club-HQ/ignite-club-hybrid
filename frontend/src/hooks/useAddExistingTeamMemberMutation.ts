@@ -16,6 +16,10 @@ import {
   createLivePendingInvite,
   linkLiveGuardian,
 } from "@/live/features/club";
+import {
+  grantLiveGuardianChildNameRead,
+  registerLiveChildNamePii,
+} from "@/live/features/vault";
 
 type Profile = {
   id: string;
@@ -293,15 +297,23 @@ export function useAddExistingTeamMemberMutation({
                   const existingChild = clubChildren.find((candidate) => candidate.id === childId);
                   if (existingChild && existingChild.parent_id !== selectedUser.id) {
                     await linkLiveGuardian(ctx, childId, userPrincipal);
+                    // Seed the new guardian's read grant on the child's PII
+                    // name record (best effort — never fails the link).
+                    await grantLiveGuardianChildNameRead(ctx, childId, userPrincipal);
                   }
                 } else {
                   const created = (await createLiveChildForParentOnTeam(
                     ctx,
+                    clubId,
                     teamId,
-                    child.name.trim(),
                     userPrincipal,
                   )) as { id?: string } | undefined;
                   childId = created?.id;
+                  if (childId) {
+                    // Names live on pii_access_control, not club_domain —
+                    // register the name and grant the parent read access.
+                    await registerLiveChildNamePii(ctx, childId, child.name.trim(), userPrincipal);
+                  }
                 }
                 if (!childId) throw new Error("No child id returned from canister");
 

@@ -13,6 +13,7 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveChildForParentOnTeam } from "@/live/features/club";
+import { registerLiveChildNamePii } from "@/live/features/vault";
 
 interface ParentCandidate {
   user_id: string;
@@ -27,6 +28,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   teamId: string;
   teamName: string;
+  /** Owning club — required by the ICP child-creation call. */
+  clubId: string;
   /** Members of the team (from user_roles join) used to populate parent picker. */
   rawMembers: Array<{
     user_id: string;
@@ -46,6 +49,7 @@ export default function AddPlayerToParentSheet({
   onOpenChange,
   teamId,
   teamName,
+  clubId,
   rawMembers,
   defaultParentUserId,
 }: Props) {
@@ -159,13 +163,18 @@ export default function AddPlayerToParentSheet({
         },
         icp: async (ctx) => {
           const { Principal } = await import("@icp-sdk/core/principal");
+          const parentPrincipal = Principal.fromText(selectedParentId);
           const child = await createLiveChildForParentOnTeam(
             ctx,
+            clubId,
             teamId,
-            trimmed,
-            Principal.fromText(selectedParentId),
+            parentPrincipal,
           );
-          return (child as any).id as string;
+          const childId = (child as any).id as string;
+          // Names live on pii_access_control, not club_domain — register the
+          // name and grant the parent read access (best effort).
+          await registerLiveChildNamePii(ctx, childId, trimmed, parentPrincipal);
+          return childId;
         },
       });
     },

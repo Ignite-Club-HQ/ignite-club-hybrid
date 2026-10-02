@@ -1316,6 +1316,7 @@ export default function TeamDetailPage() {
           onOpenChange={setAddPlayerOpen}
           teamId={id!}
           teamName={team.name}
+          clubId={team.club_id}
           rawMembers={rawMembers as any}
         />
         </Suspense>

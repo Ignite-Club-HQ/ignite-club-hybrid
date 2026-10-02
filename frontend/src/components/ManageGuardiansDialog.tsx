@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { linkLiveGuardian, unlinkLiveGuardian } from "@/live/features/club";
+import { grantLiveGuardianChildNameRead } from "@/live/features/vault";
 import { Principal } from "@icp-sdk/core/principal";
 
 interface Guardian {
@@ -135,6 +136,9 @@ export default function ManageGuardiansDialog({
           // NEEDS-CANISTER: link_guardian has no relationship_type/is_primary
           // fields yet — only the principal link itself persists.
           await linkLiveGuardian(ctx, childId, Principal.fromText(selectedUserId));
+          // Seed the new guardian's read grant on the child's PII name record
+          // (best effort — never fails the link).
+          await grantLiveGuardianChildNameRead(ctx, childId, Principal.fromText(selectedUserId));
         },
         supabase: async () => {
           const { error } = await supabase.from("child_guardians").insert({

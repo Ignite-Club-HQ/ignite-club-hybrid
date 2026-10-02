@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLivePendingInvite, createLiveChildForParentInClub, linkLiveGuardian } from "@/live/features/club";
+import { grantLiveGuardianChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
 import { linkLiveMiniLeagueGuardian } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Principal } from "@icp-sdk/core/principal";
@@ -135,6 +136,9 @@ export function AddSecondParentDialog({
         if (!selectedUser) throw new Error("Select a parent to link first");
         const parentPrincipal = Principal.fromText(selectedUser.id);
         const child = await createLiveChildForParentInClub(ctx, clubId, parentPrincipal);
+        // Names live on pii_access_control, not club_domain — register the
+        // player name and grant the parent read access (best effort).
+        await registerLiveChildNamePii(ctx, child.id, playerName, parentPrincipal);
         return child.id;
       },
     });
@@ -170,6 +174,9 @@ export function AddSecondParentDialog({
           if (!selectedUser) throw new Error("No user selected");
           const resolvedChildId = await ensureChildId();
           await linkLiveGuardian(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
+          // Seed the new guardian's read grant on the child's PII name record
+          // (best effort — never fails the link).
+          await grantLiveGuardianChildNameRead(ctx, resolvedChildId, Principal.fromText(selectedUser.id));
           // Keep the mini_league_domain guardian-status lookup
           // (get_player_guardian_status, used by ManagePlayersDialog's
           // pending-status column) in sync with the club_domain link above.
