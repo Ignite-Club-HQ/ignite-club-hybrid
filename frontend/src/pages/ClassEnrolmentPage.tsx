@@ -24,50 +24,10 @@ import { MobileSelect } from "@/components/ui/mobile-select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabClassEnrolment } from "@/lab/fixtureDataLayer";
 
 type TeamType = "junior" | "senior" | "mixed";
 
-export default function ClassEnrolmentPage() {
-  const navigate = useNavigate();
-  const { teamId } = useParams<{ teamId: string }>();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-
-  if (useIcpLab) {
-    const enrolment = getLocalLabClassEnrolment(teamId ?? "team-icp-001");
-    return (
-      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold">{enrolment.class_name}</h1>
-        </div>
-        <Alert>
-          <AlertDescription>
-            Showing synthetic ICP lab enrolment data. Submitting a new enrolment is disabled.
-          </AlertDescription>
-        </Alert>
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <p className="text-sm">
-              <span className="font-medium">Capacity:</span> {enrolment.capacity}
-            </p>
-            <p className="text-sm font-medium flex items-center gap-1"><Users className="h-4 w-4" /> Enrolled</p>
-            <ul className="text-sm text-muted-foreground list-disc list-inside">
-              {enrolment.enrolled.map((child) => (
-                <li key={child.id}>{child.display_name}</li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return <SupabaseClassEnrolmentPage />;
-}
+export default SupabaseClassEnrolmentPage;
 
 function SupabaseClassEnrolmentPage() {
   const { clubId } = useParams<{ clubId: string }>();

@@ -9,13 +9,9 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { RoleRequestsList } from "@/components/members/RoleRequestsList";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabTeamRoleRoster } from "@/lab/fixtureDataLayer";
-import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { roleLabels, type AppRole } from "@/features/membership/rolePresentation";
-import { IcpLabRoleRosterView } from "@/features/membership/IcpLabRoleRosterView";
 import { groupRoleRowsByUser } from "@/features/membership/roleRoster";
 import {
   RoleManagementHeader,
@@ -45,54 +41,7 @@ const roleColors: Record<TeamRole, string> = {
   app_admin: "bg-destructive/20 text-destructive",
 };
 
-export default function ManageTeamRolesPage() {
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
-    return <IcpLabManageTeamRolesPage />;
-  }
-
-  return <SupabaseManageTeamRolesPage />;
-}
-
-/** Read-only team role roster backed by synthetic fixtures; mutations remain unavailable until identity_access role-projection is wired here. */
-function IcpLabManageTeamRolesPage() {
-  const { user } = useAuth();
-  const { teamId } = useParams<{ teamId: string }>();
-  const persona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
-  const [fallbackRoster] = useState(() => getLocalLabTeamRoleRoster(teamId ?? "team-icp-001"));
-  const { data: state, error, isLoading } = useQuery({
-    queryKey: ["icp-team-role-roster", teamId, persona],
-    queryFn: async () => {
-      try {
-        const connection = await connectLocalIdentityAccessClient(persona);
-        return { source: "icp" as const, state: await connection.client.exportState() };
-      } catch (error) {
-        if (!(error instanceof Error) || !/not configured/i.test(error.message)) throw error;
-        return { source: "fixture" as const, state: null };
-      }
-    },
-  });
-  const roster = state?.state
-    ? state.state.roles
-      .filter((role) => role.team[0] === (teamId ?? "team-icp-001"))
-      .map((role) => ({
-        profile: { id: role.account_id, display_name: role.account_id },
-        roles: [{ id: `${role.account_id}-${role.role}`, role: role.role }],
-      }))
-    : fallbackRoster;
-
-  return (
-    <IcpLabRoleRosterView
-      title="Team Roles"
-      source={state?.source}
-      isLoading={isLoading}
-      error={error}
-      errorFallbackMessage="Unable to load team role data."
-      roster={roster}
-      roleBadgeClassName={(role) => roleColors[role as TeamRole]}
-    />
-  );
-}
+export default SupabaseManageTeamRolesPage;
 
 function SupabaseManageTeamRolesPage() {
   const { teamId } = useParams<{ teamId: string }>();

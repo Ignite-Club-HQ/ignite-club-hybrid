@@ -546,16 +546,22 @@ export default function EventDetailPage() {
   // Check if user is app admin (global override)
   const { data: isAppAdmin } = useQuery({
     queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !useIcpLab,
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", user!.id)
+          .eq("role", "app_admin")
+          .maybeSingle();
+        return !!data;
+      },
+      icp: async (ctx) => {
+        const grants = await getLiveMyRoleGrants(ctx);
+        return (grants ?? []).some((g: any) => g.role === "app_admin");
+      },
+    }),
+    enabled: !!user,
   });
 
   // Check if user is admin for this event
@@ -563,45 +569,53 @@ export default function EventDetailPage() {
     queryKey: ["event-admin-check", id, user?.id, event?.club_id, event?.team_id, event?.mini_league_id],
     queryFn: async () => {
       if (!event) return false;
-      
-      // First check for club_admin role (always applies to club events)
-      const { data: clubAdminData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("club_id", event.club_id)
-        .in("role", ["club_admin", "committee_member"])
-        .limit(1);
-      
-      if (clubAdminData && clubAdminData.length > 0) return true;
-      
-      // For team-specific events, also check team_admin/coach roles
-      if (event.team_id) {
-        const { data: teamRoleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user!.id)
-          .eq("team_id", event.team_id)
-          .in("role", ["team_admin", "coach"]);
-        
-        if (teamRoleData && teamRoleData.length > 0) return true;
-      }
-      
-      // For mini-league events, also check league_admin/coach roles
-      if (event.mini_league_id) {
-        const { data: leagueAdminData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user!.id)
-          .eq("club_id", event.club_id)
-          .in("role", ["league_admin", "coach", "committee_member"]);
-        
-        if (leagueAdminData && leagueAdminData.length > 0) return true;
-      }
-      
-      return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubAdminData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user!.id)
+            .eq("club_id", event.club_id)
+            .in("role", ["club_admin", "committee_member"])
+            .limit(1);
+
+          if (clubAdminData && clubAdminData.length > 0) return true;
+
+          if (event.team_id) {
+            const { data: teamRoleData } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user!.id)
+              .eq("team_id", event.team_id)
+              .in("role", ["team_admin", "coach"]);
+
+            if (teamRoleData && teamRoleData.length > 0) return true;
+          }
+
+          if (event.mini_league_id) {
+            const { data: leagueAdminData } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user!.id)
+              .eq("club_id", event.club_id)
+              .in("role", ["league_admin", "coach", "committee_member"]);
+
+            if (leagueAdminData && leagueAdminData.length > 0) return true;
+          }
+
+          return false;
+        },
+        icp: async (ctx) => {
+          const grants = (await getLiveMyRoleGrants(ctx)) as Array<{ club: [] | [string]; team: [] | [string]; role: string }>;
+          const inClub = (g: typeof grants[number]) => Array.isArray(g.club) && g.club[0] === event.club_id;
+          if (grants.some((g) => inClub(g) && ["club_admin", "committee_member"].includes(g.role))) return true;
+          if (event.team_id && grants.some((g) => Array.isArray(g.team) && g.team[0] === event.team_id && ["team_admin", "coach"].includes(g.role))) return true;
+          if (event.mini_league_id && grants.some((g) => inClub(g) && ["league_admin", "coach", "committee_member"].includes(g.role))) return true;
+          return false;
+        },
+      });
     },
-    enabled: !!user && !!event && !useIcpLab,
+    enabled: !!user && !!event,
   });
 
   // Check if team has Pro Football subscription (for pitch board) or club has Pro Football
@@ -609,63 +623,72 @@ export default function EventDetailPage() {
     queryKey: ["team-pro-football-status", event?.team_id, event?.club_id],
     queryFn: async () => {
       if (!event?.team_id) return false;
-      
-      // Check team-level Pro Football
-      const { data: teamSub } = await supabase
-        .from("team_subscriptions")
-        .select("is_pro_football, admin_pro_football_override")
-        .eq("team_id", event.team_id)
-        .maybeSingle();
-      
-      if (teamSub?.is_pro_football || teamSub?.admin_pro_football_override) return true;
-      
-      // Check club-level Pro Football
-      if (event?.club_id) {
-        const { data: clubSub } = await supabase
-          .from("club_subscriptions")
-          .select("is_pro_football, admin_pro_football_override")
-          .eq("club_id", event.club_id)
-          .maybeSingle();
-        
-        if (clubSub?.is_pro_football || clubSub?.admin_pro_football_override) return true;
-      }
-      
-      return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: teamSub } = await supabase
+            .from("team_subscriptions")
+            .select("is_pro_football, admin_pro_football_override")
+            .eq("team_id", event.team_id)
+            .maybeSingle();
+
+          if (teamSub?.is_pro_football || teamSub?.admin_pro_football_override) return true;
+
+          if (event?.club_id) {
+            const { data: clubSub } = await supabase
+              .from("club_subscriptions")
+              .select("is_pro_football, admin_pro_football_override")
+              .eq("club_id", event.club_id)
+              .maybeSingle();
+
+            if (clubSub?.is_pro_football || clubSub?.admin_pro_football_override) return true;
+          }
+
+          return false;
+        },
+        icp: async (ctx) => {
+          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
+          return summary.isPro;
+        },
+      });
     },
-    enabled: !!event?.team_id && !useIcpLab,
+    enabled: !!event?.team_id,
   });
   
   // Check if team/club has Pro subscription (for other features like RSVP reminders)
   const { data: hasTeamPro, isLoading: isLoadingHasTeamPro } = useQuery({
     queryKey: ["team-pro-status", event?.team_id, event?.club_id],
-    queryFn: async () => {
-      // First check team-level subscription
-      if (event?.team_id) {
-        const { data: teamSub } = await supabase
-          .from("team_subscriptions")
-          .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("team_id", event.team_id)
-          .maybeSingle();
-        if (teamSub?.is_pro || teamSub?.is_pro_football || teamSub?.admin_pro_override || teamSub?.admin_pro_football_override) {
-          return true;
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        if (event?.team_id) {
+          const { data: teamSub } = await supabase
+            .from("team_subscriptions")
+            .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
+            .eq("team_id", event.team_id)
+            .maybeSingle();
+          if (teamSub?.is_pro || teamSub?.is_pro_football || teamSub?.admin_pro_override || teamSub?.admin_pro_football_override) {
+            return true;
+          }
         }
-      }
-      
-      // Then check club-level subscription
-      if (event?.club_id) {
-        const { data: clubSub } = await supabase
-          .from("club_subscriptions")
-          .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("club_id", event.club_id)
-          .maybeSingle();
-        if (clubSub?.is_pro || clubSub?.is_pro_football || clubSub?.admin_pro_override || clubSub?.admin_pro_football_override) {
-          return true;
+
+        if (event?.club_id) {
+          const { data: clubSub } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
+            .eq("club_id", event.club_id)
+            .maybeSingle();
+          if (clubSub?.is_pro || clubSub?.is_pro_football || clubSub?.admin_pro_override || clubSub?.admin_pro_football_override) {
+            return true;
+          }
         }
-      }
-      
-      return false;
-    },
-    enabled: (!!event?.team_id || !!event?.club_id) && !useIcpLab,
+
+        return false;
+      },
+      icp: async (ctx) => {
+        const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
+        return summary.isPro;
+      },
+    }),
+    enabled: (!!event?.team_id || !!event?.club_id),
   });
 
   // Pro feature check: duty points only for Pro clubs/teams or app_admin
