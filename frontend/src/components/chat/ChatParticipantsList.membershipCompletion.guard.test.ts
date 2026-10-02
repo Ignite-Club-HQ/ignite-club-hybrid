@@ -9,10 +9,12 @@ const source = readFileSync(
 
 describe("chat participant team-membership completion", () => {
   it("uses distinct shared completion policies for role and atomic member removal", () => {
+    // Called once per backend branch (Supabase + ICP) since the messaging
+    // ICP wiring added the withFeatureBackend("membership") path.
     expect(
       source.match(/refreshChatManagedTeamMembership\(/g),
-    ).toHaveLength(1);
-    expect(source.match(/refreshChatRemovedTeamMember\(/g)).toHaveLength(1);
+    ).toHaveLength(2);
+    expect(source.match(/refreshChatRemovedTeamMember\(/g)).toHaveLength(2);
     expect(source).toContain('supabase.rpc("remove_team_member"');
     expect(source).not.toContain(
       'invalidateQueries({ queryKey: ["team-roles", effectiveTeamId] })',
