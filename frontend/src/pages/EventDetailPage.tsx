@@ -814,69 +814,103 @@ export default function EventDetailPage() {
   // Players with status "maybe", "not_going", or no response are excluded.
   // Adults (coaches/admins) are always included so they can run the board.
   const { data: teamMembers, isLoading: isTeamMembersForPitchLoading } = useQuery({
-    queryKey: eventKeys.pitchTeamMembers(event?.team_id, event?.id),
-    queryFn: async () => {
-      const [rolesResult, childrenResult, goingRsvpsResult] = await Promise.all([
-        supabase
-          .from("user_roles")
-          .select("user_id, role, profiles:user_id (id, display_name, avatar_url)")
-          .eq("team_id", event!.team_id!),
-        // Provisional: get_team_children_for_pitch_board has no canister
-        // equivalent — ICP-mode users see an empty child picker instead of a
-        // failing uuid-keyed rpc.
-        isIcpAuthBackend
-          ? Promise.resolve({ data: [], error: null } as any)
-          : supabase.rpc("get_team_children_for_pitch_board", {
-              p_team_id: event!.team_id!,
-            }),
-        supabase
-          .from("rsvps")
-          .select("user_id, child_id, status")
-          .eq("event_id", event!.id)
-          .eq("status", "going"),
-      ]);
+    queryKey: [...eventKeys.pitchTeamMembers(event?.team_id, event?.id), isIcpAuthBackend, rsvps?.length ?? 0],
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const [rolesResult, childrenResult, goingRsvpsResult] = await Promise.all([
+          supabase
+            .from("user_roles")
+            .select("user_id, role, profiles:user_id (id, display_name, avatar_url)")
+            .eq("team_id", event!.team_id!),
+          supabase.rpc("get_team_children_for_pitch_board", {
+            p_team_id: event!.team_id!,
+          }),
+          supabase
+            .from("rsvps")
+            .select("user_id, child_id, status")
+            .eq("event_id", event!.id)
+            .eq("status", "going"),
+        ]);
 
-      if (rolesResult.error) throw rolesResult.error;
-      if (goingRsvpsResult.error) throw goingRsvpsResult.error;
+        if (rolesResult.error) throw rolesResult.error;
+        if (goingRsvpsResult.error) throw goingRsvpsResult.error;
 
-      const goingChildIds = new Set(
-        (goingRsvpsResult.data || [])
-          .map(r => r.child_id)
-          .filter((id): id is string => !!id)
-      );
-      const goingAdultIds = new Set(
-        (goingRsvpsResult.data || [])
-          .map(r => r.user_id)
-          .filter((id): id is string => !!id)
-      );
+        const goingChildIds = new Set(
+          (goingRsvpsResult.data || [])
+            .map(r => r.child_id)
+            .filter((id): id is string => !!id)
+        );
+        const goingAdultIds = new Set(
+          (goingRsvpsResult.data || [])
+            .map(r => r.user_id)
+            .filter((id): id is string => !!id)
+        );
 
-      // Adults: include coaches/admins always (they may run the board even if
-      // not personally RSVP'd as players); include other roles (e.g. "player")
-      // only when they have a "going" RSVP.
-      const STAFF_ROLES = new Set(["team_admin", "coach", "club_admin", "app_admin"]);
-      const adultMembers = (rolesResult.data || [])
-        .filter(m => STAFF_ROLES.has(m.role) || goingAdultIds.has(m.user_id))
-        .map(m => ({
-          user_id: m.user_id,
-          role: m.role,
-          profiles: m.profiles,
-        }));
+        // Adults: include coaches/admins always (they may run the board even if
+        // not personally RSVP'd as players); include other roles (e.g. "player")
+        // only when they have a "going" RSVP.
+        const STAFF_ROLES = new Set(["team_admin", "coach", "club_admin", "app_admin"]);
+        const adultMembers = (rolesResult.data || [])
+          .filter(m => STAFF_ROLES.has(m.role) || goingAdultIds.has(m.user_id))
+          .map(m => ({
+            user_id: m.user_id,
+            role: m.role,
+            profiles: m.profiles,
+          }));
 
-      // Children: only include those with a "going" RSVP.
-      const childMembers = (childrenResult.data || [])
-        .filter(child => goingChildIds.has(child.child_id))
-        .map(child => ({
-          user_id: child.child_id,
-          role: "player" as string,
-          profiles: {
-            id: child.child_id,
-            display_name: child.child_name,
-            avatar_url: null,
-          },
-        }));
+        // Children: only include those with a "going" RSVP.
+        const childMembers = (childrenResult.data || [])
+          .filter(child => goingChildIds.has(child.child_id))
+          .map(child => ({
+            user_id: child.child_id,
+            role: "player" as string,
+            profiles: {
+              id: child.child_id,
+              display_name: child.child_name,
+              avatar_url: null,
+            },
+          }));
 
-      return [...adultMembers, ...childMembers];
-    },
+        return [...adultMembers, ...childMembers];
+      },
+      icp: async (ctx) => {
+        // club_domain role grants give the adult roster; there is no
+        // canister equivalent of get_team_children_for_pitch_board, so
+        // ICP-mode users see an empty child picker instead of a failing
+        // uuid-keyed rpc (same provisional gap as before this rewiring).
+        const grants = (await listLiveRoleGrants(ctx, event!.club_id!)) as Array<{
+          account_id: string;
+          role: string;
+          team: [] | [string];
+        }>;
+        const scoped = grants.filter((g) => Array.isArray(g.team) && g.team[0] === event!.team_id);
+        const goingAdultIds = new Set(
+          (rsvps || [])
+            .filter((r: any) => r.status === "going" && !r.child_id)
+            .map((r: any) => r.user_id)
+            .filter(Boolean)
+        );
+
+        const STAFF_ROLES = new Set(["team_admin", "coach", "club_admin", "app_admin"]);
+        const adultGrants = scoped.filter((g) => STAFF_ROLES.has(g.role) || goingAdultIds.has(g.account_id));
+        const profileIds = Array.from(new Set(adultGrants.map((g) => g.account_id)));
+        const profiles = profileIds.length > 0 ? await listLiveProfilesByIds(ctx, profileIds) : [];
+        const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+
+        const adultMembers = adultGrants.map((g) => {
+          const p = profileMap.get(g.account_id);
+          return {
+            user_id: g.account_id,
+            role: g.role,
+            profiles: p
+              ? { id: g.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }
+              : null,
+          };
+        });
+
+        return adultMembers;
+      },
+    }),
     enabled: !!event?.team_id && !!event?.id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly),
   });
 
@@ -1416,7 +1450,7 @@ export default function EventDetailPage() {
         role_team_pairs: [],
       }));
     },
-    enabled: !!event && linkedAdultIdsForAttendance.length > 0 && !useIcpLab,
+    enabled: !!event && linkedAdultIdsForAttendance.length > 0,
   });
 
 
@@ -1459,7 +1493,7 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!id && !!canManageEvent && !useIcpLab,
+    enabled: !!id && !!canManageEvent && !useIcpLab && !isIcpAuthBackend,
   });
 
   // Create set of paid user IDs for quick lookup
@@ -1469,7 +1503,7 @@ export default function EventDetailPage() {
   const isGameEvent = event?.type === "game" && !!event?.team_id;
   const { data: matchCaptainRow } = useQuery({
     queryKey: ["match-captain", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab,
+    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("match_captains")
@@ -1482,7 +1516,7 @@ export default function EventDetailPage() {
   });
   const { data: potmRow } = useQuery({
     queryKey: ["player-of-match", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab,
+    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("player_of_match")
@@ -1495,7 +1529,7 @@ export default function EventDetailPage() {
   });
   const { data: goalkeeperRows = [] } = useQuery({
     queryKey: ["match-goalkeepers", id],
-    enabled: !!id && isGameEvent && !useIcpLab,
+    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("match_goalkeepers" as any)
@@ -1512,9 +1546,11 @@ export default function EventDetailPage() {
   const gkUserIds = new Set((goalkeeperRows as any[]).map((g) => g.user_id).filter(Boolean));
   const gkChildIds = new Set((goalkeeperRows as any[]).map((g) => g.child_id).filter(Boolean));
 
-  // Check if event has a price (social events only)
+  // Check if event has a price (social events only). Non-IAP payments are
+  // an allowed Supabase exception: disabled query + hidden UI in ICP mode,
+  // never an error card.
   const eventPrice = event?.type === "social" ? event?.amount : null;
-  const showPaymentStatus = eventPrice && eventPrice > 0;
+  const showPaymentStatus = !!eventPrice && eventPrice > 0 && !useIcpLab && !isIcpAuthBackend;
 
   // Check if user has paid
   const userHasPaid = user ? paidUserIds.has(user.id) : false;

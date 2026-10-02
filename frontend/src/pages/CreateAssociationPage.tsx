@@ -9,7 +9,6 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveClub } from "@/live/features/club";
 import { slugifyClubName } from "@/lib/eoiUtils";
@@ -19,7 +18,6 @@ export default function CreateAssociationPage() {
   usePageTitle("New association");
   const { toast } = useToast();
   const { user } = useAuth();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
   const { hasAnyClubPro, isLoading: proLoading } = useUserHasAnyClubPro();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

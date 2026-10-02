@@ -329,33 +329,66 @@ export function useAddTeamMemberSearch({
     queryKey: ["bulk-user-search-team-member", bulkSearchTerms, clubId, teamId],
     queryFn: async () => {
       const searches = await Promise.all(
-        bulkSearchTerms.map(async (term) => {
-          const { data: rpcData } = await supabase.rpc("search_invitable_profiles", {
-            _query: term,
-            _limit: 8,
-            _club_id: clubId ?? null,
-          });
-          const profileResults = (rpcData || []) as SearchProfile[];
-          const { data: invites } = await supabase
-            .from("pending_invites")
-            .select("id, invited_label, invited_email, invited_user_id, metadata, team_id")
-            .eq("club_id", clubId)
-            .eq("status", "pending")
-            .ilike("invited_label", `%${term}%`)
-            .limit(8);
-          const resultProfileIds = new Set(profileResults.map((result) => result.id));
-          const pendingResults = (invites || [])
-            .map((invite: any) => ({
-              id: invite.invited_user_id || `pending-${invite.id}`,
-              display_name: invite.invited_label,
-              avatar_url: null,
-              isPendingInvite: true,
-              pendingInviteId: invite.id,
-              invited_email: invite.invited_email,
-            }))
-            .filter((result: { id: string }) => !resultProfileIds.has(result.id));
-          return { term, results: [...profileResults, ...pendingResults] };
-        }),
+        bulkSearchTerms.map((term) =>
+          withFeatureBackend("membership", {
+            supabase: async () => {
+              const { data: rpcData } = await supabase.rpc("search_invitable_profiles", {
+                _query: term,
+                _limit: 8,
+                _club_id: clubId ?? null,
+              });
+              const profileResults = (rpcData || []) as SearchProfile[];
+              const { data: invites } = await supabase
+                .from("pending_invites")
+                .select("id, invited_label, invited_email, invited_user_id, metadata, team_id")
+                .eq("club_id", clubId)
+                .eq("status", "pending")
+                .ilike("invited_label", `%${term}%`)
+                .limit(8);
+              const resultProfileIds = new Set(profileResults.map((result) => result.id));
+              const pendingResults = (invites || [])
+                .map((invite: any) => ({
+                  id: invite.invited_user_id || `pending-${invite.id}`,
+                  display_name: invite.invited_label,
+                  avatar_url: null,
+                  isPendingInvite: true,
+                  pendingInviteId: invite.id,
+                  invited_email: invite.invited_email,
+                }))
+                .filter((result: { id: string }) => !resultProfileIds.has(result.id));
+              return { term, results: [...profileResults, ...pendingResults] };
+            },
+            icp: async (ctx) => {
+              const profileResults = (await searchLiveInvitableProfiles(ctx, term, 8)).map(
+                (r): SearchProfile => ({
+                  id: r.id,
+                  display_name: r.display_name,
+                  avatar_url: r.avatar_ref ?? null,
+                }),
+              );
+              if (!clubId) return { term, results: profileResults };
+              const resultProfileIds = new Set(profileResults.map((result) => result.id));
+              const needle = term.toLowerCase();
+              const invites = await listLivePendingInvitesByClub(ctx, clubId);
+              const pendingResults = invites
+                .filter(
+                  (invite) =>
+                    invite.status === "pending" && invite.email.toLowerCase().includes(needle),
+                )
+                .slice(0, 8)
+                .map((invite) => ({
+                  id: `pending-${invite.id}`,
+                  display_name: invite.email,
+                  avatar_url: null,
+                  isPendingInvite: true,
+                  pendingInviteId: invite.id,
+                  invited_email: invite.email,
+                }))
+                .filter((result) => !resultProfileIds.has(result.id));
+              return { term, results: [...profileResults, ...pendingResults] };
+            },
+          }),
+        ),
       );
       return searches;
     },
@@ -378,21 +411,33 @@ export function useAddTeamMemberSearch({
     queryKey: ["bulk-second-parent-search", bulkSecondParentTerms, clubId],
     queryFn: async () =>
       Promise.all(
-        bulkSecondParentTerms.map(async (term) => {
-          const { data } = await supabase.rpc("search_invitable_profiles", {
-            _query: term,
-            _limit: 5,
-            _club_id: clubId ?? null,
-          });
-          return {
-            term,
-            results: ((data || []) as SearchProfile[]).map((result) => ({
-              id: result.id,
-              display_name: result.display_name,
-              avatar_url: result.avatar_url,
-            })),
-          };
-        }),
+        bulkSecondParentTerms.map((term) =>
+          withFeatureBackend("membership", {
+            supabase: async () => {
+              const { data } = await supabase.rpc("search_invitable_profiles", {
+                _query: term,
+                _limit: 5,
+                _club_id: clubId ?? null,
+              });
+              return {
+                term,
+                results: ((data || []) as SearchProfile[]).map((result) => ({
+                  id: result.id,
+                  display_name: result.display_name,
+                  avatar_url: result.avatar_url,
+                })),
+              };
+            },
+            icp: async (ctx) => {
+              const results = (await searchLiveInvitableProfiles(ctx, term, 5)).map((r) => ({
+                id: r.id,
+                display_name: r.display_name,
+                avatar_url: r.avatar_ref ?? null,
+              }));
+              return { term, results };
+            },
+          }),
+        ),
       ),
     enabled: open && mode === "bulk" && bulkSecondParentTerms.length > 0,
   });
@@ -401,16 +446,28 @@ export function useAddTeamMemberSearch({
     queryKey: ["second-parent-search", debouncedSecondParentSearch, clubId],
     queryFn: async () => {
       if (debouncedSecondParentSearch.length < 2) return [];
-      const { data } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedSecondParentSearch,
-        _limit: 5,
-        _club_id: clubId ?? null,
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedSecondParentSearch,
+            _limit: 5,
+            _club_id: clubId ?? null,
+          });
+          return ((data || []) as SearchProfile[]).map((result) => ({
+            id: result.id,
+            display_name: result.display_name,
+            avatar_url: result.avatar_url,
+          }));
+        },
+        icp: async (ctx) => {
+          const results = await searchLiveInvitableProfiles(ctx, debouncedSecondParentSearch, 5);
+          return results.map((r): SearchProfile => ({
+            id: r.id,
+            display_name: r.display_name,
+            avatar_url: r.avatar_ref ?? null,
+          }));
+        },
       });
-      return ((data || []) as SearchProfile[]).map((result) => ({
-        id: result.id,
-        display_name: result.display_name,
-        avatar_url: result.avatar_url,
-      }));
     },
     enabled: debouncedSecondParentSearch.length >= 2 && !selectedSecondParent,
   });
