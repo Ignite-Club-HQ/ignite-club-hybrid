@@ -57,7 +57,7 @@ export async function saveLiveClubSubscription(
   subscription: LiveClubSubscription,
 ): Promise<void> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  unwrapCandid(actor.save_club_subscription(subscription.club_id, subscription), "Save club subscription");
+  unwrapCandid(actor.save_club_subscription(subscription), "Save club subscription");
 }
 
 /** Case-insensitive team-name uniqueness check within a club (ignores soft-deleted teams). */
@@ -79,7 +79,12 @@ export async function getLiveClubLink(
 ): Promise<{ id: string; title: string; url: string } | null> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const row = unwrapCandid(actor.get_club_link(linkId), "Get club link");
-  return row.length ? row[0] : null;
+  const link = row.length ? row[0] : null;
+  // Only active links resolve to a URL — mirrors the Supabase branch's
+  // "This link is no longer available" state for inactive/deleted rows.
+  return link && link.draft.is_active
+    ? { id: link.id, title: link.draft.title, url: link.draft.url }
+    : null;
 }
 
 export async function saveLiveClubSettings(ctx: FeatureBackendContext, settings: LiveClubSettings) {
