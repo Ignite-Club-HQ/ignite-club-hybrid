@@ -30,6 +30,7 @@ describe("resolveAuthBackend", () => {
       countryRules: {},
       targets: [],
       countryTargets: {},
+      clubBackendOverrides: {},
     });
     expect(resolveAuthBackend()).toBe("supabase");
     expect(useIcpAuthScreen()).toBe(false);
@@ -41,6 +42,7 @@ describe("resolveAuthBackend", () => {
       countryRules: {},
       targets: [],
       countryTargets: {},
+      clubBackendOverrides: {},
     });
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     expect(resolveAuthBackend()).toBe("icp");
@@ -53,6 +55,7 @@ describe("resolveAuthBackend", () => {
       countryRules: { AU: "supabase" },
       targets: [],
       countryTargets: {},
+      clubBackendOverrides: {},
     });
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     setProfileCountry("AU");
@@ -67,6 +70,7 @@ describe("resolveAuthBackend", () => {
       countryRules: { DE: "icp" },
       targets: [],
       countryTargets: {},
+      clubBackendOverrides: {},
     });
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     setProfileCountry("DE");
