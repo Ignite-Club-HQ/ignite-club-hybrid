@@ -29,33 +29,12 @@ export const idlFactory = ({ IDL }) => {
     'shredded_at' : IDL.Nat64,
     'key_destroyed' : IDL.Bool,
   });
-  const DecryptedPii = IDL.Record({
-    'pii_id' : IDL.Text,
-    'field_id' : IDL.Text,
-    'plaintext' : IDL.Vec(IDL.Nat8),
-  });
   const EncryptedPii = IDL.Record({
     'master_key_id' : IDL.Text,
     'ciphertext' : IDL.Vec(IDL.Nat8),
     'pii_id' : IDL.Text,
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
-  });
-  const KeyMetadata = IDL.Record({
-    'status' : IDL.Variant({
-      'Active' : IDL.Null,
-      'Shredded' : IDL.Null,
-      'RotationPending' : IDL.Null,
-      'Revoked' : IDL.Null,
-    }),
-    'key_id' : IDL.Text,
-    'created_at' : IDL.Nat64,
-    'rotation_due_at' : IDL.Nat64,
-  });
-  const KeyRotationResult = IDL.Record({
-    'new_key_id' : IDL.Text,
-    'old_key_id' : IDL.Text,
-    'rotated_at' : IDL.Nat64,
   });
   
   return IDL.Service({
@@ -70,32 +49,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : PiiDeleteResult, 'Err' : IDL.Text })],
         [],
       ),
-    'derive_media_key' : IDL.Func(
-        [IDL.Text, IDL.Principal, IDL.Text, IDL.Nat64],
-        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
-        [],
-      ),
     'emergency_shutdown' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'get_decrypted_pii' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : DecryptedPii, 'Err' : IDL.Text })],
-        [],
-      ),
-    'get_decrypted_pii_batch' : IDL.Func(
+    'get_encrypted_pii_batch' : IDL.Func(
         [IDL.Vec(IDL.Text), IDL.Text, IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Vec(DecryptedPii), 'Err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EncryptedPii), 'Err' : IDL.Text })],
         [],
       ),
-    'get_encrypted_pii' : IDL.Func(
-        [IDL.Text, IDL.Text],
-        [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
-        ['query'],
+    'get_encrypted_pii_vetkeys_batch' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Text, IDL.Vec(IDL.Nat8)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Opt(IDL.Vec(IDL.Nat8))),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
       ),
-    'get_key_metadata' : IDL.Func([], [IDL.Vec(KeyMetadata)], ['query']),
     'grant_pii_read' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -106,12 +79,8 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'initialize_master_key' : IDL.Func(
-        [IDL.Text],
-        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
-        [],
-      ),
     'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
@@ -130,11 +99,6 @@ export const idlFactory = ({ IDL }) => {
     'revoke_pii_read_club' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'rotate_key' : IDL.Func(
-        [IDL.Text],
-        [IDL.Variant({ 'Ok' : KeyRotationResult, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_domain_canister' : IDL.Func(

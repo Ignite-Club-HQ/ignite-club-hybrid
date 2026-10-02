@@ -26,11 +26,6 @@ export interface AuditRecord {
   'field_id' : string,
   'purpose' : string,
 }
-export interface DecryptedPii {
-  'pii_id' : string,
-  'field_id' : string,
-  'plaintext' : Uint8Array,
-}
 export interface EncryptedPii {
   'master_key_id' : string,
   'ciphertext' : Uint8Array,
@@ -38,63 +33,38 @@ export interface EncryptedPii {
   'nonce' : Uint8Array,
   'field_id' : string,
 }
-export interface KeyMetadata {
-  'status' : { 'Active' : null } |
-    { 'Shredded' : null } |
-    { 'RotationPending' : null } |
-    { 'Revoked' : null },
-  'key_id' : string,
-  'created_at' : bigint,
-  'rotation_due_at' : bigint,
-}
-export interface KeyRotationResult {
-  'new_key_id' : string,
-  'old_key_id' : string,
-  'rotated_at' : bigint,
-}
 export interface PiiDeleteResult {
   'shredded_at' : bigint,
   'key_destroyed' : boolean,
 }
 /**
  * / PII Access Control Canister
- * / Encrypts and mediates access to personally identifiable information (PII)
- * / Enforces field-level access policies and maintains audit trail
+ * / Mediates access to personally identifiable information (PII) with
+ * / field-level access policies and an audit trail.
  * /
- * / Encryption construction (interim, pre-vetKeys):
- * / - Master secrets are 32 random bytes obtained from the management canister's
- * /   `raw_rand` (via `mo:core/Random.blob`, which calls raw_rand directly) on
- * /   `initialize_master_key` / `rotate_key`. Secrets are kept per key_id in
- * /   stable state so records encrypted under a retired key remain decryptable.
- * /   No method ever returns secret material; only opaque key_ids/metadata leave
- * /   the canister.
- * / - Per-field key = SHA-256(master_secret || pii_id || field_id).
- * / - Nonces are 12 random bytes drawn fresh from raw_rand for every
- * /   `register_pii` call (register_pii is already an update call, so this is
- * /   a plain `await`).
- * / - Confidentiality: SHA-256-based CTR-mode keystream, where each 32-byte
- * /   keystream block is SHA-256(field_key || nonce || counter_be32), counter
- * /   starting at 0 and incrementing per 32-byte block, XORed with plaintext.
- * / - Integrity: encrypt-then-MAC. tag = SHA-256(field_key || nonce ||
- * /   ciphertext). The tag (32 bytes) is appended to the ciphertext bytes
- * /   stored/returned in `EncryptedPii.ciphertext` (no public record shape
- * /   changed). Decryption recomputes and compares the tag before returning
- * /   plaintext, failing closed (#Err) on any mismatch, truncated input, or
- * /   unknown master_key_id.
- * / - `derive_media_key` uses a separate raw_rand-generated 32-byte
- * /   `media_root_secret` (created lazily on first use) and returns
- * /   SHA-256(media_root_secret || child_id || authorizer || purpose),
- * /   32 bytes, still gated by the same authorization checks as before.
- * /
- * / This is a meaningful improvement over the previous XOR/timestamp
- * / "synthetic encryption" placeholder, but it is still symmetric key material
- * / held in canister heap/stable memory. Production deployment should still
- * / migrate to:
- * / - vetKeys for child media key derivation and/or field key derivation,
- * /   removing raw master secret material from canister memory entirely
- * / - Hardware Security Module (HSM) or KMS-backed custody for the true root
- * /   of trust, with this canister only holding derived, scoped key handles
- * / - External vault for secret workload identity
+ * / Encryption construction (vetKeys / IBE):
+ * / - The canister holds NO key material. Values are encrypted client-side
+ * /   with identity-based encryption (IBE) under the subnet's vetKD master
+ * /   key: the writer derives this canister's IBE public key offline (master
+ * /   public key -> canister key -> context subkey) and encrypts to the
+ * /   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
+ * /   write, so first registration of a record needs no key ceremony.
+ * / - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
+ * /   exact same authorization as the old decrypt path (governor, domain
+ * /   owner, granted readers, verified guardians, club-scoped read grants
+ * /   verified live via club_domain) and only then relays the vetKey for the
+ * /   record's identity, encrypted under the caller's one-time transport key.
+ * /   The subnet never sees the raw key; the canister only relays the
+ * /   still-encrypted key and never sees plaintext.
+ * / - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
+ * /   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
+ * /   deliberately exposes only the management-canister relay.
+ * / - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
+ * /   production). It is captured at first install and immutable for the life
+ * /   of the derived keys — the deploy script MUST set it before first use.
+ * / - `vetkd_derive_key` costs cycles per derivation; readers cache derived
+ * /   vetKeys client-side per session, so each (pii_id, field_id) costs one
+ * /   derivation per reader session.
  */
 export interface _SERVICE {
   'add_guardian_relationship' : ActorMethod<
@@ -108,28 +78,17 @@ export interface _SERVICE {
     { 'Ok' : PiiDeleteResult } |
       { 'Err' : string }
   >,
-  'derive_media_key' : ActorMethod<
-    [string, Principal, string, bigint],
-    { 'Ok' : Uint8Array } |
-      { 'Err' : string }
-  >,
   'emergency_shutdown' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'get_decrypted_pii' : ActorMethod<
-    [string, string, string, string],
-    { 'Ok' : DecryptedPii } |
-      { 'Err' : string }
-  >,
-  'get_decrypted_pii_batch' : ActorMethod<
+  'get_encrypted_pii_batch' : ActorMethod<
     [Array<string>, string, string, string],
-    { 'Ok' : Array<DecryptedPii> } |
+    { 'Ok' : Array<EncryptedPii> } |
       { 'Err' : string }
   >,
-  'get_encrypted_pii' : ActorMethod<
-    [string, string],
-    { 'Ok' : EncryptedPii } |
+  'get_encrypted_pii_vetkeys_batch' : ActorMethod<
+    [Array<string>, string, Uint8Array],
+    { 'Ok' : Array<[] | [Uint8Array]> } |
       { 'Err' : string }
   >,
-  'get_key_metadata' : ActorMethod<[], Array<KeyMetadata>>,
   'grant_pii_read' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : null } |
@@ -140,12 +99,8 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize_master_key' : ActorMethod<
-    [string],
-    { 'Ok' : string } |
-      { 'Err' : string }
-  >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
+  'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |
@@ -164,11 +119,6 @@ export interface _SERVICE {
   'revoke_pii_read_club' : ActorMethod<
     [string, string, string],
     { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'rotate_key' : ActorMethod<
-    [string],
-    { 'Ok' : KeyRotationResult } |
       { 'Err' : string }
   >,
   'set_club_domain_canister' : ActorMethod<
