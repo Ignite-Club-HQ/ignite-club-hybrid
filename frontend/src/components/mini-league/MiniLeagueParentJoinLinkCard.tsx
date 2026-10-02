@@ -61,7 +61,21 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
         .limit(1);
       if (error) throw error;
       return (data?.[0] as JoinLinkRow | undefined) ?? null;
-    },
+        },
+        icp: async (ctx) => {
+          const links = await listLiveMiniLeagueJoinLinks(ctx, miniLeagueId);
+          const active = links
+            .filter((l) => l.role === "player" && !l.revoked)
+            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))[0];
+          if (!active) return null;
+          return {
+            id: active.token,
+            invite_token: active.token,
+            created_at: new Date(Number(active.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      }),
     staleTime: 30_000,
   });
 
