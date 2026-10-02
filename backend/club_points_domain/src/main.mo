@@ -183,6 +183,87 @@ persistent actor {
     #Ok(entry)
   };
 
+  // Like award_points, but rejects the award when a points_history entry
+  // with the same (club, subject, source_type, scope_id) already exists —
+  // the canister-side counterpart of the Supabase early_rsvp_points_awarded
+  // optimistic lock. Atomic: the dedup check and the award happen in the
+  // same update call.
+  public shared ({ caller }) func award_points_once(
+    club_id : Text,
+    subject : Types.Subject,
+    action_type : Text,
+    scope_id : Text,
+    amount : Int32,
+    description : Text,
+    source_id : ?Text,
+    season_id : ?Text,
+  ) : async { #Ok : Types.PointsHistoryEntry; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(action_type) or not valid(scope_id) or not validDesc(description) or amount == 0) return #Err("Invalid award");
+    if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
+    let (uid, cid) = switch (subject) {
+      case (#User(u)) (?u, null : ?Text);
+      case (#Child(c)) (null : ?Text, ?c);
+    };
+    let already = pointsHistory.any(func(item) =
+      item.club_id == club_id and item.user_id == uid and item.child_id == cid and
+      item.source_type == action_type and item.source_id == ?scope_id
+    );
+    if (already) return #Err("Already awarded");
+    await award_points(club_id, subject, action_type, scope_id, amount, description, source_id, season_id, null)
+  };
+
+  // Consecutive UTC days (ending today or yesterday) with an engagement
+  // entry for the user — the canister-side counterpart of the Supabase
+  // get_engagement_streak RPC. Engagement sources mirror the frontend's
+  // ENGAGEMENT_SOURCE_TYPES set.
+  public query ({ caller }) func get_engagement_streak(club_id : Text, user_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    if (not canReadSubject(caller, club_id, #User(user_id))) return #Err("Forbidden");
+    var days : [Nat64] = [];
+    for (item in pointsHistory.values()) {
+      if (item.club_id == club_id and item.user_id == ?user_id and
+          (item.source_type == "chat_engagement" or item.source_type == "photo_upload" or item.source_type == "photo_comment")) {
+        let d = item.created_at_ms / 86_400_000;
+        if (not days.any(func(x) = x == d)) { days := days.concat([d]) };
+      };
+    };
+    var cursor = nowMs() / 86_400_000;
+    if (not days.any(func(x) = x == cursor)) {
+      if (cursor == 0) return #Ok(0);
+      cursor -= 1;
+    };
+    var streak : Nat32 = 0;
+    while (days.any(func(x) = x == cursor)) {
+      streak += 1;
+      if (cursor == 0) return #Ok(streak);
+      cursor -= 1;
+    };
+    #Ok(streak)
+  };
+
+  // ---------------------------------------------------------------------
+  // Club points settings
+  // ---------------------------------------------------------------------
+
+  // Any club member may read the points-module settings (the kill switch and
+  // display name drive UI rendering for everyone) — mirrors the public
+  // select policies on club_subscriptions/clubs.
+  public query ({ caller }) func get_club_points_settings(club_id : Text) : async { #Ok : ?Types.ClubPointsSettings; #Err : Text } {
+    if (not isClubMember(caller, club_id)) return #Err("Club membership required");
+    #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
+  };
+
+  public shared ({ caller }) func save_club_points_settings(club_id : Text, display_name : ?Text, disabled : Bool) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    switch (display_name) { case (?n) { if (not valid(n)) return #Err("Invalid display name") }; case null {} };
+    if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
+    let ts = nowMs();
+    let row : Types.ClubPointsSettings = { club_id; display_name; disabled; updated_at_ms = ts };
+    clubPointsSettings := clubPointsSettings.filter(func(item) = item.club_id != club_id).concat([row]);
+    #Ok(row)
+  };
+
   // ---------------------------------------------------------------------
   // Balances
   // ---------------------------------------------------------------------
