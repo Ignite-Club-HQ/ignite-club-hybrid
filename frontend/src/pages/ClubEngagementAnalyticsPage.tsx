@@ -1099,30 +1099,49 @@ function SupabaseClubEngagementAnalyticsPage({
   // ---------- Competition (admins only) ----------
   const { data: competitions = [] } = useQuery({
     queryKey: ["club-engagement-competitions", clubId, mode],
-    queryFn: async () => {
-      if (isPlatform) {
-        const { data } = await supabase
-          .from("competitions")
-          .select("id, name")
-          .limit(500);
-        return data || [];
-      }
-      // Active participation only: accepted entries from non-deleted teams.
-      const { data: entries } = await supabase
-        .from("competition_entries")
-        .select("competition_id, team_id, teams!inner(club_id, deleted_at)")
-        .eq("teams.club_id", clubId!)
-        .eq("status", "accepted")
-        .is("teams.deleted_at", null)
-        .limit(500);
-      const compIds = Array.from(new Set((entries || []).map((e: any) => e.competition_id).filter(Boolean)));
-      if (compIds.length === 0) return [] as any[];
-      const { data } = await supabase
-        .from("competitions")
-        .select("id, name")
-        .in("id", compIds);
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          if (isPlatform) {
+            const { data } = await supabase
+              .from("competitions")
+              .select("id, name")
+              .limit(500);
+            return data || [];
+          }
+          // Active participation only: accepted entries from non-deleted teams.
+          const { data: entries } = await supabase
+            .from("competition_entries")
+            .select("competition_id, team_id, teams!inner(club_id, deleted_at)")
+            .eq("teams.club_id", clubId!)
+            .eq("status", "accepted")
+            .is("teams.deleted_at", null)
+            .limit(500);
+          const compIds = Array.from(new Set((entries || []).map((e: any) => e.competition_id).filter(Boolean)));
+          if (compIds.length === 0) return [] as any[];
+          const { data } = await supabase
+            .from("competitions")
+            .select("id, name")
+            .in("id", compIds);
+          return data || [];
+        },
+        // ICP: competitions for this club, filtered to active participation —
+        // entries from this club's teams that are accepted or registered.
+        icp: async (ctx) => {
+          const cid = requireIcpClubId();
+          const comps = await listLiveCompetitions(ctx, cid);
+          const active = await Promise.all(
+            comps.map(async (c: any) => {
+              const entries = await listLiveCompetitionEntries(ctx, c.id);
+              const participating = entries.some(
+                (e: any) => e.club_id === cid && (e.status === "accepted" || e.status === "registered"),
+              );
+              return participating ? { id: c.id, name: c.name } : null;
+            }),
+          );
+          return active.filter((c): c is { id: string; name: string } => c !== null);
+        },
+      }),
     enabled: queryReady && !!access?.isCompAdmin,
   });
 
