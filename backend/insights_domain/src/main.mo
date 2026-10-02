@@ -23,6 +23,9 @@ persistent actor {
   var benchmarks : [Types.Benchmark];
   var sponsorMetrics : [Types.SponsorMetricCounter];
   var sponsorReach : [Types.SponsorReachCounter];
+  var adSettings : [Types.AppAdSetting];
+  var ads : [Types.AppAd];
+  var adEvents : [Types.AdEvent];
 
   transient let MAX_BATCH = 50;
 

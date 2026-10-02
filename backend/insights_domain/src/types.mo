@@ -67,6 +67,22 @@ module {
   // were no impressions).
   public type SponsorBenchmarkRow = { sponsor_id : Text; impressions : Nat32; clicks : Nat32; unique_reach : Nat32; ctr : Float };
 
+  // ---- House ads (app_ad_settings / app_ads / app_ad_analytics) ----
+  public type AppAdSetting = { location : Text; is_enabled : Bool; override_sponsors : Bool; show_only_when_no_sponsors : Bool; updated_at_ms : Nat64 };
+  public type AppAd = {
+    id : Text; name : Text; ad_type : Text; image_url : ?Text; logo_url : ?Text;
+    link_url : ?Text; description : ?Text; headline : ?Text; subtext : ?Text;
+    cta_label : ?Text; bg_color : ?Text; text_color : ?Text;
+    is_active : Bool; display_order : Nat32; created_at_ms : Nat64; updated_at_ms : Nat64;
+  };
+  public type AppAdInput = {
+    name : Text; ad_type : Text; image_url : ?Text; logo_url : ?Text;
+    link_url : ?Text; description : ?Text; headline : ?Text; subtext : ?Text;
+    cta_label : ?Text; bg_color : ?Text; text_color : ?Text;
+  };
+  public type AdEvent = { id : Text; ad_id : Text; event_type : Text; context : Text; user : Principal; created_at_ms : Nat64 };
+  public type AdEventSummary = { ad_id : Text; views : Nat32; clicks : Nat32 };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -81,5 +97,8 @@ module {
     var benchmarks : [Benchmark];
     var sponsorMetrics : [SponsorMetricCounter];
     var sponsorReach : [SponsorReachCounter];
+    var adSettings : [AppAdSetting];
+    var ads : [AppAd];
+    var adEvents : [AdEvent];
   };
 }
