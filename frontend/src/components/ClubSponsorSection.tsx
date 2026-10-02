@@ -114,7 +114,11 @@ export function ClubSponsorSection({ clubId }: ClubSponsorSectionProps) {
           // Pro gate in ICP mode is per-account (identity_access
           // entitlements) — there is no per-club subscription table.
           const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
-          const summary = await fetchIcpEntitlements(ctx.identity);
+          const summary = await fetchIcpEntitlements(
+            ctx.identity,
+            ctx.identity.getPrincipal().toText(),
+            ctx.target,
+          );
           if (!summary.isPro) return [];
 
           const profile = await getLiveClubProfile(ctx, clubId);
