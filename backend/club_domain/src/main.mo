@@ -56,6 +56,8 @@ persistent actor {
   var memberPayments : [Types.MemberPayment];
   var teamSponsorAllocations : [Types.TeamSponsorAllocation];
   var seasons : [Types.Season];
+  var seasonTeamSummaries : [Types.SeasonTeamSummary];
+  var seasonPlayerStats : [Types.SeasonPlayerStat];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -1912,6 +1914,52 @@ persistent actor {
     };
     seasons := seasons.filter(func(s) = s.id != stored.id).concat([stored]);
     #Ok(stored)
+  };
+
+  // ---- Season analytics — canister counterpart of the Supabase
+  // season_team_summary / season_player_stats RPCs. club_domain has no
+  // events/attendance data model to derive these from, so values are
+  // precomputed and kept fresh via admin-gated upsert calls, keyed by
+  // (season_id, team_id) and (season_id, team_id, club_player_id). ----
+
+  public query ({ caller }) func list_season_team_summary(season_id : Text) : async { #Ok : [Types.SeasonTeamSummary]; #Err : Text } {
+    auth(caller);
+    let season = seasons.find(func(s) = s.id == season_id);
+    switch (season) {
+      case null #Err("Season not found");
+      case (?s) {
+        if (not isMember(caller, s.club_id)) return #Err("Club membership required");
+        #Ok(seasonTeamSummaries.filter(func(r) = r.season_id == season_id));
+      };
+    };
+  };
+
+  public query ({ caller }) func list_season_player_stats(season_id : Text, team_id : Text) : async { #Ok : [Types.SeasonPlayerStat]; #Err : Text } {
+    auth(caller);
+    let season = seasons.find(func(s) = s.id == season_id);
+    switch (season) {
+      case null #Err("Season not found");
+      case (?s) {
+        if (not isMember(caller, s.club_id)) return #Err("Club membership required");
+        #Ok(seasonPlayerStats.filter(func(r) = r.season_id == season_id and r.team_id == team_id));
+      };
+    };
+  };
+
+  public shared ({ caller }) func save_season_team_summary(entry : Types.SeasonTeamSummary) : async { #Ok : Types.SeasonTeamSummary; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, entry.club_id)) return #Err("Club admin required");
+    let stored : Types.SeasonTeamSummary = { entry with updated_at_ms = nowMs() };
+    seasonTeamSummaries := seasonTeamSummaries.filter(func(r) = not (r.season_id == stored.season_id and r.team_id == stored.team_id)).concat([stored]);
+    #Ok(stored);
+  };
+
+  public shared ({ caller }) func save_season_player_stat(entry : Types.SeasonPlayerStat) : async { #Ok : Types.SeasonPlayerStat; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, entry.club_id)) return #Err("Club admin required");
+    let stored : Types.SeasonPlayerStat = { entry with updated_at_ms = nowMs() };
+    seasonPlayerStats := seasonPlayerStats.filter(func(r) = not (r.season_id == stored.season_id and r.team_id == stored.team_id and r.club_player_id == stored.club_player_id)).concat([stored]);
+    #Ok(stored);
   };
 
   // ---- profile_team_history: join accountRoles (team-scoped grants) with

@@ -1,11 +1,12 @@
 [toolchain]
-moc = "1.14.0"
+moc = "1.16.1"
 
 [moc]
 args = ["--default-persistent-actors"]
 
 [dependencies]
 core = "2.6.1"
+ic = "4.2.0"
 
 [canisters.events_domain]
 main = "src/main.mo"
