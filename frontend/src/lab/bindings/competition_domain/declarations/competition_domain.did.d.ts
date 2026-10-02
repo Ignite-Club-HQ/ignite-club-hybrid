@@ -24,6 +24,13 @@ export interface Competition {
   'revision' : bigint,
   'club_id' : string,
 }
+export interface CompetitionEngagementSummary {
+  'total_matches' : bigint,
+  'active_teams' : bigint,
+  'broadcasts' : bigint,
+  'results_entered' : bigint,
+  'competition_id' : string,
+}
 export interface CompetitionInvite {
   'id' : string,
   'status' : string,
@@ -44,6 +51,62 @@ export interface CompetitionJoinLink {
   'created_at_ms' : bigint,
   'revision' : bigint,
   'competition_id' : string,
+}
+export interface EoiStats {
+  'conversion_rate' : number,
+  'new_players' : bigint,
+  'total' : bigint,
+  'submitted' : bigint,
+  'views' : bigint,
+  'allocated' : bigint,
+  'confirmed' : bigint,
+  'returning_players' : bigint,
+  'withdrawn' : bigint,
+  'registered' : bigint,
+}
+export interface EoiSubmission {
+  'id' : string,
+  'status' : string,
+  'registered_at_ms' : [] | [bigint],
+  'preferred_teammates' : [] | [string],
+  'submitted_at_ms' : bigint,
+  'claim_token' : string,
+  'assigned_team_id' : [] | [string],
+  'claimed_at_ms' : [] | [bigint],
+  'source' : string,
+  'season_id' : string,
+  'parent_email' : string,
+  'invite_sent_at_ms' : [] | [bigint],
+  'updated_at_ms' : bigint,
+  'returning_player' : boolean,
+  'extra_notes' : [] | [string],
+  'parent_mobile' : [] | [string],
+  'player_name' : string,
+  'child_id' : [] | [string],
+  'confirmed_at_ms' : [] | [bigint],
+  'preferred_position' : [] | [string],
+  'created_at_ms' : bigint,
+  'invite_sent_count' : number,
+  'parent_user_id' : [] | [Principal],
+  'game_days' : Array<string>,
+  'notes' : [] | [string],
+  'training_days' : Array<string>,
+  'player_dob' : [] | [string],
+  'player_gender' : [] | [string],
+  'allocated_at_ms' : [] | [bigint],
+  'revision' : bigint,
+  'club_id' : string,
+  'skill_level' : [] | [number],
+  'parent_confirmed_at_ms' : [] | [bigint],
+  'withdrawn_at_ms' : [] | [bigint],
+  'age_group' : [] | [string],
+  'parent_name' : string,
+}
+export interface EoiTeamSuggestion {
+  'player_count' : bigint,
+  'avg_skill' : number,
+  'submission_ids' : Array<string>,
+  'age_group' : string,
 }
 export interface JoinToken {
   'id' : string,
@@ -87,6 +150,7 @@ export interface Season {
 export interface State {
   'seasons' : Array<Season>,
   'schema' : number,
+  'eoiSubmissions' : Array<EoiSubmission>,
   'entries' : Array<TeamEntry>,
   'matches' : Array<Match>,
   'tokens' : Array<JoinToken>,
@@ -120,14 +184,44 @@ export interface _SERVICE {
     { 'Ok' : RoleGrant } |
       { 'Err' : string }
   >,
+  'allocate_eoi_to_team' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : EoiSubmission } |
+      { 'Err' : string }
+  >,
   'assign_division' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : TeamEntry } |
       { 'Err' : string }
   >,
+  'assign_eoi_team' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : EoiSubmission } |
+      { 'Err' : string }
+  >,
+  'bulk_resend_eoi_invites' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : { 'ok' : bigint, 'fail' : bigint } } |
+      { 'Err' : string }
+  >,
+  'claim_eoi_by_token' : ActorMethod<
+    [string],
+    { 'Ok' : EoiSubmission } |
+      { 'Err' : string }
+  >,
   'claim_join_token' : ActorMethod<
     [string],
     { 'Ok' : string } |
+      { 'Err' : string }
+  >,
+  'competition_engagement_summary' : ActorMethod<
+    [Array<string>, bigint, bigint],
+    { 'Ok' : Array<CompetitionEngagementSummary> } |
+      { 'Err' : string }
+  >,
+  'confirm_eoi_placement' : ActorMethod<
+    [string],
+    { 'Ok' : EoiSubmission } |
       { 'Err' : string }
   >,
   'create_competition' : ActorMethod<
@@ -155,6 +249,7 @@ export interface _SERVICE {
     { 'Ok' : CompetitionInvite } |
       { 'Err' : string }
   >,
+  'delete_eoi' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'delete_match' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'duplicate_season' : ActorMethod<
     [string, string, string],
@@ -165,6 +260,16 @@ export interface _SERVICE {
   'get_chat_settings' : ActorMethod<
     [string],
     { 'Ok' : ChatSettings } |
+      { 'Err' : string }
+  >,
+  'get_eoi_stats' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : EoiStats } |
+      { 'Err' : string }
+  >,
+  'get_my_pending_eois' : ActorMethod<
+    [],
+    { 'Ok' : Array<EoiSubmission> } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -228,6 +333,11 @@ export interface _SERVICE {
     { 'Ok' : Array<TeamEntry> } |
       { 'Err' : string }
   >,
+  'list_eoi_submissions' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : Array<EoiSubmission> } |
+      { 'Err' : string }
+  >,
   'list_invites_by_invitee' : ActorMethod<
     [],
     { 'Ok' : Array<CompetitionInvite> } |
@@ -261,6 +371,11 @@ export interface _SERVICE {
   'remove_competition_role' : ActorMethod<
     [string, Principal, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'resend_eoi_invite' : ActorMethod<
+    [string],
+    { 'Ok' : EoiSubmission } |
       { 'Err' : string }
   >,
   'respond_to_entry_invite' : ActorMethod<
@@ -298,6 +413,11 @@ export interface _SERVICE {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'suggest_eoi_teams' : ActorMethod<
+    [string],
+    { 'Ok' : Array<EoiTeamSuggestion> } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -306,6 +426,16 @@ export interface _SERVICE {
   'trim_rounds' : ActorMethod<
     [string, number],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'update_eoi_status' : ActorMethod<
+    [string, string],
+    { 'Ok' : EoiSubmission } |
+      { 'Err' : string }
+  >,
+  'update_eoi_submission' : ActorMethod<
+    [string, [] | [string], [] | [string], [] | [string]],
+    { 'Ok' : EoiSubmission } |
       { 'Err' : string }
   >,
   'update_match_details' : ActorMethod<

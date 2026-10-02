@@ -1,3 +1,9 @@
+type PlayerGuardianStatus = 
+ record {
+   guardian_count: nat;
+   parent_linked: bool;
+   pending: bool;
+ };
 type MiniLeagueSessionAvailability = 
  record {
    created_at_ms: nat64;
@@ -226,6 +232,11 @@ service : {
                                     Err: text;
                                     Ok: MiniLeague;
                                   }) query;
+  get_player_guardian_status: (player_id: text) ->
+   (variant {
+      Err: text;
+      Ok: PlayerGuardianStatus;
+    }) query;
   grant_role: ("principal": principal, role: text, club_id: text, team_id:
    opt text) -> (variant {
                    Err: text;
@@ -239,6 +250,11 @@ service : {
    (variant {
       Err: text;
       Ok: ClaimedInvite;
+    });
+  link_mini_league_guardian: (child_id: text, guardian_user_id: principal) ->
+   (variant {
+      Err: text;
+      Ok;
     });
   list_admins: (mini_league_id: text) ->
    (variant {

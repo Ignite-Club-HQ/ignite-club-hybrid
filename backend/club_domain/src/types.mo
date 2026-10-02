@@ -287,6 +287,55 @@ module {
     created_at_ms : Nat64;
     status : Text; // "pending" | "resent" | "revoked" | "accepted"
     resent_at_ms : ?Nat64;
+    // Set when accept_pending_invite succeeds — backs the engagement
+    // analytics "new members" / invite-acceptance surfaces.
+    accepted_at_ms : ?Nat64;
+    accepted_by : ?Principal;
+  };
+
+  // Compact accepted-invite view for engagement analytics —
+  // invited_user_id is the accepting principal's text, "" when unaccepted
+  // (should not occur for rows this query returns).
+  public type AcceptedInvite = {
+    id : Text;
+    invited_user_id : Text;
+    accepted_at_ms : Nat64;
+  };
+
+  public type InviteStats = { total : Nat; accepted : Nat };
+
+  // A club season (draft|active|closed|archived) — distinct from ClubTerm
+  // (enrolment "terms": active|archived|completed). Seasons group teams and
+  // a club's "current" season is the one with status "active".
+  public type Season = {
+    id : Text;
+    club_id : Text;
+    name : Text;
+    status : Text; // "draft" | "active" | "closed" | "archived"
+    start_date : Text;
+    end_date : Text;
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+  };
+
+  // profile_team_history join result — the canister counterpart of the
+  // Supabase `profile_team_history` RPC. season_* fields are "" when no
+  // active season matches the team's club (no fabricated season). joined_at_ms
+  // is 0 when no membership timestamp exists (AccountRole grants carry no
+  // join date) — honest placeholder, not fabricated.
+  public type ProfileTeamHistoryEntry = {
+    membership_id : Text;
+    team_id : Text;
+    team_name : Text;
+    team_level_age : ?Text;
+    club_id : Text;
+    club_name : Text;
+    season_id : Text;
+    season_name : Text;
+    season_status : Text;
+    season_start_date : Text;
+    season_end_date : Text;
+    joined_at_ms : Nat64;
   };
 
   // A member's request to open a new team under a club, awaiting admin

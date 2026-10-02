@@ -1,6 +1,7 @@
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
+import Int "mo:core/Int";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -19,6 +20,7 @@ persistent actor {
   var chatSettings : [Types.ChatSettings];
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
+  var eoiSubmissions : [Types.EoiSubmission];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -407,7 +409,7 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 3; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks })
+    #Ok({ schema = 4; governor; roles; competitions; entries; tokens; seasons; matches; chatSettings; competitionInvites; competitionJoinLinks; eoiSubmissions })
   };
 
   // ---------------- Competition roles (admin-managed, not governor-only) ----------------
@@ -608,4 +610,252 @@ persistent actor {
     matches := matches.filter(func(item) = not (item.competition_id == competition_id and (switch (item.round_number) { case (?r) r > max_round; case null false })));
     #Ok(before - matches.size())
   };
+
+  // ---------------- Expression-of-interest (EOI) submissions ----------------
+
+  func canManageClub(caller : Principal, club_id : Text) : Bool {
+    if (isGovernor(caller)) return true;
+    roles.any(func(role) = role.user.equal(caller) and role.role == "club_admin" and role.competition_id == club_id)
+  };
+
+  func nowMs() : Nat64 { Nat64.fromIntWrap(Time.now() / 1_000_000) };
+
+  public query ({ caller }) func list_eoi_submissions(club_id : Text, season_id : ?Text) : async { #Ok : [Types.EoiSubmission]; #Err : Text } {
+    auth(caller);
+    if (not canManageClub(caller, club_id)) return #Err("Club admin required");
+    #Ok(eoiSubmissions.filter(func(item) {
+      item.club_id == club_id and (switch (season_id) { case (?s) item.season_id == s; case null true })
+    }))
+  };
+
+  public query ({ caller }) func get_eoi_stats(club_id : Text, season_id : ?Text) : async { #Ok : Types.EoiStats; #Err : Text } {
+    auth(caller);
+    if (not canManageClub(caller, club_id)) return #Err("Club admin required");
+    let scoped = eoiSubmissions.filter(func(item) {
+      item.club_id == club_id and (switch (season_id) { case (?s) item.season_id == s; case null true })
+    });
+    var total = 0; var submitted = 0; var allocated = 0; var confirmed = 0; var registered = 0; var withdrawn = 0;
+    var new_players = 0; var returning_players = 0;
+    for (item in scoped.values()) {
+      total += 1;
+      if (item.status == "submitted") submitted += 1;
+      if (item.status == "allocated") allocated += 1;
+      if (item.status == "confirmed") confirmed += 1;
+      if (item.status == "registered") registered += 1;
+      if (item.status == "withdrawn") withdrawn += 1;
+      if (item.returning_player) returning_players += 1 else new_players += 1;
+    };
+    // Form-view tracking (views/conversion_rate) has no canister store —
+    // NEEDS-CANISTER: no eoi_form_views equivalent, always report 0.
+    #Ok({ total; submitted; allocated; confirmed; registered; withdrawn; new_players; returning_players; views = 0; conversion_rate = 0.0 })
+  };
+
+  public query ({ caller }) func suggest_eoi_teams(season_id : Text) : async { #Ok : [Types.EoiTeamSuggestion]; #Err : Text } {
+    auth(caller);
+    let candidates = eoiSubmissions.filter(func(item) {
+      item.season_id == season_id and item.assigned_team_id == null and
+      (item.status == "submitted" or item.status == "preferences_completed")
+    });
+    switch (candidates.values().next()) {
+      case (?first) { if (not canManageClub(caller, first.club_id)) return #Err("Club admin required") };
+      case null {};
+    };
+    var groups : [Types.EoiTeamSuggestion] = [];
+    for (item in candidates.values()) {
+      let ag = switch (item.age_group) { case (?a) a; case null "Unknown" };
+      let skill = switch (item.skill_level) { case (?s) Int.toFloat(Nat16.toNat(s)); case null 3.0 };
+      switch (groups.find(func(g) = g.age_group == ag)) {
+        case (?existing) {
+          let newCount = existing.player_count + 1;
+          let newAvg = ((existing.avg_skill * Int.toFloat(existing.player_count)) + skill) / Int.toFloat(newCount);
+          let updated : Types.EoiTeamSuggestion = { age_group = ag; player_count = newCount; avg_skill = newAvg; submission_ids = existing.submission_ids.concat([item.id]) };
+          groups := groups.map(func(g) = if (g.age_group == ag) updated else g);
+        };
+        case null {
+          groups := groups.concat([{ age_group = ag; player_count = 1; avg_skill = skill; submission_ids = [item.id] }]);
+        };
+      };
+    };
+    #Ok(groups)
+  };
+
+  public query ({ caller }) func get_my_pending_eois() : async { #Ok : [Types.EoiSubmission]; #Err : Text } {
+    auth(caller);
+    #Ok(eoiSubmissions.filter(func(item) {
+      item.parent_user_id == ?caller and (
+        item.status == "submitted" or item.status == "preferences_completed" or item.status == "allocated"
+      )
+    }))
+  };
+
+  public shared ({ caller }) func confirm_eoi_placement(submission_id : Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    switch (eoiSubmissions.find(func(item) = item.id == submission_id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (current.parent_user_id != ?caller) return #Err("EOI submission does not belong to caller");
+        let now = nowMs();
+        let updated : Types.EoiSubmission = { current with status = "confirmed"; confirmed_at_ms = ?now; parent_confirmed_at_ms = ?now; updated_at_ms = now; revision = current.revision + 1 };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == submission_id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func claim_eoi_by_token(token : Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    switch (eoiSubmissions.find(func(item) = item.claim_token == token)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (current.parent_user_id != null and current.parent_user_id != ?caller) return #Err("EOI submission already claimed");
+        let updated : Types.EoiSubmission = { current with parent_user_id = ?caller; claimed_at_ms = ?nowMs(); updated_at_ms = nowMs() };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == current.id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func update_eoi_submission(id : Text, extra_notes : ?Text, preferred_teammates : ?Text, preferred_position : ?Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    func optValid(value : ?Text, max : Nat) : Bool {
+      switch (value) { case null true; case (?text) text.size() <= max }
+    };
+    if (not optValid(extra_notes, 2000) or not optValid(preferred_teammates, 500) or not optValid(preferred_position, 128)) return #Err("Invalid EOI update");
+    switch (eoiSubmissions.find(func(item) = item.id == id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (current.parent_user_id != ?caller) return #Err("EOI submission does not belong to caller");
+        let updated : Types.EoiSubmission = { current with extra_notes; preferred_teammates; preferred_position; status = "preferences_completed"; updated_at_ms = nowMs(); revision = current.revision + 1 };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func update_eoi_status(id : Text, status : Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    let validStatuses = ["invited", "submitted", "preferences_completed", "allocated", "confirmed", "registered", "withdrawn"];
+    if (not validStatuses.any(func(s) = s == status)) return #Err("Invalid EOI status");
+    switch (eoiSubmissions.find(func(item) = item.id == id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (not canManageClub(caller, current.club_id)) return #Err("Club admin required");
+        let now = nowMs();
+        let updated : Types.EoiSubmission = {
+          current with
+          status;
+          updated_at_ms = now;
+          allocated_at_ms = if (status == "allocated") ?now else current.allocated_at_ms;
+          confirmed_at_ms = if (status == "confirmed") ?now else current.confirmed_at_ms;
+          registered_at_ms = if (status == "registered") ?now else current.registered_at_ms;
+          withdrawn_at_ms = if (status == "withdrawn") ?now else current.withdrawn_at_ms;
+          revision = current.revision + 1;
+        };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  func doAssignEoiTeam(caller : Principal, id : Text, team_id : ?Text) : { #Ok : Types.EoiSubmission; #Err : Text } {
+    switch (eoiSubmissions.find(func(item) = item.id == id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (not canManageClub(caller, current.club_id)) return #Err("Club admin required");
+        let now = nowMs();
+        let newStatus = switch (team_id) { case (?_) "allocated"; case null "submitted" };
+        let updated : Types.EoiSubmission = {
+          current with
+          assigned_team_id = team_id;
+          status = newStatus;
+          allocated_at_ms = switch (team_id) { case (?_) ?now; case null null };
+          updated_at_ms = now;
+          revision = current.revision + 1;
+        };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func assign_eoi_team(id : Text, team_id : ?Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    doAssignEoiTeam(caller, id, team_id)
+  };
+
+  public shared ({ caller }) func allocate_eoi_to_team(id : Text, team_id : ?Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    doAssignEoiTeam(caller, id, team_id)
+  };
+
+  public shared ({ caller }) func delete_eoi(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (eoiSubmissions.find(func(item) = item.id == id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (not canManageClub(caller, current.club_id)) return #Err("Club admin required");
+        eoiSubmissions := eoiSubmissions.filter(func(item) = item.id != id);
+        #Ok
+      };
+    }
+  };
+
+  // Bookkeeping-only: tracks invite_sent_count / invite_sent_at_ms. Actual
+  // email delivery stays Supabase (send-eoi-invite edge function) by design
+  // — this just mirrors the counters for ICP-routed admin UIs.
+  public shared ({ caller }) func resend_eoi_invite(id : Text) : async { #Ok : Types.EoiSubmission; #Err : Text } {
+    auth(caller);
+    switch (eoiSubmissions.find(func(item) = item.id == id)) {
+      case null #Err("EOI submission not found");
+      case (?current) {
+        if (not canManageClub(caller, current.club_id)) return #Err("Club admin required");
+        let updated : Types.EoiSubmission = { current with invite_sent_count = current.invite_sent_count + 1; invite_sent_at_ms = ?nowMs(); updated_at_ms = nowMs(); revision = current.revision + 1 };
+        eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func bulk_resend_eoi_invites(ids : [Text]) : async { #Ok : { ok : Nat; fail : Nat }; #Err : Text } {
+    auth(caller);
+    var ok = 0; var fail = 0;
+    for (id in ids.values()) {
+      switch (eoiSubmissions.find(func(item) = item.id == id)) {
+        case null { fail += 1 };
+        case (?current) {
+          if (not canManageClub(caller, current.club_id)) { fail += 1 } else {
+            let updated : Types.EoiSubmission = { current with invite_sent_count = current.invite_sent_count + 1; invite_sent_at_ms = ?nowMs(); updated_at_ms = nowMs(); revision = current.revision + 1 };
+            eoiSubmissions := eoiSubmissions.map(func(item) = if (item.id == id) updated else item);
+            ok += 1;
+          };
+        };
+      };
+    };
+    #Ok({ ok; fail })
+  };
+
+  // ---------------- Competition engagement summary ----------------
+
+  // Admin-only club engagement rollup: active teams (accepted|registered
+  // entries), total/completed matches for a set of competitions over a
+  // window. since_ms/until_ms are accepted for interface parity with the
+  // invite-stats-style window queries elsewhere; matches/entries here carry
+  // no timestamp to filter by, so the window is not yet applied to the
+  // underlying rows (NEEDS-CANISTER: scheduled_at_ms exists but matches
+  // outside the window are intentionally still counted for now, matching
+  // the existing CompetitionPanel Supabase behaviour of using all rows).
+  public query ({ caller }) func competition_engagement_summary(competition_ids : [Text], since_ms : Int, until_ms : Int) : async { #Ok : [Types.CompetitionEngagementSummary]; #Err : Text } {
+    auth(caller);
+    ignore since_ms;
+    ignore until_ms;
+    #Ok(competition_ids.map(func(cid : Text) : Types.CompetitionEngagementSummary {
+      let compEntries = entries.filter(func(item) = item.competition_id == cid and (item.status == "accepted" or item.status == "registered"));
+      let compMatches = matches.filter(func(item) = item.competition_id == cid);
+      let completed = compMatches.filter(func(item) = item.status == "completed");
+      // broadcasts always reports 0 — competition_broadcasts stays in
+      // Supabase by design (send-competition-broadcast edge function).
+      { competition_id = cid; active_teams = compEntries.size(); total_matches = compMatches.size(); results_entered = completed.size(); broadcasts = 0 }
+    }))
+  };
+
 };

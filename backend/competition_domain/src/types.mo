@@ -37,6 +37,66 @@ module {
     created_at_ms : Nat64;
     revision : Nat64;
   };
+  // Expression-of-interest submission (parent sign-up for a season).
+  // Mirrors the Supabase eoi_submissions columns the EOI hooks read/write;
+  // *_at_ms timestamps replace ISO strings, Principal replaces auth.uid().
+  public type EoiSubmission = {
+    id : Text;
+    club_id : Text;
+    season_id : Text;
+    claim_token : Text;
+    status : Text; // invited|submitted|preferences_completed|allocated|confirmed|registered|withdrawn
+    source : Text; // website|app|admin
+    parent_name : Text;
+    parent_email : Text;
+    parent_mobile : ?Text;
+    parent_user_id : ?Principal;
+    player_name : Text;
+    player_dob : ?Text;
+    player_gender : ?Text;
+    age_group : ?Text;
+    preferred_position : ?Text;
+    preferred_teammates : ?Text;
+    skill_level : ?Nat16;
+    returning_player : Bool;
+    game_days : [Text];
+    training_days : [Text];
+    extra_notes : ?Text;
+    notes : ?Text;
+    child_id : ?Text;
+    assigned_team_id : ?Text;
+    invite_sent_count : Nat16;
+    invite_sent_at_ms : ?Nat64;
+    submitted_at_ms : Nat64;
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+    allocated_at_ms : ?Nat64;
+    confirmed_at_ms : ?Nat64;
+    registered_at_ms : ?Nat64;
+    withdrawn_at_ms : ?Nat64;
+    claimed_at_ms : ?Nat64;
+    parent_confirmed_at_ms : ?Nat64;
+    revision : Nat64;
+  };
+  public type EoiStats = {
+    total : Nat;
+    submitted : Nat;
+    allocated : Nat;
+    confirmed : Nat;
+    registered : Nat;
+    withdrawn : Nat;
+    new_players : Nat;
+    returning_players : Nat;
+    // Form-view tracking has no canister store yet (NEEDS-CANISTER: no
+    // eoi_form_views equivalent) — these two always report 0.
+    views : Nat;
+    conversion_rate : Float;
+  };
+  public type EoiTeamSuggestion = { age_group : Text; player_count : Nat; avg_skill : Float; submission_ids : [Text] };
+  // Computed from entries (accepted|registered) and matches (completed) for
+  // a set of competitions over a time window. broadcasts always reports 0 —
+  // broadcast records stay in Supabase (competition_broadcasts) by design.
+  public type CompetitionEngagementSummary = { competition_id : Text; active_teams : Nat; total_matches : Nat; results_entered : Nat; broadcasts : Nat };
   public type State = {
     schema : Nat32;
     governor : Principal;
@@ -49,5 +109,6 @@ module {
     chatSettings : [ChatSettings];
     competitionInvites : [CompetitionInvite];
     competitionJoinLinks : [CompetitionJoinLink];
+    eoiSubmissions : [EoiSubmission];
   };
 }

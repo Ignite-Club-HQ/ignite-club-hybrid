@@ -246,6 +246,43 @@ export async function removeLivePlayer(ctx: FeatureBackendContext, id: string) {
   return unwrapCandid(actor.remove_player(id), "Remove player");
 }
 
+/**
+ * Second-parent/guardian linking for the pending-status lookup. Mirrors the
+ * Supabase `child_guardians` insert in AddSecondParentDialog; the canister
+ * auto-creates the child record on first link if add_player hadn't already.
+ */
+export async function linkLiveMiniLeagueGuardian(
+  ctx: FeatureBackendContext,
+  childId: string,
+  guardianUserId: Principal,
+) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.link_mini_league_guardian(childId, guardianUserId), "Link guardian");
+}
+
+export interface LivePlayerGuardianStatus {
+  parentLinked: boolean;
+  guardianCount: number;
+  pending: boolean;
+}
+
+/**
+ * Matches exactly what ManagePlayersDialog computes client-side from
+ * Supabase's `children.parent_id` + `child_guardians` count.
+ */
+export async function getLivePlayerGuardianStatus(
+  ctx: FeatureBackendContext,
+  playerId: string,
+): Promise<LivePlayerGuardianStatus> {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  const result = await unwrapCandid(actor.get_player_guardian_status(playerId), "Get player guardian status");
+  return {
+    parentLinked: result.parent_linked,
+    guardianCount: Number(result.guardian_count),
+    pending: result.pending,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Invites
 // ---------------------------------------------------------------------------

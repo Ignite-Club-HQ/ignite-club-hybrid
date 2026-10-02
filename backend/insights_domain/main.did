@@ -1,3 +1,13 @@
+type UserActivityEntry = 
+ record {
+   club_id: opt text;
+   duration_seconds: nat32;
+   page_label: text;
+   page_path: text;
+   session_id: text;
+   started_at_ms: nat64;
+   user_id: text;
+ };
 type SponsorPerformance = 
  record {
    metrics: vec record {
@@ -14,6 +24,19 @@ type SponsorBenchmarkRow =
    impressions: nat32;
    sponsor_id: text;
    unique_reach: nat32;
+ };
+type PhotoEngagementTotal = 
+ record {
+   comments: nat;
+   photo_id: text;
+   reactions: nat;
+   views: nat;
+ };
+type PhotoEngagementKind = 
+ variant {
+   Comment;
+   Reaction;
+   View;
  };
 type PerfSampleInput = 
  record {
@@ -233,6 +256,11 @@ service : {
                 Err: text;
                 Ok: EngagementTotals;
               }) query;
+  count_photos: (club_id: text, since_ms: nat64, until_ms: nat64) ->
+   (variant {
+      Err: text;
+      Ok: nat;
+    }) query;
   create_ad: (input: AppAdInput) -> (variant {
                                        Err: text;
                                        Ok: AppAd;
@@ -304,12 +332,22 @@ service : {
             total: nat32;
           };
     }) query;
+  list_user_activity: (club_id: opt text, since_ms: nat64, until_ms:
+   nat64) -> (variant {
+                Err: text;
+                Ok: vec UserActivityEntry;
+              }) query;
   my_feedback: () -> (vec Feedback) query;
   perf_aggregate: (surface: text, source: opt text, since_ms: nat64,
    until_ms: nat64) -> (variant {
                           Err: text;
                           Ok: PerfAggregate;
                         }) query;
+  photo_engagement_totals: (photo_ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec PhotoEngagementTotal;
+    }) query;
   record_active_user: (club_id: text, account_id: text) ->
    (variant {
       Err: text;
@@ -340,6 +378,16 @@ service : {
       Err: text;
       Ok: nat32;
     });
+  record_photo_engagement: (photo_id: text, kind: PhotoEngagementKind) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  record_photo_upload: (club_id: text, photo_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   record_rsvp_completed: (club_id: text, account_id: text) ->
    (variant {
       Err: text;
@@ -358,6 +406,12 @@ service : {
                                Err: text;
                                Ok;
                              });
+  record_user_activity: (user_id: text, club_id: opt text, page_path: 
+   text, page_label: text, session_id: text, duration_seconds: nat32) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   record_web_vital: (metric_name: text, metric_value: float64, rating: 
    text, page_path: text) -> (variant {
                                 Err: text;

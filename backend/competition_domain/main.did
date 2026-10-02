@@ -13,6 +13,7 @@ type State =
    competitionJoinLinks: vec CompetitionJoinLink;
    competitions: vec Competition;
    entries: vec TeamEntry;
+   eoiSubmissions: vec EoiSubmission;
    governor: principal;
    matches: vec Match;
    roles: vec RoleGrant;
@@ -63,6 +64,65 @@ type JoinToken =
    team_id: text;
    used: bool;
  };
+type EoiTeamSuggestion = 
+ record {
+   age_group: text;
+   avg_skill: float64;
+   player_count: nat;
+   submission_ids: vec text;
+ };
+type EoiSubmission = 
+ record {
+   age_group: opt text;
+   allocated_at_ms: opt nat64;
+   assigned_team_id: opt text;
+   child_id: opt text;
+   claim_token: text;
+   claimed_at_ms: opt nat64;
+   club_id: text;
+   confirmed_at_ms: opt nat64;
+   created_at_ms: nat64;
+   extra_notes: opt text;
+   game_days: vec text;
+   id: text;
+   invite_sent_at_ms: opt nat64;
+   invite_sent_count: nat16;
+   notes: opt text;
+   parent_confirmed_at_ms: opt nat64;
+   parent_email: text;
+   parent_mobile: opt text;
+   parent_name: text;
+   parent_user_id: opt principal;
+   player_dob: opt text;
+   player_gender: opt text;
+   player_name: text;
+   preferred_position: opt text;
+   preferred_teammates: opt text;
+   registered_at_ms: opt nat64;
+   returning_player: bool;
+   revision: nat64;
+   season_id: text;
+   skill_level: opt nat16;
+   source: text;
+   status: text;
+   submitted_at_ms: nat64;
+   training_days: vec text;
+   updated_at_ms: nat64;
+   withdrawn_at_ms: opt nat64;
+ };
+type EoiStats = 
+ record {
+   allocated: nat;
+   confirmed: nat;
+   conversion_rate: float64;
+   new_players: nat;
+   registered: nat;
+   returning_players: nat;
+   submitted: nat;
+   total: nat;
+   views: nat;
+   withdrawn: nat;
+ };
 type CompetitionJoinLink = 
  record {
    competition_id: text;
@@ -85,6 +145,14 @@ type CompetitionInvite =
    role: text;
    status: text;
    team_id: opt text;
+ };
+type CompetitionEngagementSummary = 
+ record {
+   active_teams: nat;
+   broadcasts: nat;
+   competition_id: text;
+   results_entered: nat;
+   total_matches: nat;
  };
 type Competition = 
  record {
@@ -118,15 +186,49 @@ service : {
                                   Err: text;
                                   Ok: RoleGrant;
                                 });
+  allocate_eoi_to_team: (id: text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
+    });
   assign_division: (competition_id: text, team_id: text, division_id:
    opt text) -> (variant {
                    Err: text;
                    Ok: TeamEntry;
                  });
+  assign_eoi_team: (id: text, team_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
+    });
+  bulk_resend_eoi_invites: (ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: record {
+            fail: nat;
+            ok: nat;
+          };
+    });
+  claim_eoi_by_token: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
+    });
   claim_join_token: (token_id: text) -> (variant {
                                            Err: text;
                                            Ok: text;
                                          });
+  competition_engagement_summary: (competition_ids: vec text, since_ms: 
+   int, until_ms: int) ->
+   (variant {
+      Err: text;
+      Ok: vec CompetitionEngagementSummary;
+    }) query;
+  confirm_eoi_placement: (submission_id: text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
+    });
   create_competition: (club_id: text, name: text, season: text) ->
    (variant {
       Err: text;
@@ -152,6 +254,10 @@ service : {
       Err: text;
       Ok: CompetitionInvite;
     });
+  delete_eoi: (id: text) -> (variant {
+                               Err: text;
+                               Ok;
+                             });
   delete_match: (match_id: text) -> (variant {
                                        Err: text;
                                        Ok;
@@ -169,6 +275,16 @@ service : {
    (variant {
       Err: text;
       Ok: ChatSettings;
+    }) query;
+  get_eoi_stats: (club_id: text, season_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EoiStats;
+    }) query;
+  get_my_pending_eois: () ->
+   (variant {
+      Err: text;
+      Ok: vec EoiSubmission;
     }) query;
   grant_role: ("principal": principal, role: text, competition_id: text,
    team_id: opt text) -> (variant {
@@ -234,6 +350,11 @@ service : {
       Err: text;
       Ok: vec TeamEntry;
     }) query;
+  list_eoi_submissions: (club_id: text, season_id: opt text) ->
+   (variant {
+      Err: text;
+      Ok: vec EoiSubmission;
+    }) query;
   list_invites_by_invitee: () ->
    (variant {
       Err: text;
@@ -269,6 +390,10 @@ service : {
                                         Err: text;
                                         Ok;
                                       });
+  resend_eoi_invite: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok: EoiSubmission;
+                                    });
   respond_to_entry_invite: (competition_id: text, team_id: text, accept:
    bool) -> (variant {
                Err: text;
@@ -304,6 +429,11 @@ service : {
                 Err: text;
                 Ok: Season;
               });
+  suggest_eoi_teams: (season_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec EoiTeamSuggestion;
+    }) query;
   transfer_governorship: (new_governor: principal) ->
    (variant {
       Err: text;
@@ -313,6 +443,17 @@ service : {
    (variant {
       Err: text;
       Ok: nat;
+    });
+  update_eoi_status: (id: text, status: text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
+    });
+  update_eoi_submission: (id: text, extra_notes: opt text,
+   preferred_teammates: opt text, preferred_position: opt text) ->
+   (variant {
+      Err: text;
+      Ok: EoiSubmission;
     });
   update_match_details: (match_id: text, home_team: text, away_team: 
    text, division_id: opt text, scheduled_at_ms: opt nat64, venue: opt text,

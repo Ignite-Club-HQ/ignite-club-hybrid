@@ -535,3 +535,80 @@ export async function getLiveAdEventSummary(ctx: FeatureBackendContext, sinceMs:
   const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.ad_event_summary(toNat64(sinceMs)), "Get ad event summary");
 }
+
+// ---------------- Photo counters (upload + engagement) ----------------
+// Lightweight counters only — media bytes stay in Supabase. Dual-written
+// alongside the existing Supabase photo/view/reaction/comment rows when the
+// "analytics" feature is ICP-routed; failures are swallowed by callers so
+// instrumentation never blocks the primary write.
+
+export type LivePhotoEngagementKind = "View" | "Reaction" | "Comment";
+
+function toPhotoEngagementKind(kind: LivePhotoEngagementKind) {
+  if (kind === "View") return { View: null };
+  if (kind === "Reaction") return { Reaction: null };
+  return { Comment: null };
+}
+
+export async function recordLivePhotoUpload(ctx: FeatureBackendContext, clubId: string, photoId: string) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_photo_upload(clubId, photoId), "Record photo upload");
+}
+
+export async function recordLivePhotoEngagement(
+  ctx: FeatureBackendContext,
+  photoId: string,
+  kind: LivePhotoEngagementKind,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_photo_engagement(photoId, toPhotoEngagementKind(kind)), "Record photo engagement");
+}
+
+export async function countLivePhotos(ctx: FeatureBackendContext, clubId: string, sinceMs: number, untilMs: number) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.count_photos(clubId, toNat64(sinceMs), toNat64(untilMs)), "Count photos");
+}
+
+export async function getLivePhotoEngagementTotals(ctx: FeatureBackendContext, photoIds: string[]) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.photo_engagement_totals(photoIds), "Get photo engagement totals");
+}
+
+// ---------------- Per-session user activity log ----------------
+
+export async function recordLiveUserActivity(
+  ctx: FeatureBackendContext,
+  userId: string,
+  clubId: string | null,
+  pagePath: string,
+  pageLabel: string,
+  sessionId: string,
+  durationSeconds: number,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.record_user_activity(
+      userId,
+      candidOpt(clubId),
+      pagePath,
+      pageLabel,
+      sessionId,
+      Math.max(0, Math.round(durationSeconds)),
+    ),
+    "Record user activity",
+  );
+}
+
+/** Capped at 500 most-recent rows by the canister — narrow since_ms/until_ms for more. */
+export async function listLiveUserActivity(
+  ctx: FeatureBackendContext,
+  clubId: string | null,
+  sinceMs: number,
+  untilMs: number,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_user_activity(candidOpt(clubId), toNat64(sinceMs), toNat64(untilMs)),
+    "List user activity",
+  );
+}

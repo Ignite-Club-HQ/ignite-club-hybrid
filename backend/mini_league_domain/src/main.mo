@@ -20,6 +20,8 @@ persistent actor {
   var availability : [Types.MiniLeagueSessionAvailability];
   var admins : [Types.MiniLeagueAdmin];
   var joinLinks : [Types.MiniLeagueJoinLink];
+  var children : [Types.MiniLeagueChild];
+  var guardians : [Types.MiniLeagueGuardian];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -102,6 +104,7 @@ persistent actor {
     }
   };
   func findPlayer(id : Text) : ?Types.MiniLeaguePlayer { players.find(func(item) = item.id == id) };
+  func findChild(id : Text) : ?Types.MiniLeagueChild { children.find(func(item) = item.id == id) };
   func nextId(prefix : Text, size : Nat) : Text { prefix # "-" # Nat.toText(size) };
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
@@ -271,6 +274,16 @@ persistent actor {
           claimed_by = null; ability_rating; notes; created_at_ms = now; updated_at_ms = now;
         };
         players := players.concat([created]);
+        // Mirrors the Supabase `children` upsert: ensure a child record
+        // exists for the pending-status lookup / delete cascade below.
+        switch (child_id) {
+          case (?cid) {
+            if (findChild(cid) == null) {
+              children := children.concat([{ id = cid; parent_user_id = null; claimed_by = null; created_at_ms = now; updated_at_ms = now }]);
+            };
+          };
+          case null {};
+        };
         #Ok(created)
       };
     }
@@ -306,6 +319,19 @@ persistent actor {
             groupPlayers := groupPlayers.filter(func(item) = item.player_id != id);
             duties := duties.map(func(item) = if (item.assigned_to == ?id) { { item with assigned_to = null } } else item);
             availability := availability.filter(func(item) = item.player_id != id);
+            // Mirrors the Supabase delete cascade: once no other player row
+            // (in any league) still references this child, the child record
+            // and its guardian links are removed too (ManagePlayersDialog
+            // ~lines 392-449).
+            switch (current.child_id) {
+              case (?cid) {
+                if (not players.any(func(item) = item.child_id == ?cid)) {
+                  children := children.filter(func(item) = item.id != cid);
+                  guardians := guardians.filter(func(item) = item.child_id != cid);
+                };
+              };
+              case null {};
+            };
             #Ok
           };
         }
@@ -319,6 +345,64 @@ persistent actor {
       case (?league) {
         if (not canViewLeague(caller, league)) return #Err("Forbidden");
         #Ok(players.filter(func(item) = item.mini_league_id == mini_league_id))
+      };
+    }
+  };
+
+  // ---------------- Children / guardians ----------------
+  //
+  // Mirrors the slice of Supabase `children` + `child_guardians` consumed by
+  // ManagePlayersDialog's pending-status lookup: a child is "pending" when
+  // nobody (parent or guardian) is linked to it yet.
+
+  // League-admin gate shared by the guardian-link/status helpers below:
+  // true when the caller administers at least one league containing a
+  // player linked to this child.
+  func isChildLeagueAdmin(caller : Principal, child_id : Text) : Bool {
+    players.any(func(p) = p.child_id == ?child_id and (switch (findLeague(p.mini_league_id)) { case (?league) isLeagueAdmin(caller, league); case null false }))
+  };
+
+  // Links a guardian (second parent) to a child for pending-status purposes.
+  // Mirrors the `child_guardians` insert AddSecondParentDialog performs on
+  // the Supabase branch; idempotent on (child_id, guardian_user_id).
+  public shared ({ caller }) func link_mini_league_guardian(child_id : Text, guardian_user_id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(child_id)) return #Err("Invalid child");
+    if (guardian_user_id.equal(Principal.anonymous())) return #Err("Invalid guardian principal");
+    if (not isChildLeagueAdmin(caller, child_id)) return #Err("Mini-league admin required");
+    if (findChild(child_id) == null) {
+      children := children.concat([{ id = child_id; parent_user_id = null; claimed_by = null; created_at_ms = nowMs(); updated_at_ms = nowMs() }]);
+    };
+    if (not guardians.any(func(item) = item.child_id == child_id and item.guardian_user_id.equal(guardian_user_id))) {
+      guardians := guardians.concat([{ child_id; guardian_user_id; created_at_ms = nowMs() }]);
+    };
+    #Ok
+  };
+
+  // Matches exactly what ManagePlayersDialog computes client-side from
+  // Supabase: pending when the player has no parent_user_id AND (no linked
+  // child OR the child has no parent_id AND no child_guardians rows).
+  public query ({ caller }) func get_player_guardian_status(player_id : Text) : async { #Ok : Types.PlayerGuardianStatus; #Err : Text } {
+    switch (findPlayer(player_id)) {
+      case null #Err("Player not found");
+      case (?player) {
+        switch (findLeague(player.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not canViewLeague(caller, league)) return #Err("Forbidden");
+            let childParent : ?Principal = switch (player.child_id) {
+              case (?cid) { switch (findChild(cid)) { case (?child) child.parent_user_id; case null null } };
+              case null null;
+            };
+            let guardianCount : Nat = switch (player.child_id) {
+              case (?cid) guardians.filter(func(item) = item.child_id == cid).size();
+              case null 0;
+            };
+            let parentLinked = player.parent_user_id != null or childParent != null;
+            let pending = player.parent_user_id == null and (player.child_id == null or (childParent == null and guardianCount == 0));
+            #Ok({ parent_linked = parentLinked; guardian_count = guardianCount; pending })
+          };
+        }
       };
     }
   };
@@ -828,6 +912,7 @@ persistent actor {
       case (#Ok(_)) {
         let sessionIds = sessions.filter(func(item) = item.mini_league_id == mini_league_id).map(func(item) = item.id);
         let groupIds = groups.filter(func(item) = sessionIds.any(func(sid) = sid == item.session_id)).map(func(item) = item.id);
+        let childIdsHere = players.filter(func(item) = item.mini_league_id == mini_league_id and item.child_id != null).map(func(item) = switch (item.child_id) { case (?cid) cid; case null "" });
         leagues := leagues.filter(func(item) = item.id != mini_league_id);
         sessions := sessions.filter(func(item) = item.mini_league_id != mini_league_id);
         players := players.filter(func(item) = item.mini_league_id != mini_league_id);
@@ -838,6 +923,11 @@ persistent actor {
         availability := availability.filter(func(item) = not sessionIds.any(func(sid) = sid == item.session_id));
         admins := admins.filter(func(item) = item.mini_league_id != mini_league_id);
         joinLinks := joinLinks.filter(func(item) = item.mini_league_id != mini_league_id);
+        // Same orphan-child cleanup as remove_player, applied per child that
+        // was referenced only within the league just deleted.
+        let orphanChildIds = childIdsHere.filter(func(cid) = not players.any(func(item) = item.child_id == ?cid));
+        children := children.filter(func(item) = not orphanChildIds.any(func(cid) = cid == item.id));
+        guardians := guardians.filter(func(item) = not orphanChildIds.any(func(cid) = cid == item.child_id));
         #Ok
       };
     }
