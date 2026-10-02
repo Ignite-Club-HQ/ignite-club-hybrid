@@ -68,33 +68,51 @@ export async function awardEngagementPoints({
     const config = ACTION_CONFIG[action];
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    // Check if club has Pro subscription and points system enabled
-    const { data: clubSub } = await supabase
-      .from("club_subscriptions")
-      .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, disable_points_system")
-      .eq("club_id", clubId)
-      .maybeSingle();
+    if (isFeatureRoutedToIcp("points")) {
+      // ICP branch: there is no per-club subscription row — the caller's own
+      // identity_access entitlement is the Pro signal (same simplification
+      // as useClubProAccess), and the canister enforces the daily cooldown
+      // atomically inside award_points, so neither Supabase pre-check may
+      // run here (an II principal has no Supabase session).
+      // NEEDS-CANISTER: the club-level disable_points_system kill switch has
+      // no club_domain settings field yet.
+      const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return false;
+      const principal = identity.getPrincipal().toText();
+      const { getCachedIcpIsPro, fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+      const isPro = getCachedIcpIsPro(principal)
+        || (await fetchIcpEntitlements(identity, principal)).isPro;
+      if (!isPro) return false;
+    } else {
+      // Check if club has Pro subscription and points system enabled
+      const { data: clubSub } = await supabase
+        .from("club_subscriptions")
+        .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, disable_points_system")
+        .eq("club_id", clubId)
+        .maybeSingle();
 
-    const hasPro = clubSub?.is_pro || clubSub?.is_pro_football ||
-                   clubSub?.admin_pro_override || clubSub?.admin_pro_football_override;
+      const hasPro = clubSub?.is_pro || clubSub?.is_pro_football ||
+                     clubSub?.admin_pro_override || clubSub?.admin_pro_football_override;
 
-    if (!hasPro || clubSub?.disable_points_system) {
-      return false;
-    }
+      if (!hasPro || clubSub?.disable_points_system) {
+        return false;
+      }
 
-    // Atomic cooldown check + insert via DB function
-    const { data: cooldownOk, error: cooldownError } = await supabase.rpc('try_insert_points_cooldown', {
-      _user_id: userId,
-      _action_type: action,
-      _scope_id: scopeId,
-      _awarded_date: today,
-      _points_awarded: config.points,
-      _club_id: clubId,
-      _daily_cap: config.dailyCap,
-    });
+      // Atomic cooldown check + insert via DB function
+      const { data: cooldownOk, error: cooldownError } = await supabase.rpc('try_insert_points_cooldown', {
+        _user_id: userId,
+        _action_type: action,
+        _scope_id: scopeId,
+        _awarded_date: today,
+        _points_awarded: config.points,
+        _club_id: clubId,
+        _daily_cap: config.dailyCap,
+      });
 
-    if (cooldownError || !cooldownOk) {
-      return false; // Already awarded or daily cap reached
+      if (cooldownError || !cooldownOk) {
+        return false; // Already awarded or daily cap reached
+      }
     }
 
     // Atomic points increment — scoped to this club. Routed through the
