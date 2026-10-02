@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { forwardLiveMessage } from "@/live/features/messaging";
+import { recordLiveChatNotifyBatch } from "@/live/features/notifications";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -109,7 +110,27 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
             throw new Error("Missing original message id — can't forward this message.");
           }
           for (const toConversationId of destinationGroupIds) {
-            await forwardLiveMessage(ctx, source.messageId, toConversationId);
+            const forwarded = await forwardLiveMessage(ctx, source.messageId!, toConversationId);
+            // Best-effort notify of the original author only: that's the one
+            // recipient this flow genuinely knows client-side (there's no
+            // group roster or mute-list query here, unlike the Supabase
+            // branch's broader notifications-table fan-out above). Never
+            // throws into the forward flow — a missed notify just means the
+            // original author doesn't hear about the forward.
+            if (source.authorId && source.authorId !== ctx.identity.getPrincipal().toText()) {
+              try {
+                await recordLiveChatNotifyBatch(ctx, {
+                  messageId: String((forwarded as { id: string }).id),
+                  conversationId: toConversationId,
+                  sender: ctx.identity.getPrincipal().toText(),
+                  preview: (source.text || "").trim().slice(0, 60) || (source.imageUrl ? "a photo" : "your message"),
+                  recipients: [source.authorId],
+                  muteList: [],
+                });
+              } catch (e) {
+                console.warn("[forward] failed to record chat notify (ICP)", e);
+              }
+            }
           }
           return true;
         },

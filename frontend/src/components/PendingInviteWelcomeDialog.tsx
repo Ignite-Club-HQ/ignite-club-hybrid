@@ -242,7 +242,27 @@ export function PendingInviteWelcomeDialog() {
             parentInviteMeta?.child_id && parentInviteMeta?.mini_league_id
           );
           if (isFeatureRoutedToIcp("membership") && !isMiniLeagueLinkInvite) {
-            // NEEDS-CANISTER: guardian/parent-team pending_invites auto-accept (role grant, child_guardians links, child-added emails) has no club_domain counterpart
+            // The canister's PendingInvite.id is the same id/token stored in
+            // this Supabase row (see club.ts `createLivePendingInvite` and
+            // membership.ts `acceptLiveMembershipPendingInvite`), so the
+            // invite can be self-accepted directly via
+            // `accept_pending_invite`. Best-effort: never block the UI, and
+            // never fall through to the Supabase acceptance logic below.
+            await withFeatureBackend("membership", {
+              supabase: async () => {},
+              icp: async (ctx) => {
+                try {
+                  await acceptPendingLiveInvite(ctx, invite.id);
+                  console.log("[InviteAutoAccept] Accepted pending invite via canister:", invite.id);
+                } catch (icpError) {
+                  console.error(
+                    "[InviteAutoAccept] Canister accept_pending_invite failed (best-effort):",
+                    invite.id,
+                    icpError
+                  );
+                }
+              },
+            });
             continue;
           }
 
