@@ -46,6 +46,12 @@ export type BackendRoutingConfig = {
   targets: ApprovedBackendTarget[];
   /** ISO alpha-2 code -> approved target id pinned for that country. */
   countryTargets: Record<string, string>;
+  /**
+   * Club id -> backend pinned for every member of that club. A pin wins over
+   * the country rules for that member's whole app (features AND the sign-in
+   * screen); used to test ICP with one club at a time.
+   */
+  clubBackendOverrides: Record<string, BackendProvider>;
 };
 
 export const DEFAULT_BACKEND_ROUTING_CONFIG: BackendRoutingConfig = {
@@ -53,6 +59,7 @@ export const DEFAULT_BACKEND_ROUTING_CONFIG: BackendRoutingConfig = {
   countryRules: {},
   targets: [],
   countryTargets: {},
+  clubBackendOverrides: {},
 };
 
 const ELIGIBILITIES: BackendEligibility[] = ["supabase", "icp", "both"];
@@ -187,7 +194,25 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
     }
   }
 
-  return { defaultBackend: rawDefault, countryRules, targets, countryTargets };
+  const clubBackendOverrides: Record<string, BackendProvider> = {};
+  const rawClubOverrides = record.clubBackendOverrides;
+  if (rawClubOverrides !== null && rawClubOverrides !== undefined) {
+    if (typeof rawClubOverrides !== "object" || Array.isArray(rawClubOverrides)) {
+      throw new Error(`${BACKEND_ROUTING_CONFIG_KEY}.clubBackendOverrides must be a JSON object.`);
+    }
+    for (const [clubId, backend] of Object.entries(rawClubOverrides as Record<string, unknown>)) {
+      const id = clubId.trim();
+      if (!id || id.length > 128) {
+        throw new Error(`Club override key "${clubId || "(empty)"}" must be a non-empty club id.`);
+      }
+      if (backend !== "supabase" && backend !== "icp") {
+        throw new Error(`Backend pinned for club ${id} must be "supabase" or "icp".`);
+      }
+      clubBackendOverrides[id] = backend;
+    }
+  }
+
+  return { defaultBackend: rawDefault, countryRules, targets, countryTargets, clubBackendOverrides };
 }
 
 /** localStorage key holding the last successfully loaded routing config. */
@@ -234,6 +259,7 @@ function copyConfig(config: BackendRoutingConfig): BackendRoutingConfig {
     countryRules: { ...config.countryRules },
     targets: config.targets.map(t => ({ ...t })),
     countryTargets: { ...config.countryTargets },
+    clubBackendOverrides: { ...config.clubBackendOverrides },
   };
 }
 
