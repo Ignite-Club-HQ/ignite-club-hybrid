@@ -110,6 +110,7 @@ export const idlFactory = ({ IDL }) => {
     'token' : IDL.Text,
     'mini_league_id' : IDL.Text,
     'revoked' : IDL.Bool,
+    'role' : IDL.Text,
     'created_by' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
     'revision' : IDL.Nat64,
@@ -150,6 +151,19 @@ export const idlFactory = ({ IDL }) => {
     'cancel_session' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueSession, 'Err' : IDL.Text })],
+        [],
+      ),
+    'claim_admin_join_link' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'mini_league_id' : IDL.Text,
+              'club_id' : IDL.Text,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
         [],
       ),
     'claim_duty' : IDL.Func(
@@ -205,7 +219,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_mini_league_join_link' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         [],
       ),
@@ -223,6 +237,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeagueSession, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_mini_league' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'duplicate_mini_league' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
+        [],
+      ),
     'get_availability' : IDL.Func(
         [IDL.Text, IDL.Text],
         [
@@ -231,6 +255,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        ['query'],
+      ),
+    'get_join_link_by_token' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_mini_league' : IDL.Func(
@@ -335,12 +364,12 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'revoke_mini_league_join_link' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'rotate_mini_league_join_link' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : MiniLeagueJoinLink, 'Err' : IDL.Text })],
         [],
       ),

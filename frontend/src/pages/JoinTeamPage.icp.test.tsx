@@ -12,6 +12,15 @@ vi.mock("@/live/features/membership", () => ({
   acceptLiveTeamInvite: (...args: unknown[]) => acceptLiveTeamInviteMock(...args),
 }));
 
+const getLiveJoinLinkByTokenMock = vi.fn();
+const getLiveMiniLeagueMock = vi.fn();
+const claimLiveAdminJoinLinkMock = vi.fn();
+vi.mock("@/live/features/miniLeagues", () => ({
+  getLiveJoinLinkByToken: (...args: unknown[]) => getLiveJoinLinkByTokenMock(...args),
+  getLiveMiniLeague: (...args: unknown[]) => getLiveMiniLeagueMock(...args),
+  claimLiveAdminJoinLink: (...args: unknown[]) => claimLiveAdminJoinLinkMock(...args),
+}));
+
 let membershipRoutedToIcp = false;
 vi.mock("@/live/loadBackendRouting", () => ({
   isFeatureRoutedToIcp: (feature: string) => feature === "membership" && membershipRoutedToIcp,
@@ -76,6 +85,7 @@ function renderAt(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/join/:token" element={<JoinTeamPage />} />
+          <Route path="/join/p/:token" element={<JoinTeamPage />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -104,6 +114,9 @@ beforeEach(() => {
   rpcMock.mockReset();
   getLiveTeamInviteMock.mockReset();
   acceptLiveTeamInviteMock.mockReset();
+  getLiveJoinLinkByTokenMock.mockReset();
+  getLiveMiniLeagueMock.mockReset();
+  claimLiveAdminJoinLinkMock.mockReset();
   rpcMock.mockImplementation((name: string) => {
     if (name === "get_team_invite_by_token") {
       return Promise.resolve({ data: [regularInviteRow], error: null });
@@ -166,6 +179,32 @@ describe("JoinTeamPage team-invite acceptance routing", () => {
         }),
       ),
     );
+    expect(acceptLiveTeamInviteMock).not.toHaveBeenCalled();
+  });
+
+  it("ICP branch: resolves an admin join link via getLiveJoinLinkByToken and claims it via claimLiveAdminJoinLink", async () => {
+    membershipRoutedToIcp = true;
+    getLiveJoinLinkByTokenMock.mockResolvedValue({
+      token: "adm-1",
+      mini_league_id: "league-1",
+      role: "admin",
+      revoked: false,
+    });
+    getLiveMiniLeagueMock.mockResolvedValue({ id: "league-1", name: "Summer League", club_id: "club-1" });
+    claimLiveAdminJoinLinkMock.mockResolvedValue({});
+
+    renderAt("/join/p/adm-1");
+
+    // The pending-invite RPC must not be used on the ICP branch.
+    await waitFor(() => expect(getLiveJoinLinkByTokenMock).toHaveBeenCalledWith(expect.anything(), "adm-1"));
+    expect(rpcMock).not.toHaveBeenCalledWith("get_pending_invite_by_token", expect.anything());
+
+    const joinButton = await screen.findByRole("button", { name: /join/i });
+    await waitFor(() => expect(joinButton).toBeEnabled());
+    fireEvent.click(joinButton);
+
+    await waitFor(() => expect(claimLiveAdminJoinLinkMock).toHaveBeenCalledWith(expect.anything(), "adm-1"));
+    // Neither the team-invite nor the mini-league block paths may run.
     expect(acceptLiveTeamInviteMock).not.toHaveBeenCalled();
   });
 });

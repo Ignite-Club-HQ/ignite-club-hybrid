@@ -11,6 +11,7 @@ import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
 export interface ChatSettings {
+  'admins_only' : boolean,
   'revision' : bigint,
   'competition_id' : string,
   'chat_enabled' : boolean,
@@ -172,6 +173,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'invite_team' : ActorMethod<
+    [string, string],
+    { 'Ok' : TeamEntry } |
+      { 'Err' : string }
+  >,
   'is_competition_admin' : ActorMethod<
     [string],
     { 'Ok' : boolean } |
@@ -217,6 +223,11 @@ export interface _SERVICE {
     { 'Ok' : Array<TeamEntry> } |
       { 'Err' : string }
   >,
+  'list_entries_by_team' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamEntry> } |
+      { 'Err' : string }
+  >,
   'list_invites_by_invitee' : ActorMethod<
     [],
     { 'Ok' : Array<CompetitionInvite> } |
@@ -252,6 +263,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'respond_to_entry_invite' : ActorMethod<
+    [string, string, boolean],
+    { 'Ok' : TeamEntry } |
+      { 'Err' : string }
+  >,
   'revoke_competition_join_link' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -263,7 +279,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'set_chat_settings' : ActorMethod<
-    [string, boolean, bigint],
+    [string, boolean, boolean, bigint],
     { 'Ok' : ChatSettings } |
       { 'Err' : string }
   >,

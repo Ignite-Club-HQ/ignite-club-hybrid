@@ -4,7 +4,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Loader2, Camera, ImageIcon, Plus, Check, Copy, Wand2, ChevronDown, Minus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { updateLiveMiniLeague } from "@/live/features/miniLeagues";
+import {
+  addLivePlayer,
+  deleteLiveMiniLeague,
+  duplicateLiveMiniLeague,
+  listLivePlayers,
+  removeLivePlayer,
+  updateLiveMiniLeague,
+} from "@/live/features/miniLeagues";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,10 +136,26 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           const { error } = await supabase.from("mini_league_players").insert(players);
           if (error) throw error;
         },
-        // Gated: test-data generator writes directly into Supabase's
-        // mini_league_players table; no canister equivalent/need.
-        icp: async () => {
-          throw new Error("Generating test players isn't available on this backend.");
+        icp: async (ctx) => {
+          const usedNames = new Set<string>();
+          for (let i = 0; i < mockPlayerCount; i++) {
+            let name: string;
+            do {
+              const first = MOCK_FIRST_NAMES[Math.floor(Math.random() * MOCK_FIRST_NAMES.length)];
+              const last = MOCK_LAST_NAMES[Math.floor(Math.random() * MOCK_LAST_NAMES.length)];
+              name = `${first} ${last}`;
+            } while (usedNames.has(name));
+            usedNames.add(name);
+            await addLivePlayer(
+              ctx,
+              league.id,
+              name,
+              null,
+              null,
+              Math.floor(Math.random() * 5) + 1,
+              null,
+            );
+          }
         },
       }),
     onSuccess: () => {
@@ -156,8 +179,17 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           if (error) throw error;
           return data?.length ?? 0;
         },
-        icp: async () => {
-          throw new Error("Clearing test players isn't available on this backend.");
+        icp: async (ctx) => {
+          // Test players are the ones no real member is linked to — same
+          // filter as the Supabase branch, plus unclaimed.
+          const players = await listLivePlayers(ctx, league.id);
+          const testPlayers = players.filter(
+            (p) => !p.child_id[0] && !p.parent_user_id[0] && !p.claimed_by[0],
+          );
+          for (const p of testPlayers) {
+            await removeLivePlayer(ctx, p.id);
+          }
+          return testPlayers.length;
         },
       }),
     onSuccess: (count) => {
@@ -261,11 +293,8 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
           const { error } = await supabase.from("mini_leagues").delete().eq("id", league.id);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: mini_league_domain has no delete_mini_league method
-        // (only create/update/set_status) — deletion stays Supabase-only until
-        // one is added.
-        icp: async () => {
-          throw new Error("Deleting leagues on this backend requires a canister delete method that doesn't exist yet.");
+        icp: async (ctx) => {
+          await deleteLiveMiniLeague(ctx, league.id);
         },
       }),
     onSuccess: () => {
@@ -315,11 +344,13 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
 
           return newLeague.id;
         },
-        // NEEDS-CANISTER: mini_league_domain has no duplicate/clone method and
-        // duplication also depends on Supabase `created_by` (uuid); no
-        // canister equivalent to wire this to.
-        icp: async () => {
-          throw new Error("Duplicating leagues on this backend requires a canister method that doesn't exist yet.");
+        icp: async (ctx) => {
+          const created = await duplicateLiveMiniLeague(
+            ctx,
+            league.id,
+            `${editName.trim() || league.name} (Copy)`,
+          );
+          return created.id;
         },
       }),
     onSuccess: (newId) => {

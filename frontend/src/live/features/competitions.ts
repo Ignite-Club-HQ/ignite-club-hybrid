@@ -275,13 +275,46 @@ export async function setLiveCompetitionChatSettings(
   ctx: FeatureBackendContext,
   competitionId: string,
   chatEnabled: boolean,
+  adminsOnly: boolean,
   expectedRevision: number,
 ) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.set_chat_settings(competitionId, chatEnabled, BigInt(expectedRevision)),
+    actor.set_chat_settings(competitionId, chatEnabled, adminsOnly, BigInt(expectedRevision)),
     "Set chat settings",
   );
+}
+
+/**
+ * Entry-invite flow: the competition manager invites a team, an admin of
+ * that team accepts or declines. Mirrors the Supabase competition_entries
+ * status transitions read by TeamCompetitionsSection.
+ */
+export async function inviteLiveTeamToCompetition(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.invite_team(competitionId, teamId), "Invite team to competition");
+}
+
+export async function respondLiveEntryInvite(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  teamId: string,
+  accept: boolean,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.respond_to_entry_invite(competitionId, teamId, accept),
+    "Respond to entry invite",
+  );
+}
+
+export async function listLiveEntriesByTeam(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_entries_by_team(teamId), "List entries by team");
 }
 
 /**

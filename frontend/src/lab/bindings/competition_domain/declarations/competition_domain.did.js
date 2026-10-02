@@ -85,6 +85,7 @@ export const idlFactory = ({ IDL }) => {
     'expires_at_ms' : IDL.Nat64,
   });
   const ChatSettings = IDL.Record({
+    'admins_only' : IDL.Bool,
     'revision' : IDL.Nat64,
     'competition_id' : IDL.Text,
     'chat_enabled' : IDL.Bool,
@@ -184,6 +185,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'invite_team' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
+        [],
+      ),
     'is_competition_admin' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
@@ -229,6 +235,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_entries_by_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_invites_by_invitee' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(CompetitionInvite), 'Err' : IDL.Text })],
@@ -264,6 +275,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'respond_to_entry_invite' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
+        [],
+      ),
     'revoke_competition_join_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -275,7 +291,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_chat_settings' : IDL.Func(
-        [IDL.Text, IDL.Bool, IDL.Nat64],
+        [IDL.Text, IDL.Bool, IDL.Bool, IDL.Nat64],
         [IDL.Variant({ 'Ok' : ChatSettings, 'Err' : IDL.Text })],
         [],
       ),

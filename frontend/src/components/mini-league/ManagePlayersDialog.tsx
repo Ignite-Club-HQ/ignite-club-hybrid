@@ -6,7 +6,7 @@ const AddSecondParentDialog = lazyWithRetry(() => import("@/components/mini-leag
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { removeLivePlayer } from "@/live/features/miniLeagues";
+import { listLiveInvites, listLivePlayers, removeLivePlayer, updateLivePlayer } from "@/live/features/miniLeagues";
 import { Principal } from "@icp-sdk/core/principal";
 import { removeLiveMember, restoreLiveMember, listLiveRemovedMembers } from "@/live/features/club";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -56,6 +56,8 @@ export interface MiniLeaguePlayer {
   notes: string | null;
   parent_user_id: string | null;
   child_id: string | null;
+  /** ICP only: principal text of whoever claimed this player's invite. */
+  claimed_by?: string | null;
 }
 
 interface ParentProfile {
@@ -192,11 +194,20 @@ export function ManagePlayersDialog({
           if (error) throw error;
           return data as MiniLeaguePlayer[];
         },
-        // Gated: this dialog's roster management (ratings, names, second
-        // parents, deletion cascades into children/child_guardians) has no
-        // canister equivalent yet. ICP-routed sessions see an empty roster
-        // rather than invented data.
-        icp: async () => [] as MiniLeaguePlayer[],
+        icp: async (ctx) => {
+          const rows = await listLivePlayers(ctx, miniLeagueId);
+          return rows
+            .map((p): MiniLeaguePlayer => ({
+              id: p.id,
+              name: p.name,
+              ability_rating: p.ability_rating[0] ?? 0,
+              notes: p.notes[0] ?? null,
+              parent_user_id: p.parent_user_id[0] ?? null,
+              child_id: p.child_id[0] ?? null,
+              claimed_by: p.claimed_by[0] ? p.claimed_by[0].toText() : null,
+            }))
+            .sort((a, b) => b.ability_rating - a.ability_rating);
+        },
       }),
     enabled: !!miniLeagueId && open,
   });
@@ -269,6 +280,8 @@ export function ManagePlayersDialog({
   });
 
   const isPlayerPending = (player: MiniLeaguePlayer) => {
+    // ICP: pending means no parent linked and nobody has claimed the invite.
+    if (isFeatureRoutedToIcp("mini_leagues")) return !player.parent_user_id && !player.claimed_by;
     if (player.parent_user_id) return false;
     if (!player.child_id) return true;
     const childParent = pendingMeta?.childParent.get(player.child_id) ?? null;
@@ -279,23 +292,41 @@ export function ManagePlayersDialog({
   // Fetch pending invites
   const { data: pendingInvites = [] } = useQuery({
     queryKey: ["pending-invites", null, clubId, miniLeagueId],
-    queryFn: async () => {
-      // NEEDS-CANISTER: pending_invites has no canister equivalent; skip under
-      // ICP routing instead of an unauthenticated Supabase read.
-      if (isFeatureRoutedToIcp("mini_leagues")) return [];
-      const { data, error } = await supabase
-        .from("pending_invites")
-        .select("id, role, invited_user_id, invited_label, invited_email, created_at, status, metadata")
-        .eq("club_id", clubId)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      const filtered = (data || []).filter((inv: any) => {
-        const metadata = inv.metadata as any;
-        return metadata?.mini_league_id === miniLeagueId;
-      });
-      return filtered.map((inv: any) => ({ ...inv, profiles: null }));
-    },
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("pending_invites")
+            .select("id, role, invited_user_id, invited_label, invited_email, created_at, status, metadata")
+            .eq("club_id", clubId)
+            .eq("status", "pending")
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          const filtered = (data || []).filter((inv: any) => {
+            const metadata = inv.metadata as any;
+            return metadata?.mini_league_id === miniLeagueId;
+          });
+          return filtered.map((inv: any) => ({ ...inv, profiles: null }));
+        },
+        icp: async (ctx) => {
+          // Canister-side pending invites live on the mini_league_domain
+          // (single-use, optionally pre-bound to a player).
+          const invites = await listLiveInvites(ctx, miniLeagueId);
+          return invites
+            .filter((inv) => inv.status === "pending")
+            .map((inv) => ({
+              id: inv.token,
+              role: "parent",
+              invited_user_id: null,
+              invited_label: inv.label_text[0] ?? null,
+              invited_email: null,
+              created_at: new Date(Number(inv.created_at_ms)).toISOString(),
+              status: inv.status,
+              metadata: { mini_league_id: miniLeagueId },
+              profiles: null,
+            }));
+        },
+      }),
     enabled: !!clubId && !!miniLeagueId && open,
   });
 
@@ -463,9 +494,11 @@ export function ManagePlayersDialog({
               .eq("mini_league_id", miniLeagueId);
           }
         },
-        // Gated: also mirrors into child_mini_league_assignments, no canister equivalent.
-        icp: async () => {
-          throw new Error("Updating player ratings isn't available yet on this backend.");
+        icp: async (ctx) => {
+          const player = players?.find((p) => p.id === playerId);
+          if (!player) throw new Error("Player not found");
+          const dbValue = newRating >= 1 && newRating <= 5 ? newRating : null;
+          await updateLivePlayer(ctx, playerId, player.name, dbValue, player.notes);
         },
       }),
     onSuccess: () => {
@@ -492,9 +525,16 @@ export function ManagePlayersDialog({
               .eq("id", childId);
           }
         },
-        // Gated: also mirrors into the Supabase-only children table.
-        icp: async () => {
-          throw new Error("Renaming players isn't available yet on this backend.");
+        icp: async (ctx) => {
+          const player = players?.find((p) => p.id === playerId);
+          if (!player) throw new Error("Player not found");
+          await updateLivePlayer(
+            ctx,
+            playerId,
+            newName,
+            player.ability_rating >= 1 ? player.ability_rating : null,
+            player.notes,
+          );
         },
       }),
     onSuccess: () => {
