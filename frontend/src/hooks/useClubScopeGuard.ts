@@ -12,6 +12,9 @@ import { lookupRouteClubId } from "@/lib/clubScopeLookup";
 
 import { useAuth } from "@/hooks/useAuth";
 import { isIgniteSupportUser } from "@/lib/systemUser";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveCompetitions } from "@/live/features/competitions";
 
 /**
  * Club scope guard.
@@ -62,25 +65,38 @@ export function useClubScopeGuard() {
   // selected club is in none of them.
   const competitionId = scope.kind === "membership" ? scope.competitionId : null;
   const { data: competitionClubIds, isFetched: competitionFetched } = useQuery({
-    queryKey: ["route-competition-clubs", competitionId],
+    queryKey: ["route-competition-clubs", competitionId, activeClubFilter],
     queryFn: async () => {
-      if (!competitionId) return null;
-      const [comp, entries] = await Promise.all([
-        supabase.from("competitions").select("organizer_club_id").eq("id", competitionId).maybeSingle(),
-        supabase
-          .from("competition_entries")
-          .select("teams!inner(club_id)")
-          .eq("competition_id", competitionId),
-      ]);
-      // Fail open on any error: never bounce on a network/RLS hiccup.
-      if (comp.error || entries.error) return null;
-      const ids = new Set<string>();
-      if (comp.data?.organizer_club_id) ids.add(comp.data.organizer_club_id as string);
-      for (const row of entries.data ?? []) {
-        const clubId = (row as { teams?: { club_id?: string | null } | null }).teams?.club_id;
-        if (clubId) ids.add(clubId);
-      }
-      return ids.size > 0 ? Array.from(ids) : null;
+      if (!competitionId || !activeClubFilter) return null;
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const [comp, entries] = await Promise.all([
+            supabase.from("competitions").select("organizer_club_id").eq("id", competitionId).maybeSingle(),
+            supabase
+              .from("competition_entries")
+              .select("teams!inner(club_id)")
+              .eq("competition_id", competitionId),
+          ]);
+          // Fail open on any error: never bounce on a network/RLS hiccup.
+          if (comp.error || entries.error) return null;
+          const ids = new Set<string>();
+          if (comp.data?.organizer_club_id) ids.add(comp.data.organizer_club_id as string);
+          for (const row of entries.data ?? []) {
+            const clubId = (row as { teams?: { club_id?: string | null } | null }).teams?.club_id;
+            if (clubId) ids.add(clubId);
+          }
+          return ids.size > 0 ? Array.from(ids) : null;
+        },
+        icp: async (ctx) => {
+          // competition_domain has no "participating clubs" query; check
+          // whether the active club's own competition list contains this
+          // competition id instead (covers the organiser-club case and the
+          // common case of staying within one club's competitions).
+          const competitions = await listLiveCompetitions(ctx, activeClubFilter);
+          const found = (competitions as Array<{ id: string }>).some((c) => c.id === competitionId);
+          return found ? [activeClubFilter] : null;
+        },
+      });
     },
     enabled: !!competitionId && !!activeClubFilter,
     staleTime: 5 * 60 * 1000,
@@ -96,6 +112,10 @@ export function useClubScopeGuard() {
     queryKey: ["route-dm-club-scope", dmConversationId, activeClubFilter, user?.id],
     queryFn: async () => {
       if (!dmConversationId || !activeClubFilter || !user?.id) return true;
+      // `direct_conversations`/`is_club_member` have no messaging_domain
+      // counterpart yet — fail open for Internet Identity users (never
+      // bounce the DM route on a canister that can't answer this yet).
+      if (isFeatureRoutedToIcp("messaging")) return true;
       const { data, error } = await supabase
         .from("direct_conversations")
         .select("participant_1, participant_2")

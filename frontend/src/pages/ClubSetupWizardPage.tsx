@@ -31,8 +31,11 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams } from "@/live/features/club";
+import { addLiveRoleGrant, createLivePendingInvite } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 import {
   StepIntro,
   TeamsStep,
@@ -120,7 +123,7 @@ export default function ClubSetupWizardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const useIcpLab = isFeatureRoutedToIcp("membership");
   const providerKey = useIcpLab ? "icp" : "supabase";
   usePageTitle("Set up your club");
 
@@ -133,12 +136,19 @@ export default function ClubSetupWizardPage() {
     queryKey: ["club", clubId, "setup", providerKey],
     queryFn: async () => {
       if (useIcpLab) {
-        const fixture = getLocalLabClubDetail(clubId!);
-        return fixture ? {
+        // NEEDS-CANISTER: club_domain's ClubSettings has no per-field theme
+        // breakdown matching the Supabase HSL columns; only name/logo/theme
+        // enabled are mapped, which is enough to drive this wizard's steps.
+        const [profile, settings] = await Promise.all([
+          getLiveClubProfile({ target: "icp", identity: null } as any, clubId!),
+          getLiveClubSettings({ target: "icp", identity: null } as any, clubId!),
+        ]);
+        if (!profile) return null;
+        return {
           kind: "club",
-          name: fixture.name,
+          name: profile.name,
           contact_email: null,
-          logo_url: fixture.logo_url,
+          logo_url: profile.logo_url?.[0] ?? null,
           theme_primary_h: null,
           theme_primary_s: null,
           theme_primary_l: null,
@@ -160,9 +170,9 @@ export default function ClubSetupWizardPage() {
           show_logo_in_header: true,
           show_name_in_header: true,
           logo_only_mode: false,
-          theme_enabled: false,
+          theme_enabled: settings?.theme_enabled ?? false,
           primary_sponsor_id: null,
-        } : null;
+        } as SetupClub;
       }
       const { data } = await supabase
         .from("clubs")
@@ -211,9 +221,8 @@ export default function ClubSetupWizardPage() {
     queryKey: ["club-teams", clubId, "setup", providerKey],
     queryFn: async () => {
       if (useIcpLab) {
-        return getLocalLabTeamList()
-          .filter((team) => team.club_id === clubId)
-          .map((team) => ({ id: team.id, name: team.name, level_age: null }));
+        const teams = await listLiveTeams({ target: "icp", identity: null } as any, clubId!);
+        return teams.map((team: any) => ({ id: team.id, name: team.name, level_age: team.level_age?.[0] ?? null }));
       }
       const { data } = await supabase
         .from("teams")
@@ -265,20 +274,42 @@ export default function ClubSetupWizardPage() {
   const saveTeamMutation = useMutation({
     mutationFn: async (draft: DraftTeam) => {
       if (!draft.name.trim()) throw new Error("Team name is required");
-      const { data: teamId, error } = await supabase.rpc(
-        "create_team_with_creator_admin",
-        {
-          p_club_id: clubId!,
-          p_name: draft.name.trim(),
-          p_level_age: draft.levelAge.trim() || null,
-          p_default_rsvp_audience: defaultRsvpAudienceForTeam(
-            draft.name,
-            draft.levelAge,
-          ),
+      return withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const teamId = crypto.randomUUID();
+          const team = await saveLiveTeam(ctx, {
+            id: teamId,
+            club_id: clubId!,
+            name: draft.name.trim(),
+            level_age: candidOptLocal(draft.levelAge.trim() || null),
+            description: candidOptLocal(null),
+            logo_url: candidOptLocal(null),
+            default_rsvp_audience: candidOptLocal(
+              defaultRsvpAudienceForTeam(draft.name, draft.levelAge),
+            ),
+          } as any);
+          // Grant the creator team_admin — the canister counterpart of the
+          // Supabase RPC's auto-admin assignment.
+          await addLiveRoleGrant(ctx, Principal.fromText(user!.id), clubId!, "team_admin", team.id);
+          return team.id as string;
         },
-      );
-      if (error) throw error;
-      return teamId as string;
+        supabase: async () => {
+          const { data: teamId, error } = await supabase.rpc(
+            "create_team_with_creator_admin",
+            {
+              p_club_id: clubId!,
+              p_name: draft.name.trim(),
+              p_level_age: draft.levelAge.trim() || null,
+              p_default_rsvp_audience: defaultRsvpAudienceForTeam(
+                draft.name,
+                draft.levelAge,
+              ),
+            },
+          );
+          if (error) throw error;
+          return teamId as string;
+        },
+      });
     },
     onSuccess: (teamId, draft) => {
       setTeams((prev) =>
@@ -346,30 +377,46 @@ export default function ClubSetupWizardPage() {
       }
     }
 
-    const inviteToken = crypto.randomUUID();
-
-    const { error: insErr } = await supabase.from("pending_invites").insert({
-      club_id: clubId,
-      team_id: isTeamRole ? invite.teamId ?? null : null,
-      role: invite.role as any,
-      invited_user_id: null,
-      invited_by_user_id: user!.id,
-      invited_label: invite.name.trim(),
-      invited_email: invite.email.trim().toLowerCase() || null,
-      invite_token: inviteToken,
-    } as any);
-
-    if (insErr) {
+    let inviteToken: string;
+    try {
+      inviteToken = await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const created = await createLivePendingInvite(ctx, {
+            kind: isTeamRole ? "team" : "club",
+            clubId: clubId!,
+            email: invite.email.trim().toLowerCase() || "",
+            teamId: isTeamRole ? invite.teamId ?? null : null,
+            role: invite.role,
+          });
+          return created.id as string;
+        },
+        supabase: async () => {
+          const token = crypto.randomUUID();
+          const { error: insErr } = await supabase.from("pending_invites").insert({
+            club_id: clubId,
+            team_id: isTeamRole ? invite.teamId ?? null : null,
+            role: invite.role as any,
+            invited_user_id: null,
+            invited_by_user_id: user!.id,
+            invited_label: invite.name.trim(),
+            invited_email: invite.email.trim().toLowerCase() || null,
+            invite_token: token,
+          } as any);
+          if (insErr) throw insErr;
+          return token;
+        },
+      });
+    } catch (err: any) {
       setList((prev) =>
         prev.map((i) =>
           i.tempId === invite.tempId
-            ? { ...i, status: "error", errorMsg: insErr.message }
+            ? { ...i, status: "error", errorMsg: err?.message }
             : i,
         ),
       );
       toast({
         title: "Could not create invite",
-        description: insErr.message,
+        description: err?.message,
         variant: "destructive",
       });
       return;
@@ -380,8 +427,9 @@ export default function ClubSetupWizardPage() {
       ? TEAM_ROLE_LABEL[invite.role as TeamRole]
       : CLUB_ROLE_LABEL[invite.role as ClubRole];
 
-    // Optional email send
-    if (invite.email.trim()) {
+    // Optional email send — Supabase-only (allowed exception: transactional
+    // email delivery has no ICP canister counterpart).
+    if (invite.email.trim() && !useIcpLab) {
       try {
         const { data: res, error: fnErr } = await supabase.functions.invoke(
           "send-email",

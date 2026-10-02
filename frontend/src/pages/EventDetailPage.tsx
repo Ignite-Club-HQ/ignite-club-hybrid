@@ -1148,89 +1148,113 @@ export default function EventDetailPage() {
 
   // Fetch mini league duty assignees (RSVP'd parents + club admins + league admins, excluding players)
   const { data: miniLeagueDutyAssignees } = useQuery({
-    queryKey: ["mini-league-duty-assignees-session", event?.mini_league_id, id],
+    queryKey: ["mini-league-duty-assignees-session", event?.mini_league_id, id, isIcpAuthBackend, rsvps?.length ?? 0],
     queryFn: async () => {
       const miniLeagueId = event!.mini_league_id!;
 
-      // Get mini league to find the club_id
-      const leagueClubId = await withFeatureBackend("mini_leagues", {
+      return withFeatureBackend("mini_leagues", {
         supabase: async () => {
+          // Get mini league to find the club_id
           const { data: league, error: leagueError } = await supabase
             .from("mini_leagues")
             .select("club_id")
             .eq("id", miniLeagueId)
             .single();
           if (leagueError) throw leagueError;
-          return league.club_id as string;
-        },
-        icp: async (ctx) => {
-          const league = await getLiveMiniLeague(ctx, miniLeagueId);
-          return league.club_id;
-        },
-      });
+          const leagueClubId = league.club_id as string;
 
-      // Get RSVPs for this event (only user RSVPs, not children/players)
-      const { data: eventRsvps, error: rsvpError } = await supabase
-        .from("rsvps")
-        .select("user_id")
-        .eq("event_id", id!)
-        .eq("status", "going")
-        .not("user_id", "is", null);
-      if (rsvpError) throw rsvpError;
-      
-      const rsvpUserIds = new Set(eventRsvps?.map(r => r.user_id).filter(Boolean) as string[]);
-      
-      // Get all parent user IDs from mini league players who RSVP'd
-      const playerParentIds = await withFeatureBackend("mini_leagues", {
-        supabase: async () => {
+          // Get RSVPs for this event (only user RSVPs, not children/players)
+          const { data: eventRsvps, error: rsvpError } = await supabase
+            .from("rsvps")
+            .select("user_id")
+            .eq("event_id", id!)
+            .eq("status", "going")
+            .not("user_id", "is", null);
+          if (rsvpError) throw rsvpError;
+
+          const rsvpUserIds = new Set(eventRsvps?.map(r => r.user_id).filter(Boolean) as string[]);
+
+          // Get all parent user IDs from mini league players who RSVP'd
           const { data: playersData, error: playersError } = await supabase
             .from("mini_league_players")
             .select("parent_user_id")
             .eq("mini_league_id", miniLeagueId)
             .not("parent_user_id", "is", null);
           if (playersError) throw playersError;
-          return (playersData?.map(p => p.parent_user_id).filter(Boolean) as string[]) || [];
+          const playerParentIds = (playersData?.map(p => p.parent_user_id).filter(Boolean) as string[]) || [];
+
+          // Only include parents who RSVP'd going
+          const parentIds = [...new Set(
+            playerParentIds.filter(parentId => rsvpUserIds.has(parentId))
+          )];
+
+          // Get club admins and league admins who RSVP'd
+          const { data: adminRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("club_id", leagueClubId)
+            .in("role", ["club_admin", "league_admin"]);
+          if (rolesError) throw rolesError;
+
+          // Only include admins who RSVP'd going
+          const adminIds = (adminRoles?.map(r => r.user_id) || [])
+            .filter(adminId => rsvpUserIds.has(adminId));
+
+          // Combine all unique IDs
+          const allUserIds = [...new Set([...parentIds, ...adminIds])];
+
+          // Exclude app admins from the list
+          const { data: appAdmins } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("role", "app_admin");
+          const appAdminIds = new Set(appAdmins?.map(r => r.user_id) || []);
+          const filteredUserIds = allUserIds.filter(uid => !appAdminIds.has(uid));
+          if (!filteredUserIds.length) return [];
+
+          // Fetch profiles for all these users
+          const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(filteredUserIds);
+          if (profilesError) throw profilesError;
+
+          return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
         },
         icp: async (ctx) => {
+          const league = await getLiveMiniLeague(ctx, miniLeagueId);
+          const leagueClubId = league.club_id;
+
+          const rsvpUserIds = new Set(
+            (rsvps || [])
+              .filter((r: any) => r.status === "going" && !r.child_id)
+              .map((r: any) => r.user_id)
+              .filter(Boolean),
+          );
+
           const players = await listLivePlayers(ctx, miniLeagueId);
-          return players.map((p) => p.parent_user_id[0]).filter((v): v is string => !!v);
+          const playerParentIds = players.map((p) => p.parent_user_id[0]).filter((v): v is string => !!v);
+          const parentIds = [...new Set(playerParentIds.filter((pid) => rsvpUserIds.has(pid)))];
+
+          const grants = (await listLiveRoleGrants(ctx, leagueClubId)) as Array<{
+            account_id: string;
+            role: string;
+          }>;
+          // No canister concept of a global app_admin exclusion list, so
+          // club_admin/league_admin grants within this club are the full
+          // admin-candidate set already; app_admin grants (if any surface
+          // here) are filtered out below same as the Supabase branch.
+          const adminIds = grants
+            .filter((g) => (g.role === "club_admin" || g.role === "league_admin") && rsvpUserIds.has(g.account_id))
+            .map((g) => g.account_id);
+          const appAdminIds = new Set(grants.filter((g) => g.role === "app_admin").map((g) => g.account_id));
+
+          const allUserIds = [...new Set([...parentIds, ...adminIds])].filter((uid) => !appAdminIds.has(uid));
+          if (!allUserIds.length) return [];
+
+          const profiles = await listLiveProfilesByIds(ctx, allUserIds);
+          return profiles
+            .map((p: any) => ({ id: p.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }))
+            .sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
         },
       });
-
-      // Only include parents who RSVP'd going
-      const parentIds = [...new Set(
-        playerParentIds.filter(parentId => rsvpUserIds.has(parentId))
-      )];
-      
-      // Get club admins and league admins who RSVP'd
-      const { data: adminRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", leagueClubId)
-        .in("role", ["club_admin", "league_admin"]);
-      if (rolesError) throw rolesError;
-      
-      // Only include admins who RSVP'd going
-      const adminIds = (adminRoles?.map(r => r.user_id) || [])
-        .filter(adminId => rsvpUserIds.has(adminId));
-      
-      // Combine all unique IDs
-      const allUserIds = [...new Set([...parentIds, ...adminIds])];
-      
-      // Exclude app admins from the list
-      const { data: appAdmins } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "app_admin");
-      const appAdminIds = new Set(appAdmins?.map(r => r.user_id) || []);
-      const filteredUserIds = allUserIds.filter(id => !appAdminIds.has(id));
-      if (!filteredUserIds.length) return [];
-      
-      // Fetch profiles for all these users
-      const { data: profiles, error: profilesError } = await selectCachedProfilesByIds(filteredUserIds);
-      if (profilesError) throw profilesError;
-
-      return (profiles || []).slice().sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
     },
     enabled: !!event?.mini_league_id && !!id,
   });
