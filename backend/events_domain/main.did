@@ -63,6 +63,25 @@ type PushReachability =
    updated_at_ms: nat64;
    user: principal;
  };
+type PlayHQMatch = 
+ record {
+   away_team_name: opt text;
+   external_away_team_id: opt text;
+   external_home_team_id: opt text;
+   home_team_name: opt text;
+ };
+type PlayHQConfig = 
+ record {
+   api_key: text;
+   base_url: text;
+   updated_at_ms: nat64;
+ };
+type PlayHQCompetition = 
+ record {
+   id: text;
+   name: text;
+   season: opt text;
+ };
 type PitchBoardSettings = 
  record {
    disable_batch_subs: bool;
@@ -121,6 +140,17 @@ type LineupEntry =
    member: text;
    slot: text;
    team_id: opt text;
+ };
+type HttpRequestResult = 
+ record {
+   body: blob;
+   headers: vec HttpHeader;
+   status: nat;
+ };
+type HttpHeader = 
+ record {
+   name: text;
+   value: text;
  };
 type GameSummary = 
  record {
@@ -634,6 +664,16 @@ service : {
       Err: text;
       Ok: vec OpenDuty;
     }) query;
+  list_playhq_competitions: (tenant: text, org_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec PlayHQCompetition;
+    });
+  list_playhq_fixtures: (competition_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec PlayHQMatch;
+    });
   list_reminders: (event_id: text) ->
    (variant {
       Err: text;
@@ -672,6 +712,10 @@ service : {
   my_child_rsvps: (event_id: opt text, club_id: opt text) ->
    (vec RsvpWithChild) query;
   my_rsvps: () -> (vec Rsvp) query;
+  playhqTransform: (record {
+                      context: blob;
+                      response: HttpRequestResult;
+                    }) -> (HttpRequestResult) query;
   record_event_view: (event_id: text) -> (variant {
                                             Err: text;
                                             Ok;
@@ -779,6 +823,10 @@ service : {
                Err: text;
                Ok: MiniLeagueRsvp;
              });
+  set_playhq_config: (config: opt PlayHQConfig) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
   set_push_reachable: (reachable: bool) ->
    (variant {
       Err: text;
