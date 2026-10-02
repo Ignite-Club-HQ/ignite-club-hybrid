@@ -464,6 +464,11 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'send_welcome_message' : ActorMethod<
+    [string],
+    { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
   'set_club_ai_catch_up' : ActorMethod<
     [string, boolean],
     { 'Ok' : null } |

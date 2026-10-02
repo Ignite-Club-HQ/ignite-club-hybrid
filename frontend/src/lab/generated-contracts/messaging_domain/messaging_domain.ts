@@ -630,6 +630,13 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    send_welcome_message(body: string): Promise<{
+        __kind__: "Ok";
+        Ok: Message;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_ai_catch_up(club_id: string, ai_catch_up_enabled: boolean): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1290,6 +1297,16 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.send_system_message(arg0, arg1, arg2);
+        return from_candid_variant_n14(result);
+    }
+    async send_welcome_message(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Message;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.send_welcome_message(arg0);
         return from_candid_variant_n14(result);
     }
     async set_club_ai_catch_up(arg0: string, arg1: boolean): Promise<{
