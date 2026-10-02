@@ -206,6 +206,15 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
           supabase: async () => [] as never[],
           icp: (ctx) => getMyLiveChildRsvps(ctx, eventId, null),
         });
+        // Child records are nameless on events_domain (PII hardening) —
+        // names resolve best-effort from pii_access_control.
+        const childIds = (rows ?? [])
+          .map((r) => r.rsvp.child_id[0] ?? "")
+          .filter((id) => !!id);
+        const names = await withFeatureBackend("events", {
+          supabase: async () => new Map<string, string>(),
+          icp: (ctx) => resolveLivePiiTextBatch(ctx, childIds, "name", "child_rsvps", "Household RSVP child names"),
+        });
         return (rows ?? []).map((r) => {
           const child = r.child[0];
           const childId = r.rsvp.child_id[0] ?? "";
@@ -213,7 +222,7 @@ function useChildRsvps(eventId: string, userId: string | undefined) {
             id: `${r.rsvp.event_id}:${childId}`,
             status: r.rsvp.state,
             child_id: childId,
-            children: child ? { name: child.name } : null,
+            children: child ? { name: names.get(childId) ?? "Child" } : null,
           };
         });
       }
