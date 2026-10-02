@@ -108,13 +108,25 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   useQuery({
     queryKey: ["club-points-name", clubId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("clubs")
-        .select("points_display_name, points_icon_url")
-        .eq("id", clubId)
-        .single();
-      const name = (data as any)?.points_display_name || "Reward Points";
-      const iconUrl = (data as any)?.points_icon_url || null;
+      const { name, iconUrl } = await withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("clubs")
+            .select("points_display_name, points_icon_url")
+            .eq("id", clubId)
+            .single();
+          return {
+            name: (data as any)?.points_display_name || "Reward Points",
+            iconUrl: (data as any)?.points_icon_url || null,
+          };
+        },
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: points_icon_url lives on the Supabase clubs row
+          // only — the ICP branch has no custom icon yet.
+          const settings = await getLiveClubPointsSettings(ctx, clubId);
+          return { name: settings?.display_name[0] || "Reward Points", iconUrl: null };
+        },
+      });
       setCustomPointsName(name);
       setPointsIconUrl(iconUrl);
       return { name, iconUrl };
@@ -124,15 +136,28 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Fetch club subscription settings
   const { data: clubSubscription } = useQuery({
     queryKey: ["club-subscription-rewards", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_subscriptions")
-        .select("disable_team_pom_rewards, disable_points_system")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_subscriptions")
+            .select("disable_team_pom_rewards, disable_points_system")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // disable_team_pom_rewards has no canister equivalent yet (the
+          // POM toggle below is hidden for II members); map the points
+          // kill switch onto the club_points_domain settings row.
+          const settings = await getLiveClubPointsSettings(ctx, clubId);
+          return {
+            disable_team_pom_rewards: null,
+            disable_points_system: settings?.disabled ?? false,
+          } as { disable_team_pom_rewards: boolean | null; disable_points_system: boolean | null };
+        },
+      }),
   });
 
   // Toggle team POM rewards setting
@@ -158,11 +183,21 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Toggle points system setting
   const togglePointsSystemMutation = useMutation({
     mutationFn: async (disabled: boolean) => {
-      const { error } = await supabase
-        .from("club_subscriptions")
-        .update({ disable_points_system: disabled })
-        .eq("club_id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_subscriptions")
+            .update({ disable_points_system: disabled })
+            .eq("club_id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fetch-modify-save: the canister stores name + kill switch as one
+          // row, so preserve the current display name while toggling.
+          const current = await getLiveClubPointsSettings(ctx, clubId);
+          await saveLiveClubPointsSettings(ctx, clubId, current?.display_name[0] ?? null, disabled);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
