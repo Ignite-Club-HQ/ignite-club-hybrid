@@ -14,6 +14,7 @@ import { getLocalLabClubLink } from "@/lab/fixtureDataLayer";
 export default function ClubLinkEmbedPage() {
   const { linkId } = useParams<{ linkId: string }>();
   const navigate = useNavigate();
+  const isIcp = resolveAuthBackend() === "icp";
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const providerKey = useIcpLab ? "icp" : "supabase";
 
@@ -21,6 +22,7 @@ export default function ClubLinkEmbedPage() {
     queryKey: ["club-link", linkId, providerKey],
     enabled: !!linkId,
     queryFn: async () => {
+      // NEEDS-CANISTER: Club links for II
       if (useIcpLab) return getLocalLabClubLink(linkId!);
       const { data, error } = await supabase
         .from("club_links")

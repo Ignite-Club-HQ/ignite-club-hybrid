@@ -9,9 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { resolveLocalAuthMode } from "@/live/localRuntimeMode";
 import { connectLocalIdentityAccessClient, resetLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { personas } from "@/lab/syntheticIdentities.mjs";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 const roleLabels: Record<string, string> = {
   app_admin: "App Admin",
@@ -43,7 +46,7 @@ export default function MyRolesPage() {
     return <IcpMyRolesPage />;
   }
 
-  return <SupabaseMyRolesPage />;
+  return <HybridMyRolesPage />;
 }
 
 function IcpMyRolesPage() {
@@ -131,29 +134,45 @@ function IcpMyRolesPage() {
   );
 }
 
-function SupabaseMyRolesPage() {
+function HybridMyRolesPage() {
   const { user } = useAuth();
   const { activeClubFilter } = useClubTheme();
   const navigate = useNavigate();
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: roles, isLoading } = useQuery({
-    queryKey: ["my-roles", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select(`
-          id,
-          role,
-          club_id,
-          team_id,
-          clubs!club_id (id, name, logo_url),
-          teams (id, name, club_id, clubs!club_id (name))
-        `)
-        .eq("user_id", user!.id);
+    queryKey: ["my-roles", user?.id, isIcp],
+    queryFn: () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select(`
+            id,
+            role,
+            club_id,
+            team_id,
+            clubs!club_id (id, name, logo_url),
+            teams (id, name, club_id, clubs!club_id (name))
+          `)
+          .eq("user_id", user!.id);
 
-      if (error) throw error;
-      return data;
-    },
+        if (error) throw error;
+        return data;
+      },
+      icp: async (ctx) => {
+        const grants = await myLiveRoleGrants(ctx);
+        return grants.map(g => ({
+          id: `${g.club_id}-${g.role}-${g.team_id[0] || 'global'}`,
+          role: g.role,
+          club_id: g.club_id,
+          team_id: g.team_id[0] || null,
+          // ICP roles don't carry club/team names in the grant record yet.
+          // Fallback to placeholders; richer name hydration belongs in a hook.
+          clubs: { id: g.club_id, name: "Club", logo_url: null },
+          teams: g.team_id[0] ? { id: g.team_id[0], name: "Team", club_id: g.club_id, clubs: { name: "Club" } } : null
+        }));
+      }
+    }),
     enabled: !!user,
   });
 

@@ -309,7 +309,7 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!conversation?.member_user_id && authReady,
+    enabled: !!conversation?.member_user_id && authReady && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1083,7 +1083,7 @@ function SupabaseClubAdminChatPage() {
 
   // Real-time subscription
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || resolveAuthBackend() === "icp") return;
 
     const channel = supabase
       .channel(`club-admin-chat-${conversationId}`)

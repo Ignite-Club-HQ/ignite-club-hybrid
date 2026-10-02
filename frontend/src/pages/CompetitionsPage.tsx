@@ -31,6 +31,7 @@ export default function CompetitionsPage() {
 
 function IcpCompetitionsPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const localIcpPersona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const { data: competitions = [], isLoading, error } = useQuery({
     queryKey: ["local-icp-competitions", localIcpPersona],
@@ -104,6 +105,7 @@ function IcpCompetitionsPage() {
 
 function SupabaseCompetitionsPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const { activeClubFilter } = useClubTheme();
   const scopedClub = useClubProAccess(activeClubFilter);
   const anyClub = useUserHasAnyClubPro();
@@ -113,6 +115,7 @@ function SupabaseCompetitionsPage() {
   // Clubs I admin (eligible to organise competitions)
   const { data: adminClubs = [] } = useQuery({
     queryKey: ["competitions-admin-clubs", user?.id],
+    enabled: !isIcp && !!user,
     enabled: !!user,
     queryFn: async () => {
       const { data } = await supabase

@@ -938,12 +938,17 @@ function SupabaseJoinTeamPage() {
         }
 
         // Notification
-        await supabase.from("notifications").insert({
-          user_id: user.id,
-          type: "membership",
-          message: `You've joined ${inviteEntityName} as League Admin`,
-          related_id: miniLeagueId,
-        });
+        const { resolveAuthBackend } = await import("@/live/authBackendMode");
+        if (resolveAuthBackend() === "icp") {
+          // NEEDS-CANISTER: Join notifications stay Supabase-only
+        } else {
+          await supabase.from("notifications").insert({
+            user_id: user.id,
+            type: "membership",
+            message: `You've joined ${inviteEntityName} as League Admin`,
+            related_id: miniLeagueId,
+          });
+        }
 
         return ["league_admin" as AppRole];
       }
@@ -980,12 +985,17 @@ function SupabaseJoinTeamPage() {
         }
 
         // Notification (do NOT mark invite accepted — link is reusable)
-        await supabase.from("notifications").insert({
-          user_id: user.id,
-          type: "membership",
-          message: `You've joined ${inviteEntityName} as Parent`,
-          related_id: miniLeagueId,
-        });
+        const { resolveAuthBackend } = await import("@/live/authBackendMode");
+        if (resolveAuthBackend() === "icp") {
+          // NEEDS-CANISTER: Join notifications stay Supabase-only
+        } else {
+          await supabase.from("notifications").insert({
+            user_id: user.id,
+            type: "membership",
+            message: `You've joined ${inviteEntityName} as Parent`,
+            related_id: miniLeagueId,
+          });
+        }
 
         return ["parent" as AppRole];
       }
@@ -1232,12 +1242,17 @@ function SupabaseJoinTeamPage() {
     // by design — there is no canister notification/enqueue surface yet.
     const roleNames = rolesToAdd.map(r => roleLabels[r]).join(", ");
     const membershipRelatedId = inviteMiniLeagueId || invite.team_id || invite?.teams?.club_id;
-    await supabase.from("notifications").insert({
-      user_id: user.id,
-      type: "membership",
-      message: `You've joined ${inviteEntityName} as ${roleNames}`,
-      related_id: membershipRelatedId,
-    });
+    const { resolveAuthBackend } = await import("@/live/authBackendMode");
+    if (resolveAuthBackend() === "icp") {
+      // NEEDS-CANISTER: Join notifications stay Supabase-only
+    } else {
+      await supabase.from("notifications").insert({
+        user_id: user.id,
+        type: "membership",
+        message: `You've joined ${inviteEntityName} as ${roleNames}`,
+        related_id: membershipRelatedId,
+      });
+    }
 
     // Send membership confirmation email if user has an email
     if (user.email) {
@@ -1780,7 +1795,12 @@ function SupabaseJoinTeamPage() {
         message,
         related_id: invite.team_id,
       }));
-      await supabase.from("notifications").insert(rows);
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        // NEEDS-CANISTER: Admin notifications stay Supabase-only
+      } else {
+        await supabase.from("notifications").insert(rows);
+      }
     } catch (err) {
       console.error("[JoinTeam] Failed to notify admins of unlinked parent:", err);
     }

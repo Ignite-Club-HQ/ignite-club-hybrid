@@ -15,6 +15,7 @@
  *    drained as soon as the user id is known.
  */
 import { useEffect, useRef } from "react";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
@@ -46,6 +47,8 @@ type MembershipVerdict = "yes" | "no" | "error";
  * rather than dropping the switch.
  */
 async function verifyClubMembership(userId: string, clubId: string): Promise<MembershipVerdict> {
+  // NEEDS-CANISTER: verifyClubMembership (membership check for notification switch)
+  if (resolveAuthBackend() === "icp") return "no";
   let sawError = false;
 
   const roleRes = await supabase

@@ -69,7 +69,24 @@ export default function AddClubRoleToMemberDialog({
           for (const role of selectedRoles) {
             await addLiveRoleGrant(ctx, userPrincipal, clubId, role);
           }
-          // NEEDS-CANISTER: in-app notifications stay Supabase-only; skipped on this path.
+          // Best-effort in-app notification via notification_queue — a
+          // notification failure must not roll back the role grant.
+          try {
+            const roleNames = selectedRoles.map(r =>
+              availableRoles.find(ar => ar.value === r)?.label || r
+            ).join(", ");
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await fanOutLiveNotifications(ctx, {
+              userIds: [userId],
+              clubId,
+              kind: "membership",
+              body: `You have been assigned new role(s) in ${clubName}: ${roleNames}`,
+              idempotencyKeyPrefix: `membership-assignment-${userId}-${clubId}-${Date.now()}`,
+              relatedId: clubId,
+            });
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
         },
         supabase: async () => {
           const rolesToInsert = selectedRoles.map((role) => ({

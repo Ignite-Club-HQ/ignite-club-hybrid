@@ -46,11 +46,13 @@ function IcpLabOnlineUsersPage() {
 
 function SupabaseOnlineUsersPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
 
   const { data: isAppAdmin, isLoading } = useQuery({
     queryKey: ["is-app-admin", user?.id],
     queryFn: async () => {
+      // NEEDS-CANISTER: Presence and app admin checks for II
       if (!user?.id) return false;
       const { data } = await supabase
         .from("user_roles")

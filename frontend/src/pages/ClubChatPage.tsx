@@ -220,7 +220,7 @@ export default function ClubChatPage() {
 
   // Mark club message notifications as read when opening this thread
   useEffect(() => {
-    if (!user || !clubId) return;
+    if (!user || !clubId || resolveAuthBackend() === "icp") return;
     markChatScopeNotificationsRead({
       userId: user.id,
       scope: { kind: "club", clubId },
@@ -988,7 +988,7 @@ export default function ClubChatPage() {
   // pushes can arrive before the latest query contains the new row, especially
   // on Android cold-starts, so replace first paint with a small target window.
   useEffect(() => {
-    if (!targetMessageId || !clubId || !authReady) return;
+    if (!targetMessageId || !clubId || !authReady || resolveAuthBackend() === "icp") return;
     let cancelled = false;
 
     const hydrateTargetWindow = async () => {
@@ -1052,7 +1052,7 @@ export default function ClubChatPage() {
 
   // Realtime subscription - directly update cache instead of invalidating
   useEffect(() => {
-    if (!clubId || useIcpLab) return;
+    if (!clubId || useIcpLab || resolveAuthBackend() === "icp") return;
     if (clubRealtimeMode === "polling") return;
 
     const channel = supabase

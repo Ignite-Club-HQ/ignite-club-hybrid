@@ -80,10 +80,25 @@ export default function PromoteToTeamAdminDialog({
             related_id: teamId,
           });
         },
-        // No notification equivalent on the canister; the grant itself is
-        // the only effect.
-        icp: (ctx) =>
-          addLiveRoleGrant(ctx, Principal.fromText(selectedUserId), clubId, "team_admin", teamId),
+        icp: async (ctx) => {
+          await addLiveRoleGrant(ctx, Principal.fromText(selectedUserId), clubId, "team_admin", teamId);
+          
+          // Best-effort in-app notification via notification_queue — a
+          // notification failure must not roll back the promotion.
+          try {
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await fanOutLiveNotifications(ctx, {
+              userIds: [selectedUserId],
+              clubId,
+              kind: "membership",
+              body: `You have been promoted to Team Admin for ${teamName}`,
+              idempotencyKeyPrefix: `team-admin-promotion-${selectedUserId}-${teamId}-${Date.now()}`,
+              relatedId: teamId,
+            });
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
+        },
       });
 
       // Invalidate the promoted user's roles cache

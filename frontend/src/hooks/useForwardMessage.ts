@@ -178,7 +178,12 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
             };
           });
           if (notificationRows.length > 0) {
-            await supabase.from("notifications").insert(notificationRows);
+            const { resolveAuthBackend } = await import("@/live/authBackendMode");
+            if (resolveAuthBackend() === "icp") {
+              // NEEDS-CANISTER: Forward notifications stay Supabase-only
+            } else {
+              await supabase.from("notifications").insert(notificationRows);
+            }
           }
         } catch (e) {
           // Non-fatal — author just won't get a forward notification

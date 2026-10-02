@@ -238,10 +238,25 @@ function SupabaseManageRolesPage() {
             related_id: clubId,
           });
         },
-        // No notification equivalent on the canister; the grant removal
+        // Best-effort in-app notification via notification_queue — a
+        // notification failure must not roll back the role grant removal.
+        icp: async (ctx) => {
+          try {
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await fanOutLiveNotifications(ctx, {
+              userIds: [userId],
+              clubId: clubId!,
+              kind: "membership",
+              body: `Your ${roleName} role has been removed from ${club?.name || "the club"}`,
+              idempotencyKeyPrefix: `membership-removal-${userId}-${clubId}-${Date.now()}`,
+              relatedId: clubId,
+            });
+          } catch (e) {
+            console.error("Failed to send ICP notification:", e);
+          }
+          return removeLiveRoleGrant(ctx, Principal.fromText(userId), clubId!, roleValue, teamId);
+        },
         // itself is the only effect.
-        icp: (ctx) =>
-          removeLiveRoleGrant(ctx, Principal.fromText(userId), clubId!, roleValue, teamId),
       });
     },
     onSuccess: () => {

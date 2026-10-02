@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { runWhenChatScrollIdle } from "@/lib/chatScrollActivity";
@@ -44,6 +45,8 @@ const isAppDomain = (url: string): boolean => {
 };
 
 async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
+  // NEEDS-CANISTER: fetch-link-preview
+  if (resolveAuthBackend() === "icp") return null;
   if (previewCache.has(url)) return previewCache.get(url)!;
   const existing = inflight.get(url);
   if (existing) return existing;

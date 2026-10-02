@@ -46,6 +46,9 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
 
@@ -157,20 +160,28 @@ export default function ClubUpgradePage() {
     queryKey: ["is-club-admin", user?.id, clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return true;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role, club_id")
-        .eq("user_id", user!.id);
-      
-      if (!data) return false;
-      
-      // App admin can access all
-      if (data.some(r => r.role === "app_admin")) return true;
-      
-      // Club admin for this club
-      if (data.some(r => r.role === "club_admin" && r.club_id === clubId)) return true;
-      
-      return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role, club_id")
+            .eq("user_id", user!.id);
+          
+          if (!data) return false;
+          
+          // App admin can access all
+          if (data.some(r => r.role === "app_admin")) return true;
+          
+          // Club admin for this club
+          if (data.some(r => r.role === "club_admin" && r.club_id === clubId)) return true;
+          
+          return false;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(g => (g.role === "club_admin" || g.role === "app_admin") && g.club_id === clubId!);
+        }
+      });
     },
     enabled: !!user && !!clubId,
   });
@@ -335,6 +346,8 @@ export default function ClubUpgradePage() {
       plan: PlanTier;
       isAnnual: boolean;
     }) => {
+      // NEEDS-CANISTER: promo codes not yet on canister
+      if (isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -436,6 +449,8 @@ export default function ClubUpgradePage() {
 
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: cancel-subscription not yet available on canister
+      if (isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'club', entity_id: clubId },
       });

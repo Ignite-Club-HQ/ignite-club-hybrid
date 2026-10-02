@@ -321,7 +321,7 @@ export default function NotificationsPage() {
     queryKey: ["notifications-other-clubs-unread", user?.id, activeClubFilter],
     // Supabase-only nudge: hidden on ICP (the cross-club unread row is a
     // display nicety, not data the canister inbox exposes).
-    enabled: !!user?.id && !!activeClubFilter && !useIcpLab && !useIcpLab,
+    enabled: !!user?.id && !!activeClubFilter && !useIcpLab && resolveAuthBackend() !== "icp",
     staleTime: 30000,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -358,7 +358,7 @@ export default function NotificationsPage() {
   // Skipped when notifications are routed to ICP: canisters are
   // request/response, so the list query above polls instead.
   useEffect(() => {
-    if (!user || useIcpLab || useIcpLab) return;
+    if (!user || useIcpLab || resolveAuthBackend() === "icp") return;
 
     // Channel name is scoped to the user id AND to this page. `useAuth` runs
     // its own global `notifications-realtime` subscription for unread-count

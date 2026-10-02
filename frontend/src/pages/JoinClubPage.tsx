@@ -54,6 +54,7 @@ export default function JoinClubPage() {
   // Fetch invite details using secure RPC function
   const { data: invite, isLoading: inviteLoading, error: inviteError } = useQuery({
     queryKey: ["club-invite", token, useIcpLab],
+    enabled: !isIcp && !!token,
     queryFn: async () => {
       if (useIcpLab) return null;
       const { data, error } = await supabase
@@ -88,6 +89,7 @@ export default function JoinClubPage() {
   // Fetch user's existing roles in this club
   const { data: existingRoles } = useQuery({
     queryKey: ["user-club-roles", invite?.club_id, user?.id, useIcpLab],
+    enabled: !isIcp && !!invite?.club_id && !!user,
     queryFn: async () => {
       if (useIcpLab) return [];
       const { data } = await supabase
@@ -104,6 +106,7 @@ export default function JoinClubPage() {
   // Use staleTime: 0 to ensure fresh data when returning from profile completion
   const { data: userProfile, isLoading: profileLoading } = useQuery({
     queryKey: ["user-profile-for-join-club", user?.id, useIcpLab],
+    enabled: !isIcp && !!user,
     queryFn: async () => {
       if (useIcpLab) return getLocalLabProfile(user!.id);
       const { data } = await selectCachedProfileById(user!.id);
@@ -217,12 +220,17 @@ export default function JoinClubPage() {
         .eq("id", invite.id);
 
       // Send notification to the new member
-      await supabase.from("notifications").insert({
-        user_id: user.id,
-        type: "membership",
-        message: `You've joined ${invite.clubs?.name} as ${roleLabels[roleToAdd]}`,
-        related_id: invite.club_id,
-      });
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        // NEEDS-CANISTER: Join club notifications stay Supabase-only
+      } else {
+        await supabase.from("notifications").insert({
+          user_id: user.id,
+          type: "membership",
+          message: `You've joined ${invite.clubs?.name} as ${roleLabels[roleToAdd]}`,
+          related_id: invite.club_id,
+        });
+      }
 
       return roleToAdd;
     },

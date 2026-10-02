@@ -35,6 +35,7 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 import { connectLocalIdentityAccessClient } from "@/lab/localIdentityAccess";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 
 interface PendingInvite {
@@ -513,6 +514,8 @@ function SupabaseCompleteProfilePage() {
         root.style.colorScheme = 'light';
       }
 
+      // NEEDS-CANISTER: send-welcome-dm (fire-and-forget)
+      if (resolveAuthBackend() !== "icp") {
       // Send welcome DM from Ignite Support (fire and forget - don't block on this)
       supabase.functions.invoke("send-welcome-dm", {
         body: { userId: user.id }
@@ -524,7 +527,8 @@ function SupabaseCompleteProfilePage() {
         }
       }).catch(err => {
         console.warn("[CompleteProfile] Error calling welcome DM function:", err);
-      });
+            });
+            }
 
       // Track the first club from invites so we can seed the active club filter
       // ONLY for brand-new users who have no club preference yet.

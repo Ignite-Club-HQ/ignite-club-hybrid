@@ -23,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { saveLiveMembershipTeam } from "@/live/features/membership";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { ClassFieldsSection } from "@/components/ClassFieldsSection";
 import { LevelAgeCombobox } from "@/components/LevelAgeCombobox";
 import { RsvpAudienceSelect } from "@/components/event/RsvpAudienceSelect";
@@ -91,13 +93,42 @@ export default function EditTeamPage() {
           },
         };
       }
-      const { data, error } = await supabase
-        .from("teams")
-        .select("*, clubs!club_id (id, name, sport, class_mode_enabled)")
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("*, clubs!club_id (id, name, sport, class_mode_enabled)")
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const { getLiveTeam, getLiveClubProfile } = await import("@/live/features/club");
+          const teamOpt = await getLiveTeam(ctx, id!);
+          const team = teamOpt[0];
+          if (!team) return null;
+          const clubOpt = await getLiveClubProfile(ctx, team.club_id);
+          const club = clubOpt[0];
+          return {
+            id: team.id,
+            name: team.name,
+            club_id: team.club_id,
+            level_age: team.age_group[0] ?? null,
+            description: team.description[0] ?? null,
+            logo_url: team.logo_url[0] ?? null,
+            folder_id: null,
+            team_type: (team.team_type[0] as any) ?? "mixed",
+            is_archived: team.archived,
+            clubs: club ? {
+              id: club.id,
+              name: club.name,
+              sport: null,
+              class_mode_enabled: false
+            } : null
+          } as any;
+        }
+      });
     },
     enabled: !!id,
   });
@@ -107,6 +138,7 @@ export default function EditTeamPage() {
     queryKey: ["team-folders", team?.club_id, providerKey],
     queryFn: async () => {
       if (useIcpLab) return [];
+      if (isFeatureRoutedToIcp("membership")) return []; // NEEDS-CANISTER: team folders not yet on canister
       const { data, error } = await supabase
         .from("team_folders")
         .select("*")
@@ -161,14 +193,28 @@ export default function EditTeamPage() {
 
       const ext = mimeToExtension(result.mimeType);
       const fileName = `${team.club_id}/${id}/${Date.now()}.${ext}`;
+      const storagePath = `club-logos/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('club-logos')
-        .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
-      if (uploadError) throw uploadError;
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath,
+        file: result.blob,
+        mime: result.mimeType,
+      });
 
-      const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
-      setLogoUrl(urlData.publicUrl);
+      if (blobUpload) {
+        setLogoUrl(blobUpload.url);
+      } else {
+        if (isFeatureRoutedToIcp("membership")) {
+          throw new Error("Media storage is not configured for Internet Identity accounts.");
+        }
+        const { error: uploadError } = await supabase.storage
+          .from('club-logos')
+          .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
+        setLogoUrl(urlData.publicUrl);
+      }
       toast({ title: "Logo uploaded", description: "Your team logo has been uploaded successfully." });
     } catch (error) {
       if (!isCancelledSelectionError(error)) {
@@ -196,18 +242,32 @@ export default function EditTeamPage() {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${team.club_id}/${id}/${Date.now()}.${fileExt}`;
+      const storagePath = `club-logos/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('club-logos')
-        .upload(fileName, file, { upsert: true });
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath,
+        file,
+        mime: file.type,
+      });
 
-      if (uploadError) throw uploadError;
+      if (blobUpload) {
+        setLogoUrl(blobUpload.url);
+      } else {
+        if (isFeatureRoutedToIcp("membership")) {
+          throw new Error("Media storage is not configured for Internet Identity accounts.");
+        }
+        const { error: uploadError } = await supabase.storage
+          .from('club-logos')
+          .upload(fileName, file, { upsert: true });
 
-      const { data: urlData } = supabase.storage
-        .from('club-logos')
-        .getPublicUrl(fileName);
+        if (uploadError) throw uploadError;
 
-      setLogoUrl(urlData.publicUrl);
+        const { data: urlData } = supabase.storage
+          .from('club-logos')
+          .getPublicUrl(fileName);
+
+        setLogoUrl(urlData.publicUrl);
+      }
       toast({
         title: "Logo uploaded",
         description: "Your team logo has been uploaded successfully.",

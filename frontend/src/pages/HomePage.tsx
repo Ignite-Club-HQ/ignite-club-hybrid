@@ -133,6 +133,7 @@ interface Team {
 
 export default function HomePage() {
   const { user, profile, refreshProfile, initialized } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   
   usePageTitle("Home");
   const { toast } = useToast();
@@ -574,6 +575,7 @@ export default function HomePage() {
         return fixtureData.getLocalLabHomeSnapshot(user.id);
       }
       return withFeatureBackend("home", {
+        // NEEDS-CANISTER: presence, rewards, subscriptions, pitch-boards have no canister shape yet
         supabase: fetchHomeFromSupabase,
         icp: (ctx) => fetchLiveHomeFeed(ctx),
       });

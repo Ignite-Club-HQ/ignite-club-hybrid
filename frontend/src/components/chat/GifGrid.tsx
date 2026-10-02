@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,11 @@ export function GifGrid({
   const loadedOnceRef = useRef(false);
 
   const fetchGifs = async (q: string) => {
+    // NEEDS-CANISTER: giphy-search
+    if (resolveAuthBackend() === "icp") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("giphy-search", {

@@ -257,177 +257,35 @@ export default function PlayerOfMatchSelector({
               return balance;
             },
             icp: async (ctx) => {
-              const entry = await awardLivePoints(
-                ctx,
-                clubId,
-                subjectForUser(userId),
-                'player_of_match',
-                eventId,
-                pointsToAward,
-                'Player of the Match award',
-              );
-              return entry.balance_after;
-            },
-          });
-          const previousPoints = balanceAfter - pointsToAward;
-
-          // Check reward threshold
-          await withFeatureBackend("points", {
-            supabase: async () => {
-              const { checkRewardThreshold } = await import("@/lib/rewardThresholdCheck");
-              const rewardName = await checkRewardThreshold({
-                userId,
-                clubId,
-                previousPoints,
-                newPoints: balanceAfter,
-              });
-              await supabase.from("notifications").insert({
-                user_id: userId,
-                type: "player_of_match",
-                message: rewardName
-                  ? `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${rewardName}!`
-                  : `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
-                related_id: eventId,
-              });
-            },
-            icp: async (ctx) => {
-              // Reward-unlock interpolation stays Supabase-side (threshold
-              // check reads the Supabase rewards tables); the canister gets
-              // the base award body.
-              await fanOutLiveNotifications(ctx, {
+            if (userId) {
+              await (await import("@/live/features/notifications")).fanOutLiveNotifications(ctx, {
                 userIds: [userId],
-                clubId,
+                clubId: clubId!,
                 kind: "player_of_match",
-                body: `🏆 Congratulations! You were selected as Player of the Match and earned ${pointsToAward} points!`,
-                idempotencyKeyPrefix: `pom-${eventId}-${userId}`,
+                body: `🏆 Congratulations! You were selected as Player of the Match!`,
+                idempotencyKeyPrefix: `pom-${eventId}-${userId}-no-points`,
                 relatedId: eventId,
               });
-            },
-          });
-        } else if (childId) {
-          // Child display record for the notification: Supabase children
-          // row, or events_domain's get_event_child (manager-gated) in ICP.
-          const child = await withFeatureBackend("points", {
-            supabase: async () =>
-              (await supabase
-                .from("children")
-                .select("parent_id, name")
-                .eq("id", childId)
-                .single()).data,
-            icp: async (ctx) => {
-              const c = await getLiveEventChild(ctx, eventId, childId);
-              // Empty string = no linked parent; the child?.parent_id truthy
-              // guards below treat it the same as Supabase's null.
-              return { parent_id: c.parent_id[0] ?? "", name: c.name };
-            },
-          });
-
-          // Atomic child points increment (+ matching history entry,
-          // recorded atomically by award_points on the ICP branch).
-          const childBalanceAfter = await withFeatureBackend("points", {
-            supabase: async () => {
-              const { data: childNewBalance, error: childUpdateError } = await (supabase.rpc as any)('increment_child_ignite_points', {
-                _child_id: childId,
-                _amount: pointsToAward,
-                _club_id: clubId,
-              });
-
-              if (childUpdateError) throw childUpdateError;
-
-              const balance = childNewBalance || 0;
-
-              await recordPointsHistory({
-                childId,
-                clubId,
-                amount: pointsToAward,
-                balanceAfter: balance,
-                sourceType: 'player_of_match',
-                sourceId: eventId,
-                description: `Player of the Match award for ${child?.name}`,
-                createdBy: user!.id,
-              });
-
-              return balance;
-            },
-            icp: async (ctx) => {
-              const entry = await awardLivePoints(
-                ctx,
-                clubId,
-                subjectForChild(childId),
-                'player_of_match',
-                eventId,
-                pointsToAward,
-                `Player of the Match award for ${child?.name}`,
-              );
-              return entry.balance_after;
-            },
-          });
-          const previousChildPoints = childBalanceAfter - pointsToAward;
-
-          // Notify parent with points.
-          if (child?.parent_id) {
-            await withFeatureBackend("points", {
-              supabase: async () => {
-                const { checkRewardThreshold: checkChildReward } = await import("@/lib/rewardThresholdCheck");
-                const childRewardName = await checkChildReward({
-                  childId,
-                  clubId,
-                  previousPoints: previousChildPoints,
-                  newPoints: childBalanceAfter,
-                });
-                await supabase.from("notifications").insert({
-                  user_id: child.parent_id,
-                  type: "player_of_match",
-                  message: childRewardName
-                    ? `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points! 🎁 Reward unlocked: ${childRewardName}!`
-                    : `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points!`,
-                  related_id: eventId,
-                });
-              },
-              icp: async (ctx) => {
-                await fanOutLiveNotifications(ctx, {
-                  userIds: [child.parent_id],
-                  clubId,
-                  kind: "player_of_match",
-                  body: `🏆 ${child.name} was selected as Player of the Match and earned ${pointsToAward} points!`,
-                  idempotencyKeyPrefix: `pom-${eventId}-${childId}-parent`,
-                  relatedId: eventId,
-                });
-              },
-            });
-          }
-        }
-      } else {
-        // Send notification without points (pointsToAward === 0).
-        await withFeatureBackend("points", {
-          supabase: async () => {
-            if (userId) {
-              await supabase.from("notifications").insert({
-                user_id: userId,
-                type: "player_of_match",
-                message: `🏆 Congratulations! You were selected as Player of the Match!`,
-                related_id: eventId,
-              });
             } else if (childId) {
+              // We need the parent_id; best effort from Supabase cache or just skip
+              // since we are in a transitionary state for POM.
               const { data: child } = await supabase
                 .from("children")
                 .select("parent_id, name")
                 .eq("id", childId)
                 .single();
-
               if (child?.parent_id) {
-                await supabase.from("notifications").insert({
-                  user_id: child.parent_id,
-                  type: "player_of_match",
-                  message: `🏆 ${child.name} was selected as Player of the Match!`,
-                  related_id: eventId,
+                await (await import("@/live/features/notifications")).fanOutLiveNotifications(ctx, {
+                  userIds: [child.parent_id],
+                  clubId: clubId!,
+                  kind: "player_of_match",
+                  body: `🏆 ${child.name} was selected as Player of the Match!`,
+                  idempotencyKeyPrefix: `pom-${eventId}-${childId}-parent-no-points`,
+                  relatedId: eventId,
                 });
               }
             }
-          },
-          icp: async (ctx) => {
-            if (userId) {
-              await fanOutLiveNotifications(ctx, {
+          }
                 userIds: [userId],
                 clubId,
                 kind: "player_of_match",

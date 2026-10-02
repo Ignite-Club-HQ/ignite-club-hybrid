@@ -212,13 +212,14 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
           // notification failure must not roll back the role grant.
           if (userToAdd.account_id) {
             try {
-              await enqueueLiveNotification(ctx, {
-                id: crypto.randomUUID(),
-                userId: userToAdd.account_id,
+              await (await import("@/live/features/notifications")).fanOutLiveNotifications(ctx, {
+                userIds: [userToAdd.account_id],
+                relatedId: clubId,
+                idempotencyKeyPrefix: `admin-assignment-${userToAdd.account_id}-${clubId}-${Date.now()}`,
+
                 clubId,
                 kind: "membership",
                 body: `You have been added to ${clubName} as ${roleConfig[selectedRole].label}`,
-                idempotencyKey: crypto.randomUUID(),
               });
             } catch (notifyError) {
               console.warn("Role grant notification failed (best-effort):", notifyError);

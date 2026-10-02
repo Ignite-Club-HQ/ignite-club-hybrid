@@ -48,6 +48,7 @@ export default function CreateCompetitionPage() {
 function IcpCreateCompetitionPage({ preselectedOrganizer }: { preselectedOrganizer: string | null }) {
   const { toast } = useToast();
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const localIcpPersona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
@@ -151,6 +152,7 @@ function IcpCreateCompetitionPage({ preselectedOrganizer }: { preselectedOrganiz
 
 function SupabaseCreateCompetitionPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -204,6 +206,11 @@ function SupabaseCreateCompetitionPage() {
     const trimmedSport = sport || null;
     const trimmedSeason = season.trim() || null;
 
+    if (isIcp && organizerClubId === PERSONAL_ORGANISER) {
+      toast({ title: "Personal competitions are not supported for Internet Identity yet", variant: "destructive" });
+      setSaving(false);
+      return;
+    }
     if (organizerClubId === PERSONAL_ORGANISER) {
       // Atomic personal-organiser creation via transactional RPC.
       const { data: profile } = await selectCachedProfileById(user.id);
