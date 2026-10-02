@@ -48,6 +48,7 @@ import {
 type CanisterRow = { key: string; id: string };
 type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
 type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean };
+type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
 const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
   "supabase-region": "Supabase region",
@@ -177,7 +178,18 @@ export default function PlacementAdminSettingsPage() {
   const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
   const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
+  const [clubOverrideRows, setClubOverrideRows] = useState<ClubOverrideRow[]>([]);
   const [routingTouched, setRoutingTouched] = useState(false);
+
+  const { data: clubs } = useQuery({
+    queryKey: ["admin-clubs-for-backend-overrides"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clubs").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    enabled: !!user && isAppAdmin,
+  });
   const [simulateCanisters, setSimulateCanisters] = useState(false);
 
   const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
@@ -240,6 +252,9 @@ export default function PlacementAdminSettingsPage() {
         enabled: t.enabled,
       })),
     );
+    setClubOverrideRows(
+      Object.entries(config.clubBackendOverrides).map(([clubId, backend]) => ({ clubId, backend })),
+    );
   }, [savedRouting, routingTouched]);
 
   const routingMutation = useMutation({
@@ -248,6 +263,7 @@ export default function PlacementAdminSettingsPage() {
       countryRules: Record<string, BackendEligibility>;
       targets: ApprovedBackendTarget[];
       countryTargets: Record<string, string>;
+      clubBackendOverrides: Record<string, BackendProvider>;
     }) => {
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
@@ -363,7 +379,17 @@ export default function PlacementAdminSettingsPage() {
         }
         countryTargets[row.country] = target.id;
       }
-      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets });
+      const clubBackendOverrides: Record<string, BackendProvider> = {};
+      for (const row of clubOverrideRows) {
+        if (!row.clubId) {
+          throw new Error("Every club override row needs a club selected.");
+        }
+        if (clubBackendOverrides[row.clubId]) {
+          throw new Error("The same club is pinned twice.");
+        }
+        clubBackendOverrides[row.clubId] = row.backend;
+      }
+      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets, clubBackendOverrides });
     } catch (error) {
       toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
