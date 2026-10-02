@@ -133,6 +133,11 @@ service : {
       Err: text;
       Ok;
     });
+  grant_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   initialize_master_key: (initial_key_id: text) ->
    (variant {
       Err: text;
@@ -154,10 +159,20 @@ service : {
       Err: text;
       Ok;
     });
+  revoke_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   rotate_key: (new_key_id: text) ->
    (variant {
       Err: text;
       Ok: KeyRotationResult;
+    });
+  set_club_domain_canister: (canister: principal) ->
+   (variant {
+      Err: text;
+      Ok;
     });
   transfer_governorship: (new_governor: principal) ->
    (variant {

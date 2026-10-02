@@ -665,6 +665,7 @@ service : {
       Err: text;
       Ok: vec TeamPlayerPosition;
     }) query;
+  has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
   import_frozen_club: (club: text, listing: Listing) ->
    (variant {
       Err: text;

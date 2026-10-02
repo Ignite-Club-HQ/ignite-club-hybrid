@@ -132,6 +132,14 @@ persistent actor {
     children : [Text]; // pii_id set
   };
 
+  // A club-scoped read grant: members of `club_id` (per club_domain) may
+  // read the (pii_id, field_id) record via the decrypt methods.
+  public type ClubReadGrant = {
+    pii_id : Text;
+    field_id : Text;
+    club_id : Text;
+  };
+
   type MasterSecretEntry = {
     key_id : Text;
     secret : [Nat8]; // 32 bytes, from raw_rand. Never exposed via any public method.
@@ -160,6 +168,17 @@ persistent actor {
   // grant_pii_read authorization. Seeded empty, populated via
   // add_guardian_relationship.
   var guardian_relationships : [GuardianRelationship];
+
+  // Club-scoped read grants: any principal holding a role in `club_id`
+  // (verified via club_domain's has_club_staff_role at read time) may read
+  // the record. Lets club staff (e.g. a coach viewing an event roster) read
+  // child/guest names without a per-principal grant.
+  var club_read_grants : [ClubReadGrant];
+
+  // Principal of the club_domain canister used to verify club membership
+  // for club-scoped read grants. Set post-deploy by the governor via
+  // set_club_domain_canister; while unset, club grants never authorize.
+  var club_domain_canister : ?Principal;
 
   // ==================== Helper Functions ====================
 
@@ -192,6 +211,45 @@ persistent actor {
   // access without requiring an explicit per-field grant.
   func can_read(caller : Principal, r : PiiRecord) : Bool {
     isGovernor(caller) or caller.equal(r.domain_owner) or r.readers.any(func(p) = p.equal(caller)) or isVerifiedGuardian(caller, r.pii_id)
+  };
+
+  // Club ids holding a club-scoped read grant for this record (deduped).
+  func grantClubIds(pii_id : Text, field_id : Text) : [Text] {
+    var ids : [Text] = [];
+    for (g in club_read_grants.values()) {
+      if (g.pii_id == pii_id and g.field_id == field_id and not ids.any(func(c) = c == g.club_id)) {
+        ids := ids.concat([g.club_id]);
+      };
+    };
+    ids
+  };
+
+  // Verifies the caller's club membership for each club id via club_domain.
+  // Fails closed: an unset canister id or any call error yields no
+  // authorized clubs, so a misconfigured deployment denies rather than
+  // leaks.
+  func clubsWhereStaff(caller : Principal, clubIds : [Text]) : async [Text] {
+    switch (club_domain_canister) {
+      case null { [] };
+      case (?cid) {
+        let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        var ok : [Text] = [];
+        for (club_id in clubIds.values()) {
+          try {
+            if (await clubDomain.has_club_staff_role(caller, club_id)) {
+              ok := ok.concat([club_id]);
+            };
+          } catch (_) {};
+        };
+        ok
+      };
+    }
+  };
+
+  func canReadViaClub(r : PiiRecord, allowedClubs : [Text]) : Bool {
+    club_read_grants.any(
+      func(g) = g.pii_id == r.pii_id and g.field_id == r.field_id and allowedClubs.any(func(c) = c == g.club_id)
+    )
   };
 
   func log_audit(requesting_principal : Principal, pii_id : Text, field_id : Text, operation : Text, allowed : Bool, purpose : Text) {
@@ -375,8 +433,17 @@ persistent actor {
 
     switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
       case (?r) {
-        // Access control: governor, domain owner or a granted reader
-        let allowed = can_read(caller, r);
+        // Access control: governor, domain owner, a granted reader, a
+        // verified guardian, or a member of a club holding a club-scoped
+        // read grant (verified live via club_domain).
+        var allowed = can_read(caller, r);
+        if (not allowed) {
+          let clubIds = grantClubIds(r.pii_id, r.field_id);
+          if (clubIds.size() > 0) {
+            let okClubs = await clubsWhereStaff(caller, clubIds);
+            allowed := canReadViaClub(r, okClubs);
+          };
+        };
 
         log_audit(caller, pii_id, field_id, operation, allowed, purpose);
 
@@ -432,11 +499,26 @@ persistent actor {
   ) : async { #Ok : [DecryptedPii]; #Err : Text } {
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
+    // Resolve club-scoped grants once for the whole batch: collect the club
+    // ids granting any requested record, verify the caller's membership in
+    // each via club_domain, then run the per-record checks synchronously.
+    var allowedClubs : [Text] = [];
+    var clubIds : [Text] = [];
+    for (pii_id in pii_ids.values()) {
+      for (cid in grantClubIds(pii_id, field_id).values()) {
+        if (not clubIds.any(func(c) = c == cid)) {
+          clubIds := clubIds.concat([cid]);
+        };
+      };
+    };
+    if (clubIds.size() > 0) {
+      allowedClubs := await clubsWhereStaff(caller, clubIds);
+    };
     var out : [DecryptedPii] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
-          let allowed = can_read(caller, r);
+          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs);
           log_audit(caller, pii_id, field_id, operation, allowed, purpose);
           if (allowed) {
             switch (find_master_secret(r.master_key_id)) {
@@ -544,6 +626,50 @@ persistent actor {
         if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
         pii_records := pii_records.map(func(rec) = if (rec.pii_id == pii_id and rec.field_id == field_id) { { rec with readers = rec.readers.filter(func(p) = not p.equal(reader)) } } else { rec });
         log_audit(caller, pii_id, field_id, "revoke_read", true, "Reader access revoked");
+        #Ok
+      };
+    }
+  };
+
+  // Sets the club_domain canister used to verify club membership for
+  // club-scoped read grants. Governor only; must be called by the deploy
+  // script after all canisters are created.
+  public shared ({ caller }) func set_club_domain_canister(canister : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (canister.equal(Principal.anonymous())) return #Err("Invalid canister");
+    club_domain_canister := ?canister;
+    #Ok
+  };
+
+  // Grants every member of `club_id` (verified via club_domain at read
+  // time) read access to one record — e.g. a child's name so coaches can
+  // render event rosters. Governor or the record's domain owner only.
+  public shared ({ caller }) func grant_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (club_id == "") return #Err("Invalid club_id");
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?r) {
+        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        if (not club_read_grants.any(func(g) = g.pii_id == pii_id and g.field_id == field_id and g.club_id == club_id)) {
+          club_read_grants := club_read_grants.concat([{ pii_id; field_id; club_id }]);
+        };
+        log_audit(caller, pii_id, field_id, "grant_read_club", true, "Club read access granted");
+        #Ok
+      };
+    }
+  };
+
+  // Removes a club-scoped read grant. Governor or domain owner only.
+  public shared ({ caller }) func revoke_pii_read_club(pii_id : Text, field_id : Text, club_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+      case null { #Err("PII not found") };
+      case (?r) {
+        if (not isGovernor(caller) and not caller.equal(r.domain_owner)) return #Err("Domain owner authorization required");
+        club_read_grants := club_read_grants.filter(func(g) = not (g.pii_id == pii_id and g.field_id == field_id and g.club_id == club_id));
+        log_audit(caller, pii_id, field_id, "revoke_read_club", true, "Club read access revoked");
         #Ok
       };
     }

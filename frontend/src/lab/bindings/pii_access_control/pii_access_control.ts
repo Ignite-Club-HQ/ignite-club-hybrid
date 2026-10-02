@@ -199,6 +199,13 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    grant_pii_read_club(pii_id: string, field_id: string, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     initialize_master_key(initial_key_id: string): Promise<{
         __kind__: "Ok";
         Ok: string;
@@ -228,9 +235,23 @@ export interface pii_access_controlInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    revoke_pii_read_club(pii_id: string, field_id: string, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     rotate_key(new_key_id: string): Promise<{
         __kind__: "Ok";
         Ok: KeyRotationResult;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_club_domain_canister(canister: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -334,6 +355,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async grant_pii_read_club(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_pii_read_club(arg0, arg1, arg2);
+        return from_candid_variant_n1(result);
+    }
     async initialize_master_key(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: string;
@@ -378,6 +409,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.revoke_pii_read(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async revoke_pii_read_club(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.revoke_pii_read_club(arg0, arg1, arg2);
+        return from_candid_variant_n1(result);
+    }
     async rotate_key(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: KeyRotationResult;
@@ -387,6 +428,16 @@ export class Pii_access_control implements pii_access_controlInterface {
     }> {
         const result = await this.actor.rotate_key(arg0);
         return from_candid_variant_n14(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n1(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";

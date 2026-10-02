@@ -45,11 +45,7 @@ export interface AttendanceInput {
   'subject_id' : string,
   'notes' : string,
 }
-export interface Child {
-  'id' : string,
-  'name' : string,
-  'parent_id' : [] | [string],
-}
+export interface Child { 'id' : string, 'parent_id' : [] | [string] }
 export interface ChildGuardian {
   'is_primary' : boolean,
   'child_id' : string,
@@ -379,7 +375,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'admin_upsert_child' : ActorMethod<
-    [string, string, [] | [string]],
+    [string, [] | [string]],
     { 'Ok' : Child } |
       { 'Err' : string }
   >,

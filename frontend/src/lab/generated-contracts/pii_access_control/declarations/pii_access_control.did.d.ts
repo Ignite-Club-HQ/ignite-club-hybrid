@@ -135,6 +135,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'grant_pii_read_club' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'initialize_master_key' : ActorMethod<
     [string],
     { 'Ok' : string } |
@@ -156,9 +161,19 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'revoke_pii_read_club' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'rotate_key' : ActorMethod<
     [string],
     { 'Ok' : KeyRotationResult } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

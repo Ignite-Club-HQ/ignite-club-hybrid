@@ -595,6 +595,7 @@ export interface _SERVICE {
     { 'Ok' : Array<TeamPlayerPosition> } |
       { 'Err' : string }
   >,
+  'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |

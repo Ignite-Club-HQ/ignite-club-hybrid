@@ -60,7 +60,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const Child = IDL.Record({
     'id' : IDL.Text,
-    'name' : IDL.Text,
     'parent_id' : IDL.Opt(IDL.Text),
   });
   const ChildTeamAssignment = IDL.Record({
@@ -381,7 +380,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'admin_upsert_child' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),

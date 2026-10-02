@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { addLiveEventGuest, removeLiveEventGuest, getLiveEventRosterDetailed } from "@/live/features/events";
+import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "@/live/features/vault";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,11 +53,18 @@ export function EventGuestsManager({
           const roster = (await getLiveEventRosterDetailed(ctx, eventId)) as {
             guests?: Array<{ id: string; event_id?: string; guest_name: string; created_at_ms?: bigint }>;
           };
-          return (roster.guests ?? []).map((g) => ({
+          const guests = roster.guests ?? [];
+          // Guest names are PII: new guests store an opaque "guest:…"
+          // reference resolved via pii_access_control; legacy rows hold the
+          // plaintext name and render as-is. Best effort — an unreadable
+          // reference renders as "Guest", never an error state.
+          const refs = guests.map((g) => g.guest_name).filter((n) => n.startsWith("guest:"));
+          const names = await resolveLivePiiTextBatch(ctx, refs, "guest_name", "event_roster", "Event guest names");
+          return guests.map((g) => ({
             id: g.id,
             event_id: g.event_id ?? eventId,
             added_by: "",
-            guest_name: g.guest_name,
+            guest_name: g.guest_name.startsWith("guest:") ? (names.get(g.guest_name) ?? "Guest") : g.guest_name,
             created_at: g.created_at_ms ? new Date(Number(g.created_at_ms)).toISOString() : new Date().toISOString(),
           })) as EventGuest[];
         },
@@ -98,7 +106,14 @@ export function EventGuestsManager({
       const routedToIcp = await withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
-          await addLiveEventGuest(ctx, eventId, guestName.trim());
+          // Guest names are PII: register the name on pii_access_control
+          // under an opaque reference, grant the club read access so members
+          // can render the roster, and store only the reference on
+          // events_domain (the canister treats the value as opaque text).
+          const piiRef = `guest:${eventId}:${crypto.randomUUID()}`;
+          await registerLivePiiText(ctx, piiRef, "guest_name", guestName.trim());
+          await grantLiveClubPiiRead(ctx, piiRef, "guest_name", clubId);
+          await addLiveEventGuest(ctx, eventId, piiRef);
           return true;
         },
       });

@@ -597,12 +597,14 @@ persistent actor {
     roles.any(func(grant) = Principal.toText(grant.user) == guardianId and grant.club_id == club)
   };
 
-  // Coach/admin seeds minimal child records so roster reads can resolve
-  // names — full child records remain owned by Supabase.
-  public shared ({ caller }) func admin_upsert_child(id : Text, name : Text, parent_id : ?Text) : async { #Ok : Types.Child; #Err : Text } {
+  // Coach/admin seeds minimal child references (id + parent linkage only)
+  // so roster reads can resolve which child an RSVP belongs to. Child
+  // names are PII: they never enter this canister — clients resolve them
+  // via pii_access_control's get_decrypted_pii_batch.
+  public shared ({ caller }) func admin_upsert_child(id : Text, parent_id : ?Text) : async { #Ok : Types.Child; #Err : Text } {
     auth(caller); if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
-    if (not valid(id) or not valid(name)) return #Err("Invalid child");
-    let value : Types.Child = { id; name; parent_id };
+    if (not valid(id)) return #Err("Invalid child");
+    let value : Types.Child = { id; parent_id };
     children := children.filter(func(item) = item.id != id); children := children.concat([value]); #Ok(value)
   };
 

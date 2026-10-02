@@ -634,6 +634,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamPlayerPosition), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'has_club_staff_role' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'import_frozen_club' : IDL.Func(
         [IDL.Text, Listing],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

@@ -693,6 +693,17 @@ persistent actor {
     acl.roles.filter(func(grant) = grant.user.equal(caller))
   };
 
+  // Cross-canister membership check used by pii_access_control's
+  // club-scoped read grants: true when `user` holds any role grant in
+  // `club_id`. Public query — club membership is already visible to club
+  // members under the roster-read rules (canView), so this reveals nothing
+  // new. Not caller-gated so a first-party canister (whose principal is the
+  // caller here) can check on behalf of the end user it is serving.
+  public query func has_club_staff_role(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
+  };
+
   // Caller-scoped: returns only the children linked to the caller's own
   // account via family links. Children without a matching record in
   // acl.children are skipped.
