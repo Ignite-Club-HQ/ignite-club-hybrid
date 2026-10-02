@@ -1,6 +1,58 @@
 import { connectLiveEventsDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
+import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "./vault";
+
+// Team ids are canister-generated as "team-<club_id>-<n>-<ns>", so the club
+// id can be recovered by stripping the two trailing segments. Used to seed
+// club-scoped PII read grants without threading clubId through every caller.
+// Returns null when the id doesn't match the expected shape (best effort).
+function clubIdFromTeamId(teamId: string): string | null {
+  if (!teamId.startsWith("team-")) return null;
+  const rest = teamId.slice(5);
+  const last = rest.lastIndexOf("-");
+  if (last <= 0) return null;
+  const secondLast = rest.lastIndexOf("-", last - 1);
+  if (secondLast <= 0) return null;
+  return rest.slice(0, secondLast);
+}
+
+// Fill-in and MVP player names are PII: they are registered on
+// pii_access_control under opaque references and only the reference is
+// stored on events_domain. The club read grant lets club members decrypt
+// the names when rendering stats/history. All registration is best effort.
+async function registerFillInNameRef(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  teamId: string,
+  name: string,
+): Promise<string> {
+  const ref = `fillin:${eventId}:${crypto.randomUUID()}`;
+  await registerLivePiiText(ctx, ref, "name", name);
+  const clubId = clubIdFromTeamId(teamId);
+  if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
+  return ref;
+}
+
+async function registerMvpNameRef(
+  ctx: FeatureBackendContext,
+  input: LiveGameResultInput,
+  name: string,
+): Promise<string> {
+  const ref = `mvp:${input.eventId ?? `${input.teamId}:${crypto.randomUUID()}`}`;
+  await registerLivePiiText(ctx, ref, "name", name);
+  const clubId = clubIdFromTeamId(input.teamId);
+  if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
+  return ref;
+}
+
+async function resolveNameRefs(
+  ctx: FeatureBackendContext,
+  refs: string[],
+  operation: string,
+): Promise<Map<string, string>> {
+  return resolveLivePiiTextBatch(ctx, refs, "name", operation, "Player names");
+}
 
 /**
  * Events feature -> events_domain canister.
