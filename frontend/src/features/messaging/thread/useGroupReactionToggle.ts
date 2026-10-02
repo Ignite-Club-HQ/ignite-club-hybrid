@@ -3,6 +3,8 @@ import { useMutation, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ensureFreshSession } from "@/lib/ensureFreshSession";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { toggleLiveReaction } from "@/live/features/messaging";
 import {
   normalizeGroupReactionType,
   type GroupChatSupabaseClient,
@@ -46,12 +48,16 @@ export const useGroupReactionToggle = ({
         throw new Error("Group message reactions are not available in the local ICP contract.");
       }
 
-      // The messaging canister has no reaction endpoint yet, and Internet
-      // Identity users have no Supabase session to write these rows under —
-      // gate the feature off with a clear message instead of falling
-      // through to a Supabase call that would 401/RLS-reject.
+      // Internet Identity users react via the messaging canister: its
+      // toggle_reaction implements add/swap/remove in one call. Refresh the
+      // thread from the canister after toggling.
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: async (ctx) => { await toggleLiveReaction(ctx, messageId, normalizedReactionType); },
+        });
+        void queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
+        return { action: 'none' as const };
       }
 
       // Ensure the auth token is fresh — a stale/expired JWT causes RLS to
