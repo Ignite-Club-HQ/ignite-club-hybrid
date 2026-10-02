@@ -14,6 +14,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveRsvpAudience, shouldPromptPlayer } from "@/lib/rsvpAudience";
 import { getEventEligibleTeamIds } from "@/lib/eventAudience";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyChildren, getLiveMyChildTeamAssignments } from "@/live/features/events";
+import type { FeatureBackendContext } from "@/live/featureRouter";
 
 export type RsvpChild = { id: string; name: string; parent_id?: string | null };
 
@@ -61,6 +64,49 @@ async function intersectWithTeams(children: RsvpChild[], teamIds: string[]): Pro
   return children.filter((c) => inScope.has(c.id));
 }
 
+
+/**
+ * ICP counterpart of intersectWithTeams: events_domain has no
+ * child_team_assignments table, so membership is read per-child via
+ * my_child_team_assignments and matched against either the eligible team ids
+ * (team-scoped / targeted events) or the event's club id (club-wide events).
+ * Never widen — a lookup failure for a child drops that child rather than
+ * including it.
+ */
+async function intersectWithTeamsIcp(
+  ctx: FeatureBackendContext,
+  children: RsvpChild[],
+  scope: { teamIds?: string[]; clubId?: string | null },
+): Promise<RsvpChild[]> {
+  if (children.length === 0) return [];
+  const results = await Promise.all(
+    children.map(async (child) => {
+      try {
+        const assignments = await getLiveMyChildTeamAssignments(ctx, child.id);
+        const inScope = assignments.some((a) =>
+          scope.teamIds && scope.teamIds.length > 0
+            ? scope.teamIds.includes(a.team_id)
+            : !!scope.clubId && a.club_id === scope.clubId,
+        );
+        return inScope ? child : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return results.filter((c): c is RsvpChild => !!c);
+}
+
+/** The caller's own children (events_domain `my_children`), mapped to the shared RsvpChild shape. */
+async function getIcpCandidateChildren(ctx: FeatureBackendContext): Promise<RsvpChild[]> {
+  const children = await getLiveMyChildren(ctx);
+  return children.map((c) => ({
+    id: c.id,
+    name: c.name,
+    parent_id: c.parent_id.length ? c.parent_id[0] : null,
+  }));
+}
+
 /**
  * The current user's children that are in scope for this event.
  */
@@ -75,13 +121,22 @@ export async function resolveRsvpChildren({
 }): Promise<RsvpChild[]> {
   if (!event || !userId) return [];
 
-  // NEEDS-CANISTER: events_domain has no children/child_guardians/
-  // child_team_assignments tables, so child RSVP scoping cannot be computed
-  // on ICP. Never widen — return no eligible children rather than guess.
-  if (isFeatureRoutedToIcp("events")) return [];
-
   // Step 1 — adults/parents-only + role restrictions, before any team lookup.
   if (childrenAreExcluded(event, teamDefaultAudience)) return [];
+
+  if (isFeatureRoutedToIcp("events")) {
+    return withFeatureBackend("events", {
+      supabase: async () => [],
+      icp: async (ctx) => {
+        const candidates = await getIcpCandidateChildren(ctx);
+        if (candidates.length === 0) return [];
+        const eligible = getEventEligibleTeamIds(event);
+        if (eligible) return intersectWithTeamsIcp(ctx, candidates, { teamIds: eligible });
+        if (!event.club_id) return [];
+        return intersectWithTeamsIcp(ctx, candidates, { clubId: event.club_id });
+      },
+    });
+  }
 
   // Step 2 — candidate children (own + guardian-linked), deduped.
   const [ownRes, guardianRes] = await Promise.all([
@@ -124,9 +179,26 @@ export async function resolveEventChildRoster({
   teamDefaultAudience?: string | null;
 }): Promise<RsvpChild[]> {
   if (!event) return [];
-  // NEEDS-CANISTER: see resolveRsvpChildren — same missing child/team tables.
-  if (isFeatureRoutedToIcp("events")) return [];
   if (childrenAreExcluded(event, teamDefaultAudience)) return [];
+
+  if (isFeatureRoutedToIcp("events")) {
+    return withFeatureBackend("events", {
+      supabase: async () => [],
+      icp: async (ctx) => {
+        // events_domain exposes roster membership only per-child (no
+        // "all children on these teams" query), so we can only resolve the
+        // roster for the caller's own children here — same scoping rules as
+        // resolveRsvpChildren, applied to my_children() instead of a
+        // club/team-wide child list.
+        const candidates = await getIcpCandidateChildren(ctx);
+        if (candidates.length === 0) return [];
+        const eligible = getEventEligibleTeamIds(event);
+        if (eligible) return intersectWithTeamsIcp(ctx, candidates, { teamIds: eligible });
+        if (!event.club_id) return [];
+        return intersectWithTeamsIcp(ctx, candidates, { clubId: event.club_id });
+      },
+    });
+  }
 
   const eligible = getEventEligibleTeamIds(event);
   let teamIds: string[] = eligible ?? [];

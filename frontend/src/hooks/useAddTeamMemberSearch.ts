@@ -5,6 +5,11 @@ import {
   type MemberRole,
 } from "@/lib/memberIdentity";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { searchLiveInvitableProfiles, listLiveRoleGrants } from "@/live/features/membership";
+import { listLivePendingInvitesByClub } from "@/live/features/club";
+
 
 type SearchProfile = {
   id: string;
@@ -60,13 +65,18 @@ export function useAddTeamMemberSearch({
     queryKey: ["user-search-team-member", debouncedNameInput, clubId],
     queryFn: async () => {
       if (debouncedNameInput.length < 2) return [];
-      const { data, error } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedNameInput,
-        _limit: 8,
-        _club_id: clubId ?? null,
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedNameInput,
+            _limit: 8,
+            _club_id: clubId ?? null,
+          });
+          if (error) throw error;
+          return (data || []) as SearchProfile[];
+        },
+        icp: (ctx) => searchLiveInvitableProfiles(ctx, debouncedNameInput, 8),
       });
-      if (error) throw error;
-      return (data || []) as SearchProfile[];
     },
     enabled: debouncedNameInput.length >= 2,
   });

@@ -539,9 +539,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
   // Auto-generate matches (core logic)
   const runAutoGenerate = useCallback(async (abilityModeOverride?: "similar" | "mixed") => {
-    // NEEDS-CANISTER: replace_event_groups has no mini_league_domain
-    // equivalent.
-    assertSupabaseWritePath("mini_leagues", "auto-generating matches");
     const effectiveAbilityMode = abilityModeOverride || abilityMode;
     if (!availablePlayers || availablePlayers.length === 0) {
       throw new Error("No available players for this session");
@@ -664,17 +661,38 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
     });
 
     // Single atomic write: matches + player assignments commit together.
-    const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
-      p_event_id: eventId,
-      p_groups: matchSpecs.map((spec, i) => ({
-        ...spec,
-        players: matchPlayers[i].map(p => ({ player_id: p.playerId, team: p.team })),
-      })),
-      p_delete_existing: false,
+    const matchIds = await withFeatureBackend("events", {
+      supabase: async () => {
+        const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
+          p_event_id: eventId,
+          p_groups: matchSpecs.map((spec, i) => ({
+            ...spec,
+            players: matchPlayers[i].map(p => ({ player_id: p.playerId, team: p.team })),
+          })),
+          p_delete_existing: false,
+        });
+        if (replaceError) throw replaceError;
+        return (createdIds as string[] | null) ?? [];
+      },
+      icp: async (ctx) => {
+        const created = await replaceLiveEventGroups(
+          ctx,
+          eventId,
+          matchSpecs.map((spec, i) => ({
+            name: spec.name,
+            abilityBand: spec.ability_band,
+            pitchName: spec.pitch_name,
+            displayOrder: spec.display_order,
+            teamAColour: spec.team_a_color,
+            teamBColour: spec.team_b_color,
+            players: matchPlayers[i].map(p => ({ accountId: p.playerId, teamLetter: p.team })),
+            duties: [],
+          })),
+          false,
+        );
+        return created as string[];
+      },
     });
-    if (replaceError) throw replaceError;
-
-    const matchIds = (createdIds as string[] | null) ?? [];
 
     // Auto-distribute event-level duties to matches
     await distributeEventDutiesToMatches(matchIds, matchPlayers.map(mp => mp.map(p => p.playerId)));

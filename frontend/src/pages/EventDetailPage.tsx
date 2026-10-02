@@ -72,7 +72,19 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveEventRoster, getLiveEventRosterDetailed } from "@/live/features/events";
+import {
+  getLiveEventRoster,
+  getLiveEventRosterDetailed,
+  listLiveDuties,
+  getLiveMyChildren,
+  getLiveMyChildTeamAssignments,
+  listLiveChildTeamAssignments,
+  isLiveTeamMember,
+  checkLiveEventMembership,
+} from "@/live/features/events";
+import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -154,7 +166,7 @@ export default function EventDetailPage() {
   const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const { data: recentReminderMap } = useQuery({
     queryKey: eventKeys.recentReminders(id),
-    enabled: !!id && !useIcpLab,
+    enabled: !!id && !useIcpLab && !isIcpAuthBackend,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
     queryFn: async () => {
@@ -418,17 +430,25 @@ export default function EventDetailPage() {
   // RSVP'd for themselves alongside their child.
   const { data: teamPlayerAdultIds } = useQuery({
     queryKey: ["team-player-adult-ids", (event as any)?.team_id],
-    queryFn: async () => {
-      if (useIcpLab) return new Set<string>();
-
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("team_id", (event as any).team_id)
-        .eq("role", "player");
-      if (error) throw error;
-      return new Set((data || []).map((r: any) => r.user_id as string));
-    },
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("team_id", (event as any).team_id)
+          .eq("role", "player");
+        if (error) throw error;
+        return new Set((data || []).map((r: any) => r.user_id as string));
+      },
+      icp: async (ctx) => {
+        const grants = await listLiveRoleGrants(ctx, (event as any).club_id);
+        return new Set(
+          (grants ?? [])
+            .filter((g: any) => g.role === "player" && g.team?.[0] === (event as any).team_id)
+            .map((g: any) => g.account_id as string),
+        );
+      },
+    }),
     enabled: !!(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
@@ -438,17 +458,23 @@ export default function EventDetailPage() {
   // from the "players attending" count.
   const { data: clubPlayerAdultIds } = useQuery({
     queryKey: ["club-player-adult-ids", (event as any)?.club_id, (event as any)?.team_id],
-    queryFn: async () => {
-      if (useIcpLab) return new Set<string>();
-
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", (event as any).club_id)
-        .eq("role", "player");
-      if (error) throw error;
-      return new Set((data || []).map((r: any) => r.user_id as string));
-    },
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("club_id", (event as any).club_id)
+          .eq("role", "player");
+        if (error) throw error;
+        return new Set((data || []).map((r: any) => r.user_id as string));
+      },
+      icp: async (ctx) => {
+        const grants = await listLiveRoleGrants(ctx, (event as any).club_id);
+        return new Set(
+          (grants ?? []).filter((g: any) => g.role === "player").map((g: any) => g.account_id as string),
+        );
+      },
+    }),
     enabled: !!(event as any)?.club_id && !(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
@@ -470,21 +496,46 @@ export default function EventDetailPage() {
     queryFn: async () => {
       if (useIcpLab) return [];
 
-      const provider: EventSupportingReadsProvider = {
-        async listEventGuests() {
-          return [];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const provider: EventSupportingReadsProvider = {
+            async listEventGuests() {
+              return [];
+            },
+            async listEventDuties(eventId) {
+              const { data, error } = await supabase
+                .from("duties")
+                .select(`*, profiles:assigned_to (display_name, avatar_url)`)
+                .eq("event_id", eventId);
+              if (error) throw error;
+              return data ?? [];
+            },
+          };
+          return fetchEventDuties(provider, id!);
         },
-        async listEventDuties(eventId) {
-          const { data, error } = await supabase
-            .from("duties")
-            .select(`*, profiles:assigned_to (display_name, avatar_url)`)
-            .eq("event_id", eventId);
-          if (error) throw error;
-          return data ?? [];
+        icp: async (ctx) => {
+          const rows = (await listLiveDuties(ctx, id!)) as Array<{
+            id: string; event_id: string; name: string; assigned_to: [] | [string]; status: string;
+          }>;
+          const assigneeIds = Array.from(
+            new Set(rows.map((d) => (Array.isArray(d.assigned_to) ? d.assigned_to[0] : null)).filter(Boolean) as string[]),
+          );
+          const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
+          const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+          return rows.map((d) => {
+            const assignedTo = Array.isArray(d.assigned_to) && d.assigned_to.length > 0 ? d.assigned_to[0] : null;
+            const p = assignedTo ? profileMap.get(assignedTo) : null;
+            return {
+              id: d.id,
+              event_id: d.event_id,
+              name: d.name,
+              assigned_to: assignedTo,
+              status: d.status,
+              profiles: p ? { display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null } : null,
+            };
+          });
         },
-      };
-
-      return fetchEventDuties(provider, id!);
+      });
     },
     enabled: !!id,
     staleTime: 0,
