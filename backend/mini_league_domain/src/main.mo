@@ -788,6 +788,13 @@ persistent actor {
         switch (findLeague(link.mini_league_id)) {
           case null #Err("Mini-league not found");
           case (?league) {
+            // Idempotent: a retry after a lost response (or a parent re-adding
+            // the same child) returns the existing player instead of minting a
+            // duplicate roster row.
+            switch (players.find(func(p) = p.mini_league_id == link.mini_league_id and p.claimed_by == ?caller and p.name == player_name)) {
+              case (?existing) return #Ok({ mini_league_id = league.id; club_id = league.club_id; player_id = existing.id });
+              case null {};
+            };
             let now = nowMs();
             let created : Types.MiniLeaguePlayer = {
               id = nextId("mlp-" # link.mini_league_id, players.size()); mini_league_id = link.mini_league_id;
