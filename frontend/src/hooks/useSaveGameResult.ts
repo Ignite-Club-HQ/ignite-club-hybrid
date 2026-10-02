@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { saveLiveGameResult } from "@/live/features/events";
 import { useToast } from "@/hooks/use-toast";
 import type { SummaryPlayerStat, PerQuarterScore } from "@/components/scoreboard/GameSummaryDialog";
 
@@ -49,13 +51,57 @@ export function useSaveGameResult() {
       ].join(":");
       // De-dupe within a session, unless caller explicitly forces.
       if (!opts?.force && (savedKeyRef.current === key || inFlightRef.current)) return true;
-      // NEEDS-CANISTER: game_results has no events_domain equivalent; II
-      // sessions also have no Supabase session (supabase.auth.getUser() below
-      // would return null anyway). Skip the write under ICP.
-      if (resolveAuthBackend() === "icp") return false;
+      const isIcp = resolveAuthBackend() === "icp";
       inFlightRef.current = true;
 
       try {
+        const mvp = input.mvpPlayerId
+          ? input.players.find((p) => p.id === input.mvpPlayerId)
+          : null;
+
+        if (isIcp) {
+          try {
+            await withFeatureBackend("events", {
+              supabase: async () => {
+                /* unreachable: isIcp guards this branch */
+              },
+              icp: async (ctx) => {
+                await saveLiveGameResult(ctx, {
+                  teamId: input.teamId,
+                  eventId: input.eventId ?? null,
+                  sport: input.sport,
+                  homeLabel: input.homeLabel,
+                  awayLabel: input.awayLabel,
+                  homeScore: input.homeScore,
+                  awayScore: input.awayScore,
+                  periodScoresJson: JSON.stringify(input.perQuarter),
+                  playerStatsJson: JSON.stringify(input.players),
+                  mvpPlayerId: input.mvpPlayerId ?? null,
+                  mvpPlayerName: mvp?.name ?? null,
+                });
+              },
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!opts?.silent) {
+              toast({ title: "Could not save game", description: message, variant: "destructive" });
+            }
+            return false;
+          }
+          savedKeyRef.current = key;
+          setSaved(true);
+          if (input.eventId) {
+            queryClient.invalidateQueries({ queryKey: ["match-result", input.eventId] });
+            queryClient.invalidateQueries({ queryKey: ["match-score", input.eventId] });
+          }
+          queryClient.invalidateQueries({ queryKey: ["team-game-events", input.teamId] });
+          queryClient.invalidateQueries({ queryKey: ["player-stats-report-extras", input.teamId] });
+          if (!opts?.silent) {
+            toast({ title: "Game saved", description: "Available in History on the team page." });
+          }
+          return true;
+        }
+
         const { data: userData } = await supabase.auth.getUser();
         const uid = userData.user?.id;
         if (!uid) return false;
@@ -88,11 +134,6 @@ export function useSaveGameResult() {
             return true;
           }
         }
-
-
-        const mvp = input.mvpPlayerId
-          ? input.players.find((p) => p.id === input.mvpPlayerId)
-          : null;
 
         const payload = {
           team_id: input.teamId,

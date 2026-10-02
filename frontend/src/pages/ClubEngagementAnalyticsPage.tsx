@@ -424,7 +424,15 @@ function SupabaseClubEngagementAnalyticsPage({
           if (error) throw error;
           return data || [];
         },
-        icp: (ctx) => listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(range.start.getTime()), BigInt(range.end.getTime())),
+        icp: async (ctx) => {
+          const rows = await listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(range.start.getTime()), BigInt(range.end.getTime()));
+          return rows.map((r) => ({
+            id: r.id,
+            invited_user_id: r.invited_user_id,
+            accepted_at: new Date(Number(r.accepted_at_ms)).toISOString(),
+            club_id: requireIcpClubId(),
+          }));
+        },
       });
     },
     enabled: queryReady && !!access?.isAdmin,
@@ -447,7 +455,14 @@ function SupabaseClubEngagementAnalyticsPage({
           if (error) throw error;
           return data || [];
         },
-        icp: (ctx) => listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(prevRange.start.getTime()), BigInt(prevRange.end.getTime())),
+        icp: async (ctx) => {
+          const rows = await listLiveAcceptedInvites(ctx, requireIcpClubId(), BigInt(prevRange.start.getTime()), BigInt(prevRange.end.getTime()));
+          return rows.map((r) => ({
+            id: r.id,
+            accepted_at: new Date(Number(r.accepted_at_ms)).toISOString(),
+            club_id: requireIcpClubId(),
+          }));
+        },
       });
     },
     enabled: queryReady && !!access?.isAdmin,

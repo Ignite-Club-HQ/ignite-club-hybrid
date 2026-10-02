@@ -10,7 +10,8 @@ import { useState, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { saveLivePitchBoardSettings } from "@/live/features/events";
 import { TeamSize, FORMATIONS } from "@/components/pitch/types";
 
 export interface PitchSettingsState {
@@ -89,16 +90,31 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
   const persistSetting = useCallback(
     async (overrides?: Record<string, unknown>) => {
       if (readOnly) return;
-      // NEEDS-CANISTER: team_subscriptions (pitch board settings) has no
-      // club_domain/events_domain equivalent; skip under ICP.
-      if (resolveAuthBackend() === "icp") return;
       try {
-        const { error } = await supabase
-          .from("team_subscriptions")
-          .upsert(buildPayload(teamId, settingsRef.current, overrides), {
-            onConflict: "team_id",
-          });
-        if (error) throw error;
+        const payload = buildPayload(teamId, settingsRef.current, overrides);
+        await withFeatureBackend("events", {
+          supabase: async () => {
+            const { error } = await supabase
+              .from("team_subscriptions")
+              .upsert(payload, { onConflict: "team_id" });
+            if (error) throw error;
+          },
+          icp: async (ctx) => {
+            await saveLivePitchBoardSettings(ctx, {
+              teamId,
+              rotationSpeed: payload.rotation_speed,
+              disablePositionSwaps: payload.disable_position_swaps,
+              disableBatchSubs: payload.disable_batch_subs,
+              rotateGkAtHalftime: payload.rotate_gk_at_halftime,
+              minutesPerHalf: payload.minutes_per_half,
+              maxSpreadMinutes: payload.max_spread_minutes,
+              teamSize: payload.team_size,
+              formation: payload.formation,
+              showMatchHeader: Boolean((overrides as Record<string, unknown> | undefined)?.show_match_header ?? settingsRef.current.showMatchHeader),
+              showLineupPicker: Boolean((overrides as Record<string, unknown> | undefined)?.show_lineup_picker ?? settingsRef.current.showLineupPickerSetting),
+            });
+          },
+        });
 
         // Invalidate cached subscription queries so the next PitchBoard mount
         // (or parent re-read) sees the new value instead of reverting to a
@@ -190,25 +206,38 @@ export function usePitchSettings({ teamId, readOnly, settingsRef }: UsePitchSett
   /** Save all settings at once (used by settings dialog save button). */
   const handleSaveSettings = useCallback(async () => {
     if (readOnly) return;
-    // NEEDS-CANISTER: team_subscriptions (pitch board settings) has no
-    // club_domain/events_domain equivalent; skip under ICP.
-    if (resolveAuthBackend() === "icp") return;
 
     setIsSavingSettings(true);
     try {
       const settings = settingsRef.current;
-      const { error } = await supabase
-        .from("team_subscriptions")
-        .upsert(
-          {
-            ...buildPayload(teamId, settings),
-            show_match_header: settings.showMatchHeader,
-            show_lineup_picker: settings.showLineupPickerSetting,
-          },
-          { onConflict: "team_id" }
-        );
-
-      if (error) throw error;
+      const payload = {
+        ...buildPayload(teamId, settings),
+        show_match_header: settings.showMatchHeader,
+        show_lineup_picker: settings.showLineupPickerSetting,
+      };
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("team_subscriptions")
+            .upsert(payload, { onConflict: "team_id" });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await saveLivePitchBoardSettings(ctx, {
+            teamId,
+            rotationSpeed: payload.rotation_speed,
+            disablePositionSwaps: payload.disable_position_swaps,
+            disableBatchSubs: payload.disable_batch_subs,
+            rotateGkAtHalftime: payload.rotate_gk_at_halftime,
+            minutesPerHalf: payload.minutes_per_half,
+            maxSpreadMinutes: payload.max_spread_minutes,
+            teamSize: payload.team_size,
+            formation: payload.formation,
+            showMatchHeader: payload.show_match_header,
+            showLineupPicker: payload.show_lineup_picker,
+          });
+        },
+      });
 
       savedTeamDefaultsRef.current = {
         minutesPerHalf: settings.minutesPerHalf,

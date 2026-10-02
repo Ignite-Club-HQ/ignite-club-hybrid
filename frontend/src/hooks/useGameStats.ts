@@ -2,6 +2,8 @@ import { useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { saveLiveGameSummary, saveLiveGamePlayerStats } from "@/live/features/events";
 import { useToast } from "@/hooks/use-toast";
 import type { PitchPosition } from "@/components/pitch/PositionBadge";
 
@@ -102,12 +104,7 @@ export function useGameStats() {
       opponent,
       silent = false,
     }: SaveGameStatsParams) => {
-      // NEEDS-CANISTER: game_summaries/game_player_stats have no events_domain
-      // equivalent. Skip the write under ICP instead of silently landing in a
-      // Supabase table ICP users cannot read back (or failing with no Supabase session).
-      if (resolveAuthBackend() === "icp") {
-        throw new Error("Game stats saving is not yet available for Internet Identity accounts.");
-      }
+      const isIcp = resolveAuthBackend() === "icp";
       const teamId = await resolveGameStatsTeamId([teamIdParam, boardTeamId], eventId);
       if (!teamId) {
         console.error("[useGameStats] No team could be resolved for event", eventId);
@@ -185,38 +182,7 @@ export function useGameStats() {
       // Calculate total substitutions
       const totalSubstitutions = executedSubs.filter((s) => s.executed).length;
 
-      // Save game summary
-      const { error: summaryError } = await supabase
-        .from("game_summaries")
-        .upsert(
-          {
-            event_id: eventId,
-            team_id: teamId,
-            total_game_time: totalGameTime,
-            half_duration: halfDuration,
-            formation_used: formationUsed || null,
-            total_substitutions: totalSubstitutions,
-          },
-          { onConflict: "event_id" }
-        );
-
-      if (summaryError) {
-        throw new Error(`Failed to save game summary: ${summaryError.message}`);
-      }
-
-      // Delete existing player stats for this event (to allow re-saving)
-      const { error: deleteError } = await supabase
-        .from("game_player_stats")
-        .delete()
-        .eq("event_id", eventId);
-
-      if (deleteError) {
-        throw new Error(
-          `Failed to replace player stats: ${deleteError.message}`
-        );
-      }
-
-      // Save individual player stats
+      // Build the shared player-stats rows up front (used by both backends).
       const playerStats = players.map((player) => {
         const positionsPlayed = Array.from(
           playerPositionsMap.get(player.id) || []
@@ -239,34 +205,98 @@ export function useGameStats() {
         };
       });
 
-      const { error: statsError } = await supabase
-        .from("game_player_stats")
-        .insert(playerStats);
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          // Save game summary
+          const { error: summaryError } = await supabase
+            .from("game_summaries")
+            .upsert(
+              {
+                event_id: eventId,
+                team_id: teamId,
+                total_game_time: totalGameTime,
+                half_duration: halfDuration,
+                formation_used: formationUsed || null,
+                total_substitutions: totalSubstitutions,
+              },
+              { onConflict: "event_id" }
+            );
 
-      if (statsError) {
-        throw new Error(`Failed to save player stats: ${statsError.message}`);
-      }
+          if (summaryError) {
+            throw new Error(`Failed to save game summary: ${summaryError.message}`);
+          }
 
-      // Send email notification to team admins/coaches (Pro Football only)
-      const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-      };
+          // Delete existing player stats for this event (to allow re-saving)
+          const { error: deleteError } = await supabase
+            .from("game_player_stats")
+            .delete()
+            .eq("event_id", eventId);
 
-      try {
-        if (!silent) await supabase.rpc('send_game_stats_email_rpc', {
-          _event_id: eventId,
-          _team_id: teamId,
-          _event_title: eventTitle || 'Game',
-          _event_date: eventDate || new Date().toLocaleDateString(),
-          _opponent: opponent || '',
-          _total_players: players.length,
-          _total_game_time: formatTime(totalGameTime),
-        });
-      } catch (emailErr) {
-        console.error("Failed to send game stats email:", emailErr);
-        // Don't throw - stats were still saved
+          if (deleteError) {
+            throw new Error(
+              `Failed to replace player stats: ${deleteError.message}`
+            );
+          }
+
+          const { error: statsError } = await supabase
+            .from("game_player_stats")
+            .insert(playerStats);
+
+          if (statsError) {
+            throw new Error(`Failed to save player stats: ${statsError.message}`);
+          }
+        },
+        icp: async (ctx) => {
+          await saveLiveGameSummary(ctx, {
+            eventId,
+            teamId,
+            totalGameTime,
+            halfDuration,
+            formationUsed: formationUsed || null,
+            totalSubstitutions,
+          });
+          await saveLiveGamePlayerStats(
+            ctx,
+            eventId,
+            teamId,
+            playerStats.map((row) => ({
+              userId: row.user_id,
+              fillInPlayerName: row.fill_in_player_name,
+              jerseyNumber: row.jersey_number,
+              minutesPlayed: row.minutes_played,
+              positionsPlayed: row.positions_played,
+              substitutionsCount: row.substitutions_count,
+              startedOnPitch: row.started_on_pitch,
+              goalsScored: row.goals_scored,
+            })),
+          );
+        },
+      });
+
+      // Send email notification to team admins/coaches (Pro Football only).
+      // Game-stats email stays Supabase-only (allowed exception) — skipped
+      // under ICP since there is no Supabase session to authorize the RPC.
+      if (!isIcp) {
+        const formatTime = (seconds: number) => {
+          const mins = Math.floor(seconds / 60);
+          const secs = seconds % 60;
+          return `${mins}:${secs.toString().padStart(2, '0')}`;
+        };
+
+        try {
+          if (!silent) await supabase.rpc('send_game_stats_email_rpc', {
+            _event_id: eventId,
+            _team_id: teamId,
+            _event_title: eventTitle || 'Game',
+            _event_date: eventDate || new Date().toLocaleDateString(),
+            _opponent: opponent || '',
+            _total_players: players.length,
+            _total_game_time: formatTime(totalGameTime),
+          });
+        } catch (emailErr) {
+          console.error("Failed to send game stats email:", emailErr);
+          // Don't throw - stats were still saved
+        }
       }
 
       return { success: true, teamId };

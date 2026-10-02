@@ -206,6 +206,55 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Opt(IDL.Text),
     'club_id' : IDL.Text,
   });
+  const ActiveGame = IDL.Record({
+    'id' : IDL.Text,
+    'board_session_id' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'updated_at_ms' : IDL.Nat64,
+    'user_id' : IDL.Principal,
+    'timer_state_json' : IDL.Text,
+    'is_active' : IDL.Bool,
+    'pitch_state_json' : IDL.Text,
+  });
+  const GameResult = IDL.Record({
+    'id' : IDL.Text,
+    'saved_by' : IDL.Principal,
+    'period_scores_json' : IDL.Text,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'sport' : IDL.Text,
+    'mvp_player_name' : IDL.Opt(IDL.Text),
+    'away_label' : IDL.Text,
+    'away_score' : IDL.Nat32,
+    'mvp_player_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Opt(IDL.Text),
+    'home_label' : IDL.Text,
+    'home_score' : IDL.Nat32,
+    'player_stats_json' : IDL.Text,
+  });
+  const GameSummary = IDL.Record({
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'half_duration' : IDL.Nat32,
+    'event_id' : IDL.Text,
+    'total_game_time' : IDL.Nat32,
+    'formation_used' : IDL.Opt(IDL.Text),
+    'total_substitutions' : IDL.Nat16,
+  });
+  const PitchBoardSettings = IDL.Record({
+    'max_spread_minutes' : IDL.Nat16,
+    'formation' : IDL.Opt(IDL.Text),
+    'rotate_gk_at_halftime' : IDL.Bool,
+    'show_lineup_picker' : IDL.Bool,
+    'team_id' : IDL.Text,
+    'rotation_speed' : IDL.Nat16,
+    'updated_at_ms' : IDL.Nat64,
+    'team_size' : IDL.Nat16,
+    'disable_batch_subs' : IDL.Bool,
+    'minutes_per_half' : IDL.Nat16,
+    'disable_position_swaps' : IDL.Bool,
+    'show_match_header' : IDL.Bool,
+  });
   const AssociationEvent = IDL.Record({
     'id' : IDL.Text,
     'title' : IDL.Text,
@@ -219,11 +268,33 @@ export const idlFactory = ({ IDL }) => {
     'child_event_ids' : IDL.Vec(IDL.Text),
     'location' : IDL.Opt(IDL.Text),
   });
+  const GamePlayerStat = IDL.Record({
+    'started_on_pitch' : IDL.Bool,
+    'minutes_played' : IDL.Nat32,
+    'team_id' : IDL.Text,
+    'user_id' : IDL.Opt(IDL.Text),
+    'substitutions_count' : IDL.Nat16,
+    'goals_scored' : IDL.Nat16,
+    'event_id' : IDL.Text,
+    'fill_in_player_name' : IDL.Opt(IDL.Text),
+    'positions_played' : IDL.Vec(IDL.Text),
+    'jersey_number' : IDL.Opt(IDL.Nat16),
+  });
   const AttendanceInput = IDL.Record({
     'status' : IDL.Text,
     'subject_kind' : IDL.Text,
     'subject_id' : IDL.Text,
     'notes' : IDL.Text,
+  });
+  const GamePlayerStatInput = IDL.Record({
+    'started_on_pitch' : IDL.Bool,
+    'minutes_played' : IDL.Nat32,
+    'user_id' : IDL.Opt(IDL.Text),
+    'substitutions_count' : IDL.Nat16,
+    'goals_scored' : IDL.Nat16,
+    'fill_in_player_name' : IDL.Opt(IDL.Text),
+    'positions_played' : IDL.Vec(IDL.Text),
+    'jersey_number' : IDL.Opt(IDL.Nat16),
   });
   
   return IDL.Service({
@@ -271,6 +342,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
         [],
+      ),
+    'check_event_membership' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Bool],
+        ['query'],
       ),
     'child_is_in_event_audience' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -385,6 +461,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamTrainingPause, 'Err' : IDL.Text })],
         [],
       ),
+    'deactivate_active_game' : IDL.Func(
+        [IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_event' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
@@ -452,6 +533,11 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'get_active_game' : IDL.Func(
+        [IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ActiveGame), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_attendance' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EventAttendance), 'Err' : IDL.Text })],
@@ -477,9 +563,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_game_result' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(GameResult), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_game_summary' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(GameSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_lineup_snapshot' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Opt(LineupSnapshot), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pitch_board_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(PitchBoardSettings), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_push_reachable' : IDL.Func(
@@ -545,9 +646,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(EventGroup), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_event_views' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(EventView), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_events' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Vec(Event)],
+        ['query'],
+      ),
+    'list_game_player_stats' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GamePlayerStat), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_group_duties' : IDL.Func(
@@ -563,6 +674,11 @@ export const idlFactory = ({ IDL }) => {
     'list_mini_league_rsvps' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeagueRsvp), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_viewed_event_ids' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_open_duties' : IDL.Func(
@@ -663,6 +779,40 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
         [],
       ),
+    'save_game_player_stats' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(GamePlayerStatInput)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GamePlayerStat), 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_game_result' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat32,
+          IDL.Nat32,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : GameResult, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_game_summary' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat32,
+          IDL.Nat32,
+          IDL.Opt(IDL.Text),
+          IDL.Nat16,
+        ],
+        [IDL.Variant({ 'Ok' : GameSummary, 'Err' : IDL.Text })],
+        [],
+      ),
     'save_lineup_snapshot' : IDL.Func(
         [
           IDL.Text,
@@ -674,6 +824,23 @@ export const idlFactory = ({ IDL }) => {
           IDL.Vec(LineupPlayer),
         ],
         [IDL.Variant({ 'Ok' : LineupSnapshot, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_pitch_board_settings' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Nat16,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Nat16,
+          IDL.Nat16,
+          IDL.Nat16,
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'Ok' : PitchBoardSettings, 'Err' : IDL.Text })],
         [],
       ),
     'set_attendance' : IDL.Func(
@@ -745,6 +912,11 @@ export const idlFactory = ({ IDL }) => {
     'swap_group_players' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'sync_active_game' : IDL.Func(
+        [IDL.Opt(IDL.Text), IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ActiveGame, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

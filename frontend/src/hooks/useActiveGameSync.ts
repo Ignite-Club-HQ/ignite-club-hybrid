@@ -4,6 +4,8 @@ import { useAuth } from "./useAuth";
 import { recordSyncWrite } from "@/lib/syncWriteRateMonitor";
 import { hasAnchoredTimerMarker, mayWriteLegacyTimerState } from "@/lib/serverTimer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { syncLiveActiveGame, deactivateLiveActiveGame } from "@/live/features/events";
 import type { Json } from "@/integrations/supabase/types";
 
 const SYNC_INTERVAL = 10000; // Sync every 10 seconds
@@ -132,9 +134,6 @@ export function useActiveGameSync() {
 
   const syncToDatabase = useCallback(async () => {
     if (!user?.id) return;
-    // NEEDS-CANISTER: active_games push-notification mirror has no
-    // events_domain equivalent; II sessions have no Supabase session.
-    if (resolveAuthBackend() === "icp") return;
     // Skip DB sync when offline — local pitch state remains the source of truth,
     // and we'll resync on the next interval after connectivity returns.
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -168,8 +167,23 @@ export function useActiveGameSync() {
     }
 
     const pitchState = loadPitchState(timerState?.teamId);
+    const isIcp = resolveAuthBackend() === "icp";
 
     const deactivateActiveGame = async () => {
+      if (isIcp) {
+        try {
+          await withFeatureBackend("events", {
+            supabase: async () => {},
+            icp: async (ctx) => {
+              await deactivateLiveActiveGame(ctx, timerState?.teamId || null);
+            },
+          });
+        } catch (e) {
+          console.warn('[SYNC] ICP deactivate failed', e);
+        }
+        activeGameIdRef.current = null;
+        return;
+      }
       if (!activeGameIdRef.current) return;
 
       await supabase
@@ -280,6 +294,22 @@ export function useActiveGameSync() {
       // Mirrored server-side by trigger `log_active_game_write`.
       recordSyncWrite({ userId: user.id, teamId, source: "soccer" });
 
+      if (isIcp) {
+        await withFeatureBackend("events", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            const result = await syncLiveActiveGame(ctx, {
+              teamId,
+              timerStateJson: JSON.stringify(syncedTimerState),
+              pitchStateJson: JSON.stringify(pitchState),
+              boardSessionId: boardSessionIdRef.current,
+            });
+            activeGameIdRef.current = (result as { id: string }).id;
+          },
+        });
+        return;
+      }
+
       if (activeGameIdRef.current) {
         await deactivateOtherActiveGames(teamId, activeGameIdRef.current);
 
@@ -381,11 +411,24 @@ export function useActiveGameSync() {
     }
 
     // Mark game as inactive
-    if (activeGameIdRef.current && resolveAuthBackend() !== "icp") {
-      await supabase
-        .from('active_games')
-        .update({ is_active: false })
-        .eq('id', activeGameIdRef.current);
+    if (activeGameIdRef.current) {
+      if (resolveAuthBackend() === "icp") {
+        try {
+          await withFeatureBackend("events", {
+            supabase: async () => {},
+            icp: async (ctx) => {
+              await deactivateLiveActiveGame(ctx, null);
+            },
+          });
+        } catch (e) {
+          console.warn('[SYNC] ICP stopSync deactivate failed', e);
+        }
+      } else {
+        await supabase
+          .from('active_games')
+          .update({ is_active: false })
+          .eq('id', activeGameIdRef.current);
+      }
       activeGameIdRef.current = null;
     }
     console.log('[SYNC] Stopped game state sync');
