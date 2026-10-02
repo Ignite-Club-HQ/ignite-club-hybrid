@@ -616,6 +616,51 @@ export async function setLiveClubDmSettings(
   );
 }
 
+export async function setLiveClubDmAllowedRoles(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  allowedRoles: string[],
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_dm_allowed_roles(clubId, allowedRoles),
+    "Set club DM allowed roles",
+  );
+}
+
+export async function setLiveClubMessagePrivacy(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  forceDisablePreviews: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_message_privacy(clubId, forceDisablePreviews),
+    "Set club message privacy",
+  );
+}
+
+export async function setLiveClubAiCatchUp(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  aiCatchUpEnabled: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_ai_catch_up(clubId, aiCatchUpEnabled),
+    "Set club AI catch-up",
+  );
+}
+
+export async function enableLiveAiCatchUpForAllMembers(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(
+    actor.enable_ai_catch_up_for_all_members(clubId),
+    "Enable AI catch-up for all members",
+  );
+  return Number(raw);
+}
+
 export async function getLiveUserMessagingSettings(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return actor.get_user_messaging_settings();

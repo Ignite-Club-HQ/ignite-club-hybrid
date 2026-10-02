@@ -265,6 +265,9 @@ service : {
       Err: text;
       Ok;
     });
+  update_scheduled_message: (id: text, author: text, body: opt text,
+   image_url: opt text, scheduled_for_ms: opt nat64, recurrence:
+   opt Recurrence, recurrence_until_ms: opt nat64) -> (ScheduledResult);
   upsert_preferences: (user: text, input: PreferencesInput) ->
    (PreferencesResult);
   upsert_push_alert_settings: (input: PushAlertSettingsInput) ->

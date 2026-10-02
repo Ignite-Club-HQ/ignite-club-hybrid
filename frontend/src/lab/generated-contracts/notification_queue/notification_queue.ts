@@ -321,6 +321,7 @@ export interface notification_queueInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    update_scheduled_message(id: string, author: string, body: string | null, image_url: string | null, scheduled_for_ms: bigint | null, recurrence: Recurrence | null, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
     upsert_preferences(user: string, input: PreferencesInput): Promise<PreferencesResult>;
     upsert_push_alert_settings(input: PushAlertSettingsInput): Promise<PushAlertSettings>;
 }
@@ -459,9 +460,13 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.transfer_governorship(arg0);
         return from_candid_variant_n25(result);
     }
+    async update_scheduled_message(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: bigint | null, arg5: Recurrence | null, arg6: bigint | null): Promise<ScheduledResult> {
+        const result = await this.actor.update_scheduled_message(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3), to_candid_opt_n29(arg4), to_candid_opt_n55(arg5), to_candid_opt_n29(arg6));
+        return from_candid_ScheduledResult_n8(result);
+    }
     async upsert_preferences(arg0: string, arg1: PreferencesInput): Promise<PreferencesResult> {
         const result = await this.actor.upsert_preferences(arg0, arg1);
-        return from_candid_PreferencesResult_n55(result);
+        return from_candid_PreferencesResult_n56(result);
     }
     async upsert_push_alert_settings(arg0: PushAlertSettingsInput): Promise<PushAlertSettings> {
         const result = await this.actor.upsert_push_alert_settings(arg0);
@@ -495,8 +500,8 @@ function from_candid_Notification_n3(value: _Notification): Notification {
 function from_candid_PreferencesPageResult_n44(value: _PreferencesPageResult): PreferencesPageResult {
     return from_candid_variant_n45(value);
 }
-function from_candid_PreferencesResult_n55(value: _PreferencesResult): PreferencesResult {
-    return from_candid_variant_n56(value);
+function from_candid_PreferencesResult_n56(value: _PreferencesResult): PreferencesResult {
+    return from_candid_variant_n57(value);
 }
 function from_candid_PushAlertSettings_n42(value: _PushAlertSettings): PushAlertSettings {
     return from_candid_record_n43(value);
@@ -922,7 +927,7 @@ function from_candid_variant_n50(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n57(value: {
     Ok: _Preferences;
 } | {
     Err: string;
@@ -997,6 +1002,9 @@ function to_candid_opt_n22(value: string | null): [] | [string] {
 }
 function to_candid_opt_n29(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n55(value: Recurrence | null): [] | [_Recurrence] {
+    return value === null ? candid_none() : candid_some(to_candid_Recurrence_n53(value));
 }
 function to_candid_variant_n31(value: DigestSource): {
     Club: null;

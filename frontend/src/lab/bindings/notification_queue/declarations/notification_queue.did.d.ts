@@ -252,6 +252,18 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'update_scheduled_message' : ActorMethod<
+    [
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [bigint],
+      [] | [Recurrence],
+      [] | [bigint],
+    ],
+    ScheduledResult
+  >,
   'upsert_preferences' : ActorMethod<
     [string, PreferencesInput],
     PreferencesResult

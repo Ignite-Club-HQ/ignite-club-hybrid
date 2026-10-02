@@ -87,6 +87,9 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
   });
   const ClubDmSettings = IDL.Record({
+    'ai_catch_up_enabled' : IDL.Bool,
+    'allowed_roles' : IDL.Vec(IDL.Text),
+    'force_disable_previews' : IDL.Bool,
     'attachments_disabled' : IDL.Bool,
     'club_id' : IDL.Text,
     'dm_disabled' : IDL.Bool,
@@ -291,6 +294,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         ['query'],
       ),
+    'enable_ai_catch_up_for_all_members' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
@@ -459,8 +467,23 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_ai_catch_up' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_dm_allowed_roles' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_dm_settings' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_message_privacy' : IDL.Func(
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

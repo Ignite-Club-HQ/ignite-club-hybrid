@@ -320,6 +320,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'update_scheduled_message' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat64),
+          IDL.Opt(Recurrence),
+          IDL.Opt(IDL.Nat64),
+        ],
+        [ScheduledResult],
+        [],
+      ),
     'upsert_preferences' : IDL.Func(
         [IDL.Text, PreferencesInput],
         [PreferencesResult],
