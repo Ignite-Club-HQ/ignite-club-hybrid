@@ -1755,10 +1755,25 @@ export default function ClubDetailPage() {
           events_sponsor_strip_enabled: { enabled: "Events sponsor strip enabled", disabled: "Events sponsor strip disabled" },
         };
         const handleSponsorToggle = async (field: ClubSponsorToggleField, checked: boolean) => {
-          const { error } = await supabase
-            .from("clubs")
-            .update({ [field]: checked } as any)
-            .eq("id", id!);
+          const error = await withFeatureBackend("membership", {
+            supabase: async () => {
+              const { error } = await supabase
+                .from("clubs")
+                .update({ [field]: checked } as any)
+                .eq("id", id!);
+              return error;
+            },
+            icp: async (ctx) => {
+              try {
+                const { getLiveClubSettings, saveLiveClubSettings } = await import("@/live/features/club");
+                const settings = await getLiveClubSettings(ctx, id!);
+                await saveLiveClubSettings(ctx, { ...settings, [field]: checked });
+                return null;
+              } catch (e) {
+                return e;
+              }
+            },
+          });
           if (error) {
             toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });
             return;
