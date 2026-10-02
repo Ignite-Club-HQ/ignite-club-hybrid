@@ -1606,6 +1606,46 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
   const { data: stats } = useQuery({
     queryKey: ["competition-engagement", compIds, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("competitions") && compIds.length > 0) {
+        // ICP: fixtures/results and active entries come from the competition
+        // canister. Broadcasts stay on Supabase — the send path
+        // (send-competition-broadcast edge function) writes there in both
+        // modes, so the count remains accurate.
+        const [broadcasts, perComp] = await Promise.all([
+          supabase
+            .from("competition_broadcasts")
+            .select("id, created_at", { count: "exact", head: false })
+            .in("competition_id", compIds)
+            .gte("created_at", range.start.toISOString())
+            .lte("created_at", range.end.toISOString())
+            .limit(1000),
+          withFeatureBackend("competitions", {
+            supabase: async () => [],
+            icp: (ctx) =>
+              Promise.all(
+                compIds.map(async (id) => {
+                  const [compMatches, compEntries] = await Promise.all([
+                    listLiveCompetitionMatches(ctx, id),
+                    listLiveCompetitionEntries(ctx, id),
+                  ]);
+                  return {
+                    activeTeams: compEntries.filter(
+                      (e: any) => e.status === "accepted" || e.status === "registered",
+                    ).length,
+                    totalMatches: compMatches.length,
+                    resultsEntered: compMatches.filter((m: any) => m.status === "completed").length,
+                  };
+                }),
+              ),
+          }),
+        ]);
+        return {
+          activeTeams: perComp.reduce((n, c) => n + c.activeTeams, 0),
+          totalMatches: perComp.reduce((n, c) => n + c.totalMatches, 0),
+          resultsEntered: perComp.reduce((n, c) => n + c.resultsEntered, 0),
+          broadcasts: broadcasts.data?.length || 0,
+        };
+      }
       const [matches, broadcasts, entries] = await Promise.all([
         supabase
           .from("competition_matches")
