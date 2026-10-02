@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { generateLiveChatRecap } from "@/live/features/messaging";
 
 export type ChatScopeType = "team" | "club" | "group" | "club_admin" | "direct";
 
@@ -238,9 +240,22 @@ export function useChatCatchUp({
       };
 
       const fetchTier = async (hours: number, force: boolean): Promise<{ result: ChatSummaryResult | null; error: string | null }> => {
-        // NEEDS-CANISTER: messaging_domain chat recap/summary call.
+        // Internet Identity users: generate_chat_recap runs canister-side (the
+        // canister makes the LLM HTTPS outcall itself) — no Supabase call fires.
         if (isFeatureRoutedToIcp("messaging")) {
-          return { result: null, error: "Chat recap isn't available yet on the Internet Identity messaging backend." };
+          try {
+            const sinceMs = BigInt(Date.now() - hours * 60 * 60 * 1000);
+            const text = await withFeatureBackend("messaging", {
+              supabase: async () => {
+                throw new Error("unreachable");
+              },
+              icp: (ctx) => generateLiveChatRecap(ctx, scope_id, sinceMs),
+            });
+            const parsed = JSON.parse(text) as ChatSummaryResult;
+            return { result: { ...parsed, lookback_hours: hours }, error: null };
+          } catch (e: any) {
+            return { result: null, error: e?.message ?? "unknown" };
+          }
         }
         const lastOpenedMs = getLastOpened(scope_type, scope_id);
         const last_opened_at = lastOpenedMs ? new Date(lastOpenedMs).toISOString() : null;
