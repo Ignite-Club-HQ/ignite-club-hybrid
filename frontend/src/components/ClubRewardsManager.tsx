@@ -746,13 +746,28 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             onIconSelect={async (url) => {
               setPointsIconUrl(url);
               // Auto-save icon selection immediately
-              const { error } = await supabase
-                .from("clubs")
-                .update({ 
-                   points_display_name: customPointsName || 'Reward Points',
-                   points_icon_url: url,
-                } as any)
-                .eq("id", clubId);
+              const error = await withFeatureBackend("points", {
+                supabase: async () => {
+                  const { error } = await supabase
+                    .from("clubs")
+                    .update({
+                       points_display_name: customPointsName || 'Reward Points',
+                       points_icon_url: url,
+                    } as any)
+                    .eq("id", clubId);
+                  return error;
+                },
+                // ICP: icon upload is already hidden for II members, so this
+                // only ever saves the display name (the canister stores name
+                // + kill switch; preserve the current disabled state).
+                icp: async (ctx) => {
+                  const current = await getLiveClubPointsSettings(ctx, clubId);
+                  await saveLiveClubPointsSettings(
+                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                  );
+                  return null;
+                },
+              });
               if (!error) {
                 queryClient.invalidateQueries({ queryKey: ["user-clubs"] });
                 queryClient.invalidateQueries({ queryKey: ["points-display-name"] });
@@ -770,13 +785,25 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             disabled={savingPointsName}
             onClick={async () => {
               setSavingPointsName(true);
-              const { error } = await supabase
-                .from("clubs")
-                .update({ 
-                   points_display_name: customPointsName || 'Reward Points',
-                   points_icon_url: pointsIconUrl,
-                } as any)
-                .eq("id", clubId);
+              const error = await withFeatureBackend("points", {
+                supabase: async () => {
+                  const { error } = await supabase
+                    .from("clubs")
+                    .update({
+                       points_display_name: customPointsName || 'Reward Points',
+                       points_icon_url: pointsIconUrl,
+                    } as any)
+                    .eq("id", clubId);
+                  return error;
+                },
+                icp: async (ctx) => {
+                  const current = await getLiveClubPointsSettings(ctx, clubId);
+                  await saveLiveClubPointsSettings(
+                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                  );
+                  return null;
+                },
+              });
               setSavingPointsName(false);
               if (error) {
                 toast({ title: "Failed to save", variant: "destructive" });
