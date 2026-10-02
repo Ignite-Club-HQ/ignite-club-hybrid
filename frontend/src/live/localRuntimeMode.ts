@@ -13,6 +13,14 @@
  * module) can change that decision for the live build without editing
  * every call site.
  *
+ * The branches this flag guards are LAB-FIXTURE simulations: they call
+ * `getLocalLab*`/`listLocal*`/`connectLocal*` functions from `@/lab/*`
+ * modules, which the live build aliases to throwing stubs
+ * (`src/live/disabledLabRuntime.ts`). Returning `true` here would crash
+ * real Internet Identity users, not route them to canisters. Real ICP
+ * routing for signed-in II users happens inside the non-lab branches via
+ * `resolveAuthBackend()` / `withFeatureBackend` — never through this flag.
+ *
  * The deployed Supabase project remains the live source of truth until each
  * domain has a provider-neutral live ICP adapter and deployed canister ID.
  * The former `?backend=icp` override selected fixture/local-actor branches,
