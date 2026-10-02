@@ -76,7 +76,7 @@ describe("VaultPage rendering and provider-boundary characterization", () => {
     expect(source).toContain("VaultStorageBreakdown");
     expect(vaultPageSource).toContain("function SupabaseVaultPage");
     expect(vaultPageSource).toContain('withFeatureBackend("vault"');
-    expect(vaultPageSource).toContain("IcpUnavailablePage");
+    expect(vaultPageSource).not.toContain("IcpUnavailablePage");
     expect(vaultPageSource).not.toContain("SupabaseVaultPage = Icp");
   });
 
