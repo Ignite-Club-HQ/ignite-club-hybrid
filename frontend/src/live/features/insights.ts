@@ -451,3 +451,82 @@ export async function getLiveSponsorBenchmarks(
     "Get sponsor benchmarks",
   );
 }
+
+// ---------------- House ads (app_ad_settings / app_ads / app_ad_analytics) ----------------
+// App-global ad config lives in insights_domain (routed via the "analytics"
+// feature). Display reads are open; writes are app-admin gated canister-side.
+
+export type LiveAppAd = Awaited<ReturnType<InsightsDomainActor["list_active_ads"]>>[number];
+export type LiveAppAdSetting = NonNullable<Awaited<ReturnType<InsightsDomainActor["get_ad_setting"]>>[0]>;
+export type LiveAppAdInput = Parameters<InsightsDomainActor["create_ad"]>[0];
+export type LiveAdEventSummary = Awaited<ReturnType<InsightsDomainActor["ad_event_summary"]>> extends { Ok: infer T } ? T : never;
+
+export async function isLiveAppAdmin(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return actor.is_app_admin();
+}
+
+export async function getLiveAdSetting(ctx: FeatureBackendContext, location: string) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  const result = await actor.get_ad_setting(location);
+  return result[0] ?? null;
+}
+
+export async function listLiveActiveAds(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return actor.list_active_ads();
+}
+
+export async function listLiveAds(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_ads(), "List house ads");
+}
+
+export async function upsertLiveAdSetting(
+  ctx: FeatureBackendContext,
+  location: string,
+  isEnabled: boolean,
+  overrideSponsors: boolean,
+  showOnlyWhenNoSponsors: boolean,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.upsert_ad_setting(location, isEnabled, overrideSponsors, showOnlyWhenNoSponsors),
+    "Update ad setting",
+  );
+}
+
+export async function createLiveAd(ctx: FeatureBackendContext, input: LiveAppAdInput) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_ad(input), "Create house ad");
+}
+
+export async function updateLiveAd(ctx: FeatureBackendContext, id: string, input: LiveAppAdInput) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.update_ad(id, input), "Update house ad");
+}
+
+export async function setLiveAdActive(ctx: FeatureBackendContext, id: string, isActive: boolean) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_ad_active(id, isActive), "Set ad active state");
+}
+
+export async function deleteLiveAd(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_ad(id), "Delete house ad");
+}
+
+export async function recordLiveAdEvent(
+  ctx: FeatureBackendContext,
+  adId: string,
+  eventType: "view" | "click",
+  context: string,
+) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.record_ad_event(adId, eventType, context), "Record ad event");
+}
+
+export async function getLiveAdEventSummary(ctx: FeatureBackendContext, sinceMs: number) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.ad_event_summary(toNat64(sinceMs)), "Get ad event summary");
+}

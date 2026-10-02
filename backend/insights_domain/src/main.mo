@@ -23,6 +23,9 @@ persistent actor {
   var benchmarks : [Types.Benchmark];
   var sponsorMetrics : [Types.SponsorMetricCounter];
   var sponsorReach : [Types.SponsorReachCounter];
+  var adSettings : [Types.AppAdSetting];
+  var ads : [Types.AppAd];
+  var adEvents : [Types.AdEvent];
 
   transient let MAX_BATCH = 50;
 
@@ -476,6 +479,127 @@ persistent actor {
       let unique_reach = Nat.toNat32(reachSet.size());
       let ctr = if (impressions == 0) 0.0 else Int.toFloat(Nat32.toNat(clicks)) / Int.toFloat(Nat32.toNat(impressions));
       { sponsor_id; impressions; clicks; unique_reach; ctr }
+    }))
+  };
+
+  public query ({ caller }) func is_app_admin() : async Bool {
+    isAppAdmin(caller)
+  };
+
+  // ================= House ads (app_ad_settings / app_ads) =================
+  // App-global, operator-managed display config + ad content. Display reads
+  // are open (mirroring list_sponsors); writes are app-admin gated.
+
+  public query func get_ad_setting(location : Text) : async ?Types.AppAdSetting {
+    adSettings.find(func(s) = s.location == location)
+  };
+
+  public query func list_active_ads() : async [Types.AppAd] {
+    ads.filter(func(a) = a.is_active).sort(func(a, b) = Nat32.compare(a.display_order, b.display_order))
+  };
+
+  public shared ({ caller }) func upsert_ad_setting(location : Text, is_enabled : Bool, override_sponsors : Bool, show_only_when_no_sponsors : Bool) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not valid(location)) return #Err("Invalid location");
+    let now = nowMs();
+    if (adSettings.any(func(s) = s.location == location)) {
+      adSettings := adSettings.map(func(s) = if (s.location == location) ({ location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now }) else s);
+    } else {
+      adSettings := adSettings.concat([{ location; is_enabled; override_sponsors; show_only_when_no_sponsors; updated_at_ms = now }]);
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func list_ads() : async { #Ok : [Types.AppAd]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(ads.sort(func(a, b) = Nat32.compare(a.display_order, b.display_order)))
+  };
+
+  public shared ({ caller }) func create_ad(input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not valid(input.name)) return #Err("Invalid ad name");
+    if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
+    let now = nowMs();
+    let nextOrder = ads.foldLeft(0 : Nat32, func(acc, a) = if (a.display_order > acc) a.display_order else acc) + 1;
+    let ad : Types.AppAd = {
+      id = freshId("ad"); name = input.name; ad_type = input.ad_type;
+      image_url = input.image_url; logo_url = input.logo_url; link_url = input.link_url;
+      description = input.description; headline = input.headline; subtext = input.subtext;
+      cta_label = input.cta_label; bg_color = input.bg_color; text_color = input.text_color;
+      is_active = true; display_order = nextOrder; created_at_ms = now; updated_at_ms = now;
+    };
+    ads := ads.concat([ad]);
+    #Ok(ad)
+  };
+
+  public shared ({ caller }) func update_ad(id : Text, input : Types.AppAdInput) : async { #Ok : Types.AppAd; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not valid(input.name)) return #Err("Invalid ad name");
+    if (input.ad_type != "image" and input.ad_type != "logo_text") return #Err("Invalid ad type");
+    switch (ads.find(func(a) = a.id == id)) {
+      case null #Err("Ad not found");
+      case (?existing) {
+        let updated : Types.AppAd = { existing with
+          name = input.name; ad_type = input.ad_type;
+          image_url = input.image_url; logo_url = input.logo_url; link_url = input.link_url;
+          description = input.description; headline = input.headline; subtext = input.subtext;
+          cta_label = input.cta_label; bg_color = input.bg_color; text_color = input.text_color;
+          updated_at_ms = nowMs();
+        };
+        ads := ads.map(func(a) = if (a.id == id) updated else a);
+        #Ok(updated)
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_ad_active(id : Text, is_active : Bool) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
+    ads := ads.map(func(a) = if (a.id == id) ({ a with is_active; updated_at_ms = nowMs() }) else a);
+    #Ok
+  };
+
+  public shared ({ caller }) func delete_ad(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
+    ads := ads.filter(func(a) = a.id != id);
+    adEvents := adEvents.filter(func(e) = e.ad_id != id);
+    #Ok
+  };
+
+  // View/click ingest for the ad carousel (app_ad_analytics). Any signed-in
+  // member may record; the dedupe/debounce policy stays client-side.
+  public shared ({ caller }) func record_ad_event(ad_id : Text, event_type : Text, context : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(ad_id) or not valid(context)) return #Err("Invalid ad event");
+    if (event_type != "view" and event_type != "click") return #Err("Invalid event type");
+    if (not ads.any(func(a) = a.id == ad_id)) return #Err("Ad not found");
+    adEvents := adEvents.concat([{ id = freshId("ade"); ad_id; event_type; context; user = caller; created_at_ms = nowMs() }]);
+    #Ok
+  };
+
+  // All location settings, for the admin ads settings tab.
+  public query ({ caller }) func list_ad_settings() : async { #Ok : [Types.AppAdSetting]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(adSettings.sort(func(a, b) = Text.compare(a.location, b.location)))
+  };
+
+  // Per-ad, per-context view/click counts since since_ms, for the admin ads table.
+  public query ({ caller }) func ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
+    #Ok(ads.flatMap(func(a) : [Types.AdEventSummary] {
+      let mine = inRange.filter(func(e) = e.ad_id == a.id);
+      let contexts = mine.foldLeft([] : [Text], func(acc, e) = if (acc.any(func(c) = c == e.context)) acc else acc.concat([e.context]));
+      contexts.map(func(ctx) : Types.AdEventSummary {
+        let scoped = mine.filter(func(e) = e.context == ctx);
+        {
+          ad_id = a.id;
+          context = ctx;
+          views = Nat.toNat32(scoped.filter(func(e) = e.event_type == "view").size());
+          clicks = Nat.toNat32(scoped.filter(func(e) = e.event_type == "click").size());
+        }
+      })
     }))
   };
 }

@@ -9,6 +9,11 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
+  const AdEventSummary = IDL.Record({
+    'clicks' : IDL.Nat32,
+    'ad_id' : IDL.Text,
+    'views' : IDL.Nat32,
+  });
   const ClientPerfAggregate = IDL.Record({
     'path' : IDL.Text,
     'count' : IDL.Nat32,
@@ -33,6 +38,37 @@ export const idlFactory = ({ IDL }) => {
     'current' : EngagementTotals,
     'club_id' : IDL.Text,
   });
+  const AppAdInput = IDL.Record({
+    'link_url' : IDL.Opt(IDL.Text),
+    'subtext' : IDL.Opt(IDL.Text),
+    'image_url' : IDL.Opt(IDL.Text),
+    'text_color' : IDL.Opt(IDL.Text),
+    'headline' : IDL.Opt(IDL.Text),
+    'name' : IDL.Text,
+    'description' : IDL.Opt(IDL.Text),
+    'logo_url' : IDL.Opt(IDL.Text),
+    'cta_label' : IDL.Opt(IDL.Text),
+    'ad_type' : IDL.Text,
+    'bg_color' : IDL.Opt(IDL.Text),
+  });
+  const AppAd = IDL.Record({
+    'id' : IDL.Text,
+    'link_url' : IDL.Opt(IDL.Text),
+    'subtext' : IDL.Opt(IDL.Text),
+    'image_url' : IDL.Opt(IDL.Text),
+    'text_color' : IDL.Opt(IDL.Text),
+    'headline' : IDL.Opt(IDL.Text),
+    'name' : IDL.Text,
+    'description' : IDL.Opt(IDL.Text),
+    'updated_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'logo_url' : IDL.Opt(IDL.Text),
+    'cta_label' : IDL.Opt(IDL.Text),
+    'is_active' : IDL.Bool,
+    'ad_type' : IDL.Text,
+    'display_order' : IDL.Nat32,
+    'bg_color' : IDL.Opt(IDL.Text),
+  });
   const AlertStatus = IDL.Variant({ 'Open' : IDL.Null, 'Resolved' : IDL.Null });
   const AdminAlert = IDL.Record({
     'id' : IDL.Text,
@@ -42,6 +78,13 @@ export const idlFactory = ({ IDL }) => {
     'details' : IDL.Text,
     'resolved_at_ms' : IDL.Opt(IDL.Nat64),
     'resolved_by' : IDL.Opt(IDL.Principal),
+  });
+  const AppAdSetting = IDL.Record({
+    'is_enabled' : IDL.Bool,
+    'updated_at_ms' : IDL.Nat64,
+    'override_sponsors' : IDL.Bool,
+    'show_only_when_no_sponsors' : IDL.Bool,
+    'location' : IDL.Text,
   });
   const Benchmark = IDL.Record({
     'dau' : IDL.Opt(IDL.Nat32),
@@ -120,6 +163,11 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    'ad_event_summary' : IDL.Func(
+        [IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AdEventSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'append_audit_log' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -173,11 +221,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EngagementTotals, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'create_ad' : IDL.Func(
+        [AppAdInput],
+        [IDL.Variant({ 'Ok' : AppAd, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_admin_alert' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_ad' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_ad_setting' : IDL.Func([IDL.Text], [IDL.Opt(AppAdSetting)], ['query']),
     'get_benchmarks' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(Benchmark), 'Err' : IDL.Text })],
@@ -208,9 +267,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'is_app_admin' : IDL.Func([], [IDL.Bool], ['query']),
+    'list_active_ads' : IDL.Func([], [IDL.Vec(AppAd)], ['query']),
     'list_admin_alerts' : IDL.Func(
         [IDL.Opt(AlertStatus)],
         [IDL.Variant({ 'Ok' : IDL.Vec(AdminAlert), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_ads' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AppAd), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_audit_logs' : IDL.Func(
@@ -253,6 +319,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'record_active_user' : IDL.Func(
         [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_ad_event' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -306,6 +377,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
         [],
       ),
+    'set_ad_active' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_benchmark' : IDL.Func(
         [
           IDL.Text,
@@ -331,9 +407,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'update_ad' : IDL.Func(
+        [IDL.Text, AppAdInput],
+        [IDL.Variant({ 'Ok' : AppAd, 'Err' : IDL.Text })],
+        [],
+      ),
     'update_feedback_status' : IDL.Func(
         [IDL.Text, FeedbackStatus, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Feedback, 'Err' : IDL.Text })],
+        [],
+      ),
+    'upsert_ad_setting' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
   });
