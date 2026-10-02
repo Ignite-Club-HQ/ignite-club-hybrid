@@ -55,10 +55,26 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
       if (!fetchUrl.startsWith('http://') && !fetchUrl.startsWith('https://')) {
         fetchUrl = `https://${fetchUrl}`;
       }
-      const { data, error } = await supabase.functions.invoke("fetch-link-preview", {
-        body: { url: fetchUrl },
+      // ICP: messaging_domain fetches the page and parses the og meta
+      // canister-side (replicated HTTPS outcall); same metadata shape.
+      const data = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("fetch-link-preview", {
+            body: { url: fetchUrl },
+          });
+          if (error) throw error;
+          return data as LinkPreviewData | null;
+        },
+        icp: async (ctx) => {
+          const p = await fetchLiveLinkPreview(ctx, fetchUrl);
+          return {
+            title: p.title[0] ?? null,
+            description: p.description[0] ?? null,
+            image: p.image[0] ?? null,
+            site_name: p.site_name[0] ?? null,
+          } as LinkPreviewData;
+        },
       });
-      if (error) throw error;
       const hasContent = data && (data.title || data.description || data.image);
       // In chat history we reserve a fixed h-20 slot for URL previews before
       // metadata returns. If the edge function succeeds but finds no title / image,
