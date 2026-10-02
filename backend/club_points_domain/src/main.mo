@@ -19,6 +19,7 @@ persistent actor {
   var redemptions : [Types.RewardRedemption];
   var cooldowns : [Types.PointsCooldown];
   var bulkAccessPrincipals : [Principal];
+  var clubPointsSettings : [Types.ClubPointsSettings];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
