@@ -922,10 +922,11 @@ export async function moveLiveGroupPlayer(
   fromGroupId: string,
   toGroupId: string,
   accountId: string,
+  teamLetter?: string | null,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.move_group_player(fromGroupId, toGroupId, accountId),
+    actor.move_group_player(fromGroupId, toGroupId, accountId, candidOpt(teamLetter)),
     "Move group player",
   );
 }
@@ -934,12 +935,14 @@ export async function swapLiveGroupPlayers(
   ctx: FeatureBackendContext,
   groupA: string,
   accountA: string,
+  teamA: string | null | undefined,
   groupB: string,
   accountB: string,
+  teamB?: string | null,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.swap_group_players(groupA, accountA, groupB, accountB),
+    actor.swap_group_players(groupA, accountA, candidOpt(teamA), groupB, accountB, candidOpt(teamB)),
     "Swap group players",
   );
 }
@@ -1141,6 +1144,7 @@ export async function setLiveEventGroupAppearance(
   colour?: string | null,
   abilityBand?: string | null,
   pitchName?: string | null,
+  teamBColour?: string | null,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -1150,8 +1154,129 @@ export async function setLiveEventGroupAppearance(
       candidOpt(colour),
       candidOpt(abilityBand),
       candidOpt(pitchName),
+      candidOpt(teamBColour),
     ),
     "Set event group appearance",
+  );
+}
+
+/**
+ * Atomic batch replace of an event's groups (players + per-group duties in
+ * one call) — counterpart of the Supabase replace_event_groups RPC used by
+ * auto-generate and copy-from-previous-event group flows.
+ */
+export interface LiveGroupPlayerInput {
+  accountId: string;
+  teamLetter?: string | null;
+}
+
+export interface LiveGroupDutyInput {
+  duty: string;
+  accountId?: string | null;
+}
+
+export interface LiveGroupSpecInput {
+  name: string;
+  abilityBand?: string | null;
+  pitchName?: string | null;
+  displayOrder: number;
+  teamAColour?: string | null;
+  teamBColour?: string | null;
+  players: LiveGroupPlayerInput[];
+  duties: LiveGroupDutyInput[];
+}
+
+export async function replaceLiveEventGroups(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  groups: LiveGroupSpecInput[],
+  deleteExisting: boolean,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.replace_event_groups(
+      eventId,
+      groups.map((g) => ({
+        name: g.name,
+        ability_band: candidOpt(g.abilityBand),
+        pitch_name: candidOpt(g.pitchName),
+        display_order: g.displayOrder,
+        team_a_colour: candidOpt(g.teamAColour),
+        team_b_colour: candidOpt(g.teamBColour),
+        players: g.players.map((p) => ({
+          account_id: p.accountId,
+          team_letter: candidOpt(p.teamLetter),
+        })),
+        duties: g.duties.map((d) => ({
+          duty: d.duty,
+          account_id: candidOpt(d.accountId),
+        })),
+      })),
+      deleteExisting,
+    ),
+    "Replace event groups",
+  );
+}
+
+/** Flat duties list for an event (distinct from per-group duties above). */
+export async function listLiveDuties(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_duties(eventId), "List duties");
+}
+
+/** The caller's own linked children (events-domain self-service roster). */
+export async function getLiveMyChildren(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.my_children();
+}
+
+/** Admin upsert of a child->team assignment. */
+export async function adminUpsertLiveChildTeamAssignment(
+  ctx: FeatureBackendContext,
+  childId: string,
+  teamId: string,
+  clubId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.admin_upsert_child_team_assignment(childId, teamId, clubId),
+    "Assign child to team",
+  );
+}
+
+export async function removeLiveChildTeamAssignment(
+  ctx: FeatureBackendContext,
+  childId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_child_team_assignment(childId, teamId),
+    "Remove child team assignment",
+  );
+}
+
+export async function listLiveChildTeamAssignments(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_child_team_assignments(clubId, teamId),
+    "List child team assignments",
+  );
+}
+
+/** The caller's own child's team assignments, scoped by child id. */
+export async function getLiveMyChildTeamAssignments(
+  ctx: FeatureBackendContext,
+  childId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.my_child_team_assignments(childId),
+    "Get my child team assignments",
   );
 }
 

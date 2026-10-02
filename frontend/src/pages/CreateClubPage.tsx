@@ -179,10 +179,10 @@ export default function CreateClubPage() {
           // role grant — only name/slug/description/logo_url persist.
           const profile = await createLiveClub(
             ctx,
+            crypto.randomUUID(),
             name.trim(),
             slugifyClubName(name.trim()) || `club-${Date.now()}`,
             description.trim() || "",
-            null,
           );
           return profile.id;
         },

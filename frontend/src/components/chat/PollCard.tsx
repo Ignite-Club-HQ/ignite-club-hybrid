@@ -4,7 +4,6 @@ import { BarChart3, Check, Clock, Lock, Loader2, MoreVertical, Trash2 } from "lu
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLivePollResults, voteLivePoll, closeLivePoll, deleteLivePoll } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
@@ -168,7 +167,6 @@ export function PollCard({ pollId }: PollCardProps) {
         setIcpMyOptionIndex((prev) => (prev === optionIndex ? null : optionIndex));
         return;
       }
-      assertSupabaseWritePath("messaging", "polls");
       if (!user || !data?.poll) return;
       setBusyOptionId(optionId);
       const alreadyVoted = myVoteOptionIds.has(optionId);
@@ -219,7 +217,6 @@ export function PollCard({ pollId }: PollCardProps) {
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase
         .from("polls")
         .update({ closed_at: new Date().toISOString() })
@@ -244,7 +241,6 @@ export function PollCard({ pollId }: PollCardProps) {
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "polls");
       const { error } = await supabase.from("polls").delete().eq("id", pollId);
       if (error) throw error;
     },

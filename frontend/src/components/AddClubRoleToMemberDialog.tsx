@@ -11,7 +11,8 @@ import {
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveRoleGrant } from "@/live/features/membership";
 import { useToast } from "@/hooks/use-toast";
 import { RoleSelectionList, type RoleSelectionOption } from "./RoleSelectionList";
 
@@ -59,28 +60,39 @@ export default function AddClubRoleToMemberDialog({
 
   const addRolesMutation = useMutation({
     mutationFn: async () => {
-      assertSupabaseWritePath("membership", "bulk club role grants + notification; use addLiveRoleGrant per role once wired"); // NEEDS-CANISTER: bulk club role grants + notification; use addLiveRoleGrant per role once wired
       if (selectedRoles.length === 0) return;
 
-      const rolesToInsert = selectedRoles.map((role) => ({
-        user_id: userId,
-        club_id: clubId,
-        role,
-      }));
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          const userPrincipal = Principal.fromText(userId);
+          for (const role of selectedRoles) {
+            await addLiveRoleGrant(ctx, userPrincipal, clubId, role);
+          }
+          // NEEDS-CANISTER: in-app notifications stay Supabase-only; skipped on this path.
+        },
+        supabase: async () => {
+          const rolesToInsert = selectedRoles.map((role) => ({
+            user_id: userId,
+            club_id: clubId,
+            role,
+          }));
 
-      const { error } = await supabase.from("user_roles").insert(rolesToInsert);
-      if (error) throw error;
+          const { error } = await supabase.from("user_roles").insert(rolesToInsert);
+          if (error) throw error;
 
-      // Send notification to the user
-      const roleNames = selectedRoles.map(r => 
-        availableRoles.find(ar => ar.value === r)?.label || r
-      ).join(", ");
-      
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: `You have been assigned new role(s) in ${clubName}: ${roleNames}`,
-        related_id: clubId,
+          // Send notification to the user
+          const roleNames = selectedRoles.map(r =>
+            availableRoles.find(ar => ar.value === r)?.label || r
+          ).join(", ");
+
+          await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "membership",
+            message: `You have been assigned new role(s) in ${clubName}: ${roleNames}`,
+            related_id: clubId,
+          });
+        },
       });
     },
     onSuccess: () => {

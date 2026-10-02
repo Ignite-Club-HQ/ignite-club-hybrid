@@ -278,13 +278,13 @@ export async function claimLiveShellTeam(ctx: FeatureBackendContext, token: stri
  */
 export async function createLiveTeamInviteLink(
   ctx: FeatureBackendContext,
+  clubId: string,
   teamId: string,
   role: string,
-  createdByLabel: string,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.create_team_invite_link(teamId, role, createdByLabel),
+    actor.create_team_invite_link(clubId, teamId, role),
     "Create team invite link",
   );
 }
@@ -542,14 +542,14 @@ export async function listLiveTeamCaptains(ctx: FeatureBackendContext, teamId: s
  */
 export async function createLiveClub(
   ctx: FeatureBackendContext,
+  id: string,
   name: string,
   slug: string,
   description: string,
-  logoUrl?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.create_club(name, slug, description, candidOpt(logoUrl)),
+    actor.create_club(id, name, slug, candidOpt(description || null)),
     "Create club",
   );
 }
@@ -593,6 +593,9 @@ export async function setLiveClubThemePalette(
   primaryColor?: string | null,
   secondaryColor?: string | null,
   accentColor?: string | null,
+  darkPrimaryColor?: string | null,
+  darkSecondaryColor?: string | null,
+  darkAccentColor?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -601,8 +604,40 @@ export async function setLiveClubThemePalette(
       candidOpt(primaryColor),
       candidOpt(secondaryColor),
       candidOpt(accentColor),
+      candidOpt(darkPrimaryColor),
+      candidOpt(darkSecondaryColor),
+      candidOpt(darkAccentColor),
     ),
     "Set club theme palette",
+  );
+}
+
+export async function clearLiveClubTheme(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.clear_club_theme(clubId), "Clear club theme");
+}
+
+export async function setLiveClubThemeEnabled(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  enabled: boolean,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_theme_enabled(clubId, enabled),
+    "Set club theme enabled",
+  );
+}
+
+export async function setLiveClubLogoOnlyMode(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  enabled: boolean,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_logo_only_mode(clubId, enabled),
+    "Set club logo-only mode",
   );
 }
 

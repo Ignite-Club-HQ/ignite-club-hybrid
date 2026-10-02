@@ -27,9 +27,9 @@ import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { removeLiveGroupMember, leaveLiveGroup } from "@/live/features/messaging";
+import { removeLiveRoleGrant } from "@/live/features/membership";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -177,7 +177,6 @@ export function ChatParticipantsList({
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "removing a group member");
       const { error } = await supabase
         .from("group_members")
         .delete()
@@ -207,7 +206,6 @@ export function ChatParticipantsList({
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "leaving a group");
       const { error } = await supabase
         .from("group_members")
         .delete()

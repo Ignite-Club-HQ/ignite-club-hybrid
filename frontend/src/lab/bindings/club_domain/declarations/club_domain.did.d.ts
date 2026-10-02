@@ -80,7 +80,9 @@ export interface ClubProfile {
   'deleted_at_ms' : [] | [bigint],
 }
 export interface ClubSettings {
+  'logo_only_mode' : boolean,
   'invite_email_style' : [] | [string],
+  'theme_dark_accent_color' : [] | [string],
   'theme_primary_color' : [] | [string],
   'events_sponsor_strip_enabled' : boolean,
   'header_logo_enabled' : boolean,
@@ -88,14 +90,17 @@ export interface ClubSettings {
   'theme_accent_color' : [] | [string],
   'contact_email' : [] | [string],
   'club_switcher_hint' : [] | [string],
+  'theme_dark_primary_color' : [] | [string],
   'header_club_name_enabled' : boolean,
   'membership_open' : boolean,
   'announcement' : [] | [string],
   'public_directory' : boolean,
   'theme_secondary_color' : [] | [string],
   'media_header_sponsors_enabled' : boolean,
+  'theme_dark_secondary_color' : [] | [string],
   'media_sponsors_enabled' : boolean,
   'club_id' : string,
+  'theme_enabled' : boolean,
 }
 export interface ClubSponsor {
   'id' : string,
@@ -435,6 +440,11 @@ export interface _SERVICE {
   'claim_shell_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
+      { 'Err' : string }
+  >,
+  'clear_club_theme' : ActorMethod<
+    [string],
+    { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
   'create_child_for_parent_in_club' : ActorMethod<
@@ -879,6 +889,11 @@ export interface _SERVICE {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'set_club_logo_only_mode' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
   'set_club_switcher_hint' : ActorMethod<
     [string, [] | [string]],
     { 'Ok' : ClubSettings } |
@@ -889,8 +904,21 @@ export interface _SERVICE {
     { 'Ok' : ClubTerm } |
       { 'Err' : string }
   >,
+  'set_club_theme_enabled' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
   'set_club_theme_palette' : ActorMethod<
-    [string, [] | [string], [] | [string], [] | [string]],
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+    ],
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,

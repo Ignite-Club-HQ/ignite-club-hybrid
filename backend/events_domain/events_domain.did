@@ -152,6 +152,27 @@ type HttpHeader =
    name: text;
    value: text;
  };
+type GroupSpecInput = 
+ record {
+   ability_band: opt text;
+   display_order: nat16;
+   duties: vec GroupDutyInput;
+   name: text;
+   pitch_name: opt text;
+   players: vec GroupPlayerInput;
+   team_a_colour: opt text;
+   team_b_colour: opt text;
+ };
+type GroupPlayerInput = 
+ record {
+   account_id: text;
+   team_letter: opt text;
+ };
+type GroupDutyInput = 
+ record {
+   account_id: opt text;
+   duty: text;
+ };
 type GameSummary = 
  record {
    event_id: text;
@@ -256,10 +277,12 @@ type EventGroup =
    ability_band: opt text;
    colour: opt text;
    created_at_ms: nat64;
+   display_order: nat16;
    event_id: text;
    id: text;
    name: text;
    pitch_name: opt text;
+   team_b_colour: opt text;
    team_letter: opt text;
  };
 type EventAttendance = 
@@ -302,6 +325,12 @@ type CoachNote =
    note: text;
    updated_at_ms: nat64;
    updated_by: principal;
+ };
+type ChildTeamAssignment = 
+ record {
+   child_id: text;
+   club_id: text;
+   team_id: text;
  };
 type ChildGuardian = 
  record {
@@ -395,6 +424,11 @@ service : {
       Err: text;
       Ok: Child;
     });
+  admin_upsert_child_team_assignment: (child_id: text, team_id: text,
+   club_id: text) -> (variant {
+                        Err: text;
+                        Ok: ChildTeamAssignment;
+                      });
   admin_upsert_rsvp: (event_id: text, account_id: text, child_id: opt text,
    status: text, notes: text) -> (variant {
                                     Err: text;
@@ -503,6 +537,7 @@ service : {
        record {
          attendance: vec Attendance;
          childGuardians: vec ChildGuardian;
+         childTeamAssignments: vec ChildTeamAssignment;
          children: vec Child;
          coachNotes: vec CoachNote;
          duties: vec Duty;
@@ -623,6 +658,15 @@ service : {
       Err: text;
       Ok: vec AssociationEvent;
     }) query;
+  list_child_team_assignments: (club_id: text, team_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec ChildTeamAssignment;
+    }) query;
+  list_duties: (event_id: text) -> (variant {
+                                      Err: text;
+                                      Ok: vec Duty;
+                                    }) query;
   list_event_groups: (event_id: text) ->
    (variant {
       Err: text;
@@ -704,13 +748,19 @@ service : {
       Ok: vec EventAttendance;
     });
   move_group_player: (from_group_id: text, to_group_id: text, account_id:
-   text) -> (variant {
-               Err: text;
-               Ok;
-             });
+   text, team_letter: opt text) -> (variant {
+                                      Err: text;
+                                      Ok;
+                                    });
   my_attendance: (event_id: opt text) -> (vec EventAttendance) query;
   my_child_rsvps: (event_id: opt text, club_id: opt text) ->
    (vec RsvpWithChild) query;
+  my_child_team_assignments: (child_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec ChildTeamAssignment;
+    }) query;
+  my_children: () -> (vec Child) query;
   my_rsvps: () -> (vec Rsvp) query;
   playhqTransform: (record {
                       context: blob;
@@ -726,6 +776,11 @@ service : {
       Ok: ReminderLog;
     });
   removeBulkAccessPrincipal: ("principal": principal) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
+  remove_child_team_assignment: (child_id: text, team_id: text) ->
    (variant {
       Err: text;
       Ok;
@@ -754,6 +809,11 @@ service : {
       Err: text;
       Ok: EventGroup;
     });
+  replace_event_groups: (event_id: text, groups: vec GroupSpecInput,
+   delete_existing: bool) -> (variant {
+                                Err: text;
+                                Ok: vec text;
+                              });
   save_game_player_stats: (event_id: text, team_id: text, stats:
    vec GamePlayerStatInput) -> (variant {
                                   Err: text;
@@ -808,11 +868,11 @@ service : {
       Ok: Event;
     });
   set_event_group_appearance: (group_id: text, team_letter: opt text, colour:
-   opt text, ability_band: opt text, pitch_name: opt text) ->
-   (variant {
-      Err: text;
-      Ok: EventGroup;
-    });
+   opt text, ability_band: opt text, pitch_name: opt text, team_b_colour:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: EventGroup;
+                 });
   set_group_duty: (group_id: text, duty: text, account_id: opt text) ->
    (variant {
       Err: text;
@@ -851,11 +911,12 @@ service : {
                                        Err: text;
                                        Ok: EventSeries;
                                      });
-  swap_group_players: (group_a: text, account_a: text, group_b: text,
-   account_b: text) -> (variant {
-                          Err: text;
-                          Ok;
-                        });
+  swap_group_players: (group_a: text, account_a: text, team_a: opt text,
+   group_b: text, account_b: text, team_b: opt text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   sync_active_game: (team_id: opt text, timer_state_json: text,
    pitch_state_json: text, board_session_id: text) ->
    (variant {
