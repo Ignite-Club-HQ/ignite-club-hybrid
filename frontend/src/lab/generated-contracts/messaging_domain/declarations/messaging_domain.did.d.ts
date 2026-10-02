@@ -118,6 +118,13 @@ export interface MutePreference {
   'conversation_id' : string,
   'user' : Principal,
 }
+export interface PinnedMessage {
+  'id' : string,
+  'pinned_by' : Principal,
+  'conversation_id' : string,
+  'created_at_ms' : bigint,
+  'message_id' : string,
+}
 export interface Poll {
   'id' : string,
   'closed' : boolean,
@@ -187,11 +194,13 @@ export interface State {
   'clubDmSettings' : Array<ClubDmSettings>,
   'groupRoles' : Array<GroupRole>,
   'unread' : Array<Unread>,
+  'typingPings' : Array<TypingPing>,
   'groupMetadata' : Array<GroupMetadata>,
   'clubMemberships' : Array<ClubMembership>,
   'pollVotes' : Array<PollVote>,
   'governor' : Principal,
   'conversations' : Array<Conversation>,
+  'pinnedMessages' : Array<PinnedMessage>,
   'polls' : Array<Poll>,
   'attachmentMetadata' : Array<AttachmentMetadata>,
   'dmLinks' : Array<DmLink>,
@@ -201,6 +210,13 @@ export interface State {
   'roles' : Array<RoleGrant>,
   'competitionAdmins' : Array<CompetitionAdmin>,
 }
+export interface TypingPing {
+  'conversation_id' : string,
+  'name' : string,
+  'user' : Principal,
+  'last_typed_ms' : bigint,
+}
+export interface TypingUser { 'name' : string, 'user' : Principal }
 export interface Unread {
   'conversation_id' : string,
   'count' : bigint,
@@ -332,6 +348,16 @@ export interface _SERVICE {
     { 'Ok' : MessagePage } |
       { 'Err' : string }
   >,
+  'list_pinned_messages' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PinnedMessage> } |
+      { 'Err' : string }
+  >,
+  'list_typing' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TypingUser> } |
+      { 'Err' : string }
+  >,
   'mark_read' : ActorMethod<
     [string, string],
     { 'Ok' : Receipt } |
@@ -346,6 +372,11 @@ export interface _SERVICE {
   'online_count' : ActorMethod<
     [string],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'pin_message' : ActorMethod<
+    [string, string],
+    { 'Ok' : PinnedMessage } |
       { 'Err' : string }
   >,
   'presence_heartbeat' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
@@ -433,6 +464,11 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_typing' : ActorMethod<
+    [string, boolean, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_user_messaging_settings' : ActorMethod<
     [boolean, boolean],
     { 'Ok' : null } |
@@ -455,6 +491,11 @@ export interface _SERVICE {
   >,
   'unblock_user' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'unpin_message' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
