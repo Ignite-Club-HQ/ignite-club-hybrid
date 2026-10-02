@@ -89,6 +89,12 @@ import {
   listLiveAds,
   getLiveAdEventSummary,
 } from "@/live/features/insights";
+import { listLiveSponsors } from "@/live/features/club";
+import {
+  listLiveCompetitions,
+  listLiveCompetitionEntries,
+  listLiveCompetitionMatches,
+} from "@/live/features/competitions";
 import type { EngagementBenchmarks as IcpEngagementBenchmarks, EngagementDayPoint } from "@/lab/bindings/insights_domain/declarations/insights_domain.did.js";
 
 const ALL_TEAMS = "__all__";
@@ -638,46 +644,74 @@ function SupabaseClubEngagementAnalyticsPage({
   // ---------- Sponsors ----------
   const { data: sponsorRows = [] } = useQuery({
     queryKey: ["club-engagement-sponsors", clubId, mode],
-    queryFn: async () => {
-      let q = supabase
-        .from("sponsors")
-        .select("id, name, club_id")
-        .eq("is_active", true)
-        .limit(2000);
-      if (!isPlatform) q = q.eq("club_id", clubId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          let q = supabase
+            .from("sponsors")
+            .select("id, name, club_id")
+            .eq("is_active", true)
+            .limit(2000);
+          if (!isPlatform) q = q.eq("club_id", clubId!);
+          const { data, error } = await q;
+          if (error) throw error;
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const sponsors = await listLiveSponsors(ctx, requireIcpClubId());
+          return sponsors
+            .filter((s) => s.is_active)
+            .map((s) => ({ id: s.id, name: s.name, club_id: s.club_id }));
+        },
+      }),
     enabled: queryReady && !!access?.isAdmin,
   });
 
   const { data: sponsorAnalytics = [] } = useQuery({
     queryKey: ["club-engagement-sponsor-analytics", sponsorRows.map((s) => s.id), range.start.toISOString(), range.end.toISOString()],
-    queryFn: async () => {
-      if (sponsorRows.length === 0) return [];
-      // Fetch counts per sponsor per event_type to avoid 1000-row cap on raw rows.
-      const out: { sponsor_id: string; event_type: string; n: number }[] = [];
-      for (const s of sponsorRows) {
-        const [v, c] = await Promise.all([
-          supabase.from("sponsor_analytics")
-            .select("id", { count: "exact", head: true })
-            .eq("sponsor_id", s.id)
-            .eq("event_type", "view")
-            .gte("created_at", range.start.toISOString())
-            .lte("created_at", range.end.toISOString()),
-          supabase.from("sponsor_analytics")
-            .select("id", { count: "exact", head: true })
-            .eq("sponsor_id", s.id)
-            .eq("event_type", "click")
-            .gte("created_at", range.start.toISOString())
-            .lte("created_at", range.end.toISOString()),
-        ]);
-        out.push({ sponsor_id: s.id, event_type: "view", n: v.count || 0 });
-        out.push({ sponsor_id: s.id, event_type: "click", n: c.count || 0 });
-      }
-      return out;
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          if (sponsorRows.length === 0) return [];
+          // Fetch counts per sponsor per event_type to avoid 1000-row cap on raw rows.
+          const out: { sponsor_id: string; event_type: string; n: number }[] = [];
+          for (const s of sponsorRows) {
+            const [v, c] = await Promise.all([
+              supabase.from("sponsor_analytics")
+                .select("id", { count: "exact", head: true })
+                .eq("sponsor_id", s.id)
+                .eq("event_type", "view")
+                .gte("created_at", range.start.toISOString())
+                .lte("created_at", range.end.toISOString()),
+              supabase.from("sponsor_analytics")
+                .select("id", { count: "exact", head: true })
+                .eq("sponsor_id", s.id)
+                .eq("event_type", "click")
+                .gte("created_at", range.start.toISOString())
+                .lte("created_at", range.end.toISOString()),
+            ]);
+            out.push({ sponsor_id: s.id, event_type: "view", n: v.count || 0 });
+            out.push({ sponsor_id: s.id, event_type: "click", n: c.count || 0 });
+          }
+          return out;
+        },
+        // ICP: the canister sponsor_analytics mirror exposes per-sponsor
+        // aggregate benchmarks (impressions/clicks) rather than raw events.
+        icp: async (ctx) => {
+          const ids = sponsorRows.map((s) => s.id);
+          if (ids.length === 0) return [];
+          const rows = await getLiveSponsorBenchmarks(
+            ctx,
+            ids,
+            String(range.start.getTime()),
+            String(range.end.getTime()),
+          );
+          return rows.flatMap((r: any) => [
+            { sponsor_id: r.sponsor_id, event_type: "view", n: Number(r.impressions ?? 0) },
+            { sponsor_id: r.sponsor_id, event_type: "click", n: Number(r.clicks ?? 0) },
+          ]);
+        },
+      }),
     enabled: !!access?.isAdmin && sponsorRows.length > 0,
   });
 
