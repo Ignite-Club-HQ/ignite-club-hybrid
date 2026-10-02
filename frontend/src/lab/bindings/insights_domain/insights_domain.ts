@@ -338,6 +338,7 @@ export interface insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    is_app_admin(): Promise<boolean>;
     list_active_ads(): Promise<Array<AppAd>>;
     list_admin_alerts(status: AlertStatus | null): Promise<{
         __kind__: "Ok";
@@ -704,6 +705,10 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.initialize();
         return from_candid_variant_n3(result);
+    }
+    async is_app_admin(): Promise<boolean> {
+        const result = await this.actor.is_app_admin();
+        return result;
     }
     async list_active_ads(): Promise<Array<AppAd>> {
         const result = await this.actor.list_active_ads();

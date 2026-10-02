@@ -267,6 +267,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'is_app_admin' : IDL.Func([], [IDL.Bool], ['query']),
     'list_active_ads' : IDL.Func([], [IDL.Vec(AppAd)], ['query']),
     'list_admin_alerts' : IDL.Func(
         [IDL.Opt(AlertStatus)],

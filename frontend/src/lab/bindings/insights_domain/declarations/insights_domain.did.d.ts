@@ -245,6 +245,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'is_app_admin' : ActorMethod<[], boolean>,
   'list_active_ads' : ActorMethod<[], Array<AppAd>>,
   'list_admin_alerts' : ActorMethod<
     [[] | [AlertStatus]],
