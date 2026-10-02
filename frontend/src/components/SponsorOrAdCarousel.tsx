@@ -131,6 +131,8 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
+      return withFeatureBackend("membership", {
+        supabase: async () => {
       // Get all clubs the user belongs to
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
@@ -177,6 +179,16 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
       const isProFiltered = effectiveClubFilter ? proClubIds.has(effectiveClubFilter) : hasAnyPro;
 
       return { isProFiltered, hasAnyPro, resolved: true };
+        },
+        icp: async (ctx) => {
+          // ICP mode has no per-club subscription table — Pro is a per-account
+          // entitlement on identity_access (iOS IAP only). A Pro user is Pro
+          // for every club they belong to.
+          const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText());
+          return { isProFiltered: summary.isPro, hasAnyPro: summary.isPro, resolved: true };
+        },
+      });
     },
   });
 
