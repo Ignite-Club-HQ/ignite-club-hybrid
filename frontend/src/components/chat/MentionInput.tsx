@@ -9,6 +9,11 @@ import { VaultFileCard } from "./VaultFileCard";
 import { Capacitor } from "@capacitor/core";
 import { X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveGroupMetadata } from "@/live/features/messaging";
+import { listLiveRoleGrants } from "@/live/features/membership";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 
 interface MentionInputProps {
   value: string;
@@ -493,6 +498,65 @@ export function MentionInput({
       mentionSearch,
     ],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: async (ctx) => {
+            let icpUserIds: string[] = [];
+
+            if (dmOtherUserId) {
+              icpUserIds = [dmOtherUserId, currentUser?.id].filter(Boolean) as string[];
+            } else if (clubAdminMemberUserId && clubId) {
+              // club_domain role grants give club-admin standing; club-wide
+              // grants only (team.length === 0), matching AddClubAdminSheet.
+              const grants = await listLiveRoleGrants(ctx, clubId);
+              const admins = (grants as Array<{ account_id: string; role: string; team: [] | [string] }>)
+                .filter((g) => g.role === "club_admin" && g.team.length === 0)
+                .map((g) => g.account_id);
+              icpUserIds = [...new Set([clubAdminMemberUserId, ...admins])];
+            } else if (groupId) {
+              // messaging_domain group metadata carries members directly —
+              // the mini-league / manual-vs-role-derived branches below have
+              // no canister equivalent (mini leagues and group_members are
+              // Supabase-only), so group mentions are simply "every member".
+              try {
+                const metadata = await getLiveGroupMetadata(ctx, groupId);
+                icpUserIds = metadata.members.map((p) => p.toText());
+              } catch {
+                icpUserIds = [];
+              }
+            } else if (teamId && clubId) {
+              const grants = await listLiveRoleGrants(ctx, clubId);
+              icpUserIds = [...new Set(
+                (grants as Array<{ account_id: string; role: string; team: [] | [string] }>)
+                  .filter((g) => g.team[0] === teamId)
+                  .map((g) => g.account_id),
+              )];
+            } else if (clubId) {
+              const grants = await listLiveRoleGrants(ctx, clubId);
+              icpUserIds = [...new Set(
+                (grants as Array<{ account_id: string; role: string; team: [] | [string] }>).map((g) => g.account_id),
+              )];
+            }
+
+            if (icpUserIds.length === 0) return [] as SuggestedUser[];
+
+            const profiles = await listLiveProfilesByIds(ctx, icpUserIds);
+            const needle = mentionSearch.toLowerCase();
+            return profiles
+              .filter((p) => p.display_name && p.display_name.toLowerCase().includes(needle))
+              .slice(0, 5)
+              .map((p): SuggestedUser => ({
+                id: p.account_id,
+                display_name: p.display_name,
+                avatar_url: p.avatar_ref?.[0] ?? null,
+              }));
+          },
+        });
+      }
+
       let userIds: string[] = [];
 
       if (dmOtherUserId) {

@@ -160,7 +160,7 @@ export default function JoinClubPage() {
             let clubName: string | undefined;
             try {
               const profile = await getLiveClubProfile(ctx, accepted.club_id);
-              clubName = profile?.name;
+              clubName = profile[0]?.name;
             } catch {
               // Club profile lookup is best-effort for the success toast only.
             }

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLivePollResults } from "@/live/features/messaging";
 
 interface PollAttachmentPreviewProps {
   pollId: string;
@@ -16,15 +18,29 @@ export function PollAttachmentPreview({ pollId, onRemove, disabled }: PollAttach
   const { data } = useQuery({
     queryKey: ["poll-preview", pollId],
     queryFn: async () => {
-      const [pollRes, optsRes] = await Promise.all([
-        supabase.from("polls").select("question, allow_multiple").eq("id", pollId).maybeSingle(),
-        supabase.from("poll_options").select("id", { count: "exact", head: true }).eq("poll_id", pollId),
-      ]);
-      return {
-        question: pollRes.data?.question ?? "Poll",
-        allowMultiple: pollRes.data?.allow_multiple ?? false,
-        optionCount: optsRes.count ?? 0,
-      };
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const [pollRes, optsRes] = await Promise.all([
+            supabase.from("polls").select("question, allow_multiple").eq("id", pollId).maybeSingle(),
+            supabase.from("poll_options").select("id", { count: "exact", head: true }).eq("poll_id", pollId),
+          ]);
+          return {
+            question: pollRes.data?.question ?? "Poll",
+            allowMultiple: pollRes.data?.allow_multiple ?? false,
+            optionCount: optsRes.count ?? 0,
+          };
+        },
+        // messaging_domain's poll results have no "allow multiple" flag —
+        // canister polls are always single-choice, so this is always false.
+        icp: async (ctx) => {
+          const results = await getLivePollResults(ctx, pollId);
+          return {
+            question: results.poll.question ?? "Poll",
+            allowMultiple: false,
+            optionCount: results.poll.options?.length ?? 0,
+          };
+        },
+      });
     },
     staleTime: 60_000,
   });

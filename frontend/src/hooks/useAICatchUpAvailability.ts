@@ -81,7 +81,7 @@ export function useAICatchUpAvailability(
           const grants = await getLiveMyRoleGrants(ctx);
           const isAdmin = grants.some((g) =>
             g.role === "app_admin" ||
-            ((g.role === "club_admin" || g.role === "committee_member") && g.club === clubId)
+            ((g.role === "club_admin" || g.role === "committee_member") && g.club?.[0] === clubId)
           );
           return !isAdmin;
         },

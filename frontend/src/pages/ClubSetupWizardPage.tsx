@@ -35,7 +35,8 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams } from "@/live/features/club";
 import { candidOpt } from "@/live/features/candid";
-import { addLiveRoleGrant, createLivePendingInvite } from "@/live/features/membership";
+import { addLiveRoleGrant } from "@/live/features/membership";
+import { createLivePendingInvite } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 import {
   StepIntro,
@@ -147,12 +148,13 @@ export default function ClubSetupWizardPage() {
           ]),
           supabase: async () => { throw new Error("unreachable"); },
         });
-        if (!profile) return null;
+        if (profile.length === 0) return null;
+        const profileVal = profile[0];
         return {
           kind: "club",
-          name: profile.name,
+          name: profileVal.name,
           contact_email: null,
-          logo_url: profile.logo_url?.[0] ?? null,
+          logo_url: profileVal.logo_url?.[0] ?? null,
           theme_primary_h: null,
           theme_primary_s: null,
           theme_primary_l: null,
@@ -174,7 +176,7 @@ export default function ClubSetupWizardPage() {
           show_logo_in_header: true,
           show_name_in_header: true,
           logo_only_mode: false,
-          theme_enabled: settings?.theme_enabled ?? false,
+          theme_enabled: settings[0]?.theme_enabled ?? false,
           primary_sponsor_id: null,
         } as SetupClub;
       }

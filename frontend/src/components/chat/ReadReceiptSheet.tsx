@@ -10,6 +10,7 @@ import { Check, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import type { ReaderInfo } from "@/hooks/useMessageReads";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type MessageType = "team" | "club" | "broadcast" | "group" | "dm" | "club_admin";
 
@@ -54,8 +55,13 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
   // Use prop readers if available, otherwise use fetched readers
   const readers = propReaders.length > 0 ? propReaders : fetchedReaders;
 
+  // NEEDS-CANISTER: messaging_domain has no message_reads list method
+  // (Supabase `message_reads` has no canister counterpart) — silently
+  // skip the fetch for Internet Identity accounts instead of throwing or
+  // showing an "unavailable" state; the sheet just renders with no readers.
   useEffect(() => {
     if (!open || !messageId) return;
+    if (resolveAuthBackend() === "icp") return;
 
     const fetchData = async () => {
       setLoading(true);
