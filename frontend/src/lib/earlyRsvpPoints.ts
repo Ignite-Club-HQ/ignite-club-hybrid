@@ -6,7 +6,7 @@ import { sendGamificationNotification } from "@/lib/gamificationNotify";
 import { icpCallerHasProEntitlement } from "@/lib/icpPointsPro";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { awardLivePoints, subjectFor } from "@/live/features/points";
+import { awardLivePoints, awardLivePointsOnce, getLiveClubPointsSettings, subjectFor } from "@/live/features/points";
 
 const EARLY_RSVP_DAYS_THRESHOLD = 3;
 const EARLY_RSVP_POINTS = 5;
@@ -35,15 +35,24 @@ export async function awardEarlyRsvpPoints({
 }: AwardEarlyRsvpPointsParams): Promise<boolean> {
   try {
     const pointsOnIcp = isFeatureRoutedToIcp("points");
+    // Club-custom points display name, resolved on the ICP branch from the
+    // club_points_domain settings row (the Supabase branch reads
+    // clubs.points_display_name further down).
+    let icpPointsName: string | null = null;
 
     if (pointsOnIcp) {
-      // ICP branch: no per-club subscription row exists — the caller's own
-      // identity_access entitlement is the Pro signal (same simplification
-      // as useClubProAccess). An II principal has no Supabase session, so
-      // the club_subscriptions read below must never run for them.
-      // NEEDS-CANISTER: the club-level disable_points_system kill switch has
-      // no club_domain settings field yet.
+      // ICP branch: the caller's own identity_access entitlement is the Pro
+      // signal (same simplification as useClubProAccess — an II principal
+      // has no Supabase session, so the club_subscriptions read below must
+      // never run for them). The club-level kill switch and display name
+      // come from club_points_domain's per-club settings.
       if (!(await icpCallerHasProEntitlement())) return false;
+      const icpSettings = await withFeatureBackend("points", {
+        supabase: async () => null,
+        icp: (ctx) => getLiveClubPointsSettings(ctx, clubId),
+      });
+      if (icpSettings?.disabled) return false;
+      icpPointsName = icpSettings?.display_name[0] ?? null;
     } else {
       // Check if club has Pro subscription and points system enabled
       const { data: clubSub } = await supabase
@@ -129,7 +138,11 @@ export async function awardEarlyRsvpPoints({
           return newPoints || 0;
         },
         icp: async (ctx) => {
-          const entry = await awardLivePoints(
+          // award_points_once dedups atomically on (club, subject,
+          // action_type, scope_id) — the canister-side counterpart of the
+          // early_rsvp_points_awarded optimistic lock above, covering
+          // cross-day and cancelled-and-rebooked repeats alike.
+          const entry = await awardLivePointsOnce(
             ctx,
             clubId,
             subjectFor({ userId: childId ? null : userId, childId }),
@@ -163,10 +176,9 @@ export async function awardEarlyRsvpPoints({
       description: `Early RSVP bonus (${daysUntilEvent} days before event)`,
     });
 
-    // Get club's custom points name.
-    // NEEDS-CANISTER (ICP branch): club_domain has no points_display_name
-    // setting, so ICP notifications use the default "reward points".
-    let pointsName = 'reward points';
+    // Get club's custom points name (ICP: already resolved from the
+    // club_points_domain settings above).
+    let pointsName = icpPointsName ?? 'reward points';
     if (!pointsOnIcp) {
       const { data: clubData } = await supabase
         .from("clubs")

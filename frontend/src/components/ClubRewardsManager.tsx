@@ -45,7 +45,9 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import {
   createLiveClubReward,
   deleteLiveClubReward,
+  getLiveClubPointsSettings,
   listLiveClubRewards,
+  saveLiveClubPointsSettings,
   updateLiveClubReward,
 } from "@/live/features/points";
 
@@ -108,13 +110,25 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   useQuery({
     queryKey: ["club-points-name", clubId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("clubs")
-        .select("points_display_name, points_icon_url")
-        .eq("id", clubId)
-        .single();
-      const name = (data as any)?.points_display_name || "Reward Points";
-      const iconUrl = (data as any)?.points_icon_url || null;
+      const { name, iconUrl } = await withFeatureBackend("points", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("clubs")
+            .select("points_display_name, points_icon_url")
+            .eq("id", clubId)
+            .single();
+          return {
+            name: (data as any)?.points_display_name || "Reward Points",
+            iconUrl: (data as any)?.points_icon_url || null,
+          };
+        },
+        icp: async (ctx) => {
+          // NEEDS-CANISTER: points_icon_url lives on the Supabase clubs row
+          // only — the ICP branch has no custom icon yet.
+          const settings = await getLiveClubPointsSettings(ctx, clubId);
+          return { name: settings?.display_name[0] || "Reward Points", iconUrl: null };
+        },
+      });
       setCustomPointsName(name);
       setPointsIconUrl(iconUrl);
       return { name, iconUrl };
@@ -124,15 +138,28 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Fetch club subscription settings
   const { data: clubSubscription } = useQuery({
     queryKey: ["club-subscription-rewards", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("club_subscriptions")
-        .select("disable_team_pom_rewards, disable_points_system")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () =>
+      withFeatureBackend("points", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("club_subscriptions")
+            .select("disable_team_pom_rewards, disable_points_system")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          // disable_team_pom_rewards has no canister equivalent yet (the
+          // POM toggle below is hidden for II members); map the points
+          // kill switch onto the club_points_domain settings row.
+          const settings = await getLiveClubPointsSettings(ctx, clubId);
+          return {
+            disable_team_pom_rewards: null,
+            disable_points_system: settings?.disabled ?? false,
+          } as { disable_team_pom_rewards: boolean | null; disable_points_system: boolean | null };
+        },
+      }),
   });
 
   // Toggle team POM rewards setting
@@ -158,11 +185,21 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Toggle points system setting
   const togglePointsSystemMutation = useMutation({
     mutationFn: async (disabled: boolean) => {
-      const { error } = await supabase
-        .from("club_subscriptions")
-        .update({ disable_points_system: disabled })
-        .eq("club_id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_subscriptions")
+            .update({ disable_points_system: disabled })
+            .eq("club_id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fetch-modify-save: the canister stores name + kill switch as one
+          // row, so preserve the current display name while toggling.
+          const current = await getLiveClubPointsSettings(ctx, clubId);
+          await saveLiveClubPointsSettings(ctx, clubId, current?.display_name[0] ?? null, disabled);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
@@ -642,7 +679,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         </div>
       </div>
 
-      {/* Team Override Settings */}
+      {/* Team Override Settings — NEEDS-CANISTER: disable_team_pom_rewards
+          has no canister equivalent, so the lock is hidden for II members
+          rather than failing closed on tap. */}
+      {resolveAuthBackend() !== "icp" && (
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
@@ -661,6 +701,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           />
         </div>
       </Card>
+      )}
 
       {/* Points System Toggle */}
       <Card className="p-4 space-y-4">
@@ -705,13 +746,28 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             onIconSelect={async (url) => {
               setPointsIconUrl(url);
               // Auto-save icon selection immediately
-              const { error } = await supabase
-                .from("clubs")
-                .update({ 
-                   points_display_name: customPointsName || 'Reward Points',
-                   points_icon_url: url,
-                } as any)
-                .eq("id", clubId);
+              const error = await withFeatureBackend("points", {
+                supabase: async () => {
+                  const { error } = await supabase
+                    .from("clubs")
+                    .update({
+                       points_display_name: customPointsName || 'Reward Points',
+                       points_icon_url: url,
+                    } as any)
+                    .eq("id", clubId);
+                  return error;
+                },
+                // ICP: icon upload is already hidden for II members, so this
+                // only ever saves the display name (the canister stores name
+                // + kill switch; preserve the current disabled state).
+                icp: async (ctx) => {
+                  const current = await getLiveClubPointsSettings(ctx, clubId);
+                  await saveLiveClubPointsSettings(
+                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                  );
+                  return null;
+                },
+              });
               if (!error) {
                 queryClient.invalidateQueries({ queryKey: ["user-clubs"] });
                 queryClient.invalidateQueries({ queryKey: ["points-display-name"] });
@@ -729,13 +785,25 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
             disabled={savingPointsName}
             onClick={async () => {
               setSavingPointsName(true);
-              const { error } = await supabase
-                .from("clubs")
-                .update({ 
-                   points_display_name: customPointsName || 'Reward Points',
-                   points_icon_url: pointsIconUrl,
-                } as any)
-                .eq("id", clubId);
+              const error = await withFeatureBackend("points", {
+                supabase: async () => {
+                  const { error } = await supabase
+                    .from("clubs")
+                    .update({
+                       points_display_name: customPointsName || 'Reward Points',
+                       points_icon_url: pointsIconUrl,
+                    } as any)
+                    .eq("id", clubId);
+                  return error;
+                },
+                icp: async (ctx) => {
+                  const current = await getLiveClubPointsSettings(ctx, clubId);
+                  await saveLiveClubPointsSettings(
+                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                  );
+                  return null;
+                },
+              });
               setSavingPointsName(false);
               if (error) {
                 toast({ title: "Failed to save", variant: "destructive" });

@@ -37,6 +37,9 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubPointsSettings } from "@/live/features/points";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
@@ -783,14 +786,43 @@ export default function HomePage() {
       const clubIds = userMemberships?.clubIds || [];
       if (clubIds.length === 0) return [];
 
-      const { data: clubs } = await supabase
-        .from("clubs")
-        .select("id, name, sport, points_display_name, points_icon_url")
-        .in("id", clubIds)
-        .is("deleted_at", null)
-        .order("name");
-
-      return clubs || [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubs } = await supabase
+            .from("clubs")
+            .select("id, name, sport, points_display_name, points_icon_url")
+            .in("id", clubIds)
+            .is("deleted_at", null)
+            .order("name");
+          return clubs || [];
+        },
+        icp: async (ctx) => {
+          // Club rows from club_domain; points display name from
+          // club_points_domain when the points feature is routed (otherwise
+          // the default "Reward Points" applies). points_icon_url has no
+          // canister equivalent yet.
+          const rows = await Promise.all(
+            clubIds.map(async (id) => {
+              const profile = await getLiveClubProfile(ctx, id);
+              let pointsDisplayName: string | null = null;
+              if (isFeatureRoutedToIcp("points")) {
+                const settings = await getLiveClubPointsSettings(ctx, id).catch(() => null);
+                pointsDisplayName = settings?.display_name[0] ?? null;
+              }
+              return {
+                id,
+                name: profile?.name ?? "",
+                sport: profile?.sport ?? null,
+                points_display_name: pointsDisplayName,
+                points_icon_url: null,
+              };
+            }),
+          );
+          return rows
+            .filter((r) => r.name !== "")
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      });
     },
     enabled: !!user && !!userMemberships && (userMemberships?.clubIds?.length ?? 0) > 0,
     staleTime: 5 * 60 * 1000,
