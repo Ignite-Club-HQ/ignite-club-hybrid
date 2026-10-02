@@ -705,3 +705,88 @@ export async function leaveLiveGroup(ctx: FeatureBackendContext, conversationId:
   const raw = await unwrapCandid(actor.leave_group(conversationId), "Leave group");
   return toLiveGroupMetadata(raw);
 }
+
+// ---------------------------------------------------------------------------
+// Typing indicators & pinned messages.
+// ---------------------------------------------------------------------------
+
+export interface LiveTypingUser {
+  user: Principal;
+  name: string;
+}
+
+/** Record (or clear) the caller's typing state in a conversation. */
+export async function setLiveTyping(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  isTyping: boolean,
+  name: string,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_typing(conversationId, isTyping, name), "Set typing");
+}
+
+/** Currently-typing users in a conversation (recent pings only, canister-side TTL). */
+export async function listLiveTyping(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+): Promise<LiveTypingUser[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_typing(conversationId), "List typing");
+  return raw.map((entry) => ({ user: entry.user, name: entry.name }));
+}
+
+export interface LivePinnedMessage {
+  id: string;
+  conversationId: string;
+  messageId: string;
+  pinnedBy: Principal;
+  createdAtMs: number;
+}
+
+function toLivePinnedMessage(raw: {
+  id: string;
+  conversation_id: string;
+  message_id: string;
+  pinned_by: Principal;
+  created_at_ms: bigint;
+}): LivePinnedMessage {
+  return {
+    id: raw.id,
+    conversationId: raw.conversation_id,
+    messageId: raw.message_id,
+    pinnedBy: raw.pinned_by,
+    createdAtMs: Number(raw.created_at_ms),
+  };
+}
+
+export async function pinLiveMessage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  messageId: string,
+): Promise<LivePinnedMessage> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.pin_message(conversationId, messageId), "Pin message");
+  return toLivePinnedMessage(raw);
+}
+
+export async function unpinLiveMessage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  messageId: string,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unpin_message(conversationId, messageId), "Unpin message");
+}
+
+export async function listLivePinnedMessages(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+): Promise<LivePinnedMessage[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(
+    actor.list_pinned_messages(conversationId),
+    "List pinned messages",
+  );
+  return raw.map(toLivePinnedMessage);
+}

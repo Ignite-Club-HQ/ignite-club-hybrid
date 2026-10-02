@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { SubscriptionLegalLinks } from "@/components/SubscriptionLegalLinks";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useAuth } from "@/hooks/useAuth";
 
 const STORAGE_PACKS = [
   { id: '10gb', gb: 10, priceMonthly: 4.99, priceAnnual: 49.99, popular: false },
@@ -62,6 +63,15 @@ export function StoragePurchaseDialog({
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
   const [downgradeTarget, setDowngradeTarget] = useState<number>(0);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isIcpMode = resolveAuthBackend() === "icp";
+  const isNative = isNativePlatform();
+  // In ICP mode, storage purchases only work via iOS/Android native IAP
+  // (session-free identity_access redeem_entitlement path). On ICP web/
+  // desktop there is no Stripe checkout and no IAP, so the purchase
+  // option is hidden entirely rather than ever showing a "not available"
+  // error as the only state.
+  const isIcpWebUnavailable = isIcpMode && !isNative;
 
   // Check if Stripe is configured
   const { data: hasStripeConfig } = useQuery({
@@ -86,16 +96,17 @@ export function StoragePurchaseDialog({
 
       return !!appConfig;
     },
-    enabled: open,
+    enabled: open && !isIcpMode,
   });
 
   const purchaseMutation = useMutation({
     mutationFn: async (packType: string) => {
-      // NEEDS-DECISION: Stripe checkout cannot move to an ICP canister. II
-      // sessions have no Supabase session, so block before invoking rather
-      // than letting the edge function 401.
-      if (resolveAuthBackend() === "icp") {
-        throw new Error("Storage purchases are not available for this sign-in method yet.");
+      // Stripe checkout cannot move to an ICP canister, and II sessions have
+      // no Supabase session for the edge function to authorize. This web/
+      // desktop ICP path is never reachable from the UI (the purchase
+      // section is hidden via isIcpWebUnavailable), but guard defensively.
+      if (isIcpMode) {
+        throw new Error("Storage purchases via web checkout are not available in this mode.");
       }
       const { data, error } = await supabase.functions.invoke('create-storage-checkout', {
         body: {
@@ -308,18 +319,55 @@ export function StoragePurchaseDialog({
         throw new Error("Purchase was cancelled");
       }
 
-      const { data, error } = await supabase.functions.invoke("verify-iap-receipt", {
-        body: {
-          platform: Capacitor.getPlatform(),
-          transactionId: purchaseResult.transactionId,
-          productId,
-          entityId: clubId,
-          entityType: "club",
-          receipt: purchaseResult.receipt || purchaseResult.purchaseToken || purchaseResult.transactionId,
-        },
-      });
+      const receiptData = purchaseResult.receipt || purchaseResult.purchaseToken || purchaseResult.transactionId;
 
-      if (error || data?.error) throw new Error(data?.error || "Verification failed");
+      if (isIcpMode) {
+        // Internet Identity users have no Supabase session — verify the
+        // receipt via the session-free ICP attestation function, then
+        // submit the attestation to the identity_access canister for
+        // redemption (same pattern as useInAppPurchase.ts).
+        if (!user) throw new Error("No signed-in Internet Identity session.");
+        const principal = user.id;
+        const { data, error } = await supabase.functions.invoke("verify-iap-receipt-icp", {
+          body: {
+            principal,
+            product_id: productId,
+            transaction_id: purchaseResult.transactionId,
+            receipt_data: receiptData,
+          },
+        });
+
+        if (error || data?.error) throw new Error(data?.error || "Verification failed");
+
+        const [{ getCurrentInternetIdentity }, { redeemIcpEntitlement }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityEntitlements"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) {
+          throw new Error("No Internet Identity session available.");
+        }
+        await redeemIcpEntitlement(identity, principal, {
+          productId,
+          transactionId: purchaseResult.transactionId,
+          expiresAtMs: Number(data.expires_at_ms),
+          source: String(data.source),
+          signatureHex: String(data.signature_hex),
+        });
+      } else {
+        const { data, error } = await supabase.functions.invoke("verify-iap-receipt", {
+          body: {
+            platform: Capacitor.getPlatform(),
+            transactionId: purchaseResult.transactionId,
+            productId,
+            entityId: clubId,
+            entityType: "club",
+            receipt: receiptData,
+          },
+        });
+
+        if (error || data?.error) throw new Error(data?.error || "Verification failed");
+      }
 
       queryClient.invalidateQueries({ queryKey: ["purchased-storage", clubId] });
       queryClient.invalidateQueries({ queryKey: ["club-subscription", clubId] });
@@ -529,6 +577,8 @@ export function StoragePurchaseDialog({
             )}
 
             {/* Billing toggle */}
+            {!isIcpWebUnavailable && (
+            <>
             <div className="flex items-center justify-between py-1">
               <Label htmlFor="annual-billing" className="text-xs font-medium">Annual billing</Label>
               <div className="flex items-center gap-2">
@@ -632,6 +682,8 @@ export function StoragePurchaseDialog({
             <p className="text-[10px] text-center text-muted-foreground leading-relaxed">
               Billed as a recurring subscription. Cancel anytime.
             </p>
+            </>
+            )}
 
             <SubscriptionLegalLinks />
           </div>
