@@ -45,7 +45,9 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import {
   createLiveClubReward,
   deleteLiveClubReward,
+  getLiveClubPointsSettings,
   listLiveClubRewards,
+  saveLiveClubPointsSettings,
   updateLiveClubReward,
 } from "@/live/features/points";
 
