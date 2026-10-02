@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const REFRESH_EVENT = "club-free-usage:refresh";
 
@@ -142,6 +143,11 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<ClubFreeUsage | null> => {
+      // NEEDS-CANISTER: the Free-tier usage meter (get_club_free_usage RPC)
+      // has no canister equivalent. Internet Identity users must never hit
+      // Supabase, so the meter stays unresolved (callers treat null as
+      // "no cap info") until a usage-counter canister exists.
+      if (resolveAuthBackend() === "icp") return null;
       const { data, error } = await supabase.rpc("get_club_free_usage", {
         _club_id: clubId!,
       });

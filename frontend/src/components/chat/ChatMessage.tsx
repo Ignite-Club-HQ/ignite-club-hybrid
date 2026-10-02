@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { deleteLiveMessage } from "@/live/features/messaging";
+import { deleteLiveMessage, toggleLiveReaction } from "@/live/features/messaging";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Clock, Megaphone, ImagePlus, Check, Loader2, Forward } from "lucide-react";
 import {
@@ -393,7 +393,14 @@ function ChatMessageInner({
 
       let userId: string;
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
+        // The canister's toggle_reaction implements add/swap/remove in one
+        // call; refresh the thread from the canister after toggling.
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: async (ctx) => { await toggleLiveReaction(ctx, id, reactionType); },
+        });
+        void queryClient.invalidateQueries({ queryKey });
+        return;
       }
       try {
         userId = await ensureFreshSession();
@@ -497,7 +504,16 @@ function ChatMessageInner({
   const removeReactionMutation = useMutation({
     mutationFn: async (reactionId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
-        throw new Error("Reactions aren't available yet on the Internet Identity messaging backend.");
+        // Removing a reaction on the canister is toggling the same emoji.
+        const existing = getCurrentReactions().find((r) => r.id === reactionId);
+        if (existing) {
+          await withFeatureBackend("messaging", {
+            supabase: async () => {},
+            icp: async (ctx) => { await toggleLiveReaction(ctx, id, existing.reaction_type); },
+          });
+        }
+        void queryClient.invalidateQueries({ queryKey });
+        return;
       }
       if (useIcpLab) return;
       const doDelete = async () => {

@@ -159,12 +159,10 @@ export function TodaysClassesDashboard({ clubId }: TodaysClassesDashboardProps) 
                   </div>
                 </div>
                 <div className="shrink-0">
-                  {attendanceUnavailable ? (
-                    <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
-                      <AlertCircle className="h-3 w-3" />
-                      Not available
-                    </Badge>
-                  ) : hasAttendance ? (
+                  {/* Attendance marking formally stays on Supabase (RSVP-
+                      derived); in ICP mode the badge is hidden rather than
+                      showing a degraded "not available" state. */}
+                  {attendanceUnavailable ? null : hasAttendance ? (
                     <Badge variant="default" className="text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-600">
                       <CheckCircle2 className="h-3 w-3" />
                       {att.present}/{att.total}

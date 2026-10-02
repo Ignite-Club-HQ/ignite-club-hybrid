@@ -223,8 +223,12 @@ export default function MemberSubscriptionPaymentsManager({
 
   // Check if current user has paid for current tab type
   const currentUserPayment = payments.find(p => p.user_id === user?.id);
-  const canPayOnline = clubPaymentSettings?.member_payments_enabled && 
-    clubPaymentSettings?.member_subscription_amount && 
+  // Non-IAP payments are Supabase-only by design; hide the pay-online UI
+  // entirely for Internet Identity users instead of erroring on click.
+  const isIcp = resolveAuthBackend() === "icp";
+  const canPayOnline = !isIcp &&
+    clubPaymentSettings?.member_payments_enabled &&
+    clubPaymentSettings?.member_subscription_amount &&
     clubPaymentSettings.member_subscription_amount > 0;
 
   // Create a map of entry_id -> payment record for quick lookup
