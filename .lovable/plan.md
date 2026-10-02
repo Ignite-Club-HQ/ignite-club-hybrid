@@ -1,75 +1,39 @@
-# Close all remaining NEEDS-CANISTER gaps (2026-10-02)
+# Wire sensitive data into the PII canister
 
-Goal: every NEEDS-CANISTER item recorded in frontend/roadmap.md gets a real canister
-method plus frontend wiring. No "not available" states, no faked empty reads.
+## Problem
 
-Conventions (apply to every workstream):
-- moc 1.16.1 at /root/.cache/mops/moc/1.16.1/moc (reinstall via `bun add -g ic-mops &&
-  mops toolchain use moc 1.16.1` if /root was wiped); per-canister `cd backend/<c> && mops install`.
-- Compile: `moc $(mops sources) --enhanced-migration src/backend/migrations --check src/main.mo`.
-- New state: one self-contained timestamped migration under src/backend/migrations/, data-preserving.
-- Regenerate .did (`--idl`, copy over <c>.did) and bindings via icp-bindgen into BOTH
-  frontend/src/lab/bindings/<c>/ and frontend/src/lab/generated-contracts/<c>/.
-- Gates: `node frontend/scripts/check-candid-drift.mjs`, typegate
-  `node scripts/check-product-type-errors.mjs` (from frontend/), relevant vitest files.
-- Frontend wiring via withFeatureBackend(<feature key>) in frontend/src/live/features/*;
-  feature keys in frontend/src/live/featureBackend.ts. II users have user.id = principal.
-- candid opt maps to [] | [T]; unwrap with candidOpt helpers in frontend/src/live/features/candid.ts.
-- Update frontend/roadmap.md marking each item DONE.
+`pii_access_control` is built (encrypted field storage, per-field reader grants, verified guardian relationships, audit trail) but **nothing writes to it**: `registerLivePii` has zero call sites. Child names, profile display names, and invite emails arrive in ICP mode and are either dropped or stored as plaintext in other canisters. Separately, `createLiveChildForParentOnTeam` passes its arguments in the wrong order, so a child's name lands in the canister's `team_id` slot.
 
-## Workstream A — identity_access: batch profile lookup
-- Add `get_profiles_by_ids(ids: vec text) -> vec Profile` query.
-- Wire useProfiles.ts + lib/profileCache.ts (fetchAndCacheProfiles/prefetchProfiles) to ICP.
+## Key design decision
 
-## Workstream B — club_domain: seasons, team history, invite stats
-- Season record + store: `list_seasons(club_id)`, `get_current_season(club_id)`, save/create
-  (draft/active/closed/archived statuses, distinct from enrolment "terms").
-- `profile_team_history(profile_id) -> vec {membership_id; team_id; team_name; team_level_age;
-  club_id; club_name; season_id; season_name; season_status; season_start_date; season_end_date; joined_at}`.
-- `list_accepted_invites(club_id, since_ms, until_ms)` and `invite_stats(club_id, since_ms, until_ms)`.
-- Wire useClubSeasons.ts, useSeasonAnalytics.ts, useProfileTeamHistory.ts, and
-  ClubEngagementAnalyticsPage newMembers/prevNewMembers/inviteStats.
+No canister changes are needed. The PII canister's existing authorization covers every flow:
 
-## Workstream C — competition_domain: EOI submissions + engagement summary
-- New EOI submission entity (migration) + reads: list submissions, stats, team suggestions,
-  my pending EOIs; mutations: confirm_eoi_placement, claim_eoi_by_token, update submission,
-  update_eoi_status, assign_eoi_team, delete_eoi, allocate_eoi_to_team, resend/bulk-resend invite.
-- `competition_engagement_summary(competition_ids, since_ms, until_ms) -> {active_teams,
-  total_matches, results_entered, broadcasts}` (broadcasts may report 0 with a comment —
-  broadcast records stay Supabase by design).
-- Wire useMyEois.ts, useEoiAdmin.ts, useEoiPolish.ts, useEoiTeamBuilder.ts and the
-  CompetitionPanel/engagement consumers.
+- `register_pii` requires the caller to be the record's **domain owner**. When an admin creates a child or an invite, the admin (the club, as data controller) is registered as the owner. When a user saves their own profile, they are the owner.
+- `grant_pii_read` lets the owner give a parent read access to their child's name.
+- `add_guardian_relationship` self-registers when the parent accepts an invite (already wired in `acceptParentInvite.ts`).
 
-## Workstream D — events_domain: pitch board + game state
-- `pitch_board_settings` record + get/save by team_id (rotation_speed, disable_position_swaps,
-  disable_batch_subs, rotate_gk_at_halftime, minutes_per_half, max_spread_minutes, team_size,
-  formation, show_match_header, show_lineup_picker).
-- Game stats: save_game_summary / save_game_player_stats (replace-by-event-id) +
-  get_game_summary / list_game_player_stats.
-- Game results: save_game_result (upsert by event_id) + get_game_result.
-- Active games: sync_active_game / deactivate_active_game / get_active_game.
-- Per-viewer event views: admin per-viewer list + per-user viewed-ids list.
-- Event membership check (children/child_guardians based RSVP gating) so useEventMembership
-  no longer fails open.
-- Wire usePitchSettings.ts, useGameStats.ts, useSaveGameResult.ts, useActiveGameSync.ts,
-  useEventViews.ts, useEventMembership.ts. Game-stats email stays Supabase (allowed exception).
+Conventions (unchanged from existing reads): child name → `pii_id = child id`, `field_id = "name"`. New: invite email → `pii_id = invite id`, `field_id = "email"`; profile display name → `pii_id = user principal text`, `field_id = "display_name"`.
 
-## Workstream E — insights_domain: photo counters + activity logs
-- `count_photos(club_id, since_ms, until_ms)` + `photo_engagement_totals(photo_ids)`.
-- `list_user_activity(club_id?, since_ms, until_ms)` per-session page-view log
-  (user_id, page_path, page_label, session_id, started_at_ms, duration_seconds).
-- Wire ClubEngagementAnalyticsPage photos/photoEngagement and UserAnalyticsTab activityData.
+All PII writes are **best-effort**: a failure is logged, never blocks the main flow, and never surfaces a degraded-UI state.
 
-## Workstream F — mini_league_domain: guardian status + child cleanup + join parity
-- Pending-guardian status lookup (children.parent_id + guardian count) for ManagePlayersDialog.
-- Cascade cleanup on player delete: children, child_mini_league_assignments, child_team_assignments.
-- Parent-join notification parity (AddSecondParentDialog fan-out parity with Supabase path).
-- Wire ManagePlayersDialog pending-status branch and delete cascade.
+## Changes
 
-## Workstream G — events_domain: PlayHQ fixture reads
-- PlayHQ competition/fixture reads via HTTPS outcall (import/materialise stays Supabase-only,
-  as previously decided); wire PlayHQTeamLinkCard fixture reads.
+1. **Fix the argument-order bug** (`frontend/src/live/features/club.ts`)
+   - `createLiveChildForParentOnTeam(ctx, clubId, teamId, parent)` — match the canister signature `(club_id, team_id, parent)`; drop the name argument (names no longer go to club_domain at all).
+   - Update both call sites: `AddPlayerToParentSheet.tsx` (add a `clubId` prop, supplied by `TeamDetailPage` from `team.club_id`) and `useAddExistingTeamMemberMutation.ts` (already has `clubId`).
 
-## Final gate (after all workstreams)
-- Full drift check, typegate, full vitest suite in 3 shards, preview build.
-- Roadmap updated; remaining = deploy canisters + Placement Settings IDs + live II test.
+2. **Child names → PII canister** at every ICP child-creation point:
+   - `AddPlayerToParentSheet.tsx`, `useAddExistingTeamMemberMutation.ts`, `AddSecondParentDialog.tsx` (`ensureChildId` ICP branch): after the child is created, register the name with the caller as owner and grant read to the parent principal.
+
+3. **Guardian read grants** wherever a guardian link is created in ICP mode:
+   - `useAddExistingTeamMemberMutation.ts` (existing-child link path), `AddSecondParentDialog.tsx` (link-existing path), `ManageGuardiansDialog.tsx` (add-guardian path): after `linkLiveGuardian`, grant the new guardian read on the child's `name` field (best-effort; succeeds when the caller owns the record or is a verified guardian).
+
+4. **Invite emails → PII canister**: inside `createLivePendingInvite` (`club.ts`), after the invite is created, register the invitee email as `pii_id = invite id`, `field_id = "email"`, owner = the inviting caller. Covers all invite call sites at once.
+
+5. **Profile display names → PII canister**: `EditProfilePage.tsx` ICP branch — after `saveIcpIdentityProfile`, register the display name with the user as their own owner. (identity_access keeps its own copy for now; moving reads off it is a separate step.)
+
+## Verification
+
+- Typecheck clean; candid drift check stays 17/17 (no .did changes).
+- Update/add unit tests for the changed call sites (`AddPlayerToParentSheet.test.tsx` and any affected mutation tests); run the touched test files.
+- Update `roadmap.md` and `frontend/AGENTS.md` with the PII wiring rule and the pii_id/field_id conventions.
