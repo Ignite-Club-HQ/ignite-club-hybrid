@@ -40,3 +40,10 @@
 - Canisters: club_domain, events_domain, notification_queue compile clean (moc 1.16.1, --enhanced-migration); .did + bindings regenerated in both dirs; candid drift 17/17 green. Sandbox toolchain was wiped mid-pass; reinstalled per backend/AGENTS.md (bun add -g ic-mops && mops toolchain use moc 1.16.1).
 - Gates: tsgo 0 errors; full vitest suite 516 files / 4,706 tests green.
 - Remaining: Phase 4 (competition/mini-league admin + child-cascade gaps), Phase 5 (F9 cross-club sponsor lookup + ~55 degraded reads sweep). Live-test prerequisites unchanged: deploy the 17 canisters, paste IDs into Placement Settings, Internet Identity sign-in test.
+
+## Typegate cleanup — 10 pre-existing diagnostics fixed (2026-10-02)
+- NextUpCarousel: unwrap candid opt fields (`child_id[0]`, `child[0]`) in the my_child_rsvps branch; mini-league children branch now uses fetchLiveHomeChildren (PII-decrypted names) instead of listLiveChildren (club_domain Child has no name field); roster filter maps `child_id[0]` before the string type predicate.
+- PlayerOfMatchSelector: `get_event_child` parent_id unwrapped (`parent_id[0]`); no-points branch binds `child.parent_id[0]` before the truthy guard (an empty opt array is truthy — the old guard could fan out to a malformed recipient).
+- AssociationEventsPanel: `location[0] ?? null` for the association-event location opt.
+- MemberSubscriptionPaymentsManager: icp list branch maps canister MemberPayment onto the Supabase row shape (opt unwraps, created_at_ms → ISO timestamps, payment_status "paid", stripe_payment_intent_id null); Mark Paid icp branch now discards the returned MemberPayment to match the void supabase branch.
+- Gates: check-product-type-errors 0 diagnostics (exit 0); HomePage.nextUpFreshness contract tests 4/4; preview build OK.
