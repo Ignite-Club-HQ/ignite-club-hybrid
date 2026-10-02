@@ -803,7 +803,8 @@ export default function HomePage() {
           // canister equivalent yet.
           const rows = await Promise.all(
             clubIds.map(async (id) => {
-              const profile = await getLiveClubProfile(ctx, id);
+              const profileOpt = await getLiveClubProfile(ctx, id);
+              const profile = profileOpt.length ? profileOpt[0] : null;
               let pointsDisplayName: string | null = null;
               if (isFeatureRoutedToIcp("points")) {
                 const settings = await getLiveClubPointsSettings(ctx, id).catch(() => null);
@@ -812,7 +813,7 @@ export default function HomePage() {
               return {
                 id,
                 name: profile?.name ?? "",
-                sport: profile?.sport ?? null,
+                sport: null,
                 points_display_name: pointsDisplayName,
                 points_icon_url: null,
               };

@@ -15,8 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { listLiveTeams, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
-import { getLiveVaultFolder } from "@/live/features/vault";
+import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
+import { getLiveVaultFolder, listLiveVaultFolders } from "@/live/features/vault";
 import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -223,8 +223,22 @@ function SupabaseVaultPage() {
             .order("sort_order", { ascending: true });
           return data || [];
         },
-        // NEEDS-CANISTER: no team_folders equivalent exists on any canister.
-        icp: async () => [],
+        icp: async (ctx) => {
+          // vault_domain folders with a null team filter return every visible
+          // folder in the club (team-scoped and club-wide); map onto the same
+          // id/name/color summary the Supabase team_folders rows provide.
+          const folders = await listLiveVaultFolders(ctx, clubId, null);
+          return folders
+            .slice()
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map((f) => ({
+              id: f.id,
+              club_id: clubId,
+              name: f.name,
+              color: f.color[0] ?? null,
+              sort_order: f.sort_order,
+            }));
+        },
       });
     },
     enabled: currentView.type === "club",
@@ -262,10 +276,14 @@ function SupabaseVaultPage() {
         },
         icp: async (ctx) => {
           // Reuse the already-routed access model's roles instead of
-          // re-fetching, and resolve Pro Football from the caller's own
-          // entitlements (no per-club Pro Football flag exists on ICP).
-          const entitlements = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
-          return { freshRoles: userRoles ?? [], hasProFootball: entitlements.isPro };
+          // re-fetching; Pro Football resolves from the club_domain
+          // subscription row (member-readable), with the caller's own
+          // entitlement as a fallback while club subscriptions are unmigrated.
+          const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
+          const hasProFootball = sub
+            ? Boolean(sub.is_pro_football || sub.admin_pro_football_override)
+            : (await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target)).isPro;
+          return { freshRoles: userRoles ?? [], hasProFootball };
         },
       });
 
@@ -542,21 +560,30 @@ function SupabaseVaultPage() {
             }
             path.push({ id: folder.id, name: folder.name });
 
-            const teamId = folder.team_id.length ? folder.team_id[0] : null;
+            const teamId = folder.team.length ? folder.team[0] : null;
             const [clubProfile, teams] = await Promise.all([
-              getLiveClubProfile(ctx, folder.club_id),
-              teamId ? listLiveTeams(ctx, folder.club_id) : Promise.resolve([]),
+              getLiveClubProfile(ctx, folder.club),
+              teamId ? listLiveTeams(ctx, folder.club) : Promise.resolve([]),
             ]);
-            const clubName = clubProfile?.name ?? "Unknown Club";
+            const clubName = clubProfile.length ? clubProfile[0].name : "Unknown Club";
             const team = teamId ? teams.find((t: any) => t.id === teamId) : null;
 
             return {
               folder: {
-                ...folder,
-                parent_id: folder.parent_id.length ? folder.parent_id[0] : null,
+                id: folder.id,
+                name: folder.name,
+                club_id: folder.club,
                 team_id: teamId,
-                teams: team ? { id: team.id, name: team.name, club_id: folder.club_id } : null,
-                clubs: { id: folder.club_id, name: clubName },
+                parent_id: folder.parent_id.length ? folder.parent_id[0] : null,
+                restricted_roles: folder.restricted_roles,
+                created_by: folder.created_by.toText(),
+                created_at: new Date(Number(folder.created_at_ms)).toISOString(),
+                updated_at: new Date(Number(folder.created_at_ms)).toISOString(),
+                deleted_at: null,
+                chat_group_id: null,
+                drive_folder_id: null,
+                teams: team ? { id: team.id, name: team.name, club_id: folder.club } : null,
+                clubs: { id: folder.club, name: clubName },
               },
               path,
               clubName,

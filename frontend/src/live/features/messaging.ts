@@ -401,7 +401,7 @@ export async function sendLiveSystemMessage(
   idempotencyKey: string,
 ): Promise<void> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  unwrapCandid(await actor.send_system_message(toUser, body, idempotencyKey), "Send system message");
+  await unwrapCandid(Promise.resolve(actor.send_system_message(toUser, body, idempotencyKey)), "Send system message");
 }
 
 /**
@@ -415,7 +415,7 @@ export async function sendLiveWelcomeMessage(
   body: string,
 ): Promise<void> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  unwrapCandid(await actor.send_welcome_message(body), "Send welcome message");
+  await unwrapCandid(Promise.resolve(actor.send_welcome_message(body)), "Send welcome message");
 }
 
 /** Minimum supported app versions per platform, governor-configured on the canister. */
@@ -438,7 +438,7 @@ export async function fetchLiveLinkPreview(
   url: string,
 ): Promise<{ title: [] | [string]; description: [] | [string]; image: [] | [string]; site_name: [] | [string] }> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  return unwrapCandid(await actor.fetch_link_preview(url), "Fetch link preview");
+  return unwrapCandid(Promise.resolve(actor.fetch_link_preview(url)), "Fetch link preview");
 }
 
 /**
