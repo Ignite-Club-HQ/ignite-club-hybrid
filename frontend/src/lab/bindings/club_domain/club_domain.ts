@@ -790,6 +790,7 @@ export interface club_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
     import_frozen_club(club: string, listing: Listing): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1811,6 +1812,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.get_team_player_positions(arg0);
         return from_candid_variant_n91(result);
+    }
+    async has_club_staff_role(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.has_club_staff_role(arg0, arg1);
+        return result;
     }
     async import_frozen_club(arg0: string, arg1: Listing): Promise<{
         __kind__: "Ok";
