@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings, listLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
+import { getLiveClubSettings, listAllLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
@@ -265,17 +265,13 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
           return !!sponsors && sponsors.length > 0;
         },
         icp: async (ctx) => {
-          // Cross-club active-sponsor lookup via caller-scoped role grants:
-          // every club the caller holds any role in, then list_sponsors per
-          // club (sponsor records live in club_domain).
-          const clubIds = effectiveClubFilter
-            ? [effectiveClubFilter]
-            : [...new Set((await myLiveRoleGrants(ctx)).flatMap((g) => g.club))];
-          for (const clubId of clubIds) {
-            const sponsors = await listLiveSponsors(ctx, clubId);
-            if (sponsors.some((s) => s.is_active)) return true;
+          // Cross-club active-sponsor lookup via club_domain's
+          // list_all_sponsors query (no per-club filter server-side).
+          const sponsors = await listAllLiveSponsors(ctx);
+          if (effectiveClubFilter) {
+            return sponsors.some((s) => s.club_id === effectiveClubFilter && s.is_active);
           }
-          return false;
+          return sponsors.some((s) => s.is_active);
         },
       });
     },
