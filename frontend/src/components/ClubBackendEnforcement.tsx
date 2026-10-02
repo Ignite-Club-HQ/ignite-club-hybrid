@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useOptionalAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,6 +33,14 @@ import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
  *     a misconfigured pin from reload-looping: after one enforced switch the
  *     user stays signed in and a warning is logged instead.
  *
+ * Race-window hardening: while a signed-in user COULD be subject to a club
+ * pin (i.e. at least one clubBackendOverrides entry exists), this component
+ * holds its children — the route tree — behind a loader until the pin check
+ * has settled. That closes the window where pages would fire queries against
+ * the wrong backend before enforcement signed the user out. With no pins
+ * configured nothing can force a switch, so children render immediately and
+ * the membership/hint maintenance still runs in the background.
+ *
  * With no club pin this component only maintains the membership store and
  * hint cache; it never signs anyone out.
  */
@@ -59,16 +67,28 @@ async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
   return [...new Set([...directClubIds, ...teamClubIds])];
 }
 
-export function ClubBackendEnforcement() {
+function hasClubPins(): boolean {
+  return Object.keys(getBackendRoutingConfig().clubBackendOverrides).length > 0;
+}
+
+export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
   const user = useOptionalAuth()?.user ?? null;
   const { toast } = useToast();
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     if (!user) {
       clearUserClubIds();
+      setSettled(true);
       return;
     }
+    // A new signed-in user must re-run the pin check before the route tree
+    // renders again.
+    if (hasClubPins()) setSettled(false);
     let cancelled = false;
+    const settle = () => {
+      if (!cancelled) setSettled(true);
+    };
     void (async () => {
       try {
         const identity = await getCurrentInternetIdentity();
@@ -94,12 +114,14 @@ export function ClubBackendEnforcement() {
         cacheClubBackendHint(pin);
         if (pin === null) {
           sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
           return;
         }
         const { country } = getCurrentCountry();
         const required = resolveBackendForUser(config, country, clubIds, isIcpAuthAvailable());
         if (required === provider) {
           sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
           return;
         }
         if (sessionStorage.getItem(ENFORCED_KEY)) {
@@ -110,6 +132,15 @@ export function ClubBackendEnforcement() {
             provider,
             "— staying signed in to avoid a reload loop.",
           );
+          toast({
+            title: "Sign-in method mismatch",
+            description:
+              required === "icp"
+                ? "Your club uses Internet Identity, but we couldn't switch you automatically. Please sign out and sign back in with Internet Identity."
+                : "Your club uses email sign-in, but we couldn't switch you automatically. Please sign out and sign back in with email.",
+            variant: "destructive",
+          });
+          settle();
           return;
         }
         sessionStorage.setItem(ENFORCED_KEY, "1");
@@ -125,9 +156,14 @@ export function ClubBackendEnforcement() {
         } else {
           await supabase.auth.signOut();
         }
+        // Deliberately NOT settling: keep the loader up until the reload
+        // replaces the page, so no wrong-backend query can fire in between.
         window.location.reload();
       } catch (error) {
         console.warn("[club-backend] Enforcement check failed.", error);
+        // Fail open to the previous behavior rather than hanging the app on
+        // a loader forever when the membership fetch itself fails.
+        settle();
       }
     })();
     return () => {
@@ -135,5 +171,14 @@ export function ClubBackendEnforcement() {
     };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return null;
+  // Fast path: with no club pins configured nothing can force a backend
+  // switch, so never hold the route tree on the membership fetch.
+  if (!user || settled || !hasClubPins()) {
+    return <>{children}</>;
+  }
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="animate-pulse text-2xl font-bold text-gradient-emerald">Ignite</div>
+    </div>
+  );
 }
