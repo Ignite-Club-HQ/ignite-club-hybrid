@@ -272,6 +272,73 @@ export function getBackendRoutingConfig(): BackendRoutingConfig {
 }
 
 /**
+ * Pure resolver: the backend pinned for the given club memberships, or null
+ * when no member club has an override. When a member belongs to clubs pinned
+ * both ways, a Supabase pin wins — Supabase is the safe rescue path.
+ */
+export function resolveClubBackendOverride(
+  config: BackendRoutingConfig,
+  clubIds: readonly string[],
+): BackendProvider | null {
+  let sawIcp = false;
+  for (const id of clubIds) {
+    const pin = config.clubBackendOverrides[id];
+    if (pin === "supabase") return "supabase";
+    if (pin === "icp") sawIcp = true;
+  }
+  return sawIcp ? "icp" : null;
+}
+
+/**
+ * Pure resolver: which backend should serve a user, combining per-club
+ * overrides with the country rules. A club pin wins over country rules; the
+ * ICP safety net still applies (ICP is never returned before canisters are
+ * configured).
+ */
+export function resolveBackendForUser(
+  config: BackendRoutingConfig,
+  country: string | null,
+  clubIds: readonly string[],
+  icpAvailable: boolean,
+): BackendProvider {
+  const pin = resolveClubBackendOverride(config, clubIds);
+  if (pin === "supabase") return "supabase";
+  if (pin === "icp") return icpAvailable ? "icp" : "supabase";
+  return resolveBackendForCountry(config, country, icpAvailable);
+}
+
+/**
+ * localStorage key holding the last per-club backend pin that applied to the
+ * signed-in user. The pre-auth boot (which sign-in screen /auth shows)
+ * cannot know club memberships yet, so it reads this hint; the post-auth
+ * enforcement check rewrites it from live membership data.
+ */
+export const CLUB_BACKEND_HINT_KEY = "ignite.clubBackendHint";
+
+/** Persists the last per-club backend pin (null clears it). Best-effort. */
+export function cacheClubBackendHint(backend: BackendProvider | null): void {
+  try {
+    if (backend === null) {
+      globalThis.localStorage?.removeItem(CLUB_BACKEND_HINT_KEY);
+    } else {
+      globalThis.localStorage?.setItem(CLUB_BACKEND_HINT_KEY, backend);
+    }
+  } catch {
+    // Storage unavailable (private mode, quota) — caching is best-effort.
+  }
+}
+
+/** Reads the cached per-club backend pin, or null when absent/invalid. */
+export function readCachedClubBackendHint(): BackendProvider | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(CLUB_BACKEND_HINT_KEY);
+    return raw === "supabase" || raw === "icp" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Pure resolver: which backend should serve a user in `country` (ISO alpha-2,
  * or null when unknown).
  *
