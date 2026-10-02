@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { listLiveTeams, getLiveTeam } from "@/live/features/club";
+import { listLiveTeams, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { getLiveVaultFolder } from "@/live/features/vault";
 import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
