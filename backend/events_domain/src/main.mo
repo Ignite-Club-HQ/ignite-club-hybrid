@@ -1135,6 +1135,207 @@ persistent actor {
     }
   };
 
+  // ---- Workstream D: pitch board settings ----
+  func canManageTeamBoard(caller : Principal, team_id : Text) : Bool {
+    isGovernor(caller) or roles.any(func(g) {
+      g.user.equal(caller) and g.team_id == ?team_id and (g.role == "team_admin" or g.role == "coach" or g.role == "club_admin")
+    })
+  };
+
+  public query ({ caller }) func get_pitch_board_settings(team_id : Text) : async { #Ok : ?Types.PitchBoardSettings; #Err : Text } {
+    auth(caller);
+    #Ok(pitchBoardSettings.find(func(item) = item.team_id == team_id))
+  };
+
+  public shared ({ caller }) func save_pitch_board_settings(
+    team_id : Text,
+    rotation_speed : Nat16,
+    disable_position_swaps : Bool,
+    disable_batch_subs : Bool,
+    rotate_gk_at_halftime : Bool,
+    minutes_per_half : Nat16,
+    max_spread_minutes : Nat16,
+    team_size : Nat16,
+    formation : ?Text,
+    show_match_header : Bool,
+    show_lineup_picker : Bool,
+  ) : async { #Ok : Types.PitchBoardSettings; #Err : Text } {
+    auth(caller);
+    if (not canManageTeamBoard(caller, team_id)) return #Err("Pitch settings management forbidden");
+    if (not valid(team_id)) return #Err("Invalid team");
+    let value : Types.PitchBoardSettings = {
+      team_id; rotation_speed; disable_position_swaps; disable_batch_subs; rotate_gk_at_halftime;
+      minutes_per_half; max_spread_minutes; team_size; formation; show_match_header; show_lineup_picker;
+      updated_at_ms = nowMs();
+    };
+    pitchBoardSettings := pitchBoardSettings.filter(func(item) = item.team_id != team_id).concat([value]);
+    #Ok(value)
+  };
+
+  // ---- Workstream D: game summary + player stats (replace-by-event-id) ----
+  public shared ({ caller }) func save_game_summary(
+    event_id : Text,
+    team_id : Text,
+    total_game_time : Nat32,
+    half_duration : Nat32,
+    formation_used : ?Text,
+    total_substitutions : Nat16,
+  ) : async { #Ok : Types.GameSummary; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game summary");
+    if (not canManageTeamBoard(caller, team_id)) return #Err("Game summary management forbidden");
+    let value : Types.GameSummary = { event_id; team_id; total_game_time; half_duration; formation_used; total_substitutions; updated_at_ms = nowMs() };
+    gameSummaries := gameSummaries.filter(func(item) = item.event_id != event_id).concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func get_game_summary(event_id : Text) : async { #Ok : ?Types.GameSummary; #Err : Text } {
+    auth(caller);
+    #Ok(gameSummaries.find(func(item) = item.event_id == event_id))
+  };
+
+  public shared ({ caller }) func save_game_player_stats(
+    event_id : Text,
+    team_id : Text,
+    stats : [Types.GamePlayerStatInput],
+  ) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not valid(team_id)) return #Err("Invalid game player stats");
+    if (not canManageTeamBoard(caller, team_id)) return #Err("Game stats management forbidden");
+    let rows : [Types.GamePlayerStat] = stats.map(func(input) : Types.GamePlayerStat {
+      {
+        event_id; team_id;
+        user_id = input.user_id;
+        fill_in_player_name = input.fill_in_player_name;
+        jersey_number = input.jersey_number;
+        minutes_played = input.minutes_played;
+        positions_played = input.positions_played;
+        substitutions_count = input.substitutions_count;
+        started_on_pitch = input.started_on_pitch;
+        goals_scored = input.goals_scored;
+      }
+    });
+    gamePlayerStats := gamePlayerStats.filter(func(item) = item.event_id != event_id).concat(rows);
+    #Ok(rows)
+  };
+
+  public query ({ caller }) func list_game_player_stats(event_id : Text) : async { #Ok : [Types.GamePlayerStat]; #Err : Text } {
+    auth(caller);
+    #Ok(gamePlayerStats.filter(func(item) = item.event_id == event_id))
+  };
+
+  // ---- Workstream D: cross-sport game result (upsert by event_id) ----
+  public shared ({ caller }) func save_game_result(
+    team_id : Text,
+    event_id : ?Text,
+    sport : Text,
+    home_label : Text,
+    away_label : Text,
+    home_score : Nat32,
+    away_score : Nat32,
+    period_scores_json : Text,
+    player_stats_json : Text,
+    mvp_player_id : ?Text,
+    mvp_player_name : ?Text,
+  ) : async { #Ok : Types.GameResult; #Err : Text } {
+    auth(caller);
+    if (not valid(team_id) or not valid(sport)) return #Err("Invalid game result");
+    if (not canManageTeamBoard(caller, team_id)) return #Err("Game result management forbidden");
+    let existing = switch (event_id) {
+      case (?id) gameResults.find(func(item) = item.event_id == ?id);
+      case null null;
+    };
+    let value : Types.GameResult = {
+      id = switch (existing) { case (?e) e.id; case null "gr-" # team_id # "-" # Nat.toText(gameResults.size()) };
+      team_id; event_id; sport; home_label; away_label; home_score; away_score;
+      period_scores_json; player_stats_json; mvp_player_id; mvp_player_name;
+      saved_by = caller; updated_at_ms = nowMs();
+    };
+    gameResults := switch (event_id) {
+      case (?id) gameResults.filter(func(item) = item.event_id != ?id).concat([value]);
+      case null gameResults.concat([value]);
+    };
+    #Ok(value)
+  };
+
+  public query ({ caller }) func get_game_result(event_id : Text) : async { #Ok : ?Types.GameResult; #Err : Text } {
+    auth(caller);
+    #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
+  };
+
+  // ---- Workstream D: active game mirror (server-side push notification driver) ----
+  // Shared-session model (mirrors Supabase active_games): one active row per
+  // team; a null team scopes the row to the caller alone.
+  public shared ({ caller }) func sync_active_game(
+    team_id : ?Text,
+    timer_state_json : Text,
+    pitch_state_json : Text,
+    board_session_id : Text,
+  ) : async { #Ok : Types.ActiveGame; #Err : Text } {
+    auth(caller);
+    let matches = func(item : Types.ActiveGame) : Bool {
+      item.is_active and (switch (team_id) { case (?t) item.team_id == ?t; case null item.user_id.equal(caller) and item.team_id == null })
+    };
+    let existing = activeGames.find(matches);
+    let value : Types.ActiveGame = {
+      id = switch (existing) { case (?e) e.id; case null "ag-" # Principal.toText(caller) # "-" # Nat.toText(activeGames.size()) };
+      user_id = caller; team_id; timer_state_json; pitch_state_json; board_session_id; is_active = true; updated_at_ms = nowMs();
+    };
+    activeGames := activeGames.filter(func(item) = not matches(item)).concat([value]);
+    #Ok(value)
+  };
+
+  public shared ({ caller }) func deactivate_active_game(team_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    activeGames := activeGames.map(func(item) : Types.ActiveGame {
+      let owns = switch (team_id) { case (?t) item.team_id == ?t; case null item.user_id.equal(caller) and item.team_id == null };
+      if (owns and item.is_active) { { item with is_active = false } } else { item }
+    });
+    #Ok
+  };
+
+  public query ({ caller }) func get_active_game(team_id : ?Text) : async { #Ok : ?Types.ActiveGame; #Err : Text } {
+    auth(caller);
+    #Ok(activeGames.find(func(item) = item.is_active and (switch (team_id) { case (?t) item.team_id == ?t; case null item.user_id.equal(caller) and item.team_id == null })))
+  };
+
+  // ---- Workstream D: admin per-viewer event-view list + per-user viewed-ids ----
+  public query ({ caller }) func list_event_views(event_id : Text) : async { #Ok : [Types.EventView]; #Err : Text } {
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) #Ok(eventViews.filter(func(item) = item.event_id == event_id));
+    }
+  };
+
+  public query ({ caller }) func list_my_viewed_event_ids(event_ids : [Text]) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller);
+    #Ok(event_ids.filter(func(id) = eventViews.any(func(item) = item.event_id == id and item.viewer.equal(caller))))
+  };
+
+  // ---- Workstream D: event membership check ----
+  // events_domain has no user_roles/children/child_guardians membership
+  // tables (those live in club_domain, owned by another agent) — evaluated
+  // here against the membership signals events_domain CAN reach: the
+  // account's own roster/rsvp/attendance/duty rows for this event, plus any
+  // mini-league-player RSVP the account is linked to via the same account id.
+  // RESIDUAL LIMITATION: a parent/guardian whose ONLY link to the event is
+  // via a child record owned by club_domain (child_guardians) will read as
+  // not-a-member here; see frontend/roadmap.md.
+  public query ({ caller = _ }) func check_event_membership(user_id : Text, event_id : Text) : async Bool {
+    if (not valid(user_id) or not valid(event_id)) return false;
+    let onRoster = roster.any(func(item) = item.event_id == event_id and item.account_id == user_id);
+    if (onRoster) return true;
+    let hasRsvp = rsvps.any(func(item) = item.event_id == event_id and item.account_id == user_id);
+    if (hasRsvp) return true;
+    let hasAttendance = attendance.any(func(item) = item.event_id == event_id and item.account_id == user_id);
+    if (hasAttendance) return true;
+    let hasEventAttendance = eventAttendance.any(func(item) = item.event_id == event_id and item.subject_id == user_id);
+    if (hasEventAttendance) return true;
+    let hasDuty = duties.any(func(item) = item.event_id == event_id and item.account_id == user_id);
+    if (hasDuty) return true;
+    false
+  };
+
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 4; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps })
