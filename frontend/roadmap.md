@@ -88,10 +88,10 @@
 ## Triple-check audit — unapproved Supabase dependencies in ICP mode (2026-10-02)
 Standing rule: no "not available" states. Every item below must be wired to a canister (existing method or new) — no exceptions beyond the designed list (media bytes, push, Drive import, non-IAP payments, game-stats email, competition broadcasts, PlayHQ import/materialise, admin/routing config).
 
-- [ ] assertSupabaseWritePath call sites (~41 across 16 files) — throws for II users; wire each to its canister:
+- [~] assertSupabaseWritePath call sites (~41 across 16 files) — throws for II users; wire each to its canister:
   - messaging: PollCard (4), ChatDetailsSheet (2), ChatParticipantsList (5), ClubDMSettings (2), ClubMessagePrivacySettings (2), ClubAICatchUpSettings (3)
   - club: AddClubRoleToMemberDialog (2), AddTeamMemberSheet (2), useAddBulkTeamMembersMutation (2), ClubThemeEditor (3), FindOrCreateClubWizard (3)
-  - competitions: CompetitionShareJoinLink (3), PlayHQTeamLinkCard (2 — verify sites vs allowed PlayHQ exception)
+  - DONE (2026-10-02) competitions: CompetitionShareJoinLink create/regenerate wired via withFeatureBackend("competitions") to new competition_domain list_competition_join_links + existing create/rotate join-link methods; PlayHQTeamLinkCard's single site is the allowed PlayHQ import/materialise exception (left as-is).
   - events: EventGroupsManager (9), AttendanceSection (2), AssociationEventsPanel (1)
 - [ ] useUpdateScheduledMessage throws in ICP mode — add canister update method or cancel+reschedule flow
 - [ ] resolveEventChildScope returns [] in ICP mode (EventDetailPage, QuickRSVPDialog, NextUpCarousel) — children silently missing from RSVP scope

@@ -1755,6 +1755,14 @@ persistent actor {
     #Ok(updated)
   };
 
+  public shared ({ caller }) func set_club_logo_only_mode(club_id : Text, enabled : Bool) : async { #Ok : Types.ClubSettings; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    let updated : Types.ClubSettings = { currentSettingsFor(club_id) with logo_only_mode = enabled };
+    putSettings(updated);
+    #Ok(updated)
+  };
+
   public shared ({ caller }) func clear_club_theme(club_id : Text) : async { #Ok : Types.ClubSettings; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");

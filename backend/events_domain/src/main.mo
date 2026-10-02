@@ -40,6 +40,7 @@ persistent actor {
   var teamTrainingPauses : [Types.TeamTrainingPause];
   var openDuties : [Types.OpenDuty];
   var miniLeagueRsvps : [Types.MiniLeagueRsvp];
+  var childTeamAssignments : [Types.ChildTeamAssignment];
   var associationEvents : [Types.AssociationEvent];
   var pitchBoardSettings : [Types.PitchBoardSettings];
   var gameSummaries : [Types.GameSummary];
@@ -876,7 +877,7 @@ persistent actor {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(name)) return #Err("Invalid group name");
-    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs(); team_letter; colour; ability_band; pitch_name };
+    let value : Types.EventGroup = { id = "grp-" # event_id # "-" # Nat.toText(eventGroups.size()); event_id; name; created_at_ms = nowMs(); team_letter; colour; team_b_colour = null; display_order = Nat.toNat16(eventGroups.size()); ability_band; pitch_name };
     eventGroups := eventGroups.concat([value]);
     #Ok(value)
   };
@@ -904,12 +905,12 @@ persistent actor {
   // set_event_group_appearance: auto-generate/team-colour/ability-band/pitch
   // UI support — sets the optional display fields independently of the
   // group's name so a rename doesn't clobber them (and vice versa).
-  public shared ({ caller }) func set_event_group_appearance(group_id : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
+  public shared ({ caller }) func set_event_group_appearance(group_id : Text, team_letter : ?Text, colour : ?Text, ability_band : ?Text, pitch_name : ?Text, team_b_colour : ?Text) : async { #Ok : Types.EventGroup; #Err : Text } {
     auth(caller);
     switch (requireManageGroup(caller, group_id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        let updated : Types.EventGroup = { current with team_letter; colour; ability_band; pitch_name };
+        let updated : Types.EventGroup = { current with team_letter; colour; ability_band; pitch_name; team_b_colour };
         eventGroups := eventGroups.map(func(item) = if (item.id == group_id) updated else item);
         #Ok(updated)
       };
@@ -955,24 +956,26 @@ persistent actor {
 
   // Moves a player from one group to another (both groups must belong to
   // the same event the caller manages).
-  public shared ({ caller }) func move_group_player(from_group_id : Text, to_group_id : Text, account_id : Text) : async { #Ok; #Err : Text } {
+  public shared ({ caller }) func move_group_player(from_group_id : Text, to_group_id : Text, account_id : Text, team_letter : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
     switch (requireManageGroup(caller, from_group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     switch (requireManageGroup(caller, to_group_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == from_group_id and item.account_id == account_id));
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == to_group_id and item.account_id == account_id));
-    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = to_group_id; account_id; team_letter = null }]);
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = to_group_id; account_id; team_letter }]);
     #Ok
   };
 
   // Swaps two players sitting in two (possibly different) groups.
-  public shared ({ caller }) func swap_group_players(group_a : Text, account_a : Text, group_b : Text, account_b : Text) : async { #Ok; #Err : Text } {
+  // account_a moves into group_b taking team_b (account_b's former team/slot);
+  // account_b moves into group_a taking team_a (account_a's former team/slot).
+  public shared ({ caller }) func swap_group_players(group_a : Text, account_a : Text, team_a : ?Text, group_b : Text, account_b : Text, team_b : ?Text) : async { #Ok; #Err : Text } {
     auth(caller);
     switch (requireManageGroup(caller, group_a)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     switch (requireManageGroup(caller, group_b)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_a and item.account_id == account_a));
     eventGroupPlayers := eventGroupPlayers.filter(func(item) = not (item.group_id == group_b and item.account_id == account_b));
-    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = group_b; account_id = account_a; team_letter = null }, { group_id = group_a; account_id = account_b; team_letter = null }]);
+    eventGroupPlayers := eventGroupPlayers.concat([{ group_id = group_b; account_id = account_a; team_letter = team_b }, { group_id = group_a; account_id = account_b; team_letter = team_a }]);
     #Ok
   };
 
