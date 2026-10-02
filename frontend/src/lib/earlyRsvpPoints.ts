@@ -37,13 +37,18 @@ export async function awardEarlyRsvpPoints({
     const pointsOnIcp = isFeatureRoutedToIcp("points");
 
     if (pointsOnIcp) {
-      // ICP branch: no per-club subscription row exists — the caller's own
-      // identity_access entitlement is the Pro signal (same simplification
-      // as useClubProAccess). An II principal has no Supabase session, so
-      // the club_subscriptions read below must never run for them.
-      // NEEDS-CANISTER: the club-level disable_points_system kill switch has
-      // no club_domain settings field yet.
+      // ICP branch: the caller's own identity_access entitlement is the Pro
+      // signal (same simplification as useClubProAccess — an II principal
+      // has no Supabase session, so the club_subscriptions read below must
+      // never run for them). The club-level kill switch and display name
+      // come from club_points_domain's per-club settings.
       if (!(await icpCallerHasProEntitlement())) return false;
+      const icpSettings = await withFeatureBackend("points", {
+        supabase: async () => null,
+        icp: (ctx) => getLiveClubPointsSettings(ctx, clubId),
+      });
+      if (icpSettings?.disabled) return false;
+      icpPointsName = icpSettings?.display_name[0] ?? null;
     } else {
       // Check if club has Pro subscription and points system enabled
       const { data: clubSub } = await supabase
