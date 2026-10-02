@@ -1,41 +1,30 @@
 /// PII Access Control Canister
-/// Encrypts and mediates access to personally identifiable information (PII)
-/// Enforces field-level access policies and maintains audit trail
+/// Mediates access to personally identifiable information (PII) with
+/// field-level access policies and an audit trail.
 ///
-/// Encryption construction (interim, pre-vetKeys):
-/// - Master secrets are 32 random bytes obtained from the management canister's
-///   `raw_rand` (via `mo:core/Random.blob`, which calls raw_rand directly) on
-///   `initialize_master_key` / `rotate_key`. Secrets are kept per key_id in
-///   stable state so records encrypted under a retired key remain decryptable.
-///   No method ever returns secret material; only opaque key_ids/metadata leave
-///   the canister.
-/// - Per-field key = SHA-256(master_secret || pii_id || field_id).
-/// - Nonces are 12 random bytes drawn fresh from raw_rand for every
-///   `register_pii` call (register_pii is already an update call, so this is
-///   a plain `await`).
-/// - Confidentiality: SHA-256-based CTR-mode keystream, where each 32-byte
-///   keystream block is SHA-256(field_key || nonce || counter_be32), counter
-///   starting at 0 and incrementing per 32-byte block, XORed with plaintext.
-/// - Integrity: encrypt-then-MAC. tag = SHA-256(field_key || nonce ||
-///   ciphertext). The tag (32 bytes) is appended to the ciphertext bytes
-///   stored/returned in `EncryptedPii.ciphertext` (no public record shape
-///   changed). Decryption recomputes and compares the tag before returning
-///   plaintext, failing closed (#Err) on any mismatch, truncated input, or
-///   unknown master_key_id.
-/// - `derive_media_key` uses a separate raw_rand-generated 32-byte
-///   `media_root_secret` (created lazily on first use) and returns
-///   SHA-256(media_root_secret || child_id || authorizer || purpose),
-///   32 bytes, still gated by the same authorization checks as before.
-///
-/// This is a meaningful improvement over the previous XOR/timestamp
-/// "synthetic encryption" placeholder, but it is still symmetric key material
-/// held in canister heap/stable memory. Production deployment should still
-/// migrate to:
-/// - vetKeys for child media key derivation and/or field key derivation,
-///   removing raw master secret material from canister memory entirely
-/// - Hardware Security Module (HSM) or KMS-backed custody for the true root
-///   of trust, with this canister only holding derived, scoped key handles
-/// - External vault for secret workload identity
+/// Encryption construction (vetKeys / IBE):
+/// - The canister holds NO key material. Values are encrypted client-side
+///   with identity-based encryption (IBE) under the subnet's vetKD master
+///   key: the writer derives this canister's IBE public key offline (master
+///   public key -> canister key -> context subkey) and encrypts to the
+///   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
+///   write, so first registration of a record needs no key ceremony.
+/// - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
+///   exact same authorization as the old decrypt path (governor, domain
+///   owner, granted readers, verified guardians, club-scoped read grants
+///   verified live via club_domain) and only then relays the vetKey for the
+///   record's identity, encrypted under the caller's one-time transport key.
+///   The subnet never sees the raw key; the canister only relays the
+///   still-encrypted key and never sees plaintext.
+/// - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
+///   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
+///   deliberately exposes only the management-canister relay.
+/// - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
+///   production). It is captured at first install and immutable for the life
+///   of the derived keys — the deploy script MUST set it before first use.
+/// - `vetkd_derive_key` costs cycles per derivation; readers cache derived
+///   vetKeys client-side per session, so each (pii_id, field_id) costs one
+///   derivation per reader session.
 
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
@@ -44,13 +33,11 @@ import Nat "mo:core/Nat";
 import Nat8 "mo:core/Nat8";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
-import Option "mo:core/Option";
 import Principal "mo:core/Principal";
-import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
-import Crypto "./crypto";
+import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 
 persistent actor {
 
@@ -62,12 +49,6 @@ persistent actor {
     ciphertext : [Nat8];
     nonce : [Nat8];
     master_key_id : Text;
-  };
-
-  public type DecryptedPii = {
-    pii_id : Text;
-    field_id : Text;
-    plaintext : [Nat8];
   };
 
   public type AuditRecord = {
@@ -83,19 +64,6 @@ persistent actor {
   public type PiiDeleteResult = {
     shredded_at : Nat64;
     key_destroyed : Bool;
-  };
-
-  public type KeyMetadata = {
-    key_id : Text;
-    created_at : Nat64;
-    rotation_due_at : Nat64;
-    status : { #Active; #RotationPending; #Revoked; #Shredded };
-  };
-
-  public type KeyRotationResult = {
-    rotated_at : Nat64;
-    old_key_id : Text;
-    new_key_id : Text;
   };
 
   public type AuditFilter = {
@@ -140,9 +108,23 @@ persistent actor {
     club_id : Text;
   };
 
-  type MasterSecretEntry = {
-    key_id : Text;
-    secret : [Nat8]; // 32 bytes, from raw_rand. Never exposed via any public method.
+  // ==================== Constants ====================
+
+  // vetKD domain separator (context) and the marker stored in each record's
+  // legacy master_key_id field. Both are immutable once any record exists —
+  // changing either makes stored ciphertext undecryptable.
+  let VETKD_CONTEXT : Blob = Text.encodeUtf8("ignite-pii-v1");
+  let VETKEY_SCHEME_ID : Text = "vetkey-ibe-v1";
+
+  // Captured at first install and fixed for the life of the canister's
+  // derived keys; changing VETKD_KEY_NAME on a later upgrade has no effect.
+  transient let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
+  let keyId : ManagementCanister.VetKdKeyid = { curve = #bls12_381_g2; name = keyName };
+
+  // IBE identity for a record: pii_id, unit separator, field_id. Neither id
+  // may contain the separator (ids are UUIDs / "prefix:..." slugs).
+  func ibeIdentity(pii_id : Text, field_id : Text) : Blob {
+    Text.encodeUtf8(pii_id # "" # field_id)
   };
 
   // ==================== State ====================
@@ -152,17 +134,9 @@ persistent actor {
   // bootstrap 20260913_000000.mo).
   var pii_records : [PiiRecord];
   var audit_log : [AuditRecord];
-  var key_metadata_list : [KeyMetadata];
-  var master_secrets : [MasterSecretEntry];
 
-  var master_key_id_current : Text;
   var metadata_version : Nat32;
-  var last_key_rotation : Nat64;
   var governor : Principal;
-
-  // Lazily-initialized root secret for media key derivation. Populated on
-  // first call to derive_media_key using raw_rand.
-  var media_root_secret : ?[Nat8];
 
   // Verified guardian -> child (pii_id) relationships backing can_read /
   // grant_pii_read authorization. Seeded empty, populated via
@@ -265,74 +239,76 @@ persistent actor {
     audit_log := audit_log.concat([record]);
   };
 
-  // ==================== Key material ====================
-  // Pure crypto (SHA-256, field-key derivation, AEAD) lives in ./crypto.mo.
-
-  func find_master_secret(key_id : Text) : ?[Nat8] {
-    Option.map<MasterSecretEntry, [Nat8]>(
-      master_secrets.find(func(e) = e.key_id == key_id),
-      func(e) = e.secret
-    )
-  };
-
-  func store_master_secret(key_id : Text, secret : [Nat8]) {
-    master_secrets := Array.filter<MasterSecretEntry>(master_secrets, func(e) { e.key_id != key_id }).concat([{ key_id = key_id; secret = secret }]);
-  };
-
-  /// Derives the per-field key for a given master secret, pii_id and field_id.
-  func derive_field_key(master_secret : [Nat8], pii_id : Text, field_id : Text) : [Nat8] {
-    Crypto.derive_field_key(master_secret, pii_id, field_id)
-  };
-
-  func aead_encrypt(key : [Nat8], nonce : [Nat8], plaintext : [Nat8]) : [Nat8] {
-    Crypto.aead_encrypt(key, nonce, plaintext)
-  };
-
-  func aead_decrypt(key : [Nat8], nonce : [Nat8], stored : [Nat8]) : ?[Nat8] {
-    Crypto.aead_decrypt(key, nonce, stored)
-  };
-
-  /// Draws fresh randomness from the management canister via raw_rand
-  /// (mo:core/Random.blob calls raw_rand directly). Returns the first
-  /// `n` bytes of the resulting 32-byte blob.
-  func random_bytes(n : Nat) : async* [Nat8] {
-    let blob = await Random.blob();
-    let bytes = Blob.toArray(blob);
-    if (n <= bytes.size()) {
-      Array.tabulate<Nat8>(n, func(i) = bytes[i])
+  // Resolves club-scoped read access for a batch: collects the club ids
+  // granting any requested record, then verifies the caller's membership in
+  // each via club_domain (one inter-canister round per club, not per record).
+  func resolveAllowedClubs(caller : Principal, pii_ids : [Text], field_id : Text) : async [Text] {
+    var clubIds : [Text] = [];
+    for (pii_id in pii_ids.values()) {
+      for (cid in grantClubIds(pii_id, field_id).values()) {
+        if (not clubIds.any(func(c) = c == cid)) {
+          clubIds := clubIds.concat([cid]);
+        };
+      };
+    };
+    if (clubIds.size() > 0) {
+      await clubsWhereStaff(caller, clubIds)
     } else {
-      // Should not happen: raw_rand returns 32 bytes and we never request more.
-      Runtime.trap("Insufficient randomness returned by raw_rand");
+      []
     }
   };
 
-  // ==================== Public Methods ====================
+  // ==================== vetKeys (IBE) ====================
 
-  public shared ({ caller }) func initialize_master_key(initial_key_id : Text) : async { #Ok : Text; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) {
-      if (not isGovernor(caller)) { return #Err("Only governor can re-initialize") };
-    } else {
-      governor := caller;
-    };
-
-    let secret = await* random_bytes(32);
-    store_master_secret(initial_key_id, secret);
-
-    let now = now_ns();
-    master_key_id_current := initial_key_id;
-    last_key_rotation := now;
-
-    let meta : KeyMetadata = {
-      key_id = initial_key_id;
-      created_at = now;
-      rotation_due_at = now + 7776000000000000; // 90 days in nanoseconds
-      status = #Active;
-    };
-    key_metadata_list := key_metadata_list.concat([meta]);
-
-    #Ok(initial_key_id)
+  // The canister's IBE public key for the vetKD context. Not sensitive —
+  // anyone can derive it offline from the subnet master public key — so no
+  // authorization is required. Writers use it to encrypt new records without
+  // any canister call; readers use it to verify derived vetKeys.
+  public shared func pii_vetkey_verification_key() : async Blob {
+    await ManagementCanister.vetKdPublicKey(null, VETKD_CONTEXT, keyId);
   };
+
+  // Relays the caller's vetKeys for the requested records, each encrypted
+  // under the caller's one-time transport key. Authorization is identical to
+  // the ciphertext read path: governor, domain owner, granted reader,
+  // verified guardian, or club-scoped grant (verified live via club_domain).
+  // Result is index-aligned with `pii_ids`: null where the caller has no
+  // access or the record does not exist. Every attempt is audited.
+  // Capped at 25: each derivation is a paid vetkd_derive_key call.
+  public shared ({ caller }) func get_encrypted_pii_vetkeys_batch(
+    pii_ids : [Text],
+    field_id : Text,
+    transport_public_key : Blob
+  ) : async { #Ok : [?Blob]; #Err : Text } {
+    auth(caller);
+    if (pii_ids.size() > 25) return #Err("Batch too large");
+    if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
+    var out : [?Blob] = [];
+    for (pii_id in pii_ids.values()) {
+      switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
+        case (?r) {
+          let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs);
+          log_audit(caller, pii_id, field_id, "vetkey_derive", allowed, "PII vetKey derivation");
+          if (allowed) {
+            let encryptedKey = await ManagementCanister.vetKdDeriveKey(
+              ibeIdentity(pii_id, field_id), VETKD_CONTEXT, keyId, transport_public_key
+            );
+            out := out.concat([?encryptedKey]);
+          } else {
+            out := out.concat([null]);
+          };
+        };
+        case null {
+          log_audit(caller, pii_id, field_id, "vetkey_derive", false, "PII vetKey derivation");
+          out := out.concat([null]);
+        };
+      };
+    };
+    #Ok(out)
+  };
+
+  // ==================== Public Methods ====================
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -342,10 +318,15 @@ persistent actor {
     #Ok
   };
 
+  // Stores a client-encrypted PII field. The caller encrypts offline (IBE
+  // under the canister's derived public key, identity = pii_id ++ SEP ++
+  // field_id) — the canister never sees plaintext and holds no keys. The
+  // legacy nonce/master_key_id fields are kept for record-shape stability
+  // and set to empty / the vetKeys scheme marker.
   public shared ({ caller }) func register_pii(
     pii_id : Text,
     field_id : Text,
-    plaintext : [Nat8],
+    ciphertext : [Nat8],
     domain_owner : Principal
   ) : async { #Ok : EncryptedPii; #Err : Text } {
     auth(caller);
@@ -360,23 +341,14 @@ persistent actor {
       return #Err("Domain owner authorization required");
     };
 
-    let key_id = master_key_id_current;
-    let master_secret = switch (find_master_secret(key_id)) {
-      case (?s) { s };
-      case null { return #Err("Master key not initialized") };
-    };
-
-    let nonce = await* random_bytes(Crypto.NONCE_LEN);
-    let field_key = derive_field_key(master_secret, pii_id, field_id);
-    let ciphertext = aead_encrypt(field_key, nonce, plaintext);
     let now = now_ns();
 
     let record : PiiRecord = {
       pii_id = pii_id;
       field_id = field_id;
       ciphertext = ciphertext;
-      nonce = nonce;
-      master_key_id = key_id;
+      nonce = [];
+      master_key_id = VETKEY_SCHEME_ID;
       created_at = now;
       last_accessed = now;
       access_count = 0;
@@ -395,142 +367,38 @@ persistent actor {
       pii_id = pii_id;
       field_id = field_id;
       ciphertext = ciphertext;
-      nonce = nonce;
-      master_key_id = key_id;
+      nonce = [];
+      master_key_id = VETKEY_SCHEME_ID;
     })
   };
 
-  public shared query ({ caller }) func get_encrypted_pii(
-    pii_id : Text,
-    field_id : Text
-  ) : async { #Ok : EncryptedPii; #Err : Text } {
-    auth(caller);
-
-    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
-      case (?r) {
-        if (not can_read(caller, r)) {
-          return #Err("Access denied to PII field");
-        };
-        #Ok({
-          pii_id = r.pii_id;
-          field_id = r.field_id;
-          ciphertext = r.ciphertext;
-          nonce = r.nonce;
-          master_key_id = r.master_key_id;
-        })
-      };
-      case null { #Err("PII not found") };
-    }
-  };
-
-  public shared ({ caller }) func get_decrypted_pii(
-    pii_id : Text,
-    field_id : Text,
-    operation : Text,
-    purpose : Text
-  ) : async { #Ok : DecryptedPii; #Err : Text } {
-    auth(caller);
-
-    switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
-      case (?r) {
-        // Access control: governor, domain owner, a granted reader, a
-        // verified guardian, or a member of a club holding a club-scoped
-        // read grant (verified live via club_domain).
-        var allowed = can_read(caller, r);
-        if (not allowed) {
-          let clubIds = grantClubIds(r.pii_id, r.field_id);
-          if (clubIds.size() > 0) {
-            let okClubs = await clubsWhereStaff(caller, clubIds);
-            allowed := canReadViaClub(r, okClubs);
-          };
-        };
-
-        log_audit(caller, pii_id, field_id, operation, allowed, purpose);
-
-        if (not allowed) {
-          return #Err("Access denied to PII field");
-        };
-
-        let master_secret = switch (find_master_secret(r.master_key_id)) {
-          case (?s) { s };
-          case null { return #Err("Unknown or destroyed master key for this record") };
-        };
-        let field_key = derive_field_key(master_secret, pii_id, field_id);
-
-        let plaintext = switch (aead_decrypt(field_key, r.nonce, r.ciphertext)) {
-          case (?p) { p };
-          case null { return #Err("Ciphertext integrity check failed") };
-        };
-
-        // Update access count and last_accessed
-        let now = now_ns();
-        pii_records := Array.tabulate<PiiRecord>(pii_records.size(), func(idx) {
-          let cur = pii_records[idx];
-          if (cur.pii_id == pii_id and cur.field_id == field_id) {
-            { cur with last_accessed = now; access_count = cur.access_count + 1 }
-          } else {
-            cur
-          }
-        });
-
-        #Ok({
-          pii_id = pii_id;
-          field_id = field_id;
-          plaintext = plaintext;
-        })
-      };
-      case null {
-        log_audit(caller, pii_id, field_id, operation, false, purpose);
-        #Err("PII not found")
-      };
-    }
-  };
-
-  // Batch variant of get_decrypted_pii for member-facing surfaces (e.g. the
-  // home feed resolving child names). One update call instead of N. Records
-  // the caller cannot read (or that fail integrity) are omitted from the
-  // result rather than failing the whole batch; every attempt is audited.
-  // Does not bump access_count/last_accessed (bulk read path).
-  public shared ({ caller }) func get_decrypted_pii_batch(
+  // Batch read of encrypted PII fields. The canister returns ciphertext only
+  // — decryption happens client-side with the reader's vetKey. Records the
+  // caller cannot read are omitted rather than failing the whole batch;
+  // every attempt is audited. Does not bump access_count/last_accessed.
+  public shared ({ caller }) func get_encrypted_pii_batch(
     pii_ids : [Text],
     field_id : Text,
     operation : Text,
     purpose : Text
-  ) : async { #Ok : [DecryptedPii]; #Err : Text } {
+  ) : async { #Ok : [EncryptedPii]; #Err : Text } {
     auth(caller);
     if (pii_ids.size() > 100) return #Err("Batch too large");
-    // Resolve club-scoped grants once for the whole batch: collect the club
-    // ids granting any requested record, verify the caller's membership in
-    // each via club_domain, then run the per-record checks synchronously.
-    var allowedClubs : [Text] = [];
-    var clubIds : [Text] = [];
-    for (pii_id in pii_ids.values()) {
-      for (cid in grantClubIds(pii_id, field_id).values()) {
-        if (not clubIds.any(func(c) = c == cid)) {
-          clubIds := clubIds.concat([cid]);
-        };
-      };
-    };
-    if (clubIds.size() > 0) {
-      allowedClubs := await clubsWhereStaff(caller, clubIds);
-    };
-    var out : [DecryptedPii] = [];
+    let allowedClubs = await resolveAllowedClubs(caller, pii_ids, field_id);
+    var out : [EncryptedPii] = [];
     for (pii_id in pii_ids.values()) {
       switch (pii_records.find(func(r) = r.pii_id == pii_id and r.field_id == field_id)) {
         case (?r) {
           let allowed = can_read(caller, r) or canReadViaClub(r, allowedClubs);
           log_audit(caller, pii_id, field_id, operation, allowed, purpose);
           if (allowed) {
-            switch (find_master_secret(r.master_key_id)) {
-              case (?master_secret) {
-                let field_key = derive_field_key(master_secret, pii_id, field_id);
-                switch (aead_decrypt(field_key, r.nonce, r.ciphertext)) {
-                  case (?plaintext) { out := out.concat([{ pii_id; field_id; plaintext }]) };
-                  case null {};
-                };
-              };
-              case null {};
-            };
+            out := out.concat([{
+              pii_id = r.pii_id;
+              field_id = r.field_id;
+              ciphertext = r.ciphertext;
+              nonce = r.nonce;
+              master_key_id = r.master_key_id;
+            }]);
           };
         };
         case null {
@@ -541,8 +409,6 @@ persistent actor {
     #Ok(out)
   };
 
-  // Grant another principal read access to one record (e.g. a second
-  // guardian of the same child). Domain owner or governor only.
   // Grants a reader read access to a record. The caller must be the
   // governor, the record's domain owner, OR a verified guardian of the
   // child (pii_id) — self-registered via add_guardian_relationship. This
@@ -675,44 +541,6 @@ persistent actor {
     }
   };
 
-  public shared ({ caller }) func derive_media_key(
-    child_id : Text,
-    authorizer : Principal,
-    purpose : Text,
-    expiry_seconds : Nat64
-  ) : async { #Ok : [Nat8]; #Err : Text } {
-    auth(caller);
-
-    if (not isGovernor(caller) and not caller.equal(authorizer)) {
-      log_audit(caller, child_id, "media_key", "derive", false, purpose);
-      return #Err("Unauthorized media key derivation");
-    };
-
-    let root_secret = switch (media_root_secret) {
-      case (?s) { s };
-      case null {
-        let s = await* random_bytes(32);
-        media_root_secret := ?s;
-        s
-      };
-    };
-
-    log_audit(caller, child_id, "media_key", "derive", true, purpose);
-
-    let material = Array.concat<Nat8>(
-      root_secret,
-      Array.concat<Nat8>(
-        Blob.toArray(Text.encodeUtf8(child_id)),
-        Array.concat<Nat8>(
-          Blob.toArray(Principal.toBlob(authorizer)),
-          Blob.toArray(Text.encodeUtf8(purpose))
-        )
-      )
-    );
-    let key = Crypto.sha256(material); // 32 bytes
-    #Ok(key)
-  };
-
   public shared ({ caller }) func delete_pii(
     pii_id : Text,
     field_id : Text
@@ -727,7 +555,7 @@ persistent actor {
           return #Err("Access denied: cannot delete PII");
         };
 
-        // Remove the record (cryptographic shredding)
+        // Remove the record (cryptographic erasure)
         pii_records := Array.filter<PiiRecord>(pii_records, func(rec) {
           not (rec.pii_id == pii_id and rec.field_id == field_id)
         });
@@ -760,7 +588,7 @@ persistent actor {
         case null { true };
       };
       let pii_match = switch (filter.opt_pii_id) {
-        case (?pii) { record.pii_id == pii };
+        case (?pii) { record.pii_id == pii_id };
         case null { true };
       };
       let time_from_match = switch (filter.opt_from_ts) {
@@ -775,62 +603,17 @@ persistent actor {
     })
   };
 
-  public shared ({ caller }) func rotate_key(new_key_id : Text) : async { #Ok : KeyRotationResult; #Err : Text } {
-    auth(caller);
-    if (not isGovernor(caller)) { return #Err("Governor only") };
-
-    let old_key = master_key_id_current;
-    let now = now_ns();
-
-    let new_secret = await* random_bytes(32);
-    store_master_secret(new_key_id, new_secret);
-
-    // Mark previous active key as pending/rotated. Its secret is kept in
-    // master_secrets so previously-encrypted records remain decryptable.
-    key_metadata_list := Array.tabulate<KeyMetadata>(key_metadata_list.size(), func(idx) {
-      let cur = key_metadata_list[idx];
-      if (cur.key_id == old_key) {
-        { cur with status = #RotationPending }
-      } else {
-        cur
-      }
-    });
-
-    master_key_id_current := new_key_id;
-    last_key_rotation := now;
-
-    let new_meta : KeyMetadata = {
-      key_id = new_key_id;
-      created_at = now;
-      rotation_due_at = now + 7776000000000000;
-      status = #Active;
-    };
-    key_metadata_list := key_metadata_list.concat([new_meta]);
-
-    log_audit(caller, "system", "master_key", "rotate", true, "Scheduled 90-day key rotation");
-
-    #Ok({
-      rotated_at = now;
-      old_key_id = old_key;
-      new_key_id = new_key_id;
-    })
-  };
-
-  public shared query ({ caller }) func get_key_metadata() : async [KeyMetadata] {
-    auth(caller);
-    key_metadata_list
-  };
-
   public shared ({ caller }) func emergency_shutdown() : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) { return #Err("Governor only") };
 
-    // Zeroize state, including all master secrets and the media root secret.
+    // Zeroize state. There are no canister-held keys to destroy — vetKeys
+    // live with the subnet — so wiping the records and grants is the
+    // complete erasure.
     pii_records := [];
     audit_log := [];
-    key_metadata_list := [];
-    master_secrets := [];
-    media_root_secret := null;
+    guardian_relationships := [];
+    club_read_grants := [];
 
     log_audit(caller, "system", "emergency", "shutdown", true, "Emergency shutdown executed");
     #Ok
