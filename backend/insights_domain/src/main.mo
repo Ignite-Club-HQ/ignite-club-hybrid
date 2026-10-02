@@ -551,7 +551,7 @@ persistent actor {
   public shared ({ caller }) func set_ad_active(id : Text, is_active : Bool) : async { #Ok; #Err : Text } {
     auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
     if (not ads.any(func(a) = a.id == id)) return #Err("Ad not found");
-    ads := ads.map(func(a) = if (a.id == id) { a with is_active; updated_at_ms = nowMs() } else a);
+    ads := ads.map(func(a) = if (a.id == id) ({ a with is_active; updated_at_ms = nowMs() }) else a);
     #Ok
   };
 
