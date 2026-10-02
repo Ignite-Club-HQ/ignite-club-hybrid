@@ -50,6 +50,10 @@ persistent actor {
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
   var notificationQueueCanister : ?Principal;
+  // Platform -> minimum required version/build, set by the governor. Read by
+  // the native force-update prompt (NativeAppUpdatePrompt parity with the
+  // public-minimum-app-version edge function).
+  var minimumAppVersions : [(Text, Text)];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);

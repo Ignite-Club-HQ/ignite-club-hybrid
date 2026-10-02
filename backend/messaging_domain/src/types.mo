@@ -54,7 +54,11 @@ module {
 
   // --- Presence & blocking ---
   // Last heartbeat per user; drives the online count (window checked at read).
-  public type PresencePing = { user : Principal; last_seen_ms : Nat64 };
+  public type PresencePing = { user : Principal; last_seen_ms : Nat64; platform : ?Text };
+  // Admin online-users view: one row per recently-heartbeating user.
+  public type OnlineUser = { user : Principal; last_seen_ms : Nat64; platform : ?Text };
+  // Link-preview card data extracted from a page's HTML meta tags.
+  public type LinkPreview = { title : ?Text; description : ?Text; image : ?Text; site_name : ?Text };
   // blocker -> blocked pair; enforced on DMs in both directions.
   public type BlockedUser = { blocker : Principal; blocked : Principal; created_at_ms : Nat64 };
 
