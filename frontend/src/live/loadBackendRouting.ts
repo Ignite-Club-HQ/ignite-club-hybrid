@@ -7,14 +7,18 @@ import {
   getBuildTimeBackendRoutingConfig,
   readCachedBackendRoutingConfig,
   parseBackendRoutingConfig,
+  readCachedClubBackendHint,
   resolveBackendForCountry,
+  resolveClubBackendOverride,
   resolveTargetForCountry,
   type ApprovedBackendTarget,
   type BackendProvider,
+  type BackendRoutingConfig,
 } from "./backendRouting";
-import { resolveFeatureBackend, type FeatureArea } from "./featureBackend";
+import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
+import { getUserClubIds } from "./userClubs";
 
 /**
  * Loads the app-admin backend routing configuration from
@@ -85,9 +89,25 @@ function isIcpAvailable(): boolean {
  * any ICP canisters are actually configured. Feature routing only — this
  * never blocks access.
  */
+/**
+ * The per-club backend pin for the current user, or null. Post-auth this
+ * uses the live membership ids loaded by ClubBackendEnforcement; pre-auth
+ * (the /auth screen decision) it falls back to the hint cached by the last
+ * post-auth check.
+ */
+function currentClubBackendOverride(config: BackendRoutingConfig): BackendProvider | null {
+  const clubIds = getUserClubIds();
+  if (clubIds.length > 0) return resolveClubBackendOverride(config, clubIds);
+  return readCachedClubBackendHint();
+}
+
 export function getEffectiveBackend(): BackendProvider {
+  const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  return resolveBackendForCountry(getBackendRoutingConfig(), country, isIcpAvailable());
+  const pin = currentClubBackendOverride(config);
+  if (pin === "supabase") return "supabase";
+  if (pin === "icp") return isIcpAvailable() ? "icp" : "supabase";
+  return resolveBackendForCountry(config, country, isIcpAvailable());
 }
 
 /**
@@ -96,8 +116,20 @@ export function getEffectiveBackend(): BackendProvider {
  * then use the backend's built-in default).
  */
 export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
+  const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  return resolveTargetForCountry(getBackendRoutingConfig(), country, isIcpAvailable());
+  const pin = currentClubBackendOverride(config);
+  if (!pin) return resolveTargetForCountry(config, country, isIcpAvailable());
+  // A club pin flips the backend; pick an approved target for that backend.
+  const backend: BackendProvider = pin === "icp" && !isIcpAvailable() ? "supabase" : pin;
+  const enabledForBackend = config.targets.filter(t => t.enabled && t.backend === backend);
+  const code = country?.trim().toUpperCase();
+  const pinnedId = code ? config.countryTargets[code] : undefined;
+  if (pinnedId) {
+    const pinned = enabledForBackend.find(t => t.id === pinnedId);
+    if (pinned) return pinned;
+  }
+  return enabledForBackend[0];
 }
 
 function tryGetActiveIcpTarget(): IcpTargetConfig | null {
@@ -116,8 +148,15 @@ function tryGetActiveIcpTarget(): IcpTargetConfig | null {
  * deployed yet transparently keeps using Supabase.
  */
 export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProvider {
+  const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  return resolveFeatureBackend(getBackendRoutingConfig(), country, tryGetActiveIcpTarget(), feature);
+  const pin = currentClubBackendOverride(config);
+  if (pin === "supabase") return "supabase";
+  if (pin === "icp") {
+    const target = tryGetActiveIcpTarget();
+    return target && isFeatureCanisterConfigured(target, feature) ? "icp" : "supabase";
+  }
+  return resolveFeatureBackend(config, country, tryGetActiveIcpTarget(), feature);
 }
 
 /**

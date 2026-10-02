@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { AuthProvider, IcpAuthProvider } from "@/hooks/useAuth";
+import { ClubBackendEnforcement } from "@/components/ClubBackendEnforcement";
 import { useIcpAuthScreen } from "@/live/authBackendMode";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ThemeProvider } from "next-themes";
@@ -440,6 +441,7 @@ const App = () => {
             <PWAPendingInviteHandler />
 
             <Suspense fallback={null}><GlobalSubMonitorGate /></Suspense>
+            <ClubBackendEnforcement />
             <PitchBoardResumeRedirect />
             <MessagesBootstrapPrefetcher />
 

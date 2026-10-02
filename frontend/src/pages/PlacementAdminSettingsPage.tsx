@@ -48,6 +48,7 @@ import {
 type CanisterRow = { key: string; id: string };
 type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
 type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean };
+type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
 const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
   "supabase-region": "Supabase region",
@@ -177,7 +178,18 @@ export default function PlacementAdminSettingsPage() {
   const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
   const [targetRows, setTargetRows] = useState<TargetRow[]>([]);
+  const [clubOverrideRows, setClubOverrideRows] = useState<ClubOverrideRow[]>([]);
   const [routingTouched, setRoutingTouched] = useState(false);
+
+  const { data: clubs } = useQuery({
+    queryKey: ["admin-clubs-for-backend-overrides"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("clubs").select("id, name").order("name");
+      if (error) throw error;
+      return (data ?? []) as { id: string; name: string }[];
+    },
+    enabled: !!user && isAppAdmin,
+  });
   const [simulateCanisters, setSimulateCanisters] = useState(false);
 
   const profileCountry = ((profile as { country?: string | null } | null)?.country ?? null);
@@ -240,6 +252,9 @@ export default function PlacementAdminSettingsPage() {
         enabled: t.enabled,
       })),
     );
+    setClubOverrideRows(
+      Object.entries(config.clubBackendOverrides).map(([clubId, backend]) => ({ clubId, backend })),
+    );
   }, [savedRouting, routingTouched]);
 
   const routingMutation = useMutation({
@@ -248,6 +263,7 @@ export default function PlacementAdminSettingsPage() {
       countryRules: Record<string, BackendEligibility>;
       targets: ApprovedBackendTarget[];
       countryTargets: Record<string, string>;
+      clubBackendOverrides: Record<string, BackendProvider>;
     }) => {
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
@@ -328,6 +344,22 @@ export default function PlacementAdminSettingsPage() {
     ]);
   };
 
+  const updateClubOverrideRow = (index: number, patch: Partial<ClubOverrideRow>) => {
+    setRoutingTouched(true);
+    setClubOverrideRows(current => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const removeClubOverrideRow = (index: number) => {
+    setRoutingTouched(true);
+    setClubOverrideRows(current => current.filter((_, i) => i !== index));
+  };
+
+  const addClubOverrideRow = () => {
+    setRoutingTouched(true);
+    const suggestion = (clubs ?? []).find(c => !clubOverrideRows.some(r => r.clubId === c.id));
+    setClubOverrideRows(current => [...current, { clubId: suggestion?.id ?? "", backend: "icp" }]);
+  };
+
   const handleSaveRouting = () => {
     const countryRules: Record<string, BackendEligibility> = {};
     for (const row of countryRows) {
@@ -363,7 +395,17 @@ export default function PlacementAdminSettingsPage() {
         }
         countryTargets[row.country] = target.id;
       }
-      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets });
+      const clubBackendOverrides: Record<string, BackendProvider> = {};
+      for (const row of clubOverrideRows) {
+        if (!row.clubId) {
+          throw new Error("Every club override row needs a club selected.");
+        }
+        if (clubBackendOverrides[row.clubId]) {
+          throw new Error("The same club is pinned twice.");
+        }
+        clubBackendOverrides[row.clubId] = row.backend;
+      }
+      routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets, clubBackendOverrides });
     } catch (error) {
       toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }
@@ -755,6 +797,57 @@ export default function PlacementAdminSettingsPage() {
               </div>
             ))}
 
+            <div className="space-y-3 border-t pt-4">
+              <div className="space-y-1">
+                <Label>Club backend overrides</Label>
+                <p className="text-xs text-muted-foreground">
+                  Pin a club to one backend for every member of that club — features and the
+                  sign-in screen. A club pin wins over the country rules above. Useful for
+                  testing ICP with one club at a time. Members are switched to the correct
+                  sign-in method automatically on their next sign-in.
+                </p>
+              </div>
+              {clubOverrideRows.length === 0 && (
+                <p className="text-xs text-muted-foreground">No club overrides — every club follows the country rules.</p>
+              )}
+              {clubOverrideRows.map((row, index) => (
+                <div key={index} className="flex items-end gap-2">
+                  <div className="space-y-1 flex-1">
+                    <Label htmlFor={`club-override-${index}`}>Club</Label>
+                    <Select value={row.clubId} onValueChange={(v) => updateClubOverrideRow(index, { clubId: v })}>
+                      <SelectTrigger id={`club-override-${index}`}>
+                        <SelectValue placeholder="Select a club" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(clubs ?? []).map(club => (
+                          <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 w-44">
+                    <Label htmlFor={`club-backend-${index}`}>Backend</Label>
+                    <Select value={row.backend} onValueChange={(v) => updateClubOverrideRow(index, { backend: v as BackendProvider })}>
+                      <SelectTrigger id={`club-backend-${index}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="supabase">Supabase</SelectItem>
+                        <SelectItem value="icp">ICP</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => removeClubOverrideRow(index)} aria-label="Remove club override">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button variant="outline" onClick={addClubOverrideRow}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add club override
+              </Button>
+            </div>
+
             <div className="flex gap-2">
               <Button variant="outline" onClick={addCountryRow}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -796,6 +889,7 @@ export default function PlacementAdminSettingsPage() {
                 countryRules: Object.fromEntries(countryRows.map(r => [r.country, r.eligibility])),
                 targets: [],
                 countryTargets: {},
+                clubBackendOverrides: {},
               };
               const currentTarget = tryActiveIcpTarget();
               return (
