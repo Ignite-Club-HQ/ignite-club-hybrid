@@ -102,6 +102,7 @@ module {
     var blockedUsers : [BlockedUser];
     var typingPings : [TypingPing];
     var pinnedMessages : [PinnedMessage];
+    var notificationQueueCanister : ?Principal;
   };
   type NewActor = {
     var governor : Principal;
