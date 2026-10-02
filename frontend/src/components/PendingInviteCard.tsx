@@ -45,6 +45,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { revokeLivePendingInvite } from "@/live/features/club";
 
 interface PendingInviteCardProps {
   invite: {
@@ -105,6 +108,9 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
   const [editName, setEditName] = useState(invite.invited_label || "");
   const [editRole, setEditRole] = useState<AppRole>(invite.role as AppRole);
   const [isResending, setIsResending] = useState(false);
+  // ICP mode: no invite-token sharing, resend-email, edit, or move (canister has no
+  // invite token / email-resend / update / move shape) — revoke routes to the club canister.
+  const isIcp = resolveAuthBackend() === "icp";
   
 
   // Fetch team name and club branding for resend email
@@ -119,7 +125,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         .single();
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcp,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -135,7 +141,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         .single();
       return data;
     },
-    enabled: !!clubId && !teamId,
+    enabled: !!clubId && !teamId && !isIcp,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -150,7 +156,8 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         .single();
       return data;
     },
-    enabled: !!invite.id,
+    // NEEDS-CANISTER: invite tokens / short codes — the club canister invite record has no token shape.
+    enabled: !!invite.id && !isIcp,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -177,7 +184,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
       if (error) throw error;
       return (data || []).filter((t) => !t.is_archived && t.id !== teamId);
     },
-    enabled: showMoveSheet && !!clubId && !!teamId,
+    enabled: showMoveSheet && !!clubId && !!teamId && !isIcp,
   });
 
   const movePendingInviteMutation = useMutation({
@@ -274,11 +281,18 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("pending_invites")
-        .delete()
-        .eq("id", invite.id);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("pending_invites")
+            .delete()
+            .eq("id", invite.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await revokeLivePendingInvite(ctx, invite.id);
+        },
+      });
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["pending-invites"] });
@@ -568,15 +582,18 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
           {/* Send Reminder CTA + overflow menu */}
           {isAdmin && (
             <div className="shrink-0 flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="default"
-                className="h-8 text-xs font-semibold gap-1.5 px-3"
-                onClick={() => setShowReminderSheet(true)}
-              >
-                <Send className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">Remind</span>
-              </Button>
+              {/* Resend-email is Supabase-only; hidden in ICP mode */}
+              {!isIcp && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="h-8 text-xs font-semibold gap-1.5 px-3"
+                  onClick={() => setShowReminderSheet(true)}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span className="hidden xs:inline">Remind</span>
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -590,10 +607,13 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onClick={handleOpenEdit}>
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
+                  {/* NEEDS-CANISTER: update pending invite (label/role) — hidden in ICP mode */}
+                  {!isIcp && (
+                    <DropdownMenuItem onClick={handleOpenEdit}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                  )}
                   {invite.invited_email && (
                     <DropdownMenuItem
                       onClick={() => {
@@ -605,7 +625,8 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
                       Copy email
                     </DropdownMenuItem>
                   )}
-                  {teamId && clubId && (
+                  {/* NEEDS-CANISTER: move pending invite between teams — hidden in ICP mode */}
+                  {!isIcp && teamId && clubId && (
                     <DropdownMenuItem onClick={() => setShowMoveSheet(true)}>
                       <ArrowRightLeft className="h-4 w-4 mr-2" />
                       Move to team
