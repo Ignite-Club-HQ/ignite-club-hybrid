@@ -93,6 +93,12 @@ export interface JoinRequest {
   'user' : Principal,
   'created_at_ms' : bigint,
 }
+export interface LinkPreview {
+  'title' : [] | [string],
+  'description' : [] | [string],
+  'site_name' : [] | [string],
+  'image' : [] | [string],
+}
 export interface Message {
   'id' : string,
   'conversation_id' : string,
@@ -117,6 +123,11 @@ export interface MutePreference {
   'muted' : boolean,
   'conversation_id' : string,
   'user' : Principal,
+}
+export interface OnlineUser {
+  'last_seen_ms' : bigint,
+  'user' : Principal,
+  'platform' : [] | [string],
 }
 export interface PinnedMessage {
   'id' : string,
@@ -285,6 +296,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
+  'fetch_link_preview' : ActorMethod<
+    [string],
+    { 'Ok' : LinkPreview } |
+      { 'Err' : string }
+  >,
   'forward_message' : ActorMethod<
     [string, string],
     { 'Ok' : Message } |
@@ -299,6 +315,11 @@ export interface _SERVICE {
   'get_group_metadata' : ActorMethod<
     [string],
     { 'Ok' : GroupMetadata } |
+      { 'Err' : string }
+  >,
+  'get_minimum_app_versions' : ActorMethod<
+    [],
+    { 'Ok' : Array<[string, string]> } |
       { 'Err' : string }
   >,
   'get_mute_preference' : ActorMethod<[string], boolean>,
@@ -334,6 +355,11 @@ export interface _SERVICE {
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_all_online_users' : ActorMethod<
+    [],
+    { 'Ok' : Array<OnlineUser> } |
       { 'Err' : string }
   >,
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
@@ -379,7 +405,11 @@ export interface _SERVICE {
     { 'Ok' : PinnedMessage } |
       { 'Err' : string }
   >,
-  'presence_heartbeat' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'presence_heartbeat' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -429,6 +459,11 @@ export interface _SERVICE {
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
+  'send_system_message' : ActorMethod<
+    [Principal, string, string],
+    { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
   'set_club_ai_catch_up' : ActorMethod<
     [string, boolean],
     { 'Ok' : null } |
@@ -451,6 +486,11 @@ export interface _SERVICE {
   >,
   'set_dm_attachments_disabled' : ActorMethod<
     [Principal, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_minimum_app_versions' : ActorMethod<
+    [Array<[string, string]>],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

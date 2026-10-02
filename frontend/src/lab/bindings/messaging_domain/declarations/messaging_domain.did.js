@@ -196,10 +196,21 @@ export const idlFactory = ({ IDL }) => {
     'roles' : IDL.Vec(RoleGrant),
     'competitionAdmins' : IDL.Vec(CompetitionAdmin),
   });
+  const LinkPreview = IDL.Record({
+    'title' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'site_name' : IDL.Opt(IDL.Text),
+    'image' : IDL.Opt(IDL.Text),
+  });
   const PollResults = IDL.Record({
     'poll' : Poll,
     'total_votes' : IDL.Nat32,
     'counts' : IDL.Vec(IDL.Nat32),
+  });
+  const OnlineUser = IDL.Record({
+    'last_seen_ms' : IDL.Nat64,
+    'user' : IDL.Principal,
+    'platform' : IDL.Opt(IDL.Text),
   });
   const MessagePage = IDL.Record({
     'messages' : IDL.Vec(Message),
@@ -320,6 +331,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'fetch_link_preview' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : LinkPreview, 'Err' : IDL.Text })],
+        [],
+      ),
     'forward_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
@@ -334,6 +350,16 @@ export const idlFactory = ({ IDL }) => {
     'get_group_metadata' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_minimum_app_versions' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
@@ -377,6 +403,11 @@ export const idlFactory = ({ IDL }) => {
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_all_online_users' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(OnlineUser), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
@@ -432,7 +463,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'presence_heartbeat' : IDL.Func(
-        [],
+        [IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -498,6 +529,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
+    'send_system_message' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_ai_catch_up' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -520,6 +556,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_dm_attachments_disabled' : IDL.Func(
         [IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_minimum_app_versions' : IDL.Func(
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
