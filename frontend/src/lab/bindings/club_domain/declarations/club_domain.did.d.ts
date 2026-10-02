@@ -308,6 +308,10 @@ export interface TeamPlayerPosition {
   'member_id' : string,
   'position' : string,
 }
+export interface TeamSponsorAllocation {
+  'team_id' : string,
+  'sponsor_id' : string,
+}
 export interface _SERVICE {
   'accept_identity_link' : ActorMethod<
     [bigint],
@@ -619,6 +623,11 @@ export interface _SERVICE {
     { 'Ok' : Array<TeamInvite> } |
       { 'Err' : string }
   >,
+  'list_team_sponsor_allocations' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamSponsorAllocation> } |
+      { 'Err' : string }
+  >,
   'list_teams' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubTeam> } |
@@ -788,6 +797,11 @@ export interface _SERVICE {
   >,
   'set_team_player_position' : ActorMethod<
     [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_team_sponsor_allocation' : ActorMethod<
+    [string, string, boolean],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
