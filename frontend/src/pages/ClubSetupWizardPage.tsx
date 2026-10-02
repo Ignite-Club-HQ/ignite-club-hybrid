@@ -139,10 +139,13 @@ export default function ClubSetupWizardPage() {
         // NEEDS-CANISTER: club_domain's ClubSettings has no per-field theme
         // breakdown matching the Supabase HSL columns; only name/logo/theme
         // enabled are mapped, which is enough to drive this wizard's steps.
-        const [profile, settings] = await Promise.all([
-          getLiveClubProfile({ target: "icp", identity: null } as any, clubId!),
-          getLiveClubSettings({ target: "icp", identity: null } as any, clubId!),
-        ]);
+        const [profile, settings] = await withFeatureBackend("membership", {
+          icp: (ctx) => Promise.all([
+            getLiveClubProfile(ctx, clubId!),
+            getLiveClubSettings(ctx, clubId!),
+          ]),
+          supabase: async () => { throw new Error("unreachable"); },
+        });
         if (!profile) return null;
         return {
           kind: "club",
@@ -221,7 +224,10 @@ export default function ClubSetupWizardPage() {
     queryKey: ["club-teams", clubId, "setup", providerKey],
     queryFn: async () => {
       if (useIcpLab) {
-        const teams = await listLiveTeams({ target: "icp", identity: null } as any, clubId!);
+        const teams = await withFeatureBackend("membership", {
+          icp: (ctx) => listLiveTeams(ctx, clubId!),
+          supabase: async () => { throw new Error("unreachable"); },
+        });
         return teams.map((team: any) => ({ id: team.id, name: team.name, level_age: team.level_age?.[0] ?? null }));
       }
       const { data } = await supabase
@@ -281,10 +287,10 @@ export default function ClubSetupWizardPage() {
             id: teamId,
             club_id: clubId!,
             name: draft.name.trim(),
-            level_age: candidOptLocal(draft.levelAge.trim() || null),
-            description: candidOptLocal(null),
-            logo_url: candidOptLocal(null),
-            default_rsvp_audience: candidOptLocal(
+            level_age: candidOpt(draft.levelAge.trim() || null),
+            description: candidOpt(null),
+            logo_url: candidOpt(null),
+            default_rsvp_audience: candidOpt(
               defaultRsvpAudienceForTeam(draft.name, draft.levelAge),
             ),
           } as any);
