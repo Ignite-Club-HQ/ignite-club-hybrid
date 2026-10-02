@@ -688,15 +688,21 @@ persistent actor {
 
   // ---------------- Join links ----------------
 
-  public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+  // Join links are scoped per (league, role): a league can hold one active
+  // player link and one active admin link at the same time.
+  func validJoinLinkRole(value : Text) : Bool { value == "player" or value == "admin" };
+
+  public shared ({ caller }) func create_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
-        if (joinLinks.any(func(item) = item.mini_league_id == mini_league_id and not item.revoked)) return #Err("Active join link already exists");
+        if (not validJoinLinkRole(role)) return #Err("Invalid join link role");
+        if (joinLinks.any(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) return #Err("Active join link already exists");
         let link : Types.MiniLeagueJoinLink = {
           mini_league_id;
           token = nextId("mljl-" # mini_league_id, joinLinks.size());
+          role;
           revoked = false;
           created_by = caller;
           created_at_ms = nowMs();
@@ -708,16 +714,17 @@ persistent actor {
     }
   };
 
-  public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+  public shared ({ caller }) func rotate_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
-        switch (joinLinks.find(func(item) = item.mini_league_id == mini_league_id and not item.revoked)) {
+        if (not validJoinLinkRole(role)) return #Err("Invalid join link role");
+        switch (joinLinks.find(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) {
           case null #Err("No active join link");
           case (?current) {
             let rotated : Types.MiniLeagueJoinLink = { current with token = nextId("mljl-" # mini_league_id, joinLinks.size()); revision = current.revision + 1 };
-            joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and not item.revoked) rotated else item);
+            joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and item.role == role and not item.revoked) rotated else item);
             #Ok(rotated)
           };
         }
@@ -725,13 +732,45 @@ persistent actor {
     }
   };
 
-  public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text) : async { #Ok; #Err : Text } {
+  public shared ({ caller }) func revoke_mini_league_join_link(mini_league_id : Text, role : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) {
-        joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and not item.revoked) { { item with revoked = true } } else item);
+        if (not validJoinLinkRole(role)) return #Err("Invalid join link role");
+        joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and item.role == role and not item.revoked) { { item with revoked = true } } else item);
         #Ok
+      };
+    }
+  };
+
+  // Token lookup for the claim page: the token itself is the capability, so
+  // any caller holding it may resolve which league/role it belongs to.
+  public query func get_join_link_by_token(token : Text) : async { #Ok : Types.MiniLeagueJoinLink; #Err : Text } {
+    switch (joinLinks.find(func(item) = item.token == token and not item.revoked)) {
+      case null #Err("Join link not found");
+      case (?link) #Ok(link);
+    }
+  };
+
+  // Claims an admin join link: grants the caller league-admin rights instead
+  // of minting a roster player.
+  public shared ({ caller }) func claim_admin_join_link(token : Text) : async { #Ok : { mini_league_id : Text; club_id : Text }; #Err : Text } {
+    auth(caller);
+    switch (joinLinks.find(func(item) = item.token == token)) {
+      case null #Err("Join link not found");
+      case (?link) {
+        if (link.revoked) return #Err("Join link revoked");
+        if (link.role != "admin") return #Err("Join link is not an admin link");
+        switch (findLeague(link.mini_league_id)) {
+          case null #Err("Mini-league not found");
+          case (?league) {
+            if (not admins.any(func(item) = item.mini_league_id == link.mini_league_id and item.user_id.equal(caller))) {
+              admins := admins.concat([{ id = nextId("mlad-" # link.mini_league_id, admins.size()); mini_league_id = link.mini_league_id; user_id = caller; granted_by = ?link.created_by; created_at_ms = nowMs() }]);
+            };
+            #Ok({ mini_league_id = league.id; club_id = league.club_id })
+          };
+        }
       };
     }
   };
@@ -744,6 +783,7 @@ persistent actor {
       case null #Err("Join link not found");
       case (?link) {
         if (link.revoked) return #Err("Join link revoked");
+        if (link.role == "admin") return #Err("Use claim_admin_join_link for admin links");
         if (not valid(player_name)) return #Err("Invalid player name");
         switch (findLeague(link.mini_league_id)) {
           case null #Err("Mini-league not found");
@@ -766,6 +806,81 @@ persistent actor {
     switch (requireLeagueAdmin(caller, mini_league_id)) {
       case (#Err(e)) #Err(e);
       case (#Ok(_)) #Ok(joinLinks.filter(func(item) = item.mini_league_id == mini_league_id));
+    }
+  };
+
+  // ---------------- Delete / duplicate ----------------
+
+  // Deletes a league and every row scoped to it (sessions, players, groups
+  // and their players/duties, availability, invites, admins, join links).
+  // Mirrors the Supabase mini_leagues delete, which cascades via FK.
+  public shared ({ caller }) func delete_mini_league(mini_league_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let sessionIds = sessions.filter(func(item) = item.mini_league_id == mini_league_id).map(func(item) = item.id);
+        let groupIds = groups.filter(func(item) = sessionIds.any(func(sid) = sid == item.session_id)).map(func(item) = item.id);
+        leagues := leagues.filter(func(item) = item.id != mini_league_id);
+        sessions := sessions.filter(func(item) = item.mini_league_id != mini_league_id);
+        players := players.filter(func(item) = item.mini_league_id != mini_league_id);
+        invites := invites.filter(func(item) = item.mini_league_id != mini_league_id);
+        groups := groups.filter(func(item) = not sessionIds.any(func(sid) = sid == item.session_id));
+        groupPlayers := groupPlayers.filter(func(item) = not groupIds.any(func(gid) = gid == item.group_id));
+        duties := duties.filter(func(item) = not groupIds.any(func(gid) = gid == item.group_id));
+        availability := availability.filter(func(item) = not sessionIds.any(func(sid) = sid == item.session_id));
+        admins := admins.filter(func(item) = item.mini_league_id != mini_league_id);
+        joinLinks := joinLinks.filter(func(item) = item.mini_league_id != mini_league_id);
+        #Ok
+      };
+    }
+  };
+
+  // Clones a league with its roster (players keep name/rating/notes and any
+  // child/parent links, mirroring the Supabase duplicate flow), under a new
+  // id. Sessions, groups, duties and availability are not copied — they are
+  // per-session state, same as the Supabase duplicateLeagueMutation.
+  public shared ({ caller }) func duplicate_mini_league(mini_league_id : Text, new_name : Text) : async { #Ok : Types.MiniLeague; #Err : Text } {
+    auth(caller);
+    switch (requireLeagueAdmin(caller, mini_league_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(league)) {
+        if (not valid(new_name)) return #Err("Invalid league name");
+        let now = nowMs();
+        let created : Types.MiniLeague = {
+          id = nextId("mlg-" # league.club_id, leagues.size());
+          club_id = league.club_id;
+          name = new_name;
+          description = league.description;
+          logo_url = league.logo_url;
+          team_size = league.team_size;
+          min_players_per_side = league.min_players_per_side;
+          minutes_per_half = league.minutes_per_half;
+          bib_colors = league.bib_colors;
+          show_matches_to_members = league.show_matches_to_members;
+          status = "active";
+          created_by = caller;
+          created_at_ms = now;
+          updated_at_ms = now;
+        };
+        leagues := leagues.concat([created]);
+        let clonedPlayers = players.filter(func(item) = item.mini_league_id == mini_league_id).map(func(item) : Types.MiniLeaguePlayer {
+          {
+            id = nextId("mlp-" # created.id, players.size());
+            mini_league_id = created.id;
+            name = item.name;
+            child_id = item.child_id;
+            parent_user_id = item.parent_user_id;
+            claimed_by = item.claimed_by;
+            ability_rating = item.ability_rating;
+            notes = item.notes;
+            created_at_ms = now;
+            updated_at_ms = now;
+          }
+        });
+        players := players.concat(clonedPlayers);
+        #Ok(created)
+      };
     }
   };
 }

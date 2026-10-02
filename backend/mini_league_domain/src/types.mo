@@ -138,11 +138,14 @@ module {
   };
 
   // Generic mini-league-wide join link (as opposed to MiniLeagueInvite,
-  // which is single-use and optionally pre-bound to a player). Claiming
-  // creates a new player record, mirroring join_mini_league_by_token.
+  // which is single-use and optionally pre-bound to a player). `role` decides
+  // what claiming grants: "player" mints a roster player claimed by the
+  // caller; "admin" grants league-admin rights (the League Admin join link
+  // managed by MiniLeagueAdminJoinLinkCard).
   public type MiniLeagueJoinLink = {
     mini_league_id : Text;
     token : Text;
+    role : Text;
     revoked : Bool;
     created_by : Principal;
     created_at_ms : Nat64;

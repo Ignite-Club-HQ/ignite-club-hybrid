@@ -10,7 +10,7 @@ module {
   public type Match = { id : Text; competition_id : Text; home_team : Text; away_team : Text; status : Text; home_score : Nat16; away_score : Nat16; division_id : ?Text; scheduled_at_ms : ?Nat64; venue : ?Text; pitch_number : ?Text; round_number : ?Nat16; duration_minutes : ?Nat16; arrival_minutes_before : ?Nat16; notes : ?Text; revision : Nat64 };
   // Per-competition chat toggle. Revision supports optimistic locking like
   // other mutable rows in this canister.
-  public type ChatSettings = { competition_id : Text; chat_enabled : Bool; revision : Nat64 };
+  public type ChatSettings = { competition_id : Text; chat_enabled : Bool; admins_only : Bool; revision : Nat64 };
   // Standing invite record for a (competition, invitee) pair with explicit
   // status transitions (pending -> accepted | declined), mirroring the
   // generic invites pattern used elsewhere in the hybrid stack.
