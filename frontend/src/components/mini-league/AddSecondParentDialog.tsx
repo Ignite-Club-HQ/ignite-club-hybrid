@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLivePendingInvite, createLiveChildForParentInClub, linkLiveGuardian } from "@/live/features/club";
+import { grantLiveGuardianChildNameRead, registerLiveChildNamePii } from "@/live/features/vault";
 import { linkLiveMiniLeagueGuardian } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Principal } from "@icp-sdk/core/principal";
@@ -135,6 +136,9 @@ export function AddSecondParentDialog({
         if (!selectedUser) throw new Error("Select a parent to link first");
         const parentPrincipal = Principal.fromText(selectedUser.id);
         const child = await createLiveChildForParentInClub(ctx, clubId, parentPrincipal);
+        // Names live on pii_access_control, not club_domain — register the
+        // player name and grant the parent read access (best effort).
+        await registerLiveChildNamePii(ctx, child.id, playerName, parentPrincipal);
         return child.id;
       },
     });

@@ -16,6 +16,10 @@ import {
   createLivePendingInvite,
   linkLiveGuardian,
 } from "@/live/features/club";
+import {
+  grantLiveGuardianChildNameRead,
+  registerLiveChildNamePii,
+} from "@/live/features/vault";
 
 type Profile = {
   id: string;
