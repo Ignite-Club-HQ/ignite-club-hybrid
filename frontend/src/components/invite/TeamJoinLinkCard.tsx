@@ -177,8 +177,10 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
           if (rotate && existing) {
             link = await rotateLiveTeamInviteLink(ctx, existing.id);
           } else {
-            const team = await getLiveTeam(ctx, teamId);
-            link = await createLiveTeamInviteLink(ctx, (team as { club: string }).club, teamId, role);
+            const teamOpt = await getLiveTeam(ctx, teamId);
+            const team = teamOpt[0];
+            if (!team) throw new Error("Team not found");
+            link = await createLiveTeamInviteLink(ctx, team.club_id, teamId, role);
           }
           const row: JoinLinkRow = {
             id: link.id,
