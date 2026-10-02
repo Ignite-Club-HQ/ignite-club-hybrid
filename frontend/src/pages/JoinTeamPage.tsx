@@ -1910,6 +1910,7 @@ function SupabaseJoinTeamPage() {
           }
         }
         toast({ title: `${addedLabel} added to ${inviteEntityName}!` });
+        }
       }
 
 
