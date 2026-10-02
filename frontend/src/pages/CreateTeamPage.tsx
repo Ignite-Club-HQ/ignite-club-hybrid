@@ -259,7 +259,12 @@ export default function CreateTeamPage() {
         .is("deleted_at", null)
         .ilike("name", name.trim())
         .maybeSingle(),
-      icp: async () => ({ data: null }), // NEEDS-CANISTER: duplicate name check not yet available on canister
+      icp: async (ctx) => {
+        // Canister does the case-insensitive check (ignoring soft-deleted
+        // teams); map it onto the same "existing row" shape as Supabase.
+        const unique = await checkLiveTeamNameUnique(ctx, clubId!, name.trim());
+        return { data: unique ? null : { id: "duplicate" } };
+      },
     });
 
     if (existingTeam) {
