@@ -440,6 +440,7 @@ const App = () => {
             <PWAPendingInviteHandler />
 
             <Suspense fallback={null}><GlobalSubMonitorGate /></Suspense>
+            <ClubBackendEnforcement />
             <PitchBoardResumeRedirect />
             <MessagesBootstrapPrefetcher />
 
