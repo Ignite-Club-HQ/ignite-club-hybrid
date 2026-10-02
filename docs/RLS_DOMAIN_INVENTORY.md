@@ -21,6 +21,9 @@ boundary; it does not mean production parity is complete.
 - `pii_access_control`: encrypted PII, field-level access control, audit trail, cryptographic erasure, and key rotation boundary.
 - `vault_domain`: vault folder tree, club/team-scoped file metadata, restricted-role visibility, uploader, and soft-delete boundary.
 - `secret_workload_identity`: worker workload registration, scope whitelist enforcement, and vault secret access control boundary.
+- `mini_league_domain`: mini-league group, player, session, availability, duty, and admin boundary.
+- `club_points_domain`: child/club points, rewards, redemptions, cooldowns, and leaderboard boundary.
+- `insights_domain`: performance samples, engagement counters, admin alerts, audit, and feedback boundary.
 
 ## Inventory size
 
