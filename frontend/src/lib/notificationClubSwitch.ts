@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getJumpTarget, type ChatJumpKind } from "@/lib/pendingChatJump";
 import { resolveRouteClubScope } from "@/lib/routeClubScope";
 import { lookupRouteClubId } from "@/lib/clubScopeLookup";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 
 const SS_KEY = "ignite_pending_notification_club_switch";
@@ -427,6 +428,11 @@ export async function resolveClubIdForChatTarget(
   try {
     if (!targetId) return null;
     if (kind === "club") return targetId;
+    // NEEDS-CANISTER: team->club and group->club lookups below read Supabase
+    // tables by row id. No canister wrapper exposes this mapping yet, so for
+    // II users navigate without the extra club-filter sync rather than
+    // firing Supabase.
+    if (resolveAuthBackend() === "icp") return null;
     if (kind === "team") {
       const { data } = await supabase.from("teams").select("club_id").eq("id", targetId).maybeSingle();
       return (data as any)?.club_id ?? null;

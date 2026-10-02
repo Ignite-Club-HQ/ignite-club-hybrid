@@ -34,6 +34,8 @@
  * on club context, so those stay opt-in longer.
  */
 
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
 export type ChatSurface = "group" | "dm" | "team" | "club" | "broadcast";
 
 const DEFAULT_ENABLED: Record<ChatSurface, boolean> = {
@@ -66,6 +68,9 @@ export async function ensureSessionApplied(): Promise<boolean> {
 
 export function isChatEagerInvalidateEnabled(surface: ChatSurface): boolean {
   try {
+    // The eager-invalidate warm-up only benefits the Supabase query cache;
+    // II users never hit Supabase for chat data, so skip it outright.
+    if (resolveAuthBackend() === "icp") return false;
     if (typeof window !== "undefined" && (window as any).__disableChatEagerInvalidate === true) {
       return false;
     }

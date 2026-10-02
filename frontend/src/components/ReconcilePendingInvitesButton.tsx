@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   pendingCount: number;
@@ -40,6 +41,8 @@ export default function ReconcilePendingInvitesButton({ pendingCount, teamId, cl
 
   if (pendingCount === 0) return null;
   if (!teamId && !clubId) return null;
+  // NEEDS-CANISTER: no club_domain equivalent of reconcile_pending_invites.
+  if (resolveAuthBackend() === "icp") return null;
 
   const handleReconcile = async () => {
     setIsRunning(true);

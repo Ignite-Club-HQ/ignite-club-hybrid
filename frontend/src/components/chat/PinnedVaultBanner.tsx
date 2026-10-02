@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { hapticSelectionTick } from "@/lib/haptics";
 import type { PinnedVaultRecord } from "@/hooks/useChatPinnedVault";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface PinnedVaultBannerProps {
   record: PinnedVaultRecord | null;
@@ -21,6 +22,12 @@ interface ResolvedTarget {
 }
 
 async function resolveTarget(record: PinnedVaultRecord): Promise<ResolvedTarget | null> {
+  if (resolveAuthBackend() === "icp") {
+    // NEEDS-CANISTER: no routed lookup exists that returns folder/team/club
+    // name + file count in the shape this banner needs. Hide the banner for
+    // II users rather than firing Supabase.
+    return null;
+  }
   if (record.vault_file_id) {
     const { data } = await supabase
       .from("vault_files")

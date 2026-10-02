@@ -25,7 +25,6 @@ function renderSection(overrides: Partial<Parameters<typeof ClubSponsorsSection>
     <Accordion type="multiple" defaultValue={[]}>
       <ClubSponsorsSection
         hasProAccess
-        useIcpLab={false}
         toggleValues={allToggles}
         onToggle={onToggle}
         clubId="club-1"
@@ -70,18 +69,7 @@ describe("ClubSponsorsSection", () => {
     expect(screen.getAllByRole("switch")[0]).toBeDisabled();
   });
 
-  it("disables the toggles fieldset in ICP lab mode", () => {
-    renderSection({ useIcpLab: true });
-    expect(screen.getAllByRole("switch")[0]).toBeDisabled();
-  });
-
-  it("shows the lab-unavailable message instead of the sponsor managers in ICP lab mode", () => {
-    renderSection({ useIcpLab: true });
-    expect(screen.getByText("Sponsor management is unavailable in ICP lab mode.")).toBeInTheDocument();
-    expect(screen.queryByText("Sponsors manager for club-1")).not.toBeInTheDocument();
-  });
-
-  it("renders the sponsor managers when not in ICP lab mode", () => {
+  it("renders the sponsor managers (they route through withFeatureBackend)", () => {
     renderSection();
     expect(screen.getByText("Sponsors manager for club-1")).toBeInTheDocument();
     expect(screen.getByText("Team sponsor allocator for club-1")).toBeInTheDocument();

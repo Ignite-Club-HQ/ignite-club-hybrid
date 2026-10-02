@@ -14,6 +14,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { seedClubFilterFromInvite } from "./seedClubFilterFromInvite";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 const STORAGE_KEY_PREFIX = "ignite-club-theme-";
 const NO_CLUB_THEME_SENTINEL = "__ignite_no_club__";
@@ -32,12 +33,32 @@ async function fetchClubNames(clubIds: string[]): Promise<Record<string, string>
   const ids = clubIds.filter(Boolean);
   if (!ids.length) return {};
   try {
-    const { data } = await supabase.from("clubs").select("id, name").in("id", ids);
-    const map: Record<string, string> = {};
-    (data || []).forEach((row: any) => {
-      if (row?.id && row?.name) map[row.id] = String(row.name).trim();
+    return await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data } = await supabase.from("clubs").select("id, name").in("id", ids);
+        const map: Record<string, string> = {};
+        (data || []).forEach((row: any) => {
+          if (row?.id && row?.name) map[row.id] = String(row.name).trim();
+        });
+        return map;
+      },
+      icp: async (ctx) => {
+        const { getLiveClubProfile } = await import("@/live/features/club");
+        const map: Record<string, string> = {};
+        await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const profileOpt = await getLiveClubProfile(ctx, id);
+              const profile = profileOpt[0];
+              if (profile?.name) map[id] = String(profile.name).trim();
+            } catch {
+              // NEEDS-CANISTER: no-op — best-effort club name lookup only.
+            }
+          }),
+        );
+        return map;
+      },
     });
-    return map;
   } catch {
     return {};
   }

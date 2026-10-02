@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 const ManageRolesDialog = lazyWithRetry(() => import("@/components/ManageRolesDialog"));
 
 const ROLE_LABELS: Record<string, string> = {
@@ -108,6 +110,14 @@ export default function MemberDetailSheet({
     }
     let cancelled = false;
     setCanDM(null);
+    if (resolveAuthBackend() === "icp") {
+      // NEEDS-CANISTER: no DM-eligibility check on the messaging canister yet.
+      // Fail open — get_or_create_dm enforces on the canister side.
+      setCanDM(true);
+      return () => {
+        cancelled = true;
+      };
+    }
     supabase
       .rpc("can_dm_user", { other_user_id: userId })
       .then(({ data, error }) => {
@@ -128,6 +138,25 @@ export default function MemberDetailSheet({
     if (startingDM || canDM === false) return;
     setStartingDM(true);
     try {
+      if (resolveAuthBackend() === "icp") {
+        const { Principal } = await import("@icp-sdk/core/principal");
+        const conversationId = await withFeatureBackend("messaging", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const { getOrCreateLiveDm } = await import("@/live/features/messaging");
+            const other = Principal.fromText(userId);
+            const dm = await getOrCreateLiveDm(ctx, other);
+            const record = dm as unknown as Record<string, unknown>;
+            return (record.conversation_id ?? record.conversationId ?? record.id ?? null) as string | null;
+          },
+        });
+        if (conversationId) {
+          onOpenChange(false);
+          navigate(`/messages/dm/${conversationId}`);
+        }
+        return;
+      }
+
       // 1. Quick check for an existing conversation so we can confirm + skip creation
       let existingConvId: string | null = null;
       if (user?.id) {

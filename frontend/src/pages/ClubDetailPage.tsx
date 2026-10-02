@@ -1533,6 +1533,10 @@ export default function ClubDetailPage() {
                     <Megaphone className="h-4 w-4 mr-2 text-primary" />
                     Broadcast message
                   </DropdownMenuItem>
+                  {/* NEEDS-CANISTER: no club-wide player/guardian roster read exists
+                      on club_domain yet, so the export is hidden for Internet
+                      Identity accounts rather than firing Supabase. */}
+                  {!isIcpAccount && (
                   <DropdownMenuItem
                     disabled={isExportingRoster}
                     onSelect={async (e) => {
@@ -1566,6 +1570,7 @@ export default function ClubDetailPage() {
                     )}
                     Export player list
                   </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -1755,10 +1760,27 @@ export default function ClubDetailPage() {
           events_sponsor_strip_enabled: { enabled: "Events sponsor strip enabled", disabled: "Events sponsor strip disabled" },
         };
         const handleSponsorToggle = async (field: ClubSponsorToggleField, checked: boolean) => {
-          const { error } = await supabase
-            .from("clubs")
-            .update({ [field]: checked } as any)
-            .eq("id", id!);
+          const error = await withFeatureBackend("membership", {
+            supabase: async () => {
+              const { error } = await supabase
+                .from("clubs")
+                .update({ [field]: checked } as any)
+                .eq("id", id!);
+              return error;
+            },
+            icp: async (ctx) => {
+              try {
+                const { getLiveClubSettings, saveLiveClubSettings } = await import("@/live/features/club");
+                const settingsOpt = await getLiveClubSettings(ctx, id!);
+                const settings = settingsOpt[0];
+                if (!settings) throw new Error("Club settings not found");
+                await saveLiveClubSettings(ctx, { ...settings, [field]: checked });
+                return null;
+              } catch (e) {
+                return e;
+              }
+            },
+          });
           if (error) {
             toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });
             return;
@@ -1771,7 +1793,6 @@ export default function ClubDetailPage() {
         return (
           <ClubSponsorsSection
             hasProAccess={hasProAccess}
-            useIcpLab={useIcpLab}
             toggleValues={{
               media_sponsors_enabled: !!(club as any)?.media_sponsors_enabled,
               media_header_sponsors_enabled: !!(club as any)?.media_header_sponsors_enabled,

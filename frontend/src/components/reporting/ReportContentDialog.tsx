@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export interface ReportReason {
   value: string;
@@ -45,6 +46,13 @@ export function ReportContentDialog({
   invokeName,
   buildBody,
 }: ReportContentDialogProps) {
+  // NEEDS-CANISTER: content reporting is admin moderation infra with no
+  // canister counterpart. The dialog should not even be rendered for II
+  // users — callers are expected to gate on resolveAuthBackend() — but we
+  // also no-op defensively here in case a caller forgets.
+  if (resolveAuthBackend() === "icp") {
+    return null;
+  }
   const [reason, setReason] = useState("");
   const [additionalDetails, setAdditionalDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);

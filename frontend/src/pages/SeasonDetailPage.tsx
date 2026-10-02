@@ -29,6 +29,7 @@ import { BulkRolloverDialog } from "@/components/seasons/BulkRolloverDialog";
 import { SeasonEoiConfigCard } from "@/components/seasons/SeasonEoiConfigCard";
 import { EoiEmbedCard } from "@/components/eoi/EoiEmbedCard";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default SupabaseSeasonDetailPage;
 
@@ -43,6 +44,9 @@ function SupabaseSeasonDetailPage() {
   const [ackReadonly, setAckReadonly] = useState(false);
   const [ackIrreversible, setAckIrreversible] = useState(false);
   const [ackBackup, setAckBackup] = useState(false);
+  // NEEDS-CANISTER: season archive/publish/notify has no canister yet — an
+  // II principal has no Supabase session, so queries/mutations below no-op.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const resetArchiveConfirm = () => {
     setConfirmName("");
@@ -56,28 +60,28 @@ function SupabaseSeasonDetailPage() {
   const { data: season, isLoading: seasonLoading } = useQuery({
     queryKey: ["season", seasonId],
     queryFn: async () => {
-      if (!seasonId) return null;
+      if (!seasonId || isIcp) return null;
       const { data, error } = await supabase.from("seasons").select("*").eq("id", seasonId).maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!seasonId,
+    enabled: !!seasonId && !isIcp,
   });
 
 const { data: club } = useQuery({
     queryKey: ["club-detail", clubId],
     queryFn: async () => {
-      if (!clubId) return null;
+      if (!clubId || isIcp) return null;
       const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcp,
   });
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["season-teams", seasonId],
     queryFn: async () => {
-      if (!seasonId) return [];
+      if (!seasonId || isIcp) return [];
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, level_age, lifecycle_status")
@@ -86,14 +90,14 @@ const { data: club } = useQuery({
       if (error) throw error;
       return data ?? [];
     },
-    enabled: !!seasonId,
+    enabled: !!seasonId && !isIcp,
   });
 
   const teamIds = teams.map((t) => t.id);
   const { data: playerCounts = {} } = useQuery({
     queryKey: ["season-team-player-counts", seasonId, teamIds.join(",")],
     queryFn: async (): Promise<Record<string, number>> => {
-      if (teamIds.length === 0) return {};
+      if (teamIds.length === 0 || isIcp) return {};
       const { data, error } = await supabase
         .from("team_memberships")
         .select("team_id")
@@ -108,13 +112,14 @@ const { data: club } = useQuery({
       });
       return counts;
     },
-    enabled: teamIds.length > 0,
+    enabled: teamIds.length > 0 && !isIcp,
   });
 
   const totalPlayers = Object.values(playerCounts).reduce((a, b) => a + b, 0);
 
   const archiveMut = useMutation({
     mutationFn: async () => {
+      if (isIcp) throw new Error("Archiving seasons is not available yet.");
       const { error } = await supabase.rpc("archive_season", { _season_id: seasonId! });
       if (error) throw error;
       const { data: notified, error: notifyError } = await supabase.rpc(
@@ -143,6 +148,7 @@ const { data: club } = useQuery({
 
   const notifyMut = useMutation({
     mutationFn: async () => {
+      if (isIcp) throw new Error("Notifying members is not available yet.");
       const rpc = season?.status === "active" ? "notify_season_published" : "notify_season_archived";
       const { data, error } = await supabase.rpc(rpc as any, { _season_id: seasonId! });
       if (error) throw error;
@@ -162,6 +168,7 @@ const { data: club } = useQuery({
 
   const publishMut = useMutation({
     mutationFn: async () => {
+      if (isIcp) throw new Error("Publishing seasons is not available yet.");
       const { error } = await supabase.rpc("publish_season", { _season_id: seasonId! });
       if (error) throw error;
       // Fan out push notifications to all placed players (and guardians of children).
@@ -221,7 +228,7 @@ const { data: club } = useQuery({
         </Badge>
       </div>
 
-      {isDraft && (
+      {isDraft && !isIcp && (
         <Card className="border-primary/40">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -244,7 +251,7 @@ const { data: club } = useQuery({
         <DraftTeamBuilder clubId={clubId} seasonId={seasonId} teams={teams} />
       )}
 
-      {isDraft && priorSeasons.length > 0 && teams.length > 0 && (
+      {isDraft && !isIcp && priorSeasons.length > 0 && teams.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -263,7 +270,7 @@ const { data: club } = useQuery({
         </Card>
       )}
 
-      {(isActive || isArchived) && (
+      {(isActive || isArchived) && !isIcp && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -331,7 +338,7 @@ const { data: club } = useQuery({
         </>
       )}
 
-      {isActive && (
+      {isActive && !isIcp && (
         <Card className="border-destructive/30">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2 text-destructive">
