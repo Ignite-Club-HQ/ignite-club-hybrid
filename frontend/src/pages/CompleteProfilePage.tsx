@@ -514,21 +514,28 @@ function SupabaseCompleteProfilePage() {
         root.style.colorScheme = 'light';
       }
 
-      // NEEDS-CANISTER: send-welcome-dm (fire-and-forget)
-      if (resolveAuthBackend() !== "icp") {
       // Send welcome DM from Ignite Support (fire and forget - don't block on this)
-      supabase.functions.invoke("send-welcome-dm", {
-        body: { userId: user.id }
-      }).then(({ error: welcomeError }) => {
-        if (welcomeError) {
-          console.warn("[CompleteProfile] Failed to send welcome DM:", welcomeError);
-        } else {
-          console.log("[CompleteProfile] Welcome DM sent successfully");
-        }
+      withFeatureBackend("messaging", {
+        supabase: () =>
+          supabase.functions.invoke("send-welcome-dm", {
+            body: { userId: user.id }
+          }).then(({ error: welcomeError }) => {
+            if (welcomeError) {
+              console.warn("[CompleteProfile] Failed to send welcome DM:", welcomeError);
+            } else {
+              console.log("[CompleteProfile] Welcome DM sent successfully");
+            }
+          }),
+        icp: (ctx) =>
+          sendLiveWelcomeMessage(
+            ctx,
+            "Welcome to Ignite! I'm here if you need a hand getting your club set up — just reply to this message any time.",
+          ).then(() => {
+            console.log("[CompleteProfile] Welcome DM sent successfully");
+          }),
       }).catch(err => {
         console.warn("[CompleteProfile] Error calling welcome DM function:", err);
-            });
-            }
+      });
 
       // Track the first club from invites so we can seed the active club filter
       // ONLY for brand-new users who have no club preference yet.
