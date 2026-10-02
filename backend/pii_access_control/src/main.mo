@@ -112,14 +112,22 @@ persistent actor {
 
   // vetKD domain separator (context) and the marker stored in each record's
   // legacy master_key_id field. Both are immutable once any record exists —
-  // changing either makes stored ciphertext undecryptable.
-  let VETKD_CONTEXT : Blob = Text.encodeUtf8("ignite-pii-v1");
-  let VETKEY_SCHEME_ID : Text = "vetkey-ibe-v1";
+  // changing either makes stored ciphertext undecryptable. Kept as functions
+  // (not actor-level constants) because --enhanced-migration forbids
+  // initializers on actor-level declarations.
+  func vetkdContext() : Blob { Text.encodeUtf8("ignite-pii-v1") };
+  func vetkeySchemeId() : Text { "vetkey-ibe-v1" };
 
-  // Captured at first install and fixed for the life of the canister's
-  // derived keys; changing VETKD_KEY_NAME on a later upgrade has no effect.
-  transient let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
-  let keyId : ManagementCanister.VetKdKeyid = { curve = #bls12_381_g2; name = keyName };
+  // The vetKD key id, read from the VETKD_KEY_NAME canister environment
+  // variable ("test_key_1" local, "key_1" production). The deploy script
+  // MUST set it at first install and never change it afterwards — the key
+  // name feeds key derivation, so changing it makes every stored record
+  // undecryptable. Read per call (system capability is only available
+  // inside shared methods).
+  func vetkdKeyId<system>() : ManagementCanister.VetKdKeyid {
+    let keyName = Runtime.envVar<system>("VETKD_KEY_NAME") ?? "test_key_1";
+    { curve = #bls12_381_g2; name = keyName }
+  };
 
   // IBE identity for a record: pii_id, unit separator, field_id. Neither id
   // may contain the separator (ids are UUIDs / "prefix:..." slugs).
@@ -588,7 +596,7 @@ persistent actor {
         case null { true };
       };
       let pii_match = switch (filter.opt_pii_id) {
-        case (?pii) { record.pii_id == pii_id };
+        case (?pii) { record.pii_id == pii };
         case null { true };
       };
       let time_from_match = switch (filter.opt_from_ts) {
