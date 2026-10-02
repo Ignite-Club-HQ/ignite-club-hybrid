@@ -133,6 +133,24 @@ module {
     theme_dark_secondary_color : ?Text;
     theme_dark_accent_color : ?Text;
   };
+
+  // Per-club subscription/plan status, mirroring the Supabase
+  // `club_subscriptions` row. Written only by the governor or an app_admin
+  // (billing state is platform-managed, never club-admin editable).
+  public type ClubSubscription = {
+    club_id : Text;
+    is_pro : Bool;
+    is_pro_football : Bool;
+    admin_pro_override : Bool;
+    admin_pro_football_override : Bool;
+    expires_at_ms : ?Nat64;
+    plan : Text;
+    team_limit : ?Nat32;
+    trial_ends_at_ms : ?Nat64;
+    is_trial : Bool;
+    cancelled_at_ms : ?Nat64;
+    activated_at_ms : ?Nat64;
+  };
   // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
   // exposure_percentage is the strip rotation share (0-100).
   public type ClubSponsor = {

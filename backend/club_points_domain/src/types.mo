@@ -89,6 +89,16 @@ module {
     created_at_ms : Nat64;
   };
 
+  // Per-club points-module settings — mirrors the points columns on
+  // club_subscriptions (disable_points_system) and clubs
+  // (points_display_name). Absent row = system enabled, default name.
+  public type ClubPointsSettings = {
+    club_id : Text;
+    display_name : ?Text;
+    disabled : Bool;
+    updated_at_ms : Nat64;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
@@ -99,5 +109,6 @@ module {
     var redemptions : [RewardRedemption];
     var cooldowns : [PointsCooldown];
     var bulkAccessPrincipals : [Principal];
+    var clubPointsSettings : [ClubPointsSettings];
   };
 }

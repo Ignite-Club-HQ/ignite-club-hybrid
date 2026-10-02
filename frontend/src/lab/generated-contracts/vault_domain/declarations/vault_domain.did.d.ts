@@ -42,8 +42,11 @@ export interface VaultFolder {
   'mini_league_id' : [] | [string],
   'club' : string,
   'name' : string,
+  'color' : [] | [string],
   'team' : [] | [string],
   'restricted_roles' : Array<string>,
+  'sort_order' : number,
+  'description' : [] | [string],
   'created_by' : Principal,
   'created_at_ms' : bigint,
   'parent_id' : [] | [string],
@@ -60,6 +63,9 @@ export interface _SERVICE {
       string,
       Array<string>,
       [] | [string],
+      number,
+      [] | [string],
+      [] | [string],
     ],
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
@@ -72,6 +78,11 @@ export interface _SERVICE {
   'delete_folder' : ActorMethod<
     [string],
     { 'Ok' : VaultFolder } |
+      { 'Err' : string }
+  >,
+  'get_folder' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFolder] } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -158,7 +169,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'update_folder' : ActorMethod<
-    [string, string, Array<string>],
+    [string, string, Array<string>, number, [] | [string], [] | [string]],
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,

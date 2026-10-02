@@ -324,6 +324,21 @@ type ClubTeam =
    shell_invited_by: opt principal;
    team_type: opt text;
  };
+type ClubSubscription = 
+ record {
+   activated_at_ms: opt nat64;
+   admin_pro_football_override: bool;
+   admin_pro_override: bool;
+   cancelled_at_ms: opt nat64;
+   club_id: text;
+   expires_at_ms: opt nat64;
+   is_pro: bool;
+   is_pro_football: bool;
+   is_trial: bool;
+   plan: text;
+   team_limit: opt nat32;
+   trial_ends_at_ms: opt nat64;
+ };
 type ClubSponsor = 
  record {
    club_id: text;
@@ -506,6 +521,11 @@ service : {
                         Err: text;
                         Ok: nat;
                       });
+  check_team_name_unique: (club_id: text, name: text) ->
+   (variant {
+      Err: text;
+      Ok: bool;
+    }) query;
   claim_shell_team: (token: text) -> (variant {
                                         Err: text;
                                         Ok: ClubTeam;
@@ -610,6 +630,10 @@ service : {
       Err: text;
       Ok: ClubBranding;
     }) query;
+  get_club_link: (link_id: text) -> (variant {
+                                       Err: text;
+                                       Ok: opt Link;
+                                     }) query;
   get_club_profile: (id: text) ->
    (variant {
       Err: text;
@@ -619,6 +643,11 @@ service : {
    (variant {
       Err: text;
       Ok: opt ClubSettings;
+    }) query;
+  get_club_subscription: (club_id: text) ->
+   (variant {
+      Err: text;
+      Ok: opt ClubSubscription;
     }) query;
   get_current_season: (club_id: text) ->
    (variant {
@@ -924,6 +953,11 @@ service : {
    (variant {
       Err: text;
       Ok: ClubSettings;
+    });
+  save_club_subscription: (item: ClubSubscription) ->
+   (variant {
+      Err: text;
+      Ok: ClubSubscription;
     });
   save_club_term: (term: ClubTerm) -> (variant {
                                          Err: text;

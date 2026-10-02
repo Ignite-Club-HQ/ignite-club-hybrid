@@ -1,15 +1,18 @@
 type VaultFolder = 
  record {
    club: text;
+   color: opt text;
    created_at_ms: nat64;
    created_by: principal;
    deleted_at_ms: opt nat64;
    deleted_by: opt principal;
+   description: opt text;
    id: text;
    mini_league_id: opt text;
    name: text;
    parent_id: opt text;
    restricted_roles: vec text;
+   sort_order: nat32;
    team: opt text;
  };
 type VaultFileWithFolder = 
@@ -44,7 +47,8 @@ type BlobRef =
  };
 service : {
   create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
-   name: text, restricted_roles: vec text, mini_league_id: opt text) ->
+   name: text, restricted_roles: vec text, mini_league_id: opt text,
+   sort_order: nat32, description: opt text, color: opt text) ->
    (variant {
       Err: text;
       Ok: VaultFolder;
@@ -57,6 +61,10 @@ service : {
                                   Err: text;
                                   Ok: VaultFolder;
                                 });
+  get_folder: (id: text) -> (variant {
+                               Err: text;
+                               Ok: opt VaultFolder;
+                             }) query;
   grant_role: (user: principal, role: text, club_id: opt text, team_id:
    opt text) -> (variant {
                    Err: text;
@@ -130,7 +138,8 @@ service : {
                                Err: text;
                                Ok: VaultFile;
                              });
-  update_folder: (id: text, name: text, restricted_roles: vec text) ->
+  update_folder: (id: text, name: text, restricted_roles: vec text,
+   sort_order: nat32, description: opt text, color: opt text) ->
    (variant {
       Err: text;
       Ok: VaultFolder;

@@ -62,6 +62,7 @@ persistent actor {
   // Governor-set notification_queue canister id for the manual-payment fee
   // reminder fan-out (Phase 3 F6). Fail-closed while unset.
   var notificationQueueCanister : ?Principal;
+  var clubSubscriptions : [Types.ClubSubscription];
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -2155,5 +2156,50 @@ persistent actor {
   // sponsors across every club (e.g. SponsorOrAdCarousel).
   public query func list_all_sponsors() : async { #Ok : [Types.ClubSponsor]; #Err : Text } {
     #Ok(sponsors)
+  };
+
+  // ---- Club subscription status (club_subscriptions parity) ----
+  // Reads are member-visible (Pro gates render for every member); writes are
+  // platform-only — governor or app_admin, never a club admin, so a club
+  // cannot grant itself Pro.
+  func isAppAdmin(caller : Principal) : Bool {
+    acl.roles.any(func(grant) = grant.user.equal(caller) and grant.role == "app_admin")
+  };
+
+  public query func get_club_subscription(club_id : Text) : async { #Ok : ?Types.ClubSubscription; #Err : Text } {
+    for (s in clubSubscriptions.values()) {
+      if (s.club_id == club_id) return #Ok(?s);
+    };
+    #Ok(null)
+  };
+
+  public shared ({ caller }) func save_club_subscription(item : Types.ClubSubscription) : async { #Ok : Types.ClubSubscription; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != item.club_id);
+    clubSubscriptions := clubSubscriptions.concat([item]);
+    #Ok(item)
+  };
+
+  // ---- Duplicate team-name check (CreateTeamPage parity) ----
+  // Case-insensitive, ignores soft-deleted teams, scoped to the club.
+  public query func check_team_name_unique(club_id : Text, name : Text) : async { #Ok : Bool; #Err : Text } {
+    let wanted = Text.toLower(Text.trim(name, #char ' '));
+    for (t in teams.values()) {
+      if (t.club_id == club_id and t.deleted_at_ms == null and Text.toLower(Text.trim(t.name, #char ' ')) == wanted) {
+        return #Ok(false);
+      };
+    };
+    #Ok(true)
+  };
+
+  // ---- Single club-link lookup (ClubLinkEmbedPage parity) ----
+  public query func get_club_link(link_id : Text) : async { #Ok : ?Types.Link; #Err : Text } {
+    for ((_, listing) in clubListings.values()) {
+      for (link in listing.links.values()) {
+        if (link.id == link_id) return #Ok(?link);
+      };
+    };
+    #Ok(null)
   };
 }

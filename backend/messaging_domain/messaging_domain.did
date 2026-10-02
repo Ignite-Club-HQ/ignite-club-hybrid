@@ -136,6 +136,12 @@ type PinnedMessage =
    message_id: text;
    pinned_by: principal;
  };
+type OnlineUser = 
+ record {
+   last_seen_ms: nat64;
+   platform: opt text;
+   user: principal;
+ };
 type MutePreference = 
  record {
    conversation_id: text;
@@ -164,6 +170,13 @@ type Message =
    idempotency_key: text;
    sender: principal;
    sequence: nat64;
+ };
+type LinkPreview = 
+ record {
+   description: opt text;
+   image: opt text;
+   site_name: opt text;
+   title: opt text;
  };
 type JoinRequest = 
  record {
@@ -340,6 +353,10 @@ service : {
                          Err: text;
                          Ok: State;
                        }) query;
+  fetch_link_preview: (url: text) -> (variant {
+                                        Err: text;
+                                        Ok: LinkPreview;
+                                      });
   forward_message: (message_id: text, to_conversation_id: text) ->
    (variant {
       Err: text;
@@ -355,6 +372,14 @@ service : {
    (variant {
       Err: text;
       Ok: GroupMetadata;
+    }) query;
+  get_minimum_app_versions: () ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                text;
+                text;
+              };
     }) query;
   get_mute_preference: (conversation_id: text) -> (bool) query;
   get_or_create_dm: (other: principal) ->
@@ -393,6 +418,11 @@ service : {
    (variant {
       Err: text;
       Ok: vec principal;
+    }) query;
+  list_all_online_users: () ->
+   (variant {
+      Err: text;
+      Ok: vec OnlineUser;
     }) query;
   list_blocked_users: () -> (vec principal) query;
   list_join_requests: (conversation_id: text) ->
@@ -438,10 +468,10 @@ service : {
       Err: text;
       Ok: PinnedMessage;
     });
-  presence_heartbeat: () -> (variant {
-                               Err: text;
-                               Ok;
-                             });
+  presence_heartbeat: (platform: opt text) -> (variant {
+                                                 Err: text;
+                                                 Ok;
+                                               });
   recapTransform: (record {
                      context: blob;
                      response: HttpRequestResult;
@@ -491,6 +521,11 @@ service : {
                                            Err: text;
                                            Ok: Message;
                                          });
+  send_system_message: (to_user: principal, body: text, idempotency_key:
+   text) -> (variant {
+               Err: text;
+               Ok: Message;
+             });
   set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
    (variant {
       Err: text;
@@ -516,6 +551,13 @@ service : {
       Err: text;
       Ok;
     });
+  set_minimum_app_versions: (versions: vec record {
+                                             text;
+                                             text;
+                                           }) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
   set_mute_preference: (conversation_id: text, muted: bool) ->
    (variant {
       Err: text;
