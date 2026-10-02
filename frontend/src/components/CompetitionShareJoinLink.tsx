@@ -6,7 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveCompetitionJoinLink,
+  listLiveCompetitionJoinLinks,
+  rotateLiveCompetitionJoinLink,
+} from "@/live/features/competitions";
 
 const PUBLIC_BASE = "https://reference.invalid";
 
@@ -33,35 +38,37 @@ export function CompetitionShareJoinLink({
     if (!open || token) return;
     setLoading(true);
     (async () => {
-      const { data, error } = await supabase
-        .from("competitions")
-        .select("join_token")
-        .eq("id", competitionId)
-        .maybeSingle();
-      if (error || !data?.join_token) {
-        // create one
-        // NEEDS-CANISTER: competition_domain's issue_join_token is scoped to a
-        // single team, not a competition-wide link shared from this card.
-        try {
-          assertSupabaseWritePath("competitions", "creating a competition join link");
-        } catch (gateErr: any) {
-          toast({ title: "Could not load link", description: gateErr.message, variant: "destructive" });
-          setLoading(false);
-          return;
-        }
-        const { data: newTok, error: rerr } = await supabase.rpc(
-          "regenerate_competition_join_token",
-          { p_competition_id: competitionId }
-        );
-        if (rerr) {
-          toast({ title: "Could not load link", description: rerr.message, variant: "destructive" });
-        } else {
-          setToken(newTok as unknown as string);
-        }
-      } else {
-        setToken(data.join_token as string);
+      try {
+        const tok = await withFeatureBackend("competitions", {
+          supabase: async () => {
+            const { data, error } = await supabase
+              .from("competitions")
+              .select("join_token")
+              .eq("id", competitionId)
+              .maybeSingle();
+            if (error) throw error;
+            if (data?.join_token) return data.join_token as string;
+            const { data: newTok, error: rerr } = await supabase.rpc(
+              "regenerate_competition_join_token",
+              { p_competition_id: competitionId }
+            );
+            if (rerr) throw rerr;
+            return newTok as unknown as string;
+          },
+          icp: async (ctx) => {
+            const existing = await listLiveCompetitionJoinLinks(ctx, competitionId);
+            const active = existing.find((link) => !link.revoked);
+            if (active) return active.token;
+            const created = await createLiveCompetitionJoinLink(ctx, competitionId, "player", null);
+            return created.token;
+          },
+        });
+        setToken(tok);
+      } catch (err: any) {
+        toast({ title: "Could not load link", description: err.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [open, competitionId, token, toast]);
 
@@ -112,24 +119,28 @@ export function CompetitionShareJoinLink({
 
   const regenerate = async () => {
     if (!confirm("Replace the current link? The old link will stop working.")) return;
-    // NEEDS-CANISTER: see above — no competition-wide join-link canister shape.
-    try {
-      assertSupabaseWritePath("competitions", "regenerating a competition join link");
-    } catch (gateErr: any) {
-      toast({ title: "Could not regenerate", description: gateErr.message, variant: "destructive" });
-      return;
-    }
     setRegenerating(true);
-    const { data, error } = await supabase.rpc("regenerate_competition_join_token", {
-      p_competition_id: competitionId,
-    });
-    setRegenerating(false);
-    if (error) {
-      toast({ title: "Could not regenerate", description: error.message, variant: "destructive" });
-      return;
+    try {
+      const newToken = await withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("regenerate_competition_join_token", {
+            p_competition_id: competitionId,
+          });
+          if (error) throw error;
+          return data as unknown as string;
+        },
+        icp: async (ctx) => {
+          const rotated = await rotateLiveCompetitionJoinLink(ctx, competitionId);
+          return rotated.token;
+        },
+      });
+      setToken(newToken);
+      toast({ title: "New link generated" });
+    } catch (err: any) {
+      toast({ title: "Could not regenerate", description: err.message, variant: "destructive" });
+    } finally {
+      setRegenerating(false);
     }
-    setToken(data as unknown as string);
-    toast({ title: "New link generated" });
   };
 
   return (

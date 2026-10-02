@@ -382,6 +382,14 @@ export async function revokeLiveCompetitionJoinLink(ctx: FeatureBackendContext, 
   return unwrapCandid(actor.revoke_competition_join_link(competitionId), "Revoke competition join link");
 }
 
+export async function listLiveCompetitionJoinLinks(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_competition_join_links(competitionId),
+    "List competition join links",
+  );
+}
+
 export async function joinLiveCompetitionByToken(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.join_competition_by_token(token), "Join competition");

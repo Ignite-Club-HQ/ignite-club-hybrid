@@ -571,6 +571,12 @@ persistent actor {
     #Ok
   };
 
+  public query ({ caller }) func list_competition_join_links(competition_id : Text) : async { #Ok : [Types.CompetitionJoinLink]; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    #Ok(competitionJoinLinks.filter(func(item) = item.competition_id == competition_id))
+  };
+
   public shared ({ caller }) func join_competition_by_token(token : Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
     auth(caller);
     switch (competitionJoinLinks.find(func(item) = item.token == token)) {
