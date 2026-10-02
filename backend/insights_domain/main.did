@@ -171,6 +171,7 @@ type AdEventSummary =
  record {
    ad_id: text;
    clicks: nat32;
+   context: text;
    views: nat32;
  };
 service : {
@@ -273,6 +274,10 @@ service : {
                      });
   is_app_admin: () -> (bool) query;
   list_active_ads: () -> (vec AppAd) query;
+  list_ad_settings: () -> (variant {
+                             Err: text;
+                             Ok: vec AppAdSetting;
+                           }) query;
   list_admin_alerts: (status: opt AlertStatus) ->
    (variant {
       Err: text;

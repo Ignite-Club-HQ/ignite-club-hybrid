@@ -6,6 +6,7 @@ import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
@@ -588,18 +589,20 @@ persistent actor {
   public query ({ caller }) func ad_event_summary(since_ms : Nat64) : async { #Ok : [Types.AdEventSummary]; #Err : Text } {
     if (not isAppAdmin(caller)) return #Err("App admin required");
     let inRange = adEvents.filter(func(e) = e.created_at_ms >= since_ms);
-    #Ok(ads.flatMap(func(a) : [Types.AdEventSummary] {
+    var result : [Types.AdEventSummary] = [];
+    for (a in ads.values()) {
       let mine = inRange.filter(func(e) = e.ad_id == a.id);
       let contexts = mine.foldLeft([] : [Text], func(acc, e) = if (acc.any(func(c) = c == e.context)) acc else acc.concat([e.context]));
-      contexts.map(func(ctx) : Types.AdEventSummary {
+      for (ctx in contexts.values()) {
         let scoped = mine.filter(func(e) = e.context == ctx);
-        {
+        result := result.concat([{
           ad_id = a.id;
           context = ctx;
           views = Nat.toNat32(scoped.filter(func(e) = e.event_type == "view").size());
           clicks = Nat.toNat32(scoped.filter(func(e) = e.event_type == "click").size());
-        }
-      })
-    }))
+        }]);
+      };
+    };
+    #Ok(result)
   };
 }

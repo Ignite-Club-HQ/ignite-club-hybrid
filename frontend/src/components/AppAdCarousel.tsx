@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { openAdLink } from "@/lib/adLinkNavigation";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveAdSetting, listLiveActiveAds } from "@/live/features/insights";
+import { myLiveRoleGrants } from "@/live/features/club";
 
 interface AppAdCarouselProps {
   location: "home" | "events" | "messages" | "event-detail" | "schedule";
@@ -45,19 +48,29 @@ export function AppAdCarousel({ location, hasSponsorAds, suppressUpgradeAdsForPr
   // Fetch user's admin scopes so we can route upgrade ads to a real upgrade URL
   const { data: adminScopes } = useQuery({
     queryKey: ["user-admin-upgrade-scopes", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return { clubId: null as string | null, teamId: null as string | null };
+    queryFn: () =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          if (!user?.id) return { clubId: null as string | null, teamId: null as string | null };
 
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role, club_id, team_id")
-        .eq("user_id", user.id)
-        .in("role", ["club_admin", "team_admin"]);
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role, club_id, team_id")
+            .eq("user_id", user.id)
+            .in("role", ["club_admin", "team_admin"]);
 
-      const clubId = roles?.find((r) => r.role === "club_admin" && r.club_id)?.club_id ?? null;
-      const teamId = roles?.find((r) => r.role === "team_admin" && r.team_id)?.team_id ?? null;
-      return { clubId, teamId };
-    },
+          const clubId = roles?.find((r) => r.role === "club_admin" && r.club_id)?.club_id ?? null;
+          const teamId = roles?.find((r) => r.role === "team_admin" && r.team_id)?.team_id ?? null;
+          return { clubId, teamId };
+        },
+        // ICP role grants are club/team-scoped rows from the club canister.
+        icp: async (ctx) => {
+          const grants = await myLiveRoleGrants(ctx);
+          const clubId = grants.find((g) => g.role === "club_admin")?.club[0] ?? null;
+          const teamId = grants.find((g) => g.role === "team_admin")?.team[0] ?? null;
+          return { clubId, teamId };
+        },
+      }),
     enabled: !!user?.id,
   });
 
@@ -67,31 +80,62 @@ export function AppAdCarousel({ location, hasSponsorAds, suppressUpgradeAdsForPr
   // Fetch ad settings for this location
   const { data: settings } = useQuery({
     queryKey: ["app-ad-settings", location],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_settings")
-        .select("*")
-        .eq("location", location)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
+    queryFn: (): Promise<{ is_enabled: boolean; override_sponsors: boolean; show_only_when_no_sponsors: boolean } | null> =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_settings")
+            .select("is_enabled, override_sponsors, show_only_when_no_sponsors")
+            .eq("location", location)
+            .single();
+
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const s = await getLiveAdSetting(ctx, location);
+          return s
+            ? {
+                is_enabled: s.is_enabled,
+                override_sponsors: s.override_sponsors,
+                show_only_when_no_sponsors: s.show_only_when_no_sponsors,
+              }
+            : null;
+        },
+      }),
   });
 
   // Fetch active ads
   const { data: ads } = useQuery({
     queryKey: ["app-ads-active"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ads")
-        .select("*")
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      
-      if (error) throw error;
-      return data as AppAd[];
-    },
+    queryFn: async (): Promise<AppAd[]> =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ads")
+            .select("*")
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+
+          if (error) throw error;
+          return data as AppAd[];
+        },
+        icp: async (ctx) =>
+          (await listLiveActiveAds(ctx)).map((a) => ({
+            id: a.id,
+            name: a.name,
+            image_url: a.image_url[0] ?? null,
+            link_url: a.link_url[0] ?? null,
+            description: a.description[0] ?? null,
+            ad_type: a.ad_type as AppAd["ad_type"],
+            logo_url: a.logo_url[0] ?? null,
+            headline: a.headline[0] ?? null,
+            subtext: a.subtext[0] ?? null,
+            cta_label: a.cta_label[0] ?? null,
+            bg_color: a.bg_color[0] ?? null,
+            text_color: a.text_color[0] ?? null,
+          })),
+      }),
     enabled: !!settings?.is_enabled,
   });
 

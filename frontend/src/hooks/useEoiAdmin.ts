@@ -11,15 +11,23 @@ export function useEoiSubmissions(clubId?: string, seasonId?: string | null) {
     queryKey: ["eoi-submissions", clubId, seasonId ?? "all"],
     queryFn: async (): Promise<EoiSubmission[]> => {
       if (!clubId) return [];
-      let q = supabase
-        .from("eoi_submissions")
-        .select("*")
-        .eq("club_id", clubId)
-        .order("submitted_at", { ascending: false });
-      if (seasonId) q = q.eq("season_id", seasonId);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data ?? [];
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          let q = supabase
+            .from("eoi_submissions")
+            .select("*")
+            .eq("club_id", clubId)
+            .order("submitted_at", { ascending: false });
+          if (seasonId) q = q.eq("season_id", seasonId);
+          const { data, error } = await q;
+          if (error) throw error;
+          return data ?? [];
+        },
+        // NEEDS-CANISTER: competition_domain has no EOI submission entity —
+        // eoi_submissions has no canister equivalent yet (needs e.g.
+        // list_eoi_submissions(club_id, season_id?)).
+        icp: async () => [] as EoiSubmission[],
+      });
     },
     enabled: !!clubId,
   });
@@ -30,12 +38,19 @@ export function useEoiStats(clubId?: string, seasonId?: string | null) {
     queryKey: ["eoi-stats", clubId, seasonId ?? "all"],
     queryFn: async () => {
       if (!clubId) return null;
-      const { data, error } = await supabase.rpc("get_eoi_stats", {
-        _club_id: clubId,
-        _season_id: seasonId ?? undefined,
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("get_eoi_stats", {
+            _club_id: clubId,
+            _season_id: seasonId ?? undefined,
+          });
+          if (error) throw error;
+          return data?.[0] ?? null;
+        },
+        // NEEDS-CANISTER: competition_domain has no EOI stats aggregation
+        // (needs e.g. get_eoi_stats(club_id, season_id?)).
+        icp: async () => null,
       });
-      if (error) throw error;
-      return data?.[0] ?? null;
     },
     enabled: !!clubId,
   });

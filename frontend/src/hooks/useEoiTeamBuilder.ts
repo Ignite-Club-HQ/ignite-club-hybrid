@@ -14,16 +14,23 @@ export function useEoiTeamSuggestions(seasonId?: string | null) {
     queryKey: ["eoi-team-suggestions", seasonId],
     queryFn: async (): Promise<EoiTeamSuggestion[]> => {
       if (!seasonId) return [];
-      const { data, error } = await supabase.rpc("suggest_eoi_teams", {
-        _season_id: seasonId,
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("suggest_eoi_teams", {
+            _season_id: seasonId,
+          });
+          if (error) throw error;
+          return (data as any[])?.map((r) => ({
+            age_group: r.age_group,
+            player_count: Number(r.player_count),
+            avg_skill: Number(r.avg_skill),
+            submission_ids: r.submission_ids ?? [],
+          })) ?? [];
+        },
+        // NEEDS-CANISTER: competition_domain has no EOI submission entity to
+        // suggest team groupings from (needs e.g. suggest_eoi_teams(season_id)).
+        icp: async () => [] as EoiTeamSuggestion[],
       });
-      if (error) throw error;
-      return (data as any[])?.map((r) => ({
-        age_group: r.age_group,
-        player_count: Number(r.player_count),
-        avg_skill: Number(r.avg_skill),
-        submission_ids: r.submission_ids ?? [],
-      })) ?? [];
     },
     enabled: !!seasonId,
   });
