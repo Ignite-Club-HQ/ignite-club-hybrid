@@ -17,6 +17,18 @@ type Unread =
    last_read_sequence: nat64;
    user: principal;
  };
+type TypingUser = 
+ record {
+   name: text;
+   user: principal;
+ };
+type TypingPing = 
+ record {
+   conversation_id: text;
+   last_typed_ms: nat64;
+   name: text;
+   user: principal;
+ };
 type State = 
  record {
    attachmentMetadata: vec AttachmentMetadata;
@@ -33,6 +45,7 @@ type State =
    joinRequests: vec JoinRequest;
    messages: vec Message;
    mutePreferences: vec MutePreference;
+   pinnedMessages: vec PinnedMessage;
    pollVotes: vec PollVote;
    polls: vec Poll;
    reactions: vec Reaction;
@@ -40,6 +53,7 @@ type State =
    roles: vec RoleGrant;
    scheduledMessages: vec ScheduledMessage;
    schema: nat32;
+   typingPings: vec TypingPing;
    unread: vec Unread;
    userMessagingSettings: vec UserMessagingSettings;
  };
@@ -113,6 +127,14 @@ type Poll =
    message_id: opt text;
    options: vec text;
    question: text;
+ };
+type PinnedMessage = 
+ record {
+   conversation_id: text;
+   created_at_ms: nat64;
+   id: text;
+   message_id: text;
+   pinned_by: principal;
  };
 type MutePreference = 
  record {
@@ -385,6 +407,16 @@ service : {
                 Err: text;
                 Ok: MessagePage;
               }) query;
+  list_pinned_messages: (conversation_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec PinnedMessage;
+    }) query;
+  list_typing: (conversation_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec TypingUser;
+    }) query;
   mark_read: (conversation_id: text, message_id: text) ->
    (variant {
       Err: text;
@@ -401,6 +433,11 @@ service : {
       Err: text;
       Ok: nat64;
     }) query;
+  pin_message: (conversation_id: text, message_id: text) ->
+   (variant {
+      Err: text;
+      Ok: PinnedMessage;
+    });
   presence_heartbeat: () -> (variant {
                                Err: text;
                                Ok;
@@ -488,6 +525,11 @@ service : {
                                                     Err: text;
                                                     Ok;
                                                   });
+  set_typing: (conversation_id: text, is_typing: bool, name: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   set_user_messaging_settings: (hide_message_preview: bool,
    ai_catchup_enabled: bool) -> (variant {
                                    Err: text;
@@ -511,6 +553,11 @@ service : {
                                         Err: text;
                                         Ok;
                                       });
+  unpin_message: (conversation_id: text, message_id: text) ->
+   (variant {
+      Err: text;
+      Ok;
+    });
   unread_count: (conversation_id: text) ->
    (variant {
       Err: text;
