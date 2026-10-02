@@ -1,5 +1,6 @@
 
 ## Tasks
+- [ ] vetKeys switch (user directive 2026-10-02, scope: PII + photos): pii_access_control drops canister-held master secrets (crypto.mo, initialize_master_key/rotate_key/derive_media_key/get_decrypted_pii*) for IBE — writers encrypt client-side to identity (pii_id SEP field_id) via the canister's derived public key, readers fetch the vetKey through a can_read/club-grant-gated vetkd_derive_key relay (VETKD_KEY_NAME env var, deploy must set key_1); media_blob_store canister gets built from the fixed .did + encrypted-blob vetKeys; frontend live/piiVetKeys.ts (@icp-sdk/vetkeys >=0.7), vault.ts PII helpers encrypt/decrypt client-side, mediaUpload encrypts bytes, SecureImage/SecureAvatar decrypt icp-blob sources
 - [x] Admin ICP canister configuration screen (app_settings-backed)
 - [x] Backend routing admin: global Supabase/ICP default + per-country eligibility (app_settings `backend_routing_config`); profile `country` column + Edit Profile selector; IP fallback
 - [x] Consolidate canister config + backend routing into Infrastructure / Placement Settings (/admin/placement-settings); removed duplicate lab placement panel and old /admin/icp-canisters page (old path redirects)
