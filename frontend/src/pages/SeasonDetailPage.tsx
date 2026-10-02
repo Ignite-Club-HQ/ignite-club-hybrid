@@ -29,40 +29,8 @@ import { BulkRolloverDialog } from "@/components/seasons/BulkRolloverDialog";
 import { SeasonEoiConfigCard } from "@/components/seasons/SeasonEoiConfigCard";
 import { EoiEmbedCard } from "@/components/eoi/EoiEmbedCard";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabSeasonDetail } from "@/lab/fixtureDataLayer";
 
-export default function SeasonDetailPage() {
-  const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
-    const season = getLocalLabSeasonDetail(id ?? "season-icp-001") ?? getLocalLabSeasonDetail("season-icp-001");
-    return (
-      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold">{season?.name ?? "Season"}</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Showing synthetic ICP lab season data. Rollover, activation, archiving, and EOI configuration are disabled.
-        </p>
-        {season && (
-          <Card>
-            <CardContent className="p-4 grid grid-cols-2 gap-2 text-center">
-              <div><p className="text-xl font-bold">{season.stats.games_played}</p><p className="text-xs text-muted-foreground">Games played</p></div>
-              <div><p className="text-xl font-bold">{season.stats.wins}</p><p className="text-xs text-muted-foreground">Wins</p></div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  return <SupabaseSeasonDetailPage />;
-}
+export default SupabaseSeasonDetailPage;
 
 function SupabaseSeasonDetailPage() {
   const { clubId, seasonId } = useParams<{ clubId: string; seasonId: string }>();

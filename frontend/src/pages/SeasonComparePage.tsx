@@ -17,41 +17,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
-import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
-import { getLocalLabSeasonCompare } from "@/lab/fixtureDataLayer";
 
-export default function SeasonComparePage() {
-  const navigate = useNavigate();
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
-    const compare = getLocalLabSeasonCompare("club-icp-001");
-    return (
-      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold">Season Comparison</h1>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Showing synthetic ICP lab season comparison data.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {compare.seasons.map((season) => (
-            <Card key={season.id}>
-              <CardContent className="p-4">
-                <p className="text-sm font-medium">{season.name}</p>
-                <p className="text-xs text-muted-foreground">{season.games_played} games · {season.wins} wins</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return <SupabaseSeasonComparePage />;
-}
+export default SupabaseSeasonComparePage;
 
 function SupabaseSeasonComparePage() {
   const { clubId } = useParams<{ clubId: string }>();
