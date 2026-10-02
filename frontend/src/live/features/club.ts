@@ -83,6 +83,33 @@ export async function deleteLiveSponsor(ctx: FeatureBackendContext, sponsorId: s
 }
 
 /**
+ * Team sponsor allocations (Supabase team_sponsor_allocations counterpart):
+ * which sponsors a team displays under its own name in the sponsor strips.
+ * The club scope is derived from the sponsor record, so list takes a club id
+ * and set takes sponsor + team ids. Writes are club-admin gated canister-side.
+ */
+export async function listLiveTeamSponsorAllocations(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_team_sponsor_allocations(clubId),
+    "List team sponsor allocations",
+  );
+}
+
+export async function setLiveTeamSponsorAllocation(
+  ctx: FeatureBackendContext,
+  sponsorId: string,
+  teamId: string,
+  allocated: boolean,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_sponsor_allocation(sponsorId, teamId, allocated),
+    "Set team sponsor allocation",
+  );
+}
+
+/**
  * Rich news posts (the news feed) — the counterpart of the Supabase
  * club_news posts. The single announcement string on club settings stays
  * for the banner surface.

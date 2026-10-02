@@ -303,6 +303,10 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'team_id' : IDL.Text,
   });
+  const TeamSponsorAllocation = IDL.Record({
+    'team_id' : IDL.Text,
+    'sponsor_id' : IDL.Text,
+  });
   const Operation = IDL.Variant({
     'SetActive' : IDL.Record({ 'id' : IDL.Text, 'active' : IDL.Bool }),
     'Save' : IDL.Record({ 'id' : IDL.Opt(IDL.Text), 'draft' : Draft }),
@@ -671,6 +675,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_team_sponsor_allocations' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamSponsorAllocation),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'list_teams' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
@@ -860,6 +874,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_team_player_position' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_sponsor_allocation' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -3,13 +3,12 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, listLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
 import { useAuth } from "@/hooks/useAuth";
 import { readAdTierHint, writeAdTierHint, type AdTierHint } from "@/lib/adTierHint";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface SponsorOrAdCarouselProps {
   location: "home" | "events" | "messages" | "event-detail" | "schedule";
@@ -64,42 +63,49 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
         return { allowed, effectiveClubId: allowed ? activeClubFilter : null };
       }
 
-      // II users have no Supabase session (auth.getUser() returns null) and
-      // `user_roles.user_id` is uuid-typed, so there is no club to discover
-      // this way for a principal-text id. NEEDS-CANISTER: resolving "which of
-      // my clubs has the events sponsor strip enabled" without an explicit
-      // club filter has no club_domain counterpart (list_role_grants is
-      // scoped by club, not by caller-across-all-clubs).
-      if (resolveAuthBackend() === "icp") {
-        return { allowed: false, effectiveClubId: null as string | null };
-      }
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return { allowed: false, effectiveClubId: null as string | null };
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return { allowed: false, effectiveClubId: null as string | null };
+          const { data: directRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user.id);
+          if (rolesError) throw rolesError;
 
-      const { data: directRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user.id);
-      if (rolesError) throw rolesError;
+          const clubIds = new Set<string>();
+          (directRoles ?? []).forEach((r: any) => { if (r.club_id) clubIds.add(r.club_id); });
+          const teamIds = (directRoles ?? []).map((r: any) => r.team_id).filter(Boolean);
+          if (teamIds.length) {
+            const { data: teams, error: teamsError } = await supabase
+              .from("teams").select("club_id").in("id", teamIds);
+            if (teamsError) throw teamsError;
+            (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
+          }
+          if (clubIds.size === 0) return { allowed: false, effectiveClubId: null as string | null };
 
-      const clubIds = new Set<string>();
-      (directRoles ?? []).forEach((r: any) => { if (r.club_id) clubIds.add(r.club_id); });
-      const teamIds = (directRoles ?? []).map((r: any) => r.team_id).filter(Boolean);
-      if (teamIds.length) {
-        const { data: teams, error: teamsError } = await supabase
-          .from("teams").select("club_id").in("id", teamIds);
-        if (teamsError) throw teamsError;
-        (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
-      }
-      if (clubIds.size === 0) return { allowed: false, effectiveClubId: null };
-
-      for (const candidateClubId of clubIds) {
-        if (await isEventsStripEnabledForClub(candidateClubId)) {
-          return { allowed: true, effectiveClubId: candidateClubId };
-        }
-      }
-      return { allowed: false, effectiveClubId: null as string | null };
+          for (const candidateClubId of clubIds) {
+            if (await isEventsStripEnabledForClub(candidateClubId)) {
+              return { allowed: true, effectiveClubId: candidateClubId };
+            }
+          }
+          return { allowed: false, effectiveClubId: null as string | null };
+        },
+        icp: async (ctx) => {
+          // Caller-scoped "which of my clubs" via my_role_grants (every club
+          // the caller holds any role in), then the same per-club strip
+          // setting read the filtered path uses.
+          const grants = await myLiveRoleGrants(ctx);
+          const clubIds = [...new Set(grants.flatMap((g) => g.club))];
+          for (const candidateClubId of clubIds) {
+            if (await isEventsStripEnabledForClub(candidateClubId)) {
+              return { allowed: true, effectiveClubId: candidateClubId };
+            }
+          }
+          return { allowed: false, effectiveClubId: null as string | null };
+        },
+      });
     },
     enabled: isEventsPlacement,
   });
@@ -124,6 +130,8 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
     placeholderData: keepPreviousData,
     staleTime: 60_000,
     queryFn: async () => {
+      return withFeatureBackend("membership", {
+        supabase: async () => {
       // Get all clubs the user belongs to
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
@@ -170,6 +178,16 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
       const isProFiltered = effectiveClubFilter ? proClubIds.has(effectiveClubFilter) : hasAnyPro;
 
       return { isProFiltered, hasAnyPro, resolved: true };
+        },
+        icp: async (ctx) => {
+          // ICP mode has no per-club subscription table — Pro is a per-account
+          // entitlement on identity_access (iOS IAP only). A Pro user is Pro
+          // for every club they belong to.
+          const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText());
+          return { isProFiltered: summary.isPro, hasAnyPro: summary.isPro, resolved: true };
+        },
+      });
     },
   });
 
@@ -193,66 +211,73 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
     queryKey: ["user-has-active-sponsors", effectiveClubFilter],
     placeholderData: keepPreviousData,
     queryFn: async () => {
-      // II users have no Supabase session and `user_roles`/`sponsors` are
-      // keyed/filtered by uuid — the per-club check (effectiveClubFilter set)
-      // still works below via plain club_id equality, but the "all of my
-      // clubs" fallback needs the Supabase user id. NEEDS-CANISTER: insights_domain
-      // exposes club_engagement_sponsor_performance (per-club), not a
-      // cross-club "does any of my clubs have active sponsors" lookup.
-      if (!effectiveClubFilter && resolveAuthBackend() === "icp") {
-        return false;
-      }
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return false;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
+          if (effectiveClubFilter) {
+            // Check if this specific club has active sponsors
+            const { data, error } = await supabase
+              .from("sponsors")
+              .select("id")
+              .eq("club_id", effectiveClubFilter)
+              .eq("is_active", true)
+              .limit(1);
+            if (error) throw error;
+            return !!data && data.length > 0;
+          }
 
-      if (effectiveClubFilter) {
-        // Check if this specific club has active sponsors
-        const { data, error } = await supabase
-          .from("sponsors")
-          .select("id")
-          .eq("club_id", effectiveClubFilter)
-          .eq("is_active", true)
-          .limit(1);
-        if (error) throw error;
-        return !!data && data.length > 0;
-      }
+          // Check all user's clubs for active sponsors
+          const { data: roles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user.id);
+          if (rolesError) throw rolesError;
 
-      // Check all user's clubs for active sponsors
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user.id);
-      if (rolesError) throw rolesError;
+          if (!roles || roles.length === 0) return false;
 
-      if (!roles || roles.length === 0) return false;
+          const clubIds = roles.filter(r => r.club_id).map(r => r.club_id);
+          const teamIds = roles.filter(r => r.team_id).map(r => r.team_id);
 
-      const clubIds = roles.filter(r => r.club_id).map(r => r.club_id);
-      const teamIds = roles.filter(r => r.team_id).map(r => r.team_id);
+          if (teamIds.length > 0) {
+            const { data: teams, error: teamsError } = await supabase
+              .from("teams")
+              .select("club_id")
+              .in("id", teamIds);
+            if (teamsError) throw teamsError;
+            if (teams) {
+              clubIds.push(...teams.map(t => t.club_id));
+            }
+          }
 
-      if (teamIds.length > 0) {
-        const { data: teams, error: teamsError } = await supabase
-          .from("teams")
-          .select("club_id")
-          .in("id", teamIds);
-        if (teamsError) throw teamsError;
-        if (teams) {
-          clubIds.push(...teams.map(t => t.club_id));
-        }
-      }
+          const uniqueClubIds = [...new Set(clubIds.filter(Boolean))];
+          if (uniqueClubIds.length === 0) return false;
 
-      const uniqueClubIds = [...new Set(clubIds.filter(Boolean))];
-      if (uniqueClubIds.length === 0) return false;
+          const { data: sponsors, error: sponsorsError } = await supabase
+            .from("sponsors")
+            .select("id")
+            .in("club_id", uniqueClubIds)
+            .eq("is_active", true)
+            .limit(1);
+          if (sponsorsError) throw sponsorsError;
 
-      const { data: sponsors, error: sponsorsError } = await supabase
-        .from("sponsors")
-        .select("id")
-        .in("club_id", uniqueClubIds)
-        .eq("is_active", true)
-        .limit(1);
-      if (sponsorsError) throw sponsorsError;
-
-      return !!sponsors && sponsors.length > 0;
+          return !!sponsors && sponsors.length > 0;
+        },
+        icp: async (ctx) => {
+          // Cross-club active-sponsor lookup via caller-scoped role grants:
+          // every club the caller holds any role in, then list_sponsors per
+          // club (sponsor records live in club_domain).
+          const clubIds = effectiveClubFilter
+            ? [effectiveClubFilter]
+            : [...new Set((await myLiveRoleGrants(ctx)).flatMap((g) => g.club))];
+          for (const clubId of clubIds) {
+            const sponsors = await listLiveSponsors(ctx, clubId);
+            if (sponsors.some((s) => s.is_active)) return true;
+          }
+          return false;
+        },
+      });
     },
   });
 

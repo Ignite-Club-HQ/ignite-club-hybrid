@@ -3,6 +3,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { writeHomeSponsorHint } from "@/lib/homeSponsorHint";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveClubProfile,
+  listLiveSponsors,
+  listLiveTeams,
+  listLiveTeamSponsorAllocations,
+  myLiveRoleGrants,
+} from "@/live/features/club";
 import {
   MULTI_CLUB_SPONSOR_CAROUSEL_PLACEMENT,
   SponsorCarouselPresentation,
@@ -15,109 +23,183 @@ export function MultiClubSponsorCarousel() {
   // Fetch ALL active sponsors, showing team-allocated ones under team names
   const { data: allSponsors = [] } = useQuery({
     queryKey: ["user-all-sponsors", user?.id],
-    queryFn: async () => {
-      // Get all club IDs the user is linked to
-      const { data: roles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select(`
-          club_id,
-          team_id,
-          teams!user_roles_team_id_fkey(id, name, club_id)
-        `)
-        .eq("user_id", user!.id);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          // Get all club IDs the user is linked to
+          const { data: roles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select(`
+              club_id,
+              team_id,
+              teams!user_roles_team_id_fkey(id, name, club_id)
+            `)
+            .eq("user_id", user!.id);
 
-      if (rolesError) throw rolesError;
+          if (rolesError) throw rolesError;
 
-      // Collect unique club IDs
-      const clubIds = new Set<string>();
-      roles?.forEach((role) => {
-        if (role.club_id) clubIds.add(role.club_id);
-        if (role.teams?.club_id) clubIds.add(role.teams.club_id);
-      });
-
-      if (clubIds.size === 0) return [];
-
-      // Only include sponsors from clubs on an active Pro plan.
-      // Free-plan clubs can configure sponsors but they must not display.
-      const { data: subs } = await supabase
-        .from("club_subscriptions")
-        .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at")
-        .in("club_id", Array.from(clubIds));
-
-      const now = Date.now();
-      const proClubIds = new Set<string>(
-        (subs ?? [])
-          .filter((s: any) => {
-            const notExpired = !s.expires_at || new Date(s.expires_at).getTime() > now;
-            return notExpired && (s.is_pro || s.is_pro_football || s.admin_pro_override || s.admin_pro_football_override);
-          })
-          .map((s: any) => s.club_id),
-      );
-
-      if (proClubIds.size === 0) return [];
-
-      // Fetch all clubs for name lookup (Pro clubs only)
-      const { data: clubs } = await supabase
-        .from("clubs")
-        .select("id, name")
-        .in("id", Array.from(proClubIds));
-
-      const clubNameMap = new Map<string, string>();
-      clubs?.forEach((club) => clubNameMap.set(club.id, club.name));
-
-      // Fetch ALL active sponsors for Pro clubs only
-      const { data: sponsors } = await supabase
-        .from("sponsors")
-        .select("id, name, club_id, is_active")
-        .in("club_id", Array.from(proClubIds))
-        .eq("is_active", true)
-        .order("name");
-
-      if (!sponsors || sponsors.length === 0) return [];
-
-      // Fetch team allocations with team names
-      const { data: allocations } = await supabase
-        .from("team_sponsor_allocations")
-        .select("sponsor_id, team_id, teams!team_sponsor_allocations_team_id_fkey(id, name)")
-        .in("sponsor_id", sponsors.map(s => s.id));
-
-      // Build a map of sponsor_id -> team names (a sponsor can be allocated to multiple teams)
-      const sponsorTeamMap = new Map<string, string[]>();
-      allocations?.forEach((alloc) => {
-        if (alloc.teams?.name) {
-          const existing = sponsorTeamMap.get(alloc.sponsor_id) || [];
-          existing.push(alloc.teams.name);
-          sponsorTeamMap.set(alloc.sponsor_id, existing);
-        }
-      });
-
-      // Map sponsors: if allocated to teams, show under each team; otherwise show under club
-      const result: SponsorCarouselItem[] = [];
-      sponsors.forEach((sponsor) => {
-        const teamNames = sponsorTeamMap.get(sponsor.id);
-        const clubName = clubNameMap.get(sponsor.club_id) || "";
-        
-        if (teamNames && teamNames.length > 0) {
-          // Show once per team allocation
-          teamNames.forEach((teamName) => {
-            result.push({
-              id: `sponsor-${sponsor.id}-team-${teamName}`,
-              sponsorId: sponsor.id,
-              entityName: teamName,
-            });
+          // Collect unique club IDs
+          const clubIds = new Set<string>();
+          roles?.forEach((role) => {
+            if (role.club_id) clubIds.add(role.club_id);
+            if (role.teams?.club_id) clubIds.add(role.teams.club_id);
           });
-        } else {
-          // Club-level sponsor
-          result.push({
-            id: `sponsor-${sponsor.id}`,
-            sponsorId: sponsor.id,
-            entityName: clubName,
-          });
-        }
-      });
 
-      return result;
-    },
+          if (clubIds.size === 0) return [];
+
+          // Only include sponsors from clubs on an active Pro plan.
+          // Free-plan clubs can configure sponsors but they must not display.
+          const { data: subs } = await supabase
+            .from("club_subscriptions")
+            .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at")
+            .in("club_id", Array.from(clubIds));
+
+          const now = Date.now();
+          const proClubIds = new Set<string>(
+            (subs ?? [])
+              .filter((s: any) => {
+                const notExpired = !s.expires_at || new Date(s.expires_at).getTime() > now;
+                return notExpired && (s.is_pro || s.is_pro_football || s.admin_pro_override || s.admin_pro_football_override);
+              })
+              .map((s: any) => s.club_id),
+          );
+
+          if (proClubIds.size === 0) return [];
+
+          // Fetch all clubs for name lookup (Pro clubs only)
+          const { data: clubs } = await supabase
+            .from("clubs")
+            .select("id, name")
+            .in("id", Array.from(proClubIds));
+
+          const clubNameMap = new Map<string, string>();
+          clubs?.forEach((club) => clubNameMap.set(club.id, club.name));
+
+          // Fetch ALL active sponsors for Pro clubs only
+          const { data: sponsors } = await supabase
+            .from("sponsors")
+            .select("id, name, club_id, is_active")
+            .in("club_id", Array.from(proClubIds))
+            .eq("is_active", true)
+            .order("name");
+
+          if (!sponsors || sponsors.length === 0) return [];
+
+          // Fetch team allocations with team names
+          const { data: allocations } = await supabase
+            .from("team_sponsor_allocations")
+            .select("sponsor_id, team_id, teams!team_sponsor_allocations_team_id_fkey(id, name)")
+            .in("sponsor_id", sponsors.map(s => s.id));
+
+          // Build a map of sponsor_id -> team names (a sponsor can be allocated to multiple teams)
+          const sponsorTeamMap = new Map<string, string[]>();
+          allocations?.forEach((alloc) => {
+            if (alloc.teams?.name) {
+              const existing = sponsorTeamMap.get(alloc.sponsor_id) || [];
+              existing.push(alloc.teams.name);
+              sponsorTeamMap.set(alloc.sponsor_id, existing);
+            }
+          });
+
+          // Map sponsors: if allocated to teams, show under each team; otherwise show under club
+          const result: SponsorCarouselItem[] = [];
+          sponsors.forEach((sponsor) => {
+            const teamNames = sponsorTeamMap.get(sponsor.id);
+            const clubName = clubNameMap.get(sponsor.club_id) || "";
+
+            if (teamNames && teamNames.length > 0) {
+              // Show once per team allocation
+              teamNames.forEach((teamName) => {
+                result.push({
+                  id: `sponsor-${sponsor.id}-team-${teamName}`,
+                  sponsorId: sponsor.id,
+                  entityName: teamName,
+                });
+              });
+            } else {
+              // Club-level sponsor
+              result.push({
+                id: `sponsor-${sponsor.id}`,
+                sponsorId: sponsor.id,
+                entityName: clubName,
+              });
+            }
+          });
+
+          return result;
+        },
+        icp: async (ctx) => {
+          // Pro gate in ICP mode is per-account (identity_access
+          // entitlements) — there is no per-club subscription table.
+          const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
+          const summary = await fetchIcpEntitlements(
+            ctx.identity,
+            ctx.identity.getPrincipal().toText(),
+            ctx.target,
+          );
+          if (!summary.isPro) return [];
+
+          // Caller-scoped club set from my_role_grants.
+          const grants = await myLiveRoleGrants(ctx);
+          const clubIds = new Set<string>();
+          grants.forEach((grant) => {
+            if (grant.club[0]) clubIds.add(grant.club[0]);
+          });
+          if (clubIds.size === 0) return [];
+
+          const perClub = await Promise.all(
+            Array.from(clubIds).map(async (clubId) => {
+              const profile = await getLiveClubProfile(ctx, clubId);
+              const club = profile[0];
+              if (!club) return [] as SponsorCarouselItem[];
+
+              const [sponsors, teams, allocations] = await Promise.all([
+                listLiveSponsors(ctx, clubId),
+                listLiveTeams(ctx, clubId),
+                listLiveTeamSponsorAllocations(ctx, clubId),
+              ]);
+              const activeSponsors = sponsors.filter((s) => s.is_active);
+              if (activeSponsors.length === 0) return [] as SponsorCarouselItem[];
+
+              const teamNameMap = new Map<string, string>();
+              teams.forEach((t) => teamNameMap.set(t.id, t.name));
+
+              const sponsorTeamMap = new Map<string, string[]>();
+              allocations.forEach((alloc) => {
+                const teamName = teamNameMap.get(alloc.team_id);
+                if (teamName) {
+                  const existing = sponsorTeamMap.get(alloc.sponsor_id) || [];
+                  existing.push(teamName);
+                  sponsorTeamMap.set(alloc.sponsor_id, existing);
+                }
+              });
+
+              const result: SponsorCarouselItem[] = [];
+              activeSponsors.forEach((sponsor) => {
+                const teamNames = sponsorTeamMap.get(sponsor.id);
+
+                if (teamNames && teamNames.length > 0) {
+                  teamNames.forEach((teamName) => {
+                    result.push({
+                      id: `sponsor-${sponsor.id}-team-${teamName}`,
+                      sponsorId: sponsor.id,
+                      entityName: teamName,
+                    });
+                  });
+                } else {
+                  result.push({
+                    id: `sponsor-${sponsor.id}`,
+                    sponsorId: sponsor.id,
+                    entityName: club.name,
+                  });
+                }
+              });
+              return result;
+            }),
+          );
+          return perClub.flat();
+        },
+      }),
     enabled: !!user?.id,
   });
 
