@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { deleteLiveAsset } from "@/live/features/media";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Publish a chat-attached image to the team / club media gallery.
@@ -54,6 +55,14 @@ export async function publishChatImageToGallery(
   if (!imageUrl) throw new Error("imageUrl is required");
   if (!uploaderId) throw new Error("uploaderId is required");
   if (!teamId && !clubId) throw new Error("teamId or clubId is required");
+
+  // NEEDS-CANISTER: the whole publish flow (photos table lookup, bucket
+  // re-upload, photos row insert) is Supabase-only — media_domain has no
+  // publish-to-gallery equivalent yet. Fail closed in ICP mode rather than
+  // silently writing gallery rows to the wrong backend.
+  if (isFeatureRoutedToIcp("media")) {
+    throw new Error("Publishing to the gallery is not available yet for Internet Identity accounts");
+  }
 
   // 1. Idempotency — has this exact image already been published by this user?
   // Fail-closed: if the lookup errors (RLS, connectivity, server), we cannot

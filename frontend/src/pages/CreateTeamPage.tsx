@@ -211,6 +211,19 @@ export default function CreateTeamPage() {
       return;
     }
 
+    // NEEDS-CANISTER: the non-admin request flow (team_creation_requests
+    // insert + request-logo upload) has no club_domain counterpart — the
+    // canister only lists/approves/rejects requests. Fail closed so an
+    // ICP-routed club's request never lands in Supabase.
+    if (!isClubAdmin && isFeatureRoutedToIcp("membership")) {
+      toast({
+        title: "Team requests are not available yet for Internet Identity clubs",
+        description: "Ask a club admin to create the team directly.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(true);
 
     // Check for duplicate team name in the same club

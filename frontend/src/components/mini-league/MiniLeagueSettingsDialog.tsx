@@ -13,6 +13,8 @@ import {
   updateLiveMiniLeague,
 } from "@/live/features/miniLeagues";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -227,6 +229,20 @@ export function MiniLeagueSettingsDialog({ open, onOpenChange, league, canDelete
       const { file: compressedFile } = await compressImage(file);
       const fileName = `mini-league-${league.id}-${Date.now()}.jpg`;
       const filePath = `${league.club_id}/${fileName}`;
+
+      const blobUpload = await tryUploadMediaToBlobStore({
+        storagePath: `clubs/${league.club_id}/mini-league/${fileName}`,
+        file: compressedFile,
+        mime: compressedFile.type || "image/jpeg",
+      });
+      if (blobUpload) {
+        setEditLogoUrl(blobUpload.url);
+        toast.success("Logo uploaded");
+        return;
+      }
+      if (resolveAuthBackend() === "icp") {
+        throw new Error("Media uploads are not available yet for Internet Identity accounts");
+      }
 
       const { error: uploadError } = await supabase.storage
         .from("club-logos")

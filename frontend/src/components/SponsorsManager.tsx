@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { 
   Plus, 
   Pencil, 
@@ -368,7 +370,17 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     
     const fileExt = logoFile.name.split('.').pop();
     const fileName = `${clubId}/${Date.now()}.${fileExt}`;
-    
+
+    const blobUpload = await tryUploadMediaToBlobStore({
+      storagePath: `clubs/${clubId}/sponsors/${fileName}`,
+      file: logoFile,
+      mime: logoFile.type || "application/octet-stream",
+    });
+    if (blobUpload) return blobUpload.url;
+    if (resolveAuthBackend() === "icp") {
+      throw new Error("Media uploads are not available yet for Internet Identity accounts");
+    }
+
     const { error } = await supabase.storage
       .from("sponsor-logos")
       .upload(fileName, logoFile);
