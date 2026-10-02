@@ -8,6 +8,7 @@ import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import igniteIcon from "@/assets/ignite-icon.png";
 
 /**
@@ -16,9 +17,12 @@ import igniteIcon from "@/assets/ignite-icon.png";
  */
 function useUserProClubs(enabled: boolean) {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
+  // NEEDS-CANISTER: no canister equivalent of "every Pro club I belong to";
+  // never query Supabase for an Internet Identity principal.
   return useQuery({
     queryKey: ["desktop-gate-pro-clubs", user?.id],
-    enabled: enabled && !!user?.id,
+    enabled: enabled && !!user?.id && !isIcp,
     staleTime: 60_000,
     queryFn: async () => {
       const [direct, viaTeam] = await Promise.all([
