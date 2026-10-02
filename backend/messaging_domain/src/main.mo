@@ -499,7 +499,7 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings })
+    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages })
   };
 
   func validKind(kind : Text) : Bool {
@@ -1395,6 +1395,75 @@ persistent actor {
       };
     };
     #Ok(count)
+  };
+
+  // ===================== Typing indicators (ephemeral) =====================
+
+  // TTL window: a typing ping older than this is treated as stale and
+  // filtered out at read time (mirrors the old Supabase presence-track
+  // auto-expiry). The frontend also auto-clears after 3s of no keystrokes.
+  transient let TYPING_TTL_MS : Nat64 = 6_000;
+
+  public shared ({ caller }) func set_typing(conversation_id : Text, is_typing : Bool, name : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    typingPings := typingPings.filter(func(p) = not (p.user.equal(caller) and p.conversation_id == conversation_id));
+    if (is_typing) {
+      typingPings := typingPings.concat([{ user = caller; conversation_id; name; last_typed_ms = nowMs() }]);
+    };
+    #Ok
+  };
+
+  // Live typing users for a conversation, excluding the caller and any ping
+  // older than TYPING_TTL_MS. Polled by the frontend on a short interval.
+  public query ({ caller }) func list_typing(conversation_id : Text) : async { #Ok : [Types.TypingUser]; #Err : Text } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    let now = nowMs();
+    let active = typingPings.filter(func(p) =
+      p.conversation_id == conversation_id and
+      not p.user.equal(caller) and
+      p.last_typed_ms + TYPING_TTL_MS >= now
+    );
+    #Ok(active.map<Types.TypingPing, Types.TypingUser>(func(p) = { user = p.user; name = p.name }))
+  };
+
+  // ===================== Pinned messages =====================
+
+  transient let PIN_LIMIT = 3;
+
+  public shared ({ caller }) func pin_message(conversation_id : Text, message_id : Text) : async { #Ok : Types.PinnedMessage; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (not messages.any(func(m) = m.id == message_id and m.conversation_id == conversation_id)) return #Err("Message not found");
+    if (pinnedMessages.any(func(p) = p.conversation_id == conversation_id and p.message_id == message_id)) {
+      return #Err("Message already pinned");
+    };
+    if (pinnedMessages.filter(func(p) = p.conversation_id == conversation_id).size() >= PIN_LIMIT) {
+      return #Err("Pin limit reached: at most 3 pinned messages per conversation");
+    };
+    let pin : Types.PinnedMessage = {
+      id = "pin-" # conversation_id # "-" # message_id;
+      conversation_id;
+      message_id;
+      pinned_by = caller;
+      created_at_ms = nowMs();
+    };
+    pinnedMessages := pinnedMessages.concat([pin]);
+    #Ok(pin)
+  };
+
+  public shared ({ caller }) func unpin_message(conversation_id : Text, message_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    pinnedMessages := pinnedMessages.filter(func(p) = not (p.conversation_id == conversation_id and p.message_id == message_id));
+    #Ok
+  };
+
+  public query ({ caller }) func list_pinned_messages(conversation_id : Text) : async { #Ok : [Types.PinnedMessage]; #Err : Text } {
+    if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
+    if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    #Ok(pinnedMessages.filter(func(p) = p.conversation_id == conversation_id))
   };
 
   // ===================== User blocking =====================

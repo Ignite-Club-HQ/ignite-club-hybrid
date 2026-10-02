@@ -135,9 +135,34 @@ module {
   // with empty lists for both (no prior data to preserve).
   public func migration(old : OldActor) : NewActor {
     {
-      old with
-      typingPings = [] : [TypingPing];
-      pinnedMessages = [] : [PinnedMessage];
+      var governor = old.governor;
+      var roles = old.roles;
+      var conversations = old.conversations;
+      var messages = old.messages;
+      var receipts = old.receipts;
+      var unread = old.unread;
+      var bulkAccessPrincipals = old.bulkAccessPrincipals;
+      var groupMetadata = old.groupMetadata;
+      var clubMemberships = old.clubMemberships;
+      var competitionAdmins = old.competitionAdmins;
+      var dmAttachmentsDisabled = old.dmAttachmentsDisabled;
+      var groupRoles = old.groupRoles;
+      var joinRequests = old.joinRequests;
+      var polls = old.polls;
+      var pollVotes = old.pollVotes;
+      var mutePreferences = old.mutePreferences;
+      var dmLinks = old.dmLinks;
+      var forwardRecords = old.forwardRecords;
+      var scheduledMessages = old.scheduledMessages;
+      var attachmentMetadata = old.attachmentMetadata;
+      var reactions = old.reactions;
+      var clubDmSettings = old.clubDmSettings;
+      var userMessagingSettings = old.userMessagingSettings;
+      var recapConfig = old.recapConfig;
+      var presence = old.presence;
+      var blockedUsers = old.blockedUsers;
+      var typingPings = [] : [TypingPing];
+      var pinnedMessages = [] : [PinnedMessage];
     }
   };
 };
