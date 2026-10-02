@@ -1,6 +1,8 @@
 import type { Principal } from "@icp-sdk/core/principal";
+import { IbeCiphertext } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl, connectLiveVaultDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
+import { encryptPiiValue, fetchPiiVetKeys } from "../piiVetKeys";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
 
 /**
@@ -8,9 +10,11 @@ import { candidOpt, toNat64, unwrapCandid } from "./candid";
  * pii_access_control (encrypted records).
  *
  * Canister-side counterpart of the Supabase vault repositories in
- * `features/vault/`: encrypted PII records with per-field access control and
- * key rotation. Plaintext only ever crosses to the canister as bytes; the
- * canister encrypts at rest under the current master key.
+ * `features/vault/`: encrypted PII records with per-field access control.
+ * Encryption is client-side IBE (vetKeys) — `register_pii` receives
+ * ciphertext the browser produced offline, and reads fetch ciphertext plus
+ * the caller's authorization-gated vetKey and decrypt locally. The
+ * canister never sees plaintext or keys.
  *
  * NOTE: untested against a live canister until deployment — verify the
  * field_id/domain_owner conventions during the post-deploy sign-in test.
@@ -23,9 +27,10 @@ export async function registerLivePii(
   plaintext: Uint8Array,
   domainOwner: Principal,
 ) {
+  const ciphertext = await encryptPiiValue(ctx, piiId, fieldId, plaintext);
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.register_pii(piiId, fieldId, plaintext, domainOwner),
+    actor.register_pii(piiId, fieldId, ciphertext, domainOwner),
     "Register PII",
   );
 }
@@ -39,26 +44,14 @@ export async function getLiveEncryptedPii(
   return unwrapCandid(actor.get_encrypted_pii(piiId, fieldId), "Get encrypted PII");
 }
 
-export async function getLiveDecryptedPii(
-  ctx: FeatureBackendContext,
-  piiId: string,
-  fieldId: string,
-  operation: string,
-  purpose: string,
-) {
-  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.get_decrypted_pii(piiId, fieldId, operation, purpose),
-    "Get decrypted PII",
-  );
-}
-
 /**
- * Batch read of decrypted PII fields (e.g. child display names). The canister
+ * Batch read of PII ciphertext (e.g. child display names). The canister
  * omits records the caller cannot read and audits every attempt, so callers
- * should treat a missing entry as "no access / not registered" and fall back.
+ * should treat a missing entry as "no access / not registered" and fall
+ * back. Decrypt locally via `fetchPiiVetKeys` + `decryptPiiValue`, or use
+ * `resolveLivePiiTextBatch` for text fields.
  */
-export async function getLiveDecryptedPiiBatch(
+export async function getLiveEncryptedPiiBatch(
   ctx: FeatureBackendContext,
   piiIds: string[],
   fieldId: string,
@@ -67,8 +60,8 @@ export async function getLiveDecryptedPiiBatch(
 ) {
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.get_decrypted_pii_batch(piiIds, fieldId, operation, purpose),
-    "Get decrypted PII batch",
+    actor.get_encrypted_pii_batch(piiIds, fieldId, operation, purpose),
+    "Get encrypted PII batch",
   );
 }
 
@@ -79,25 +72,6 @@ export async function deleteLivePii(
 ) {
   const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_pii(piiId, fieldId), "Delete PII");
-}
-
-export async function deriveLiveMediaKey(
-  ctx: FeatureBackendContext,
-  childId: string,
-  authorizer: Principal,
-  purpose: string,
-  expirySeconds: number,
-) {
-  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.derive_media_key(childId, authorizer, purpose, BigInt(expirySeconds)),
-    "Derive media key",
-  );
-}
-
-export async function getLiveKeyMetadata(ctx: FeatureBackendContext) {
-  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
-  return actor.get_key_metadata();
 }
 
 /**
@@ -229,10 +203,22 @@ export async function resolveLivePiiTextBatch(
   const out = new Map<string, string>();
   if (piiIds.length === 0) return out;
   try {
-    const rows = await getLiveDecryptedPiiBatch(ctx, piiIds, fieldId, operation, purpose);
+    const rows = await getLiveEncryptedPiiBatch(ctx, piiIds, fieldId, operation, purpose);
+    if (rows.length === 0) return out;
+    const readableIds = rows.map((row) => row.pii_id);
+    const vetKeys = await fetchPiiVetKeys(ctx, readableIds, fieldId);
     const decoder = new TextDecoder();
     for (const row of rows) {
-      out.set(row.pii_id, decoder.decode(Uint8Array.from(row.plaintext)));
+      const vetKey = vetKeys.get(row.pii_id);
+      if (!vetKey) continue; // ciphertext readable but no key grant — treat as no access
+      try {
+        const plaintext = IbeCiphertext.deserialize(
+          Uint8Array.from(row.ciphertext),
+        ).decrypt(vetKey);
+        out.set(row.pii_id, decoder.decode(plaintext));
+      } catch {
+        // Corrupt ciphertext or wrong identity — skip, fall back to the neutral label.
+      }
     }
   } catch (error) {
     console.error("[vault] PII batch decrypt failed", {
