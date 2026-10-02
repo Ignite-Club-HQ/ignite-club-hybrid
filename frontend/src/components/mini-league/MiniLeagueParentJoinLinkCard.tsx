@@ -6,7 +6,13 @@ import { Filesystem, Directory } from "@capacitor/filesystem";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveMiniLeagueJoinLink,
+  listLiveMiniLeagueJoinLinks,
+  revokeLiveMiniLeagueJoinLink,
+  rotateLiveMiniLeagueJoinLink,
+} from "@/live/features/miniLeagues";
 import { MiniLeagueJoinLinkCard } from "./MiniLeagueJoinLinkCard";
 import {
   buildMiniLeagueJoinLinkQrFilename,
@@ -41,7 +47,9 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
 
   const { data: link, isLoading, isError, refetch } = useQuery({
     queryKey,
-    queryFn: async () => {
+    queryFn: () =>
+      withFeatureBackend("mini_leagues", {
+        supabase: async () => {
       const { data, error } = await supabase
         .from("pending_invites")
         .select("id, invite_token, created_at, metadata")
