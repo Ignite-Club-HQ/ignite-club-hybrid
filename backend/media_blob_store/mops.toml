@@ -1,0 +1,9 @@
+[dependencies]
+core = "2.6.1"
+
+[toolchain]
+moc = "1.16.1"
+
+[package]
+name = "media_blob_store"
+version = "0.1.0"
