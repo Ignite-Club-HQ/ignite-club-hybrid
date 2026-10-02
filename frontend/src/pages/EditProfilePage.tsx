@@ -171,6 +171,19 @@ export default function EditProfilePage() {
           displayName: displayName.trim(),
           avatarRef: avatarUrl.trim() || null,
         });
+        // Mirror the display name into pii_access_control (pii_id = caller
+        // principal text, field_id = "display_name", owner = the user).
+        // Best effort — the profile save above already succeeded.
+        const [{ getActiveIcpTarget }, { registerLivePiiText }] = await Promise.all([
+          import("@/live/targetRegistry"),
+          import("@/live/features/vault"),
+        ]);
+        await registerLivePiiText(
+          { identity, target: getActiveIcpTarget() },
+          identity.getPrincipal().toText(),
+          "display_name",
+          displayName.trim(),
+        );
       } catch (error) {
         setSaving(false);
         toast({
