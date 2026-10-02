@@ -28,7 +28,8 @@ import { isVideoUrl } from "@/lib/videoUtils";
 import { cn } from "@/lib/utils";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveMutePreference, getLiveMutePreference } from "@/live/features/messaging";
 
 export type ChatDetailsType = ChatSharedMediaType | "support";
 
@@ -468,19 +469,28 @@ function NotificationsToggle({
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const useIcpLab = isFeatureRoutedToIcp("messaging");
   const muteType = chatType === "broadcast" ? "team" : chatType; // broadcast not tracked individually; UI-only
 
   const { data: muteData, isLoading } = useQuery({
     queryKey: ["chat-mute", muteType, chatId, user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("chat_mute_preferences")
-        .select("id, muted_until")
-        .eq("user_id", user!.id)
-        .eq("chat_type", muteType as any)
-        .eq("chat_id", chatId)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("chat_mute_preferences")
+            .select("id, muted_until")
+            .eq("user_id", user!.id)
+            .eq("chat_type", muteType as any)
+            .eq("chat_id", chatId)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const muted = await getLiveMutePreference(ctx, chatId);
+          return muted ? { id: chatId, muted_until: null } : null;
+        },
+      });
     },
     enabled: !!user && !disabled && chatType !== "broadcast",
   });
@@ -490,29 +500,32 @@ function NotificationsToggle({
 
   const toggleMutation = useMutation({
     mutationFn: async (enable: boolean) => {
-      // NEEDS-CANISTER: messaging_domain mute-preference call.
-      assertSupabaseWritePath("messaging", "updating chat mute preferences");
-      if (enable) {
-        await supabase
-          .from("chat_mute_preferences")
-          .delete()
-          .eq("user_id", user!.id)
-          .eq("chat_type", muteType as any)
-          .eq("chat_id", chatId);
-      } else {
-        await supabase
-          .from("chat_mute_preferences")
-          .delete()
-          .eq("user_id", user!.id)
-          .eq("chat_type", muteType as any)
-          .eq("chat_id", chatId);
-        await supabase.from("chat_mute_preferences").insert({
-          user_id: user!.id,
-          chat_type: muteType as any,
-          chat_id: chatId,
-          muted_until: null,
-        });
-      }
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          if (enable) {
+            await supabase
+              .from("chat_mute_preferences")
+              .delete()
+              .eq("user_id", user!.id)
+              .eq("chat_type", muteType as any)
+              .eq("chat_id", chatId);
+          } else {
+            await supabase
+              .from("chat_mute_preferences")
+              .delete()
+              .eq("user_id", user!.id)
+              .eq("chat_type", muteType as any)
+              .eq("chat_id", chatId);
+            await supabase.from("chat_mute_preferences").insert({
+              user_id: user!.id,
+              chat_type: muteType as any,
+              chat_id: chatId,
+              muted_until: null,
+            });
+          }
+        },
+        icp: (ctx) => setLiveMutePreference(ctx, chatId, !enable),
+      });
     },
     onSuccess: (_, enable) => {
       queryClient.invalidateQueries({ queryKey: ["chat-mute", muteType, chatId, user?.id] });

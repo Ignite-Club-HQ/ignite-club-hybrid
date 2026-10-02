@@ -355,6 +355,36 @@ export async function cancelLiveScheduledMessage(
   return fromCandidScheduledMessage(result);
 }
 
+export interface LiveUpdateScheduledMessageInput {
+  id: string;
+  author: string;
+  body?: string | null;
+  imageUrl?: string | null;
+  scheduledForMs?: number | null;
+  recurrence?: LiveScheduledRecurrence | null;
+  recurrenceUntilMs?: number | null;
+}
+
+export async function updateLiveScheduledMessage(
+  ctx: FeatureBackendContext,
+  input: LiveUpdateScheduledMessageInput,
+): Promise<LiveScheduledMessage> {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  const result = await unwrapCandid(
+    actor.update_scheduled_message(
+      input.id,
+      input.author,
+      input.body !== undefined && input.body !== null ? [input.body] : [],
+      input.imageUrl !== undefined && input.imageUrl !== null ? [input.imageUrl] : [],
+      input.scheduledForMs != null ? [BigInt(Math.trunc(input.scheduledForMs))] : [],
+      input.recurrence != null ? [recurrenceToCandid(input.recurrence)] : [],
+      input.recurrenceUntilMs != null ? [BigInt(Math.trunc(input.recurrenceUntilMs))] : [],
+    ),
+    "Update scheduled message",
+  );
+  return fromCandidScheduledMessage(result);
+}
+
 // ---------------------------------------------------------------------------
 // Notification preferences (get_preferences / upsert_preferences).
 //

@@ -19,7 +19,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { SPORT_EMOJIS, getSportEmoji } from "@/lib/sportEmojis";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { createLiveClub, requestLiveClubJoin } from "@/live/features/club";
+import { addLiveRoleGrant } from "@/live/features/membership";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -119,110 +121,133 @@ export default function FindOrCreateClubWizard({
   const handleCreateClub = async () => {
     if (!clubName.trim() || !user) return;
 
-    try {
-      assertSupabaseWritePath("membership", "club creation + club_admin role grant + logo upload has no club_domain counterpart wired here"); // NEEDS-CANISTER: club creation + club_admin role grant + logo upload has no club_domain counterpart wired here
-    } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Not available", variant: "destructive" });
-      return;
-    }
-
     setSaving(true);
 
-    // Check for duplicate name
-    const { data: existing } = await supabase
-      .from("clubs")
-      .select("id")
-      .ilike("name", clubName.trim())
-      .maybeSingle();
+    try {
+      const clubId = await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          const profile = await createLiveClub(
+            ctx,
+            crypto.randomUUID(),
+            clubName.trim(),
+            clubName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `club-${Date.now()}`,
+            clubDescription.trim() || "",
+          );
+          // NEEDS-CANISTER: logo upload has no club_domain counterpart; skipped on this path.
+          await addLiveRoleGrant(ctx, Principal.fromText(user.id), profile.id, "club_admin");
+          return profile.id;
+        },
+        supabase: async () => {
+          // Check for duplicate name
+          const { data: existing } = await supabase
+            .from("clubs")
+            .select("id")
+            .ilike("name", clubName.trim())
+            .maybeSingle();
 
-    if (existing) {
+          if (existing) {
+            throw new Error("Club name already exists. Please choose a different name.");
+          }
+
+          const { data: club, error: clubError } = await supabase
+            .from("clubs")
+            .insert({
+              name: clubName.trim(),
+              description: clubDescription.trim() || null,
+              logo_url: null,
+              sport: clubSport || null,
+              created_by: user.id,
+            })
+            .select()
+            .single();
+
+          if (clubError) {
+            throw new Error(
+              clubError.message.includes("idx_unique_club_name")
+                ? "A club with this name already exists."
+                : "Failed to create club. Please try again.",
+            );
+          }
+
+          // Upload logo
+          if (clubLogoFile) {
+            try {
+              const fileExt = clubLogoFile.name.split(".").pop();
+              const fileName = `${club.id}/${Date.now()}.${fileExt}`;
+              const { error: uploadError } = await supabase.storage
+                .from("club-logos")
+                .upload(fileName, clubLogoFile, { upsert: true });
+
+              if (!uploadError) {
+                const { data: urlData } = supabase.storage
+                  .from("club-logos")
+                  .getPublicUrl(fileName);
+                await supabase.from("clubs").update({ logo_url: urlData.publicUrl }).eq("id", club.id);
+              }
+            } catch (error) {
+              console.error("Logo upload error:", error);
+            }
+          }
+
+          // Assign creator as club_admin
+          await supabase.from("user_roles").insert({
+            user_id: user.id,
+            role: "club_admin" as any,
+            club_id: club.id,
+          });
+
+          return club.id as string;
+        },
+      });
+
       setSaving(false);
-      toast({ title: "Club name already exists", description: "Please choose a different name.", variant: "destructive" });
-      return;
-    }
-
-    const { data: club, error: clubError } = await supabase
-      .from("clubs")
-      .insert({
-        name: clubName.trim(),
-        description: clubDescription.trim() || null,
-        logo_url: null,
-        sport: clubSport || null,
-        created_by: user.id,
-      })
-      .select()
-      .single();
-
-    if (clubError) {
+      onClubCreated(clubId);
+    } catch (e) {
       setSaving(false);
       toast({
         title: "Error",
-        description: clubError.message.includes("idx_unique_club_name")
-          ? "A club with this name already exists."
-          : "Failed to create club. Please try again.",
+        description: e instanceof Error ? e.message : "Failed to create club. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendJoinRequest = async (club: ClubSearchResult) => {
+    if (!user) return;
+    setSendingRequest(true);
+
+    try {
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          await requestLiveClubJoin(ctx, club.id);
+        },
+        supabase: async () => {
+          const { error } = await supabase.from("club_join_requests").insert({
+            club_id: club.id,
+            user_id: user.id,
+            message: joinMessage.trim() || null,
+          });
+
+          if (error) {
+            if (error.code === "23505") {
+              throw new Error("You've already sent a join request to this club.");
+            }
+            throw new Error("Failed to send join request. Please try again.");
+          }
+        },
+      });
+    } catch (e) {
+      setSendingRequest(false);
+      toast({
+        title: e instanceof Error && e.message.includes("already") ? "Already requested" : "Error",
+        description: e instanceof Error ? e.message : "Failed to send join request. Please try again.",
         variant: "destructive",
       });
       return;
     }
 
-    // Upload logo
-    if (clubLogoFile) {
-      try {
-        const fileExt = clubLogoFile.name.split(".").pop();
-        const fileName = `${club.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from("club-logos")
-          .upload(fileName, clubLogoFile, { upsert: true });
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from("club-logos")
-            .getPublicUrl(fileName);
-          await supabase.from("clubs").update({ logo_url: urlData.publicUrl }).eq("id", club.id);
-        }
-      } catch (error) {
-        console.error("Logo upload error:", error);
-      }
-    }
-
-    // Assign creator as club_admin
-    await supabase.from("user_roles").insert({
-      user_id: user.id,
-      role: "club_admin" as any,
-      club_id: club.id,
-    });
-
-    setSaving(false);
-    onClubCreated(club.id);
-  };
-
-  const handleSendJoinRequest = async (club: ClubSearchResult) => {
-    if (!user) return;
-    try {
-      assertSupabaseWritePath("membership", "club_join_requests insert has no club_domain counterpart"); // NEEDS-CANISTER: club_join_requests insert has no club_domain counterpart
-    } catch (e) {
-      toast({ title: e instanceof Error ? e.message : "Not available", variant: "destructive" });
-      return;
-    }
-    setSendingRequest(true);
-
-    const { error } = await supabase.from("club_join_requests").insert({
-      club_id: club.id,
-      user_id: user.id,
-      message: joinMessage.trim() || null,
-    });
-
     setSendingRequest(false);
-
-    if (error) {
-      if (error.code === "23505") {
-        toast({ title: "Already requested", description: "You've already sent a join request to this club.", variant: "destructive" });
-      } else {
-        toast({ title: "Error", description: "Failed to send join request. Please try again.", variant: "destructive" });
-      }
-      return;
-    }
-
     setRequestSentClub({ id: club.id, name: club.name });
     setMode("request-sent");
     toast({ title: "Request sent!", description: `Your join request has been sent to ${club.name}.` });

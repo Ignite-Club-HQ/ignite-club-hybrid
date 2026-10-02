@@ -6,8 +6,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMiniLeague, listLivePlayers } from "@/live/features/miniLeagues";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import {
+  createLiveEventGroup,
+  renameLiveEventGroup,
+  deleteLiveEventGroup,
+  listLiveEventGroups,
+  addLiveGroupPlayer,
+  listLiveGroupPlayers,
+  moveLiveGroupPlayer,
+  swapLiveGroupPlayers,
+  setLiveGroupDuty,
+  listLiveGroupDuties,
+  setLiveEventGroupAppearance,
+  replaceLiveEventGroups,
+  listLiveDuties,
+  listLiveMiniLeagueRsvps,
+  type LiveGroupSpecInput,
+} from "@/live/features/events";
 
 import type { Json } from "@/integrations/supabase/types";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -116,8 +131,9 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
     queryKey: ["event-groups", eventId],
     // NEEDS-CANISTER: event_groups/event_group_players (mini-league match
     // groups) have no events_domain/mini_league_domain equivalent.
-    enabled: !!eventId && !isFeatureRoutedToIcp("mini_leagues"),
-    queryFn: async () => {
+    enabled: !!eventId,
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => {
       const { data: groupsData, error } = await supabase
         .from("event_groups")
         .select("*")
@@ -166,7 +182,40 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         });
       }
       return groupsWithPlayers;
-    },
+      },
+      icp: async (ctx) => {
+        const [rawGroups, players] = await Promise.all([
+          listLiveEventGroups(ctx, eventId),
+          listLivePlayers(ctx, miniLeagueId),
+        ]);
+        const playerInfo = new Map(players.map((p) => [p.id, p]));
+        const groupsWithPlayers: EventGroup[] = await Promise.all(
+          rawGroups.map(async (g) => {
+            const playerLinks = await listLiveGroupPlayers(ctx, g.id);
+            const groupPlayers: GroupPlayer[] = playerLinks.map((pl) => {
+              const info = playerInfo.get(pl.account_id);
+              return {
+                id: pl.account_id,
+                name: info?.name || "Unknown",
+                ability_rating: info?.ability_rating.length ? info.ability_rating[0] : 3,
+                team: pl.team_letter.length ? (pl.team_letter[0] as "a" | "b") : null,
+              };
+            });
+            return {
+              id: g.id,
+              name: g.name,
+              ability_band: g.ability_band.length ? g.ability_band[0] : null,
+              pitch_name: g.pitch_name.length ? g.pitch_name[0] : null,
+              display_order: g.display_order,
+              team_a_color: g.colour.length ? g.colour[0] : "#ef4444",
+              team_b_color: g.team_b_colour.length ? g.team_b_colour[0] : "#3b82f6",
+              players: groupPlayers,
+            };
+          }),
+        );
+        return groupsWithPlayers.sort((a, b) => a.display_order - b.display_order);
+      },
+    }),
     staleTime: 0,
     refetchOnMount: "always",
   });
@@ -264,25 +313,45 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Fetch all duties for all groups in this event (for inline badges)
   const { data: allGroupDuties } = useQuery({
     queryKey: ["event-all-group-duties", eventId],
-    // NEEDS-CANISTER: event_group_duties has no mini_league_domain equivalent.
-    enabled: !!eventId && !!groups && groups.length > 0 && !isFeatureRoutedToIcp("mini_leagues"),
-    queryFn: async () => {
-      if (!groups || groups.length === 0) return {};
-      const groupIds = groups.map(g => g.id);
-      const { data, error } = await supabase
-        .from("event_group_duties")
-        .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
-        .in("group_id", groupIds)
-        .order("created_at");
-      if (error) throw error;
-      // Group by group_id
-      const map: Record<string, typeof data> = {};
-      for (const d of data || []) {
-        if (!map[d.group_id]) map[d.group_id] = [];
-        map[d.group_id].push(d);
-      }
-      return map;
-    },
+    enabled: !!eventId && !!groups && groups.length > 0,
+    queryFn: () => withFeatureBackend("events", {
+      supabase: async () => {
+        if (!groups || groups.length === 0) return {};
+        const groupIds = groups.map(g => g.id);
+        const { data, error } = await supabase
+          .from("event_group_duties")
+          .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
+          .in("group_id", groupIds)
+          .order("created_at");
+        if (error) throw error;
+        // Group by group_id
+        const map: Record<string, typeof data> = {};
+        for (const d of data || []) {
+          if (!map[d.group_id]) map[d.group_id] = [];
+          map[d.group_id].push(d);
+        }
+        return map;
+      },
+      icp: async (ctx) => {
+        if (!groups || groups.length === 0) return {} as Record<string, any[]>;
+        const map: Record<string, any[]> = {};
+        await Promise.all(groups.map(async (group) => {
+          const duties = await listLiveGroupDuties(ctx, group.id);
+          map[group.id] = duties.map((d) => {
+            const assignedTo = d.account_id.length ? d.account_id[0] : null;
+            const profile = assignedTo ? parentProfiles?.find((p) => p.id === assignedTo) : null;
+            return {
+              id: `${group.id}:${d.duty}`,
+              group_id: group.id,
+              name: d.duty,
+              assigned_to: assignedTo,
+              assignee: profile ? { display_name: profile.display_name } : null,
+            };
+          });
+        }));
+        return map;
+      },
+    }),
   });
 
   // State for quick-assign (clicking a duty badge)
@@ -354,76 +423,118 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
   // Smart duty distribution: assign event-level duties to matches, preferring parents whose kids are in each match
   const distributeEventDutiesToMatches = useCallback(async (matchIds: string[], matchPlayerIds: string[][]) => {
-    // NEEDS-CANISTER: event_group_duties has no mini_league_domain equivalent.
-    assertSupabaseWritePath("mini_leagues", "assigning match duties");
-    // Fetch event-level duties
-    const { data: eventDuties } = await supabase
-      .from("duties")
-      .select("id, name, assigned_to")
-      .eq("event_id", eventId);
-    
-    if (!eventDuties || eventDuties.length === 0) return;
+    await withFeatureBackend("events", {
+      supabase: async () => {
+        // Fetch event-level duties
+        const { data: eventDuties } = await supabase
+          .from("duties")
+          .select("id, name, assigned_to")
+          .eq("event_id", eventId);
 
-    // Build a map: player_id -> parent_user_id
-    const playerParentMap = new Map<string, string>();
-    if (allPlayers) {
-      for (const p of allPlayers) {
-        if (p.parent_user_id) playerParentMap.set(p.id, p.parent_user_id);
-      }
-    }
+        if (!eventDuties || eventDuties.length === 0) return;
 
-    // For each match, find which parents have kids playing
-    const matchParentIds: string[][] = matchPlayerIds.map(playerIds => {
-      const parents = new Set<string>();
-      for (const pid of playerIds) {
-        const parentId = playerParentMap.get(pid);
-        if (parentId) parents.add(parentId);
-      }
-      return [...parents];
-    });
-
-    // Track how many duties each parent has been assigned (for fair rotation)
-    const parentDutyCount = new Map<string, number>();
-
-    // For each duty, create an event_group_duty in every match
-    const dutyInserts: { group_id: string; name: string; assigned_to: string | null; status: string }[] = [];
-
-    for (const duty of eventDuties) {
-      for (let matchIdx = 0; matchIdx < matchIds.length; matchIdx++) {
-        let assignedTo: string | null = null;
-
-        if (duty.assigned_to) {
-          // If the event-level duty is pre-assigned, check if that parent has a kid in this match
-          const parentInMatch = matchParentIds[matchIdx].includes(duty.assigned_to);
-          if (parentInMatch) {
-            assignedTo = duty.assigned_to;
+        // Build a map: player_id -> parent_user_id
+        const playerParentMap = new Map<string, string>();
+        if (allPlayers) {
+          for (const p of allPlayers) {
+            if (p.parent_user_id) playerParentMap.set(p.id, p.parent_user_id);
           }
         }
 
-        // If not pre-assigned or parent not in this match, pick the least-burdened parent from this match
-        if (!assignedTo && matchParentIds[matchIdx].length > 0) {
-          const candidates = matchParentIds[matchIdx]
-            .map(pid => ({ id: pid, count: parentDutyCount.get(pid) || 0 }))
-            .sort((a, b) => a.count - b.count);
-          assignedTo = candidates[0].id;
-        }
-
-        if (assignedTo) {
-          parentDutyCount.set(assignedTo, (parentDutyCount.get(assignedTo) || 0) + 1);
-        }
-
-        dutyInserts.push({
-          group_id: matchIds[matchIdx],
-          name: duty.name,
-          assigned_to: assignedTo,
-          status: assignedTo ? "confirmed" : "pending",
+        // For each match, find which parents have kids playing
+        const matchParentIds: string[][] = matchPlayerIds.map(playerIds => {
+          const parents = new Set<string>();
+          for (const pid of playerIds) {
+            const parentId = playerParentMap.get(pid);
+            if (parentId) parents.add(parentId);
+          }
+          return [...parents];
         });
-      }
-    }
 
-    if (dutyInserts.length > 0) {
-      await supabase.from("event_group_duties").insert(dutyInserts);
-    }
+        // Track how many duties each parent has been assigned (for fair rotation)
+        const parentDutyCount = new Map<string, number>();
+
+        // For each duty, create an event_group_duty in every match
+        const dutyInserts: { group_id: string; name: string; assigned_to: string | null; status: string }[] = [];
+
+        for (const duty of eventDuties) {
+          for (let matchIdx = 0; matchIdx < matchIds.length; matchIdx++) {
+            let assignedTo: string | null = null;
+
+            if (duty.assigned_to) {
+              // If the event-level duty is pre-assigned, check if that parent has a kid in this match
+              const parentInMatch = matchParentIds[matchIdx].includes(duty.assigned_to);
+              if (parentInMatch) {
+                assignedTo = duty.assigned_to;
+              }
+            }
+
+            // If not pre-assigned or parent not in this match, pick the least-burdened parent from this match
+            if (!assignedTo && matchParentIds[matchIdx].length > 0) {
+              const candidates = matchParentIds[matchIdx]
+                .map(pid => ({ id: pid, count: parentDutyCount.get(pid) || 0 }))
+                .sort((a, b) => a.count - b.count);
+              assignedTo = candidates[0].id;
+            }
+
+            if (assignedTo) {
+              parentDutyCount.set(assignedTo, (parentDutyCount.get(assignedTo) || 0) + 1);
+            }
+
+            dutyInserts.push({
+              group_id: matchIds[matchIdx],
+              name: duty.name,
+              assigned_to: assignedTo,
+              status: assignedTo ? "confirmed" : "pending",
+            });
+          }
+        }
+
+        if (dutyInserts.length > 0) {
+          await supabase.from("event_group_duties").insert(dutyInserts);
+        }
+      },
+      icp: async (ctx) => {
+        const eventDuties = await listLiveDuties(ctx, eventId);
+        if (!eventDuties || eventDuties.length === 0) return;
+
+        const playerParentMap = new Map<string, string>();
+        if (allPlayers) {
+          for (const p of allPlayers) {
+            if (p.parent_user_id) playerParentMap.set(p.id, p.parent_user_id);
+          }
+        }
+
+        const matchParentIds: string[][] = matchPlayerIds.map(playerIds => {
+          const parents = new Set<string>();
+          for (const pid of playerIds) {
+            const parentId = playerParentMap.get(pid);
+            if (parentId) parents.add(parentId);
+          }
+          return [...parents];
+        });
+
+        const parentDutyCount = new Map<string, number>();
+
+        for (const duty of eventDuties) {
+          for (let matchIdx = 0; matchIdx < matchIds.length; matchIdx++) {
+            let assignedTo: string | null = null;
+            if (matchParentIds[matchIdx].includes(duty.account_id)) {
+              assignedTo = duty.account_id;
+            } else if (matchParentIds[matchIdx].length > 0) {
+              const candidates = matchParentIds[matchIdx]
+                .map(pid => ({ id: pid, count: parentDutyCount.get(pid) || 0 }))
+                .sort((a, b) => a.count - b.count);
+              assignedTo = candidates[0].id;
+            }
+            if (assignedTo) {
+              parentDutyCount.set(assignedTo, (parentDutyCount.get(assignedTo) || 0) + 1);
+            }
+            await setLiveGroupDuty(ctx, matchIds[matchIdx], duty.duty, assignedTo);
+          }
+        }
+      },
+    });
   }, [eventId, allPlayers]);
 
   // Auto-generate matches (core logic)

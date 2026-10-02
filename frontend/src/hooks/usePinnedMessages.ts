@@ -2,6 +2,8 @@ import { useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { pinLiveMessage, unpinLiveMessage, listLivePinnedMessages } from "@/live/features/messaging";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { toast } from "sonner";
 
@@ -43,12 +45,32 @@ export function usePinnedMessages(
   const queryClient = useQueryClient();
   const enabledOpt = options?.enabled ?? true;
 
+  const routedToIcp = isFeatureRoutedToIcp("messaging");
+
   const query = useQuery({
     queryKey: pinnedQueryKey(chatType, chatId ?? ""),
     enabled: enabledOpt && !!chatId,
-    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
+    refetchInterval: routedToIcp ? 3_000 : false,
     queryFn: async (): Promise<PinnedMessageWithContent[]> => {
       if (!chatId) return [];
+
+      if (routedToIcp) {
+        const pinned = await withFeatureBackend("messaging", {
+          supabase: async () => [],
+          icp: (ctx) => listLivePinnedMessages(ctx, chatId),
+        });
+        return pinned.map((p) => ({
+          id: p.id,
+          message_id: p.messageId,
+          pinned_by: p.pinnedBy.toText(),
+          created_at: new Date(p.createdAtMs).toISOString(),
+          text: null,
+          image_url: null,
+          author_id: p.pinnedBy.toText(),
+          author_name: null,
+          author_avatar: null,
+        } satisfies PinnedMessageWithContent));
+      }
 
       const { data: pins, error } = await supabase
         .from("pinned_messages")
@@ -106,8 +128,8 @@ export function usePinnedMessages(
   useEffect(() => {
     if (!chatId) return;
     // Messaging is ICP-routed: no realtime channel to subscribe to. The
-    // refetchInterval above polls pinned messages every 30s instead.
-    if (isFeatureRoutedToIcp("messaging")) return;
+    // refetchInterval above polls pinned messages every few seconds instead.
+    if (routedToIcp) return;
     const channel = supabase
       .channel(`pinned-${chatType}-${chatId}`)
       .on(
@@ -138,6 +160,17 @@ export function usePinnedMessages(
   const pin = useMutation({
     mutationFn: async (messageId: string) => {
       if (!chatId) throw new Error("Missing chat id");
+
+      if (routedToIcp) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("Pinning is not available");
+          },
+          icp: (ctx) => pinLiveMessage(ctx, chatId, messageId),
+        });
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
@@ -170,6 +203,17 @@ export function usePinnedMessages(
   const unpin = useMutation({
     mutationFn: async (messageId: string) => {
       if (!chatId) throw new Error("Missing chat id");
+
+      if (routedToIcp) {
+        await withFeatureBackend("messaging", {
+          supabase: async () => {
+            throw new Error("Unpinning is not available");
+          },
+          icp: (ctx) => unpinLiveMessage(ctx, chatId, messageId),
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from("pinned_messages")
         .delete()

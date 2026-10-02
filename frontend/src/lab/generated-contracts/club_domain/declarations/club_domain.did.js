@@ -125,6 +125,29 @@ export const idlFactory = ({ IDL }) => {
     'expires_at_ns' : IDL.Nat64,
     'expected_version' : IDL.Nat64,
   });
+  const ClubSettings = IDL.Record({
+    'logo_only_mode' : IDL.Bool,
+    'invite_email_style' : IDL.Opt(IDL.Text),
+    'theme_dark_accent_color' : IDL.Opt(IDL.Text),
+    'theme_primary_color' : IDL.Opt(IDL.Text),
+    'events_sponsor_strip_enabled' : IDL.Bool,
+    'header_logo_enabled' : IDL.Bool,
+    'chat_thread_ads_enabled' : IDL.Bool,
+    'theme_accent_color' : IDL.Opt(IDL.Text),
+    'contact_email' : IDL.Opt(IDL.Text),
+    'club_switcher_hint' : IDL.Opt(IDL.Text),
+    'theme_dark_primary_color' : IDL.Opt(IDL.Text),
+    'header_club_name_enabled' : IDL.Bool,
+    'membership_open' : IDL.Bool,
+    'announcement' : IDL.Opt(IDL.Text),
+    'public_directory' : IDL.Bool,
+    'theme_secondary_color' : IDL.Opt(IDL.Text),
+    'media_header_sponsors_enabled' : IDL.Bool,
+    'theme_dark_secondary_color' : IDL.Opt(IDL.Text),
+    'media_sponsors_enabled' : IDL.Bool,
+    'club_id' : IDL.Text,
+    'theme_enabled' : IDL.Bool,
+  });
   const ClubProfile = IDL.Record({
     'id' : IDL.Text,
     'secondary_color' : IDL.Opt(IDL.Text),
@@ -236,24 +259,6 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'contact_email' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
-  });
-  const ClubSettings = IDL.Record({
-    'invite_email_style' : IDL.Opt(IDL.Text),
-    'theme_primary_color' : IDL.Opt(IDL.Text),
-    'events_sponsor_strip_enabled' : IDL.Bool,
-    'header_logo_enabled' : IDL.Bool,
-    'chat_thread_ads_enabled' : IDL.Bool,
-    'theme_accent_color' : IDL.Opt(IDL.Text),
-    'contact_email' : IDL.Opt(IDL.Text),
-    'club_switcher_hint' : IDL.Opt(IDL.Text),
-    'header_club_name_enabled' : IDL.Bool,
-    'membership_open' : IDL.Bool,
-    'announcement' : IDL.Opt(IDL.Text),
-    'public_directory' : IDL.Bool,
-    'theme_secondary_color' : IDL.Opt(IDL.Text),
-    'media_header_sponsors_enabled' : IDL.Bool,
-    'media_sponsors_enabled' : IDL.Bool,
-    'club_id' : IDL.Text,
   });
   const Season = IDL.Record({
     'id' : IDL.Text,
@@ -447,6 +452,11 @@ export const idlFactory = ({ IDL }) => {
     'claim_shell_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
+        [],
+      ),
+    'clear_club_theme' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
     'create_child_for_parent_in_club' : IDL.Func(
@@ -961,6 +971,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_logo_only_mode' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_switcher_hint' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
@@ -971,8 +986,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubTerm, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_theme_enabled' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_theme_palette' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),

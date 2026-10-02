@@ -105,6 +105,12 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'last_read_sequence' : IDL.Nat64,
   });
+  const TypingPing = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'name' : IDL.Text,
+    'user' : IDL.Principal,
+    'last_typed_ms' : IDL.Nat64,
+  });
   const ClubMembership = IDL.Record({
     'user' : IDL.Principal,
     'club_id' : IDL.Text,
@@ -113,6 +119,13 @@ export const idlFactory = ({ IDL }) => {
     'poll_id' : IDL.Text,
     'user' : IDL.Principal,
     'option_index' : IDL.Nat32,
+  });
+  const PinnedMessage = IDL.Record({
+    'id' : IDL.Text,
+    'pinned_by' : IDL.Principal,
+    'conversation_id' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'message_id' : IDL.Text,
   });
   const AttachmentMetadata = IDL.Record({
     'id' : IDL.Text,
@@ -167,11 +180,13 @@ export const idlFactory = ({ IDL }) => {
     'clubDmSettings' : IDL.Vec(ClubDmSettings),
     'groupRoles' : IDL.Vec(GroupRole),
     'unread' : IDL.Vec(Unread),
+    'typingPings' : IDL.Vec(TypingPing),
     'groupMetadata' : IDL.Vec(GroupMetadata),
     'clubMemberships' : IDL.Vec(ClubMembership),
     'pollVotes' : IDL.Vec(PollVote),
     'governor' : IDL.Principal,
     'conversations' : IDL.Vec(Conversation),
+    'pinnedMessages' : IDL.Vec(PinnedMessage),
     'polls' : IDL.Vec(Poll),
     'attachmentMetadata' : IDL.Vec(AttachmentMetadata),
     'dmLinks' : IDL.Vec(DmLink),
@@ -191,6 +206,7 @@ export const idlFactory = ({ IDL }) => {
     'latest_sequence' : IDL.Nat64,
     'next_sequence' : IDL.Opt(IDL.Nat64),
   });
+  const TypingUser = IDL.Record({ 'name' : IDL.Text, 'user' : IDL.Principal });
   const ReactionSummary = IDL.Record({
     'count' : IDL.Nat32,
     'emoji' : IDL.Text,
@@ -379,6 +395,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_pinned_messages' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PinnedMessage), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_typing' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TypingUser), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'mark_read' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Receipt, 'Err' : IDL.Text })],
@@ -399,6 +425,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'pin_message' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : PinnedMessage, 'Err' : IDL.Text })],
+        [],
       ),
     'presence_heartbeat' : IDL.Func(
         [],
@@ -502,6 +533,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_typing' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_user_messaging_settings' : IDL.Func(
         [IDL.Bool, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -524,6 +560,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'unblock_user' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'unpin_message' : IDL.Func(
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

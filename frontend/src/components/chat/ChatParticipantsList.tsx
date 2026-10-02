@@ -27,9 +27,9 @@ import { cn } from "@/lib/utils";
 import { useOnlineSet } from "@/hooks/useUserPresence";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { removeLiveGroupMember, leaveLiveGroup } from "@/live/features/messaging";
+import { removeLiveRoleGrant } from "@/live/features/membership";
 import {
   refreshChatManagedTeamMembership,
   refreshChatRemovedTeamMember,
@@ -177,7 +177,6 @@ export function ChatParticipantsList({
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "removing a group member");
       const { error } = await supabase
         .from("group_members")
         .delete()
@@ -207,7 +206,6 @@ export function ChatParticipantsList({
         });
         return;
       }
-      assertSupabaseWritePath("messaging", "leaving a group");
       const { error } = await supabase
         .from("group_members")
         .delete()
@@ -639,11 +637,29 @@ export function ChatParticipantsList({
   };
 
   const handleRemoveRole = async (roleItem: { id: string; role: string }) => {
-    // NEEDS-CANISTER: club_domain role-removal call.
-    try {
-      assertSupabaseWritePath("membership", "removing a member role");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to remove role");
+    if (useIcpLab) {
+      if (!selectedMember || !effectiveTeamId) return;
+      const club = resolvedClubId ?? (chatType === "club" ? chatId : clubId);
+      if (!club) {
+        toast.error("Failed to remove role");
+        return;
+      }
+      try {
+        const { Principal } = await import("@icp-sdk/core/principal");
+        await withFeatureBackend("membership", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: (ctx) =>
+            removeLiveRoleGrant(ctx, Principal.fromText(selectedMember.userId), club, roleItem.role, effectiveTeamId),
+        });
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to remove role");
+        return;
+      }
+      toast.success("Role removed");
+      refreshChatManagedTeamMembership(queryClient, effectiveTeamId, chatType, chatId);
+      setSelectedMember(null);
       return;
     }
     const { error } = await supabase.from("user_roles").delete().eq("id", roleItem.id);
@@ -662,11 +678,34 @@ export function ChatParticipantsList({
 
   const handleRemoveMember = async () => {
     if (!selectedMember || !effectiveTeamId) return;
-    // NEEDS-CANISTER: club_domain team-member removal call.
-    try {
-      assertSupabaseWritePath("membership", "removing a team member");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to remove member");
+    if (useIcpLab) {
+      const club = resolvedClubId ?? (chatType === "club" ? chatId : clubId);
+      if (!club) {
+        toast.error("Failed to remove member");
+        return;
+      }
+      try {
+        const { Principal } = await import("@icp-sdk/core/principal");
+        const userPrincipal = Principal.fromText(selectedMember.userId);
+        await withFeatureBackend("membership", {
+          supabase: async () => {
+            throw new Error("unreachable");
+          },
+          icp: async (ctx) => {
+            const roles = selectedMember.roles.length > 0 ? selectedMember.roles : [{ id: "", role: "" }];
+            for (const r of roles) {
+              if (!r.role) continue;
+              await removeLiveRoleGrant(ctx, userPrincipal, club, r.role, effectiveTeamId);
+            }
+          },
+        });
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to remove member");
+        return;
+      }
+      refreshChatRemovedTeamMember(queryClient, effectiveTeamId, chatType, chatId);
+      toast.success("Member removed");
+      setSelectedMember(null);
       return;
     }
     // Authoritative team-member removal — same scoped RPC used by Team Detail.

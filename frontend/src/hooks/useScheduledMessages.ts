@@ -12,6 +12,7 @@ import {
   cancelLiveScheduledMessage,
   listLiveScheduledMessages,
   scheduleLiveMessage,
+  updateLiveScheduledMessage,
   type LiveScheduledChatType,
   type LiveScheduledMessage,
   type LiveScheduledRecurrence,
@@ -341,27 +342,35 @@ export function useUpdateScheduledMessage() {
       recurrence_until?: Date | null;
     }) => {
       if (!user?.id) throw new Error("Not authenticated");
-      // Provisional: the notification_queue canister does not yet expose an
-      // "update scheduled message" method (only schedule/list/cancel), so
-      // editing an existing scheduled message is not available when routed
-      // to ICP — cancel and re-schedule instead until the canister adds one.
-      if (await import("@/live/loadBackendRouting").then((m) => m.isFeatureRoutedToIcp("notifications"))) {
-        throw new Error(
-          "Editing a scheduled message isn't supported yet on this backend. Cancel it and schedule a new one instead.",
-        );
-      }
-      const body: Record<string, unknown> = { action: "update", id: input.id };
-      if (input.text !== undefined) body.text = input.text;
-      if (input.image_url !== undefined) body.image_url = input.image_url;
-      if (input.scheduled_for) body.scheduled_for = input.scheduled_for.toISOString();
-      if (input.recurrence !== undefined) body.recurrence = input.recurrence;
-      if (input.recurrence_until !== undefined) {
-        body.recurrence_until = input.recurrence_until
-          ? input.recurrence_until.toISOString()
-          : null;
-      }
-      const data = await invokeWrite(body);
-      return (data as any)?.row as ScheduledMessageRow;
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          const body: Record<string, unknown> = { action: "update", id: input.id };
+          if (input.text !== undefined) body.text = input.text;
+          if (input.image_url !== undefined) body.image_url = input.image_url;
+          if (input.scheduled_for) body.scheduled_for = input.scheduled_for.toISOString();
+          if (input.recurrence !== undefined) body.recurrence = input.recurrence;
+          if (input.recurrence_until !== undefined) {
+            body.recurrence_until = input.recurrence_until
+              ? input.recurrence_until.toISOString()
+              : null;
+          }
+          const data = await invokeWrite(body);
+          return (data as any)?.row as ScheduledMessageRow;
+        },
+        icp: async (ctx) => {
+          const author = ctx.identity.getPrincipal().toText();
+          const row = await updateLiveScheduledMessage(ctx, {
+            id: input.id,
+            author,
+            body: input.text,
+            imageUrl: input.image_url,
+            scheduledForMs: input.scheduled_for ? input.scheduled_for.getTime() : undefined,
+            recurrence: input.recurrence,
+            recurrenceUntilMs: input.recurrence_until ? input.recurrence_until.getTime() : undefined,
+          });
+          return rowFromLiveScheduledMessage(row);
+        },
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["scheduled-messages-thread"] });

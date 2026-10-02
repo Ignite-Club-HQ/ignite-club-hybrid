@@ -6,7 +6,9 @@ import { ensureSecondParent, secondParentPartialFailureMessage, SecondParentErro
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { isDuplicateChildError } from "@/lib/childDedup";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { addLiveRoleGrant } from "@/live/features/membership";
+import { createLivePendingInvite } from "@/live/features/club";
 
 type TeamRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -47,12 +49,74 @@ export function useAddBulkTeamMembersMutation({
   clubBranding, discoverEmailStyle, customMessage, roleOptions, isDuplicateError,
   toast, toastInviteSuccess, setBulkResults,
 }: Args) {
+  /**
+   * ICP path: mirrors the single-member mutations' locked-decision shape —
+   * `addLiveRoleGrant` for an existing-user match, `createLivePendingInvite`
+   * for a fresh invite. Second-parent linking and email delivery have no
+   * club_domain counterpart and are skipped per that same decision.
+   * NEEDS-CANISTER: bulk second-parent invite composition + email delivery.
+   */
+  const mutationIcp = async (ctx: FeatureBackendContext, membersToAdd?: BulkMember[]) => {
+    const { Principal } = await import("@icp-sdk/core/principal");
+    const membersSource = membersToAdd || bulkMembers;
+    const validMembers = membersSource.filter((m) => m.name.trim());
+    if (validMembers.length === 0) throw new Error("Please enter at least one name");
+
+    const results: { name: string; email: string; link: string; sent: boolean; role: string; childrenCount: number }[] = [];
+
+    for (const member of validMembers) {
+      const validChildren = member.children.filter((c) => c.name.trim());
+      if (member.selectedUser) {
+        try {
+          await addLiveRoleGrant(ctx, Principal.fromText(member.selectedUser.id), clubId, member.role, teamId);
+        } catch (error) {
+          console.error("[BulkAdd][ICP] role grant failed for", member.name, error);
+          continue;
+        }
+        results.push({
+          name: member.selectedUser.display_name || member.name.trim(),
+          email: member.email.trim(),
+          link: `${window.location.origin}/teams/${teamId}`,
+          sent: true,
+          role: member.role,
+          childrenCount: validChildren.length,
+        });
+        continue;
+      }
+
+      try {
+        const { invite } = await createLivePendingInvite(ctx, {
+          kind: "team",
+          clubId,
+          email: member.email.trim().toLowerCase(),
+          teamId,
+          role: member.role,
+        });
+        const link = invite?.id ? `${window.location.origin}/join/p/${invite.id}` : "";
+        results.push({
+          name: member.name.trim(),
+          email: member.email.trim(),
+          link,
+          sent: false,
+          role: member.role,
+          childrenCount: validChildren.length,
+        });
+      } catch (error) {
+        console.error("[BulkAdd][ICP] pending invite failed for", member.name, error);
+      }
+    }
+
+    return { results, secondParentFailures: [] as string[], secondParentInvited: [] as string[], secondParentAdded: [] as string[] };
+  };
+
   return useMutation({
-    mutationFn: async (membersToAdd?: BulkMember[]) => {
+    mutationFn: async (membersToAdd?: BulkMember[]) =>
+      withFeatureBackend("membership", {
+        icp: (ctx) => mutationIcp(ctx, membersToAdd),
+        supabase: async () => {
       const membersSource = membersToAdd || bulkMembers;
       const validMembers = membersSource.filter(m => m.name.trim());
       if (validMembers.length === 0) throw new Error("Please enter at least one name");
-      assertSupabaseWritePath("membership", "bulk team-member add (role grants + pending invites + second-parent + email) has no club_domain counterpart"); // NEEDS-CANISTER: bulk team-member add (role grants + pending invites + second-parent + email) has no club_domain counterpart
 
       const results: { name: string; email: string; link: string; sent: boolean; role: string; childrenCount: number }[] = [];
       const secondParentFailures: string[] = [];
@@ -390,7 +454,8 @@ export function useAddBulkTeamMembersMutation({
       }
 
       return { results, secondParentFailures, secondParentInvited, secondParentAdded };
-    },
+        },
+      }),
     onSuccess: ({ results, secondParentFailures, secondParentInvited, secondParentAdded }) => {
       setBulkResults(results);
       queryClient.invalidateQueries({ queryKey: ["pending-invites", teamId, null] });

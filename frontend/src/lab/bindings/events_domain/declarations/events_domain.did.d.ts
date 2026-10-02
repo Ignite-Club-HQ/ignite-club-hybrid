@@ -55,6 +55,11 @@ export interface ChildGuardian {
   'child_id' : string,
   'guardian_id' : string,
 }
+export interface ChildTeamAssignment {
+  'team_id' : string,
+  'child_id' : string,
+  'club_id' : string,
+}
 export interface CoachNote {
   'updated_by' : Principal,
   'note' : string,
@@ -98,7 +103,9 @@ export interface EventGroup {
   'name' : string,
   'created_at_ms' : bigint,
   'team_letter' : [] | [string],
+  'team_b_colour' : [] | [string],
   'ability_band' : [] | [string],
+  'display_order' : number,
   'event_id' : string,
   'colour' : [] | [string],
 }
@@ -190,6 +197,24 @@ export interface GameSummary {
   'total_game_time' : number,
   'formation_used' : [] | [string],
   'total_substitutions' : number,
+}
+export interface GroupDutyInput {
+  'account_id' : [] | [string],
+  'duty' : string,
+}
+export interface GroupPlayerInput {
+  'account_id' : string,
+  'team_letter' : [] | [string],
+}
+export interface GroupSpecInput {
+  'pitch_name' : [] | [string],
+  'name' : string,
+  'team_a_colour' : [] | [string],
+  'players' : Array<GroupPlayerInput>,
+  'team_b_colour' : [] | [string],
+  'duties' : Array<GroupDutyInput>,
+  'ability_band' : [] | [string],
+  'display_order' : number,
 }
 export interface HttpHeader { 'value' : string, 'name' : string }
 export interface HttpRequestResult {
@@ -358,6 +383,11 @@ export interface _SERVICE {
     { 'Ok' : Child } |
       { 'Err' : string }
   >,
+  'admin_upsert_child_team_assignment' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : ChildTeamAssignment } |
+      { 'Err' : string }
+  >,
   'admin_upsert_rsvp' : ActorMethod<
     [string, string, [] | [string], string, string],
     { 'Ok' : Rsvp } |
@@ -497,6 +527,7 @@ export interface _SERVICE {
           'pushReachability' : Array<PushReachability>,
           'eventGroupPlayers' : Array<EventGroupPlayer>,
           'coachNotes' : Array<CoachNote>,
+          'childTeamAssignments' : Array<ChildTeamAssignment>,
           'series' : Array<EventSeries>,
           'eventGroups' : Array<EventGroup>,
           'children' : Array<Child>,
@@ -606,6 +637,16 @@ export interface _SERVICE {
     { 'Ok' : Array<AssociationEvent> } |
       { 'Err' : string }
   >,
+  'list_child_team_assignments' : ActorMethod<
+    [string, string],
+    { 'Ok' : Array<ChildTeamAssignment> } |
+      { 'Err' : string }
+  >,
+  'list_duties' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Duty> } |
+      { 'Err' : string }
+  >,
   'list_event_groups' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroup> } |
@@ -691,7 +732,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'move_group_player' : ActorMethod<
-    [string, string, string],
+    [string, string, string, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -700,6 +741,12 @@ export interface _SERVICE {
     [[] | [string], [] | [string]],
     Array<RsvpWithChild>
   >,
+  'my_child_team_assignments' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ChildTeamAssignment> } |
+      { 'Err' : string }
+  >,
+  'my_children' : ActorMethod<[], Array<Child>>,
   'my_rsvps' : ActorMethod<[], Array<Rsvp>>,
   'playhqTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
@@ -717,6 +764,11 @@ export interface _SERVICE {
   >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_child_team_assignment' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -743,6 +795,11 @@ export interface _SERVICE {
   'rename_event_group' : ActorMethod<
     [string, string],
     { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'replace_event_groups' : ActorMethod<
+    [string, Array<GroupSpecInput>, boolean],
+    { 'Ok' : Array<string> } |
       { 'Err' : string }
   >,
   'save_game_player_stats' : ActorMethod<
@@ -823,7 +880,14 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'set_event_group_appearance' : ActorMethod<
-    [string, [] | [string], [] | [string], [] | [string], [] | [string]],
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+    ],
     { 'Ok' : EventGroup } |
       { 'Err' : string }
   >,
@@ -868,7 +932,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'swap_group_players' : ActorMethod<
-    [string, string, string, string],
+    [string, string, [] | [string], string, string, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

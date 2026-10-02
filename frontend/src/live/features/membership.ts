@@ -51,6 +51,16 @@ export async function listLiveMembershipClubs(ctx: FeatureBackendContext) {
   return listLiveClubs(ctx);
 }
 
+/**
+ * The caller's own role grants across every club (club_domain `my_role_grants`
+ * query) — used for admin / Pro-feature / pitch-board access checks that
+ * previously relied on Supabase `user_roles` rows keyed by the II principal.
+ */
+export async function getLiveMyRoleGrants(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.my_role_grants();
+}
+
 /** The caller's club_domain identity view (account id + roles). */
 export async function getLiveMembershipWhoami(ctx: FeatureBackendContext) {
   return liveClubWhoami(ctx);

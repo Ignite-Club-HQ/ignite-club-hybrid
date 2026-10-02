@@ -23,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getCachedRoles } from "@/lib/rolesCache";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveTeamInviteLink, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink } from "@/live/features/club";
+import { createLiveTeamInviteLink, rotateLiveTeamInviteLink, revokeLiveTeamInviteLink, getLiveTeam } from "@/live/features/club";
 
 const APP_URL = "https://reference.invalid";
 const DEFAULT_EXPIRY_DAYS = 30;
@@ -173,9 +173,15 @@ export default function TeamJoinLinkCard({ teamId, teamName, teamType = "mixed",
       withFeatureBackend("membership", {
         icp: async (ctx) => {
           const existing = links?.[role];
-          const link = rotate && existing
-            ? await rotateLiveTeamInviteLink(ctx, existing.id)
-            : await createLiveTeamInviteLink(ctx, teamId, role, "team_admin");
+          let link;
+          if (rotate && existing) {
+            link = await rotateLiveTeamInviteLink(ctx, existing.id);
+          } else {
+            const teamOpt = await getLiveTeam(ctx, teamId);
+            const team = teamOpt[0];
+            if (!team) throw new Error("Team not found");
+            link = await createLiveTeamInviteLink(ctx, team.club_id, teamId, role);
+          }
           const row: JoinLinkRow = {
             id: link.id,
             token: link.token,
