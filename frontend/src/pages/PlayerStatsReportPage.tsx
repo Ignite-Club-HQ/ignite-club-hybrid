@@ -16,6 +16,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: player-stats reporting has no canister shape yet — in ICP
+// mode every query on this page is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
 
 interface Team {
@@ -130,7 +135,7 @@ function SupabasePlayerStatsReportPage() {
       }
       return allTeams;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpPageMode(),
   });
 
   // If the active club changes, drop a selection that no longer belongs to it.
@@ -184,7 +189,7 @@ function SupabasePlayerStatsReportPage() {
 
       return (events as GameEvent[]) || [];
     },
-    enabled: !!selectedTeamId,
+    enabled: !!selectedTeamId && !isIcpPageMode(),
   });
 
   // Check if user has Pro Football access via team or club subscription
@@ -230,7 +235,7 @@ function SupabasePlayerStatsReportPage() {
 
       return false;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpPageMode(),
   });
 
   // Select first team by default, or preselect the team passed via URL query param

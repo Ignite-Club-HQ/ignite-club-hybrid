@@ -31,6 +31,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: attendance stats aggregation has no canister shape yet — in
+// ICP mode every query on this page is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -183,7 +188,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       
       return false;
     },
-    enabled: !!user && !!teamId,
+    enabled: !!user && !!teamId && !isIcpPageMode(),
   });
 
   // Fetch team details
@@ -198,7 +203,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   // Check Pro access - same logic as TeamDetailPage
@@ -212,7 +217,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   const { data: clubSubscription, isLoading: clubSubLoading } = useQuery({
@@ -225,7 +230,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!team?.club_id,
+    enabled: !!team?.club_id && !isIcpPageMode(),
   });
 
   // Pro Access Logic (matches TeamDetailPage):
@@ -256,7 +261,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   // Fetch children assigned to this team (use RPC to bypass RLS limits on child_team_assignments)
@@ -292,7 +297,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         },
       }));
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   // Fetch events for the team in date range
@@ -319,7 +324,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       // Only include past events for attendance
       return (data || []).filter(e => isPast(parseISO(e.event_date)));
     },
-    enabled: !!teamId && !!startDate && !!endDate,
+    enabled: !!teamId && !!startDate && !!endDate && !isIcpPageMode(),
   });
 
   // Fetch RSVPs for all events
@@ -336,7 +341,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: events.length > 0,
+    enabled: events.length > 0 && !isIcpPageMode(),
   });
 
   // Calculate player stats

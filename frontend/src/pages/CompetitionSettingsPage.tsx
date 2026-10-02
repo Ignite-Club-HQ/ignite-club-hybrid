@@ -12,6 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: competition settings admin has no canister shape yet — in
+// ICP mode every query on this page is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/lib/utils";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
@@ -101,7 +106,7 @@ function SupabaseCompetitionSettingsPage() {
   const navigate = useNavigate();
   const { data: competition, isLoading, refetch } = useQuery({
     queryKey: ["competition", id],
-    enabled: !!id,
+    enabled: !!id && !isIcpPageMode(),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competitions")
@@ -115,7 +120,7 @@ function SupabaseCompetitionSettingsPage() {
 
   const { data: isAdmin = false, isLoading: adminLoading } = useQuery({
     queryKey: ["competition-isadmin", id, user?.id],
-    enabled: !!id && !!user,
+    enabled: !!id && !!user && !isIcpPageMode(),
     queryFn: async () => {
       const { data } = await supabase.rpc("is_competition_admin", {
         _user_id: user!.id,

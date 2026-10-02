@@ -24,6 +24,11 @@ import { MobileSelect } from "@/components/ui/mobile-select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: class enrolment has no canister shape yet — in ICP mode
+// every query/mutation here is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 
 type TeamType = "junior" | "senior" | "mixed";
 
@@ -59,7 +64,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Fetch active terms
@@ -75,7 +80,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Auto-select first term
@@ -107,7 +112,7 @@ function SupabaseClassEnrolmentPage() {
         team_type: TeamType;
       }>;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Determine if any class allows child enrolment (junior or mixed)
@@ -127,7 +132,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user && hasChildClasses,
+    enabled: !!user && hasChildClasses && !isIcpPageMode(),
   });
 
   // Fetch existing child enrolments for the selected term
@@ -144,7 +149,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!termId && childIds.length > 0,
+    enabled: !!termId && childIds.length > 0 && !isIcpPageMode(),
   });
 
   // Fetch existing adult (self) enrolments for the selected term
@@ -160,7 +165,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!termId && !!user && hasAdultClasses,
+    enabled: !!termId && !!user && hasAdultClasses && !isIcpPageMode(),
   });
 
   // Combined enrolments for display
@@ -188,12 +193,13 @@ function SupabaseClassEnrolmentPage() {
       });
       return counts;
     },
-    enabled: !!termId && classes.length > 0,
+    enabled: !!termId && classes.length > 0 && !isIcpPageMode(),
   });
 
   // Enrol child mutation
   const enrolChildMutation = useMutation({
     mutationFn: async ({ childId, teamId }: { childId: string; teamId: string }) => {
+      if (isIcpPageMode()) return;
       if (!termId) throw new Error("No term selected");
 
       const cls = classes.find((c) => c.id === teamId);
@@ -249,6 +255,7 @@ function SupabaseClassEnrolmentPage() {
   // Enrol self (adult) mutation
   const enrolSelfMutation = useMutation({
     mutationFn: async ({ teamId }: { teamId: string }) => {
+      if (isIcpPageMode()) return;
       if (!termId || !user) throw new Error("No term selected or not logged in");
 
       const cls = classes.find((c) => c.id === teamId);
@@ -304,6 +311,7 @@ function SupabaseClassEnrolmentPage() {
   // Withdraw mutation
   const withdrawMutation = useMutation({
     mutationFn: async (enrolmentId: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase
         .from("class_enrolments")
         .update({ status: "withdrawn", withdrawn_at: new Date().toISOString() })

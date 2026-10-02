@@ -9,6 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+
+// NEEDS-CANISTER: expression-of-interest claim flow has no canister shape yet —
+// in ICP mode every query here is disabled so no II principal reaches Supabase.
+const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";
 import { EOI_STATUS_LABELS } from "@/lib/eoiUtils";
@@ -82,7 +87,7 @@ function SupabaseEoiCompletePage() {
       if (error) throw error;
       return (data as EoiSubmission) ?? null;
     },
-    enabled: !!token && !!user,
+    enabled: !!token && !!user && !isIcpPageMode(),
   });
 
   // Auto-claim on first visit
@@ -111,7 +116,7 @@ function SupabaseEoiCompletePage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!eoi?.club_id,
+    enabled: !!eoi?.club_id && !isIcpPageMode(),
   });
 
   const { data: team } = useQuery({
@@ -125,7 +130,7 @@ function SupabaseEoiCompletePage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!eoi?.assigned_team_id,
+    enabled: !!eoi?.assigned_team_id && !isIcpPageMode(),
   });
 
   if (authLoading || isLoading) {

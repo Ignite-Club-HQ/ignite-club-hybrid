@@ -24,6 +24,10 @@ export async function triggerPitchCheck(source: string, dedupeKey?: string): Pro
   }
 
   try {
+    // Push fan-out is an approved Supabase exception, but Internet Identity
+    // users have no Supabase session — skip silently for them.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
     await supabase.functions.invoke("check-pending-subs", { body: { source } });
   } catch (err) {
     console.warn("[triggerPitchCheck] failed", err);
