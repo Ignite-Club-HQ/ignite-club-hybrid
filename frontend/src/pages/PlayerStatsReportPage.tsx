@@ -130,7 +130,7 @@ function SupabasePlayerStatsReportPage() {
       }
       return allTeams;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpPageMode(),
   });
 
   // If the active club changes, drop a selection that no longer belongs to it.
@@ -184,7 +184,7 @@ function SupabasePlayerStatsReportPage() {
 
       return (events as GameEvent[]) || [];
     },
-    enabled: !!selectedTeamId,
+    enabled: !!selectedTeamId && !isIcpPageMode(),
   });
 
   // Check if user has Pro Football access via team or club subscription
@@ -230,7 +230,7 @@ function SupabasePlayerStatsReportPage() {
 
       return false;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpPageMode(),
   });
 
   // Select first team by default, or preselect the team passed via URL query param

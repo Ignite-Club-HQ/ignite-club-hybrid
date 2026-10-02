@@ -82,7 +82,7 @@ function SupabaseEoiCompletePage() {
       if (error) throw error;
       return (data as EoiSubmission) ?? null;
     },
-    enabled: !!token && !!user,
+    enabled: !!token && !!user && !isIcpPageMode(),
   });
 
   // Auto-claim on first visit
@@ -111,7 +111,7 @@ function SupabaseEoiCompletePage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!eoi?.club_id,
+    enabled: !!eoi?.club_id && !isIcpPageMode(),
   });
 
   const { data: team } = useQuery({
@@ -125,7 +125,7 @@ function SupabaseEoiCompletePage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!eoi?.assigned_team_id,
+    enabled: !!eoi?.assigned_team_id && !isIcpPageMode(),
   });
 
   if (authLoading || isLoading) {

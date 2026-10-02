@@ -101,7 +101,7 @@ function SupabaseCompetitionSettingsPage() {
   const navigate = useNavigate();
   const { data: competition, isLoading, refetch } = useQuery({
     queryKey: ["competition", id],
-    enabled: !!id,
+    enabled: !!id && !isIcpPageMode(),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competitions")
@@ -115,7 +115,7 @@ function SupabaseCompetitionSettingsPage() {
 
   const { data: isAdmin = false, isLoading: adminLoading } = useQuery({
     queryKey: ["competition-isadmin", id, user?.id],
-    enabled: !!id && !!user,
+    enabled: !!id && !!user && !isIcpPageMode(),
     queryFn: async () => {
       const { data } = await supabase.rpc("is_competition_admin", {
         _user_id: user!.id,

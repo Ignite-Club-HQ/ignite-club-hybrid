@@ -27,7 +27,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: assoc, isLoading } = useQuery({
     queryKey: ["association", id],
-    enabled: !!id,
+    enabled: !!id && !isIcpPageMode(),
     queryFn: async () => {
       const { data } = await supabase.from("clubs").select("*").eq("id", id!).maybeSingle();
       return data;
@@ -36,7 +36,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: isAdmin = false } = useQuery({
     queryKey: ["assoc-isadmin", id, user?.id],
-    enabled: !!id && !!user,
+    enabled: !!id && !!user && !isIcpPageMode(),
     queryFn: async () => {
       const { data } = await supabase.rpc("is_association_admin", {
         _user_id: user!.id,
@@ -48,7 +48,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["association-clubs", id],
-    enabled: !!id,
+    enabled: !!id && !isIcpPageMode(),
     queryFn: async () => {
       const { data } = await supabase
         .from("clubs")
@@ -63,7 +63,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: rollup } = useQuery({
     queryKey: ["association-rollup", id, clubIds.length],
-    enabled: !!id && clubIds.length > 0,
+    enabled: !!id && clubIds.length > 0 && !isIcpPageMode(),
     queryFn: async () => {
       const [teamsRes, eventsRes, membersRes] = await Promise.all([
         supabase.from("teams").select("id", { count: "exact", head: true }).in("club_id", clubIds),
@@ -190,7 +190,7 @@ function LinkClubForm({ associationId }: { associationId: string }) {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["link-club-search", search, associationId],
-    enabled: open,
+    enabled: open && !isIcpPageMode(),
     queryFn: async () => {
       let q = supabase
         .from("clubs")

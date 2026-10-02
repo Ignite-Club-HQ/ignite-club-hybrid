@@ -59,7 +59,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Fetch active terms
@@ -75,7 +75,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Auto-select first term
@@ -107,7 +107,7 @@ function SupabaseClassEnrolmentPage() {
         team_type: TeamType;
       }>;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcpPageMode(),
   });
 
   // Determine if any class allows child enrolment (junior or mixed)
@@ -127,7 +127,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user && hasChildClasses,
+    enabled: !!user && hasChildClasses && !isIcpPageMode(),
   });
 
   // Fetch existing child enrolments for the selected term
@@ -144,7 +144,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!termId && childIds.length > 0,
+    enabled: !!termId && childIds.length > 0 && !isIcpPageMode(),
   });
 
   // Fetch existing adult (self) enrolments for the selected term
@@ -160,7 +160,7 @@ function SupabaseClassEnrolmentPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!termId && !!user && hasAdultClasses,
+    enabled: !!termId && !!user && hasAdultClasses && !isIcpPageMode(),
   });
 
   // Combined enrolments for display
@@ -188,7 +188,7 @@ function SupabaseClassEnrolmentPage() {
       });
       return counts;
     },
-    enabled: !!termId && classes.length > 0,
+    enabled: !!termId && classes.length > 0 && !isIcpPageMode(),
   });
 
   // Enrol child mutation

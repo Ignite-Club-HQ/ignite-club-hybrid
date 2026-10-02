@@ -61,7 +61,7 @@ function SupabaseManageTeamRolesPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   const { data: roles, isLoading: loadingRoles } = useQuery({
@@ -74,7 +74,7 @@ function SupabaseManageTeamRolesPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   const { data: requests } = useQuery({
@@ -97,7 +97,7 @@ function SupabaseManageTeamRolesPage() {
         requester: profiles?.find(p => p.id === req.user_id) || null
       }));
     },
-    enabled: !!teamId,
+    enabled: !!teamId && !isIcpPageMode(),
   });
 
   const deleteRoleMutation = useMutation({
