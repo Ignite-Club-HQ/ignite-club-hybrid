@@ -146,7 +146,8 @@ export default function MemberDetailSheet({
             const { getOrCreateLiveDm } = await import("@/live/features/messaging");
             const other = Principal.fromText(userId);
             const dm = await getOrCreateLiveDm(ctx, other);
-            return (dm as any)?.conversation_id ?? (dm as any)?.conversationId ?? (dm as string);
+            const record = dm as unknown as Record<string, unknown>;
+            return (record.conversation_id ?? record.conversationId ?? record.id ?? null) as string | null;
           },
         });
         if (conversationId) {

@@ -48,7 +48,8 @@ async function fetchClubNames(clubIds: string[]): Promise<Record<string, string>
         await Promise.all(
           ids.map(async (id) => {
             try {
-              const profile = await getLiveClubProfile(ctx, id);
+              const profileOpt = await getLiveClubProfile(ctx, id);
+              const profile = profileOpt[0];
               if (profile?.name) map[id] = String(profile.name).trim();
             } catch {
               // NEEDS-CANISTER: no-op — best-effort club name lookup only.
