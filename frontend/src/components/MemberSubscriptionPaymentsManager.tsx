@@ -34,12 +34,11 @@ import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberChecko
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
-  listLiveClubs,
   listLiveMemberPayments,
   markLiveMemberPaid,
+  sendLiveFeeReminders,
   unmarkLiveMemberPaid,
 } from "@/live/features/club";
-import { fanOutLiveNotifications } from "@/live/features/notifications";
 import { Capacitor } from "@capacitor/core";
 
 type PaymentType = "subscription" | "uniform";
@@ -357,19 +356,13 @@ export default function MemberSubscriptionPaymentsManager({
           return unpaidParentIds.length;
         },
         icp: async (ctx) => {
-          // Club name from club_domain; reminders fan out through
-          // notification_queue with an idempotent prefix per period/tab.
-          const clubs = await listLiveClubs(ctx, null, 500);
-          const clubName = clubs.find((c) => c.id === clubId)?.name || "Your club";
-          await fanOutLiveNotifications(ctx, {
-            userIds: unpaidParentIds,
-            clubId,
-            kind: "fee_payment_request",
-            body: `${clubName} is requesting payment of ${feeLabel} fees for ${paymentPeriod}`,
-            idempotencyKeyPrefix: `fee-reminder-${clubId}-${activeTab}-${paymentPeriod}`,
-            relatedId: clubId,
-          });
-          return unpaidParentIds.length;
+          // club_domain's send_fee_reminders fans reminders out to every
+          // member still pending for this period/type via notification_queue.
+          // It fails closed (plain error, not a degraded banner) when the
+          // notification-queue canister isn't configured — let that surface
+          // through the mutation's normal onError toast below.
+          const message = `Your ${feeLabel} fees for ${paymentPeriod} are due. Please make payment as soon as possible.`;
+          return sendLiveFeeReminders(ctx, clubId, paymentPeriod, activeTab, message);
         },
       });
     },
