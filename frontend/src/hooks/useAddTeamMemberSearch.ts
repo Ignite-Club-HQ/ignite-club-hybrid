@@ -311,10 +311,7 @@ export function useAddTeamMemberSearch({
         });
       }
       return identities;
-    },
-    enabled: identityLookupIds.length > 0 && !!clubId,
-    staleTime: 60 * 1000,
-  });
+    }
 
   const profileIds = new Set(searchResults.map((result) => result.id));
   const filteredPendingResults = pendingInviteResults.filter(
