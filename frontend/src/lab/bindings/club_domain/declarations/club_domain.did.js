@@ -260,6 +260,20 @@ export const idlFactory = ({ IDL }) => {
     'contact_email' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
   });
+  const ClubSubscription = IDL.Record({
+    'activated_at_ms' : IDL.Opt(IDL.Nat64),
+    'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
+    'team_limit' : IDL.Opt(IDL.Nat32),
+    'is_trial' : IDL.Bool,
+    'plan' : IDL.Text,
+    'is_pro' : IDL.Bool,
+    'is_pro_football' : IDL.Bool,
+    'admin_pro_football_override' : IDL.Bool,
+    'admin_pro_override' : IDL.Bool,
+    'cancelled_at_ms' : IDL.Opt(IDL.Nat64),
+    'club_id' : IDL.Text,
+    'expires_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const Season = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -449,6 +463,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'check_team_name_unique' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'claim_shell_team' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
@@ -574,6 +593,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(Link), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_club_profile' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubProfile), 'Err' : IDL.Text })],
@@ -582,6 +606,11 @@ export const idlFactory = ({ IDL }) => {
     'get_club_settings' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSettings), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_subscription' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(ClubSubscription), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_current_season' : IDL.Func(
@@ -939,6 +968,11 @@ export const idlFactory = ({ IDL }) => {
     'save_club_settings' : IDL.Func(
         [ClubSettings],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_club_subscription' : IDL.Func(
+        [ClubSubscription],
+        [IDL.Variant({ 'Ok' : ClubSubscription, 'Err' : IDL.Text })],
         [],
       ),
     'save_club_term' : IDL.Func(

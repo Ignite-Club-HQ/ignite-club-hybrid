@@ -115,6 +115,20 @@ export interface ClubSponsor {
   'club_id' : string,
   'exposure_percentage' : [] | [number],
 }
+export interface ClubSubscription {
+  'activated_at_ms' : [] | [bigint],
+  'trial_ends_at_ms' : [] | [bigint],
+  'team_limit' : [] | [number],
+  'is_trial' : boolean,
+  'plan' : string,
+  'is_pro' : boolean,
+  'is_pro_football' : boolean,
+  'admin_pro_football_override' : boolean,
+  'admin_pro_override' : boolean,
+  'cancelled_at_ms' : [] | [bigint],
+  'club_id' : string,
+  'expires_at_ms' : [] | [bigint],
+}
 export interface ClubTeam {
   'id' : string,
   'playhq_team_id' : [] | [string],
@@ -437,6 +451,11 @@ export interface _SERVICE {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'check_team_name_unique' : ActorMethod<
+    [string, string],
+    { 'Ok' : boolean } |
+      { 'Err' : string }
+  >,
   'claim_shell_team' : ActorMethod<
     [string],
     { 'Ok' : ClubTeam } |
@@ -539,6 +558,11 @@ export interface _SERVICE {
     { 'Ok' : ClubBranding } |
       { 'Err' : string }
   >,
+  'get_club_link' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [Link] } |
+      { 'Err' : string }
+  >,
   'get_club_profile' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubProfile] } |
@@ -547,6 +571,11 @@ export interface _SERVICE {
   'get_club_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSettings] } |
+      { 'Err' : string }
+  >,
+  'get_club_subscription' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [ClubSubscription] } |
       { 'Err' : string }
   >,
   'get_current_season' : ActorMethod<
@@ -857,6 +886,11 @@ export interface _SERVICE {
   'save_club_settings' : ActorMethod<
     [ClubSettings],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'save_club_subscription' : ActorMethod<
+    [ClubSubscription],
+    { 'Ok' : ClubSubscription } |
       { 'Err' : string }
   >,
   'save_club_term' : ActorMethod<
