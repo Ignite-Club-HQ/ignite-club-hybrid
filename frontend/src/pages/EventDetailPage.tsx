@@ -72,7 +72,19 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveEventRoster, getLiveEventRosterDetailed } from "@/live/features/events";
+import {
+  getLiveEventRoster,
+  getLiveEventRosterDetailed,
+  listLiveDuties,
+  getLiveMyChildren,
+  getLiveMyChildTeamAssignments,
+  listLiveChildTeamAssignments,
+  isLiveTeamMember,
+  checkLiveEventMembership,
+} from "@/live/features/events";
+import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -154,7 +166,7 @@ export default function EventDetailPage() {
   const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const { data: recentReminderMap } = useQuery({
     queryKey: eventKeys.recentReminders(id),
-    enabled: !!id && !useIcpLab,
+    enabled: !!id && !useIcpLab && !isIcpAuthBackend,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
     queryFn: async () => {
@@ -418,17 +430,25 @@ export default function EventDetailPage() {
   // RSVP'd for themselves alongside their child.
   const { data: teamPlayerAdultIds } = useQuery({
     queryKey: ["team-player-adult-ids", (event as any)?.team_id],
-    queryFn: async () => {
-      if (useIcpLab) return new Set<string>();
-
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("team_id", (event as any).team_id)
-        .eq("role", "player");
-      if (error) throw error;
-      return new Set((data || []).map((r: any) => r.user_id as string));
-    },
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("team_id", (event as any).team_id)
+          .eq("role", "player");
+        if (error) throw error;
+        return new Set((data || []).map((r: any) => r.user_id as string));
+      },
+      icp: async (ctx) => {
+        const grants = await listLiveRoleGrants(ctx, (event as any).club_id);
+        return new Set(
+          (grants ?? [])
+            .filter((g: any) => g.role === "player" && g.team?.[0] === (event as any).team_id)
+            .map((g: any) => g.account_id as string),
+        );
+      },
+    }),
     enabled: !!(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
@@ -438,17 +458,23 @@ export default function EventDetailPage() {
   // from the "players attending" count.
   const { data: clubPlayerAdultIds } = useQuery({
     queryKey: ["club-player-adult-ids", (event as any)?.club_id, (event as any)?.team_id],
-    queryFn: async () => {
-      if (useIcpLab) return new Set<string>();
-
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", (event as any).club_id)
-        .eq("role", "player");
-      if (error) throw error;
-      return new Set((data || []).map((r: any) => r.user_id as string));
-    },
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("club_id", (event as any).club_id)
+          .eq("role", "player");
+        if (error) throw error;
+        return new Set((data || []).map((r: any) => r.user_id as string));
+      },
+      icp: async (ctx) => {
+        const grants = await listLiveRoleGrants(ctx, (event as any).club_id);
+        return new Set(
+          (grants ?? []).filter((g: any) => g.role === "player").map((g: any) => g.account_id as string),
+        );
+      },
+    }),
     enabled: !!(event as any)?.club_id && !(event as any)?.team_id && !useIcpLab,
     staleTime: 60_000,
   });
@@ -470,21 +496,45 @@ export default function EventDetailPage() {
     queryFn: async () => {
       if (useIcpLab) return [];
 
-      const provider: EventSupportingReadsProvider = {
-        async listEventGuests() {
-          return [];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const provider: EventSupportingReadsProvider = {
+            async listEventGuests() {
+              return [];
+            },
+            async listEventDuties(eventId) {
+              const { data, error } = await supabase
+                .from("duties")
+                .select(`*, profiles:assigned_to (display_name, avatar_url)`)
+                .eq("event_id", eventId);
+              if (error) throw error;
+              return data ?? [];
+            },
+          };
+          return fetchEventDuties(provider, id!);
         },
-        async listEventDuties(eventId) {
-          const { data, error } = await supabase
-            .from("duties")
-            .select(`*, profiles:assigned_to (display_name, avatar_url)`)
-            .eq("event_id", eventId);
-          if (error) throw error;
-          return data ?? [];
+        icp: async (ctx) => {
+          // Canister Duty shape (events_domain .did): { account_id, duty,
+          // completed, event_id } — no `id`/`name`/`assigned_to`/`status`
+          // fields. Map it into the Supabase-shaped duty row the rest of the
+          // page expects rather than casting onto a mismatched shape.
+          const rows = await listLiveDuties(ctx, id!);
+          const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
+          const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
+          const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+          return rows.map((d) => {
+            const p = d.account_id ? profileMap.get(d.account_id) : null;
+            return {
+              id: `${d.event_id}:${d.account_id}:${d.duty}`,
+              event_id: d.event_id,
+              name: d.duty,
+              assigned_to: d.account_id || null,
+              status: d.completed ? "completed" : "open",
+              profiles: p ? { display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null } : null,
+            };
+          });
         },
-      };
-
-      return fetchEventDuties(provider, id!);
+      });
     },
     enabled: !!id,
     staleTime: 0,
@@ -495,16 +545,22 @@ export default function EventDetailPage() {
   // Check if user is app admin (global override)
   const { data: isAppAdmin } = useQuery({
     queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !useIcpLab,
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", user!.id)
+          .eq("role", "app_admin")
+          .maybeSingle();
+        return !!data;
+      },
+      icp: async (ctx) => {
+        const grants = await getLiveMyRoleGrants(ctx);
+        return (grants ?? []).some((g: any) => g.role === "app_admin");
+      },
+    }),
+    enabled: !!user,
   });
 
   // Check if user is admin for this event
@@ -512,45 +568,53 @@ export default function EventDetailPage() {
     queryKey: ["event-admin-check", id, user?.id, event?.club_id, event?.team_id, event?.mini_league_id],
     queryFn: async () => {
       if (!event) return false;
-      
-      // First check for club_admin role (always applies to club events)
-      const { data: clubAdminData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("club_id", event.club_id)
-        .in("role", ["club_admin", "committee_member"])
-        .limit(1);
-      
-      if (clubAdminData && clubAdminData.length > 0) return true;
-      
-      // For team-specific events, also check team_admin/coach roles
-      if (event.team_id) {
-        const { data: teamRoleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user!.id)
-          .eq("team_id", event.team_id)
-          .in("role", ["team_admin", "coach"]);
-        
-        if (teamRoleData && teamRoleData.length > 0) return true;
-      }
-      
-      // For mini-league events, also check league_admin/coach roles
-      if (event.mini_league_id) {
-        const { data: leagueAdminData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user!.id)
-          .eq("club_id", event.club_id)
-          .in("role", ["league_admin", "coach", "committee_member"]);
-        
-        if (leagueAdminData && leagueAdminData.length > 0) return true;
-      }
-      
-      return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubAdminData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user!.id)
+            .eq("club_id", event.club_id)
+            .in("role", ["club_admin", "committee_member"])
+            .limit(1);
+
+          if (clubAdminData && clubAdminData.length > 0) return true;
+
+          if (event.team_id) {
+            const { data: teamRoleData } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user!.id)
+              .eq("team_id", event.team_id)
+              .in("role", ["team_admin", "coach"]);
+
+            if (teamRoleData && teamRoleData.length > 0) return true;
+          }
+
+          if (event.mini_league_id) {
+            const { data: leagueAdminData } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", user!.id)
+              .eq("club_id", event.club_id)
+              .in("role", ["league_admin", "coach", "committee_member"]);
+
+            if (leagueAdminData && leagueAdminData.length > 0) return true;
+          }
+
+          return false;
+        },
+        icp: async (ctx) => {
+          const grants = (await getLiveMyRoleGrants(ctx)) as Array<{ club: [] | [string]; team: [] | [string]; role: string }>;
+          const inClub = (g: typeof grants[number]) => Array.isArray(g.club) && g.club[0] === event.club_id;
+          if (grants.some((g) => inClub(g) && ["club_admin", "committee_member"].includes(g.role))) return true;
+          if (event.team_id && grants.some((g) => Array.isArray(g.team) && g.team[0] === event.team_id && ["team_admin", "coach"].includes(g.role))) return true;
+          if (event.mini_league_id && grants.some((g) => inClub(g) && ["league_admin", "coach", "committee_member"].includes(g.role))) return true;
+          return false;
+        },
+      });
     },
-    enabled: !!user && !!event && !useIcpLab,
+    enabled: !!user && !!event,
   });
 
   // Check if team has Pro Football subscription (for pitch board) or club has Pro Football
@@ -558,63 +622,72 @@ export default function EventDetailPage() {
     queryKey: ["team-pro-football-status", event?.team_id, event?.club_id],
     queryFn: async () => {
       if (!event?.team_id) return false;
-      
-      // Check team-level Pro Football
-      const { data: teamSub } = await supabase
-        .from("team_subscriptions")
-        .select("is_pro_football, admin_pro_football_override")
-        .eq("team_id", event.team_id)
-        .maybeSingle();
-      
-      if (teamSub?.is_pro_football || teamSub?.admin_pro_football_override) return true;
-      
-      // Check club-level Pro Football
-      if (event?.club_id) {
-        const { data: clubSub } = await supabase
-          .from("club_subscriptions")
-          .select("is_pro_football, admin_pro_football_override")
-          .eq("club_id", event.club_id)
-          .maybeSingle();
-        
-        if (clubSub?.is_pro_football || clubSub?.admin_pro_football_override) return true;
-      }
-      
-      return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: teamSub } = await supabase
+            .from("team_subscriptions")
+            .select("is_pro_football, admin_pro_football_override")
+            .eq("team_id", event.team_id)
+            .maybeSingle();
+
+          if (teamSub?.is_pro_football || teamSub?.admin_pro_football_override) return true;
+
+          if (event?.club_id) {
+            const { data: clubSub } = await supabase
+              .from("club_subscriptions")
+              .select("is_pro_football, admin_pro_football_override")
+              .eq("club_id", event.club_id)
+              .maybeSingle();
+
+            if (clubSub?.is_pro_football || clubSub?.admin_pro_football_override) return true;
+          }
+
+          return false;
+        },
+        icp: async (ctx) => {
+          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
+          return summary.isPro;
+        },
+      });
     },
-    enabled: !!event?.team_id && !useIcpLab,
+    enabled: !!event?.team_id,
   });
   
   // Check if team/club has Pro subscription (for other features like RSVP reminders)
   const { data: hasTeamPro, isLoading: isLoadingHasTeamPro } = useQuery({
     queryKey: ["team-pro-status", event?.team_id, event?.club_id],
-    queryFn: async () => {
-      // First check team-level subscription
-      if (event?.team_id) {
-        const { data: teamSub } = await supabase
-          .from("team_subscriptions")
-          .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("team_id", event.team_id)
-          .maybeSingle();
-        if (teamSub?.is_pro || teamSub?.is_pro_football || teamSub?.admin_pro_override || teamSub?.admin_pro_football_override) {
-          return true;
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        if (event?.team_id) {
+          const { data: teamSub } = await supabase
+            .from("team_subscriptions")
+            .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
+            .eq("team_id", event.team_id)
+            .maybeSingle();
+          if (teamSub?.is_pro || teamSub?.is_pro_football || teamSub?.admin_pro_override || teamSub?.admin_pro_football_override) {
+            return true;
+          }
         }
-      }
-      
-      // Then check club-level subscription
-      if (event?.club_id) {
-        const { data: clubSub } = await supabase
-          .from("club_subscriptions")
-          .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-          .eq("club_id", event.club_id)
-          .maybeSingle();
-        if (clubSub?.is_pro || clubSub?.is_pro_football || clubSub?.admin_pro_override || clubSub?.admin_pro_football_override) {
-          return true;
+
+        if (event?.club_id) {
+          const { data: clubSub } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
+            .eq("club_id", event.club_id)
+            .maybeSingle();
+          if (clubSub?.is_pro || clubSub?.is_pro_football || clubSub?.admin_pro_override || clubSub?.admin_pro_football_override) {
+            return true;
+          }
         }
-      }
-      
-      return false;
-    },
-    enabled: (!!event?.team_id || !!event?.club_id) && !useIcpLab,
+
+        return false;
+      },
+      icp: async (ctx) => {
+        const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
+        return summary.isPro;
+      },
+    }),
+    enabled: (!!event?.team_id || !!event?.club_id),
   });
 
   // Pro feature check: duty points only for Pro clubs/teams or app_admin
@@ -648,6 +721,10 @@ export default function EventDetailPage() {
   const localSubsManagerForEvent = !!duties?.some(
     (d: any) => normalizeDutyName(d.name) === "subs manager" && d.assigned_to === user?.id
   );
+  // Production ICP routing: `duties` (fetched above via listLiveDuties) is
+  // already ICP-aware, so `localSubsManagerForEvent` covers the ICP case —
+  // this direct Supabase re-check is Supabase-only and must not fire for an
+  // II principal.
   const { data: directSubsManagerForEvent = false, isLoading: isDirectSubsManagerLoading } = useQuery({
     queryKey: ["event-subs-manager-direct", id, user?.id],
     queryFn: async () => {
@@ -659,7 +736,7 @@ export default function EventDetailPage() {
       if (error) throw error;
       return (data || []).some((d: any) => normalizeDutyName(d.name) === "subs manager");
     },
-    enabled: !!id && !!user && !useIcpLab,
+    enabled: !!id && !!user && !useIcpLab && !isIcpAuthBackend,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
@@ -689,17 +766,20 @@ export default function EventDetailPage() {
   // Check if user is a team member (for read-only pitch board access)
   const { data: isTeamMember } = useQuery({
     queryKey: ["is-team-member", event?.team_id, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("team_id", event!.team_id!)
-        .limit(1)
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !!event?.team_id && !canAccessPitchBoard && !useIcpLab,
+    queryFn: async () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("id")
+          .eq("user_id", user!.id)
+          .eq("team_id", event!.team_id!)
+          .limit(1)
+          .maybeSingle();
+        return !!data;
+      },
+      icp: async (ctx) => isLiveTeamMember(ctx, ctx.identity.getPrincipal(), event!.club_id!, event!.team_id!),
+    }),
+    enabled: !!user && !!event?.team_id && !!event?.club_id && !canAccessPitchBoard && !useIcpLab,
   });
 
   // Check if a game is currently in progress (for read-only spectator mode)
@@ -714,7 +794,7 @@ export default function EventDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
+    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && !isIcpAuthBackend && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
     refetchInterval: 30000, // Poll every 30s to detect game start
   });
 
@@ -827,43 +907,63 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab,
+    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab && !isIcpAuthBackend,
   });
 
   // Fetch team/club members for duty assignment and not responded list (with roles)
   const { data: membersWithRoles } = useQuery({
-    queryKey: ["event-members-with-roles", event?.club_id, event?.team_id],
-    queryFn: async () => {
-      const query = supabase
-        .from("user_roles")
-        .select("user_id, role, team_id, profiles:user_id (id, display_name, avatar_url)");
+    queryKey: ["event-members-with-roles", event?.club_id, event?.team_id, isIcpAuthBackend],
+    queryFn: async () => withFeatureBackend("membership", {
+      supabase: async () => {
+        const query = supabase
+          .from("user_roles")
+          .select("user_id, role, team_id, profiles:user_id (id, display_name, avatar_url)");
 
-      if (event?.team_id) {
-        query.eq("team_id", event.team_id);
-      } else {
-        query.eq("club_id", event!.club_id);
-      }
+        if (event?.team_id) {
+          query.eq("team_id", event.team_id);
+        } else {
+          query.eq("club_id", event!.club_id);
+        }
 
-      // The club bot holds roles so it can post in chats, but it is not a
-      // real member — never surface it in attendance lists.
-      // Provisional: bot_user_id lookup has no canister equivalent — ICP-mode
-      // users just skip the bot exclusion instead of failing the query.
-      const [{ data, error }, { data: clubRow }] = await Promise.all([
-        query,
-        isIcpAuthBackend
-          ? Promise.resolve({ data: null } as any)
-          : supabase.from("clubs").select("bot_user_id").eq("id", event!.club_id).maybeSingle(),
-      ]);
-      if (error) throw error;
-      const botUserId = clubRow?.bot_user_id ?? null;
+        // The club bot holds roles so it can post in chats, but it is not a
+        // real member — never surface it in attendance lists.
+        const [{ data, error }, { data: clubRow }] = await Promise.all([
+          query,
+          supabase.from("clubs").select("bot_user_id").eq("id", event!.club_id).maybeSingle(),
+        ]);
+        if (error) throw error;
+        const botUserId = clubRow?.bot_user_id ?? null;
 
-      
-      return buildEventMemberRoster(
-        (data ?? []) as EventMemberRoleRow[],
-        botUserId,
-      );
-
-    },
+        return buildEventMemberRoster((data ?? []) as EventMemberRoleRow[], botUserId);
+      },
+      icp: async (ctx) => {
+        // No canister bot-account concept, so there is nothing to exclude
+        // here — every role grant maps straight to an EventMemberRoleRow.
+        const grants = (await listLiveRoleGrants(ctx, event!.club_id!)) as Array<{
+          account_id: string;
+          role: string;
+          team: [] | [string];
+        }>;
+        const scoped = event?.team_id
+          ? grants.filter((g) => Array.isArray(g.team) && g.team[0] === event.team_id)
+          : grants;
+        const profileIds = Array.from(new Set(scoped.map((g) => g.account_id)));
+        const profiles = profileIds.length > 0 ? await listLiveProfilesByIds(ctx, profileIds) : [];
+        const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+        const rows: EventMemberRoleRow[] = scoped.map((g) => {
+          const p = profileMap.get(g.account_id);
+          return {
+            user_id: g.account_id,
+            role: g.role,
+            team_id: Array.isArray(g.team) && g.team.length > 0 ? g.team[0] : null,
+            profiles: p
+              ? { id: g.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }
+              : null,
+          } as EventMemberRoleRow;
+        });
+        return buildEventMemberRoster(rows, null);
+      },
+    }),
     enabled: !!event && !useIcpLab,
   });
 

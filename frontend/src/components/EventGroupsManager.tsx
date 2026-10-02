@@ -539,9 +539,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
   // Auto-generate matches (core logic)
   const runAutoGenerate = useCallback(async (abilityModeOverride?: "similar" | "mixed") => {
-    // NEEDS-CANISTER: replace_event_groups has no mini_league_domain
-    // equivalent.
-    assertSupabaseWritePath("mini_leagues", "auto-generating matches");
     const effectiveAbilityMode = abilityModeOverride || abilityMode;
     if (!availablePlayers || availablePlayers.length === 0) {
       throw new Error("No available players for this session");
@@ -664,17 +661,38 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
     });
 
     // Single atomic write: matches + player assignments commit together.
-    const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
-      p_event_id: eventId,
-      p_groups: matchSpecs.map((spec, i) => ({
-        ...spec,
-        players: matchPlayers[i].map(p => ({ player_id: p.playerId, team: p.team })),
-      })),
-      p_delete_existing: false,
+    const matchIds = await withFeatureBackend("events", {
+      supabase: async () => {
+        const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
+          p_event_id: eventId,
+          p_groups: matchSpecs.map((spec, i) => ({
+            ...spec,
+            players: matchPlayers[i].map(p => ({ player_id: p.playerId, team: p.team })),
+          })),
+          p_delete_existing: false,
+        });
+        if (replaceError) throw replaceError;
+        return (createdIds as string[] | null) ?? [];
+      },
+      icp: async (ctx) => {
+        const created = await replaceLiveEventGroups(
+          ctx,
+          eventId,
+          matchSpecs.map((spec, i) => ({
+            name: spec.name,
+            abilityBand: spec.ability_band,
+            pitchName: spec.pitch_name,
+            displayOrder: spec.display_order,
+            teamAColour: spec.team_a_color,
+            teamBColour: spec.team_b_color,
+            players: matchPlayers[i].map(p => ({ accountId: p.playerId, teamLetter: p.team })),
+            duties: [],
+          })),
+          false,
+        );
+        return created as string[];
+      },
     });
-    if (replaceError) throw replaceError;
-
-    const matchIds = (createdIds as string[] | null) ?? [];
 
     // Auto-distribute event-level duties to matches
     await distributeEventDutiesToMatches(matchIds, matchPlayers.map(mp => mp.map(p => p.playerId)));
@@ -686,31 +704,40 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Create group mutation - with player assignments
   const createGroupMutation = useMutation({
     mutationFn: async (data: { name: string; pitchName: string; teamAPlayerIds: string[]; teamBPlayerIds: string[] }) => {
-      // NEEDS-CANISTER: event_groups/event_group_players have no
-      // mini_league_domain equivalent.
-      assertSupabaseWritePath("mini_leagues", "creating a match");
       const leagueColors = miniLeague?.bib_colors || DEFAULT_BIB_COLORS;
       const colors = getMatchColors(groups?.length || 0, leagueColors);
-      const { data: newGroup, error } = await supabase.from("event_groups").insert({
-        event_id: eventId,
-        name: data.name,
-        pitch_name: data.pitchName || null,
-        display_order: (groups?.length || 0) + 1,
-        team_a_color: colors.teamA,
-        team_b_color: colors.teamB,
-      }).select().single();
-      if (error) throw error;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { data: newGroup, error } = await supabase.from("event_groups").insert({
+            event_id: eventId,
+            name: data.name,
+            pitch_name: data.pitchName || null,
+            display_order: (groups?.length || 0) + 1,
+            team_a_color: colors.teamA,
+            team_b_color: colors.teamB,
+          }).select().single();
+          if (error) throw error;
 
-      // Insert player assignments
-      // event_id is re-derived server-side from the group; sent only to satisfy the NOT NULL column.
-      const playerInserts = [
-        ...data.teamAPlayerIds.map(pid => ({ event_id: eventId, group_id: newGroup.id, player_id: pid, team: "a" as const })),
-        ...data.teamBPlayerIds.map(pid => ({ event_id: eventId, group_id: newGroup.id, player_id: pid, team: "b" as const })),
-      ];
-      if (playerInserts.length > 0) {
-        const { error: playerError } = await supabase.from("event_group_players").insert(playerInserts);
-        if (playerError) throw playerError;
-      }
+          // Insert player assignments
+          // event_id is re-derived server-side from the group; sent only to satisfy the NOT NULL column.
+          const playerInserts = [
+            ...data.teamAPlayerIds.map(pid => ({ event_id: eventId, group_id: newGroup.id, player_id: pid, team: "a" as const })),
+            ...data.teamBPlayerIds.map(pid => ({ event_id: eventId, group_id: newGroup.id, player_id: pid, team: "b" as const })),
+          ];
+          if (playerInserts.length > 0) {
+            const { error: playerError } = await supabase.from("event_group_players").insert(playerInserts);
+            if (playerError) throw playerError;
+          }
+        },
+        icp: async (ctx) => {
+          const newGroup = await createLiveEventGroup(ctx, eventId, data.name, null, colors.teamA, null, data.pitchName || null);
+          await setLiveEventGroupAppearance(ctx, newGroup.id, null, colors.teamA, null, data.pitchName || null, colors.teamB);
+          await Promise.all([
+            ...data.teamAPlayerIds.map((pid) => addLiveGroupPlayer(ctx, newGroup.id, pid, "a")),
+            ...data.teamBPlayerIds.map((pid) => addLiveGroupPlayer(ctx, newGroup.id, pid, "b")),
+          ]);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -806,9 +833,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Copy from previous mutation
   const copyFromPreviousMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: event_groups/event_group_players have no
-      // mini_league_domain equivalent.
-      assertSupabaseWritePath("mini_leagues", "copying matches from a previous event");
       if (!selectedPreviousEventId) throw new Error("Select an event");
 
       // Get players who have RSVP'd "going" to the CURRENT session
@@ -817,72 +841,116 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         .select("mini_league_player_id")
         .eq("event_id", eventId)
         .eq("status", "going");
-      
+
       const goingPlayerIds = new Set(
         (currentRsvps || [])
           .map(r => r.mini_league_player_id)
           .filter(Boolean) as string[]
       );
 
-      const { data: prevGroups, error: groupsError } = await supabase
-        .from("event_groups")
-        .select("*")
-        .eq("event_id", selectedPreviousEventId)
-        .order("display_order");
-      if (groupsError) throw groupsError;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data: prevGroups, error: groupsError } = await supabase
+            .from("event_groups")
+            .select("*")
+            .eq("event_id", selectedPreviousEventId)
+            .order("display_order");
+          if (groupsError) throw groupsError;
 
-      const newMatchPlayerIds: string[][] = [];
-      const groupPayload: Json[] = [];
-      let skippedCount = 0;
+          const newMatchPlayerIds: string[][] = [];
+          const groupPayload: Json[] = [];
+          let skippedCount = 0;
 
-      for (const prevGroup of prevGroups || []) {
-        const { data: prevPlayers, error: prevPlayersError } = await supabase
-          .from("event_group_players")
-          .select("player_id, team")
-          .eq("group_id", prevGroup.id);
-        if (prevPlayersError) throw prevPlayersError;
+          for (const prevGroup of prevGroups || []) {
+            const { data: prevPlayers, error: prevPlayersError } = await supabase
+              .from("event_group_players")
+              .select("player_id, team")
+              .eq("group_id", prevGroup.id);
+            if (prevPlayersError) throw prevPlayersError;
 
-        const playerIds: string[] = [];
-        let players: { player_id: string; team: string | null }[] = [];
+            const playerIds: string[] = [];
+            let players: { player_id: string; team: string | null }[] = [];
 
-        if (prevPlayers && prevPlayers.length > 0) {
-          // Only include players who RSVP'd going to the current session
-          const eligiblePlayers = goingPlayerIds.size > 0
-            ? prevPlayers.filter(p => goingPlayerIds.has(p.player_id))
-            : prevPlayers; // If no RSVPs exist at all, copy all (fallback)
+            if (prevPlayers && prevPlayers.length > 0) {
+              // Only include players who RSVP'd going to the current session
+              const eligiblePlayers = goingPlayerIds.size > 0
+                ? prevPlayers.filter(p => goingPlayerIds.has(p.player_id))
+                : prevPlayers; // If no RSVPs exist at all, copy all (fallback)
 
-          skippedCount += prevPlayers.length - eligiblePlayers.length;
+              skippedCount += prevPlayers.length - eligiblePlayers.length;
 
-          players = eligiblePlayers.map(p => ({ player_id: p.player_id, team: p.team }));
-          playerIds.push(...eligiblePlayers.map(p => p.player_id));
-        }
+              players = eligiblePlayers.map(p => ({ player_id: p.player_id, team: p.team }));
+              playerIds.push(...eligiblePlayers.map(p => p.player_id));
+            }
 
-        groupPayload.push({
-          name: prevGroup.name,
-          ability_band: prevGroup.ability_band,
-          pitch_name: prevGroup.pitch_name,
-          display_order: prevGroup.display_order,
-          team_a_color: prevGroup.team_a_color || "#ef4444",
-          team_b_color: prevGroup.team_b_color || "#3b82f6",
-          players,
-        } as unknown as Json);
-        newMatchPlayerIds.push(playerIds);
-      }
+            groupPayload.push({
+              name: prevGroup.name,
+              ability_band: prevGroup.ability_band,
+              pitch_name: prevGroup.pitch_name,
+              display_order: prevGroup.display_order,
+              team_a_color: prevGroup.team_a_color || "#ef4444",
+              team_b_color: prevGroup.team_b_color || "#3b82f6",
+              players,
+            } as unknown as Json);
+            newMatchPlayerIds.push(playerIds);
+          }
 
-      // Single atomic write: every copied match + its players, or nothing.
-      const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
-        p_event_id: eventId,
-        p_groups: groupPayload as Json,
-        p_delete_existing: false,
+          // Single atomic write: every copied match + its players, or nothing.
+          const { data: createdIds, error: replaceError } = await supabase.rpc("replace_event_groups", {
+            p_event_id: eventId,
+            p_groups: groupPayload as Json,
+            p_delete_existing: false,
+          });
+          if (replaceError) throw replaceError;
+
+          const newMatchIds = (createdIds as string[] | null) ?? [];
+
+          // Auto-distribute event-level duties to copied matches
+          await distributeEventDutiesToMatches(newMatchIds, newMatchPlayerIds);
+
+          return { skippedCount };
+        },
+        icp: async (ctx) => {
+          const prevGroups = await listLiveEventGroups(ctx, selectedPreviousEventId);
+          const sortedPrevGroups = [...prevGroups].sort((a, b) => a.display_order - b.display_order);
+
+          const newMatchPlayerIds: string[][] = [];
+          const groupSpecs: LiveGroupSpecInput[] = [];
+          let skippedCount = 0;
+
+          for (const prevGroup of sortedPrevGroups) {
+            const prevPlayers = await listLiveGroupPlayers(ctx, prevGroup.id);
+            const eligiblePlayers = goingPlayerIds.size > 0
+              ? prevPlayers.filter(p => goingPlayerIds.has(p.account_id))
+              : prevPlayers;
+            skippedCount += prevPlayers.length - eligiblePlayers.length;
+
+            const playerIds = eligiblePlayers.map(p => p.account_id);
+            newMatchPlayerIds.push(playerIds);
+
+            groupSpecs.push({
+              name: prevGroup.name,
+              abilityBand: prevGroup.ability_band.length ? prevGroup.ability_band[0] : null,
+              pitchName: prevGroup.pitch_name.length ? prevGroup.pitch_name[0] : null,
+              displayOrder: prevGroup.display_order,
+              teamAColour: prevGroup.colour.length ? prevGroup.colour[0] : "#ef4444",
+              teamBColour: prevGroup.team_b_colour.length ? prevGroup.team_b_colour[0] : "#3b82f6",
+              players: eligiblePlayers.map(p => ({
+                accountId: p.account_id,
+                teamLetter: p.team_letter.length ? p.team_letter[0] : null,
+              })),
+              duties: [],
+            });
+          }
+
+          const newMatchIds = await replaceLiveEventGroups(ctx, eventId, groupSpecs, false);
+
+          // Auto-distribute event-level duties to copied matches
+          await distributeEventDutiesToMatches(newMatchIds, newMatchPlayerIds);
+
+          return { skippedCount };
+        },
       });
-      if (replaceError) throw replaceError;
-
-      const newMatchIds = (createdIds as string[] | null) ?? [];
-
-      // Auto-distribute event-level duties to copied matches
-      await distributeEventDutiesToMatches(newMatchIds, newMatchPlayerIds);
-
-      return { skippedCount };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -900,10 +968,15 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Delete group mutation
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
-      // NEEDS-CANISTER: event_groups has no mini_league_domain equivalent.
-      assertSupabaseWritePath("mini_leagues", "deleting a match");
-      const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
-      if (error) throw error;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveEventGroup(ctx, groupId);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -915,14 +988,21 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Delete all groups mutation
   const deleteAllGroupsMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: event_groups has no mini_league_domain equivalent.
-      assertSupabaseWritePath("mini_leagues", "deleting all matches");
       const groupIds = groups?.map(g => g.id) || [];
-      for (const groupId of groupIds) {
-        const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
-        // Stop at the first failure — never continue deleting or report success.
-        if (error) throw error;
-      }
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          for (const groupId of groupIds) {
+            const { error } = await supabase.from("event_groups").delete().eq("id", groupId);
+            // Stop at the first failure — never continue deleting or report success.
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          for (const groupId of groupIds) {
+            await deleteLiveEventGroup(ctx, groupId);
+          }
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -933,27 +1013,31 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
   // Move player mutation (move to a team)
   const movePlayerMutation = useMutation({
     mutationFn: async ({ playerId, fromGroupId, toGroupId, toTeam }: { playerId: string; fromGroupId: string; toGroupId: string; toTeam: "a" | "b" }) => {
-      // NEEDS-CANISTER: event_group_players has no mini_league_domain
-      // equivalent.
-      assertSupabaseWritePath("mini_leagues", "moving a player between matches");
-      if (fromGroupId === toGroupId) {
-        const { error } = await supabase
-          .from("event_group_players")
-          .update({ team: toTeam })
-          .eq("group_id", fromGroupId)
-          .eq("player_id", playerId);
-        if (error) throw error;
-      } else {
-        // True in-place move (single UPDATE) — no delete/insert window in
-        // which the player could be dropped from every group.
-        const { error } = await supabase.rpc("move_event_group_player", {
-          p_player_id: playerId,
-          p_from_group_id: fromGroupId,
-          p_to_group_id: toGroupId,
-          p_to_team: toTeam,
-        });
-        if (error) throw error;
-      }
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          if (fromGroupId === toGroupId) {
+            const { error } = await supabase
+              .from("event_group_players")
+              .update({ team: toTeam })
+              .eq("group_id", fromGroupId)
+              .eq("player_id", playerId);
+            if (error) throw error;
+          } else {
+            // True in-place move (single UPDATE) — no delete/insert window in
+            // which the player could be dropped from every group.
+            const { error } = await supabase.rpc("move_event_group_player", {
+              p_player_id: playerId,
+              p_from_group_id: fromGroupId,
+              p_to_group_id: toGroupId,
+              p_to_team: toTeam,
+            });
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          await moveLiveGroupPlayer(ctx, fromGroupId, toGroupId, playerId, toTeam);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });
@@ -975,21 +1059,24 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
       player1Id: string; player1GroupId: string; player1Team: "a" | "b"; 
       player2Id: string; player2GroupId: string; player2Team: "a" | "b";
     }) => {
-      // NEEDS-CANISTER: event_group_players has no mini_league_domain
-      // equivalent.
-      assertSupabaseWritePath("mini_leagues", "swapping players between matches");
-      // Single atomic RPC: all writes commit together or none do, so a
-      // failure part-way can never leave a player removed but not re-added.
-      const { error } = await supabase.rpc("swap_event_group_players", {
-        p_player1_id: player1Id,
-        p_player1_group_id: player1GroupId,
-        p_player1_team: player1Team,
-        p_player2_id: player2Id,
-        p_player2_group_id: player2GroupId,
-        p_player2_team: player2Team,
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          // Single atomic RPC: all writes commit together or none do, so a
+          // failure part-way can never leave a player removed but not re-added.
+          const { error } = await supabase.rpc("swap_event_group_players", {
+            p_player1_id: player1Id,
+            p_player1_group_id: player1GroupId,
+            p_player1_team: player1Team,
+            p_player2_id: player2Id,
+            p_player2_group_id: player2GroupId,
+            p_player2_team: player2Team,
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await swapLiveGroupPlayers(ctx, player1GroupId, player1Id, player1Team, player2GroupId, player2Id, player2Team);
+        },
       });
-      if (error) throw error;
-
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-groups", eventId] });

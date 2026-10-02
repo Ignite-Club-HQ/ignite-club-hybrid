@@ -16,6 +16,10 @@ import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStora
 import type { Database } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { acceptLiveMembershipPendingInvite } from "@/live/features/membership";
+import { getLiveClubProfile } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -40,6 +44,7 @@ export default function JoinClubPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const isIcp = resolveAuthBackend() === "icp";
   const [joined, setJoined] = useState(false);
   const autoJoinAttempted = useRef(false);
   
@@ -140,8 +145,37 @@ export default function JoinClubPage() {
 
   const joinMutation = useMutation({
     mutationFn: async () => {
-      if (useIcpLab) {
-        throw new Error("Club joining is unavailable in ICP lab mode");
+      if (isIcp) {
+        // II users: the share token is the club_domain PendingInvite id —
+        // accept it directly (there is no separate "preview before
+        // accepting" query on the canister yet, see membership.ts).
+        if (!token || !user) throw new Error("Missing data");
+        return withFeatureBackend("membership", {
+          supabase: async () => {
+            throw new Error("Unexpected backend routing for an ICP join");
+          },
+          icp: async (ctx) => {
+            const accepted = await acceptLiveMembershipPendingInvite(ctx, token);
+            const roleToAdd = (accepted.role?.[0] ?? "basic_user") as AppRole;
+            let clubName: string | undefined;
+            try {
+              const profile = await getLiveClubProfile(ctx, accepted.club_id);
+              clubName = profile?.name;
+            } catch {
+              // Club profile lookup is best-effort for the success toast only.
+            }
+            setInviteFlowContext({
+              active: true,
+              clubName,
+              clubLogoUrl: undefined,
+              teamName: undefined,
+              role: roleToAdd,
+              inviteToken: token,
+              currentStep: "view",
+            });
+            return roleToAdd;
+          },
+        });
       }
       if (!invite || !user) throw new Error("Missing data");
 
@@ -273,6 +307,40 @@ export default function JoinClubPage() {
     );
   }
 
+  // II accounts: the token is a club_domain PendingInvite id (email invite),
+  // not a Supabase shareable link, so the join flow is real here — show an
+  // accept card instead of the Supabase "shareable links disabled" notice.
+  if (isIcp) {
+    if (joined) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="p-6 text-center">
+              <h2 className="text-xl font-semibold mb-2">You've joined!</h2>
+              <p className="text-muted-foreground mb-4">Your invite has been accepted.</p>
+              <Button onClick={() => navigate("/")}>Go to Home</Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center">
+            <h2 className="text-xl font-semibold mb-2">Club Invite</h2>
+            <p className="text-muted-foreground mb-4">
+              {user ? "Accept this invite to join the club." : "Sign in to accept this invite."}
+            </p>
+            <Button onClick={handleJoinClick} disabled={joinMutation.isPending}>
+              {joinMutation.isPending ? "Joining..." : "Accept Invite"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Club shareable invite links are no longer supported - only email invites work
   // This page handles /join-club/:token which are all shareable links
   return (
@@ -282,9 +350,7 @@ export default function JoinClubPage() {
           <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
           <h2 className="text-xl font-semibold mb-2">Invite Links Disabled</h2>
           <p className="text-muted-foreground mb-4">
-            {useIcpLab
-              ? "Club joining is unavailable in ICP lab mode. No membership changes have been made."
-              : "Shareable invite links are no longer supported. Please ask your club admin to send you an email invite instead."}
+            Shareable invite links are no longer supported. Please ask your club admin to send you an email invite instead.
           </p>
           <Button onClick={() => navigate("/")}>Go to Home</Button>
         </CardContent>

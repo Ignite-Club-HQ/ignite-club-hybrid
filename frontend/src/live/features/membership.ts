@@ -143,6 +143,18 @@ export async function rejectLiveRoleRequest(ctx: FeatureBackendContext, id: stri
 }
 
 /**
+ * Pending invite acceptance — the canister counterpart of the JoinClubPage
+ * "shareable invite link" flow. The URL token doubles as the canister's
+ * `PendingInvite.id` (see club.ts `createLivePendingInvite`), so accepting
+ * is a single `accept_pending_invite(id)` call; there is no separate
+ * "preview without accepting" query on the canister yet.
+ */
+export async function acceptLiveMembershipPendingInvite(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+}
+
+/**
  * Team invites — token-based invite links scoped to a team, the canister
  * counterpart of the Supabase `pending_invites`/team-invite RPCs. Unlike the
  * Supabase flow, the canister does not send email; callers must surface the

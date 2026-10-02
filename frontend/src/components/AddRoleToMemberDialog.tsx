@@ -13,7 +13,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { addLiveRoleGrant } from "@/live/features/membership";
 import { RoleSelectionList, type RoleSelectionOption } from "./RoleSelectionList";
 
 type TeamRole = "player" | "parent" | "coach" | "team_admin";
@@ -61,35 +62,40 @@ export default function AddRoleToMemberDialog({
     mutationFn: async () => {
       if (selectedRoles.length === 0) return;
 
-      // Provisional: user_roles is a Supabase-only table with no membership.ts
-      // canister equivalent for role assignment yet — block the action for
-      // Internet Identity accounts instead of firing a failing uuid-keyed insert.
-      if (resolveAuthBackend() === "icp") {
-        throw new Error("Member management isn't available for Internet Identity accounts yet");
-      }
+      await withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          const userPrincipal = Principal.fromText(userId);
+          for (const role of selectedRoles) {
+            await addLiveRoleGrant(ctx, userPrincipal, clubId, role, teamId);
+          }
+          // NEEDS-CANISTER: in-app notifications stay Supabase-only; skipped on this path.
+        },
+        supabase: async () => {
+          // The RLS policy on user_roles enforces admin permissions
+          // This mutation will fail if the current user lacks club_admin, team_admin, or app_admin role
+          const rolesToInsert = selectedRoles.map((role) => ({
+            user_id: userId,
+            team_id: teamId,
+            club_id: clubId,
+            role,
+          }));
 
-      // The RLS policy on user_roles enforces admin permissions
-      // This mutation will fail if the current user lacks club_admin, team_admin, or app_admin role
-      const rolesToInsert = selectedRoles.map((role) => ({
-        user_id: userId,
-        team_id: teamId,
-        club_id: clubId,
-        role,
-      }));
+          const { error } = await supabase.from("user_roles").insert(rolesToInsert);
+          if (error) throw error;
 
-      const { error } = await supabase.from("user_roles").insert(rolesToInsert);
-      if (error) throw error;
+          // Send notification to the user
+          const roleNames = selectedRoles.map(r =>
+            availableRoles.find(ar => ar.value === r)?.label || r
+          ).join(", ");
 
-      // Send notification to the user
-      const roleNames = selectedRoles.map(r => 
-        availableRoles.find(ar => ar.value === r)?.label || r
-      ).join(", ");
-      
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        type: "membership",
-        message: `You have been assigned new role(s) in ${teamName}: ${roleNames}`,
-        related_id: teamId,
+          await supabase.from("notifications").insert({
+            user_id: userId,
+            type: "membership",
+            message: `You have been assigned new role(s) in ${teamName}: ${roleNames}`,
+            related_id: teamId,
+          });
+        },
       });
     },
     onSuccess: () => {

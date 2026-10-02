@@ -5,6 +5,12 @@ import {
   type MemberRole,
 } from "@/lib/memberIdentity";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { searchLiveInvitableProfiles, listLiveRoleGrants, listLiveMembershipTeams } from "@/live/features/membership";
+import { listLivePendingInvitesByClub } from "@/live/features/club";
+import type { MemberRole as LiveMemberRole } from "@/lib/memberIdentity";
+
 
 type SearchProfile = {
   id: string;
@@ -60,13 +66,25 @@ export function useAddTeamMemberSearch({
     queryKey: ["user-search-team-member", debouncedNameInput, clubId],
     queryFn: async () => {
       if (debouncedNameInput.length < 2) return [];
-      const { data, error } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedNameInput,
-        _limit: 8,
-        _club_id: clubId ?? null,
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedNameInput,
+            _limit: 8,
+            _club_id: clubId ?? null,
+          });
+          if (error) throw error;
+          return (data || []) as SearchProfile[];
+        },
+        icp: async (ctx) => {
+          const results = await searchLiveInvitableProfiles(ctx, debouncedNameInput, 8);
+          return results.map((r): SearchProfile => ({
+            id: r.id,
+            display_name: r.display_name,
+            avatar_url: r.avatar_ref ?? null,
+          }));
+        },
       });
-      if (error) throw error;
-      return (data || []) as SearchProfile[];
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -75,63 +93,91 @@ export function useAddTeamMemberSearch({
     queryKey: ["pending-invite-search", debouncedNameInput, clubId, teamId],
     queryFn: async () => {
       if (debouncedNameInput.length < 2) return [];
-      const { data: invites } = await supabase
-        .from("pending_invites")
-        .select("id, invited_label, invited_email, invited_user_id, metadata, team_id, role")
-        .eq("club_id", clubId)
-        .eq("status", "pending")
-        .ilike("invited_label", `%${debouncedNameInput}%`)
-        .limit(12);
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: invites } = await supabase
+            .from("pending_invites")
+            .select("id, invited_label, invited_email, invited_user_id, metadata, team_id, role")
+            .eq("club_id", clubId)
+            .eq("status", "pending")
+            .ilike("invited_label", `%${debouncedNameInput}%`)
+            .limit(12);
 
-      if (!invites?.length) return [];
+          if (!invites?.length) return [];
 
-      const teamIds = Array.from(
-        new Set<string>(
-          invites
-            .filter((invite: { team_id: string | null }) => invite.team_id)
-            .map((invite: { team_id: string }) => invite.team_id),
-        ),
-      );
-      const teamNameById: Record<string, string> = {};
-      if (teamIds.length > 0 && clubId) {
-        const { data: teams } = await supabase
-          .from("teams")
-          .select("id, name")
-          .in("id", teamIds)
-          .eq("club_id", clubId);
-        for (const team of teams || []) {
-          teamNameById[team.id] = team.name;
-        }
-      }
+          const teamIds = Array.from(
+            new Set<string>(
+              invites
+                .filter((invite: { team_id: string | null }) => invite.team_id)
+                .map((invite: { team_id: string }) => invite.team_id),
+            ),
+          );
+          const teamNameById: Record<string, string> = {};
+          if (teamIds.length > 0 && clubId) {
+            const { data: teams } = await supabase
+              .from("teams")
+              .select("id, name")
+              .in("id", teamIds)
+              .eq("club_id", clubId);
+            for (const team of teams || []) {
+              teamNameById[team.id] = team.name;
+            }
+          }
 
-      const userIds = invites
-        .filter((invite: { invited_user_id: string | null }) => invite.invited_user_id)
-        .map((invite: { invited_user_id: string }) => invite.invited_user_id);
-      const profileMap = new Map<
-        string,
-        { display_name: string | null; avatar_url: string | null }
-      >();
-      if (userIds.length > 0) {
-        const { data: profiles } = await selectCachedProfilesByIds(userIds);
-        profiles?.forEach((profile) => profileMap.set(profile.id, profile));
-      }
+          const userIds = invites
+            .filter((invite: { invited_user_id: string | null }) => invite.invited_user_id)
+            .map((invite: { invited_user_id: string }) => invite.invited_user_id);
+          const profileMap = new Map<
+            string,
+            { display_name: string | null; avatar_url: string | null }
+          >();
+          if (userIds.length > 0) {
+            const { data: profiles } = await selectCachedProfilesByIds(userIds);
+            profiles?.forEach((profile) => profileMap.set(profile.id, profile));
+          }
 
-      return invites.map((invite: any) => ({
-        id: invite.invited_user_id || `pending-${invite.id}`,
-        display_name: invite.invited_user_id
-          ? profileMap.get(invite.invited_user_id)?.display_name || invite.invited_label
-          : invite.invited_label,
-        avatar_url: invite.invited_user_id
-          ? profileMap.get(invite.invited_user_id)?.avatar_url || null
-          : null,
-        invited_email: invite.invited_email,
-        isPendingInvite: true,
-        pendingInviteId: invite.id,
-        role: invite.role,
-        teamId: invite.team_id,
-        teamName: invite.team_id ? teamNameById[invite.team_id] || null : null,
-        childName: getPendingInviteChildName(invite.metadata),
-      }));
+          return invites.map((invite: any) => ({
+            id: invite.invited_user_id || `pending-${invite.id}`,
+            display_name: invite.invited_user_id
+              ? profileMap.get(invite.invited_user_id)?.display_name || invite.invited_label
+              : invite.invited_label,
+            avatar_url: invite.invited_user_id
+              ? profileMap.get(invite.invited_user_id)?.avatar_url || null
+              : null,
+            invited_email: invite.invited_email,
+            isPendingInvite: true,
+            pendingInviteId: invite.id,
+            role: invite.role,
+            teamId: invite.team_id,
+            teamName: invite.team_id ? teamNameById[invite.team_id] || null : null,
+            childName: getPendingInviteChildName(invite.metadata),
+          }));
+        },
+        icp: async (ctx) => {
+          if (!clubId) return [];
+          // club_domain's PendingInvite has no display-name/children metadata
+          // (Supabase's `pending_invites.invited_label`/`metadata` have no
+          // canister equivalent yet), so matching falls back to email and the
+          // child-name column is always null in ICP mode.
+          const invites = await listLivePendingInvitesByClub(ctx, clubId);
+          const needle = debouncedNameInput.toLowerCase();
+          return invites
+            .filter((invite) => invite.status === "pending" && invite.email.toLowerCase().includes(needle))
+            .slice(0, 12)
+            .map((invite) => ({
+              id: `pending-${invite.id}`,
+              display_name: invite.email,
+              avatar_url: null as string | null,
+              invited_email: invite.email,
+              isPendingInvite: true,
+              pendingInviteId: invite.id,
+              role: invite.role[0] ?? null,
+              teamId: invite.team_id[0] ?? null,
+              teamName: null as string | null,
+              childName: null as string | null,
+            }));
+        },
+      });
     },
     enabled: debouncedNameInput.length >= 2,
   });
@@ -149,7 +195,49 @@ export function useAddTeamMemberSearch({
     queryKey: ["invite-search-identities", clubId, [...identityLookupIds].sort().join(",")],
     queryFn: async (): Promise<Record<string, MemberIdentity>> => {
       if (identityLookupIds.length === 0 || !clubId) return {};
+      return withFeatureBackend("membership", {
+        supabase: () => fetchSupabaseIdentityMap(clubId, identityLookupIds),
+        icp: async (ctx) => {
+          // club_domain's role grants have no linked-children concept (the
+          // Supabase `children`/`child_team_assignments` tables have no
+          // canister equivalent yet), so children_names is always empty here.
+          const [grants, teams] = await Promise.all([
+            listLiveRoleGrants(ctx, clubId),
+            listLiveMembershipTeams(ctx, clubId),
+          ]);
+          const teamNameById: Record<string, string> = {};
+          for (const team of teams as any[]) {
+            if (team?.id) teamNameById[team.id] = team.name ?? team.id;
+          }
+          const rolesByUser = new Map<string, { role: LiveMemberRole; team_id: string | null }[]>();
+          for (const grant of grants as any[]) {
+            const userId = grant.user?.toText ? grant.user.toText() : String(grant.user);
+            if (!identityLookupIds.includes(userId)) continue;
+            const roles = rolesByUser.get(userId) || [];
+            roles.push({ role: grant.role as LiveMemberRole, team_id: grant.team?.[0] ?? null });
+            rolesByUser.set(userId, roles);
+          }
+          const identities: Record<string, MemberIdentity> = {};
+          for (const id of identityLookupIds) {
+            identities[id] = computeMemberIdentity({
+              display_name: null,
+              roles: rolesByUser.get(id) || [],
+              children_names: [],
+              teamNameById,
+            });
+          }
+          return identities;
+        },
+      });
+    },
+    enabled: identityLookupIds.length > 0 && !!clubId,
+    staleTime: 60 * 1000,
+  });
 
+  async function fetchSupabaseIdentityMap(
+    clubId: string,
+    identityLookupIds: string[],
+  ): Promise<Record<string, MemberIdentity>> {
       const [rolesRes, teamsRes, childrenRes] = await Promise.all([
         supabase
           .from("user_roles")

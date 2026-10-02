@@ -24,9 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { EventViewMemberRow } from "@/components/EventViewMemberRow";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveReminderLog, isLiveReachable } from "@/live/features/events";
+import { getLiveReminderLog, isLiveReachable, recordLiveReminderSent } from "@/live/features/events";
 
 interface AttendanceCounts {
   going: number;
@@ -262,9 +261,6 @@ export function AttendanceSection({
     channels: "push" | "email" | "both",
     userIds?: string[],
   ) => {
-    // NEEDS-CANISTER: event-view reminders (send-event-view-reminder edge
-    // function) have no events_domain counterpart.
-    assertSupabaseWritePath("events", "event view reminders");
     if (!canSendReminders) {
       onProRequired?.();
       return;
@@ -308,6 +304,19 @@ export function AttendanceSection({
         title: "Reminder sent",
         description: parts.length ? `Sent ${parts.join(" and ")}.` : "No reminder could be delivered.",
       });
+      if (isFeatureRoutedToIcp("events")) {
+        // Delivery (push/email) stays on the Supabase edge function above;
+        // only the record of "a reminder was sent" is mirrored into the
+        // canister so cooldown/log reads (getLiveReminderLog) stay accurate.
+        await withFeatureBackend("events", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            await Promise.all(
+              targets.map((userId) => recordLiveReminderSent(ctx, eventId, channels, userId)),
+            );
+          },
+        });
+      }
       if (!isPerUser) refetchLastReminder();
     } catch (err: any) {
       toast({

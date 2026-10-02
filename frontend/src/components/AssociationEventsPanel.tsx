@@ -11,7 +11,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { CalendarDays, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { createLiveAssociationEvent, listLiveAssociationEvents } from "@/live/features/events";
