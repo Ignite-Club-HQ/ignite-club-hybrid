@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   open: boolean;
@@ -30,6 +31,14 @@ export function AICatchUpDisclosureDialog({ open, onOpenChange, onAcknowledged }
   const accept = async () => {
     setSaving(true);
     try {
+      if (resolveAuthBackend() === "icp") {
+        // NEEDS-CANISTER: AI chat recap has no canister counterpart (documented
+        // as out of scope). Treat the disclosure as accepted for this session
+        // without persisting anything server-side, so it never blocks chat use.
+        onOpenChange(false);
+        onAcknowledged();
+        return;
+      }
       const { error } = await supabase.rpc("acknowledge_ai_catch_up_disclosure" as any);
       if (error) throw error;
       onOpenChange(false);

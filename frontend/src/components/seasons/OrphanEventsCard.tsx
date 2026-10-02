@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertTriangle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   clubId: string;
@@ -18,13 +19,18 @@ interface OrphanEvent {
 }
 
 export function OrphanEventsCard({ clubId }: Props) {
+  // NEEDS-CANISTER: orphan-event detection has no canister equivalent yet;
+  // an II principal has no Supabase session so skip the RPC and render nothing.
+  const isIcp = resolveAuthBackend() === "icp";
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["season-orphan-events", clubId],
     queryFn: async (): Promise<OrphanEvent[]> => {
+      if (isIcp) return [];
       const { data, error } = await supabase.rpc("season_orphan_events", { _club_id: clubId });
       if (error) throw error;
       return (data ?? []) as OrphanEvent[];
     },
+    enabled: !isIcp,
   });
 
   if (isLoading || events.length === 0) return null;

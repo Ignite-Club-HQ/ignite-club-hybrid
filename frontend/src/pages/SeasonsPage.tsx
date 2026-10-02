@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons, type Season, type SeasonStatus } from "@/hooks/useClubSeasons";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const StartNewSeasonWizard = lazyWithRetry(() => import("@/components/seasons/StartNewSeasonWizard").then(m => ({ default: m.StartNewSeasonWizard })));
 import { SeasonTemplateDialog } from "@/components/seasons/SeasonTemplateDialog";
@@ -30,13 +31,17 @@ function SupabaseSeasonsPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // NEEDS-CANISTER: seasons archive/publish has no canister yet — an II
+  // principal has no Supabase session, so every query below is skipped and
+  // the page renders its empty state instead of erroring.
+  const isIcp = resolveAuthBackend() === "icp";
   const [wizardOpen, setWizardOpen] = useState(false);
   const [templateSource, setTemplateSource] = useState<Season | null>(null);
 
   const { data: club, isLoading: clubLoading } = useQuery({
     queryKey: ["club-basic", clubId],
     queryFn: async () => {
-      if (!clubId) return null;
+      if (!clubId || isIcp) return null;
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name, current_season_id")
@@ -45,20 +50,20 @@ function SupabaseSeasonsPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcp,
   });
 
   const { data: isClubAdmin, isLoading: adminLoading } = useQuery({
     queryKey: ["is-club-admin-for-seasons", clubId, user?.id],
     queryFn: async () => {
-      if (!user?.id || !clubId) return false;
+      if (!user?.id || !clubId || isIcp) return false;
       const [appAdmin, clubAdmin] = await Promise.all([
         supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
       ]);
       return !!appAdmin.data || !!clubAdmin.data;
     },
-    enabled: !!user?.id && !!clubId,
+    enabled: !!user?.id && !!clubId && !isIcp,
   });
 
   const { hasPro, isLoading: proLoading } = useClubProAccess(clubId);
@@ -70,7 +75,7 @@ function SupabaseSeasonsPage() {
   const { data: teamCounts = {} } = useQuery({
     queryKey: ["season-team-counts", clubId, seasonIds.join(",")],
     queryFn: async (): Promise<Record<string, number>> => {
-      if (seasonIds.length === 0) return {};
+      if (seasonIds.length === 0 || isIcp) return {};
       const { data, error } = await supabase
         .from("teams")
         .select("season_id")
@@ -82,7 +87,7 @@ function SupabaseSeasonsPage() {
       });
       return counts;
     },
-    enabled: seasonIds.length > 0,
+    enabled: seasonIds.length > 0 && !isIcp,
   });
 
   const grouped = useMemo(() => {
@@ -98,6 +103,19 @@ function SupabaseSeasonsPage() {
   }, [seasons]);
 
   if (clubLoading || adminLoading || seasonsLoading || proLoading) return <PageLoading />;
+
+  if (isIcp) {
+    return (
+      <div className="py-6 space-y-6">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold">Seasons</h1>
+        </div>
+      </div>
+    );
+  }
 
   if (!isClubAdmin) {
     return (

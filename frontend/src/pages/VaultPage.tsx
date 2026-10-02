@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
+import { listLiveTeams, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -66,17 +68,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { VaultContentRenderer, type ContentSectionProps, type TrashSectionProps } from "@/components/vault/VaultContentRenderer";
 import { invalidateVaultCache } from "@/features/vault/vaultQueryKeys";
 import { useVaultAccessModel } from "@/features/vault/useVaultAccessModel";
 import { useVaultContentDataModel } from "@/features/vault/useVaultContentDataModel";
 
 export default function VaultPage() {
-  if (isFeatureRoutedToIcp("vault")) {
-    return <IcpUnavailablePage title="Vault storage is unavailable in ICP lab mode" description="Protected file metadata, authorization, and encrypted object storage require an approved provider-neutral design." />;
-  }
   return <SupabaseVaultPage />;
 }
 
@@ -135,52 +132,77 @@ function SupabaseVaultPage() {
     queryKey: ["vault-club-teams", currentView.type === "club" ? currentView.clubId : null, isClubAdmin, userTeamIds, currentClubHasPro],
     queryFn: async () => {
       if (currentView.type !== "club") return [];
-      
-      // First get all teams user can potentially access
-      let teams: { id: string; name: string; folder_id: string | null }[] = [];
-      
-      if (isClubAdmin) {
-        // Club admins and app admins can see all teams
-        const { data } = await supabase
-          .from("teams")
-          .select("id, name, folder_id")
-          .eq("club_id", currentView.clubId)
-          .is("deleted_at", null)
-          .order("name");
-        teams = data || [];
-      } else {
-        // Non-club admins only see teams they are members of
-        if (userTeamIds.length === 0) return [];
-        
-        const { data } = await supabase
-          .from("teams")
-          .select("id, name, folder_id")
-          .eq("club_id", currentView.clubId)
-          .in("id", userTeamIds)
-          .is("deleted_at", null)
-          .order("name");
-        teams = data || [];
-      }
-      
-      // If club has Pro, all teams inherit it - show all
-      if (currentClubHasPro) return teams;
-      
-      // If club doesn't have Pro, only show teams with individual Pro subscriptions
-      if (teams.length === 0) return [];
-      
-      const teamIds = teams.map(t => t.id);
-      const { data: teamSubs } = await supabase
-        .from("team_subscriptions")
-        .select("team_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
-        .in("team_id", teamIds);
-      
-      const proTeamIds = new Set(
-        (teamSubs || [])
-          .filter(sub => sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override)
-          .map(sub => sub.team_id)
-      );
-      
-      return teams.filter(t => proTeamIds.has(t.id));
+      const clubId = currentView.clubId;
+
+      return withFeatureBackend("vault", {
+        supabase: async () => {
+          // First get all teams user can potentially access
+          let teams: { id: string; name: string; folder_id: string | null }[] = [];
+
+          if (isClubAdmin) {
+            // Club admins and app admins can see all teams
+            const { data } = await supabase
+              .from("teams")
+              .select("id, name, folder_id")
+              .eq("club_id", clubId)
+              .is("deleted_at", null)
+              .order("name");
+            teams = data || [];
+          } else {
+            // Non-club admins only see teams they are members of
+            if (userTeamIds.length === 0) return [];
+
+            const { data } = await supabase
+              .from("teams")
+              .select("id, name, folder_id")
+              .eq("club_id", clubId)
+              .in("id", userTeamIds)
+              .is("deleted_at", null)
+              .order("name");
+            teams = data || [];
+          }
+
+          // If club has Pro, all teams inherit it - show all
+          if (currentClubHasPro) return teams;
+
+          // If club doesn't have Pro, only show teams with individual Pro subscriptions
+          if (teams.length === 0) return [];
+
+          const teamIds = teams.map(t => t.id);
+          const { data: teamSubs } = await supabase
+            .from("team_subscriptions")
+            .select("team_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
+            .in("team_id", teamIds);
+
+          const proTeamIds = new Set(
+            (teamSubs || [])
+              .filter(sub => sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override)
+              .map(sub => sub.team_id)
+          );
+
+          return teams.filter(t => proTeamIds.has(t.id));
+        },
+        icp: async (ctx) => {
+          const liveTeams = await listLiveTeams(ctx, clubId);
+          let teams = liveTeams.map((team: any) => ({
+            id: team.id,
+            name: team.name,
+            // NEEDS-CANISTER: the vault_domain/club_domain canisters have no
+            // team-level folder concept, so this always reads null.
+            folder_id: null as string | null,
+          }));
+
+          if (!isClubAdmin) {
+            if (userTeamIds.length === 0) return [];
+            const allowed = new Set(userTeamIds);
+            teams = teams.filter((t) => allowed.has(t.id));
+          }
+
+          // No per-team Pro entitlement on ICP — show every team the caller
+          // can otherwise see, regardless of the caller's own Pro status.
+          return teams;
+        },
+      });
     },
     enabled: currentView.type === "club" && currentClubHasPro !== undefined,
   });
@@ -190,12 +212,19 @@ function SupabaseVaultPage() {
     queryKey: ["vault-team-folders", currentView.type === "club" ? currentView.clubId : null],
     queryFn: async () => {
       if (currentView.type !== "club") return [];
-      const { data } = await supabase
-        .from("team_folders")
-        .select("*")
-        .eq("club_id", currentView.clubId)
-        .order("sort_order", { ascending: true });
-      return data || [];
+      const clubId = currentView.clubId;
+      return withFeatureBackend("vault", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("team_folders")
+            .select("*")
+            .eq("club_id", clubId)
+            .order("sort_order", { ascending: true });
+          return data || [];
+        },
+        // NEEDS-CANISTER: no team_folders equivalent exists on any canister.
+        icp: async () => [],
+      });
     },
     enabled: currentView.type === "club",
   });
@@ -208,22 +237,37 @@ function SupabaseVaultPage() {
       
       const clubId = currentView.clubId;
       
-      // First fetch the user's roles fresh to avoid stale closure issues
-      const { data: freshRoles } = await supabase
-        .from("user_roles")
-        .select("role, club_id, team_id")
-        .eq("user_id", user!.id);
-      
-      console.log("[Vault Mini-Leagues] Fresh roles for user:", user!.id, freshRoles);
-      
-      // Check if club has Pro Football access
-      const { data: clubSub } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro_football, admin_pro_football_override")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      
-      const hasProFootball = clubSub?.is_pro_football || clubSub?.admin_pro_football_override;
+      const { freshRoles, hasProFootball } = await withFeatureBackend("vault", {
+        supabase: async () => {
+          // First fetch the user's roles fresh to avoid stale closure issues
+          const { data: freshRoles } = await supabase
+            .from("user_roles")
+            .select("role, club_id, team_id")
+            .eq("user_id", user!.id);
+
+          console.log("[Vault Mini-Leagues] Fresh roles for user:", user!.id, freshRoles);
+
+          // Check if club has Pro Football access
+          const { data: clubSub } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro_football, admin_pro_football_override")
+            .eq("club_id", clubId)
+            .maybeSingle();
+
+          return {
+            freshRoles: freshRoles ?? [],
+            hasProFootball: Boolean(clubSub?.is_pro_football || clubSub?.admin_pro_football_override),
+          };
+        },
+        icp: async (ctx) => {
+          // Reuse the already-routed access model's roles instead of
+          // re-fetching, and resolve Pro Football from the caller's own
+          // entitlements (no per-club Pro Football flag exists on ICP).
+          const entitlements = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
+          return { freshRoles: userRoles ?? [], hasProFootball: entitlements.isPro };
+        },
+      });
+
       if (!hasProFootball && !isAppAdmin) {
         console.log("[Vault Mini-Leagues] Club doesn't have Pro Football, returning empty");
         return [];

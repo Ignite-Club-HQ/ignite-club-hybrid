@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ChatJumpKind } from "@/lib/pendingChatJump";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 /**
  * Shared resolution of a notification's `related_id` (a message id) to an
@@ -67,6 +68,15 @@ function isLookupFailure(table: string, error: unknown): boolean {
  */
 export async function resolveChatTargetResult(messageId: string): Promise<ChatTargetResolution> {
   if (!messageId) return { status: "not_found", target: null };
+
+  // NEEDS-CANISTER: these probes read Supabase message tables by row id,
+  // which don't exist for II users (messaging_domain canister conversation
+  // ids are carried directly in push/notification payloads). Never fire
+  // Supabase for an II principal — treat as unresolved so the caller falls
+  // back to the safe default route.
+  if (resolveAuthBackend() === "icp") {
+    return { status: "not_found", target: null };
+  }
 
   const found = (kind: ChatJumpKind, targetId: string | null): ChatTargetResolution => ({
     status: "found",
