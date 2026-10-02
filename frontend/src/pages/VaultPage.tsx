@@ -524,10 +524,43 @@ function SupabaseVaultPage() {
 
             return { folder, path, clubName };
           },
-          // NEEDS-CANISTER: the vault_domain canister has no single-folder
-          // lookup by id (only folder listings scoped to a club), so a
-          // deep link straight to a folder id cannot be resolved on ICP yet.
-          icp: async () => null,
+          // ICP: single-folder lookup by id on vault_domain, with the
+          // parent-chain walk and the team/club name joins done here —
+          // the canister returns the flat VaultFolder record only.
+          icp: async (ctx) => {
+            const folder = await getLiveVaultFolder(ctx, urlFolderId!);
+            if (!folder) return null;
+
+            const path: { id: string; name: string }[] = [];
+            let currentFolderId: string | null = folder.parent_id.length ? folder.parent_id[0] : null;
+            while (currentFolderId) {
+              const parentFolder = await getLiveVaultFolder(ctx, currentFolderId);
+              if (!parentFolder) break;
+              path.unshift({ id: parentFolder.id, name: parentFolder.name });
+              currentFolderId = parentFolder.parent_id.length ? parentFolder.parent_id[0] : null;
+            }
+            path.push({ id: folder.id, name: folder.name });
+
+            const teamId = folder.team_id.length ? folder.team_id[0] : null;
+            const [clubProfile, teams] = await Promise.all([
+              getLiveClubProfile(ctx, folder.club_id),
+              teamId ? listLiveTeams(ctx, folder.club_id) : Promise.resolve([]),
+            ]);
+            const clubName = clubProfile?.name ?? "Unknown Club";
+            const team = teamId ? teams.find((t: any) => t.id === teamId) : null;
+
+            return {
+              folder: {
+                ...folder,
+                parent_id: folder.parent_id.length ? folder.parent_id[0] : null,
+                team_id: teamId,
+                teams: team ? { id: team.id, name: team.name, club_id: folder.club_id } : null,
+                clubs: { id: folder.club_id, name: clubName },
+              },
+              path,
+              clubName,
+            };
+          },
         });
 
         if (!result) {
