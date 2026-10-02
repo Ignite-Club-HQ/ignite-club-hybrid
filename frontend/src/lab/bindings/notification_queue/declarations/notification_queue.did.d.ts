@@ -247,6 +247,11 @@ export interface _SERVICE {
     ],
     ScheduledResult
   >,
+  'set_messaging_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |

@@ -315,6 +315,11 @@ export const idlFactory = ({ IDL }) => {
         [ScheduledResult],
         [],
       ),
+    'set_messaging_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'transfer_governorship' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
