@@ -14,7 +14,7 @@ import { useNavigate } from "react-router-dom";
 import type { Database } from "@/integrations/supabase/types";
 import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { approveLiveTeamCreationRequest, rejectLiveTeamCreationRequest } from "@/live/features/club";
+import { approveLiveTeamCreationRequest, listLiveTeamCreationRequests, rejectLiveTeamCreationRequest } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -32,7 +32,35 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ["team-creation-requests", clubId],
-    queryFn: async () => {
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        icp: async (ctx) => {
+          const live = await listLiveTeamCreationRequests(ctx, clubId);
+          return live
+            .filter((r) => r.status === "pending")
+            .sort((a, b) => Number(b.created_at_ms - a.created_at_ms))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              name: r.name,
+              status: r.status,
+              requested_by: r.requested_by.toText(),
+              created_at: new Date(Number(r.created_at_ms)).toISOString(),
+              level_age: r.age_group[0] ?? null,
+              // Fields the canister record does not carry stay empty; the
+              // ICP approve path only flips status (see mutation below).
+              description: null as string | null,
+              logo_url: null as string | null,
+              team_type: null as string | null,
+              folder_id: null as string | null,
+              class_day: null as string | null,
+              class_time: null as string | null,
+              class_duration_minutes: null as number | null,
+              class_capacity: null as number | null,
+              requester: undefined as { display_name: string | null } | undefined,
+            }));
+        },
+        supabase: async () => {
       const { data, error } = await supabase
         .from("team_creation_requests")
         .select("*")
@@ -52,7 +80,8 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
         ...r,
         requester: profileMap.get(r.requested_by),
       }));
-    },
+        },
+      }),
     enabled: !!clubId,
   });
 
