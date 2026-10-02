@@ -11,6 +11,7 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlFactory = ({ IDL }) => {
   const AdEventSummary = IDL.Record({
     'clicks' : IDL.Nat32,
+    'context' : IDL.Text,
     'ad_id' : IDL.Text,
     'views' : IDL.Nat32,
   });
@@ -269,6 +270,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'is_app_admin' : IDL.Func([], [IDL.Bool], ['query']),
     'list_active_ads' : IDL.Func([], [IDL.Vec(AppAd)], ['query']),
+    'list_ad_settings' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AppAdSetting), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_admin_alerts' : IDL.Func(
         [IDL.Opt(AlertStatus)],
         [IDL.Variant({ 'Ok' : IDL.Vec(AdminAlert), 'Err' : IDL.Text })],

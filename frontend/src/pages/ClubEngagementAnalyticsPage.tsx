@@ -86,6 +86,8 @@ import {
   getLiveClubEngagementBenchmarks,
   getLiveClubEngagementSponsorPerformance,
   getLiveSponsorBenchmarks,
+  listLiveAds,
+  getLiveAdEventSummary,
 } from "@/live/features/insights";
 import type { EngagementBenchmarks as IcpEngagementBenchmarks, EngagementDayPoint } from "@/lab/bindings/insights_domain/declarations/insights_domain.did.js";
 
@@ -827,46 +829,84 @@ function SupabaseClubEngagementAnalyticsPage({
   // platform admin can compare in-house ad performance vs. AdMob (which is
   // reported separately in the Google AdMob console).
   const { data: appAds = [] } = useQuery({
-    queryKey: ["engagement-app-ads"],
+    queryKey: ["engagement-app-ads", isIcpAnalytics],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ads")
-        .select("id, name, headline, ad_type, is_active")
-        .order("display_order", { ascending: true })
-        .limit(500);
-      if (error) throw error;
-      return (data || []) as Array<{
-        id: string;
-        name: string | null;
-        headline: string | null;
-        ad_type: string | null;
-        is_active: boolean;
-      }>;
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ads")
+            .select("id, name, headline, ad_type, is_active")
+            .order("display_order", { ascending: true })
+            .limit(500);
+          if (error) throw error;
+          return (data || []) as Array<{
+            id: string;
+            name: string | null;
+            headline: string | null;
+            ad_type: string | null;
+            is_active: boolean;
+          }>;
+        },
+        icp: async (ctx) => {
+          const ads = await listLiveAds(ctx);
+          return ads.map((a) => ({
+            id: a.id,
+            name: a.name,
+            headline: a.headline[0] ?? null,
+            ad_type: a.ad_type,
+            is_active: a.is_active,
+          }));
+        },
+      });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });
 
+  // ad_event_summary(sinceMs) returns cumulative view/click counts per
+  // (ad_id, context) since `sinceMs` — there is no bounded [since, until)
+  // query on the canister, so the current window is approximated as "since
+  // range.start" (honest as long as range.end tracks "now", which it does
+  // for every preset/custom range in this page) and the previous window is
+  // derived by subtracting the "since range.start" counts from the "since
+  // prevRange.start" counts. The canister also carries no per-event user id,
+  // so reach cannot be reconstructed — rows get `user_id: null` throughout,
+  // which honestly zeroes out the reach tile on the ICP branch instead of
+  // fabricating distinct users.
   const { data: appAdAnalyticsRaw = [] } = useQuery({
     queryKey: [
       "engagement-app-ad-analytics",
       range.start.toISOString(),
       range.end.toISOString(),
       isPlatform,
+      isIcpAnalytics,
     ],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_analytics")
-        .select("ad_id, event_type, context, user_id")
-        .gte("created_at", range.start.toISOString())
-        .lte("created_at", range.end.toISOString())
-        .limit(50000);
-      if (error) throw error;
-      return (data || []) as Array<{
-        ad_id: string;
-        event_type: string;
-        context: string | null;
-        user_id: string | null;
-      }>;
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_analytics")
+            .select("ad_id, event_type, context, user_id")
+            .gte("created_at", range.start.toISOString())
+            .lte("created_at", range.end.toISOString())
+            .limit(50000);
+          if (error) throw error;
+          return (data || []) as Array<{
+            ad_id: string;
+            event_type: string;
+            context: string | null;
+            user_id: string | null;
+          }>;
+        },
+        icp: async (ctx) => {
+          const summary = await getLiveAdEventSummary(ctx, range.start.getTime());
+          const rows: Array<{ ad_id: string; event_type: string; context: string | null; user_id: string | null }> = [];
+          for (const row of summary) {
+            for (let i = 0; i < row.views; i++) rows.push({ ad_id: row.ad_id, event_type: "view", context: row.context, user_id: null });
+            for (let i = 0; i < row.clicks; i++) rows.push({ ad_id: row.ad_id, event_type: "click", context: row.context, user_id: null });
+          }
+          return rows;
+        },
+      });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });
@@ -877,16 +917,37 @@ function SupabaseClubEngagementAnalyticsPage({
       prevRange.start.toISOString(),
       prevRange.end.toISOString(),
       isPlatform,
+      isIcpAnalytics,
     ],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_analytics")
-        .select("ad_id, event_type")
-        .gte("created_at", prevRange.start.toISOString())
-        .lte("created_at", prevRange.end.toISOString())
-        .limit(50000);
-      if (error) throw error;
-      return (data || []) as Array<{ ad_id: string; event_type: string }>;
+      return withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_analytics")
+            .select("ad_id, event_type")
+            .gte("created_at", prevRange.start.toISOString())
+            .lte("created_at", prevRange.end.toISOString())
+            .limit(50000);
+          if (error) throw error;
+          return (data || []) as Array<{ ad_id: string; event_type: string }>;
+        },
+        icp: async (ctx) => {
+          const [sincePrev, sinceCurrent] = await Promise.all([
+            getLiveAdEventSummary(ctx, prevRange.start.getTime()),
+            getLiveAdEventSummary(ctx, range.start.getTime()),
+          ]);
+          const currentByAd = new Map(sinceCurrent.map((r) => [r.ad_id, r]));
+          const rows: Array<{ ad_id: string; event_type: string }> = [];
+          for (const row of sincePrev) {
+            const current = currentByAd.get(row.ad_id);
+            const views = Math.max(0, row.views - (current?.views ?? 0));
+            const clicks = Math.max(0, row.clicks - (current?.clicks ?? 0));
+            for (let i = 0; i < views; i++) rows.push({ ad_id: row.ad_id, event_type: "view" });
+            for (let i = 0; i < clicks; i++) rows.push({ ad_id: row.ad_id, event_type: "click" });
+          }
+          return rows;
+        },
+      });
     },
     enabled: queryReady && !!access?.isAdmin && isPlatform,
   });

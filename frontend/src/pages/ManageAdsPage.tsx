@@ -32,8 +32,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { candidOpt } from "@/live/features/candid";
+import {
+  createLiveAd,
+  deleteLiveAd,
+  getLiveAdEventSummary,
+  isLiveAppAdmin,
+  listLiveAds,
+  listLiveAdSettings,
+  setLiveAdActive,
+  updateLiveAd,
+  upsertLiveAdSetting,
+  type LiveAppAd,
+  type LiveAppAdInput,
+} from "@/live/features/insights";
 
 type AdType = "image" | "logo_text";
 
@@ -131,28 +144,43 @@ function LogoTextPreview({
 }
 
 export default function ManageAdsPage() {
-  const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("admin");
-  if (useIcpLab) {
-    return (
-      <div className="container max-w-3xl mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-4 text-center">
-            <BarChart3 className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Advertising management is unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Ad configuration, media uploads, targeting, and analytics remain an external provider boundary.
-            </p>
-            <Button variant="outline" onClick={() => navigate(-1)}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Go back
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return <SupabaseManageAdsPage />;
+}
+
+function mapLiveAd(a: LiveAppAd): AppAd {
+  return {
+    id: a.id,
+    name: a.name,
+    image_url: a.image_url[0] ?? null,
+    link_url: a.link_url[0] ?? null,
+    description: a.description[0] ?? null,
+    is_active: a.is_active,
+    display_order: Number(a.display_order),
+    ad_type: a.ad_type as AdType,
+    logo_url: a.logo_url[0] ?? null,
+    headline: a.headline[0] ?? null,
+    subtext: a.subtext[0] ?? null,
+    cta_label: a.cta_label[0] ?? null,
+    bg_color: a.bg_color[0] ?? null,
+    text_color: a.text_color[0] ?? null,
+  };
+}
+
+function toLiveAdInput(ad: typeof EMPTY_NEW_AD | AppAd): LiveAppAdInput {
+  const isImage = ad.ad_type === "image";
+  return {
+    name: ad.name,
+    ad_type: ad.ad_type,
+    image_url: candidOpt(isImage ? ad.image_url || null : null),
+    logo_url: candidOpt(!isImage ? ad.logo_url || null : null),
+    headline: candidOpt(!isImage ? ad.headline || null : null),
+    subtext: candidOpt(!isImage ? ad.subtext || null : null),
+    cta_label: candidOpt(!isImage ? ad.cta_label || null : null),
+    bg_color: candidOpt(!isImage ? ad.bg_color || null : null),
+    text_color: candidOpt(!isImage ? ad.text_color || null : null),
+    link_url: candidOpt(ad.link_url || null),
+    description: candidOpt(ad.description || null),
+  };
 }
 
 function SupabaseManageAdsPage() {
@@ -206,86 +234,135 @@ function SupabaseManageAdsPage() {
   // Check if user is app admin
   const { data: isAppAdmin } = useQuery({
     queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
+    queryFn: () =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          if (!user?.id) return false;
+          const { data } = await supabase
+            .from("user_roles")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("role", "app_admin")
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => isLiveAppAdmin(ctx),
+      }),
     enabled: !!user,
   });
 
   const { data: ads, isLoading: adsLoading } = useQuery({
     queryKey: ["app-ads"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ads")
-        .select("*")
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return data as unknown as AppAd[];
-    },
+    queryFn: async (): Promise<AppAd[]> =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ads")
+            .select("*")
+            .order("display_order", { ascending: true });
+          if (error) throw error;
+          return data as unknown as AppAd[];
+        },
+        icp: async (ctx) => (await listLiveAds(ctx)).map(mapLiveAd),
+      }),
     enabled: isAppAdmin,
   });
 
   const { data: settings } = useQuery({
     queryKey: ["app-ad-settings-all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_settings")
-        .select("*")
-        .order("location");
-      if (error) throw error;
-      return data as AdSetting[];
-    },
+    queryFn: async (): Promise<AdSetting[]> =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_settings")
+            .select("*")
+            .order("location");
+          if (error) throw error;
+          return data as AdSetting[];
+        },
+        // The canister keys settings by location; it doubles as the row id.
+        icp: async (ctx) =>
+          (await listLiveAdSettings(ctx)).map((s) => ({
+            id: s.location,
+            location: s.location,
+            is_enabled: s.is_enabled,
+            override_sponsors: s.override_sponsors,
+            show_only_when_no_sponsors: s.show_only_when_no_sponsors,
+          })),
+      }),
     enabled: isAppAdmin,
   });
 
   const { data: analytics } = useQuery({
     queryKey: ["app-ad-analytics-summary"],
-    queryFn: async () => {
-      const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
-      const { data, error } = await supabase
-        .from("app_ad_analytics")
-        .select("ad_id, event_type, context, created_at")
-        .gte("created_at", thirtyDaysAgo);
-      if (error) throw error;
-      return data;
-    },
+    // Normalized per-ad, per-context view/click totals for both backends so
+    // getAdStats/getContextStats work identically.
+    queryFn: async (): Promise<{ ad_id: string; context: string; views: number; clicks: number }[]> =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
+          const { data, error } = await supabase
+            .from("app_ad_analytics")
+            .select("ad_id, event_type, context, created_at")
+            .gte("created_at", thirtyDaysAgo);
+          if (error) throw error;
+          const grouped = new Map<string, { ad_id: string; context: string; views: number; clicks: number }>();
+          for (const e of data ?? []) {
+            const key = `${e.ad_id}|${e.context}`;
+            const row = grouped.get(key) ?? { ad_id: e.ad_id, context: e.context, views: 0, clicks: 0 };
+            if (e.event_type === "view") row.views += 1;
+            else if (e.event_type === "click") row.clicks += 1;
+            grouped.set(key, row);
+          }
+          return [...grouped.values()];
+        },
+        icp: async (ctx) => {
+          const sinceMs = subDays(new Date(), 30).getTime();
+          return (await getLiveAdEventSummary(ctx, sinceMs)).map((r) => ({
+            ad_id: r.ad_id,
+            context: r.context,
+            views: Number(r.views),
+            clicks: Number(r.clicks),
+          }));
+        },
+      }),
     enabled: isAppAdmin,
   });
 
   const createAdMutation = useMutation({
-    mutationFn: async (ad: typeof newAd) => {
-      const payload: Record<string, unknown> = {
-        name: ad.name,
-        ad_type: ad.ad_type,
-        link_url: ad.link_url || null,
-        description: ad.description || null,
-      };
-      if (ad.ad_type === "image") {
-        payload.image_url = ad.image_url;
-        payload.logo_url = null;
-        payload.headline = null;
-        payload.subtext = null;
-        payload.cta_label = null;
-        payload.bg_color = null;
-        payload.text_color = null;
-      } else {
-        payload.image_url = null;
-        payload.logo_url = ad.logo_url || null;
-        payload.headline = ad.headline;
-        payload.subtext = ad.subtext || null;
-        payload.cta_label = ad.cta_label || null;
-        payload.bg_color = ad.bg_color || null;
-        payload.text_color = ad.text_color || null;
-      }
-      const { error } = await supabase.from("app_ads").insert(payload as never);
-      if (error) throw error;
-    },
+    mutationFn: async (ad: typeof newAd) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const payload: Record<string, unknown> = {
+            name: ad.name,
+            ad_type: ad.ad_type,
+            link_url: ad.link_url || null,
+            description: ad.description || null,
+          };
+          if (ad.ad_type === "image") {
+            payload.image_url = ad.image_url;
+            payload.logo_url = null;
+            payload.headline = null;
+            payload.subtext = null;
+            payload.cta_label = null;
+            payload.bg_color = null;
+            payload.text_color = null;
+          } else {
+            payload.image_url = null;
+            payload.logo_url = ad.logo_url || null;
+            payload.headline = ad.headline;
+            payload.subtext = ad.subtext || null;
+            payload.cta_label = ad.cta_label || null;
+            payload.bg_color = ad.bg_color || null;
+            payload.text_color = ad.text_color || null;
+          }
+          const { error } = await supabase.from("app_ads").insert(payload as never);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await createLiveAd(ctx, toLiveAdInput(ad));
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-ads"] });
       setIsDrawerOpen(false);
@@ -296,10 +373,14 @@ function SupabaseManageAdsPage() {
   });
 
   const toggleAdMutation = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase.from("app_ads").update({ is_active }).eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("app_ads").update({ is_active }).eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => setLiveAdActive(ctx, id, is_active),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-ads"] });
       toast.success("Ad updated");
@@ -307,33 +388,39 @@ function SupabaseManageAdsPage() {
   });
 
   const updateAdMutation = useMutation({
-    mutationFn: async (ad: AppAd) => {
-      const payload: Record<string, unknown> = {
-        name: ad.name,
-        ad_type: ad.ad_type,
-        link_url: ad.link_url || null,
-        description: ad.description || null,
-      };
-      if (ad.ad_type === "image") {
-        payload.image_url = ad.image_url;
-        payload.logo_url = null;
-        payload.headline = null;
-        payload.subtext = null;
-        payload.cta_label = null;
-        payload.bg_color = null;
-        payload.text_color = null;
-      } else {
-        payload.image_url = null;
-        payload.logo_url = ad.logo_url || null;
-        payload.headline = ad.headline;
-        payload.subtext = ad.subtext || null;
-        payload.cta_label = ad.cta_label || null;
-        payload.bg_color = ad.bg_color || null;
-        payload.text_color = ad.text_color || null;
-      }
-      const { error } = await supabase.from("app_ads").update(payload as never).eq("id", ad.id);
-      if (error) throw error;
-    },
+    mutationFn: async (ad: AppAd) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const payload: Record<string, unknown> = {
+            name: ad.name,
+            ad_type: ad.ad_type,
+            link_url: ad.link_url || null,
+            description: ad.description || null,
+          };
+          if (ad.ad_type === "image") {
+            payload.image_url = ad.image_url;
+            payload.logo_url = null;
+            payload.headline = null;
+            payload.subtext = null;
+            payload.cta_label = null;
+            payload.bg_color = null;
+            payload.text_color = null;
+          } else {
+            payload.image_url = null;
+            payload.logo_url = ad.logo_url || null;
+            payload.headline = ad.headline;
+            payload.subtext = ad.subtext || null;
+            payload.cta_label = ad.cta_label || null;
+            payload.bg_color = ad.bg_color || null;
+            payload.text_color = ad.text_color || null;
+          }
+          const { error } = await supabase.from("app_ads").update(payload as never).eq("id", ad.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await updateLiveAd(ctx, ad.id, toLiveAdInput(ad));
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-ads"] });
       setEditingAd(null);
@@ -343,10 +430,14 @@ function SupabaseManageAdsPage() {
   });
 
   const deleteAdMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("app_ads").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("app_ads").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => deleteLiveAd(ctx, id),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-ads"] });
       toast.success("Ad deleted");
@@ -354,10 +445,19 @@ function SupabaseManageAdsPage() {
   });
 
   const updateSettingMutation = useMutation({
-    mutationFn: async ({ id, field, value }: { id: string; field: string; value: boolean }) => {
-      const { error } = await supabase.from("app_ad_settings").update({ [field]: value } as never).eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async ({ id, field, value }: { id: string; field: string; value: boolean }) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("app_ad_settings").update({ [field]: value } as never).eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const row = settings?.find((s) => s.id === id);
+          if (!row) throw new Error("Ad setting not found");
+          const next = { ...row, [field]: value };
+          await upsertLiveAdSetting(ctx, next.location, next.is_enabled, next.override_sponsors, next.show_only_when_no_sponsors);
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-ad-settings-all"] });
       queryClient.invalidateQueries({ queryKey: ["app-ad-settings"] });
@@ -366,20 +466,18 @@ function SupabaseManageAdsPage() {
   });
 
   const getAdStats = (adId: string) => {
-    if (!analytics) return { views: 0, clicks: 0 };
-    const adEvents = analytics.filter(a => a.ad_id === adId);
+    const rows = (analytics ?? []).filter((a) => a.ad_id === adId);
     return {
-      views: adEvents.filter(e => e.event_type === "view").length,
-      clicks: adEvents.filter(e => e.event_type === "click").length,
+      views: rows.reduce((sum, r) => sum + r.views, 0),
+      clicks: rows.reduce((sum, r) => sum + r.clicks, 0),
     };
   };
 
   const getContextStats = (context: string) => {
-    if (!analytics) return { views: 0, clicks: 0 };
-    const contextEvents = analytics.filter(a => a.context === context);
+    const rows = (analytics ?? []).filter((a) => a.context === context);
     return {
-      views: contextEvents.filter(e => e.event_type === "view").length,
-      clicks: contextEvents.filter(e => e.event_type === "click").length,
+      views: rows.reduce((sum, r) => sum + r.views, 0),
+      clicks: rows.reduce((sum, r) => sum + r.clicks, 0),
     };
   };
 

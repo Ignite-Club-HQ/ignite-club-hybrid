@@ -482,6 +482,11 @@ export async function listLiveAds(ctx: FeatureBackendContext) {
   return unwrapCandid(actor.list_ads(), "List house ads");
 }
 
+export async function listLiveAdSettings(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveInsightsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_ad_settings(), "List ad settings");
+}
+
 export async function upsertLiveAdSetting(
   ctx: FeatureBackendContext,
   location: string,

@@ -12,6 +12,7 @@ import type { Principal } from '@icp-sdk/core/principal';
 
 export interface AdEventSummary {
   'clicks' : number,
+  'context' : string,
   'ad_id' : string,
   'views' : number,
 }
@@ -247,6 +248,11 @@ export interface _SERVICE {
   'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_app_admin' : ActorMethod<[], boolean>,
   'list_active_ads' : ActorMethod<[], Array<AppAd>>,
+  'list_ad_settings' : ActorMethod<
+    [],
+    { 'Ok' : Array<AppAdSetting> } |
+      { 'Err' : string }
+  >,
   'list_admin_alerts' : ActorMethod<
     [[] | [AlertStatus]],
     { 'Ok' : Array<AdminAlert> } |
