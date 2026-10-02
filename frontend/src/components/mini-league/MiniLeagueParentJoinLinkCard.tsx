@@ -133,10 +133,15 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
   const revoke = useMutation({
     mutationFn: async () => {
       if (!link) return;
-      // NEEDS-CANISTER: see createOrRotate above.
-      assertSupabaseWritePath("mini_leagues", "revoking a mini-league join link");
-      const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
-      if (error) throw error;
+      await withFeatureBackend("mini_leagues", {
+        supabase: async () => {
+          const { error } = await supabase.from("pending_invites").delete().eq("id", link.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await revokeLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player");
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
