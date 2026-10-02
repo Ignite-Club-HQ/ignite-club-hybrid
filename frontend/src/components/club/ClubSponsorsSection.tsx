@@ -44,7 +44,6 @@ const SPONSOR_TOGGLES: SponsorToggleConfig[] = [
 
 interface ClubSponsorsSectionProps {
   hasProAccess: boolean;
-  useIcpLab: boolean;
   toggleValues: Record<ClubSponsorToggleField, boolean>;
   onToggle: (field: ClubSponsorToggleField, checked: boolean) => void;
   clubId: string;
@@ -54,7 +53,6 @@ interface ClubSponsorsSectionProps {
 
 export function ClubSponsorsSection({
   hasProAccess,
-  useIcpLab,
   toggleValues,
   onToggle,
   clubId,
@@ -80,7 +78,7 @@ export function ClubSponsorsSection({
             </div>
           )}
           {/* Display-surface toggles — only functional on Pro */}
-          <fieldset disabled={!hasProAccess || useIcpLab} className={cn("space-y-4", (!hasProAccess || useIcpLab) && "opacity-60")}>
+          <fieldset disabled={!hasProAccess} className={cn("space-y-4", !hasProAccess && "opacity-60")}>
             {SPONSOR_TOGGLES.map(({ field, label, description }) => (
               <div key={field} className="flex items-start justify-between gap-3 rounded-md border p-3">
                 <div className="space-y-0.5">
@@ -94,20 +92,15 @@ export function ClubSponsorsSection({
               </div>
             ))}
           </fieldset>
-          {useIcpLab ? (
-            <p className="text-sm text-muted-foreground">
-              Sponsor management is unavailable in ICP lab mode.
-            </p>
-          ) : (
-            <>
-              <SponsorsManager
-                clubId={clubId}
-                currentPrimarySponsorId={currentPrimarySponsorId}
-                onPrimaryChange={onPrimaryChange}
-              />
-              <ClubTeamSponsorAllocator clubId={clubId} />
-            </>
-          )}
+          {/* SponsorsManager and ClubTeamSponsorAllocator route through
+              withFeatureBackend("membership"), so they work in both backend
+              modes. */}
+          <SponsorsManager
+            clubId={clubId}
+            currentPrimarySponsorId={currentPrimarySponsorId}
+            onPrimaryChange={onPrimaryChange}
+          />
+          <ClubTeamSponsorAllocator clubId={clubId} />
         </div>
       </AccordionContent>
     </AccordionItem>
