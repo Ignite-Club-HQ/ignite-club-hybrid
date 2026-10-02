@@ -1,3 +1,4 @@
+import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 module {
   type RoleGrant = { user : Principal; role : Text; club_id : Text; team_id : ?Text };
