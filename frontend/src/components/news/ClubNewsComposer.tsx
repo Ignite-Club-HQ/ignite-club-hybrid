@@ -382,17 +382,15 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-            ) : (
-              {!isIcpMediaUploadUnavailable() && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <ImagePlus className="mr-2 h-4 w-4" /> Add image
-                </Button>
-              )}
+            ) : isIcpMediaUploadUnavailable() ? null : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="mr-2 h-4 w-4" /> Add image
+              </Button>
             )}
             <input
               ref={fileInputRef}
