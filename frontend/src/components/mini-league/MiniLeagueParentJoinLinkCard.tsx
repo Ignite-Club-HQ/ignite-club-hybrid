@@ -81,10 +81,21 @@ export default function MiniLeagueParentJoinLinkCard({ miniLeagueId, miniLeagueN
 
   const createOrRotate = useMutation({
     mutationFn: async ({ rotate }: { rotate: boolean }) => {
-      // NEEDS-CANISTER: mini_league_domain has create_invite/claim_invite for
-      // single-player invites, but no generic role-grant join-link shape
-      // backed by pending_invites (admin-grant / parent-join semantics).
-      assertSupabaseWritePath("mini_leagues", "creating a mini-league join link");
+      const icpResult = await withFeatureBackend("mini_leagues", {
+        supabase: async () => null as JoinLinkRow | null,
+        icp: async (ctx) => {
+          const created = link
+            ? await rotateLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player")
+            : await createLiveMiniLeagueJoinLink(ctx, miniLeagueId, "player");
+          return {
+            id: created.token,
+            invite_token: created.token,
+            created_at: new Date(Number(created.created_at_ms)).toISOString(),
+            metadata: { kind: MINI_LEAGUE_PARENT_JOIN_LINK_ROLE.metadataKind, mini_league_id: miniLeagueId },
+          } as JoinLinkRow;
+        },
+      });
+      if (icpResult) return icpResult;
       const userId = requireAuthenticatedUserId(user?.id);
       if (rotate && link) {
         await supabase.from("pending_invites").delete().eq("id", link.id);
