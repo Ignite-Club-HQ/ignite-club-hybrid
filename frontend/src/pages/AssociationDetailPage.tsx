@@ -211,7 +211,7 @@ function LinkClubForm({ associationId }: { associationId: string }) {
   });
 
   const link = async () => {
-    if (!clubId) return;
+    if (!clubId || isIcpPageMode()) return;
     setSaving(true);
     const { error } = await supabase.from("clubs").update({ parent_org_id: associationId }).eq("id", clubId);
     setSaving(false);
@@ -262,6 +262,7 @@ function UnlinkClubButton({ clubId, associationId }: { clubId: string; associati
   const qc = useQueryClient();
   const { toast } = useToast();
   const unlink = async () => {
+    if (isIcpPageMode()) return;
     const ok = window.confirm("Remove this club from the association?");
     if (!ok) return;
     const { error } = await supabase.from("clubs").update({ parent_org_id: null }).eq("id", clubId);
@@ -298,6 +299,7 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
         .limit(20);
       return data ?? [];
     },
+    enabled: !isIcpPageMode(),
   });
 
   const toggleClub = (cid: string) => {
@@ -309,7 +311,7 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   };
 
   const send = async () => {
-    if (!message.trim()) return;
+    if (!message.trim() || isIcpPageMode()) return;
     setSending(true);
     const { data, error } = await supabase.functions.invoke("send-association-broadcast", {
       body: {

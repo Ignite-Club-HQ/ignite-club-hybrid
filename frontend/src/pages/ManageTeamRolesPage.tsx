@@ -108,6 +108,7 @@ function SupabaseManageTeamRolesPage() {
 
   const deleteRoleMutation = useMutation({
     mutationFn: async ({ roleId, userId, roleName, userName }: { roleId: string; userId: string; roleName: string; userName: string }) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
       if (error) throw error;
       
@@ -127,6 +128,7 @@ function SupabaseManageTeamRolesPage() {
 
   const resetPointsMutation = useMutation({
     mutationFn: async (userId: string) => {
+      if (isIcpPageMode()) return;
       // Per-club balance: only reset points for THIS team's club.
       const { data: t } = await supabase
         .from("teams").select("club_id").eq("id", teamId!).maybeSingle();
@@ -153,6 +155,7 @@ function SupabaseManageTeamRolesPage() {
 
   const handleRequestMutation = useMutation({
     mutationFn: async ({ requestId, approved }: { requestId: string; approved: boolean; request: any }) => {
+      if (isIcpPageMode()) return;
       const rpcName = approved ? "approve_role_request" : "deny_role_request";
       const { error } = await supabase.rpc(rpcName, { p_request_id: requestId });
       if (error) throw error;

@@ -199,6 +199,7 @@ function SupabaseClassEnrolmentPage() {
   // Enrol child mutation
   const enrolChildMutation = useMutation({
     mutationFn: async ({ childId, teamId }: { childId: string; teamId: string }) => {
+      if (isIcpPageMode()) return;
       if (!termId) throw new Error("No term selected");
 
       const cls = classes.find((c) => c.id === teamId);
@@ -254,6 +255,7 @@ function SupabaseClassEnrolmentPage() {
   // Enrol self (adult) mutation
   const enrolSelfMutation = useMutation({
     mutationFn: async ({ teamId }: { teamId: string }) => {
+      if (isIcpPageMode()) return;
       if (!termId || !user) throw new Error("No term selected or not logged in");
 
       const cls = classes.find((c) => c.id === teamId);
@@ -309,6 +311,7 @@ function SupabaseClassEnrolmentPage() {
   // Withdraw mutation
   const withdrawMutation = useMutation({
     mutationFn: async (enrolmentId: string) => {
+      if (isIcpPageMode()) return;
       const { error } = await supabase
         .from("class_enrolments")
         .update({ status: "withdrawn", withdrawn_at: new Date().toISOString() })
