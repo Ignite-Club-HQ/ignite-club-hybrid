@@ -1336,6 +1336,8 @@ function SupabaseVaultPage() {
       {currentView.type !== "root" && (
         <>
           <Suspense fallback={null}>
+            {/* Hidden for II members until the blob-store canister is configured (defence in depth; the upload button is already hidden in VaultTopSection) */}
+            {!isIcpMediaUploadUnavailable() && (
             <UploadFilesDialog
               open={uploadDialogOpen}
               onOpenChange={setUploadDialogOpen}
