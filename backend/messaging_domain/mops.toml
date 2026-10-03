@@ -8,6 +8,7 @@ args = [ "--default-persistent-actors" ]
 core = "2.6.1"
 ic = "4.2.0"
 ic-websocket-cdk = "0.4.1"
+cbor = "0.1.3"
 
 [canisters.messaging_domain]
 main = "src/main.mo"

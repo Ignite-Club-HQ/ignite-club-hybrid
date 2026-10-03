@@ -1,9 +1,9 @@
 {
   "version": 3,
-  "mopsTomlDepsHash": "18405ace4e24cafcf2dc8dcadae7497d10454f74359ded62e32110a65940ac5d",
+  "mopsTomlDepsHash": "93b75520fb81322df215df7f1bf575d063a143f30bb5616f60604fb7e867771b",
   "deps": {
     "base": "0.13.2",
-    "cbor": "1.0.0",
+    "cbor": "0.1.3",
     "core": "2.6.1",
     "ic": "4.2.0",
     "ic-certification": "0.1.3",
@@ -103,14 +103,17 @@
       "base@0.13.2/src/TrieMap.mo": "6d69d887006cd1dff09331473f258141bccb251a04a3a8221b65720a4bf237ac",
       "base@0.13.2/src/TrieSet.mo": "29b3314f43fad714fc7b68cc3b0dde00a7d8b02b6431afd7fe12304dc14f9612"
     },
-    "cbor@1.0.0": {
-      "cbor@1.0.0/LICENSE": "7caf02fc1ac48db886244237e0fa148cea6c360daabcbccd3e6d26da422bb06b",
-      "cbor@1.0.0/README.md": "f2ca1ad4db7290d660da74e55fb1f865ef24fbbe63879ab2aea375093d14d1b5",
-      "cbor@1.0.0/mops.toml": "c1a0badc02bbb58b228398144dd9f34f2744563533295a627ef2d4548d039be9",
-      "cbor@1.0.0/src/Decoder.mo": "4262fad249b39378a141deb677ecc3dfb1efced8fc4394eba0d0698dbb6e4718",
-      "cbor@1.0.0/src/Encoder.mo": "817af25db17d796a9b7cf5eadf531db6bedd30381dd08c9f811caf72d6f051b6",
-      "cbor@1.0.0/src/Types.mo": "68755bdb38d01e581253c5a4dafa30139a780068bac639329f730954e25eed50",
-      "cbor@1.0.0/src/Util.mo": "2d09cbf0cd5c0087e9ab492fda1fc9837bedd0b564b1c4e30c3cb6bf50382aa8"
+    "cbor@0.1.3": {
+      "cbor@0.1.3/LICENSE": "7c506e3eb6f4bca4ef5bee931f06712568c568bf3fca152d0e82524e6cb4b5f6",
+      "cbor@0.1.3/README.md": "daad96802fb7269aa3f5e17f07359e09667ccbb92ddf8b139272881f295e9ad9",
+      "cbor@0.1.3/mops.toml": "8a8757fd5a8def40d7a8cd07ecde911a0733733ba82c765ee007ad3b139def79",
+      "cbor@0.1.3/src/Decoder.mo": "abceeb5b9c8bc91471bc38e229a41199896907cbf232dbc29e7ad028fd8231cf",
+      "cbor@0.1.3/src/Encoder.mo": "1bc438d1286f1b33931b5caaf8dc3df4d41e16445a429e79cfc9fca4fb540d96",
+      "cbor@0.1.3/src/Errors.mo": "4b9a5ce77917e6d0d1a8e5e2b48bb6805dfad349d1a7a42ee3d563aea8ab181d",
+      "cbor@0.1.3/src/Util.mo": "2fdb6d9cca6ecafb08249195616f7374744fffcf9e0a451bd27d817a12a4b0d8",
+      "cbor@0.1.3/src/Value.mo": "b692c95e0378cbf6d6dc0cae166628ffc198243030ea63408f7994d486784e9e",
+      "cbor@0.1.3/test/DecoderTests.mo": "97afcac20e6a87475b72f1b5d740256347c4e978f45ef9b56c58e369cb43dae3",
+      "cbor@0.1.3/test/Tests.mo": "b6430e23cef66c252181ce13aa4c1c439b289d7188df168f7c8f775c89dd02d5"
     },
     "core@2.6.1": {
       "core@2.6.1/LICENSE": "840e3d57a38a8061f55d04470fbd58b9345326fa04ea10ee42add5c6e3b2aa08",
