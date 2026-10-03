@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { LogoImage } from "@/components/ui/logo-image";
 import { Bell, Flame, User, LogOut, Loader2, Moon, Sun, Check, Building2, Lock, UserCog, Settings, ChevronDown } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 // Lazy-loaded: only app admins render this dialog, so its Radix Select
 // dependency (~49KB) should not enter every visitor's initial chunk.
-const DemoLoginSection = lazy(() =>
+const DemoLoginSection = lazyWithRetry(() =>
   import("@/components/DemoLoginSection").then((m) => ({ default: m.DemoLoginSection })),
 );
 import igniteIcon from "@/assets/ignite-icon.png";
