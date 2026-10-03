@@ -99,6 +99,10 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
     queryKey: ["vault-file-card", fileId],
     queryFn: async () => {
       if (!fileId) return null;
+      // NEEDS-CANISTER: vault_domain exposes no file-by-id query (files are
+      // listed per folder), so the file card cannot resolve under ICP. The
+      // card is hidden for II users below rather than firing Supabase.
+      if (vaultIcp) return null;
       const { data, error } = await supabase
         .from("vault_files")
         .select("id, name, file_url, file_type, file_size, is_external_link, club_id, team_id, folder_id, deleted_at")
@@ -107,7 +111,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
       if (error) throw error;
       return data;
     },
-    enabled: !!fileId,
+    enabled: !!fileId && !vaultIcp,
     staleTime: 60 * 1000,
   });
 
@@ -116,22 +120,35 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
     queryKey: ["vault-root-card", rootScope, rootId],
     queryFn: async () => {
       if (!rootScope || !rootId) return null;
-      if (rootScope === "team") {
-        const { data, error } = await supabase
-          .from("teams")
-          .select("id, name, club_id")
-          .eq("id", rootId)
-          .maybeSingle();
-        if (error) throw error;
-        return data ? { name: data.name as string } : null;
-      }
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, name")
-        .eq("id", rootId)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? { name: data.name as string } : null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          if (rootScope === "team") {
+            const { data, error } = await supabase
+              .from("teams")
+              .select("id, name, club_id")
+              .eq("id", rootId)
+              .maybeSingle();
+            if (error) throw error;
+            return data ? { name: data.name as string } : null;
+          }
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, name")
+            .eq("id", rootId)
+            .maybeSingle();
+          if (error) throw error;
+          return data ? { name: data.name as string } : null;
+        },
+        // Internet Identity users: resolve the team/club name from club_domain.
+        icp: async (ctx) => {
+          if (rootScope === "team") {
+            const t = (await getLiveTeam(ctx, rootId)) as { name?: string } | null;
+            return t?.name ? { name: t.name } : null;
+          }
+          const c = await getLiveClubProfile(ctx, rootId);
+          return c?.name ? { name: c.name } : null;
+        },
+      });
     },
     enabled: !!rootScope && !!rootId,
     staleTime: 60 * 1000,
