@@ -1090,6 +1090,7 @@ persistent actor (governor_arg : Principal) {
 
   // ---- (8) Open-duty creation / claiming ----
   public shared ({ caller }) func create_open_duty(event_id : Text, duty : Text) : async { #Ok : Types.OpenDuty; #Err : Text } {
+    if (openDuties.filter(func(item) = item.event_id == event_id).size() >= 200) return #Err("Too many open duties for this event");
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(duty)) return #Err("Invalid duty");
@@ -1686,6 +1687,53 @@ persistent actor (governor_arg : Principal) {
         }))
       };
     }
+  };
+
+  // ---- Event reminder fan-out (non-RSVP member-list notify) ----
+  // Verifies the caller manages the event, computes recipients as the event
+  // audience (club/team members) minus accounts who already have an RSVP,
+  // mirroring the Supabase useEventReminderMutations non-responder branch,
+  // then enqueues via notification_queue (fire-and-forget, fail-closed while
+  // unset) — mirrors club_domain.send_fee_reminders / messaging_domain's chat
+  // notify fan-out. Push delivery itself stays Supabase-side by design.
+  public shared ({ caller }) func set_notification_queue_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    notificationQueueCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func send_event_reminders(event_id : Text) : async { #Ok : Nat16; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(event)) {
+        switch (notificationQueueCanister) {
+          case null { #Err("Notification queue not configured") };
+          case (?nq) {
+            let responded = rsvps.filter(func(item) = item.event_id == event_id).map(func(item) = item.account_id);
+            var recipients : [Text] = [];
+            for (grant in roles.values()) {
+              if (grant.club_id == event.club_id and (grant.team_id == event.team_id or grant.team_id == null) and recipients.size() < 500) {
+                let accountId = grant.user.toText();
+                if (responded.find(func(r) = r == accountId) == null and recipients.find(func(r) = r == accountId) == null) {
+                  recipients := recipients.concat([accountId]);
+                };
+              };
+            };
+            if (recipients.size() == 0) return #Ok(0);
+            let queue : actor {
+              fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+            } = actor (Principal.toText(nq));
+            let keyPrefix = "event-reminder-" # event_id # "-" # Nat64.toText(nowMs());
+            try {
+              await queue.fan_out(recipients, event.club_id, "event_reminder", "Reminder: Please RSVP for \"" # event.title # "\"", keyPrefix, ?event_id)
+            } catch (_) { #Err("Notification queue call failed") }
+          };
+        };
+      };
+    };
   };
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment] }; #Err : Text } {
