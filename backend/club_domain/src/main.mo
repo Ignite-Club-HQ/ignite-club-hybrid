@@ -1,4 +1,5 @@
 import Array "mo:core/Array";
+import Char "mo:core/Char";
 import Int "mo:core/Int";
 import Iter "mo:core/Iter";
 import Nat "mo:core/Nat";
@@ -2264,7 +2265,7 @@ persistent actor class Main(governorInit : Principal) {
         case ('\t') { out #= "\\t" };
         case (ch) {
           // Strip other control characters (invalid raw in JSON strings).
-          if (ch >= ' ') out #= Text.fromChar(ch);
+          if (ch >= ' ') out #= Char.toText(ch);
         };
       };
     };
@@ -2359,7 +2360,7 @@ persistent actor class Main(governorInit : Principal) {
         // The website backend caches its side; never serve stale club data.
         ("cache-control", "no-cache"),
       ];
-      body = Text.toBlob(body);
+      body = Text.encodeUtf8(body);
     }
   };
 
