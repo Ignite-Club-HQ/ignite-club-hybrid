@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useEffect } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealtimeChannelLifecycle";
 import { sortChatMessagesChronologically } from "@/lib/chatMessageOrder";
@@ -12,6 +12,7 @@ import { findSupersededOptimisticIndex } from "@/lib/failedSendRestore";
 import { fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import type { GroupChatSupabaseClient, GroupMessage, MessageReaction } from "@/features/messaging/thread/groupChatData";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
 
 interface UseGroupRealtimeUpdatesOptions {
   groupId?: string;
@@ -46,15 +47,34 @@ export const useGroupRealtimeUpdates = ({
   // messaging was ICP-routed, since no Supabase channel fires and the
   // polling arm only ran for the lab fixture).
   const messagingOnIcp = useIcpLab || isFeatureRoutedToIcp("messaging");
+  const isDocumentVisible = useIsDocumentVisible();
 
   useEffect(() => {
     if (!groupId) return;
     if (!messagingOnIcp && groupRealtimeMode !== "polling") return;
     const id = window.setInterval(() => {
+      // Skip invalidation ticks while the tab is hidden — nobody's watching,
+      // and visibility regain below triggers an immediate catch-up refetch.
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
     }, groupPollIntervalMs);
     return () => window.clearInterval(id);
   }, [groupId, messagingOnIcp, groupRealtimeMode, groupPollIntervalMs, queryClient]);
+
+  // Immediate catch-up refetch the moment the tab regains visibility (not
+  // on initial mount), so messages sent while backgrounded show up without
+  // waiting for the next slow/hidden-interval tick.
+  const wasDocumentVisibleRef = useRef(isDocumentVisible);
+  useEffect(() => {
+    const wasVisible = wasDocumentVisibleRef.current;
+    wasDocumentVisibleRef.current = isDocumentVisible;
+    if (!groupId) return;
+    if (!messagingOnIcp && groupRealtimeMode !== "polling") return;
+    if (wasVisible || !isDocumentVisible) return;
+    queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
+    // Only fire on the visible transition itself, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDocumentVisible]);
 
   // Real-time subscription - directly update cache instead of invalidating
   useEffect(() => {

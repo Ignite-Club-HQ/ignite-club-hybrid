@@ -183,9 +183,22 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
     mutationFn: async ({ requestId, reason }: { requestId: string; reason: string }) =>
       withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: rejection + notification has no club_domain counterpart yet
-          // beyond flipping the request's status.
           await rejectLiveTeamCreationRequest(ctx, requestId);
+          const request = requests.find(r => r.id === requestId);
+          if (request) {
+            try {
+              const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+              await fanOutLiveNotifications(ctx, {
+                userIds: [request.requested_by],
+                clubId,
+                kind: "team_rejected",
+                body: `Your team request "${request.name}" was declined.${reason ? ` Reason: ${reason}` : ''}`,
+                idempotencyKeyPrefix: `team-rejected-${requestId}`,
+              });
+            } catch (e) {
+              console.error("[PendingTeamRequests] failed to notify requester of rejection:", e);
+            }
+          }
         },
         supabase: async () => {
           const request = requests.find(r => r.id === requestId);

@@ -278,6 +278,33 @@ persistent actor {
     #Ok(findChildPoints(club_id, child_id))
   };
 
+  // ---- Bulk lookups (useAllUserClubPoints / useChildrenClubPoints parity) ----
+  // Cross-club and batched reads. Results are filtered per club through the
+  // same canReadSubject rule as the single-row getters, so a caller only ever
+  // sees balances they could already read one at a time — no new visibility.
+
+  public query ({ caller }) func get_user_points_all_clubs(user_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    auth(caller);
+    #Ok(userClubPoints
+      .filter(func(item) = item.user_id == user_id and canReadSubject(caller, item.club_id, #User(user_id)))
+      .map(func(item) = (item.club_id, item.points)))
+  };
+
+  public query ({ caller }) func get_child_points_all_clubs(child_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    auth(caller);
+    #Ok(childClubPoints
+      .filter(func(item) = item.child_id == child_id and canReadSubject(caller, item.club_id, #Child(child_id)))
+      .map(func(item) = (item.club_id, item.points)))
+  };
+
+  public query ({ caller }) func get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
+    auth(caller);
+    if (child_ids.size() > 500) return #Err("At most 500 child ids per batch");
+    #Ok(childClubPoints
+      .filter(func(item) = item.club_id == club_id and child_ids.any(func(id) = id == item.child_id) and canReadSubject(caller, club_id, #Child(item.child_id)))
+      .map(func(item) = (item.child_id, item.points)))
+  };
+
   // Window start (ms) for leaderboard queries — mirrors the Supabase
   // _leaderboard_window_start(_window) helper: "week" = trailing 7 days,
   // "month" = trailing 30 days, anything else (including "all_time") = 0

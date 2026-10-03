@@ -36,6 +36,11 @@ import { markChatOpened } from "@/hooks/useChatCatchUp";
 import { useAICatchUpAvailability } from "@/hooks/useAICatchUpAvailability";
 import { useUnreadMessageCounts } from "@/hooks/useUnreadMessageCounts";
 import { useChatOnlineCount } from "@/hooks/useChatOnlineCount";
+import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
+import {
+  CHAT_POLL_INTERVAL_HIDDEN_MS,
+  CHAT_POLL_INTERVAL_VISIBLE_MS,
+} from "@/hooks/useClubRealtimeMode";
 import { ChatSearchLoadingState } from "@/components/chat/ChatSearch";
 import { useChatHistorySearch } from "@/hooks/useChatHistorySearch";
 import { createChatHistorySearchFetcher } from "@/features/messaging/thread/chatHistorySearchFetcher";
@@ -188,6 +193,7 @@ export default function TeamChatPage() {
   const { isOnline } = useOnlineStatus();
   const isNativeIOS = Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
   const isNativePlatform = Capacitor.isNativePlatform();
+  const isTeamChatPageDocumentVisible = useIsDocumentVisible();
   const useVirtualizedChat = true;
 
   // Mark team message notifications as read when opening this thread.
@@ -215,7 +221,7 @@ export default function TeamChatPage() {
     queryKey: ["local-team-unread-count", teamId, localIcpPersona],
     queryFn: () => getLocalTeamUnreadCount(localIcpPersona, teamId!),
     enabled: useIcpLab && !!teamId,
-    refetchInterval: 30_000,
+    refetchInterval: isTeamChatPageDocumentVisible ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS,
   });
   const teamUnreadCount = useIcpLab ? localTeamUnreadCount : supabaseTeamUnreadCount;
 

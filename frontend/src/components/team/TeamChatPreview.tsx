@@ -2,6 +2,11 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
+import {
+  CHAT_POLL_INTERVAL_HIDDEN_MS,
+  CHAT_POLL_INTERVAL_VISIBLE_MS,
+} from "@/hooks/useClubRealtimeMode";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useUnreadMessageCounts } from "@/hooks/useUnreadMessageCounts";
@@ -19,6 +24,7 @@ interface TeamChatPreviewProps {
 export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isDocumentVisible = useIsDocumentVisible();
 
 
 
@@ -55,7 +61,9 @@ export function TeamChatPreview({ teamId }: TeamChatPreviewProps) {
     },
     enabled: !!teamId,
     staleTime: 30 * 1000,
-    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30 * 1000 : 60 * 1000,
+    refetchInterval: isFeatureRoutedToIcp("messaging")
+      ? (isDocumentVisible ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS)
+      : 60 * 1000,
   });
 
   // Realtime patch (both web and native): a single team-filtered subscription

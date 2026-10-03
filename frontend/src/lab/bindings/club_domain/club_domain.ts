@@ -720,6 +720,7 @@ export interface club_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_app_config(key: string): Promise<string | null>;
     get_club_branding(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: ClubBranding;
@@ -1259,6 +1260,13 @@ export interface club_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_app_config(key: string, value: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_club_header_toggles(club_id: string, header_logo_enabled: boolean, header_club_name_enabled: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubSettings;
@@ -1755,6 +1763,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.freeze_club(arg0, arg1);
         return from_candid_variant_n74(result);
+    }
+    async get_app_config(arg0: string): Promise<string | null> {
+        const result = await this.actor.get_app_config(arg0);
+        return from_candid_opt_n6(result);
     }
     async get_club_branding(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2534,6 +2546,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.send_fee_reminders(arg0, arg1, arg2, arg3);
         return from_candid_variant_n179(result);
+    }
+    async set_app_config(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_app_config(arg0, arg1);
+        return from_candid_variant_n15(result);
     }
     async set_club_header_toggles(arg0: string, arg1: boolean, arg2: boolean): Promise<{
         __kind__: "Ok";

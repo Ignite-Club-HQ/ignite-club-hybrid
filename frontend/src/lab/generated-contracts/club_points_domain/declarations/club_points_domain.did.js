@@ -194,6 +194,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_child_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_child_points_batch' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_club_points_settings' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubPointsSettings), 'Err' : IDL.Text })],
@@ -217,6 +237,16 @@ export const idlFactory = ({ IDL }) => {
     'get_user_points' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Int32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_user_points_all_clubs' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int32)),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'grant_role' : IDL.Func(

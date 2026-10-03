@@ -230,6 +230,20 @@ export interface club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_child_points_all_clubs(child_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_child_points_batch(club_id: string, child_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_club_points_settings(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings | null;
@@ -254,6 +268,13 @@ export interface club_points_domainInterface {
     get_user_points(club_id: string, user_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_user_points_all_clubs(user_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
     } | {
         __kind__: "Err";
         Err: string;
@@ -449,6 +470,26 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.get_child_points(arg0, arg1);
         return from_candid_variant_n26(result);
     }
+    async get_child_points_all_clubs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_child_points_all_clubs(arg0);
+        return from_candid_variant_n27(result);
+    }
+    async get_child_points_batch(arg0: string, arg1: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_child_points_batch(arg0, arg1);
+        return from_candid_variant_n27(result);
+    }
     async get_club_points_settings(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings | null;
@@ -457,7 +498,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_club_points_settings(arg0);
-        return from_candid_variant_n27(result);
+        return from_candid_variant_n28(result);
     }
     async get_engagement_streak(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -467,7 +508,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.get_engagement_streak(arg0, arg1);
-        return from_candid_variant_n31(result);
+        return from_candid_variant_n32(result);
     }
     async get_leaderboard(arg0: string, arg1: Variant_User_Child, arg2: string, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -476,8 +517,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.get_leaderboard(arg0, to_candid_variant_n32(arg1), arg2, arg3);
-        return from_candid_variant_n33(result);
+        const result = await this.actor.get_leaderboard(arg0, to_candid_variant_n33(arg1), arg2, arg3);
+        return from_candid_variant_n34(result);
     }
     async get_user_points(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -488,6 +529,16 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.get_user_points(arg0, arg1);
         return from_candid_variant_n26(result);
+    }
+    async get_user_points_all_clubs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<[string, number]>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_user_points_all_clubs(arg0);
+        return from_candid_variant_n27(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -517,7 +568,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_variant_n34(result);
+        return from_candid_variant_n35(result);
     }
     async list_points_history(arg0: string, arg1: Subject | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -526,8 +577,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_points_history(arg0, to_candid_opt_n35(arg1), arg2, arg3);
-        return from_candid_variant_n36(result);
+        const result = await this.actor.list_points_history(arg0, to_candid_opt_n36(arg1), arg2, arg3);
+        return from_candid_variant_n37(result);
     }
     async list_redemptions(arg0: string, arg1: Subject | null): Promise<{
         __kind__: "Ok";
@@ -536,8 +587,8 @@ export class Club_points_domain implements club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_redemptions(arg0, to_candid_opt_n35(arg1));
-        return from_candid_variant_n39(result);
+        const result = await this.actor.list_redemptions(arg0, to_candid_opt_n36(arg1));
+        return from_candid_variant_n40(result);
     }
     async list_rewards(arg0: string, arg1: string | null, arg2: boolean): Promise<{
         __kind__: "Ok";
@@ -547,7 +598,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_rewards(arg0, to_candid_opt_n10(arg1), arg2);
-        return from_candid_variant_n40(result);
+        return from_candid_variant_n41(result);
     }
     async redeem_reward(arg0: string, arg1: Subject, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -577,7 +628,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
-        return from_candid_variant_n41(result);
+        return from_candid_variant_n42(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -600,14 +651,14 @@ export class Club_points_domain implements club_points_domainInterface {
         return from_candid_variant_n15(result);
     }
 }
-function from_candid_ClubPointsSettings_n29(value: _ClubPointsSettings): ClubPointsSettings {
-    return from_candid_record_n30(value);
+function from_candid_ClubPointsSettings_n30(value: _ClubPointsSettings): ClubPointsSettings {
+    return from_candid_record_n31(value);
 }
 function from_candid_ClubReward_n16(value: _ClubReward): ClubReward {
     return from_candid_record_n17(value);
 }
-function from_candid_HistoryPage_n37(value: _HistoryPage): HistoryPage {
-    return from_candid_record_n38(value);
+function from_candid_HistoryPage_n38(value: _HistoryPage): HistoryPage {
+    return from_candid_record_n39(value);
 }
 function from_candid_PointsHistoryEntry_n13(value: _PointsHistoryEntry): PointsHistoryEntry {
     return from_candid_record_n14(value);
@@ -618,8 +669,8 @@ function from_candid_RewardRedemption_n3(value: _RewardRedemption): RewardRedemp
 function from_candid_RoleGrant_n23(value: _RoleGrant): RoleGrant {
     return from_candid_record_n24(value);
 }
-function from_candid_opt_n28(value: [] | [_ClubPointsSettings]): ClubPointsSettings | null {
-    return value.length === 0 ? null : from_candid_ClubPointsSettings_n29(value[0]);
+function from_candid_opt_n29(value: [] | [_ClubPointsSettings]): ClubPointsSettings | null {
+    return value.length === 0 ? null : from_candid_ClubPointsSettings_n30(value[0]);
 }
 function from_candid_opt_n5(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
@@ -774,7 +825,7 @@ function from_candid_record_n24(value: {
         club_id: value.club_id
     };
 }
-function from_candid_record_n30(value: {
+function from_candid_record_n31(value: {
     updated_at_ms: bigint;
     display_name: [] | [string];
     disabled: boolean;
@@ -792,7 +843,7 @@ function from_candid_record_n30(value: {
         club_id: value.club_id
     };
 }
-function from_candid_record_n38(value: {
+function from_candid_record_n39(value: {
     total: bigint;
     items: Array<_PointsHistoryEntry>;
 }): {
@@ -981,6 +1032,25 @@ function from_candid_variant_n26(value: {
     } : value;
 }
 function from_candid_variant_n27(value: {
+    Ok: Array<[string, number]>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<[string, number]>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n28(value: {
     Ok: [] | [_ClubPointsSettings];
 } | {
     Err: string;
@@ -993,13 +1063,13 @@ function from_candid_variant_n27(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_opt_n28(value.Ok)
+        Ok: from_candid_opt_n29(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n31(value: {
+function from_candid_variant_n32(value: {
     Ok: number;
 } | {
     Err: string;
@@ -1018,7 +1088,7 @@ function from_candid_variant_n31(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n33(value: {
+function from_candid_variant_n34(value: {
     Ok: Array<_LeaderboardEntry>;
 } | {
     Err: string;
@@ -1037,7 +1107,7 @@ function from_candid_variant_n33(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n35(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -1056,7 +1126,7 @@ function from_candid_variant_n34(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n37(value: {
     Ok: _HistoryPage;
 } | {
     Err: string;
@@ -1069,13 +1139,13 @@ function from_candid_variant_n36(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_HistoryPage_n37(value.Ok)
+        Ok: from_candid_HistoryPage_n38(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n39(value: {
+function from_candid_variant_n40(value: {
     Ok: Array<_RewardRedemption>;
 } | {
     Err: string;
@@ -1094,7 +1164,7 @@ function from_candid_variant_n39(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n40(value: {
+function from_candid_variant_n41(value: {
     Ok: Array<_ClubReward>;
 } | {
     Err: string;
@@ -1113,7 +1183,7 @@ function from_candid_variant_n40(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n41(value: {
+function from_candid_variant_n42(value: {
     Ok: _ClubPointsSettings;
 } | {
     Err: string;
@@ -1126,7 +1196,7 @@ function from_candid_variant_n41(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_ClubPointsSettings_n29(value.Ok)
+        Ok: from_candid_ClubPointsSettings_n30(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1153,10 +1223,10 @@ function to_candid_opt_n10(value: string | null): [] | [string] {
 function to_candid_opt_n11(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n35(value: Subject | null): [] | [_Subject] {
+function to_candid_opt_n36(value: Subject | null): [] | [_Subject] {
     return value === null ? candid_none() : candid_some(to_candid_Subject_n8(value));
 }
-function to_candid_variant_n32(value: Variant_User_Child): {
+function to_candid_variant_n33(value: Variant_User_Child): {
     User: null;
 } | {
     Child: null;

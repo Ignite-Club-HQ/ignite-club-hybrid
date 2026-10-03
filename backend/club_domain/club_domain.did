@@ -625,6 +625,7 @@ service : {
                                               Err: text;
                                               Ok: nat64;
                                             });
+  get_app_config: (key: text) -> (opt text) query;
   get_club_branding: (club_id: text) ->
    (variant {
       Err: text;
@@ -991,6 +992,10 @@ service : {
                               Err: text;
                               Ok: nat16;
                             });
+  set_app_config: (key: text, value: text) -> (variant {
+                                                 Err: text;
+                                                 Ok;
+                                               });
   set_club_header_toggles: (club_id: text, header_logo_enabled: bool,
    header_club_name_enabled: bool) -> (variant {
                                          Err: text;

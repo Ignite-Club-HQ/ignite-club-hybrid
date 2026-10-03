@@ -3,6 +3,10 @@ import { noteChannelRemoved, noteChannelSubscribed } from "@/lib/chatPerfDiagnos
 import { registerChannel, type RealtimeChannel, type Scope } from "@/lib/realtimeChannelRegistry";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import {
+  CHAT_POLL_INTERVAL_HIDDEN_MS,
+  CHAT_POLL_INTERVAL_VISIBLE_MS,
+} from "@/hooks/useClubRealtimeMode";
 
 interface ChatRealtimeChannelLifecycleOptions {
   channel: RealtimeChannel;
@@ -36,11 +40,41 @@ export function startChatRealtimeChannel({
   // broadcast and club-admin chats still refresh on canister backends.
   if (isFeatureRoutedToIcp("messaging")) {
     if (!queryClient || !cacheKeys || cacheKeys.length === 0) return () => {};
-    const poll = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    const invalidateAll = () => {
       for (const key of cacheKeys) queryClient.invalidateQueries({ queryKey: key });
-    }, 30000);
-    return () => clearInterval(poll);
+    };
+    const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
+    let scheduledInterval = isVisible() ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS;
+    let pollId = setInterval(() => {
+      if (!isVisible()) return;
+      invalidateAll();
+    }, scheduledInterval);
+
+    const handleVisibilityChange = () => {
+      const nextInterval = isVisible() ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS;
+      if (isVisible()) {
+        // Immediate catch-up refetch on visibility regain.
+        invalidateAll();
+      }
+      if (nextInterval !== scheduledInterval) {
+        scheduledInterval = nextInterval;
+        clearInterval(pollId);
+        pollId = setInterval(() => {
+          if (!isVisible()) return;
+          invalidateAll();
+        }, scheduledInterval);
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    return () => {
+      clearInterval(pollId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
   }
   channel.subscribe();
   noteChannelSubscribed(channelKey);

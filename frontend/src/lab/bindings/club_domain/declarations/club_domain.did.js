@@ -588,6 +588,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
+    'get_app_config' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'get_club_branding' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
@@ -1008,6 +1009,11 @@ export const idlFactory = ({ IDL }) => {
     'send_fee_reminders' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_app_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_header_toggles' : IDL.Func(
