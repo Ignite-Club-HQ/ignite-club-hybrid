@@ -28,9 +28,6 @@ export function ClubThemeToggle() {
     queryKey: ["all-user-clubs-for-theme-v2", user?.id],
     placeholderData: keepPreviousData,
     staleTime: 60_000,
-    // Currently dead code (imported by AppHeader but never rendered); guarded
-    // anyway so re-enabling it can never fire Supabase reads for II users.
-    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     queryFn: async () => {
       if (!user?.id) return [];
 
@@ -141,7 +138,9 @@ export function ClubThemeToggle() {
       return guardClubListResult(`all-user-clubs:${user.id}`, Array.from(dedupedClubs.values()));
     },
     retry: 3,
-    enabled: !!user?.id,
+    // Currently dead code (imported by AppHeader but never rendered); guarded
+    // anyway so re-enabling it can never fire Supabase reads for II users.
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
   });
 
   // Show non-selectable clubs with appropriate messaging
