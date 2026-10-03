@@ -1,5 +1,5 @@
 import { Actor, HttpAgent, SignIdentity } from "@dfinity/agent";
-import type { Identity as DfinityIdentity, PublicKey } from "@dfinity/agent";
+import type { Identity as DfinityIdentity, PublicKey, Signature } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { IcWebSocket, createWsConfig } from "ic-websocket-js";
 import type { Identity } from "@icp-sdk/core/agent";
@@ -62,20 +62,28 @@ const wsIdlFactory = ({ IDL }: { IDL: any }) => {
  * transforms are delegated straight through, so II delegations keep working.
  */
 class BridgedSignIdentity extends SignIdentity {
-  constructor(private readonly inner: Identity) {
+  // The app's Identity interface only exposes getPrincipal/transformRequest;
+  // II sessions always carry a signing identity, so the extra members are
+  // present at runtime and accessed through this structural view.
+  private readonly signer: Identity & {
+    getPublicKey(): unknown;
+    sign(blob: ArrayBuffer): Promise<unknown>;
+  };
+  constructor(inner: Identity) {
     super();
+    this.signer = inner as BridgedSignIdentity["signer"];
   }
   getPublicKey(): PublicKey {
-    return this.inner.getPublicKey() as unknown as PublicKey;
+    return this.signer.getPublicKey() as PublicKey;
   }
   getPrincipal(): Principal {
-    return Principal.fromText(this.inner.getPrincipal().toText());
+    return Principal.fromText(this.signer.getPrincipal().toText());
   }
-  sign(blob: ArrayBuffer): Promise<Uint8Array> {
-    return this.inner.sign(blob) as unknown as Promise<Uint8Array>;
+  sign(blob: ArrayBuffer): Promise<Signature> {
+    return this.signer.sign(blob) as unknown as Promise<Signature>;
   }
   transformRequest(request: unknown): Promise<unknown> {
-    return (this.inner as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
+    return (this.signer as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
   }
 }
 
@@ -173,16 +181,15 @@ async function connect(): Promise<void> {
     // never used for calls. The client builds its own agent from networkUrl.
     const agent = HttpAgent.createSync({ host: target.host, identity: bridged });
     const actor = Actor.createActor(wsIdlFactory, { agent, canisterId });
-    const ws = new IcWebSocket(
-      gatewayUrl,
-      undefined,
-      createWsConfig({
-        canisterId,
-        canisterActor: actor,
-        identity: bridged,
-        networkUrl: target.host,
-      }),
-    );
+    // The @dfinity/* actor/identity types differ from the app's @icp-sdk/*
+    // copies only at the type level; they are wire-compatible at runtime.
+    const wsConfig = {
+      canisterId,
+      canisterActor: actor,
+      identity: bridged,
+      networkUrl: target.host,
+    } as unknown as Parameters<typeof createWsConfig>[0];
+    const ws = new IcWebSocket(gatewayUrl, undefined, createWsConfig(wsConfig));
     socket = ws;
     ws.onopen = () => {
       if (socket !== ws) return;
