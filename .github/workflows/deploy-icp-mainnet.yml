@@ -140,6 +140,46 @@ jobs:
           grep -rl "$SENTINEL" backend deploy/mainnet scripts \
             | xargs -r sed -i "s|$SENTINEL|$GOVERNOR|g"
 
+      - name: Verify cycles are ready for deploy
+        run: |
+          set -uo pipefail
+          # Outside the checkout — see "Show funding address and balances" above.
+          mkdir -p "$RUNNER_TEMP/icp-no-project" && cd "$RUNNER_TEMP/icp-no-project"
+          CYC_RAW="$(icp cycles balance -n ic 2>/dev/null || true)"
+          echo "Cycles balance: $CYC_RAW"
+          CYC_NUM="$(echo "$CYC_RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || echo 0)"
+          # If cycles are zero but ICP is present, convert now — covers funding
+          # that landed while this run was already in progress.
+          if [ "$(awk -v c="${CYC_NUM:-0}" 'BEGIN{print (c<=0)?1:0}')" = "1" ]; then
+            RAW="$(icp token balance -n ic 2>/dev/null || true)"
+            AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
+            MINT="$(awk -v b="${AMT:-0}" 'BEGIN{ m = b - 0.0001; if (m <= 0) m = 0; printf "%.8f", m }')"
+            if [ "$MINT" != "0.00000000" ]; then
+              echo "==> Found $AMT ICP that arrived after the first conversion pass — minting now"
+              icp cycles mint --icp "$MINT" -n ic
+              CYC_RAW="$(icp cycles balance -n ic 2>/dev/null || true)"
+              echo "Cycles balance now: $CYC_RAW"
+              CYC_NUM="$(echo "$CYC_RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || echo 0)"
+            fi
+          fi
+          if [ "$(awk -v c="${CYC_NUM:-0}" 'BEGIN{print (c<=0)?1:0}')" = "1" ]; then
+            echo "::error::No cycles available to pay for canister creation."
+            echo ""
+            echo "Deployer principal:    $(icp identity principal)"
+            echo "Its account address:   $(icp identity account-id)"
+            echo "Its ICP balance:       $(icp token balance -n ic || true)"
+            echo ""
+            echo "Your ICP must sit at THIS account address. If you funded a"
+            echo "different address, the DEPLOYER_PEM secret is not the key that"
+            echo "owns that address — update it with the 'deployer-key' artifact"
+            echo "from the run that printed the address you funded (Artifacts"
+            echo "section at the bottom of that run page)."
+            exit 1
+          fi
+          echo "==> Cycles ready. Deploy needs ~18T total; if it stops partway for"
+          echo "==> funds, top up this identity's address and run the workflow again —"
+          echo "==> already-created canisters are kept, nothing is lost."
+
       - name: Deploy + wire all 18 canisters
         run: bash scripts/deploy-mainnet.sh
 
