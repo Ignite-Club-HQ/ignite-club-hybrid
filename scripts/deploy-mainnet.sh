@@ -12,7 +12,9 @@
 # Usage:  bash scripts/deploy-mainnet.sh
 set -euo pipefail
 
-GOVERNOR="gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
+# Default governor; the GitHub workflow overrides this with the deployer
+# identity's actual principal (and seds the sentinel in the canister configs).
+GOVERNOR="${GOVERNOR:-gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae}"
 PROJECT_DIR="$(cd "$(dirname "$0")/../deploy/mainnet" && pwd)"
 IDS_JSON="$PROJECT_DIR/.icp/data/mappings/ic.ids.json"
 
