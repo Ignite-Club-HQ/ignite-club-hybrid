@@ -1768,8 +1768,8 @@ export default function HomePage() {
   // Dedicated mutation for "Request additional access" buttons on a team the
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
-      if (resolveAuthBackend() === "icp") return;
     mutationFn: async (role: TeamRole) => {
+      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
       if (userRoles?.some(r => r.team_id === selectedTeam && r.role === role)) {

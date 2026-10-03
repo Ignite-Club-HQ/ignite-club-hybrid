@@ -49,7 +49,7 @@ export function EventDetailHeader({
 }: EventDetailHeaderProps) {
   const eventDateStr = event.event_date?.split("T")[0] || event.event_date;
   const isUpcoming =
-    new Date(eventDateStr + "T" + (event.end_time || event.start_time || "23:59") >= new Date();
+    new Date(eventDateStr + "T" + (event.end_time || event.start_time || "23:59")) >= new Date();
 
   return (
     <div className="flex items-center gap-2">
