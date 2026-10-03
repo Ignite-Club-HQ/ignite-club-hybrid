@@ -40,7 +40,8 @@ import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps } from "@/live/features/events";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 import { buildPersonalRsvpLine } from "@/lib/personalRsvpLine";
