@@ -81,6 +81,11 @@ persistent actor MediaBlobStore {
   var blobs : [BlobRecord];
   var pending_uploads : [PendingUpload];
   var next_upload_seq : Nat64;
+  // Principal of the club_domain canister used to verify club-staff delete
+  // rights on clubs/<clubId>/ paths; set post-install via
+  // set_club_domain_canister. While unset, only owner/governor may delete
+  // (fail closed).
+  var club_domain_canister : ?Principal;
 
   // ==================== Helpers ====================
 
@@ -234,13 +239,51 @@ persistent actor MediaBlobStore {
     }
   };
 
+  // Club-domain pointer is governor-only; while unset, club-staff deletes
+  // never authorize (fail closed).
+  public shared ({ caller }) func set_club_domain_canister(canister_id : Principal) : async Result {
+    auth(caller);
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    club_domain_canister := ?canister_id;
+    #Ok
+  };
+
+  // Extracts the club id from a clubs/<clubId>/... path, if present.
+  func clubIdFromPath(path : Text) : ?Text {
+    if (not path.startsWith(#text "clubs/")) return null;
+    let rest = switch (Text.stripStart(path, #text "clubs/")) {
+      case (?stripped) { stripped };
+      case null { return null };
+    };
+    switch (Text.split(rest, #char '/').next()) {
+      case (?clubId) { if (clubId == "") null else ?clubId };
+      case null { null };
+    }
+  };
+
+  // Club staff (verified live via club_domain) may delete blobs under their
+  // club's prefix so permanent vault/photo deletion does not leave orphaned
+  // ciphertext behind. Best-effort: verification failure means no grant.
+  func isClubStaffForPath(caller : Principal, path : Text) : async Bool {
+    let ?clubId = clubIdFromPath(path) else return false;
+    let ?cid = club_domain_canister else return false;
+    let clubDomain : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+    try {
+      await clubDomain.has_club_staff_role(caller, clubId)
+    } catch (_) {
+      false
+    }
+  };
+
   public shared ({ caller }) func delete_blob(path : Text) : async Result {
     auth(caller);
     switch (findBlob(path)) {
       case null { #Err("Unknown blob") };
       case (?record) {
         if (not record.owner.equal(caller) and not isGovernor<system>(caller)) {
-          return #Err("Owner or governor required");
+          if (not (await isClubStaffForPath(caller, path))) {
+            return #Err("Owner, club staff, or governor required");
+          };
         };
         blobs := blobs.filter(func(item) { item.path != path });
         #Ok

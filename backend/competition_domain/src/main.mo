@@ -8,8 +8,12 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var competitions : [Types.Competition];
   var entries : [Types.TeamEntry];
@@ -21,13 +25,6 @@ persistent actor {
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var eoiSubmissions : [Types.EoiSubmission];
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);

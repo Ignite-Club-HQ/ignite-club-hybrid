@@ -166,6 +166,21 @@ module {
   public type UserMessagingSettings = { user : Principal; hide_message_preview : Bool; ai_catchup_enabled : Bool };
 
   // --- Recent conversations rail ---
+  // Group summary for club/team chat-list browsing (list_groups_by_club /
+  // list_groups_by_team) — the canister counterpart of the Supabase
+  // `chat_groups` row read ChatGroupsList needs.
+  public type GroupSummary = {
+    conversation_id : Text;
+    name : Text;
+    kind : Text;
+    club_id : ?Text;
+    team_id : ?Text;
+    avatar : ?Text;
+    description : ?Text;
+    member_count : Nat32;
+    is_member : Bool;
+  };
+
   public type RecentConversation = { conversation_id : Text; kind : Text; last_message_sequence : Nat64; last_message_at_ms : ?Nat64 };
   public type ClubUnreadSummary = { club_id : Text; count : Nat64 };
 
