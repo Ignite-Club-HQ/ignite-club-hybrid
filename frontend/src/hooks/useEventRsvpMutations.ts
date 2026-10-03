@@ -268,6 +268,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   const saveRsvpNoteMutation = useMutation({
     mutationFn: async ({ childId, note }: { childId?: string; note: string | null }) => {
       if (resolveAuthBackend() === "icp") return;
+      if (resolveAuthBackend() === "icp") return;
       const target = childId
         ? childRsvps.find((r) => r.child_id === childId)
         : myRsvp;
@@ -488,6 +489,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   // Toggle payment status mutation
   const togglePaymentMutation = useMutation({
     mutationFn: async ({ userId, isPaid }: { userId: string; isPaid: boolean }) => {
+      if (resolveAuthBackend() === "icp") return;
       if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) {
         queryClient.setQueryData(eventKeys.payments(id), (current: unknown) => {

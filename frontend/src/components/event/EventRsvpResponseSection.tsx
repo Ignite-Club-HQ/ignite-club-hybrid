@@ -182,8 +182,7 @@ export function EventRsvpResponseSection({
                     </Button>
                   ))}
                 </div>
-                {childRsvp && (
-                {resolveAuthBackend() !== "icp" && (
+                {childRsvp && resolveAuthBackend() !== "icp" && (
                   <button
                     type="button"
                     onClick={() => setNoteTarget({ kind: "child", childId: child.id, subjectName: child.name })}
@@ -258,8 +257,7 @@ export function EventRsvpResponseSection({
           {String(myRsvp.notes ?? "").startsWith("Present") ? "Mark absent" : "Mark present"}
         </Button>
       )}
-      {resolveAuthBackend() !== "icp" && myRsvp && (
-      {myRsvp && (
+      {myRsvp && resolveAuthBackend() !== "icp" && (
         <button
           type="button"
           onClick={() => setNoteTarget({ kind: "self", subjectName: "You" })}

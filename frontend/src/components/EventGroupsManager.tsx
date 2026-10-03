@@ -1505,6 +1505,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
 
       {/* Match Duties Dialog */}
       <Suspense fallback={null}>
+      {resolveAuthBackend() !== "icp" && (
       <MatchDutiesDialog
         open={!!activeDutiesGroup}
         onOpenChange={(open) => {
@@ -1520,6 +1521,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
         miniLeagueId={miniLeagueId}
         initialDutyId={quickAssignDutyId}
       />
+      )}
       </Suspense>
 
       {/* Pitch Board Portal */}

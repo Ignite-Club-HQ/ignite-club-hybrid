@@ -78,7 +78,6 @@ export function EventDetailHeader({
                   Edit {eventTypeLabel}
                 </DropdownMenuItem>
                 {resolveAuthBackend() !== "icp" && isUpcoming && (canSendReminders ? (
-                {isUpcoming && (canSendReminders ? (
                   <DropdownMenuItem onClick={onSendReminders}>
                     <Bell className="h-4 w-4 mr-2 text-primary" />
                     Send Reminders
