@@ -323,15 +323,11 @@ export function useMessageReads(
   useEffect(() => {
     if (!contextId) return;
 
-    // Messaging is ICP-routed: no realtime channel to subscribe to. Poll the
-    // visible window's read receipts instead (visibility-gated, ~30s).
+    // Messaging is ICP-routed: no realtime channel to subscribe to, and
+    // per-message reader lists have no canister shape yet (NEEDS-CANISTER),
+    // so there is nothing to poll — reconcile no-ops under ICP above.
     if (isFeatureRoutedToIcp("messaging")) {
-      reconcileRef.current();
-      const poll = setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        reconcileRef.current();
-      }, 30_000);
-      return () => clearInterval(poll);
+      return;
     }
 
     const scopeKey = messageType === "broadcast" ? "broadcast" : contextId;
