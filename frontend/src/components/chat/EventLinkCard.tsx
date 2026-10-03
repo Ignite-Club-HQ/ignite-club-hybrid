@@ -6,6 +6,9 @@ import { format, parseISO } from "date-fns";
 import { getEventTypeLabel } from "@/lib/eventTypeLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { shouldAppendOpponent } from "@/lib/eventTitle";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveEvents } from "@/live/features/events";
 import { memo, useCallback } from "react";
 
 interface EventLinkCardProps {

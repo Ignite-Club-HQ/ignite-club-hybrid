@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveVaultFolder } from "@/live/features/vault";
+import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { toast } from "sonner";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 
