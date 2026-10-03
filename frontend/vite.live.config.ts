@@ -5,6 +5,8 @@ import { visualizer } from "rollup-plugin-visualizer";
 import giphySearchHandler from "./netlify/functions/giphy-search.mjs";
 // @ts-expect-error plain-JS Netlify function handlers have no type declarations
 import fetchLinkPreviewHandler from "./netlify/functions/fetch-link-preview.mjs";
+// @ts-expect-error plain-JS Netlify function handlers have no type declarations
+import registerClubBackendHandler from "./netlify/functions/register-club-backend.mjs";
 
 if (process.env.IGNITE_LIVE_BUILD !== "1") {
   throw new Error("Live builds must use the guarded build:live script");
@@ -59,6 +61,7 @@ export default defineConfig({
         const routes: Record<string, (req: Request) => Promise<Response>> = {
           "/api/giphy-search": giphySearchHandler,
           "/api/fetch-link-preview": fetchLinkPreviewHandler,
+          "/api/register-club-backend": registerClubBackendHandler,
         };
         server.middlewares.use(async (req, res, next) => {
           const path = (req.url || "/").split("?")[0];
