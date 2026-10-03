@@ -14,6 +14,7 @@
  * push events for the session.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 let cachedEnabled: boolean = true; // safe default: perf on
 let initialized = false;
@@ -40,6 +41,12 @@ async function refresh(): Promise<void> {
 export function initNotificationPrefetchFlag(): void {
   if (initialized) return;
   initialized = true;
+  // Global app_settings read is accepted for both backends; the realtime
+  // channel is Supabase-only, so II users keep the one-shot fetch only.
+  if (resolveAuthBackend() === "icp") {
+    void refresh();
+    return;
+  }
   void refresh();
   try {
     supabase

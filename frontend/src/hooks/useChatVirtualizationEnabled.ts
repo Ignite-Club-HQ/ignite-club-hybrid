@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const QUERY_KEY = ["app-setting", "chat_virtualization_enabled"] as const;
 
@@ -39,6 +40,8 @@ export function useChatVirtualizationEnabled(): boolean {
   // the 5-minute staleTime. Single shared channel; the postgres_changes filter
   // ensures we only react to the row we care about.
   useEffect(() => {
+    // Realtime is Supabase-only; II users rely on the query's staleTime.
+    if (resolveAuthBackend() === "icp") return;
     let channel: RealtimeChannel | undefined;
 
     try {

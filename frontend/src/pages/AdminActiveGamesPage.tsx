@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface ActiveGameRow {
   id: string;
@@ -100,6 +101,8 @@ function SupabaseAdminActiveGamesPage() {
 
   const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
     queryKey: ["is-app-admin", user?.id],
+    // icp-guard: allow app-admin active-games tooling stays Supabase-only by design
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     queryFn: async () => {
       if (!user?.id) return false;
       const { data } = await supabase
@@ -110,7 +113,6 @@ function SupabaseAdminActiveGamesPage() {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
   });
 
   const { data: activeRows, isLoading: activeLoading, refetch: refetchActive } = useQuery({

@@ -183,6 +183,7 @@ export function useNativePush(userId: string | undefined, options: UseNativePush
 
 
   // Save refreshed token to database
+  // icp-guard: allow push delivery stays Supabase-only by design
   const handleTokenRefresh = useCallback(async (token: string) => {
     if (!userId) return;
     

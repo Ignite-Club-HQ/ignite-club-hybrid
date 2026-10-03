@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { subscribeToPushNotifications, resetPushNotifications } from "@/lib/pushNotifications";
 import {
   logPush,
@@ -47,6 +48,9 @@ export function usePushSubscriptionHealth(userId: string | undefined) {
    */
   const validateSubscription = useCallback(async (force = false): Promise<boolean> => {
     if (!userId || isValidating.current) return false;
+    // Push delivery stays Supabase-only; II users have no Supabase session, so
+    // never fire push_subscriptions reads/writes keyed on a principal.
+    if (resolveAuthBackend() === "icp") return false;
 
     // Skip if recently validated (unless forced)
     if (!force && !needsRevalidation()) {
@@ -134,6 +138,7 @@ export function usePushSubscriptionHealth(userId: string | undefined) {
 
   useEffect(() => {
     if (!userId || !('serviceWorker' in navigator)) return;
+    if (resolveAuthBackend() === "icp") return;
 
     const platform = getPlatformInfo();
     logPush('info', 'Push health hook initialized', {

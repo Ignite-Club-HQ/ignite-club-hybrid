@@ -49,6 +49,12 @@ export function useAutoSubNotify(
   const notify = useCallback(
     async (args: Omit<AutoSubNotifyArgs, "teamId" | "teamName">) => {
       if (!teamId) return;
+      // Fail closed for Internet Identity users: recipient discovery and push
+      // fan-out below are Supabase-only. (This hook currently has no
+      // production caller — only its test — but the guard keeps it safe if
+      // it is ever wired up.)
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") return;
       const dedupeKey = `${args.playerOutName}|${args.playerInName}|${args.position}|${args.periodLabel ?? ""}|${Math.floor(Date.now() / 60000)}`;
 
       // Distinguish "currently processing" from "already completed" so a
@@ -153,6 +159,9 @@ export function useAutoSubNotify(
         // Fire-and-forget per recipient; we do NOT await the whole batch
         // because pitch boards run on a 1Hz tick and any latency here is
         // user-perceivable.
+        // icp-guard: allow push delivery stays Supabase-only by design; the
+        // resolveAuthBackend fail-closed guard at the top of notify() runs
+        // before any Supabase call in this file.
         for (const userId of userIds) {
           supabase.functions
             .invoke("send-push-notification", {

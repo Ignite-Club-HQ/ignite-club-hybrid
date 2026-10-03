@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const QUERY_KEY = ["app-setting", "chat_recap_enabled"] as const;
 
@@ -34,6 +35,8 @@ export function useChatRecapGloballyEnabled(): boolean {
   });
 
   useEffect(() => {
+    // Realtime is Supabase-only; II users rely on the query's staleTime.
+    if (resolveAuthBackend() === "icp") return;
     // Unique channel name per hook instance: multiple components mount this
     // hook, and reusing one channel name makes the second `.on()` land after
     // the shared channel already subscribed, which throws.

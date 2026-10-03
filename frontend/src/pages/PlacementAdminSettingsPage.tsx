@@ -51,6 +51,7 @@ type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: str
 type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
 const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
+  // icp-guard: allow this page IS the backend-routing console — its Supabase app_settings reads/writes are the top config tier by design
   "supabase-region": "Supabase region",
   "icp-cloud-engine": "ICP Cloud Engine",
   "icp-mainnet": "ICP mainnet",
