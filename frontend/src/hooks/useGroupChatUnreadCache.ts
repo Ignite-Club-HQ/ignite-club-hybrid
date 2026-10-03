@@ -2,6 +2,11 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
+import {
+  CHAT_POLL_INTERVAL_HIDDEN_MS,
+  CHAT_POLL_INTERVAL_VISIBLE_MS,
+} from "@/hooks/useClubRealtimeMode";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { myLiveUnreadCounts } from "@/live/features/messaging";
@@ -30,6 +35,7 @@ type UnreadMap = Record<string, number>;
 export function useGroupChatUnreadCache(userId: string | null | undefined) {
   const queryClient = useQueryClient();
   const key = groupChatUnreadCacheKey(userId);
+  const isDocumentVisible = useIsDocumentVisible();
 
   const query = useQuery<UnreadMap>({
     queryKey: key,
@@ -37,7 +43,9 @@ export function useGroupChatUnreadCache(userId: string | null | undefined) {
     staleTime: 5 * 60 * 1000,
     initialData: {} as UnreadMap,
     initialDataUpdatedAt: 0,
-    refetchInterval: isFeatureRoutedToIcp("messaging") ? 30_000 : false,
+    refetchInterval: isFeatureRoutedToIcp("messaging")
+      ? (isDocumentVisible ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS)
+      : false,
     queryFn: async () => {
       return withFeatureBackend("messaging", {
         supabase: async () => {
