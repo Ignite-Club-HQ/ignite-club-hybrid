@@ -101,7 +101,12 @@ export function useDesktopNavAccess() {
       // The pitch board only exists for football/soccer in this build — never
       // surface it for other sports.
       const boardClubIds = new Set<string>();
-      if (clubIds.length > 0) {
+      // NEEDS-CANISTER: club sport has no canister field (club_domain
+      // ClubProfile/ClubSettings carry no sport), so the pitch-board sport
+      // check cannot resolve under ICP. boardClubIds stays empty and the
+      // board rail item stays hidden for Internet Identity users — no
+      // Supabase clubs read fires.
+      if (clubIds.length > 0 && !isFeatureRoutedToIcp("membership")) {
         const { data: clubs } = await supabase.from("clubs").select("id, sport").in("id", clubIds);
         (clubs || []).forEach((c) => {
           if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id as string);
@@ -174,6 +179,10 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
     enabled: enabled && teamIds.length > 0,
     staleTime: 60_000,
     queryFn: async (): Promise<string | null> => {
+      // Under ICP the board rail item is hidden (no canister club-sport
+      // field), so there is never a board target to resolve — fail closed
+      // rather than firing a Supabase events read.
+      if (isFeatureRoutedToIcp("events")) return null;
       const { data: events, error } = await supabase
         .from("events")
         .select("team_id, event_date")
