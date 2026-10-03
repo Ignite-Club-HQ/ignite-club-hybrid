@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentProps } from "react";
+import { Suspense, type ComponentProps } from "react";
 import { ChevronRight, FolderOpen } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ContactClubButton } from "@/components/ContactClubButton";
