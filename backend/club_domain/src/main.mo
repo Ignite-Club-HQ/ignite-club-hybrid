@@ -64,6 +64,13 @@ persistent actor {
   var notificationQueueCanister : ?Principal;
   var clubSubscriptions : [Types.ClubSubscription];
 
+  // Global app-wide config key/value store (app_settings parity for values
+  // that must be readable pre-auth, e.g. the backend routing config). Values
+  // are plain text (JSON for structured payloads), capped small; writes are
+  // governor-only, reads are public so an unauthenticated boot can fetch the
+  // routing config. Never store secrets here — state is replica-visible.
+  var appConfig : [(Text, Text)];
+
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
     if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
