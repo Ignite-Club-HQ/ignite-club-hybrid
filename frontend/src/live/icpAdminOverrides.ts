@@ -19,6 +19,8 @@ export const ICP_CANISTER_CONFIG_KEY = "icp_canister_config";
 
 export type IcpAdminOverrides = {
   canisterIds: Record<string, string>;
+  /** IC WebSocket gateway URL for chat realtime; empty/absent keeps polling. */
+  wsGatewayUrl?: string;
 };
 
 export function validateCanisterId(domainKey: string, canisterId: string): string {
@@ -45,8 +47,18 @@ export function parseIcpAdminOverrides(value: unknown): IcpAdminOverrides | null
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${ICP_CANISTER_CONFIG_KEY} must be a JSON object.`);
   }
+  const rawGateway = (value as Record<string, unknown>).wsGatewayUrl;
+  let wsGatewayUrl: string | undefined;
+  if (rawGateway !== null && rawGateway !== undefined) {
+    if (typeof rawGateway !== "string") {
+      throw new Error(`${ICP_CANISTER_CONFIG_KEY}.wsGatewayUrl must be a string.`);
+    }
+    wsGatewayUrl = rawGateway.trim() === "" ? undefined : rawGateway.trim();
+  }
   const raw = (value as Record<string, unknown>).canisterIds;
-  if (raw === null || raw === undefined) return null;
+  if (raw === null || raw === undefined) {
+    return wsGatewayUrl ? { canisterIds: {}, wsGatewayUrl } : null;
+  }
   if (typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error(`${ICP_CANISTER_CONFIG_KEY}.canisterIds must be a JSON object.`);
   }
@@ -58,17 +70,22 @@ export function parseIcpAdminOverrides(value: unknown): IcpAdminOverrides | null
     if (id.trim() === "") continue;
     canisterIds[key.trim()] = validateCanisterId(key, id);
   }
-  return Object.keys(canisterIds).length > 0 ? { canisterIds } : null;
+  if (Object.keys(canisterIds).length === 0 && !wsGatewayUrl) return null;
+  return wsGatewayUrl ? { canisterIds, wsGatewayUrl } : { canisterIds };
 }
 
 let activeOverrides: IcpAdminOverrides | null = null;
 
 export function applyIcpAdminOverrides(overrides: IcpAdminOverrides | null): void {
-  activeOverrides = overrides ? { canisterIds: { ...overrides.canisterIds } } : null;
+  activeOverrides = overrides
+    ? { canisterIds: { ...overrides.canisterIds }, ...(overrides.wsGatewayUrl ? { wsGatewayUrl: overrides.wsGatewayUrl } : {}) }
+    : null;
 }
 
 export function getIcpAdminOverrides(): IcpAdminOverrides | null {
-  return activeOverrides ? { canisterIds: { ...activeOverrides.canisterIds } } : null;
+  return activeOverrides
+    ? { canisterIds: { ...activeOverrides.canisterIds }, ...(activeOverrides.wsGatewayUrl ? { wsGatewayUrl: activeOverrides.wsGatewayUrl } : {}) }
+    : null;
 }
 
 /**
@@ -81,5 +98,6 @@ export function mergeIcpTargetWithAdminOverrides(target: IcpTargetConfig): IcpTa
   return {
     ...target,
     canisterIds: { ...target.canisterIds, ...overrides.canisterIds },
+    ...(overrides.wsGatewayUrl ? { wsGatewayUrl: overrides.wsGatewayUrl } : {}),
   };
 }
