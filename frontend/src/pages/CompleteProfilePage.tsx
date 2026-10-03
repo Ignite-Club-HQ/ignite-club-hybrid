@@ -522,9 +522,17 @@ function SupabaseCompleteProfilePage() {
       const welcomeMessage = await fetchWelcomeDmMessage();
       withFeatureBackend("messaging", {
         supabase: () =>
-          supabase.functions.invoke("send-welcome-dm", {
-            body: { userId: user.id, message: welcomeMessage }
-          }).then(({ error: welcomeError }) => {
+          // send_welcome_dm is a security-definer database function (replaces
+          // the old send-welcome-dm edge function); it verifies the caller is
+          // the recipient. The generated types file predates it, hence the
+          // narrow cast on the rpc name.
+          (supabase.rpc as (
+            fn: string,
+            args: Record<string, unknown>,
+          ) => Promise<{ error: { message: string } | null }>)(
+            "send_welcome_dm",
+            { p_user_id: user.id, p_message: welcomeMessage },
+          ).then(({ error: welcomeError }) => {
             if (welcomeError) {
               console.warn("[CompleteProfile] Failed to send welcome DM:", welcomeError);
             } else {
