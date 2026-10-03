@@ -75,6 +75,7 @@ export default defineConfig({
               method: req.method ?? "GET",
               headers: {
                 "content-type": req.headers["content-type"] ?? "application/json",
+                ...(req.headers.authorization ? { authorization: req.headers.authorization } : {}),
               },
               body: body.length > 0 ? body : undefined,
             });
