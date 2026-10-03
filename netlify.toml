@@ -28,6 +28,11 @@
   to = "/.netlify/functions/fetch-link-preview"
   status = 200
 
+[[redirects]]
+  from = "/api/register-club-backend"
+  to = "/.netlify/functions/register-club-backend"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]

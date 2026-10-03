@@ -30,6 +30,7 @@ import {
   resolveFeatureBackend,
 } from "@/live/featureBackend";
 import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
+import { diffClubBackendChanges, syncClubBackendChanges } from "@/live/websiteBackendSync";
 import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -297,6 +298,27 @@ export default function PlacementAdminSettingsPage() {
       queryClient.invalidateQueries();
       setRoutingTouched(false);
       toast({ title: "Backend routing saved", description: "The routing configuration is active for this session and all future sessions." });
+      // Tell the club website where each moved club's data now lives. The
+      // website keeps its own resolver; this is a best-effort notification
+      // and never blocks the routing save itself.
+      const changes = diffClubBackendChanges(savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG, config);
+      if (changes.length > 0) {
+        const canisterId = tryActiveIcpTarget()?.canisterIds["club_domain"] ?? null;
+        void syncClubBackendChanges(changes, canisterId).then(failures => {
+          if (failures.length > 0) {
+            toast({
+              title: "Website sync incomplete",
+              description: `${failures.length} club${failures.length === 1 ? "" : "s"} could not be registered with the website (${failures[0].error}). Save again to retry.`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Website notified",
+              description: `${changes.length} club${changes.length === 1 ? "" : "s"} registered with the club website backend.`,
+            });
+          }
+        });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Failed to save routing", description: error.message, variant: "destructive" });
