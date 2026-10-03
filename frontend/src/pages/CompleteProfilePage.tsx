@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
+import { fetchWelcomeDmMessage } from "@/lib/welcomeMessage";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { usePasskey, isPlatformAuthenticatorAvailable } from "@/hooks/usePasskey";
@@ -515,11 +516,14 @@ function SupabaseCompleteProfilePage() {
         root.style.colorScheme = 'light';
       }
 
-      // Send welcome DM from Ignite Support (fire and forget - don't block on this)
+      // Send welcome DM from Ignite Support (fire and forget - don't block on this).
+      // The message text is app-admin configurable via App Settings
+      // (app_settings.welcome_dm_message); falls back to the default.
+      const welcomeMessage = await fetchWelcomeDmMessage();
       withFeatureBackend("messaging", {
         supabase: () =>
           supabase.functions.invoke("send-welcome-dm", {
-            body: { userId: user.id }
+            body: { userId: user.id, message: welcomeMessage }
           }).then(({ error: welcomeError }) => {
             if (welcomeError) {
               console.warn("[CompleteProfile] Failed to send welcome DM:", welcomeError);
@@ -528,10 +532,7 @@ function SupabaseCompleteProfilePage() {
             }
           }),
         icp: (ctx) =>
-          sendLiveWelcomeMessage(
-            ctx,
-            "Welcome to Ignite! I'm here if you need a hand getting your club set up — just reply to this message any time.",
-          ).then(() => {
+          sendLiveWelcomeMessage(ctx, welcomeMessage).then(() => {
             console.log("[CompleteProfile] Welcome DM sent successfully");
           }),
       }).catch(err => {

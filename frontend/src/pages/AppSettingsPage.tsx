@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_WELCOME_DM_MESSAGE, WELCOME_DM_SETTING_KEY } from "@/lib/welcomeMessage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -175,6 +177,59 @@ function SupabaseAppSettingsPage() {
     setChunkInput(String(n));
     if (n === savedChunkSize) return;
     updateSettingMutation.mutate({ key: "chat_basic_chunk_size", value: n });
+  };
+
+  // Welcome DM text — app-admin configurable message sent from Ignite
+  // Support when a new member completes their profile.
+  const welcomeRow = settings?.find(s => s.key === WELCOME_DM_SETTING_KEY);
+  const savedWelcomeMessage = (() => {
+    const raw = welcomeRow?.value;
+    const text = typeof raw === "string" ? raw : raw == null ? "" : String(raw);
+    return text.trim().length > 0 ? text : DEFAULT_WELCOME_DM_MESSAGE;
+  })();
+  const [welcomeInput, setWelcomeInput] = useState<string>(savedWelcomeMessage);
+  useEffect(() => {
+    setWelcomeInput(savedWelcomeMessage);
+  }, [savedWelcomeMessage]);
+
+  const saveWelcomeMessageMutation = useMutation({
+    mutationFn: async (message: string) => {
+      // Update-or-insert: the settings row may not exist yet.
+      const { data: updated, error: updateError } = await supabase
+        .from("app_settings")
+        .update({ value: message as never })
+        .eq("key", WELCOME_DM_SETTING_KEY)
+        .select("id");
+      if (updateError) throw updateError;
+      if (!updated || updated.length === 0) {
+        const { error: insertError } = await supabase
+          .from("app_settings")
+          .insert({
+            key: WELCOME_DM_SETTING_KEY,
+            value: message as never,
+            description: "Welcome DM sent from Ignite Support when a new member completes their profile.",
+          } as never);
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["appSettings"] });
+      queryClient.invalidateQueries({ queryKey: ["app-setting", WELCOME_DM_SETTING_KEY] });
+      toast({ title: "Welcome message saved" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to save welcome message",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSaveWelcomeMessage = () => {
+    const trimmed = welcomeInput.trim();
+    if (trimmed.length === 0 || trimmed === savedWelcomeMessage) return;
+    saveWelcomeMessageMutation.mutate(trimmed);
   };
 
   if (isLoadingAuth || isLoadingSettings) {
@@ -497,6 +552,53 @@ function SupabaseAppSettingsPage() {
             })()}
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Welcome message
+            </CardTitle>
+            <CardDescription>
+              The direct message new members receive from Ignite Support right after they finish setting up their profile. Applies to both sign-in methods. Leave as-is to keep the default.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              id="welcome-message-input"
+              aria-label="Welcome message"
+              value={welcomeInput}
+              onChange={(e) => setWelcomeInput(e.target.value)}
+              rows={4}
+              maxLength={4000}
+              disabled={saveWelcomeMessageMutation.isPending}
+            />
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleSaveWelcomeMessage}
+                disabled={
+                  saveWelcomeMessageMutation.isPending ||
+                  welcomeInput.trim().length === 0 ||
+                  welcomeInput.trim() === savedWelcomeMessage
+                }
+              >
+                {saveWelcomeMessageMutation.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                )}
+                Save
+              </Button>
+              {welcomeInput.trim() !== DEFAULT_WELCOME_DM_MESSAGE && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setWelcomeInput(DEFAULT_WELCOME_DM_MESSAGE)}
+                  disabled={saveWelcomeMessageMutation.isPending}
+                >
+                  Reset to default
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <LegalReacceptanceAdminCard />
 
         <div className="text-center text-sm text-muted-foreground pt-4">
