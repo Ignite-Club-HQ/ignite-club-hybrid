@@ -2,21 +2,46 @@
 # Deploy with: scripts/deploy-mainnet.sh  (or manually: cd deploy/mainnet && icp deploy -e ic)
 # Canister IDs land in deploy/mainnet/.icp/data/mappings/ic.ids.json — commit that file.
 canisters:
-  - ../../backend/club_domain/canister.yaml
-  - ../../backend/club_points_domain/canister.yaml
-  - ../../backend/competition_domain/canister.yaml
-  - ../../backend/events_domain/canister.yaml
-  - ../../backend/identity_access/canister.yaml
-  - ../../backend/insights_domain/canister.yaml
-  - ../../backend/media_blob_store/canister.yaml
-  - ../../backend/media_metadata/canister.yaml
-  - ../../backend/messaging_domain/canister.yaml
-  - ../../backend/migration_coordinator/canister.yaml
-  - ../../backend/mini_league_domain/canister.yaml
-  - ../../backend/notification_queue/canister.yaml
-  - ../../backend/pii_access_control/canister.yaml
-  - ../../backend/placement_registry/canister.yaml
-  - ../../backend/secret_workload_identity/canister.yaml
-  - ../../backend/shard_router/canister.yaml
-  - ../../backend/timer_jobs/canister.yaml
-  - ../../backend/vault_domain/canister.yaml
+  - ../../backend/club_domain
+  - ../../backend/club_points_domain
+  - ../../backend/competition_domain
+  - ../../backend/events_domain
+  - ../../backend/identity_access
+  - ../../backend/insights_domain
+  - ../../backend/media_blob_store
+  - ../../backend/media_metadata
+  - ../../backend/messaging_domain
+  - ../../backend/migration_coordinator
+  - ../../backend/mini_league_domain
+  - ../../backend/notification_queue
+  - ../../backend/pii_access_control
+  - ../../backend/placement_registry
+  - ../../backend/secret_workload_identity
+  - ../../backend/shard_router
+  - ../../backend/timer_jobs
+  - ../../backend/vault_domain
+
+# The mainnet environment that `icp deploy -e ic` targets (the `ic` network is
+# built in; the environment must still be declared — see icp-cli docs).
+environments:
+  - name: ic
+    network: ic
+    canisters:
+      - club_domain
+      - club_points_domain
+      - competition_domain
+      - events_domain
+      - identity_access
+      - insights_domain
+      - media_blob_store
+      - media_metadata
+      - messaging_domain
+      - migration_coordinator
+      - mini_league_domain
+      - notification_queue
+      - pii_access_control
+      - placement_registry
+      - secret_workload_identity
+      - shard_router
+      - timer_jobs
+      - vault_domain

@@ -2,7 +2,7 @@
 # Ignite Club HQ — mainnet canister deploy + wiring.
 #
 # Prerequisites (one-time):
-#   1. bun add -g icp-sdk-icp-cli            (or: npm i -g icp-sdk-icp-cli)
+#   1. npm i -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops            (or: npm i -g @icp-sdk/icp-cli)
 #   2. Create/select an identity whose principal is the governor below:
 #        icp identity new ignite-governor
 #        icp identity principal             # must print GOVERNOR
@@ -21,7 +21,7 @@ IDS_JSON="$PROJECT_DIR/.icp/data/mappings/ic.ids.json"
 cd "$PROJECT_DIR"
 
 echo "==> Checking icp CLI"
-command -v icp >/dev/null || { echo "icp CLI not found. Install: bun add -g icp-sdk-icp-cli"; exit 1; }
+command -v icp >/dev/null || { echo "icp CLI not found. Install: npm i -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops"; exit 1; }
 
 echo "==> Checking identity"
 CURRENT="$(icp identity principal)"
@@ -34,7 +34,9 @@ if [ "$CURRENT" != "$GOVERNOR" ]; then
 fi
 
 echo "==> Deploying all 18 canisters to mainnet (this funds them from your cycles balance)"
-icp deploy -e ic
+# 1T cycles per canister (18T total) fits a ~8 ICP budget with headroom; top up later as needed.
+# -y skips interactive candid/confirmation prompts so this runs unattended in CI.
+icp deploy -e ic -y --cycles 1000000000000
 
 [ -f "$IDS_JSON" ] || { echo "ERROR: $IDS_JSON not found after deploy"; exit 1; }
 
