@@ -513,28 +513,57 @@ export default function RewardRedemptionCard() {
       const claimerName = claimerProfile?.display_name || "Someone";
 
       // Notify club admins about the claim
-      const { data: clubAdmins } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", redemption.club_id)
-        .eq("role", "club_admin");
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          const { listLiveRoleGrants } = await import("@/live/features/membership");
+          const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+          await withFeatureBackend("notifications", {
+            supabase: async () => {},
+            icp: async (ctx) => {
+              const grants = await listLiveRoleGrants(ctx, redemption.club_id);
+              const adminIds = Array.from(
+                new Set(
+                  grants
+                    .filter((g) => g.role === "club_admin")
+                    .map((g) => g.account_id)
+                    .filter((id) => id !== user!.id),
+                ),
+              );
+              if (adminIds.length === 0) return;
+              await fanOutLiveNotifications(ctx, {
+                userIds: adminIds,
+                clubId: redemption.club_id,
+                kind: "reward_claimed",
+                body: `${claimerName} marked their "${redemption.reward_name}" reward as claimed`,
+                idempotencyKeyPrefix: `reward-claimed-${redemption.id}`,
+                relatedId: redemption.id,
+              });
+            },
+          });
+        } catch (e) {
+          console.error("[RewardRedemptionCard] Failed to notify club admins of claim:", e);
+        }
+      } else {
+        const { data: clubAdmins } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("club_id", redemption.club_id)
+          .eq("role", "club_admin");
 
-      if (clubAdmins && clubAdmins.length > 0) {
-        const notifications = clubAdmins
-          .filter(admin => admin.user_id !== user!.id)
-          .map(admin => ({
-            user_id: admin.user_id,
-            type: "reward_claimed",
-            message: `${claimerName} marked their "${redemption.reward_name}" reward as claimed`,
-            related_id: redemption.id,
-            club_id: redemption.club_id,
-          }));
+        if (clubAdmins && clubAdmins.length > 0) {
+          const notifications = clubAdmins
+            .filter(admin => admin.user_id !== user!.id)
+            .map(admin => ({
+              user_id: admin.user_id,
+              type: "reward_claimed",
+              message: `${claimerName} marked their "${redemption.reward_name}" reward as claimed`,
+              related_id: redemption.id,
+              club_id: redemption.club_id,
+            }));
 
-        if (notifications.length > 0) {
-          const { resolveAuthBackend } = await import("@/live/authBackendMode");
-          if (resolveAuthBackend() === "icp") {
-            // NEEDS-CANISTER: Reward notifications stay Supabase-only
-          } else {
+          if (notifications.length > 0) {
             await supabase.from("notifications").insert(notifications);
           }
         }

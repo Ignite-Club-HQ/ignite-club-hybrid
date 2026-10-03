@@ -10,7 +10,7 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { createLivePendingInvite, bulkAddLiveTeamMembers } from "@/live/features/club";
+import { createLivePendingInvite, bulkAddLiveTeamMembers, listLivePendingInvitesByClub } from "@/live/features/club";
 
 type Args = {
   supabase: any;
@@ -122,10 +122,28 @@ export function useAddPendingTeamMemberMutation({
       }
     }
 
+    // Dedupe against existing pending invites for the same email+team — the
+    // ICP equivalent of the Supabase email dedupe. Account matching has no
+    // ICP equivalent by design: Internet Identity accounts have no email on
+    // file, so only the pending-invite ledger can be checked.
+    const inviteEmail = customEmail.trim().toLowerCase();
+    if (inviteEmail) {
+      const existing = await listLivePendingInvitesByClub(ctx, clubId);
+      const duplicate = existing.find(
+        (i) =>
+          i.status === "pending" &&
+          i.email.trim().toLowerCase() === inviteEmail &&
+          (i.team_id.length ? i.team_id[0] : null) === (teamId ?? null),
+      );
+      if (duplicate) {
+        throw new Error(`An invite for ${inviteEmail} is already pending for this team.`);
+      }
+    }
+
     const { invite } = await createLivePendingInvite(ctx, {
       kind: "team",
       clubId,
-      email: customEmail.trim().toLowerCase(),
+      email: inviteEmail,
       teamId,
       role: selectedRole,
     });

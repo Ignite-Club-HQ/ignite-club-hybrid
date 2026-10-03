@@ -349,3 +349,34 @@ export async function listLiveRedemptions(
   const a = await actor(ctx);
   return unwrapCandid(a.list_redemptions(clubId, candidOpt(subject)), "List redemptions");
 }
+
+/** Balances for a user across every club they can be read for. */
+export async function getLiveUserPointsAllClubs(
+  ctx: FeatureBackendContext,
+  userId: string,
+): Promise<Array<{ clubId: string; points: number }>> {
+  const a = await actor(ctx);
+  const rows = await unwrapCandid(a.get_user_points_all_clubs(userId), "Get user points (all clubs)");
+  return rows.map(([clubId, points]) => ({ clubId, points }));
+}
+
+/** Balances for a child across every club they can be read for. */
+export async function getLiveChildPointsAllClubs(
+  ctx: FeatureBackendContext,
+  childId: string,
+): Promise<Array<{ clubId: string; points: number }>> {
+  const a = await actor(ctx);
+  const rows = await unwrapCandid(a.get_child_points_all_clubs(childId), "Get child points (all clubs)");
+  return rows.map(([clubId, points]) => ({ clubId, points }));
+}
+
+/** Bulk balances for many children within a single club (max 500 ids per call). */
+export async function getLiveChildPointsBatch(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  childIds: string[],
+): Promise<Array<{ childId: string; points: number }>> {
+  const a = await actor(ctx);
+  const rows = await unwrapCandid(a.get_child_points_batch(clubId, childIds), "Get child points (batch)");
+  return rows.map(([childId, points]) => ({ childId, points }));
+}

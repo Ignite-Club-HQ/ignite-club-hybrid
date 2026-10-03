@@ -180,7 +180,8 @@ export function useForwardMessageMutation(currentUserId: string | undefined) {
           if (notificationRows.length > 0) {
             const { resolveAuthBackend } = await import("@/live/authBackendMode");
             if (resolveAuthBackend() === "icp") {
-              // NEEDS-CANISTER: Forward notifications stay Supabase-only
+              // Covered by the canister-side fanOutChatNotify on messaging_domain's
+              // forward path — no direct notification write needed here.
             } else {
               await supabase.from("notifications").insert(notificationRows);
             }

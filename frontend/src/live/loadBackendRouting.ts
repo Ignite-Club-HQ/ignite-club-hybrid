@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { readLiveAppConfig } from "./appConfig";
 import {
   BACKEND_ROUTING_CONFIG_KEY,
   applyBackendRoutingConfig,
@@ -30,7 +31,8 @@ import { getUserClubIds } from "./userClubs";
  */
 /**
  * Loads the routing config with explicit precedence:
- *   stored app_settings row > build-time env > localStorage cache > default.
+ *   stored app_settings row > build-time env > canister app_config >
+ *   localStorage cache > default.
  * The build-time and cache fallbacks exist so an ICP-routed deployment still
  * boots on ICP when Supabase is unreachable — previously this silently fell
  * back to Supabase-everywhere and the app could not even learn it should be
@@ -64,6 +66,22 @@ export async function loadBackendRoutingConfig(): Promise<void> {
     }
   } catch (error) {
     console.warn("[backend-routing] Build-time routing config is invalid; ignoring it.", error);
+  }
+  // Canister-hosted copy of the routing config (club_domain.get_app_config),
+  // read anonymously — lets an ICP-only deployment boot without Supabase and
+  // without a build-time env or a warm cache.
+  try {
+    const onChain = await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY);
+    if (onChain) {
+      const parsed = parseBackendRoutingConfig(onChain);
+      if (parsed) {
+        applyBackendRoutingConfig(parsed);
+        cacheBackendRoutingConfig(parsed);
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn("[backend-routing] Could not load routing config from the canister; trying cache.", error);
   }
   const cached = readCachedBackendRoutingConfig();
   if (cached) {

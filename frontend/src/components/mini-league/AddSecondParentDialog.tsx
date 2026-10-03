@@ -166,7 +166,19 @@ export function AddSecondParentDialog({
           const actorName = actor?.display_name || "An admin";
           const { resolveAuthBackend } = await import("@/live/authBackendMode");
           if (resolveAuthBackend() === "icp") {
-            // NEEDS-CANISTER: Guardian notifications stay Supabase-only
+            try {
+              const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+              await sendGamificationNotification({
+                userId: selectedUser.id,
+                clubId,
+                kind: "guardian_added",
+                message: `${actorName} added you as a parent of ${playerName} in ${miniLeagueName}`,
+                relatedId: resolvedChildId,
+                dedupHours: 0,
+              });
+            } catch (e) {
+              console.error("[AddSecondParentDialog] Failed to notify linked guardian:", e);
+            }
           } else {
             await supabase.from("notifications").insert({
               user_id: selectedUser.id,

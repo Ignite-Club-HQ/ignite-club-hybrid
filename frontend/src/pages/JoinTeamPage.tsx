@@ -940,7 +940,19 @@ function SupabaseJoinTeamPage() {
         // Notification
         const { resolveAuthBackend } = await import("@/live/authBackendMode");
         if (resolveAuthBackend() === "icp") {
-          // NEEDS-CANISTER: Join notifications stay Supabase-only
+          try {
+            const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+            await sendGamificationNotification({
+              userId: user.id,
+              clubId: (pendingInviteData as any).club_id ?? miniLeagueId,
+              kind: "membership",
+              message: `You've joined ${inviteEntityName} as League Admin`,
+              relatedId: miniLeagueId,
+              dedupHours: 0,
+            });
+          } catch (e) {
+            console.error("[JoinTeam] Failed to send league-admin join notification:", e);
+          }
         } else {
           await supabase.from("notifications").insert({
             user_id: user.id,
@@ -987,7 +999,19 @@ function SupabaseJoinTeamPage() {
         // Notification (do NOT mark invite accepted — link is reusable)
         const { resolveAuthBackend } = await import("@/live/authBackendMode");
         if (resolveAuthBackend() === "icp") {
-          // NEEDS-CANISTER: Join notifications stay Supabase-only
+          try {
+            const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+            await sendGamificationNotification({
+              userId: user.id,
+              clubId: targetClubId ?? miniLeagueId,
+              kind: "membership",
+              message: `You've joined ${inviteEntityName} as Parent`,
+              relatedId: miniLeagueId,
+              dedupHours: 0,
+            });
+          } catch (e) {
+            console.error("[JoinTeam] Failed to send parent join notification:", e);
+          }
         } else {
           await supabase.from("notifications").insert({
             user_id: user.id,
@@ -1244,7 +1268,19 @@ function SupabaseJoinTeamPage() {
     const membershipRelatedId = inviteMiniLeagueId || invite.team_id || invite?.teams?.club_id;
     const { resolveAuthBackend } = await import("@/live/authBackendMode");
     if (resolveAuthBackend() === "icp") {
-      // NEEDS-CANISTER: Join notifications stay Supabase-only
+      try {
+        const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+        await sendGamificationNotification({
+          userId: user.id,
+          clubId: invite?.teams?.club_id ?? membershipRelatedId,
+          kind: "membership",
+          message: `You've joined ${inviteEntityName} as ${roleNames}`,
+          relatedId: membershipRelatedId,
+          dedupHours: 0,
+        });
+      } catch (e) {
+        console.error("[JoinTeam] Failed to send membership join notification:", e);
+      }
     } else {
       await supabase.from("notifications").insert({
         user_id: user.id,
@@ -1797,7 +1833,21 @@ function SupabaseJoinTeamPage() {
       }));
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {
-        // NEEDS-CANISTER: Admin notifications stay Supabase-only
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            await fanOutLiveNotifications(ctx, {
+              userIds: recipientIds,
+              clubId: clubId ?? invite.team_id,
+              kind: "membership",
+              body: message,
+              idempotencyKeyPrefix: `unlinked-parent-${invite.team_id}-${user.id}`,
+              relatedId: invite.team_id,
+            });
+          },
+        });
       } else {
         await supabase.from("notifications").insert(rows);
       }
