@@ -12820,6 +12820,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      send_welcome_dm: {
+        Args: { p_message?: string; p_user_id: string }
+        Returns: string
+      }
       set_internal_dispatch_credentials: {
         Args: { _functions_base_url: string; _service_role_key: string }
         Returns: Json
