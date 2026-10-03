@@ -66,7 +66,7 @@ export function useDesktopNavAccess() {
               const resolved = await Promise.all(
                 teamIds.map(async (id) => {
                   try {
-                    const t = (await getLiveTeam(ctx, id)) as { id: string; name?: string; club_id?: string; club?: string } | null;
+                    const t = (await getLiveTeam(ctx, id)) as unknown as { id: string; name?: string; club_id?: string; club?: string } | null;
                     return t
                       ? { id: t.id, name: t.name ?? "Team", club_id: (t.club_id ?? t.club) ?? null }
                       : null;

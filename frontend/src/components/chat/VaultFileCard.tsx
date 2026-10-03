@@ -146,7 +146,8 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
             return t?.name ? { name: t.name } : null;
           }
           const c = await getLiveClubProfile(ctx, rootId);
-          return c?.name ? { name: c.name } : null;
+          const profile = c.length ? c[0] : null;
+          return profile?.name ? { name: profile.name } : null;
         },
       });
     },
