@@ -14,7 +14,12 @@ import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStora
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { claimLocalCompetitionJoinToken } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveCompetitionTeam } from "@/live/features/competitions";
+import { getLiveJoinLinkPreview, joinLiveCompetitionWithLink } from "@/live/features/competitions";
+import { getLiveClubProfile, getLiveTeam, listLiveTeams, myLiveRoleGrants } from "@/live/features/club";
+import { getEffectiveBackendForFeature } from "@/live/loadBackendRouting";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { AnonymousIdentity } from "@icp-sdk/core/agent";
 
 type CompInfo = {
   id: string;
@@ -139,6 +144,52 @@ function SupabaseCompetitionJoinPage() {
       return;
     }
     (async () => {
+      // ICP branch: single anonymous-safe canister preview call replaces the
+      // three Supabase SECURITY DEFINER RPCs (comp info, divisions, token
+      // status) plus the entered-team-ids read.
+      if (getEffectiveBackendForFeature("competitions") === "icp") {
+        try {
+          const identity = (await getCurrentInternetIdentity()) ?? new AnonymousIdentity();
+          const ctx = { identity, target: getActiveIcpTarget() };
+          const { status, preview } = await getLiveJoinLinkPreview(ctx, token);
+          if (!preview) {
+            if (status === "disabled") {
+              setError("The organiser has disabled this join link. Ask them for a new one.");
+            } else if (status === "archived") {
+              setError("This competition has been archived and is no longer accepting entries.");
+            } else {
+              setError("This join link isn't recognised. Double-check the URL or ask the organiser for a new one.");
+            }
+            setLoading(false);
+            return;
+          }
+          // Organiser club name lives on club_domain — best-effort join.
+          let clubName: string | null = null;
+          try {
+            const row = await getLiveClubProfile(ctx, preview.club_id);
+            clubName = row.length ? row[0].name : null;
+          } catch {
+            clubName = null;
+          }
+          setComp({
+            id: preview.competition_id,
+            name: preview.name,
+            organizer_club_id: preview.club_id,
+            organizer_club_name: clubName,
+            sport: null, // canister Competition has no sport field
+            season: preview.season || null,
+            status: preview.competition_status,
+          });
+          // Canister divisions are plain names — id mirrors name.
+          setDivisions(preview.divisions.map((name) => ({ id: name, name })));
+          setEnteredTeamIds(new Set(preview.entered_team_ids));
+          setLoading(false);
+        } catch {
+          setError("This join link couldn't be loaded. Check your connection and try again.");
+          setLoading(false);
+        }
+        return;
+      }
       const [{ data: compRows, error: cErr }, { data: divRows }, { data: statusVal }] =
         await Promise.all([
           supabase.rpc("get_competition_by_join_token", { p_token: token }),
@@ -168,6 +219,68 @@ function SupabaseCompetitionJoinPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
+      // ICP branch: caller-scoped role grants on club_domain replace the
+      // user_roles reads; entered-team ids already came with the preview.
+      if (getEffectiveBackendForFeature("competitions") === "icp") {
+        try {
+          const identity = await getCurrentInternetIdentity();
+          if (!identity) return;
+          const ctx = { identity, target: getActiveIcpTarget() };
+          const grants = await myLiveRoleGrants(ctx);
+          const teamIds = new Set<string>();
+          const clubIds = new Set<string>();
+          for (const grant of grants) {
+            const team = grant.team.length ? grant.team[0] : null;
+            const club = grant.club.length ? grant.club[0] : null;
+            if ((grant.role === "team_admin" || grant.role === "app_admin") && team) teamIds.add(team);
+            if ((grant.role === "club_admin" || grant.role === "app_admin") && club) clubIds.add(club);
+          }
+          const clubNames = new Map<string, string | null>();
+          const clubName = async (clubId: string) => {
+            if (!clubNames.has(clubId)) {
+              try {
+                const row = await getLiveClubProfile(ctx, clubId);
+                clubNames.set(clubId, row.length ? row[0].name : null);
+              } catch {
+                clubNames.set(clubId, null);
+              }
+            }
+            return clubNames.get(clubId) ?? null;
+          };
+          const seen = new Set<string>();
+          const opts: TeamOpt[] = [];
+          for (const id of teamIds) {
+            try {
+              const row = await getLiveTeam(ctx, id);
+              const team = row.length ? row[0] : null;
+              if (!team || seen.has(team.id) || team.archived || team.deleted_at_ms.length > 0) continue;
+              seen.add(team.id);
+              opts.push({ id: team.id, name: team.name, club_id: team.club_id, club_name: await clubName(team.club_id) });
+            } catch {
+              // A stale grant pointing at a missing team must not break the list.
+            }
+          }
+          for (const clubId of clubIds) {
+            try {
+              const teams = await listLiveTeams(ctx, clubId);
+              for (const team of teams) {
+                if (seen.has(team.id) || team.archived || team.deleted_at_ms.length > 0) continue;
+                seen.add(team.id);
+                opts.push({ id: team.id, name: team.name, club_id: team.club_id, club_name: await clubName(team.club_id) });
+              }
+            } catch {
+              // Skip clubs the caller can no longer read.
+            }
+          }
+          opts.sort((a, b) => a.name.localeCompare(b.name));
+          setTeams(opts);
+          const eligible = opts.filter((o) => !enteredTeamIds.has(o.id));
+          if (eligible.length === 1) setTeamId(eligible[0].id);
+        } catch {
+          // Fail closed: no teams listed, no Supabase fallback.
+        }
+        return;
+      }
       // 1) Direct team-admin rows (team-scoped)
       const teamAdminRowsP = supabase
         .from("user_roles")
@@ -281,14 +394,11 @@ function SupabaseCompetitionJoinPage() {
           return (data as any[])?.[0]?.competition_id;
         },
         icp: async (ctx) => {
-          // Provisional mapping: register_team is the organizer-facing entry
-          // point on competition_domain and has no token/division concept —
-          // token validation and division assignment stay Supabase-only
-          // (no canister shape). This calls it with the already-resolved
-          // competition from the token lookup above; verify post-deploy.
-          const team = teams.find((t) => t.id === teamId);
-          await registerLiveCompetitionTeam(ctx, comp!.id, teamId, team?.club_id ?? "");
-          // stays Supabase: no canister shape for division assignment.
+          // join_competition_with_link validates the token canister-side and
+          // registers the team with its division in one call — no
+          // competition-management rights needed (the link is the
+          // organiser's authorization).
+          await joinLiveCompetitionWithLink(ctx, token, teamId, divisionId || null);
           return comp!.id;
         },
       });
