@@ -22,7 +22,7 @@ export async function loadIcpAdminOverrides(): Promise<void> {
       .eq("key", ICP_CANISTER_CONFIG_KEY)
       .maybeSingle();
     if (error) throw error;
-    applyIcpAdminOverrides(data ? parseIcpAdminOverrides(data.value) : null);
+    applyIcpAdminOverrides(data ? await parseIcpAdminOverrides(data.value) : null);
   } catch (error) {
     console.warn(
       "[icp] Could not load admin canister overrides; using build-time configuration.",
