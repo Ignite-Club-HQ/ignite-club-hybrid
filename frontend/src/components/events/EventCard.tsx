@@ -206,6 +206,10 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: hasPro } = useQuery({
     queryKey: ["event-pro-status", event.team_id, event.club_id],
     queryFn: async () => {
+      // Subscriptions are Supabase-only by design (billing has no canister
+      // shape). Fail closed for ICP-routed clubs: hasPro stays false, which
+      // also hides the reminder action below (NEEDS-CANISTER).
+      if (isFeatureRoutedToIcp("events")) return false;
       if (event.team_id) {
         const { data: teamSub } = await supabase
           .from("team_subscriptions")
