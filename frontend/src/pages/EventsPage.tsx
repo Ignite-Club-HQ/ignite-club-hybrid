@@ -35,7 +35,6 @@ import { sendScheduleBroadcast } from "@/lib/scheduleBroadcast";
 import { useScheduleBroadcastListener } from "@/hooks/useScheduleBroadcastListener";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { isLocalEventsCanisterUnavailable, listLocalEvents } from "@/lab/localEventsService";
