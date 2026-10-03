@@ -1038,7 +1038,7 @@ fn grant_role_scoped(
     {
         return Err("Invalid role fields".into());
     }
-    if !account_exists(&state, &account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.roles.len() >= MAX_ROLES {
@@ -1075,11 +1075,7 @@ fn set_family(account_id: String, child_id: String) -> Outcome<()> {
     if state.families.len() >= MAX_FAMILIES {
         return Err("Family quota reached".into());
     }
-    if !state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
-    {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state
@@ -1119,7 +1115,7 @@ fn set_exclusion_scoped(
     {
         return Err("Invalid exclusion fields".into());
     }
-    if !account_exists(&state, &account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.exclusions.len() >= MAX_EXCLUSIONS {
@@ -1214,7 +1210,6 @@ fn attestation_message(
     .into_bytes()
 }
 fn upsert_entitlement(
-    state: &mut State,
     principal: Principal,
     product_id: String,
     transaction_id: String,
@@ -1224,42 +1219,29 @@ fn upsert_entitlement(
     if !valid_id(&product_id) || !valid_id(&source) {
         return Err("Invalid entitlement fields".into());
     }
+    let key = entitlement_key(principal, &product_id, &transaction_id);
     // Replay protection: once an Apple transaction id has been redeemed, it
     // is permanently bound to the first principal that redeemed it. The same
     // principal may re-verify (idempotent refresh, e.g. renewal), but a
     // different principal submitting the same transaction id is rejected.
-    if !transaction_id.is_empty() {
-        if let Some(existing) = state
-            .entitlements
-            .iter()
-            .find(|e| e.transaction_id == transaction_id)
-        {
-            if existing.principal != principal {
-                return Err("Transaction already redeemed by another identity".into());
-            }
+    let existing = get_entitlement(&key);
+    if let Some(existing) = &existing {
+        if !transaction_id.is_empty() && existing.principal != principal {
+            return Err("Transaction already redeemed by another identity".into());
         }
     }
-    if state.entitlements.len() >= MAX_ENTITLEMENTS
-        && !state.entitlements.iter().any(|e| {
-            e.principal == principal && e.product_id == product_id && e.transaction_id == transaction_id
-        })
-    {
+    if existing.is_none() && entitlements_count() >= MAX_ENTITLEMENTS as u64 {
         return Err("Entitlement quota reached".into());
     }
     let record = Entitlement {
         principal,
-        product_id: product_id.clone(),
-        transaction_id: transaction_id.clone(),
+        product_id,
+        transaction_id,
         expires_at_ms,
         source,
         granted_at_ms: ic_cdk::api::time() / 1_000_000,
     };
-    state.entitlements.retain(|e| {
-        !(e.principal == principal
-            && e.product_id == product_id
-            && e.transaction_id == transaction_id)
-    });
-    state.entitlements.push(record.clone());
+    put_entitlement(&key, &record);
     Ok(record)
 }
 
@@ -1326,8 +1308,7 @@ fn set_entitlement(
         return Err("Forbidden".into());
     }
     authenticated(principal)?;
-    let record = upsert_entitlement(&mut state, principal, product_id, transaction_id, expires_at_ms, source)?;
-    store(&state);
+    let record = upsert_entitlement(principal, product_id, transaction_id, expires_at_ms, source)?;
     Ok(record)
 }
 
@@ -1352,7 +1333,7 @@ fn redeem_entitlement(
 ) -> Outcome<Entitlement> {
     let caller = ic_cdk::api::msg_caller();
     authenticated(caller)?;
-    let mut state = state();
+    let state = state();
     if state.attestation_secret.is_empty() {
         return Err("IAP attestation is not configured".into());
     }
@@ -1365,8 +1346,7 @@ fn redeem_entitlement(
     if !constant_time_eq(&expected, &provided) {
         return Err("Invalid attestation signature".into());
     }
-    let record = upsert_entitlement(&mut state, caller, product_id, transaction_id, expires_at_ms, source)?;
-    store(&state);
+    let record = upsert_entitlement(caller, product_id, transaction_id, expires_at_ms, source)?;
     Ok(record)
 }
 
@@ -1375,12 +1355,9 @@ fn redeem_entitlement(
 fn get_my_entitlements() -> Outcome<Vec<Entitlement>> {
     let caller = ic_cdk::api::msg_caller();
     authenticated(caller)?;
-    let state = state();
-    Ok(state
-        .entitlements
-        .iter()
+    Ok(all_entitlements()
+        .into_iter()
         .filter(|e| e.principal == caller)
-        .cloned()
         .collect())
 }
 
@@ -1389,11 +1366,9 @@ fn get_my_entitlements() -> Outcome<Vec<Entitlement>> {
 #[ic_cdk::query]
 fn is_pro(principal: Principal) -> Outcome<bool> {
     authenticated(ic_cdk::api::msg_caller())?;
-    let state = state();
     let now_ms = ic_cdk::api::time() / 1_000_000;
-    Ok(state
-        .entitlements
-        .iter()
+    Ok(all_entitlements()
+        .into_iter()
         .any(|e| e.principal == principal && e.expires_at_ms > now_ms))
 }
 
