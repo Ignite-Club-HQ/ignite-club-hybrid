@@ -83,7 +83,7 @@ class BridgedSignIdentity extends SignIdentity {
     return this.signer.sign(blob) as Promise<Uint8Array>;
   }
   transformRequest(request: unknown): Promise<unknown> {
-    return (this.inner as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
+    return (this.signer as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
   }
 }
 
