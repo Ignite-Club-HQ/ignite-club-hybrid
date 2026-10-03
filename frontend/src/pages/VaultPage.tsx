@@ -1345,6 +1345,7 @@ function SupabaseVaultPage() {
               onUpload={handleDialogUpload}
               isUploading={uploading}
               targetName={currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "club" ? currentView.clubName : "Vault")}
+            )}
             />
             )}
           </Suspense>

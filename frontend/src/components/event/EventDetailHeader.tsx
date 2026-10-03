@@ -77,7 +77,6 @@ export function EventDetailHeader({
                   <Pencil className="h-4 w-4 mr-2" />
                   Edit {eventTypeLabel}
                 </DropdownMenuItem>
-                {resolveAuthBackend() !== "icp" && isUpcoming && (canSendReminders ? (
                   <DropdownMenuItem onClick={onSendReminders}>
                     <Bell className="h-4 w-4 mr-2 text-primary" />
                     Send Reminders
@@ -89,7 +88,6 @@ export function EventDetailHeader({
                     <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1">Pro</Badge>
                   </DropdownMenuItem>
                 )}
-                {resolveAuthBackend() !== "icp" && isUpcoming && (
                   <DropdownMenuItem onClick={onResendInvites}>
                     <UserPlus className="h-4 w-4 mr-2 text-primary" />
                     Resend Invites

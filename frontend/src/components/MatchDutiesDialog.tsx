@@ -57,7 +57,6 @@ export function MatchDutiesDialog({
   const { data: duties, isLoading: dutiesLoading } = useQuery({
     queryKey: ["event-group-duties", groupId],
     queryFn: async () => {
-      if (resolveAuthBackend() === "icp") return [];
       const { data, error } = await supabase
         .from("event_group_duties")
         .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
