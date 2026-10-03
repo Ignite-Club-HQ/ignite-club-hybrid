@@ -122,3 +122,21 @@ export async function deleteLiveComment(ctx: FeatureBackendContext, commentId: s
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_comment(commentId), "Delete comment");
 }
+
+// ---------------------------------------------------------------------------
+// Gallery chat cards (photo-share prompt cards embedded in chat)
+// ---------------------------------------------------------------------------
+
+export async function getLiveGalleryChatCard(ctx: FeatureBackendContext, cardId: string) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandidOpt(await actor.get_gallery_chat_card(cardId));
+}
+
+export async function listLiveGalleryChatCards(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return actor.list_gallery_chat_cards(clubId, teamId);
+}
