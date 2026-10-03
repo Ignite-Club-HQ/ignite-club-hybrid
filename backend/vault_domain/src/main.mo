@@ -269,6 +269,23 @@ persistent actor {
     #Ok(file)
   };
 
+  // Single-file lookup, same visibility rule as list_files: a file whose
+  // folder has restricted_roles is invisible to callers lacking one of
+  // those roles. A file with no (deleted) folder is visible like vault root.
+  public query ({ caller }) func get_file(id : Text) : async { #Ok : ?Types.VaultFile; #Err : Text } {
+    auth(caller);
+    switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
+      case null { #Ok(null) };
+      case (?file) {
+        switch (folders.find(func(item) = item.id == file.folder_id and item.deleted_at_ms == null)) {
+          case (?folder) { if (not canViewFolder(caller, folder)) return #Ok(null) };
+          case null {};
+        };
+        #Ok(?file)
+      };
+    }
+  };
+
   public query ({ caller }) func list_files(folder_id : Text) : async { #Ok : [Types.VaultFile]; #Err : Text } {
     auth(caller);
     switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
