@@ -194,7 +194,6 @@ export function EventRsvpResponseSection({
                     </span>
                   </button>
                 )}
-                )}
                 <TrainingDefaultControl
                   teamId={event.team_id ?? null}
                   childId={child.id}
@@ -267,7 +266,6 @@ export function EventRsvpResponseSection({
           <span className={myRsvp.notes ? "text-foreground" : undefined}>
             {myRsvp.notes || "Add a note…"}
           </span>
-      )}
         </button>
       )}
       {showPaymentStatus && myRsvp?.status === "going" && (

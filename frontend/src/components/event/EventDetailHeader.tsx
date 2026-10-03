@@ -1,3 +1,4 @@
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { ArrowLeft, Bell, MoreVertical, Pencil, Share2, Trash2, UserPlus, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-import { resolveAuthBackend } from "@/live/authBackendMode";
 } from "@/components/ui/dropdown-menu";
 
 type EventType = "game" | "training" | "social";
@@ -49,7 +49,7 @@ export function EventDetailHeader({
 }: EventDetailHeaderProps) {
   const eventDateStr = event.event_date?.split("T")[0] || event.event_date;
   const isUpcoming =
-    new Date(eventDateStr + "T" + (event.end_time || event.start_time || "23:59")) >= new Date();
+    new Date(eventDateStr + "T" + (event.end_time || event.start_time || "23:59") >= new Date();
 
   return (
     <div className="flex items-center gap-2">
@@ -88,14 +88,11 @@ export function EventDetailHeader({
                     Send Reminders
                     <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1">Pro</Badge>
                   </DropdownMenuItem>
-                ))}
-                ))}
+                )}
                 {resolveAuthBackend() !== "icp" && isUpcoming && (
-                {isUpcoming && (
                   <DropdownMenuItem onClick={onResendInvites}>
                     <UserPlus className="h-4 w-4 mr-2 text-primary" />
                     Resend Invites
-                )}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
