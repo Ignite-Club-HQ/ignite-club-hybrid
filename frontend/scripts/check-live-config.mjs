@@ -25,7 +25,7 @@ if (!icpOnly) {
 }
 
 const anonKey = process.env.IGNITE_LIVE_SUPABASE_ANON_KEY;
-const [, payload] = anonKey.split(".");
+const [, payload] = (anonKey || "").split(".");
 if (payload) {
   try {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
