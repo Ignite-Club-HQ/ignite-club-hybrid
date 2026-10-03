@@ -8,3 +8,11 @@ moc = "1.16.1"
 [package]
 name = "media_blob_store"
 version = "0.1.0"
+
+[canisters.media_blob_store]
+main = "src/main.mo"
+candid = "media_blob_store.did"
+
+[canisters.media_blob_store.migrations]
+chain = "src/backend/migrations"
+check-limit = 1
