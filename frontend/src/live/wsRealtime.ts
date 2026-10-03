@@ -1,5 +1,5 @@
 import { Actor, HttpAgent, SignIdentity } from "@dfinity/agent";
-import type { Identity as DfinityIdentity, PublicKey } from "@dfinity/agent";
+import type { Identity as DfinityIdentity, PublicKey, Signature } from "@dfinity/agent";
 import { Principal } from "@dfinity/principal";
 import { IcWebSocket, createWsConfig } from "ic-websocket-js";
 import type { Identity } from "@icp-sdk/core/agent";
@@ -79,8 +79,8 @@ class BridgedSignIdentity extends SignIdentity {
   getPrincipal(): Principal {
     return Principal.fromText(this.signer.getPrincipal().toText());
   }
-  sign(blob: ArrayBuffer): Promise<Uint8Array> {
-    return this.signer.sign(blob) as Promise<Uint8Array>;
+  sign(blob: ArrayBuffer): Promise<Signature> {
+    return this.signer.sign(blob) as unknown as Promise<Signature>;
   }
   transformRequest(request: unknown): Promise<unknown> {
     return (this.signer as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
@@ -181,16 +181,15 @@ async function connect(): Promise<void> {
     // never used for calls. The client builds its own agent from networkUrl.
     const agent = HttpAgent.createSync({ host: target.host, identity: bridged });
     const actor = Actor.createActor(wsIdlFactory, { agent, canisterId });
-    const ws = new IcWebSocket(
-      gatewayUrl,
-      undefined,
-      createWsConfig({
-        canisterId,
-        canisterActor: actor,
-        identity: bridged,
-        networkUrl: target.host,
-      }),
-    );
+    // The @dfinity/* actor/identity types differ from the app's @icp-sdk/*
+    // copies only at the type level; they are wire-compatible at runtime.
+    const wsConfig = {
+      canisterId,
+      canisterActor: actor,
+      identity: bridged,
+      networkUrl: target.host,
+    } as unknown as Parameters<typeof createWsConfig>[0];
+    const ws = new IcWebSocket(gatewayUrl, undefined, createWsConfig(wsConfig));
     socket = ws;
     ws.onopen = () => {
       if (socket !== ws) return;
