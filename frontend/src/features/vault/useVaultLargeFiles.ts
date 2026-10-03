@@ -22,6 +22,12 @@ export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSi
 
   const fetchLargeFiles = useCallback(async () => {
     if (!currentClubId) return;
+    // Large-files listing reads Supabase storage rows with no canister
+    // counterpart — silently empty for ICP-routed clubs.
+    if (isFeatureRoutedToIcp("vault")) {
+      setLargeFilesData({ loading: false, items: [] });
+      return;
+    }
     setLargeFilesData({ loading: true, items: [] });
     setSelectedLargeFiles(new Set());
     try {
@@ -55,6 +61,9 @@ export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSi
 
   const deleteSelectedLargeFiles = useCallback(async () => {
     if (selectedLargeFiles.size === 0) return;
+    // Fail closed: permanent-delete-photos is a Supabase edge function with
+    // no canister equivalent — never fire it for an ICP-routed club.
+    if (isFeatureRoutedToIcp("vault")) return;
     setDeletingLargeFiles(true);
     try {
       const deletion = prepareVaultLargeFileDeletion(largeFilesData.items, selectedLargeFiles);
