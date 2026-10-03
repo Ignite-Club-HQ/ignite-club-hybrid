@@ -55,9 +55,11 @@ jobs:
             # escape sequences, and any stray text before/after the PEM block.
             printf '%s' "$DEPLOYER_PEM" \
               | tr -d '\r' \
+              | sed 's/\\\\n/\n/g' \
               | sed 's/\\n/\n/g' \
               | sed -n '/-----BEGIN/,/-----END/p' \
               > "$PEM_FILE"
+            echo "==> Cleaned key file starts with: $(head -1 "$PEM_FILE")"
             if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
               echo "::error::The DEPLOYER_PEM secret does not contain a valid key file."
               echo "Re-copy the FULL text of the downloaded ignite-governor.pem artifact"
