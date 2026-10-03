@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/check-live-config.mjs && node scripts/dev-live.mjs",
     "build": "npm run build:live",
-    "build:live": "node scripts/check-live-config.mjs && node scripts/build-live.mjs",
+    "build:live": "node scripts/check-live-config.mjs && node scripts/check-icp-guards.mjs && node scripts/build-live.mjs",
     "test": "vitest run --config vitest.legacy.config.mjs",
     "test:live-runtime": "vitest run --config vitest.legacy.config.mjs src/live",
     "lint": "eslint --max-warnings=0 src/lib/observability src/lib/csv.ts src/product-main.tsx src/live vite.live.config.ts",
@@ -20,6 +20,7 @@
     "check:live-config": "node scripts/check-live-config.mjs",
     "check:topology": "node scripts/check-topology.mjs",
     "check:candid-drift": "node scripts/check-candid-drift.mjs",
+    "check:icp-guards": "node scripts/check-icp-guards.mjs",
     "check:step1": "npm run check:topology && npm run check:candid-drift"
   },
   "dependencies": {
