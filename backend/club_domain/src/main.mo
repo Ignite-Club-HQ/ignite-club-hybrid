@@ -13,22 +13,22 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
-// IC HTTP gateway request/response shapes for `http_request` (same contract
-// media_blob_store uses). Body is raw bytes; JSON is encoded by hand below.
-type HttpRequest = {
-  url : Text;
-  method : Text;
-  headers : [(Text, Text)];
-  body : Blob;
-};
-type HttpResponse = {
-  status_code : Nat16;
-  headers : [(Text, Text)];
-  body : Blob;
-};
-
 persistent actor class Main(governorInit : Principal) {
   transient let challengeTtlNs : Nat64 = 600_000_000_000;
+
+  // IC HTTP gateway request/response shapes for `http_request` (same contract
+  // media_blob_store uses). Body is raw bytes; JSON is encoded by hand below.
+  type HttpRequest = {
+    url : Text;
+    method : Text;
+    headers : [(Text, Text)];
+    body : Blob;
+  };
+  type HttpResponse = {
+    status_code : Nat16;
+    headers : [(Text, Text)];
+    body : Blob;
+  };
 
   var governor : Principal;
 
