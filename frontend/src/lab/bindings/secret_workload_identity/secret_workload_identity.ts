@@ -59,54 +59,12 @@ export interface WorkloadIdentity {
     last_used: bigint;
     registered_at: bigint;
 }
-export interface AuditSummary {
-    total_accesses: bigint;
-    denied: bigint;
-    approved: bigint;
-}
-export interface WorkloadIdentityFilter {
-    opt_from_ts?: bigint;
-    opt_to_ts?: bigint;
-    opt_scope?: string;
-    opt_principal?: Principal;
-}
-export interface SecretAccessResult {
-    approved: boolean;
-    timestamp: bigint;
-    reason: string;
-}
-export interface SecretAccessAudit {
-    workload_name: string;
-    requesting_principal: Principal;
-    secret_scope: string;
-    approved: boolean;
-    nonce: string;
-    timestamp: bigint;
-    denial_reason?: string;
-}
-export enum Variant_Active_Suspended_Revoked {
-    Active = "Active",
-    Suspended = "Suspended",
-    Revoked = "Revoked"
-}
-/**
- * / Secret Workload Identity Canister
- * / Manages workload identity registration and vault secret access control
- * / Enforces least-privilege access to vault secrets by canister principal
- */
-export interface secret_workload_identityInterface {
+export interface MainInterface {
     audit_secret_access(filter: WorkloadIdentityFilter): Promise<Array<SecretAccessAudit>>;
     get_audit_summary(): Promise<AuditSummary>;
     get_workload(workload_principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: WorkloadIdentity;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -142,6 +100,43 @@ export interface secret_workload_identityInterface {
     }>;
     verify_secret_access(workload_principal: Principal, secret_scope: string, nonce: string): Promise<SecretAccessResult>;
 }
+export interface AuditSummary {
+    total_accesses: bigint;
+    denied: bigint;
+    approved: bigint;
+}
+export interface WorkloadIdentityFilter {
+    opt_from_ts?: bigint;
+    opt_to_ts?: bigint;
+    opt_scope?: string;
+    opt_principal?: Principal;
+}
+export interface SecretAccessResult {
+    approved: boolean;
+    timestamp: bigint;
+    reason: string;
+}
+export interface SecretAccessAudit {
+    workload_name: string;
+    requesting_principal: Principal;
+    secret_scope: string;
+    approved: boolean;
+    nonce: string;
+    timestamp: bigint;
+    denial_reason?: string;
+}
+export enum Variant_Active_Suspended_Revoked {
+    Active = "Active",
+    Suspended = "Suspended",
+    Revoked = "Revoked"
+}
+/**
+ * / Secret Workload Identity Canister
+ * / Manages workload identity registration and vault secret access control
+ * / Enforces least-privilege access to vault secrets by canister principal
+ */
+export interface secret_workload_identityInterface extends MainInterface {
+}
 import type { SecretAccessAudit as _SecretAccessAudit, WorkloadIdentity as _WorkloadIdentity, WorkloadIdentityFilter as _WorkloadIdentityFilter } from "./declarations/secret_workload_identity.did";
 export class Secret_workload_identity implements secret_workload_identityInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
@@ -163,19 +158,9 @@ export class Secret_workload_identity implements secret_workload_identityInterfa
         const result = await this.actor.get_workload(arg0);
         return from_candid_variant_n7(result);
     }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
-        return from_candid_variant_n11(result);
-    }
     async list_workloads(): Promise<Array<WorkloadIdentity>> {
         const result = await this.actor.list_workloads();
-        return from_candid_vec_n12(result);
+        return from_candid_vec_n11(result);
     }
     async register_workload(arg0: Principal, arg1: string, arg2: Array<string>): Promise<{
         __kind__: "Ok";
@@ -195,7 +180,7 @@ export class Secret_workload_identity implements secret_workload_identityInterfa
         Err: string;
     }> {
         const result = await this.actor.revoke_workload(arg0);
-        return from_candid_variant_n11(result);
+        return from_candid_variant_n12(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -205,7 +190,7 @@ export class Secret_workload_identity implements secret_workload_identityInterfa
         Err: string;
     }> {
         const result = await this.actor.transfer_governorship(arg0);
-        return from_candid_variant_n11(result);
+        return from_candid_variant_n12(result);
     }
     async update_workload_scopes(arg0: Principal, arg1: Array<string>): Promise<{
         __kind__: "Ok";
@@ -297,7 +282,7 @@ function from_candid_variant_n10(value: {
 }): Variant_Active_Suspended_Revoked {
     return "Active" in value ? Variant_Active_Suspended_Revoked.Active : "Suspended" in value ? Variant_Active_Suspended_Revoked.Suspended : "Revoked" in value ? Variant_Active_Suspended_Revoked.Revoked : value;
 }
-function from_candid_variant_n11(value: {
+function from_candid_variant_n12(value: {
     Ok: null;
 } | {
     Err: string;
@@ -335,7 +320,7 @@ function from_candid_variant_n7(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n12(value: Array<_WorkloadIdentity>): Array<WorkloadIdentity> {
+function from_candid_vec_n11(value: Array<_WorkloadIdentity>): Array<WorkloadIdentity> {
     return value.map((x)=>from_candid_WorkloadIdentity_n8(x));
 }
 function from_candid_vec_n3(value: Array<_SecretAccessAudit>): Array<SecretAccessAudit> {

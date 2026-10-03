@@ -51,6 +51,18 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
+export interface MainInterface {
+    abort(id: bigint): Promise<Migration>;
+    begin(domain: string, source: Principal, destination: Principal, schemaVersion: bigint, checksum: string): Promise<Migration>;
+    commit(id: bigint): Promise<Migration>;
+    markExported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+    markImported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+    orchestrateExport(id: bigint): Promise<Migration>;
+    orchestrateVerify(id: bigint): Promise<Migration>;
+    status(): Promise<[Migration | null, Array<Migration>]>;
+    transfer_governorship(new_governor: Principal): Promise<void>;
+    verify(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+}
 export interface Migration {
     id: bigint;
     destination: Principal;
@@ -69,18 +81,7 @@ export enum Phase {
     started = "started",
     committed = "committed"
 }
-export interface migration_coordinatorInterface {
-    abort(id: bigint): Promise<Migration>;
-    begin(domain: string, source: Principal, destination: Principal, schemaVersion: bigint, checksum: string): Promise<Migration>;
-    commit(id: bigint): Promise<Migration>;
-    initialize(): Promise<void>;
-    markExported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
-    markImported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
-    orchestrateExport(id: bigint): Promise<Migration>;
-    orchestrateVerify(id: bigint): Promise<Migration>;
-    status(): Promise<[Migration | null, Array<Migration>]>;
-    transfer_governorship(new_governor: Principal): Promise<void>;
-    verify(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
+export interface migration_coordinatorInterface extends MainInterface {
 }
 import type { Migration as _Migration, Phase as _Phase } from "./declarations/migration_coordinator.did";
 export class Migration_coordinator implements migration_coordinatorInterface {
@@ -96,10 +97,6 @@ export class Migration_coordinator implements migration_coordinatorInterface {
     async commit(arg0: bigint): Promise<Migration> {
         const result = await this.actor.commit(arg0);
         return from_candid_Migration_n1(result);
-    }
-    async initialize(): Promise<void> {
-        const result = await this.actor.initialize();
-        return result;
     }
     async markExported(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration> {
         const result = await this.actor.markExported(arg0, arg1, arg2);

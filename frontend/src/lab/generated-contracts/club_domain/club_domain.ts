@@ -258,221 +258,7 @@ export type Operation = {
         second: string;
     };
 };
-export interface ClubBranding {
-    name: string;
-    contact_email?: string;
-    logo_url?: string;
-}
-export interface TeamInvite {
-    id: string;
-    revoked: boolean;
-    role: string;
-    accepted_by?: Principal;
-    team_id: string;
-    email: string;
-    created_at_ms: bigint;
-    invited_by: Principal;
-    club_id: string;
-    expires_at_ms: bigint;
-}
-export interface ClubSponsor {
-    id: string;
-    website_url?: string;
-    name: string;
-    tier: string;
-    sort_order: number;
-    description?: string;
-    logo_url?: string;
-    is_team_only: boolean;
-    is_active: boolean;
-    club_id: string;
-    exposure_percentage?: number;
-}
-export interface Listing {
-    links: Array<Link>;
-    revision: bigint;
-}
-export interface Family {
-    account_id: string;
-    child_id: string;
-}
-export interface RoleRequest {
-    id: string;
-    account_id: string;
-    status: string;
-    decided_at_ms?: bigint;
-    club: string;
-    role: string;
-    team?: string;
-    user: Principal;
-    created_at_ms: bigint;
-    decided_by?: Principal;
-}
-export interface Challenge {
-    id: bigint;
-    account_id: string;
-    issuer: Principal;
-    target: Principal;
-    accepted: boolean;
-    expires_at_ns: bigint;
-    expected_version: bigint;
-}
-export interface PendingInvite {
-    id: string;
-    status: string;
-    kind: string;
-    resent_at_ms?: bigint;
-    role?: string;
-    accepted_by?: Principal;
-    team_id?: string;
-    email: string;
-    child_id?: string;
-    created_at_ms: bigint;
-    accepted_at_ms?: bigint;
-    invited_by: Principal;
-    club_id: string;
-}
-export interface MemberPayment {
-    id: string;
-    payment_type: string;
-    marked_by: Principal;
-    user_id: string;
-    child_id?: string;
-    created_at_ms: bigint;
-    notes?: string;
-    payment_period: string;
-    amount: number;
-    club_id: string;
-}
-export interface SeasonTeamSummary {
-    season_id: string;
-    avg_attendance_pct: number;
-    team_id: string;
-    updated_at_ms: bigint;
-    roster_size: number;
-    team_name: string;
-    events_count: number;
-    club_id: string;
-}
-export interface InviteStats {
-    total: bigint;
-    accepted: bigint;
-}
-export interface TeamCreationRequest {
-    id: string;
-    status: string;
-    decided_at_ms?: bigint;
-    name: string;
-    division?: string;
-    team_id?: string;
-    requested_by: Principal;
-    created_at_ms: bigint;
-    club_id: string;
-    decided_by?: Principal;
-    age_group?: string;
-}
-export interface Config {
-    acl: Acl;
-    schema: number;
-    governor: Principal;
-    acl_version: bigint;
-}
-export interface ClubSubscription {
-    activated_at_ms?: bigint;
-    trial_ends_at_ms?: bigint;
-    team_limit?: number;
-    is_trial: boolean;
-    plan: string;
-    is_pro: boolean;
-    is_pro_football: boolean;
-    admin_pro_football_override: boolean;
-    admin_pro_override: boolean;
-    cancelled_at_ms?: bigint;
-    club_id: string;
-    expires_at_ms?: bigint;
-}
-export interface SeasonPlayerStat {
-    season_id: string;
-    team_id: string;
-    updated_at_ms: bigint;
-    player_name: string;
-    club_player_id: string;
-    events_total: number;
-    attendance_pct: number;
-    events_attended: number;
-    games_played: number;
-    club_id: string;
-}
-export interface AccountRole {
-    account_id: string;
-    club?: string;
-    role: string;
-    team?: string;
-}
-export interface ClubTerm {
-    id: string;
-    status: string;
-    name: string;
-    end_date: string;
-    created_at_ms: bigint;
-    start_date: string;
-    is_active: boolean;
-    club_id: string;
-}
-export interface ClubTeam {
-    id: string;
-    playhq_team_id?: string;
-    name: string;
-    division?: string;
-    description?: string;
-    team_type?: string;
-    logo_url?: string;
-    shell_invited_by?: Principal;
-    shell_contact_name?: string;
-    shell_claim_token?: string;
-    is_shell: boolean;
-    gender?: string;
-    shell_claimed_at_ms?: bigint;
-    is_active: boolean;
-    playhq_auto_create_events: boolean;
-    playhq_competition_id?: string;
-    shell_contact_email?: string;
-    shell_claimed_by?: Principal;
-    club_id: string;
-    archived: boolean;
-    age_group?: string;
-    deleted_at_ms?: bigint;
-}
-export interface TeamSponsorAllocation {
-    team_id: string;
-    sponsor_id: string;
-}
-export interface TeamCaptain {
-    user: Principal;
-    team_id: string;
-}
-export interface TeamInviteLink {
-    id: string;
-    token: string;
-    revoked: boolean;
-    role: string;
-    rotated_at_ms?: bigint;
-    team_id: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    club_id: string;
-}
-export interface ParentInvite {
-    id: string;
-    accepted_by?: Principal;
-    team_id?: string;
-    child_id: string;
-    created_at_ms: bigint;
-    invited_by: Principal;
-    club_id: string;
-    expires_at_ms: bigint;
-}
-export interface club_domainInterface {
+export interface MainInterface {
     accept_identity_link(id: bigint): Promise<{
         __kind__: "Ok";
         Ok: Account;
@@ -836,13 +622,6 @@ export interface club_domainInterface {
         Err: string;
     }>;
     import_links(snap: Snapshot): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -1409,6 +1188,222 @@ export interface club_domainInterface {
         Err: string;
     }>;
 }
+export interface TeamInvite {
+    id: string;
+    revoked: boolean;
+    role: string;
+    accepted_by?: Principal;
+    team_id: string;
+    email: string;
+    created_at_ms: bigint;
+    invited_by: Principal;
+    club_id: string;
+    expires_at_ms: bigint;
+}
+export interface ClubSponsor {
+    id: string;
+    website_url?: string;
+    name: string;
+    tier: string;
+    sort_order: number;
+    description?: string;
+    logo_url?: string;
+    is_team_only: boolean;
+    is_active: boolean;
+    club_id: string;
+    exposure_percentage?: number;
+}
+export interface Listing {
+    links: Array<Link>;
+    revision: bigint;
+}
+export interface Family {
+    account_id: string;
+    child_id: string;
+}
+export interface RoleRequest {
+    id: string;
+    account_id: string;
+    status: string;
+    decided_at_ms?: bigint;
+    club: string;
+    role: string;
+    team?: string;
+    user: Principal;
+    created_at_ms: bigint;
+    decided_by?: Principal;
+}
+export interface ClubBranding {
+    name: string;
+    contact_email?: string;
+    logo_url?: string;
+}
+export interface PendingInvite {
+    id: string;
+    status: string;
+    kind: string;
+    resent_at_ms?: bigint;
+    role?: string;
+    accepted_by?: Principal;
+    team_id?: string;
+    email: string;
+    child_id?: string;
+    created_at_ms: bigint;
+    accepted_at_ms?: bigint;
+    invited_by: Principal;
+    club_id: string;
+}
+export interface MemberPayment {
+    id: string;
+    payment_type: string;
+    marked_by: Principal;
+    user_id: string;
+    child_id?: string;
+    created_at_ms: bigint;
+    notes?: string;
+    payment_period: string;
+    amount: number;
+    club_id: string;
+}
+export interface SeasonTeamSummary {
+    season_id: string;
+    avg_attendance_pct: number;
+    team_id: string;
+    updated_at_ms: bigint;
+    roster_size: number;
+    team_name: string;
+    events_count: number;
+    club_id: string;
+}
+export interface InviteStats {
+    total: bigint;
+    accepted: bigint;
+}
+export interface TeamCreationRequest {
+    id: string;
+    status: string;
+    decided_at_ms?: bigint;
+    name: string;
+    division?: string;
+    team_id?: string;
+    requested_by: Principal;
+    created_at_ms: bigint;
+    club_id: string;
+    decided_by?: Principal;
+    age_group?: string;
+}
+export interface Config {
+    acl: Acl;
+    schema: number;
+    governor: Principal;
+    acl_version: bigint;
+}
+export interface ClubSubscription {
+    activated_at_ms?: bigint;
+    trial_ends_at_ms?: bigint;
+    team_limit?: number;
+    is_trial: boolean;
+    plan: string;
+    is_pro: boolean;
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms?: bigint;
+    club_id: string;
+    expires_at_ms?: bigint;
+}
+export interface SeasonPlayerStat {
+    season_id: string;
+    team_id: string;
+    updated_at_ms: bigint;
+    player_name: string;
+    club_player_id: string;
+    events_total: number;
+    attendance_pct: number;
+    events_attended: number;
+    games_played: number;
+    club_id: string;
+}
+export interface AccountRole {
+    account_id: string;
+    club?: string;
+    role: string;
+    team?: string;
+}
+export interface ClubTerm {
+    id: string;
+    status: string;
+    name: string;
+    end_date: string;
+    created_at_ms: bigint;
+    start_date: string;
+    is_active: boolean;
+    club_id: string;
+}
+export interface ClubTeam {
+    id: string;
+    playhq_team_id?: string;
+    name: string;
+    division?: string;
+    description?: string;
+    team_type?: string;
+    logo_url?: string;
+    shell_invited_by?: Principal;
+    shell_contact_name?: string;
+    shell_claim_token?: string;
+    is_shell: boolean;
+    gender?: string;
+    shell_claimed_at_ms?: bigint;
+    is_active: boolean;
+    playhq_auto_create_events: boolean;
+    playhq_competition_id?: string;
+    shell_contact_email?: string;
+    shell_claimed_by?: Principal;
+    club_id: string;
+    archived: boolean;
+    age_group?: string;
+    deleted_at_ms?: bigint;
+}
+export interface TeamSponsorAllocation {
+    team_id: string;
+    sponsor_id: string;
+}
+export interface TeamCaptain {
+    user: Principal;
+    team_id: string;
+}
+export interface TeamInviteLink {
+    id: string;
+    token: string;
+    revoked: boolean;
+    role: string;
+    rotated_at_ms?: bigint;
+    team_id: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    club_id: string;
+}
+export interface ParentInvite {
+    id: string;
+    accepted_by?: Principal;
+    team_id?: string;
+    child_id: string;
+    created_at_ms: bigint;
+    invited_by: Principal;
+    club_id: string;
+    expires_at_ms: bigint;
+}
+export interface Challenge {
+    id: bigint;
+    account_id: string;
+    issuer: Principal;
+    target: Principal;
+    accepted: boolean;
+    expires_at_ns: bigint;
+    expected_version: bigint;
+}
+export interface club_domainInterface extends MainInterface {
+}
 import type { AcceptedInvite as _AcceptedInvite, Account as _Account, AccountExclusion as _AccountExclusion, AccountRole as _AccountRole, Acl as _Acl, Challenge as _Challenge, Child as _Child, ClubBranding as _ClubBranding, ClubJoinRequest as _ClubJoinRequest, ClubProfile as _ClubProfile, ClubSettings as _ClubSettings, ClubSponsor as _ClubSponsor, ClubSubscription as _ClubSubscription, ClubTeam as _ClubTeam, ClubTerm as _ClubTerm, Config as _Config, Draft as _Draft, Exclusion as _Exclusion, Family as _Family, Guardian as _Guardian, InvitePayload as _InvitePayload, InviteStats as _InviteStats, Link as _Link, Listing as _Listing, MemberPayment as _MemberPayment, Mutation as _Mutation, NewsPost as _NewsPost, Operation as _Operation, ParentInvite as _ParentInvite, PendingInvite as _PendingInvite, ProfileTeamHistoryEntry as _ProfileTeamHistoryEntry, RemovedMember as _RemovedMember, Request as _Request, RoleGrant as _RoleGrant, RoleRequest as _RoleRequest, Season as _Season, SeasonPlayerStat as _SeasonPlayerStat, SeasonTeamSummary as _SeasonTeamSummary, Snapshot as _Snapshot, State as _State, Team as _Team, TeamCaptain as _TeamCaptain, TeamCreationRequest as _TeamCreationRequest, TeamInvite as _TeamInvite, TeamInviteLink as _TeamInviteLink, TeamPlayerPosition as _TeamPlayerPosition, TeamSponsorAllocation as _TeamSponsorAllocation } from "./declarations/club_domain.did";
 export class Club_domain implements club_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
@@ -1941,16 +1936,6 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.import_links(to_candid_Snapshot_n107(arg0));
-        return from_candid_variant_n15(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n15(result);
     }
     async invite_stats(arg0: string, arg1: bigint, arg2: bigint): Promise<{

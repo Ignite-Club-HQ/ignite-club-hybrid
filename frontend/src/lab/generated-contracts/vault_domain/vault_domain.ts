@@ -84,17 +84,7 @@ export interface VaultFile {
     deleted_at_ms?: bigint;
     uploaded_by: Principal;
 }
-export interface BlobRef {
-    path: string;
-    content_hash: string;
-    canister: string;
-}
-export interface VaultFileWithFolder {
-    folder_name?: string;
-    folder_path: Array<string>;
-    file: VaultFile;
-}
-export interface vault_domainInterface {
+export interface MainInterface {
     create_folder(id: string, club: string, team: string | null, parent_id: string | null, name: string, restricted_roles: Array<string>, mini_league_id: string | null, sort_order: number, description: string | null, color: string | null): Promise<{
         __kind__: "Ok";
         Ok: VaultFolder;
@@ -131,13 +121,6 @@ export interface vault_domainInterface {
         Err: string;
     }>;
     grant_role(user: Principal, role: string, club_id: string | null, team_id: string | null): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -243,6 +226,18 @@ export interface vault_domainInterface {
         Err: string;
     }>;
 }
+export interface BlobRef {
+    path: string;
+    content_hash: string;
+    canister: string;
+}
+export interface VaultFileWithFolder {
+    folder_name?: string;
+    folder_path: Array<string>;
+    file: VaultFile;
+}
+export interface vault_domainInterface extends MainInterface {
+}
 import type { BlobRef as _BlobRef, VaultFile as _VaultFile, VaultFileWithFolder as _VaultFileWithFolder, VaultFolder as _VaultFolder } from "./declarations/vault_domain.did";
 export class Vault_domain implements vault_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
@@ -304,16 +299,6 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3));
-        return from_candid_variant_n8(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n8(result);
     }
     async list_club_files(arg0: string, arg1: string | null, arg2: string | null): Promise<{

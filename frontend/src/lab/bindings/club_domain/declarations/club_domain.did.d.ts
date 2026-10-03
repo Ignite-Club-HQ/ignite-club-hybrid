@@ -195,198 +195,7 @@ export interface Link {
   'club_id' : string,
 }
 export interface Listing { 'links' : Array<Link>, 'revision' : bigint }
-export interface MemberPayment {
-  'id' : string,
-  'payment_type' : string,
-  'marked_by' : Principal,
-  'user_id' : string,
-  'child_id' : [] | [string],
-  'created_at_ms' : bigint,
-  'notes' : [] | [string],
-  'payment_period' : string,
-  'amount' : number,
-  'club_id' : string,
-}
-export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
-export interface NewsPost {
-  'id' : string,
-  'status' : string,
-  'title' : string,
-  'body' : string,
-  'updated_at_ms' : bigint,
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'revision' : bigint,
-  'club_id' : string,
-}
-export type Operation = {
-    'SetActive' : { 'id' : string, 'active' : boolean }
-  } |
-  { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
-  { 'Remove' : { 'id' : string } } |
-  { 'Reorder' : { 'first' : string, 'second' : string } };
-export interface ParentInvite {
-  'id' : string,
-  'accepted_by' : [] | [Principal],
-  'team_id' : [] | [string],
-  'child_id' : string,
-  'created_at_ms' : bigint,
-  'invited_by' : Principal,
-  'club_id' : string,
-  'expires_at_ms' : bigint,
-}
-export interface PendingInvite {
-  'id' : string,
-  'status' : string,
-  'kind' : string,
-  'resent_at_ms' : [] | [bigint],
-  'role' : [] | [string],
-  'accepted_by' : [] | [Principal],
-  'team_id' : [] | [string],
-  'email' : string,
-  'child_id' : [] | [string],
-  'created_at_ms' : bigint,
-  'accepted_at_ms' : [] | [bigint],
-  'invited_by' : Principal,
-  'club_id' : string,
-}
-export interface ProfileTeamHistoryEntry {
-  'season_start_date' : string,
-  'season_id' : string,
-  'team_id' : string,
-  'season_name' : string,
-  'team_level_age' : [] | [string],
-  'team_name' : string,
-  'joined_at_ms' : bigint,
-  'membership_id' : string,
-  'season_end_date' : string,
-  'club_name' : string,
-  'club_id' : string,
-  'season_status' : string,
-}
-export interface RemovedMember {
-  'club' : string,
-  'user' : Principal,
-  'removed_at_ms' : bigint,
-  'removed_by' : Principal,
-}
-export interface Request {
-  'request_id' : string,
-  'club' : string,
-  'operation' : Operation,
-  'expected_revision' : bigint,
-}
-export interface RoleGrant {
-  'club' : [] | [string],
-  'role' : string,
-  'team' : [] | [string],
-  'user' : Principal,
-}
-export interface RoleRequest {
-  'id' : string,
-  'account_id' : string,
-  'status' : string,
-  'decided_at_ms' : [] | [bigint],
-  'club' : string,
-  'role' : string,
-  'team' : [] | [string],
-  'user' : Principal,
-  'created_at_ms' : bigint,
-  'decided_by' : [] | [Principal],
-}
-export interface Season {
-  'id' : string,
-  'status' : string,
-  'name' : string,
-  'updated_at_ms' : bigint,
-  'end_date' : string,
-  'created_at_ms' : bigint,
-  'start_date' : string,
-  'club_id' : string,
-}
-export interface SeasonPlayerStat {
-  'season_id' : string,
-  'team_id' : string,
-  'updated_at_ms' : bigint,
-  'player_name' : string,
-  'club_player_id' : string,
-  'events_total' : number,
-  'attendance_pct' : number,
-  'events_attended' : number,
-  'games_played' : number,
-  'club_id' : string,
-}
-export interface SeasonTeamSummary {
-  'season_id' : string,
-  'avg_attendance_pct' : number,
-  'team_id' : string,
-  'updated_at_ms' : bigint,
-  'roster_size' : number,
-  'team_name' : string,
-  'events_count' : number,
-  'club_id' : string,
-}
-export interface Snapshot {
-  'schema' : number,
-  'clubs' : Array<[string, Listing]>,
-}
-export interface State {
-  'schema' : number,
-  'accounts' : Array<Account>,
-  'exclusions' : Array<AccountExclusion>,
-  'families' : Array<Family>,
-  'challenges' : Array<Challenge>,
-  'roles' : Array<AccountRole>,
-  'next_challenge' : bigint,
-}
-export interface Team { 'id' : string, 'club' : string }
-export interface TeamCaptain { 'user' : Principal, 'team_id' : string }
-export interface TeamCreationRequest {
-  'id' : string,
-  'status' : string,
-  'decided_at_ms' : [] | [bigint],
-  'name' : string,
-  'division' : [] | [string],
-  'team_id' : [] | [string],
-  'requested_by' : Principal,
-  'created_at_ms' : bigint,
-  'club_id' : string,
-  'decided_by' : [] | [Principal],
-  'age_group' : [] | [string],
-}
-export interface TeamInvite {
-  'id' : string,
-  'revoked' : boolean,
-  'role' : string,
-  'accepted_by' : [] | [Principal],
-  'team_id' : string,
-  'email' : string,
-  'created_at_ms' : bigint,
-  'invited_by' : Principal,
-  'club_id' : string,
-  'expires_at_ms' : bigint,
-}
-export interface TeamInviteLink {
-  'id' : string,
-  'token' : string,
-  'revoked' : boolean,
-  'role' : string,
-  'rotated_at_ms' : [] | [bigint],
-  'team_id' : string,
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'club_id' : string,
-}
-export interface TeamPlayerPosition {
-  'team_id' : string,
-  'member_id' : string,
-  'position' : string,
-}
-export interface TeamSponsorAllocation {
-  'team_id' : string,
-  'sponsor_id' : string,
-}
-export interface _SERVICE {
+export interface Main {
   'accept_identity_link' : ActorMethod<
     [bigint],
     { 'Ok' : Account } |
@@ -637,7 +446,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'invite_stats' : ActorMethod<
     [string, bigint, bigint],
     { 'Ok' : InviteStats } |
@@ -1036,5 +844,197 @@ export interface _SERVICE {
   >,
   'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,
 }
+export interface MemberPayment {
+  'id' : string,
+  'payment_type' : string,
+  'marked_by' : Principal,
+  'user_id' : string,
+  'child_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'notes' : [] | [string],
+  'payment_period' : string,
+  'amount' : number,
+  'club_id' : string,
+}
+export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
+export interface NewsPost {
+  'id' : string,
+  'status' : string,
+  'title' : string,
+  'body' : string,
+  'updated_at_ms' : bigint,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'revision' : bigint,
+  'club_id' : string,
+}
+export type Operation = {
+    'SetActive' : { 'id' : string, 'active' : boolean }
+  } |
+  { 'Save' : { 'id' : [] | [string], 'draft' : Draft } } |
+  { 'Remove' : { 'id' : string } } |
+  { 'Reorder' : { 'first' : string, 'second' : string } };
+export interface ParentInvite {
+  'id' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : [] | [string],
+  'child_id' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
+export interface PendingInvite {
+  'id' : string,
+  'status' : string,
+  'kind' : string,
+  'resent_at_ms' : [] | [bigint],
+  'role' : [] | [string],
+  'accepted_by' : [] | [Principal],
+  'team_id' : [] | [string],
+  'email' : string,
+  'child_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'accepted_at_ms' : [] | [bigint],
+  'invited_by' : Principal,
+  'club_id' : string,
+}
+export interface ProfileTeamHistoryEntry {
+  'season_start_date' : string,
+  'season_id' : string,
+  'team_id' : string,
+  'season_name' : string,
+  'team_level_age' : [] | [string],
+  'team_name' : string,
+  'joined_at_ms' : bigint,
+  'membership_id' : string,
+  'season_end_date' : string,
+  'club_name' : string,
+  'club_id' : string,
+  'season_status' : string,
+}
+export interface RemovedMember {
+  'club' : string,
+  'user' : Principal,
+  'removed_at_ms' : bigint,
+  'removed_by' : Principal,
+}
+export interface Request {
+  'request_id' : string,
+  'club' : string,
+  'operation' : Operation,
+  'expected_revision' : bigint,
+}
+export interface RoleGrant {
+  'club' : [] | [string],
+  'role' : string,
+  'team' : [] | [string],
+  'user' : Principal,
+}
+export interface RoleRequest {
+  'id' : string,
+  'account_id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'club' : string,
+  'role' : string,
+  'team' : [] | [string],
+  'user' : Principal,
+  'created_at_ms' : bigint,
+  'decided_by' : [] | [Principal],
+}
+export interface Season {
+  'id' : string,
+  'status' : string,
+  'name' : string,
+  'updated_at_ms' : bigint,
+  'end_date' : string,
+  'created_at_ms' : bigint,
+  'start_date' : string,
+  'club_id' : string,
+}
+export interface SeasonPlayerStat {
+  'season_id' : string,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'player_name' : string,
+  'club_player_id' : string,
+  'events_total' : number,
+  'attendance_pct' : number,
+  'events_attended' : number,
+  'games_played' : number,
+  'club_id' : string,
+}
+export interface SeasonTeamSummary {
+  'season_id' : string,
+  'avg_attendance_pct' : number,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
+  'roster_size' : number,
+  'team_name' : string,
+  'events_count' : number,
+  'club_id' : string,
+}
+export interface Snapshot {
+  'schema' : number,
+  'clubs' : Array<[string, Listing]>,
+}
+export interface State {
+  'schema' : number,
+  'accounts' : Array<Account>,
+  'exclusions' : Array<AccountExclusion>,
+  'families' : Array<Family>,
+  'challenges' : Array<Challenge>,
+  'roles' : Array<AccountRole>,
+  'next_challenge' : bigint,
+}
+export interface Team { 'id' : string, 'club' : string }
+export interface TeamCaptain { 'user' : Principal, 'team_id' : string }
+export interface TeamCreationRequest {
+  'id' : string,
+  'status' : string,
+  'decided_at_ms' : [] | [bigint],
+  'name' : string,
+  'division' : [] | [string],
+  'team_id' : [] | [string],
+  'requested_by' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+  'decided_by' : [] | [Principal],
+  'age_group' : [] | [string],
+}
+export interface TeamInvite {
+  'id' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'accepted_by' : [] | [Principal],
+  'team_id' : string,
+  'email' : string,
+  'created_at_ms' : bigint,
+  'invited_by' : Principal,
+  'club_id' : string,
+  'expires_at_ms' : bigint,
+}
+export interface TeamInviteLink {
+  'id' : string,
+  'token' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'rotated_at_ms' : [] | [bigint],
+  'team_id' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+}
+export interface TeamPlayerPosition {
+  'team_id' : string,
+  'member_id' : string,
+  'position' : string,
+}
+export interface TeamSponsorAllocation {
+  'team_id' : string,
+  'sponsor_id' : string,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

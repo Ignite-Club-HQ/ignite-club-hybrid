@@ -46,8 +46,7 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : IDL.Nat64,
     'reason' : IDL.Text,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'audit_secret_access' : IDL.Func(
         [WorkloadIdentityFilter],
         [IDL.Vec(SecretAccessAudit)],
@@ -58,11 +57,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : WorkloadIdentity, 'Err' : IDL.Text })],
         ['query'],
-      ),
-    'initialize' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
       ),
     'list_workloads' : IDL.Func([], [IDL.Vec(WorkloadIdentity)], ['query']),
     'register_workload' : IDL.Func(
@@ -91,6 +85,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

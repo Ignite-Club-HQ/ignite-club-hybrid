@@ -15,6 +15,43 @@ export interface AuditSummary {
   'denied' : bigint,
   'approved' : bigint,
 }
+export interface Main {
+  'audit_secret_access' : ActorMethod<
+    [WorkloadIdentityFilter],
+    Array<SecretAccessAudit>
+  >,
+  'get_audit_summary' : ActorMethod<[], AuditSummary>,
+  'get_workload' : ActorMethod<
+    [Principal],
+    { 'Ok' : WorkloadIdentity } |
+      { 'Err' : string }
+  >,
+  'list_workloads' : ActorMethod<[], Array<WorkloadIdentity>>,
+  'register_workload' : ActorMethod<
+    [Principal, string, Array<string>],
+    { 'Ok' : WorkloadIdentity } |
+      { 'Err' : string }
+  >,
+  'revoke_workload' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'update_workload_scopes' : ActorMethod<
+    [Principal, Array<string>],
+    { 'Ok' : WorkloadIdentity } |
+      { 'Err' : string }
+  >,
+  'verify_secret_access' : ActorMethod<
+    [Principal, string, string],
+    SecretAccessResult
+  >,
+}
 export interface SecretAccessAudit {
   'workload_name' : string,
   'requesting_principal' : Principal,
@@ -50,43 +87,6 @@ export interface WorkloadIdentityFilter {
  * / Manages workload identity registration and vault secret access control
  * / Enforces least-privilege access to vault secrets by canister principal
  */
-export interface _SERVICE {
-  'audit_secret_access' : ActorMethod<
-    [WorkloadIdentityFilter],
-    Array<SecretAccessAudit>
-  >,
-  'get_audit_summary' : ActorMethod<[], AuditSummary>,
-  'get_workload' : ActorMethod<
-    [Principal],
-    { 'Ok' : WorkloadIdentity } |
-      { 'Err' : string }
-  >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'list_workloads' : ActorMethod<[], Array<WorkloadIdentity>>,
-  'register_workload' : ActorMethod<
-    [Principal, string, Array<string>],
-    { 'Ok' : WorkloadIdentity } |
-      { 'Err' : string }
-  >,
-  'revoke_workload' : ActorMethod<
-    [Principal],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'transfer_governorship' : ActorMethod<
-    [Principal],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'update_workload_scopes' : ActorMethod<
-    [Principal, Array<string>],
-    { 'Ok' : WorkloadIdentity } |
-      { 'Err' : string }
-  >,
-  'verify_secret_access' : ActorMethod<
-    [Principal, string, string],
-    SecretAccessResult
-  >,
-}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];
