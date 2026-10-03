@@ -42,6 +42,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
+import { listLivePlayers } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 import { buildPersonalRsvpLine } from "@/lib/personalRsvpLine";
