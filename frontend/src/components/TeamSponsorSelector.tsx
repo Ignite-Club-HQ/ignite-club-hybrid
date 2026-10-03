@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, setLiveTeamSponsorAllocation, getLiveTeam } from "@/live/features/club";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,11 +34,36 @@ export function TeamSponsorSelector({
   const { data: sponsors = [], isLoading } = useQuery({
     queryKey: ["team-allocated-sponsors", teamId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as Sponsor[],
+          icp: async (ctx) => {
+            // The team record carries club_id; sponsor details join from the
+            // club's sponsor list.
+            const team = await getLiveTeam(ctx, teamId).catch(() => null);
+            const teamRow = (Array.isArray(team) ? team[0] : team) as { club_id?: string; club?: string } | null;
+            const clubId = teamRow?.club_id ?? teamRow?.club;
+            if (!clubId) return [] as Sponsor[];
+            const [allSponsors, allocations] = await Promise.all([
+              listLiveSponsors(ctx, clubId),
+              listLiveTeamSponsorAllocations(ctx, clubId),
+            ]);
+            const allocatedIds = new Set(
+              (allocations as Array<{ team_id: string; sponsor_id: string; allocated: boolean }>)
+                .filter((a) => a.team_id === teamId && a.allocated)
+                .map((a) => a.sponsor_id),
+            );
+            return (allSponsors as Array<{ id: string; name: string; logo_url: [] | [string] }>)
+              .filter((s) => allocatedIds.has(s.id))
+              .map((s) => ({ id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("team_sponsor_allocations")
         .select("sponsors:sponsor_id(id, name, logo_url)")
         .eq("team_id", teamId);
-      
+
       if (error) throw error;
       return data
         .map(a => a.sponsors as unknown as Sponsor)
@@ -45,11 +73,34 @@ export function TeamSponsorSelector({
 
   const updateTeamSponsorMutation = useMutation({
     mutationFn: async (sponsorId: string | null) => {
+      if (isFeatureRoutedToIcp("membership")) {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            // Clear every currently allocated sponsor, then allocate the new
+            // one (mirrors the single-sponsor teams.sponsor_id semantics).
+            const team = await getLiveTeam(ctx, teamId).catch(() => null);
+            const teamRow = (Array.isArray(team) ? team[0] : team) as { club_id?: string; club?: string } | null;
+            const clubId = teamRow?.club_id ?? teamRow?.club;
+            if (!clubId) throw new Error("Club could not be resolved for this team.");
+            const allocations = await listLiveTeamSponsorAllocations(ctx, clubId) as Array<{ team_id: string; sponsor_id: string; allocated: boolean }>;
+            await Promise.all(
+              allocations
+                .filter((a) => a.team_id === teamId && a.allocated && a.sponsor_id !== sponsorId)
+                .map((a) => setLiveTeamSponsorAllocation(ctx, a.sponsor_id, teamId, false)),
+            );
+            if (sponsorId) {
+              await setLiveTeamSponsorAllocation(ctx, sponsorId, teamId, true);
+            }
+          },
+        });
+        return;
+      }
       const { error } = await supabase
         .from("teams")
         .update({ sponsor_id: sponsorId })
         .eq("id", teamId);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {

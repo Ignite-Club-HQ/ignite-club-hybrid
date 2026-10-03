@@ -1,21 +1,31 @@
-const required = [
-  "IGNITE_LIVE_SUPABASE_URL",
-  "IGNITE_LIVE_SUPABASE_ANON_KEY",
-];
+// ICP-only builds ship without a Supabase URL/key: routing config then falls
+// back to build-time JSON / canister app_config / localStorage / defaults.
+// When IGNITE_LIVE_ICP_ONLY is set, the Supabase checks are skipped but every
+// ICP check below still runs.
+const icpOnly = ["1", "true", "yes"].includes((process.env.IGNITE_LIVE_ICP_ONLY || "").trim().toLowerCase());
 
-for (const name of required) {
-  if (!process.env[name]?.trim()) {
-    throw new Error(`${name} is required for a live build.`);
+if (!icpOnly) {
+  const required = [
+    "IGNITE_LIVE_SUPABASE_URL",
+    "IGNITE_LIVE_SUPABASE_ANON_KEY",
+  ];
+
+  for (const name of required) {
+    if (!process.env[name]?.trim()) {
+      throw new Error(`${name} is required for a live build.`);
+    }
   }
-}
 
-const supabaseUrl = new URL(process.env.IGNITE_LIVE_SUPABASE_URL);
-if (supabaseUrl.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(supabaseUrl.hostname)) {
-  throw new Error("IGNITE_LIVE_SUPABASE_URL must use HTTPS, except localhost development URLs.");
+  const supabaseUrl = new URL(process.env.IGNITE_LIVE_SUPABASE_URL);
+  if (supabaseUrl.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(supabaseUrl.hostname)) {
+    throw new Error("IGNITE_LIVE_SUPABASE_URL must use HTTPS, except localhost development URLs.");
+  }
+} else if (!process.env.IGNITE_LIVE_ICP_CANISTER_IDS_JSON?.trim()) {
+  throw new Error("IGNITE_LIVE_ICP_ONLY builds must set IGNITE_LIVE_ICP_CANISTER_IDS_JSON.");
 }
 
 const anonKey = process.env.IGNITE_LIVE_SUPABASE_ANON_KEY;
-const [, payload] = anonKey.split(".");
+const [, payload] = (anonKey || "").split(".");
 if (payload) {
   try {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");

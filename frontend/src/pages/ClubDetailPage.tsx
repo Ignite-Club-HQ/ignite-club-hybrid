@@ -106,6 +106,7 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSponsors, listLiveTeamSponsorAllocations } from "@/live/features/club";
 import {
   softDeleteLiveClub,
   restoreLiveClub,
@@ -748,13 +749,33 @@ export default function ClubDetailPage() {
     queryFn: async () => {
       const teamIds = teams?.map(t => t.id) || [];
       if (teamIds.length === 0) return [];
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            // Sponsor details join from the club's sponsor list; the canister
+            // allocation rows carry no nested sponsor record.
+            const [allSponsors, allocations] = await Promise.all([
+              listLiveSponsors(ctx, id!),
+              listLiveTeamSponsorAllocations(ctx, id!),
+            ]);
+            const sponsorById = new Map(
+              (allSponsors as Array<{ id: string; name: string; logo_url: [] | [string]; website_url: [] | [string] }>)
+                .map((s) => [s.id, { id: s.id, name: s.name, logo_url: s.logo_url[0] ?? null, website_url: s.website_url[0] ?? null }]),
+            );
+            return (allocations as Array<{ team_id: string; sponsor_id: string; allocated: boolean }>)
+              .filter((a) => a.allocated && teamIds.includes(a.team_id))
+              .map((a) => ({ ...a, sponsors: sponsorById.get(a.sponsor_id) }));
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_sponsor_allocations")
         .select("*, sponsors(*)")
         .in("team_id", teamIds);
       return data || [];
     },
-    enabled: !!teams && teams.length > 0 && !useIcpLab,
+    enabled: !!teams && teams.length > 0,
   });
 
   // Helper to get first sponsor for a team
