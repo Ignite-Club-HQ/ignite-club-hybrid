@@ -61,11 +61,13 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
       // canister-side (replicated HTTPS outcall); same metadata shape.
       const data = await withFeatureBackend("messaging", {
         supabase: async () => {
-          const { data, error } = await supabase.functions.invoke("fetch-link-preview", {
-            body: { url: fetchUrl },
+          const res = await fetch("/api/fetch-link-preview", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ url: fetchUrl }),
           });
-          if (error) throw error;
-          return data as LinkPreviewData | null;
+          if (!res.ok) throw new Error(`Link preview failed (${res.status})`);
+          return (await res.json()) as LinkPreviewData | null;
         },
         icp: async (ctx) => {
           const p = await fetchLiveLinkPreview(ctx, fetchUrl);

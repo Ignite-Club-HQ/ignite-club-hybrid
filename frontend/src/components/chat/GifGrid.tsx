@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -46,16 +45,20 @@ export function GifGrid({
   const loadedOnceRef = useRef(false);
 
   const fetchGifs = async (q: string) => {
-    // icp-guard: allow GIF search intentionally uses the Supabase edge function for every
-    // sign-in method, including Internet Identity members (user decision 2026-10); the Giphy
-    // API key must stay server-side and cannot live in canister state.
+    // icp-guard: allow GIF search intentionally uses the same-origin
+    // /api/giphy-search endpoint for every sign-in method, including Internet
+    // Identity members (user decision 2026-10); the GIPHY API key must stay
+    // server-side and cannot live in canister state.
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("giphy-search", {
-        body: { query: q, limit: 24 },
+      const res = await fetch("/api/giphy-search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: q, limit: 24 }),
       });
-      if (error) throw error;
-      setGifs((data?.gifs as GiphyResult[]) || []);
+      if (!res.ok) throw new Error(`GIF search failed (${res.status})`);
+      const data = (await res.json()) as { gifs?: GiphyResult[] } | null;
+      setGifs(data?.gifs ?? []);
     } catch (err) {
       console.error("[GifGrid] fetch failed:", err);
       toast.error("Couldn't load GIFs. Please try again.");
