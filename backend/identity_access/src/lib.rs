@@ -525,22 +525,14 @@ fn post_upgrade() {
 
 #[ic_cdk::query]
 fn whoami() -> Outcome<Account> {
-    account_for(&state(), ic_cdk::api::msg_caller())
+    account_for(ic_cdk::api::msg_caller())
 }
 
 #[ic_cdk::update]
 fn register_account() -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
-    let mut state = state();
-    let account_id = ensure_account(&mut state, caller)?;
-    let account = state
-        .accounts
-        .iter()
-        .find(|account| account.id == account_id)
-        .cloned()
-        .ok_or("Account unavailable")?;
-    store(&state);
-    Ok(account)
+    let account_id = ensure_account(caller)?;
+    get_account(&account_id).ok_or("Account unavailable".into())
 }
 
 fn valid_display_name(value: &str) -> bool {
@@ -553,8 +545,7 @@ fn valid_display_name(value: &str) -> bool {
 #[ic_cdk::update]
 fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let state = state();
-    let account_id = account_for(&state, caller)?.id;
+    let account_id = account_for(caller)?.id;
     if !valid_display_name(&display_name) {
         return Err("Display name must be 1-80 characters".into());
     }
@@ -567,24 +558,15 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
         avatar_ref,
         updated_at_ns: ic_cdk::api::time(),
     };
-    let mut state = state;
-    state.profiles.retain(|p| p.account_id != account_id);
-    state.profiles.push(profile.clone());
-    store(&state);
+    put_profile_entry(&profile);
     Ok(profile)
 }
 
 /// The caller's own profile, or an error when none has been set yet.
 #[ic_cdk::query]
 fn get_profile() -> Outcome<Profile> {
-    let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
-    state
-        .profiles
-        .iter()
-        .find(|p| p.account_id == account_id)
-        .cloned()
-        .ok_or("Profile not set".into())
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
+    get_profile_entry(&account_id).ok_or("Profile not set".into())
 }
 
 /// Batch profile lookup by account id (principal text / user id), used by
@@ -592,10 +574,7 @@ fn get_profile() -> Outcome<Profile> {
 /// Unknown ids are skipped rather than causing an error.
 #[ic_cdk::query]
 fn get_profiles_by_ids(ids: Vec<String>) -> Vec<Profile> {
-    let state = state();
-    ids.iter()
-        .filter_map(|id| state.profiles.iter().find(|p| &p.account_id == id).cloned())
-        .collect()
+    ids.iter().filter_map(|id| get_profile_entry(id)).collect()
 }
 
 /// Case-insensitive substring search over display names — the ICP-mode
@@ -611,21 +590,15 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
         return Err("Search text is required".into());
     }
     let cap = limit.clamp(1, 25) as usize;
-    let state = state();
     let mut results = Vec::new();
-    for profile in &state.profiles {
+    for profile in all_profiles() {
         if profile.display_name.trim().is_empty()
             || !profile.display_name.to_lowercase().contains(&needle)
         {
             continue;
         }
-        let principal = match state
-            .accounts
-            .iter()
-            .find(|a| a.id == profile.account_id)
-            .and_then(|a| a.principals.first())
-        {
-            Some(p) => *p,
+        let principal = match get_account(&profile.account_id).and_then(|a| a.principals.first().copied()) {
+            Some(p) => p,
             None => continue,
         };
         results.push(ProfileSearchResult {
@@ -645,7 +618,7 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
 #[ic_cdk::query]
 fn my_roles() -> Outcome<Vec<RoleGrant>> {
     let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
     Ok(state
         .roles
         .iter()
@@ -667,7 +640,7 @@ fn access_scoped(
     child: Option<String>,
 ) -> Outcome<Access> {
     let state = state();
-    let account = account_for(&state, ic_cdk::api::msg_caller())?;
+    let account = account_for(ic_cdk::api::msg_caller())?;
     let account_id = account.id;
     let site_ref = site_id.as_deref();
     let club_ref = club.as_deref();
@@ -707,7 +680,7 @@ fn export_state() -> Outcome<State> {
 fn get_external_bindings(account_id: String) -> Outcome<Vec<ExternalSiteBinding>> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -722,7 +695,7 @@ fn get_external_bindings(account_id: String) -> Outcome<Vec<ExternalSiteBinding>
 fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -739,7 +712,7 @@ fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
 fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     authenticated(target)?;
     if state
         .accounts
@@ -825,7 +798,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
 fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let current = account_for(&state, caller)?;
+    let current = account_for(caller)?;
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
     }
@@ -899,7 +872,7 @@ fn set_privacy_consent(
 ) -> Outcome<PrivacyConsent> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -938,7 +911,7 @@ fn set_privacy_consent(
 fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account_id = account_for(&state, caller)?.id;
+    let account_id = account_for(caller)?.id;
     if terms_version == 0 {
         return Err("terms_version must be positive".into());
     }
@@ -970,7 +943,7 @@ fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
 fn get_terms_acceptance(account_id: String) -> Outcome<Option<TermsAcceptance>> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -987,7 +960,7 @@ fn get_terms_acceptance(account_id: String) -> Outcome<Option<TermsAcceptance>> 
 #[ic_cdk::query]
 fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
     let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
     Ok(state
         .terms_acceptances
         .iter()
@@ -999,7 +972,7 @@ fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
 fn erase_account(account_id: String) -> Outcome<()> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let caller_account = account_for(&state, caller)?;
+    let caller_account = account_for(caller)?;
     if caller_account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -1440,7 +1413,7 @@ fn is_pro(principal: Principal) -> Outcome<bool> {
 fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
     let state = state();
     let caller = ic_cdk::api::msg_caller();
-    let caller_account = account_for(&state, caller)?;
+    let caller_account = account_for(caller)?;
     if state.governor == caller || caller_account.id == account_id {
         return Ok(true);
     }
