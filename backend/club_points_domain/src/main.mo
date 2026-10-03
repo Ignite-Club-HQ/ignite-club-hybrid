@@ -285,16 +285,16 @@ persistent actor {
 
   public query ({ caller }) func get_user_points_all_clubs(user_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     auth(caller);
-    userClubPoints
+    #Ok(userClubPoints
       .filter(func(item) = item.user_id == user_id and canReadSubject(caller, item.club_id, #User(user_id)))
-      .map(func(item) = (item.club_id, item.points))
+      .map(func(item) = (item.club_id, item.points)))
   };
 
   public query ({ caller }) func get_child_points_all_clubs(child_id : Text) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     auth(caller);
-    childClubPoints
+    #Ok(childClubPoints
       .filter(func(item) = item.child_id == child_id and canReadSubject(caller, item.club_id, #Child(child_id)))
-      .map(func(item) = (item.club_id, item.points))
+      .map(func(item) = (item.club_id, item.points)))
   };
 
   public query ({ caller }) func get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
