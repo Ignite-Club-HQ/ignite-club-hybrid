@@ -157,6 +157,7 @@ export const idlFactory = ({ IDL }) => {
     'description' : IDL.Opt(IDL.Text),
     'created_at_ms' : IDL.Nat64,
     'logo_url' : IDL.Opt(IDL.Text),
+    'sport' : IDL.Opt(IDL.Text),
     'playhq_org_id' : IDL.Opt(IDL.Text),
     'is_active' : IDL.Bool,
     'primary_color' : IDL.Opt(IDL.Text),
@@ -489,7 +490,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_club' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
         [],
       ),

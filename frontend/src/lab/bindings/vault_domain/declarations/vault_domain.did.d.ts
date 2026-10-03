@@ -80,6 +80,11 @@ export interface _SERVICE {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+  'get_file' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [VaultFile] } |
+      { 'Err' : string }
+  >,
   'get_folder' : ActorMethod<
     [string],
     { 'Ok' : [] | [VaultFolder] } |

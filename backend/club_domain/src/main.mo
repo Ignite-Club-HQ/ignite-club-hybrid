@@ -1657,13 +1657,13 @@ persistent actor {
 
   // ---- Club creation + club join requests ----
 
-  public shared ({ caller }) func create_club(id : Text, name : Text, slug : Text, description : ?Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
+  public shared ({ caller }) func create_club(id : Text, name : Text, slug : Text, description : ?Text, sport : ?Text) : async { #Ok : Types.ClubProfile; #Err : Text } {
     auth(caller);
     if (id == "" or id.size() > 128) return #Err("Invalid club id");
     if (name == "" or name.size() > 160) return #Err("Invalid club name");
     if (profiles.any(func(p) = p.id == id)) return #Err("Club already exists");
     let profile : Types.ClubProfile = {
-      id; name; slug; description;
+      id; name; slug; description; sport;
       created_at_ms = nowMs();
       logo_url = null;
       is_active = true;

@@ -174,15 +174,15 @@ export default function CreateClubPage() {
     try {
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: create_club has no sport/class-mode/logo-upload
-          // fields yet and does not auto-assign the creator a club_admin
-          // role grant — only name/slug/description/logo_url persist.
+          // Class-mode and logo upload still have no club_domain counterpart
+          // on this path (NEEDS-CANISTER); sport now persists via create_club.
           const profile = await createLiveClub(
             ctx,
             crypto.randomUUID(),
             name.trim(),
             slugifyClubName(name.trim()) || `club-${Date.now()}`,
             description.trim() || "",
+            sport || null,
           );
           return profile.id;
         },
