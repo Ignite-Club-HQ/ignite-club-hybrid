@@ -166,6 +166,22 @@ service : {
       Err: text;
       Ok: int32;
     }) query;
+  get_child_points_all_clubs: (child_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                text;
+                int32;
+              };
+    }) query;
+  get_child_points_batch: (club_id: text, child_ids: vec text) ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                text;
+                int32;
+              };
+    }) query;
   get_club_points_settings: (club_id: text) ->
    (variant {
       Err: text;
@@ -188,6 +204,14 @@ service : {
    (variant {
       Err: text;
       Ok: int32;
+    }) query;
+  get_user_points_all_clubs: (user_id: text) ->
+   (variant {
+      Err: text;
+      Ok: vec record {
+                text;
+                int32;
+              };
     }) query;
   grant_role: ("principal": principal, role: text, club_id: text, team_id:
    opt text) -> (variant {

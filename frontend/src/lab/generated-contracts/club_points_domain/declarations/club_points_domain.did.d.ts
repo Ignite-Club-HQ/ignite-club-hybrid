@@ -185,6 +185,16 @@ export interface _SERVICE {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'get_child_points_all_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'get_child_points_batch' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
   'get_club_points_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubPointsSettings] } |
@@ -203,6 +213,11 @@ export interface _SERVICE {
   'get_user_points' : ActorMethod<
     [string, string],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'get_user_points_all_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<[string, number]> } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<

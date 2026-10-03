@@ -553,6 +553,7 @@ export interface _SERVICE {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'get_app_config' : ActorMethod<[string], [] | [string]>,
   'get_club_branding' : ActorMethod<
     [string],
     { 'Ok' : ClubBranding } |
@@ -922,6 +923,11 @@ export interface _SERVICE {
   'send_fee_reminders' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'set_app_config' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_header_toggles' : ActorMethod<
