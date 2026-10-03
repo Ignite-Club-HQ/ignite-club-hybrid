@@ -115,7 +115,7 @@ function rowsFromOverrides(overrides: IcpAdminOverrides | null): CanisterRow[] {
   return Object.entries(overrides.canisterIds).map(([key, id]) => ({ key, id }));
 }
 
-function validateRows(rows: CanisterRow[]): Record<string, string> {
+async function validateRows(rows: CanisterRow[]): Promise<Record<string, string>> {
   const canisterIds: Record<string, string> = {};
   for (const row of rows) {
     const key = row.key.trim();
@@ -126,7 +126,7 @@ function validateRows(rows: CanisterRow[]): Record<string, string> {
     }
     if (!id) throw new Error(`Canister "${key}" is missing its canister ID.`);
     if (canisterIds[key]) throw new Error(`Canister key "${key}" is listed twice.`);
-    canisterIds[key] = validateCanisterId(key, id);
+    canisterIds[key] = await validateCanisterId(key, id);
   }
   return canisterIds;
 }
@@ -209,7 +209,7 @@ export default function PlacementAdminSettingsPage() {
         .eq("key", ICP_CANISTER_CONFIG_KEY)
         .maybeSingle();
       if (error) throw error;
-      return data ? parseIcpAdminOverrides(data.value) : null;
+      return data ? await parseIcpAdminOverrides(data.value) : null;
     },
     enabled: !!user && isAppAdmin,
   });
@@ -492,9 +492,9 @@ export default function PlacementAdminSettingsPage() {
     setRows(current => [...current, { key: suggestion ?? "", id: "" }]);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
-      saveMutation.mutate(validateRows(rows));
+      saveMutation.mutate(await validateRows(rows));
     } catch (error) {
       toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
     }

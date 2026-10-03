@@ -1,4 +1,4 @@
-import { Principal } from "@icp-sdk/core/principal";
+import type { Principal } from "@icp-sdk/core/principal";
 import type { IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -23,8 +23,11 @@ export type IcpAdminOverrides = {
   wsGatewayUrl?: string;
 };
 
-export function validateCanisterId(domainKey: string, canisterId: string): string {
+export async function validateCanisterId(domainKey: string, canisterId: string): Promise<string> {
   const trimmed = canisterId.trim();
+  // Lazy @icp-sdk/core/principal import: this module is entry-reachable via
+  // targetRegistry.ts, and the entry-chunk rule forbids static @icp-sdk/* pulls.
+  const { Principal } = await import("@icp-sdk/core/principal");
   let principal: Principal;
   try {
     principal = Principal.fromText(trimmed);
@@ -42,7 +45,7 @@ export function validateCanisterId(domainKey: string, canisterId: string): strin
  * Returns null when the row holds no usable overrides. Throws on malformed
  * content so callers can surface the problem instead of silently ignoring it.
  */
-export function parseIcpAdminOverrides(value: unknown): IcpAdminOverrides | null {
+export async function parseIcpAdminOverrides(value: unknown): Promise<IcpAdminOverrides | null> {
   if (value === null || value === undefined) return null;
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${ICP_CANISTER_CONFIG_KEY} must be a JSON object.`);
@@ -68,7 +71,7 @@ export function parseIcpAdminOverrides(value: unknown): IcpAdminOverrides | null
       throw new Error(`Canister ID for ${key} must be a string.`);
     }
     if (id.trim() === "") continue;
-    canisterIds[key.trim()] = validateCanisterId(key, id);
+    canisterIds[key.trim()] = await validateCanisterId(key, id);
   }
   if (Object.keys(canisterIds).length === 0 && !wsGatewayUrl) return null;
   return wsGatewayUrl ? { canisterIds, wsGatewayUrl } : { canisterIds };
