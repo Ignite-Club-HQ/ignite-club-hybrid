@@ -1729,7 +1729,33 @@ export async function deactivateLiveActiveGame(
 
 export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: string | null) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_active_game(candidOpt(teamId)), "Get active game");
+  const result = unwrapCandid(actor.get_active_game(candidOpt(teamId)), "Get active game") as unknown as
+    | []
+    | [{ pitch_state_json?: string; [key: string]: unknown }];
+  if (result.length === 0) return result;
+  const row = result[0];
+  // Player names inside the pitch-state JSON are opaque PII references;
+  // resolve them best effort (neutral label when unreadable; legacy
+  // plaintext renders as-is).
+  if (typeof row.pitch_state_json !== "string") return result;
+  let doc: unknown;
+  try {
+    doc = JSON.parse(row.pitch_state_json);
+  } catch {
+    return result;
+  }
+  const players = (doc as { players?: unknown[] } | null)?.players;
+  if (!Array.isArray(players)) return result;
+  const refs = players
+    .map((p) => (p as Record<string, unknown> | null)?.name)
+    .filter((n): n is string => typeof n === "string" && n.startsWith(PITCH_NAME_REF_PREFIX));
+  if (refs.length === 0) return result;
+  const names = await resolveNameRefs(ctx, refs, "Get active game");
+  const resolved = {
+    ...(doc as Record<string, unknown>),
+    players: resolveNameRefsInDoc(players, PITCH_NAME_REF_PREFIX, names),
+  };
+  return [{ ...row, pitch_state_json: JSON.stringify(resolved) }];
 }
 
 /** Admin per-viewer event-view list (event_views rows for one event). */
