@@ -1,4 +1,5 @@
 import { Clock, Filter, RefreshCw, Sparkles } from "lucide-react";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,10 @@ export function MessagesPageHeader({
             </Button>
           )}
 
+          {/* Scheduled messages have no canister counterpart — the page fails
+              closed for II users, so hide the entry point instead (blocked
+              options are hidden, never shown as unavailable). */}
+          {!isFeatureRoutedToIcp("messaging") && (
           <Button
             variant="outline"
             size="icon"
@@ -97,6 +102,7 @@ export function MessagesPageHeader({
           >
             <Clock className="h-5 w-5" />
           </Button>
+          )}
           <CreateActionButton ariaLabel="New message" onClick={onOpenNewMessage} />
         </div>
       </div>

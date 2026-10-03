@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import igniteIcon from "@/assets/ignite-icon.png";
 import { guardClubListResult } from "@/lib/clubListEmptyGuard";
 
@@ -137,7 +138,9 @@ export function ClubThemeToggle() {
       return guardClubListResult(`all-user-clubs:${user.id}`, Array.from(dedupedClubs.values()));
     },
     retry: 3,
-    enabled: !!user?.id,
+    // Currently dead code (imported by AppHeader but never rendered); guarded
+    // anyway so re-enabling it can never fire Supabase reads for II users.
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
   });
 
   // Show non-selectable clubs with appropriate messaging

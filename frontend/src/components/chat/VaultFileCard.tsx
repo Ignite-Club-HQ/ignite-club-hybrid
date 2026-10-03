@@ -14,6 +14,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveVaultFolder } from "@/live/features/vault";
+import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { toast } from "sonner";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 
@@ -60,19 +64,31 @@ function getColorForFile(name: string, fileType: string | null): string {
 
 export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, rootScope, rootId }: VaultFileCardProps) {
   const navigate = useNavigate();
+  const vaultIcp = isFeatureRoutedToIcp("vault");
 
   // Folder card
   const folderQuery = useQuery({
-    queryKey: ["vault-folder-card", folderId],
+    queryKey: ["vault-folder-card", folderId, vaultIcp],
     queryFn: async () => {
       if (!folderId) return null;
-      const { data, error } = await supabase
-        .from("vault_folders")
-        .select("id, name, club_id, team_id")
-        .eq("id", folderId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("vault", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("vault_folders")
+            .select("id, name, club_id, team_id")
+            .eq("id", folderId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        // Internet Identity users: resolve the folder from vault_domain.
+        icp: async (ctx) => {
+          const f = await getLiveVaultFolder(ctx, folderId);
+          if (!f) return null;
+          const team = (f as { team?: string[] }).team;
+          return { id: f.id, name: f.name, club_id: f.club, team_id: team?.[0] ?? null };
+        },
+      });
     },
     enabled: !!folderId,
     staleTime: 60 * 1000,
@@ -83,6 +99,10 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
     queryKey: ["vault-file-card", fileId],
     queryFn: async () => {
       if (!fileId) return null;
+      // NEEDS-CANISTER: vault_domain exposes no file-by-id query (files are
+      // listed per folder), so the file card cannot resolve under ICP. The
+      // card is hidden for II users below rather than firing Supabase.
+      if (vaultIcp) return null;
       const { data, error } = await supabase
         .from("vault_files")
         .select("id, name, file_url, file_type, file_size, is_external_link, club_id, team_id, folder_id, deleted_at")
@@ -91,7 +111,7 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
       if (error) throw error;
       return data;
     },
-    enabled: !!fileId,
+    enabled: !!fileId && !vaultIcp,
     staleTime: 60 * 1000,
   });
 
@@ -100,22 +120,36 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
     queryKey: ["vault-root-card", rootScope, rootId],
     queryFn: async () => {
       if (!rootScope || !rootId) return null;
-      if (rootScope === "team") {
-        const { data, error } = await supabase
-          .from("teams")
-          .select("id, name, club_id")
-          .eq("id", rootId)
-          .maybeSingle();
-        if (error) throw error;
-        return data ? { name: data.name as string } : null;
-      }
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, name")
-        .eq("id", rootId)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? { name: data.name as string } : null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          if (rootScope === "team") {
+            const { data, error } = await supabase
+              .from("teams")
+              .select("id, name, club_id")
+              .eq("id", rootId)
+              .maybeSingle();
+            if (error) throw error;
+            return data ? { name: data.name as string } : null;
+          }
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, name")
+            .eq("id", rootId)
+            .maybeSingle();
+          if (error) throw error;
+          return data ? { name: data.name as string } : null;
+        },
+        // Internet Identity users: resolve the team/club name from club_domain.
+        icp: async (ctx) => {
+          if (rootScope === "team") {
+            const t = (await getLiveTeam(ctx, rootId)) as { name?: string } | null;
+            return t?.name ? { name: t.name } : null;
+          }
+          const c = await getLiveClubProfile(ctx, rootId);
+          const profile = c.length ? c[0] : null;
+          return profile?.name ? { name: profile.name } : null;
+        },
+      });
     },
     enabled: !!rootScope && !!rootId,
     staleTime: 60 * 1000,
@@ -222,6 +256,9 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
   }
 
   if (fileId) {
+    // Hidden for II users (no canister file-by-id query) — never render a
+    // "File unavailable" degraded state for a vault that is simply unrouted.
+    if (vaultIcp) return null;
     if (fileQuery.isLoading) {
       return (
         <div

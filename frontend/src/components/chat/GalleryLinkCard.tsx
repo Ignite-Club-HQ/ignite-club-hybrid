@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ImageIcon, ChevronRight } from "lucide-react";
 import { memo, useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -15,6 +16,10 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const navigate = useNavigate();
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
+  // NEEDS-CANISTER: gallery_chat_cards (photo-share prompt cards) have no
+  // canister counterpart — the card is hidden for II users below instead of
+  // firing Supabase reads. Matches the BoardLinkCard pattern.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { data: card, isLoading } = useQuery({
     queryKey: ["gallery-chat-card", cardId],
@@ -39,7 +44,7 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
 
       return data ? { ...data, opponentLabel, eventStart } : null;
     },
-    enabled: !!cardId,
+    enabled: !!cardId && !isIcp,
     staleTime: 30 * 1000,
   });
 
@@ -59,6 +64,8 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
     },
     [card, navigate],
   );
+
+  if (isIcp) return null;
 
   if (isLoading) {
     // Match the final gallery-card slot exactly. The card itself keeps a

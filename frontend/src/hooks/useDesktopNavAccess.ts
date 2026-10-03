@@ -5,7 +5,7 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants } from "@/live/features/club";
+import { myLiveRoleGrants, getLiveTeam } from "@/live/features/club";
 
 
 
@@ -57,11 +57,38 @@ export function useDesktopNavAccess() {
       let teamClubMap = new Map<string, string>();
       let teamNameMap = new Map<string, string>();
       if (teamIds.length > 0) {
-        const { data: teams } = await supabase.from("teams").select("id, name, club_id").in("id", teamIds);
-        teamClubMap = new Map(
-          (teams || []).filter((t) => !!t.club_id).map((t) => [t.id as string, t.club_id as string]),
-        );
-        teamNameMap = new Map((teams || []).map((t) => [t.id as string, (t.name as string) ?? "Team"]));
+        if (isFeatureRoutedToIcp("membership")) {
+          // Internet Identity users: resolve team -> club from club_domain
+          // (same shape as the Supabase teams read below).
+          const teams = await withFeatureBackend("membership", {
+            supabase: async () => [] as Array<{ id: string; name: string; club_id: string | null }>,
+            icp: async (ctx) => {
+              const resolved = await Promise.all(
+                teamIds.map(async (id) => {
+                  try {
+                    const t = (await getLiveTeam(ctx, id)) as unknown as { id: string; name?: string; club_id?: string; club?: string } | null;
+                    return t
+                      ? { id: t.id, name: t.name ?? "Team", club_id: (t.club_id ?? t.club) ?? null }
+                      : null;
+                  } catch {
+                    return null;
+                  }
+                }),
+              );
+              return resolved.filter((t): t is { id: string; name: string; club_id: string | null } => !!t);
+            },
+          });
+          teamClubMap = new Map(
+            teams.filter((t) => !!t.club_id).map((t) => [t.id, t.club_id as string]),
+          );
+          teamNameMap = new Map(teams.map((t) => [t.id, t.name]));
+        } else {
+          const { data: teams } = await supabase.from("teams").select("id, name, club_id").in("id", teamIds);
+          teamClubMap = new Map(
+            (teams || []).filter((t) => !!t.club_id).map((t) => [t.id as string, t.club_id as string]),
+          );
+          teamNameMap = new Map((teams || []).map((t) => [t.id as string, (t.name as string) ?? "Team"]));
+        }
       }
 
       const clubIds = Array.from(
@@ -74,7 +101,12 @@ export function useDesktopNavAccess() {
       // The pitch board only exists for football/soccer in this build — never
       // surface it for other sports.
       const boardClubIds = new Set<string>();
-      if (clubIds.length > 0) {
+      // NEEDS-CANISTER: club sport has no canister field (club_domain
+      // ClubProfile/ClubSettings carry no sport), so the pitch-board sport
+      // check cannot resolve under ICP. boardClubIds stays empty and the
+      // board rail item stays hidden for Internet Identity users — no
+      // Supabase clubs read fires.
+      if (clubIds.length > 0 && !isFeatureRoutedToIcp("membership")) {
         const { data: clubs } = await supabase.from("clubs").select("id, sport").in("id", clubIds);
         (clubs || []).forEach((c) => {
           if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id as string);
@@ -147,6 +179,10 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
     enabled: enabled && teamIds.length > 0,
     staleTime: 60_000,
     queryFn: async (): Promise<string | null> => {
+      // Under ICP the board rail item is hidden (no canister club-sport
+      // field), so there is never a board target to resolve — fail closed
+      // rather than firing a Supabase events read.
+      if (isFeatureRoutedToIcp("events")) return null;
       const { data: events, error } = await supabase
         .from("events")
         .select("team_id, event_date")

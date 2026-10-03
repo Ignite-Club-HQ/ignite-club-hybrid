@@ -6,6 +6,9 @@ import { format, parseISO } from "date-fns";
 import { getEventTypeLabel } from "@/lib/eventTypeLabel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { shouldAppendOpponent } from "@/lib/eventTitle";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveEvents } from "@/live/features/events";
 import { memo, useCallback } from "react";
 
 interface EventLinkCardProps {
@@ -15,15 +18,43 @@ interface EventLinkCardProps {
 export const EventLinkCard = memo(function EventLinkCard({ eventId }: EventLinkCardProps) {
   const navigate = useNavigate();
 
+  const icpRouted = isFeatureRoutedToIcp("events");
   const { data: event, isLoading } = useQuery({
-    queryKey: ["event-link-card", eventId],
+    queryKey: ["event-link-card", eventId, icpRouted],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("id, title, event_date, start_time, end_time, location_name, location, type, opponent, is_home_game, mini_league_id, is_cancelled")
-        .eq("id", eventId)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("events")
+            .select("id, title, event_date, start_time, end_time, location_name, location, type, opponent, is_home_game, mini_league_id, is_cancelled")
+            .eq("id", eventId)
+            .maybeSingle();
+          return data;
+        },
+        // Internet Identity users: resolve the event from events_domain.
+        // Caller-scoped list + find mirrors eventDetailRepository's pattern.
+        icp: async (ctx) => {
+          const events = (await listLiveEvents(ctx)) as unknown as Array<Record<string, unknown>>;
+          const e = events.find((ev) => ev.id === eventId && !ev.deleted);
+          if (!e) return null;
+          const startsAt = new Date(Number(e.starts_at_ms));
+          const endsAt = new Date(Number(e.ends_at_ms));
+          return {
+            id: e.id as string,
+            title: e.title as string,
+            event_date: startsAt.toISOString(),
+            start_time: startsAt.toISOString(),
+            end_time: endsAt.toISOString(),
+            location_name: null,
+            location: ((e.location as string[] | undefined)?.[0] as string) ?? null,
+            type: e.event_type as string,
+            opponent: null,
+            is_home_game: false,
+            mini_league_id: null,
+            is_cancelled: !!e.cancelled,
+          };
+        },
+      });
     },
     enabled: !!eventId,
     staleTime: 5 * 60 * 1000,
