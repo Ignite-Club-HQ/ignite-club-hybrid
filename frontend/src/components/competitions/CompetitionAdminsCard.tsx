@@ -153,7 +153,22 @@ export function CompetitionAdminsCard({
             related_id: competitionId,
           });
         },
-        icp: async (ctx) => { await addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin"); },
+        icp: async (ctx) => {
+          await addLiveCompetitionRole(ctx, competitionId, Principal.fromText(target.id), "admin");
+          try {
+            const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+            await sendGamificationNotification({
+              userId: target.id,
+              clubId: organizerClubId ?? competitionId,
+              kind: "membership",
+              message: `You have been added as an admin of ${competitionName}`,
+              relatedId: competitionId,
+              dedupHours: 0,
+            });
+          } catch (e) {
+            console.error("[CompetitionAdminsCard] Failed to notify new competition admin:", e);
+          }
+        },
       });
       return target;
     },
