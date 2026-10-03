@@ -58,6 +58,16 @@ persistent actor {
   // public-minimum-app-version edge function).
   var minimumAppVersions : [(Text, Text)];
 
+  // Realtime poke channel (IC WebSocket). Session state only — transient by
+  // design: a canister upgrade drops registrations and connected gateways /
+  // clients simply reconnect. No message content ever crosses this channel,
+  // only {conversation_id, sequence} pokes (see Types.WsAppMessage).
+  transient let wsParams = IcWebSocketCdkTypes.WsInitParams(null, null);
+  transient let wsState = IcWebSocketCdkState.IcWebSocketState(wsParams);
+  transient let wsHandlers = IcWebSocketCdkTypes.WsHandlers(null, null, null);
+  transient let ws = IcWebSocketCdk.IcWebSocket(wsState, wsParams, wsHandlers);
+  ws.init<system>();
+
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
     if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
