@@ -56,8 +56,6 @@ persistent actor class Main(governorInit : Principal) {
   // fan-out hook. Fail-closed while unset, mirrors messaging_domain/club_domain.
   var notificationQueueCanister : ?Principal;
 
-  if (governor.equal(Principal.anonymous()) and not governor_arg.equal(Principal.anonymous())) { governor := governor_arg };
-
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
