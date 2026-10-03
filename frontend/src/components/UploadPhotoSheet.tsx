@@ -18,7 +18,7 @@ import { isCancelledSelectionError, getReadableUploadError } from "@/lib/uploadE
 import { pickNativePhoto, shouldUseNativePicker as shouldUseNativeIOSPicker, ensurePhotoLibraryPermission, PhotoPermissionDeniedError, isPhotoPermissionError } from "@/lib/nativePhotoPicker";
 import { showPhotoPermissionDeniedToast } from "@/lib/showPhotoPermissionDeniedToast";
 import { syncGalleryPhotoToVault } from "@/lib/galleryVaultSync";
-import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { tryUploadMediaToBlobStore, isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { registerLiveAsset } from "@/live/features/media";
@@ -423,6 +423,14 @@ export function UploadPhotoSheet({
   }, []);
 
   const uploadSinglePhoto = async (file: File, clubId: string, teamId: string, miniLeagueId: string, eventId: string, photoCaption: string, albumId: string | null): Promise<{ url: string; photoId: string }> => {
+    // Fail closed for Internet Identity members until the media_blob_store
+    // canister is configured: without it the only byte path is plaintext
+    // Supabase storage, which ICP sessions must never write. The entry
+    // buttons are hidden upstream (MediaPage gates on the same check); this
+    // is the defence-in-depth guard.
+    if (isIcpMediaUploadUnavailable()) {
+      throw new Error("Photo uploads are not available for Internet Identity members until the media canisters are configured");
+    }
     const fileExt = file.name.split(".").pop();
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(7);
