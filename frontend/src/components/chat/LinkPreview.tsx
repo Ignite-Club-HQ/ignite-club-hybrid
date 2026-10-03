@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { fetchLiveLinkPreview } from "@/live/features/messaging";
-import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { runWhenChatScrollIdle } from "@/lib/chatScrollActivity";
 import { preventIfReactionInteractionGuarded } from "@/lib/reactionInteractionGuard";
