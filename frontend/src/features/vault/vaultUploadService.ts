@@ -8,6 +8,9 @@ import {
   settleVaultStorage,
 } from "@/lib/vaultUpload";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { registerLiveVaultFile } from "@/live/features/vault";
 import type { VaultFolderView } from "./types";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
@@ -111,6 +114,51 @@ export async function uploadVaultItem(
     fileName: options.file.name,
   });
   const clubId = "clubId" in options.view ? options.view.clubId ?? null : null;
+
+  // ICP mode: bytes go to the media_blob_store canister (encrypted) and the
+  // metadata row to vault_domain — no Supabase writes at all. Fail closed
+  // when the blob store is not configured (the upload UI is hidden upstream
+  // via isIcpMediaUploadUnavailable; this is the defence-in-depth guard).
+  // Quota reserve/settle are Supabase-only and intentionally skipped:
+  // storage accounting is hard-zeroed for ICP (vaultAccessRepository).
+  if (isFeatureRoutedToIcp("vault")) {
+    const blobUpload = dependencies.tryBlobUpload
+      ? await dependencies.tryBlobUpload({
+          storagePath,
+          file: options.file,
+          mime: options.file.type || "application/octet-stream",
+        })
+      : null;
+    if (!blobUpload) {
+      throw new Error("Vault uploads are not available for Internet Identity members until the media canisters are configured");
+    }
+    if (!clubId) {
+      throw new Error("Vault uploads need a club scope on the ICP backend");
+    }
+    await withFeatureBackend("vault", {
+      supabase: () => {
+        throw new Error("unreachable: vault routing checked above");
+      },
+      icp: async (ctx) => {
+        await registerLiveVaultFile(
+          ctx,
+          crypto.randomUUID(),
+          options.folderId ?? "",
+          clubId,
+          options.view.type === "team" ? options.view.teamId : null,
+          options.name,
+          blobUpload.url,
+          options.file.size,
+          options.file.type || "application/octet-stream",
+          false,
+          blobUpload.blobRef,
+          options.view.type === "mini-league" ? options.view.miniLeagueId : null,
+        );
+      },
+    });
+    return;
+  }
+
   const reservationId = await dependencies.reserveStorage(clubId, options.file.size);
 
   // ICP blob store (future on-chain media): bytes go on-chain when a

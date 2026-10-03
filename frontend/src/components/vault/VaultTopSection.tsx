@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import type { FolderView, VaultExportProgress } from "@/features/vault/useVaultExport";
 import type { VaultStorageBreakdown as VaultStorageBreakdownData } from "@/features/vault/vaultStorageRepository";
 import { VaultStorageBarRow } from "./VaultStorageBarRow";
@@ -559,7 +560,7 @@ function VaultActionToolbar({
 
         {!selectionMode && !isExporting && (
           <>
-            {canUpload && (
+            {canUpload && !isIcpMediaUploadUnavailable() && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="sm" onClick={() => setUploadDialogOpen(true)}>
