@@ -55,7 +55,8 @@ jobs:
             icp identity default ignite-governor
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
-            icp identity new ignite-governor --storage plaintext
+            icp identity new ignite-governor --storage plaintext \
+              --output-seed "$ICP_HOME/identity/keys/ignite-governor.seed.txt"
             icp identity default ignite-governor
             echo "key_source=generated" >> "$GITHUB_ENV"
           fi
@@ -71,10 +72,10 @@ jobs:
       - name: Convert available ICP to cycles
         run: |
           set -euo pipefail
-          RAW="$(icp token balance -n ic)"
+          RAW="$(icp token balance -n ic -q 2>/dev/null || icp token balance -n ic)"
           echo "ICP balance: $RAW"
-          # Extract the decimal amount, leave 0.0001 ICP behind for the ledger fee.
-          AMT="$(echo "$RAW" | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
+          # Extract the first number, leave 0.0001 ICP behind for the ledger fee.
+          AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
           if [ -z "$AMT" ]; then
             echo "==> Could not parse ICP balance; skipping auto-conversion."
             echo "==> If deploy fails for lack of cycles, convert manually: icp cycles mint --icp <amount> -n ic"
@@ -136,5 +137,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deployer-key
-          path: ${{ env.ICP_HOME }}/identity/keys/ignite-governor.pem
+          path: |
+            ${{ env.ICP_HOME }}/identity/keys/ignite-governor.pem
+            ${{ env.ICP_HOME }}/identity/keys/ignite-governor.seed.txt
           if-no-files-found: error
