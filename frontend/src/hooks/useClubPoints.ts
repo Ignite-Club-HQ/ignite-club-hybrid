@@ -1,7 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveChildPoints, getLiveUserPoints } from "@/live/features/points";
+import {
+  getLiveChildPoints,
+  getLiveChildPointsAllClubs,
+  getLiveChildPointsBatch,
+  getLiveUserPoints,
+  getLiveUserPointsAllClubs,
+} from "@/live/features/points";
 
 /**
  * Read a user's reward-points balance scoped to a single club.
@@ -81,13 +87,10 @@ export function useAllUserClubPoints(userId: string | null | undefined) {
             .eq("user_id", userId);
           return (data ?? []) as Array<{ club_id: string; points: number }>;
         },
-        // The canister's `get_user_points` requires an explicit club_id — there
-        // is no canister equivalent of "every club this user belongs to" in one
-        // call. Rather than invent a cross-club aggregate (or silently fall
-        // back to Supabase while the feature is routed to ICP), surface an
-        // empty breakdown; per-club balances still resolve correctly via
-        // `useUserClubPoints`.
-        icp: async () => [] as Array<{ club_id: string; points: number }>,
+        icp: async (ctx) => {
+          const rows = await getLiveUserPointsAllClubs(ctx, userId);
+          return rows.map((r) => ({ club_id: r.clubId, points: r.points }));
+        },
       });
     },
     enabled: !!userId,
@@ -120,12 +123,15 @@ export function useChildrenClubPoints(
           (data ?? []).forEach((r: any) => map.set(r.child_id, r.points ?? 0));
           return map;
         },
-        // The canister only exposes `get_child_points(clubId, childId)` for a
-        // single child at a time — there is no bulk-by-ids lookup. Rather than
-        // fire N round trips per render (or fall back to Supabase while ICP is
-        // the routed backend), surface an empty map; callers already treat a
-        // missing entry as "0 points".
-        icp: async () => map,
+        icp: async (ctx) => {
+          const chunkSize = 500;
+          for (let i = 0; i < ids.length; i += chunkSize) {
+            const chunk = ids.slice(i, i + chunkSize);
+            const rows = await getLiveChildPointsBatch(ctx, clubId, chunk);
+            rows.forEach((r) => map.set(r.childId, r.points));
+          }
+          return map;
+        },
       });
     },
     enabled: !!clubId && ids.length > 0,
@@ -150,9 +156,10 @@ export function useAllChildClubPoints(childId: string | null | undefined) {
             .eq("child_id", childId);
           return (data ?? []) as Array<{ club_id: string; points: number }>;
         },
-        // No canister equivalent of "every club this child belongs to" — see
-        // `useAllUserClubPoints` for the same constraint on the user side.
-        icp: async () => [] as Array<{ club_id: string; points: number }>,
+        icp: async (ctx) => {
+          const rows = await getLiveChildPointsAllClubs(ctx, childId);
+          return rows.map((r) => ({ club_id: r.clubId, points: r.points }));
+        },
       });
     },
     enabled: !!childId,
