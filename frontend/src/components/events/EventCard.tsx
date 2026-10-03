@@ -227,6 +227,20 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: myRsvp, isLoading: myRsvpLoading } = useQuery({
     queryKey: ["card-rsvp", event.id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => null, // unreachable — guarded above
+          icp: async (ctx) => {
+            const mine = await listLiveMyRsvps(ctx);
+            const rsvp = mine.find(
+              (r) => r.event_id === event.id && r.child_id.length === 0,
+            );
+            // The canister Rsvp has no row id; the Supabase-shaped id is
+            // only used by the Supabase update branch below, never on ICP.
+            return rsvp ? { id: rsvp.event_id, status: rsvp.state } : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("rsvps")
         .select("id, status")
