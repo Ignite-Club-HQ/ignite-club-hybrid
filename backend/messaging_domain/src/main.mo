@@ -13,6 +13,9 @@ import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Call "mo:ic/Call";
 import IC "mo:ic/Types";
+import IcWebSocketCdk "mo:ic-websocket-cdk";
+import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
+import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
 
 persistent actor {
@@ -54,6 +57,16 @@ persistent actor {
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).
   var minimumAppVersions : [(Text, Text)];
+
+  // Realtime poke channel (IC WebSocket). Session state only — transient by
+  // design: a canister upgrade drops registrations and connected gateways /
+  // clients simply reconnect. No message content ever crosses this channel,
+  // only {conversation_id, sequence} pokes (see Types.WsAppMessage).
+  transient let wsParams = IcWebSocketCdkTypes.WsInitParams(null, null);
+  transient let wsState = IcWebSocketCdkState.IcWebSocketState(wsParams);
+  transient let wsHandlers = IcWebSocketCdkTypes.WsHandlers(null, null, null);
+  transient let ws = IcWebSocketCdk.IcWebSocket(wsState, wsParams, wsHandlers);
+  ws.init<system>();
 
   public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
     auth(caller);
@@ -351,6 +364,49 @@ persistent actor {
     };
   };
 
+  // Realtime poke fan-out: hands each chat member (including the sender —
+  // their other devices need it too) a tiny {conversation_id, sequence} poke
+  // via the WS channel. Never carries message content; clients refetch
+  // through the normal certified query path. Fire-and-forget and fully
+  // fail-open: with no gateway connected every send is a no-op and chat
+  // works exactly as before (adaptive polling).
+  func fanOutWsPoke(conversation_id : Text, sequence : Nat64) : async () {
+    var conv : ?Types.Conversation = null;
+    for (c in conversations.values()) { if (c.id == conversation_id) { conv := ?c } };
+    switch (conv) {
+      case null {};
+      case (?conversation) {
+        let members = switch (getGroupMetadataFor(conversation.id)) {
+          case (?meta) { if (meta.members.size() > 0) { meta.members } else { conversation.participants } };
+          case null { conversation.participants };
+        };
+        let bytes = to_candid (#chat_poke({ conversation_id; sequence }) : Types.WsAppMessage);
+        var sent = 0;
+        label send for (p in members.values()) {
+          // Same 500-recipient cap as the notification fan-out.
+          if (sent >= 500) { break send };
+          sent += 1;
+          try { ignore await ws.send(p, bytes) } catch (_) {};
+        };
+      };
+    };
+  };
+
+  func fanOutWsPokeForMessage(msg : Types.Message) : async () {
+    await fanOutWsPoke(msg.conversation_id, msg.sequence);
+  };
+
+  // Reactions mutate `reactions` without bumping the conversation sequence,
+  // so they poke with the current sequence as the version marker.
+  func fanOutWsReactionPoke(message_id : Text) : async () {
+    for (m in messages.values()) {
+      if (m.id == message_id) {
+        await fanOutWsPoke(m.conversation_id, m.sequence);
+        return;
+      };
+    };
+  };
+
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
@@ -388,6 +444,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, caller, body, idempotency_key, attachment);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }
@@ -433,6 +490,7 @@ persistent actor {
           if (not already) {
             let posted = postMessage(i, caller, body, key, null);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             delivered += 1;
           };
         };
@@ -1059,6 +1117,7 @@ persistent actor {
             };
             let posted = postMessage(ci, caller, orig.body, key, orig.attachment);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
             #Ok(posted)
           };
@@ -1097,6 +1156,7 @@ persistent actor {
           case (?ci) {
             let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
             scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
             #Ok(updated)
@@ -1128,7 +1188,29 @@ persistent actor {
     } else {
       reactions := reactions.concat([{ message_id; user = caller; emoji }]);
     };
+    ignore fanOutWsReactionPoke(message_id);
     #Ok
+  };
+
+  // ===================== Realtime pokes (IC WebSocket) =====================
+  // The four standard gateway-facing methods the IC WebSocket gateway
+  // requires. All state and authorization live in the SDK; the app layer
+  // only ever sends poke messages (Types.WsAppMessage).
+
+  public shared ({ caller }) func ws_open(args : IcWebSocketCdk.CanisterWsOpenArguments) : async IcWebSocketCdk.CanisterWsOpenResult {
+    await ws.ws_open(caller, args);
+  };
+
+  public shared ({ caller }) func ws_close(args : IcWebSocketCdk.CanisterWsCloseArguments) : async IcWebSocketCdk.CanisterWsCloseResult {
+    await ws.ws_close(caller, args);
+  };
+
+  public shared ({ caller }) func ws_message(args : IcWebSocketCdk.CanisterWsMessageArguments, msg_type : ?Types.WsAppMessage) : async IcWebSocketCdk.CanisterWsMessageResult {
+    await ws.ws_message(caller, args, msg_type);
+  };
+
+  public shared query ({ caller }) func ws_get_messages(args : IcWebSocketCdk.CanisterWsGetMessagesArguments) : async IcWebSocketCdk.CanisterWsGetMessagesResult {
+    ws.ws_get_messages(caller, args);
   };
 
   func reactionsSummaryFor(message_id : Text) : [Types.ReactionSummary] {
@@ -1514,6 +1596,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, caller, body, idempotency_key, null);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }
@@ -1557,6 +1640,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, governor, body, idempotency_key, null);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }

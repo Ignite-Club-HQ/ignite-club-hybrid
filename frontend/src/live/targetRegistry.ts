@@ -17,6 +17,8 @@ export type IcpTargetConfig = {
   networkKind: "public_mainnet" | "cloud_engine";
   host: string;
   canisterIds: Record<string, string>;
+  /** IC WebSocket gateway URL for chat realtime (e.g. wss://ws.example.com). */
+  wsGatewayUrl?: string;
   supportedDomains?: string[];
   residencyProfile?: string;
   deploymentClass: "public_subnet" | "cloud_engine";
@@ -122,7 +124,20 @@ function validateIcpTarget(target: IcpTargetConfig): IcpTargetConfig {
   if (target.status === "disabled") {
     throw new Error(`ICP target ${alias} is disabled.`);
   }
+  if (target.wsGatewayUrl !== undefined && !isAllowedWsUrl(target.wsGatewayUrl)) {
+    throw new Error(`ICP target ${alias} WebSocket gateway must use WSS, except localhost development URLs.`);
+  }
   return { ...target, alias };
+}
+
+function isAllowedWsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "wss:") return true;
+    return parsed.protocol === "ws:" && ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function defaultSupabaseTargets(): SupabaseTargetConfig[] {
@@ -147,6 +162,7 @@ function defaultIcpTargets(): IcpTargetConfig[] {
       networkKind: optionalEnv("IGNITE_LIVE_ICP_NETWORK_KIND") === "cloud_engine" ? "cloud_engine" : "public_mainnet",
       host: optionalEnv("IGNITE_LIVE_ICP_HOST") ?? DEFAULT_ICP_HOST,
       canisterIds: canisterIds ? JSON.parse(canisterIds) as Record<string, string> : {},
+      wsGatewayUrl: optionalEnv("IGNITE_LIVE_ICP_WS_GATEWAY_URL"),
       supportedDomains: optionalEnv("IGNITE_LIVE_ICP_SUPPORTED_DOMAINS")?.split(",").map(item => item.trim()).filter(Boolean),
       residencyProfile: optionalEnv("IGNITE_LIVE_ICP_RESIDENCY_PROFILE"),
       deploymentClass: optionalEnv("IGNITE_LIVE_ICP_NETWORK_KIND") === "cloud_engine" ? "cloud_engine" : "public_subnet",

@@ -168,4 +168,10 @@ module {
   // --- Recent conversations rail ---
   public type RecentConversation = { conversation_id : Text; kind : Text; last_message_sequence : Nat64; last_message_at_ms : ?Nat64 };
   public type ClubUnreadSummary = { club_id : Text; count : Nat64 };
+
+  // --- Realtime pokes (IC WebSocket) ---
+  // The only application message type that crosses the WS channel. Poke-only
+  // by design: carries a chat id + monotonic version, never message content;
+  // clients react by refetching through the normal certified query path.
+  public type WsAppMessage = { #chat_poke : { conversation_id : Text; sequence : Nat64 } };
 }

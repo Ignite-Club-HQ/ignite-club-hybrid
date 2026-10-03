@@ -12,6 +12,7 @@ import { findSupersededOptimisticIndex } from "@/lib/failedSendRestore";
 import { fetchSingleProfileWithCache, getProfilesFromCache } from "@/lib/profileCache";
 import type { GroupChatSupabaseClient, GroupMessage, MessageReaction } from "@/features/messaging/thread/groupChatData";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { isChatWsHealthy, subscribeChatPokes } from "@/live/wsRealtime";
 import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
 
 interface UseGroupRealtimeUpdatesOptions {
@@ -52,13 +53,23 @@ export const useGroupRealtimeUpdates = ({
   useEffect(() => {
     if (!groupId) return;
     if (!messagingOnIcp && groupRealtimeMode !== "polling") return;
+    // WebSocket realtime (IC WS gateway): a poke refetches immediately; while
+    // the socket is healthy the poll ticks become a no-op safety net that
+    // resumes automatically if the socket drops.
+    const unsubscribePokes = messagingOnIcp
+      ? subscribeChatPokes(() => queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] }))
+      : null;
     const id = window.setInterval(() => {
       // Skip invalidation ticks while the tab is hidden — nobody's watching,
       // and visibility regain below triggers an immediate catch-up refetch.
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (isChatWsHealthy()) return;
       queryClient.invalidateQueries({ queryKey: ["group-messages", groupId] });
     }, groupPollIntervalMs);
-    return () => window.clearInterval(id);
+    return () => {
+      unsubscribePokes?.();
+      window.clearInterval(id);
+    };
   }, [groupId, messagingOnIcp, groupRealtimeMode, groupPollIntervalMs, queryClient]);
 
   // Immediate catch-up refetch the moment the tab regains visibility (not
