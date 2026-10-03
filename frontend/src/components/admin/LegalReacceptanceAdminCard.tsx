@@ -52,6 +52,7 @@ export function LegalReacceptanceAdminCard() {
   const apply = async (required: boolean) => {
     setSaving(true);
     try {
+      // icp-guard: allow app-admin legal tooling stays Supabase-only by design
       const { error } = await supabase.rpc("set_legal_reacceptance" as never, {
         _required: required,
         _confirmation: required ? phrase.trim() : null,

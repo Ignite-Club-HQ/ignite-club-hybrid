@@ -100,6 +100,8 @@ function SupabaseAdminActiveGamesPage() {
 
   const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
     queryKey: ["is-app-admin", user?.id],
+    // icp-guard: allow app-admin active-games tooling stays Supabase-only by design
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     queryFn: async () => {
       if (!user?.id) return false;
       const { data } = await supabase
