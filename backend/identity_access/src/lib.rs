@@ -1889,6 +1889,158 @@ mod tests {
     }
 
     #[test]
+    fn legacy_schema4_blob_splits_into_maps_on_migration() {
+        let governor = principal(1);
+        let user = principal(2);
+        let legacy = State {
+            schema: 4,
+            governor,
+            accounts: vec![Account {
+                id: "user-1".into(),
+                principals: vec![user],
+                version: 3,
+            }],
+            profiles: vec![Profile {
+                account_id: "user-1".into(),
+                display_name: "Paul".into(),
+                avatar_ref: None,
+                updated_at_ns: 7,
+            }],
+            roles: vec![RoleGrant {
+                account_id: "user-1".into(),
+                role: "club_admin".into(),
+                site_id: None,
+                club: Some("club-a".into()),
+                team: None,
+            }],
+            families: vec![],
+            exclusions: vec![],
+            challenges: vec![],
+            external_bindings: vec![],
+            privacy_consents: vec![],
+            terms_acceptances: vec![],
+            entitlements: vec![Entitlement {
+                principal: user,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            }],
+            verifiers: vec![],
+            attestation_secret: vec![],
+            next_challenge: 9,
+        };
+        let migrated = migrate_legacy_state(legacy);
+        assert_eq!(migrated.schema, SCHEMA);
+        assert_eq!(migrated.governor, governor);
+        assert_eq!(migrated.roles.len(), 1);
+        assert_eq!(migrated.next_challenge, 9);
+        // The big collections now live in the maps, not the blob.
+        let account = get_account("user-1").expect("account migrated into map");
+        assert_eq!(account.version, 3);
+        assert_eq!(
+            find_account_by_principal(user).map(|a| a.id),
+            Some("user-1".to_string())
+        );
+        assert_eq!(
+            get_profile_entry("user-1").map(|p| p.display_name),
+            Some("Paul".to_string())
+        );
+        let key = entitlement_key(user, "pro", "tx-1");
+        assert!(get_entitlement(&key).is_some());
+    }
+
+    #[test]
+    fn entitlement_replay_by_different_principal_is_rejected() {
+        let first = principal(2);
+        let second = principal(3);
+        let key = entitlement_key(first, "pro", "tx-1");
+        put_entitlement(
+            &key,
+            &Entitlement {
+                principal: first,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            },
+        );
+        // Mirror upsert_entitlement's replay guard: the key is derived from
+        // the transaction id alone, so a different principal collides with
+        // the bound record and must be rejected; the same principal may
+        // re-verify.
+        let existing = get_entitlement(&entitlement_key(second, "pro", "tx-1"))
+            .expect("transaction id resolves to the bound record");
+        assert_ne!(existing.principal, second, "replay must be rejected");
+        let same = get_entitlement(&entitlement_key(first, "pro", "tx-1"))
+            .expect("same principal re-verifies against the same record");
+        assert_eq!(same.principal, first);
+    }
+
+    #[test]
+    fn erase_account_cleanup_clears_maps_and_blob_entries() {
+        let user = principal(2);
+        put_account(&Account {
+            id: "user-1".into(),
+            principals: vec![user],
+            version: 1,
+        });
+        index_principal(user, "user-1");
+        put_profile_entry(&Profile {
+            account_id: "user-1".into(),
+            display_name: "Gone".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        let key = entitlement_key(user, "pro", "tx-1");
+        put_entitlement(
+            &key,
+            &Entitlement {
+                principal: user,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            },
+        );
+        let mut state = empty_core_state(principal(1));
+        state.roles.push(RoleGrant {
+            account_id: "user-1".into(),
+            role: "club_admin".into(),
+            site_id: None,
+            club: Some("club-a".into()),
+            team: None,
+        });
+        state.terms_acceptances.push(TermsAcceptance {
+            account_id: "user-1".into(),
+            terms_version: 1,
+            accepted_at_ms: 0,
+        });
+        // Mirror erase_account's cleanup sequence (the handler itself needs
+        // msg_caller, which is unavailable in tests).
+        let erased = remove_account("user-1").expect("account exists");
+        for p in &erased.principals {
+            deindex_principal(*p);
+            remove_entitlements_for_principal(*p);
+        }
+        remove_profile_entry("user-1");
+        state.roles.retain(|grant| grant.account_id != "user-1");
+        state
+            .terms_acceptances
+            .retain(|entry| entry.account_id != "user-1");
+        assert!(!account_exists("user-1"));
+        assert!(find_account_by_principal(user).is_none());
+        assert!(get_profile_entry("user-1").is_none());
+        assert!(get_entitlement(&key).is_none());
+        assert_eq!(entitlements_count(), 0);
+        assert!(state.roles.is_empty());
+        assert!(state.terms_acceptances.is_empty());
+    }
+
+    #[test]
     fn exported_candid_matches_the_checked_in_contract() {
         fn methods(candid: &str) -> std::collections::BTreeSet<String> {
             let service_start = candid.find("service").expect("service block");
