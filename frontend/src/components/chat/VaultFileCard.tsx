@@ -64,19 +64,31 @@ function getColorForFile(name: string, fileType: string | null): string {
 
 export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, rootScope, rootId }: VaultFileCardProps) {
   const navigate = useNavigate();
+  const vaultIcp = isFeatureRoutedToIcp("vault");
 
   // Folder card
   const folderQuery = useQuery({
-    queryKey: ["vault-folder-card", folderId],
+    queryKey: ["vault-folder-card", folderId, vaultIcp],
     queryFn: async () => {
       if (!folderId) return null;
-      const { data, error } = await supabase
-        .from("vault_folders")
-        .select("id, name, club_id, team_id")
-        .eq("id", folderId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("vault", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("vault_folders")
+            .select("id, name, club_id, team_id")
+            .eq("id", folderId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        // Internet Identity users: resolve the folder from vault_domain.
+        icp: async (ctx) => {
+          const f = await getLiveVaultFolder(ctx, folderId);
+          if (!f) return null;
+          const team = (f as { team?: string[] }).team;
+          return { id: f.id, name: f.name, club_id: f.club, team_id: team?.[0] ?? null };
+        },
+      });
     },
     enabled: !!folderId,
     staleTime: 60 * 1000,
