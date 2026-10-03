@@ -125,6 +125,10 @@ export async function uploadVaultItem(
     : null;
 
   if (!blobUpload) {
+    // icp-guard: allow media bytes stay on Supabase storage by design; II
+    // uploaders are gated upstream (isIcpMediaUploadUnavailable) until the
+    // blob-store canister ID is configured, so this fallback is unreachable
+    // for Internet Identity members in practice.
     const { error: uploadError } = await client.storage
       .from("photos")
       .upload(storagePath, options.file, { cacheControl: "31536000" });

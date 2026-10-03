@@ -153,6 +153,8 @@ export function useAutoSubNotify(
         // Fire-and-forget per recipient; we do NOT await the whole batch
         // because pitch boards run on a 1Hz tick and any latency here is
         // user-perceivable.
+        // icp-guard: allow push delivery stays Supabase-only by design; the
+        // caller (pitch-board trigger) already checks the auth backend.
         for (const userId of userIds) {
           supabase.functions
             .invoke("send-push-notification", {
