@@ -15,122 +15,7 @@ export interface ClaimedInvite {
   'mini_league_id' : string,
   'club_id' : string,
 }
-export interface MiniLeague {
-  'id' : string,
-  'status' : string,
-  'bib_colors' : Array<string>,
-  'name' : string,
-  'description' : [] | [string],
-  'updated_at_ms' : bigint,
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'team_size' : number,
-  'logo_url' : [] | [string],
-  'show_matches_to_members' : boolean,
-  'minutes_per_half' : number,
-  'club_id' : string,
-  'min_players_per_side' : number,
-}
-export interface MiniLeagueAdmin {
-  'id' : string,
-  'mini_league_id' : string,
-  'user_id' : Principal,
-  'created_at_ms' : bigint,
-  'granted_by' : [] | [Principal],
-}
-export interface MiniLeagueGroup {
-  'id' : string,
-  'linked_event_id' : [] | [string],
-  'session_id' : string,
-  'pitch_name' : [] | [string],
-  'name' : string,
-  'updated_at_ms' : bigint,
-  'created_at_ms' : bigint,
-  'ability_band' : [] | [string],
-  'display_order' : number,
-  'target_size' : number,
-}
-export interface MiniLeagueGroupDuty {
-  'id' : string,
-  'status' : string,
-  'name' : string,
-  'completed' : boolean,
-  'points_awarded' : boolean,
-  'updated_at_ms' : bigint,
-  'created_at_ms' : bigint,
-  'assigned_to' : [] | [string],
-  'group_id' : string,
-  'points' : [] | [number],
-}
-export interface MiniLeagueGroupPlayer {
-  'player_id' : string,
-  'created_at_ms' : bigint,
-  'group_id' : string,
-  'jersey_number' : [] | [number],
-}
-export interface MiniLeagueInvite {
-  'player_id' : [] | [string],
-  'status' : string,
-  'claimed_by' : [] | [Principal],
-  'token' : string,
-  'mini_league_id' : string,
-  'claimed_at_ms' : [] | [bigint],
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'label_text' : [] | [string],
-}
-export interface MiniLeagueJoinLink {
-  'token' : string,
-  'mini_league_id' : string,
-  'revoked' : boolean,
-  'role' : string,
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'revision' : bigint,
-}
-export interface MiniLeaguePlayer {
-  'id' : string,
-  'claimed_by' : [] | [Principal],
-  'mini_league_id' : string,
-  'name' : string,
-  'updated_at_ms' : bigint,
-  'child_id' : [] | [string],
-  'ability_rating' : [] | [number],
-  'created_at_ms' : bigint,
-  'parent_user_id' : [] | [string],
-  'notes' : [] | [string],
-}
-export interface MiniLeagueSession {
-  'id' : string,
-  'status' : string,
-  'postcode' : [] | [string],
-  'mini_league_id' : string,
-  'linked_event_id' : [] | [string],
-  'team_size_override' : [] | [number],
-  'updated_at_ms' : bigint,
-  'created_by' : Principal,
-  'end_time' : [] | [string],
-  'created_at_ms' : bigint,
-  'start_time' : string,
-  'address' : [] | [string],
-  'location_name' : [] | [string],
-  'session_date' : string,
-}
-export interface MiniLeagueSessionAvailability {
-  'id' : string,
-  'player_id' : string,
-  'status' : string,
-  'session_id' : string,
-  'marked_by' : [] | [Principal],
-  'updated_at_ms' : bigint,
-  'created_at_ms' : bigint,
-}
-export interface PlayerGuardianStatus {
-  'pending' : boolean,
-  'parent_linked' : boolean,
-  'guardian_count' : bigint,
-}
-export interface _SERVICE {
+export interface Main {
   'add_admin' : ActorMethod<
     [string, Principal],
     { 'Ok' : MiniLeagueAdmin } |
@@ -262,7 +147,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'join_mini_league_by_token' : ActorMethod<
     [string, string],
     { 'Ok' : ClaimedInvite } |
@@ -402,5 +286,121 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface MiniLeague {
+  'id' : string,
+  'status' : string,
+  'bib_colors' : Array<string>,
+  'name' : string,
+  'description' : [] | [string],
+  'updated_at_ms' : bigint,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'team_size' : number,
+  'logo_url' : [] | [string],
+  'show_matches_to_members' : boolean,
+  'minutes_per_half' : number,
+  'club_id' : string,
+  'min_players_per_side' : number,
+}
+export interface MiniLeagueAdmin {
+  'id' : string,
+  'mini_league_id' : string,
+  'user_id' : Principal,
+  'created_at_ms' : bigint,
+  'granted_by' : [] | [Principal],
+}
+export interface MiniLeagueGroup {
+  'id' : string,
+  'linked_event_id' : [] | [string],
+  'session_id' : string,
+  'pitch_name' : [] | [string],
+  'name' : string,
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'ability_band' : [] | [string],
+  'display_order' : number,
+  'target_size' : number,
+}
+export interface MiniLeagueGroupDuty {
+  'id' : string,
+  'status' : string,
+  'name' : string,
+  'completed' : boolean,
+  'points_awarded' : boolean,
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'assigned_to' : [] | [string],
+  'group_id' : string,
+  'points' : [] | [number],
+}
+export interface MiniLeagueGroupPlayer {
+  'player_id' : string,
+  'created_at_ms' : bigint,
+  'group_id' : string,
+  'jersey_number' : [] | [number],
+}
+export interface MiniLeagueInvite {
+  'player_id' : [] | [string],
+  'status' : string,
+  'claimed_by' : [] | [Principal],
+  'token' : string,
+  'mini_league_id' : string,
+  'claimed_at_ms' : [] | [bigint],
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'label_text' : [] | [string],
+}
+export interface MiniLeagueJoinLink {
+  'token' : string,
+  'mini_league_id' : string,
+  'revoked' : boolean,
+  'role' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'revision' : bigint,
+}
+export interface MiniLeaguePlayer {
+  'id' : string,
+  'claimed_by' : [] | [Principal],
+  'mini_league_id' : string,
+  'name' : string,
+  'updated_at_ms' : bigint,
+  'child_id' : [] | [string],
+  'ability_rating' : [] | [number],
+  'created_at_ms' : bigint,
+  'parent_user_id' : [] | [string],
+  'notes' : [] | [string],
+}
+export interface MiniLeagueSession {
+  'id' : string,
+  'status' : string,
+  'postcode' : [] | [string],
+  'mini_league_id' : string,
+  'linked_event_id' : [] | [string],
+  'team_size_override' : [] | [number],
+  'updated_at_ms' : bigint,
+  'created_by' : Principal,
+  'end_time' : [] | [string],
+  'created_at_ms' : bigint,
+  'start_time' : string,
+  'address' : [] | [string],
+  'location_name' : [] | [string],
+  'session_date' : string,
+}
+export interface MiniLeagueSessionAvailability {
+  'id' : string,
+  'player_id' : string,
+  'status' : string,
+  'session_id' : string,
+  'marked_by' : [] | [Principal],
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+}
+export interface PlayerGuardianStatus {
+  'pending' : boolean,
+  'parent_linked' : boolean,
+  'guardian_count' : bigint,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

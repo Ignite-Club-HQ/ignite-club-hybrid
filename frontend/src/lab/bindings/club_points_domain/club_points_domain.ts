@@ -61,95 +61,7 @@ export interface PointsCooldown {
     club_id: string;
     scope_id: string;
 }
-export interface LeaderboardEntry {
-    subject_id: string;
-    points: number;
-}
-export interface RewardRedemption {
-    id: string;
-    status: string;
-    points_spent: number;
-    redeemed_at_ms?: bigint;
-    user_id?: string;
-    child_id?: string;
-    verified_at_ms?: bigint;
-    created_at_ms: bigint;
-    reward_id: string;
-    verified_by?: Principal;
-    club_id: string;
-    idempotency_key?: string;
-}
-export interface ChildClubPoints {
-    updated_at_ms: bigint;
-    child_id: string;
-    club_id: string;
-    points: number;
-}
-export interface ClubReward {
-    id: string;
-    points_required: number;
-    name: string;
-    qr_code_url?: string;
-    team_id?: string;
-    description?: string;
-    updated_at_ms: bigint;
-    show_qr_code: boolean;
-    is_default: boolean;
-    reward_type: string;
-    created_at_ms: bigint;
-    logo_url?: string;
-    sponsor_id?: string;
-    is_active: boolean;
-    club_id: string;
-}
-export interface HistoryPage {
-    total: bigint;
-    items: Array<PointsHistoryEntry>;
-}
-export interface ClubPointsSettings {
-    updated_at_ms: bigint;
-    display_name?: string;
-    disabled: boolean;
-    club_id: string;
-}
-export interface UserClubPoints {
-    updated_at_ms: bigint;
-    user_id: string;
-    club_id: string;
-    points: number;
-}
-export interface PointsHistoryEntry {
-    id: string;
-    balance_after: number;
-    season_id?: string;
-    description: string;
-    source_id?: string;
-    created_by?: Principal;
-    user_id?: string;
-    child_id?: string;
-    created_at_ms: bigint;
-    source_type: string;
-    amount: number;
-    club_id: string;
-}
-export type Subject = {
-    __kind__: "User";
-    User: string;
-} | {
-    __kind__: "Child";
-    Child: string;
-};
-export interface RoleGrant {
-    role: string;
-    user: Principal;
-    team_id?: string;
-    club_id: string;
-}
-export enum Variant_User_Child {
-    User = "User",
-    Child = "Child"
-}
-export interface club_points_domainInterface {
+export interface MainInterface {
     addBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -286,13 +198,6 @@ export interface club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
     listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -356,6 +261,96 @@ export interface club_points_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+}
+export interface RewardRedemption {
+    id: string;
+    status: string;
+    points_spent: number;
+    redeemed_at_ms?: bigint;
+    user_id?: string;
+    child_id?: string;
+    verified_at_ms?: bigint;
+    created_at_ms: bigint;
+    reward_id: string;
+    verified_by?: Principal;
+    club_id: string;
+    idempotency_key?: string;
+}
+export interface LeaderboardEntry {
+    subject_id: string;
+    points: number;
+}
+export interface ChildClubPoints {
+    updated_at_ms: bigint;
+    child_id: string;
+    club_id: string;
+    points: number;
+}
+export interface ClubReward {
+    id: string;
+    points_required: number;
+    name: string;
+    qr_code_url?: string;
+    team_id?: string;
+    description?: string;
+    updated_at_ms: bigint;
+    show_qr_code: boolean;
+    is_default: boolean;
+    reward_type: string;
+    created_at_ms: bigint;
+    logo_url?: string;
+    sponsor_id?: string;
+    is_active: boolean;
+    club_id: string;
+}
+export interface HistoryPage {
+    total: bigint;
+    items: Array<PointsHistoryEntry>;
+}
+export interface ClubPointsSettings {
+    updated_at_ms: bigint;
+    display_name?: string;
+    disabled: boolean;
+    club_id: string;
+}
+export interface UserClubPoints {
+    updated_at_ms: bigint;
+    user_id: string;
+    club_id: string;
+    points: number;
+}
+export interface PointsHistoryEntry {
+    id: string;
+    balance_after: number;
+    season_id?: string;
+    description: string;
+    source_id?: string;
+    created_by?: Principal;
+    user_id?: string;
+    child_id?: string;
+    created_at_ms: bigint;
+    source_type: string;
+    amount: number;
+    club_id: string;
+}
+export type Subject = {
+    __kind__: "User";
+    User: string;
+} | {
+    __kind__: "Child";
+    Child: string;
+};
+export interface RoleGrant {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    club_id: string;
+}
+export enum Variant_User_Child {
+    User = "User",
+    Child = "Child"
+}
+export interface club_points_domainInterface extends MainInterface {
 }
 import type { ChildClubPoints as _ChildClubPoints, ClubPointsSettings as _ClubPointsSettings, ClubReward as _ClubReward, HistoryPage as _HistoryPage, LeaderboardEntry as _LeaderboardEntry, PointsCooldown as _PointsCooldown, PointsHistoryEntry as _PointsHistoryEntry, RewardRedemption as _RewardRedemption, RoleGrant as _RoleGrant, Subject as _Subject, UserClubPoints as _UserClubPoints } from "./declarations/club_points_domain.did";
 export class Club_points_domain implements club_points_domainInterface {
@@ -548,16 +543,6 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n10(arg3));
-        return from_candid_variant_n1(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n1(result);
     }
     async listBulkAccessPrincipals(): Promise<{

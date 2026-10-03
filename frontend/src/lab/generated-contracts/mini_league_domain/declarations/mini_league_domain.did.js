@@ -129,8 +129,7 @@ export const idlFactory = ({ IDL }) => {
     'parent_linked' : IDL.Bool,
     'guardian_count' : IDL.Nat,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'add_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : MiniLeagueAdmin, 'Err' : IDL.Text })],
@@ -279,11 +278,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -465,6 +459,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

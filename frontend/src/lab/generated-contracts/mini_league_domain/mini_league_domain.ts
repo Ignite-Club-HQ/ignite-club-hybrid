@@ -57,121 +57,7 @@ export interface MiniLeagueGroupPlayer {
     group_id: string;
     jersey_number?: number;
 }
-export interface MiniLeaguePlayer {
-    id: string;
-    claimed_by?: Principal;
-    mini_league_id: string;
-    name: string;
-    updated_at_ms: bigint;
-    child_id?: string;
-    ability_rating?: number;
-    created_at_ms: bigint;
-    parent_user_id?: string;
-    notes?: string;
-}
-export interface PlayerGuardianStatus {
-    pending: boolean;
-    parent_linked: boolean;
-    guardian_count: bigint;
-}
-export interface MiniLeagueSessionAvailability {
-    id: string;
-    player_id: string;
-    status: string;
-    session_id: string;
-    marked_by?: Principal;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-}
-export interface MiniLeagueGroup {
-    id: string;
-    linked_event_id?: string;
-    session_id: string;
-    pitch_name?: string;
-    name: string;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-    ability_band?: string;
-    display_order: number;
-    target_size: number;
-}
-export interface MiniLeague {
-    id: string;
-    status: string;
-    bib_colors: Array<string>;
-    name: string;
-    description?: string;
-    updated_at_ms: bigint;
-    created_by: Principal;
-    created_at_ms: bigint;
-    team_size: number;
-    logo_url?: string;
-    show_matches_to_members: boolean;
-    minutes_per_half: number;
-    club_id: string;
-    min_players_per_side: number;
-}
-export interface ClaimedInvite {
-    player_id: string;
-    mini_league_id: string;
-    club_id: string;
-}
-export interface MiniLeagueAdmin {
-    id: string;
-    mini_league_id: string;
-    user_id: Principal;
-    created_at_ms: bigint;
-    granted_by?: Principal;
-}
-export interface MiniLeagueInvite {
-    player_id?: string;
-    status: string;
-    claimed_by?: Principal;
-    token: string;
-    mini_league_id: string;
-    claimed_at_ms?: bigint;
-    created_by: Principal;
-    created_at_ms: bigint;
-    label_text?: string;
-}
-export interface MiniLeagueJoinLink {
-    token: string;
-    mini_league_id: string;
-    revoked: boolean;
-    role: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    revision: bigint;
-}
-export interface MiniLeagueGroupDuty {
-    id: string;
-    status: string;
-    name: string;
-    completed: boolean;
-    points_awarded: boolean;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-    assigned_to?: string;
-    group_id: string;
-    points?: number;
-}
-export interface MiniLeagueSession {
-    id: string;
-    status: string;
-    postcode?: string;
-    mini_league_id: string;
-    linked_event_id?: string;
-    team_size_override?: number;
-    updated_at_ms: bigint;
-    created_by: Principal;
-    end_time?: string;
-    created_at_ms: bigint;
-    start_time: string;
-    address?: string;
-    location_name?: string;
-    session_date: string;
-}
-export interface mini_league_domainInterface {
+export interface MainInterface {
     add_admin(mini_league_id: string, user_id: Principal): Promise<{
         __kind__: "Ok";
         Ok: MiniLeagueAdmin;
@@ -316,13 +202,6 @@ export interface mini_league_domainInterface {
         Err: string;
     }>;
     grant_role(principal: Principal, role: string, club_id: string, team_id: string | null): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -500,6 +379,122 @@ export interface mini_league_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+}
+export interface MiniLeaguePlayer {
+    id: string;
+    claimed_by?: Principal;
+    mini_league_id: string;
+    name: string;
+    updated_at_ms: bigint;
+    child_id?: string;
+    ability_rating?: number;
+    created_at_ms: bigint;
+    parent_user_id?: string;
+    notes?: string;
+}
+export interface PlayerGuardianStatus {
+    pending: boolean;
+    parent_linked: boolean;
+    guardian_count: bigint;
+}
+export interface MiniLeagueSessionAvailability {
+    id: string;
+    player_id: string;
+    status: string;
+    session_id: string;
+    marked_by?: Principal;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+}
+export interface MiniLeagueGroup {
+    id: string;
+    linked_event_id?: string;
+    session_id: string;
+    pitch_name?: string;
+    name: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    ability_band?: string;
+    display_order: number;
+    target_size: number;
+}
+export interface MiniLeague {
+    id: string;
+    status: string;
+    bib_colors: Array<string>;
+    name: string;
+    description?: string;
+    updated_at_ms: bigint;
+    created_by: Principal;
+    created_at_ms: bigint;
+    team_size: number;
+    logo_url?: string;
+    show_matches_to_members: boolean;
+    minutes_per_half: number;
+    club_id: string;
+    min_players_per_side: number;
+}
+export interface ClaimedInvite {
+    player_id: string;
+    mini_league_id: string;
+    club_id: string;
+}
+export interface MiniLeagueAdmin {
+    id: string;
+    mini_league_id: string;
+    user_id: Principal;
+    created_at_ms: bigint;
+    granted_by?: Principal;
+}
+export interface MiniLeagueInvite {
+    player_id?: string;
+    status: string;
+    claimed_by?: Principal;
+    token: string;
+    mini_league_id: string;
+    claimed_at_ms?: bigint;
+    created_by: Principal;
+    created_at_ms: bigint;
+    label_text?: string;
+}
+export interface MiniLeagueJoinLink {
+    token: string;
+    mini_league_id: string;
+    revoked: boolean;
+    role: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    revision: bigint;
+}
+export interface MiniLeagueGroupDuty {
+    id: string;
+    status: string;
+    name: string;
+    completed: boolean;
+    points_awarded: boolean;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    assigned_to?: string;
+    group_id: string;
+    points?: number;
+}
+export interface MiniLeagueSession {
+    id: string;
+    status: string;
+    postcode?: string;
+    mini_league_id: string;
+    linked_event_id?: string;
+    team_size_override?: number;
+    updated_at_ms: bigint;
+    created_by: Principal;
+    end_time?: string;
+    created_at_ms: bigint;
+    start_time: string;
+    address?: string;
+    location_name?: string;
+    session_date: string;
+}
+export interface mini_league_domainInterface extends MainInterface {
 }
 import type { ClaimedInvite as _ClaimedInvite, MiniLeague as _MiniLeague, MiniLeagueAdmin as _MiniLeagueAdmin, MiniLeagueGroup as _MiniLeagueGroup, MiniLeagueGroupDuty as _MiniLeagueGroupDuty, MiniLeagueGroupPlayer as _MiniLeagueGroupPlayer, MiniLeagueInvite as _MiniLeagueInvite, MiniLeagueJoinLink as _MiniLeagueJoinLink, MiniLeaguePlayer as _MiniLeaguePlayer, MiniLeagueSession as _MiniLeagueSession, MiniLeagueSessionAvailability as _MiniLeagueSessionAvailability, PlayerGuardianStatus as _PlayerGuardianStatus } from "./declarations/mini_league_domain.did";
 export class Mini_league_domain implements mini_league_domainInterface {
@@ -715,16 +710,6 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n5(arg3));
-        return from_candid_variant_n34(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n34(result);
     }
     async join_mini_league_by_token(arg0: string, arg1: string): Promise<{
