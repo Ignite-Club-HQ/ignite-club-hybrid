@@ -49,9 +49,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
           if [ -n "$DEPLOYER_PEM" ]; then
-            printf '%s\n' "$DEPLOYER_PEM" | tr -d '\r' > "$ICP_HOME/identity/keys/ignite-governor.pem"
-            icp identity import --from-pem "$ICP_HOME/identity/keys/ignite-governor.pem" --storage plaintext ignite-governor
+            # Normalize common paste issues: CRLF line endings, literal "\n"
+            # escape sequences, and any stray text before/after the PEM block.
+            printf '%s' "$DEPLOYER_PEM" \
+              | tr -d '\r' \
+              | sed 's/\\n/\n/g' \
+              | sed -n '/-----BEGIN/,/-----END/p' \
+              > "$PEM_FILE"
+            if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
+              echo "::error::The DEPLOYER_PEM secret does not contain a valid key file."
+              echo "Re-copy the FULL text of the downloaded ignite-governor.pem artifact"
+              echo "(everything from -----BEGIN ... to -----END ... inclusive) and update"
+              echo "the DEPLOYER_PEM repository secret, then re-run this workflow."
+              exit 1
+            fi
+            icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
             icp identity default ignite-governor
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
