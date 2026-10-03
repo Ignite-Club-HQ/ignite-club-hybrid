@@ -158,6 +158,10 @@ export function useMessageReads(
   // healed instead of accumulating.
   const reconcileRef = useRef<() => Promise<void>>(async () => {});
   reconcileRef.current = async () => {
+    // NEEDS-CANISTER: messaging_domain has no per-message reader-list query,
+    // so under ICP routing read receipts stay empty rather than hitting the
+    // Supabase message_reads table.
+    if (isFeatureRoutedToIcp("messaging")) return;
     const ids = messageIdsRef.current;
     if (ids.length === 0) return;
 
