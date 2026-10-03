@@ -11,7 +11,7 @@
 
 - Preview runs frontend/ via lovable.toml + scripts/*-preview.mjs, mapping SUPABASE_URL/SUPABASE_PUBLISHABLE_KEY onto IGNITE_LIVE_SUPABASE_URL/ANON_KEY; no root package.json.
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
-- Mainnet canister deploy: scripts/deploy-mainnet.sh + deploy/mainnet/icp.yaml + per-canister backend/<c>/canister.yaml (path-based so mops.toml is found at build); the governor principal is baked into those files as init_args/env vars, and the script runs the post-install wiring calls and prints the ID table. IDs land in deploy/mainnet/.icp/data/mappings/ic.ids.json — commit it.
+- Mainnet canister deploy: scripts/deploy-mainnet.sh + deploy/mainnet/icp.yaml + per-canister backend/<c>/canister.yaml (path-based so mops.toml is found at build); the governor principal is baked into those files as init_args/env vars, and .github/workflows/deploy-icp-mainnet.yml seds that sentinel to the deployer identity's actual principal at deploy time (the gwyap-pqop5-…-cae string in the repo is only a placeholder — Internet Identity keys can't be exported, so the workflow generates the key on first run and uploads it as the deployer-key artifact for DEPLOYER_PEM). The script runs the post-install wiring calls and prints the ID table. IDs land in deploy/mainnet/.icp/data/mappings/ic.ids.json — commit it.
 
 <!-- ic-skills:managed:start -->
 <!-- state: configured (on-demand) -->
