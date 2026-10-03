@@ -219,6 +219,68 @@ function SupabaseCompetitionJoinPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
+      // ICP branch: caller-scoped role grants on club_domain replace the
+      // user_roles reads; entered-team ids already came with the preview.
+      if (getEffectiveBackendForFeature("competitions") === "icp") {
+        try {
+          const identity = await getCurrentInternetIdentity();
+          if (!identity) return;
+          const ctx = { identity, target: getActiveIcpTarget() };
+          const grants = await myLiveRoleGrants(ctx);
+          const teamIds = new Set<string>();
+          const clubIds = new Set<string>();
+          for (const grant of grants) {
+            const team = grant.team.length ? grant.team[0] : null;
+            const club = grant.club.length ? grant.club[0] : null;
+            if ((grant.role === "team_admin" || grant.role === "app_admin") && team) teamIds.add(team);
+            if ((grant.role === "club_admin" || grant.role === "app_admin") && club) clubIds.add(club);
+          }
+          const clubNames = new Map<string, string | null>();
+          const clubName = async (clubId: string) => {
+            if (!clubNames.has(clubId)) {
+              try {
+                const profile = await getLiveClubProfile(ctx, clubId);
+                clubNames.set(clubId, profile?.name ?? null);
+              } catch {
+                clubNames.set(clubId, null);
+              }
+            }
+            return clubNames.get(clubId) ?? null;
+          };
+          const seen = new Set<string>();
+          const opts: TeamOpt[] = [];
+          for (const id of teamIds) {
+            try {
+              const row = await getLiveTeam(ctx, id);
+              const team = row.length ? row[0] : null;
+              if (!team || seen.has(team.id) || team.archived || team.deleted_at_ms.length > 0) continue;
+              seen.add(team.id);
+              opts.push({ id: team.id, name: team.name, club_id: team.club_id, club_name: await clubName(team.club_id) });
+            } catch {
+              // A stale grant pointing at a missing team must not break the list.
+            }
+          }
+          for (const clubId of clubIds) {
+            try {
+              const teams = await listLiveTeams(ctx, clubId);
+              for (const team of teams) {
+                if (seen.has(team.id) || team.archived || team.deleted_at_ms.length > 0) continue;
+                seen.add(team.id);
+                opts.push({ id: team.id, name: team.name, club_id: team.club_id, club_name: await clubName(team.club_id) });
+              }
+            } catch {
+              // Skip clubs the caller can no longer read.
+            }
+          }
+          opts.sort((a, b) => a.name.localeCompare(b.name));
+          setTeams(opts);
+          const eligible = opts.filter((o) => !enteredTeamIds.has(o.id));
+          if (eligible.length === 1) setTeamId(eligible[0].id);
+        } catch {
+          // Fail closed: no teams listed, no Supabase fallback.
+        }
+        return;
+      }
       // 1) Direct team-admin rows (team-scoped)
       const teamAdminRowsP = supabase
         .from("user_roles")
