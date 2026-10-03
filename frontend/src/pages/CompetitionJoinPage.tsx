@@ -144,6 +144,52 @@ function SupabaseCompetitionJoinPage() {
       return;
     }
     (async () => {
+      // ICP branch: single anonymous-safe canister preview call replaces the
+      // three Supabase SECURITY DEFINER RPCs (comp info, divisions, token
+      // status) plus the entered-team-ids read.
+      if (getEffectiveBackendForFeature("competitions") === "icp") {
+        try {
+          const identity = (await getCurrentInternetIdentity()) ?? new AnonymousIdentity();
+          const ctx = { identity, target: getActiveIcpTarget() };
+          const { status, preview } = await getLiveJoinLinkPreview(ctx, token);
+          if (!preview) {
+            if (status === "disabled") {
+              setError("The organiser has disabled this join link. Ask them for a new one.");
+            } else if (status === "archived") {
+              setError("This competition has been archived and is no longer accepting entries.");
+            } else {
+              setError("This join link isn't recognised. Double-check the URL or ask the organiser for a new one.");
+            }
+            setLoading(false);
+            return;
+          }
+          // Organiser club name lives on club_domain — best-effort join.
+          let clubName: string | null = null;
+          try {
+            const profile = await getLiveClubProfile(ctx, preview.club_id);
+            clubName = profile?.name ?? null;
+          } catch {
+            clubName = null;
+          }
+          setComp({
+            id: preview.competition_id,
+            name: preview.name,
+            organizer_club_id: preview.club_id,
+            organizer_club_name: clubName,
+            sport: null, // canister Competition has no sport field
+            season: preview.season || null,
+            status: preview.competition_status,
+          });
+          // Canister divisions are plain names — id mirrors name.
+          setDivisions(preview.divisions.map((name) => ({ id: name, name })));
+          setEnteredTeamIds(new Set(preview.entered_team_ids));
+          setLoading(false);
+        } catch {
+          setError("This join link couldn't be loaded. Check your connection and try again.");
+          setLoading(false);
+        }
+        return;
+      }
       const [{ data: compRows, error: cErr }, { data: divRows }, { data: statusVal }] =
         await Promise.all([
           supabase.rpc("get_competition_by_join_token", { p_token: token }),
