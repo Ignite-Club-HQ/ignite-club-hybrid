@@ -531,10 +531,7 @@ function SupabaseCompleteProfilePage() {
             }
           }),
         icp: (ctx) =>
-          sendLiveWelcomeMessage(
-            ctx,
-            "Welcome to Ignite! I'm here if you need a hand getting your club set up — just reply to this message any time.",
-          ).then(() => {
+          sendLiveWelcomeMessage(ctx, welcomeMessage).then(() => {
             console.log("[CompleteProfile] Welcome DM sent successfully");
           }),
       }).catch(err => {
