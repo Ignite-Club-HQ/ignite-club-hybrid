@@ -255,6 +255,9 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
   }
 
   if (fileId) {
+    // Hidden for II users (no canister file-by-id query) — never render a
+    // "File unavailable" degraded state for a vault that is simply unrouted.
+    if (vaultIcp) return null;
     if (fileQuery.isLoading) {
       return (
         <div
