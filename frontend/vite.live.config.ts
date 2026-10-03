@@ -18,6 +18,14 @@ export default defineConfig({
   envDir: false,
   envPrefix: "IGNITE_LIVE_",
   esbuild: { jsx: "automatic" },
+  // Scan only the real entry for dependencies up front. Without this, Vite
+  // discovers deps late, re-optimizes, and force-reloads the open page
+  // ("optimized dependencies changed. reloading") — a source of the preview
+  // bouncing back to a spinner / not-found mid-use.
+  optimizeDeps: {
+    entries: ["live-index.html"],
+    include: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime", "react-router-dom"],
+  },
   resolve: {
     alias: [
       {
@@ -114,20 +122,27 @@ export default defineConfig({
         });
       },
     },
-    visualizer({
-      filename: "dist-live/bundle-analysis.html",
-      template: "treemap",
-      gzipSize: true,
-      brotliSize: true,
-      open: false,
-    }),
-    visualizer({
-      filename: "dist-live/bundle-analysis.json",
-      template: "raw-data",
-      gzipSize: true,
-      brotliSize: true,
-      open: false,
-    }),
+    // Bundle analysis computes gzip+brotli sizes for every module, which
+    // roughly doubles build time — enough to make hosted preview builds fail.
+    // Opt in with IGNITE_BUNDLE_ANALYSIS=1.
+    ...(process.env.IGNITE_BUNDLE_ANALYSIS === "1"
+      ? [
+          visualizer({
+            filename: "dist-live/bundle-analysis.html",
+            template: "treemap",
+            gzipSize: true,
+            brotliSize: true,
+            open: false,
+          }),
+          visualizer({
+            filename: "dist-live/bundle-analysis.json",
+            template: "raw-data",
+            gzipSize: true,
+            brotliSize: true,
+            open: false,
+          }),
+        ]
+      : []),
   ],
   build: {
     outDir: "dist-live",

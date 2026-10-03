@@ -68,6 +68,8 @@ const result = spawnSync(
     env: {
       ...process.env,
       IGNITE_LIVE_BUILD: "1",
+      // Large bundle: give the build enough heap so it can't OOM on the host.
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--max-old-space-size=4096"].filter(Boolean).join(" "),
       IGNITE_LIVE_SUPABASE_URL: supabaseUrl,
       IGNITE_LIVE_SUPABASE_ANON_KEY: supabaseAnonKey,
     },
