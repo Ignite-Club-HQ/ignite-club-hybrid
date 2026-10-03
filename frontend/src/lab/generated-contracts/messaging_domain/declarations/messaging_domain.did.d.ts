@@ -30,6 +30,39 @@ export interface BroadcastResult {
   'skipped' : Array<string>,
   'delivered' : number,
 }
+export interface CanisterOutputCertifiedMessages {
+  'messages' : Array<CanisterOutputMessage>,
+  'cert' : Uint8Array,
+  'tree' : Uint8Array,
+  'is_end_of_queue' : boolean,
+}
+export interface CanisterOutputMessage {
+  'key' : string,
+  'content' : Uint8Array,
+  'client_key' : ClientKey,
+}
+export interface CanisterWsCloseArguments { 'client_key' : ClientKey }
+export type CanisterWsCloseResult = { 'Ok' : null } |
+  { 'Err' : string };
+export interface CanisterWsGetMessagesArguments { 'nonce' : bigint }
+export type CanisterWsGetMessagesResult = {
+    'Ok' : CanisterOutputCertifiedMessages
+  } |
+  { 'Err' : string };
+export interface CanisterWsMessageArguments { 'msg' : WebsocketMessage }
+export type CanisterWsMessageResult = { 'Ok' : null } |
+  { 'Err' : string };
+export interface CanisterWsOpenArguments {
+  'gateway_principal' : GatewayPrincipal,
+  'client_nonce' : bigint,
+}
+export type CanisterWsOpenResult = { 'Ok' : null } |
+  { 'Err' : string };
+export interface ClientKey {
+  'client_principal' : ClientPrincipal,
+  'client_nonce' : bigint,
+}
+export type ClientPrincipal = Principal;
 export interface ClubDmSettings {
   'ai_catch_up_enabled' : boolean,
   'allowed_roles' : Array<string>,
@@ -63,6 +96,7 @@ export interface ForwardRecord {
   'from_conversation_id' : string,
   'from_message_id' : string,
 }
+export type GatewayPrincipal = Principal;
 export interface GroupMetadata {
   'deleted' : boolean,
   'members' : Array<Principal>,
@@ -244,6 +278,16 @@ export interface UserMessagingSettings {
   'user' : Principal,
   'hide_message_preview' : boolean,
 }
+export interface WebsocketMessage {
+  'sequence_num' : bigint,
+  'content' : Uint8Array,
+  'client_key' : ClientKey,
+  'timestamp' : bigint,
+  'is_service_message' : boolean,
+}
+export type WsAppMessage = {
+    'chat_poke' : { 'conversation_id' : string, 'sequence' : bigint }
+  };
 export interface _SERVICE {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
@@ -584,6 +628,16 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'ws_close' : ActorMethod<[CanisterWsCloseArguments], CanisterWsCloseResult>,
+  'ws_get_messages' : ActorMethod<
+    [CanisterWsGetMessagesArguments],
+    CanisterWsGetMessagesResult
+  >,
+  'ws_message' : ActorMethod<
+    [CanisterWsMessageArguments, [] | [WsAppMessage]],
+    CanisterWsMessageResult
+  >,
+  'ws_open' : ActorMethod<[CanisterWsOpenArguments], CanisterWsOpenResult>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

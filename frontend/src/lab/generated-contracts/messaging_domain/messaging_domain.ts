@@ -62,6 +62,13 @@ export interface RecentConversation {
     kind: string;
     last_message_at_ms?: bigint;
 }
+export interface WebsocketMessage {
+    sequence_num: bigint;
+    content: Uint8Array;
+    client_key: ClientKey;
+    timestamp: bigint;
+    is_service_message: boolean;
+}
 export interface Conversation {
     id: string;
     participants: Array<Principal>;
@@ -69,17 +76,13 @@ export interface Conversation {
     next_sequence: bigint;
     club_id: string;
 }
-export interface AttachmentMetadata {
-    id: string;
-    url?: string;
-    conversation_id: string;
-    kind: string;
-    size_bytes?: bigint;
-    created_at_ms: bigint;
-    uploader: Principal;
-    message_id?: string;
-    ref_id: string;
-}
+export type CanisterWsGetMessagesResult = {
+    __kind__: "Ok";
+    Ok: CanisterOutputCertifiedMessages;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface UnreadSummary {
     conversation_id: string;
     kind: string;
@@ -99,9 +102,21 @@ export interface PollResults {
     total_votes: number;
     counts: Uint32Array;
 }
+export interface CanisterWsMessageArguments {
+    msg: WebsocketMessage;
+}
 export interface ClubUnreadSummary {
     count: bigint;
     club_id: string;
+}
+export interface CanisterWsCloseArguments {
+    client_key: ClientKey;
+}
+export interface CanisterOutputCertifiedMessages {
+    messages: Array<CanisterOutputMessage>;
+    cert: Uint8Array;
+    tree: Uint8Array;
+    is_end_of_queue: boolean;
 }
 export interface Poll {
     id: string;
@@ -148,6 +163,13 @@ export interface LinkPreview {
     site_name?: string;
     image?: string;
 }
+export type CanisterWsMessageResult = {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface MessageWithReactions {
     message: Message;
     reactions: Array<ReactionSummary>;
@@ -164,6 +186,18 @@ export interface GroupMetadata {
     admin_only_posting: boolean;
     club_id?: string;
     avatar?: string;
+}
+export type GatewayPrincipal = Principal;
+export interface AttachmentMetadata {
+    id: string;
+    url?: string;
+    conversation_id: string;
+    kind: string;
+    size_bytes?: bigint;
+    created_at_ms: bigint;
+    uploader: Principal;
+    message_id?: string;
+    ref_id: string;
 }
 export interface State {
     forwardRecords: Array<ForwardRecord>;
@@ -201,11 +235,6 @@ export interface BroadcastResult {
     skipped: Array<string>;
     delivered: number;
 }
-export interface GroupRole {
-    conversation_id: string;
-    role: string;
-    user: Principal;
-}
 export interface PinnedMessage {
     id: string;
     pinned_by: Principal;
@@ -213,19 +242,53 @@ export interface PinnedMessage {
     created_at_ms: bigint;
     message_id: string;
 }
+export interface GroupRole {
+    conversation_id: string;
+    role: string;
+    user: Principal;
+}
+export interface ClientKey {
+    client_principal: ClientPrincipal;
+    client_nonce: bigint;
+}
 export interface ClubMembership {
     user: Principal;
     club_id: string;
 }
+export type WsAppMessage = {
+    __kind__: "chat_poke";
+    chat_poke: {
+        conversation_id: string;
+        sequence: bigint;
+    };
+};
+export type CanisterWsCloseResult = {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface CompetitionAdmin {
     conversation_id: string;
     user: Principal;
+}
+export interface CanisterWsOpenArguments {
+    gateway_principal: GatewayPrincipal;
+    client_nonce: bigint;
 }
 export interface UserMessagingSettings {
     ai_catchup_enabled: boolean;
     user: Principal;
     hide_message_preview: boolean;
 }
+export type CanisterWsOpenResult = {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface ForwardRecord {
     to_conversation_id: string;
     original_sender: Principal;
@@ -252,6 +315,11 @@ export interface ScheduledMessage {
     scheduled_at_ms: bigint;
     replayed_at_ms?: bigint;
 }
+export interface CanisterOutputMessage {
+    key: string;
+    content: Uint8Array;
+    client_key: ClientKey;
+}
 export interface DmLink {
     a: Principal;
     b: Principal;
@@ -263,10 +331,8 @@ export interface TypingPing {
     user: Principal;
     last_typed_ms: bigint;
 }
-export interface Attachment {
-    url?: string;
-    kind: string;
-    ref_id: string;
+export interface CanisterWsGetMessagesArguments {
+    nonce: bigint;
 }
 export interface Message {
     id: string;
@@ -279,11 +345,17 @@ export interface Message {
     sequence: bigint;
     idempotency_key: string;
 }
+export interface Attachment {
+    url?: string;
+    kind: string;
+    ref_id: string;
+}
 export interface MessagePage {
     messages: Array<Message>;
     latest_sequence: bigint;
     next_sequence?: bigint;
 }
+export type ClientPrincipal = Principal;
 export interface RecapConfig {
     model: string;
     api_key: string;
@@ -798,8 +870,12 @@ export interface messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    ws_close(args: CanisterWsCloseArguments): Promise<CanisterWsCloseResult>;
+    ws_get_messages(args: CanisterWsGetMessagesArguments): Promise<CanisterWsGetMessagesResult>;
+    ws_message(args: CanisterWsMessageArguments, msg_type: WsAppMessage | null): Promise<CanisterWsMessageResult>;
+    ws_open(args: CanisterWsOpenArguments): Promise<CanisterWsOpenResult>;
 }
-import type { Attachment as _Attachment, AttachmentMetadata as _AttachmentMetadata, BroadcastResult as _BroadcastResult, ClubDmSettings as _ClubDmSettings, ClubMembership as _ClubMembership, ClubUnreadSummary as _ClubUnreadSummary, CompetitionAdmin as _CompetitionAdmin, Conversation as _Conversation, DmLink as _DmLink, ForwardRecord as _ForwardRecord, GroupMetadata as _GroupMetadata, GroupRole as _GroupRole, JoinRequest as _JoinRequest, LinkPreview as _LinkPreview, Message as _Message, MessagePage as _MessagePage, MessageWithReactions as _MessageWithReactions, MutePreference as _MutePreference, OnlineUser as _OnlineUser, PinnedMessage as _PinnedMessage, Poll as _Poll, PollResults as _PollResults, PollVote as _PollVote, Reaction as _Reaction, ReactionSummary as _ReactionSummary, RecapConfig as _RecapConfig, Receipt as _Receipt, RecentConversation as _RecentConversation, RoleGrant as _RoleGrant, ScheduledMessage as _ScheduledMessage, State as _State, TypingPing as _TypingPing, TypingUser as _TypingUser, Unread as _Unread, UserMessagingSettings as _UserMessagingSettings } from "./declarations/messaging_domain.did";
+import type { Attachment as _Attachment, AttachmentMetadata as _AttachmentMetadata, BroadcastResult as _BroadcastResult, CanisterOutputCertifiedMessages as _CanisterOutputCertifiedMessages, CanisterWsCloseResult as _CanisterWsCloseResult, CanisterWsGetMessagesResult as _CanisterWsGetMessagesResult, CanisterWsMessageResult as _CanisterWsMessageResult, CanisterWsOpenResult as _CanisterWsOpenResult, ClubDmSettings as _ClubDmSettings, ClubMembership as _ClubMembership, ClubUnreadSummary as _ClubUnreadSummary, CompetitionAdmin as _CompetitionAdmin, Conversation as _Conversation, DmLink as _DmLink, ForwardRecord as _ForwardRecord, GroupMetadata as _GroupMetadata, GroupRole as _GroupRole, JoinRequest as _JoinRequest, LinkPreview as _LinkPreview, Message as _Message, MessagePage as _MessagePage, MessageWithReactions as _MessageWithReactions, MutePreference as _MutePreference, OnlineUser as _OnlineUser, PinnedMessage as _PinnedMessage, Poll as _Poll, PollResults as _PollResults, PollVote as _PollVote, Reaction as _Reaction, ReactionSummary as _ReactionSummary, RecapConfig as _RecapConfig, Receipt as _Receipt, RecentConversation as _RecentConversation, RoleGrant as _RoleGrant, ScheduledMessage as _ScheduledMessage, State as _State, TypingPing as _TypingPing, TypingUser as _TypingUser, Unread as _Unread, UserMessagingSettings as _UserMessagingSettings, WsAppMessage as _WsAppMessage } from "./declarations/messaging_domain.did";
 export class Messaging_domain implements messaging_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
@@ -1539,12 +1615,40 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.vote_poll(arg0, arg1);
         return from_candid_variant_n1(result);
     }
+    async ws_close(arg0: CanisterWsCloseArguments): Promise<CanisterWsCloseResult> {
+        const result = await this.actor.ws_close(arg0);
+        return from_candid_CanisterWsCloseResult_n78(result);
+    }
+    async ws_get_messages(arg0: CanisterWsGetMessagesArguments): Promise<CanisterWsGetMessagesResult> {
+        const result = await this.actor.ws_get_messages(arg0);
+        return from_candid_CanisterWsGetMessagesResult_n79(result);
+    }
+    async ws_message(arg0: CanisterWsMessageArguments, arg1: WsAppMessage | null): Promise<CanisterWsMessageResult> {
+        const result = await this.actor.ws_message(arg0, to_candid_opt_n81(arg1));
+        return from_candid_CanisterWsMessageResult_n84(result);
+    }
+    async ws_open(arg0: CanisterWsOpenArguments): Promise<CanisterWsOpenResult> {
+        const result = await this.actor.ws_open(arg0);
+        return from_candid_CanisterWsOpenResult_n85(result);
+    }
 }
 function from_candid_AttachmentMetadata_n33(value: _AttachmentMetadata): AttachmentMetadata {
     return from_candid_record_n34(value);
 }
 function from_candid_Attachment_n19(value: _Attachment): Attachment {
     return from_candid_record_n20(value);
+}
+function from_candid_CanisterWsCloseResult_n78(value: _CanisterWsCloseResult): CanisterWsCloseResult {
+    return from_candid_variant_n1(value);
+}
+function from_candid_CanisterWsGetMessagesResult_n79(value: _CanisterWsGetMessagesResult): CanisterWsGetMessagesResult {
+    return from_candid_variant_n80(value);
+}
+function from_candid_CanisterWsMessageResult_n84(value: _CanisterWsMessageResult): CanisterWsMessageResult {
+    return from_candid_variant_n1(value);
+}
+function from_candid_CanisterWsOpenResult_n85(value: _CanisterWsOpenResult): CanisterWsOpenResult {
+    return from_candid_variant_n1(value);
 }
 function from_candid_Conversation_n12(value: _Conversation): Conversation {
     return from_candid_record_n13(value);
@@ -2497,6 +2601,25 @@ function from_candid_variant_n76(value: {
         Err: value.Err
     } : value;
 }
+function from_candid_variant_n80(value: {
+    Ok: _CanisterOutputCertifiedMessages;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: CanisterOutputCertifiedMessages;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
 function from_candid_vec_n25(value: Array<_ScheduledMessage>): Array<ScheduledMessage> {
     return value.map((x)=>from_candid_ScheduledMessage_n26(x));
 }
@@ -2530,6 +2653,9 @@ function from_candid_vec_n66(value: Array<_RecentConversation>): Array<RecentCon
 function to_candid_Attachment_n72(value: Attachment): _Attachment {
     return to_candid_record_n73(value);
 }
+function to_candid_WsAppMessage_n82(value: WsAppMessage): _WsAppMessage {
+    return to_candid_variant_n83(value);
+}
 function to_candid_opt_n10(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
@@ -2545,6 +2671,9 @@ function to_candid_opt_n74(value: RecapConfig | null): [] | [_RecapConfig] {
 function to_candid_opt_n77(value: boolean | null): [] | [boolean] {
     return value === null ? candid_none() : candid_some(value);
 }
+function to_candid_opt_n81(value: WsAppMessage | null): [] | [_WsAppMessage] {
+    return value === null ? candid_none() : candid_some(to_candid_WsAppMessage_n82(value));
+}
 function to_candid_record_n73(value: {
     url?: string;
     kind: string;
@@ -2559,6 +2688,22 @@ function to_candid_record_n73(value: {
         kind: value.kind,
         ref_id: value.ref_id
     };
+}
+function to_candid_variant_n83(value: {
+    __kind__: "chat_poke";
+    chat_poke: {
+        conversation_id: string;
+        sequence: bigint;
+    };
+}): {
+    chat_poke: {
+        conversation_id: string;
+        sequence: bigint;
+    };
+} {
+    return value.__kind__ === "chat_poke" ? {
+        chat_poke: value.chat_poke
+    } : value;
 }
 export interface CreateActorOptions {
     agent?: Agent;
