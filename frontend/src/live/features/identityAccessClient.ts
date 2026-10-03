@@ -23,3 +23,27 @@ export async function listLiveProfilesByIds(
     client.dispose();
   }
 }
+
+/**
+ * Case-insensitive substring search over display names — the ICP-mode
+ * counterpart of the Supabase `search_invitable_profiles` RPC. Used by the
+ * invite-other-parent sheet so Internet Identity members never touch the
+ * Supabase RPC. Returns rows in the Supabase shape callers already consume.
+ */
+export async function searchLiveProfiles(
+  ctx: FeatureBackendContext,
+  query: string,
+  limit: number,
+): Promise<Array<{ id: string; display_name: string | null; avatar_url: string | null }>> {
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+  try {
+    const rows = await client.searchProfiles(query, limit);
+    return rows.map((row) => ({
+      id: row.account_id,
+      display_name: row.display_name,
+      avatar_url: row.avatar_ref[0] ?? null,
+    }));
+  } finally {
+    client.dispose();
+  }
+}

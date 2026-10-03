@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 import { linkLiveGuardian, createLivePendingInvite, getLiveTeam } from "@/live/features/club";
+import { searchLiveProfiles } from "@/live/features/identityAccessClient";
 
 interface InviteOtherParentSheetProps {
   open: boolean;
