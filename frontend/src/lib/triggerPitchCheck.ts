@@ -5,6 +5,7 @@
  * board executes subs quickly, marking them executed before cron sees them.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const recent = new Map<string, number>();
 const DEDUPE_MS = 4000;
@@ -25,7 +26,9 @@ export async function triggerPitchCheck(source: string, dedupeKey?: string): Pro
 
   try {
     // Push fan-out is an approved Supabase exception, but Internet Identity
-    // users have no Supabase session — skip silently for them.
+    // users have no Supabase session — skip silently for them. Check the
+    // auth backend explicitly rather than relying on session absence.
+    if (resolveAuthBackend() === "icp") return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
     await supabase.functions.invoke("check-pending-subs", { body: { source } });
