@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -130,6 +131,9 @@ export default function PlayerOfMatchSelector({
 
       return { ...data, profiles: profile, children: child };
     },
+    // player_of_match record is Supabase-only (NEEDS-CANISTER: no POM record
+    // shape on events_domain) — skip the read for II principals.
+    enabled: resolveAuthBackend() !== "icp",
   });
 
   const playerOfMatchDisplay = useMemo(() => {
@@ -214,17 +218,22 @@ export default function PlayerOfMatchSelector({
       const rewardToUse = activePomReward;
       const pointsToAward = rewardToUse?.points_required || 0;
 
-      // Insert player of match record
-      const { error: pomError } = await supabase.from("player_of_match").insert({
-        event_id: eventId,
-        user_id: userId || null,
-        child_id: childId || null,
-        awarded_by: user!.id,
-        points_awarded: pointsToAward > 0,
-        points: pointsToAward,
-      } as any);
+      // Insert player of match record. NEEDS-CANISTER: the player_of_match
+      // record has no canister shape — under ICP the record write is skipped
+      // while points + notifications still flow through the routed canister
+      // paths below.
+      if (resolveAuthBackend() !== "icp") {
+        const { error: pomError } = await supabase.from("player_of_match").insert({
+          event_id: eventId,
+          user_id: userId || null,
+          child_id: childId || null,
+          awarded_by: user!.id,
+          points_awarded: pointsToAward > 0,
+          points: pointsToAward,
+        } as any);
 
-      if (pomError) throw pomError;
+        if (pomError) throw pomError;
+      }
 
       // Only award points if there's a reward configured
       if (pointsToAward > 0) {

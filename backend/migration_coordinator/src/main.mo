@@ -77,92 +77,134 @@ persistent actor {
     total
   };
 
-  // Fetches export evidence from a domain canister principal, dispatching on
-  // the migration's recorded domain name. Traps (via the underlying inter-
-  // canister call failure or an explicit trap) if the domain is unsupported
-  // or the domain canister rejects the caller (only governor / bulk-access
-  // allowlisted principals may call export_state on the domain canisters).
-  func fetchEvidence(domain : Text, principal : Principal) : async* Types.Evidence {
+  // Dispatches export_state() on a domain canister principal based on the
+  // migration's recorded domain name, *without* awaiting the response. The
+  // underlying inter-canister call is already sent as soon as this returns,
+  // so callers can issue several of these back-to-back (e.g. for source and
+  // destination) before awaiting any of them, running the calls concurrently
+  // instead of serializing one behind the other. Traps immediately if the
+  // domain is unsupported.
+  // Pure normalizers: convert a domain's export_state response into the
+  // uniform Evidence shape. Traps (preserving the original error reporting
+  // semantics) if the domain canister reported an export failure or rejected
+  // the caller (only governor / bulk-access allowlisted principals may call
+  // export_state on the domain canisters).
+  func eventsEvidence(result : Types.EventsExport) : Types.Evidence {
+    switch (result) {
+      case (#Err(message)) { Runtime.trap("events_domain export_state failed: " # message) };
+      case (#Ok(state)) {
+        {
+          schema = state.schema;
+          governor = state.governor;
+          sizes = [
+            ("roles", state.roles.size()),
+            ("events", state.events.size()),
+            ("rsvps", state.rsvps.size()),
+            ("attendance", state.attendance.size()),
+            ("lineups", state.lineups.size()),
+            ("duties", state.duties.size()),
+            ("roster", state.roster.size()),
+            ("recurrences", state.recurrences.size()),
+          ];
+        }
+      };
+    };
+  };
+
+  func competitionEvidence(result : Types.CompetitionExport) : Types.Evidence {
+    switch (result) {
+      case (#Err(message)) { Runtime.trap("competition_domain export_state failed: " # message) };
+      case (#Ok(state)) {
+        {
+          schema = state.schema;
+          governor = state.governor;
+          sizes = [
+            ("roles", state.roles.size()),
+            ("competitions", state.competitions.size()),
+            ("entries", state.entries.size()),
+            ("tokens", state.tokens.size()),
+            ("seasons", state.seasons.size()),
+            ("matches", state.matches.size()),
+          ];
+        }
+      };
+    };
+  };
+
+  func mediaEvidence(result : Types.MediaExport) : Types.Evidence {
+    switch (result) {
+      case (#Err(message)) { Runtime.trap("media_metadata export_state failed: " # message) };
+      case (#Ok(state)) {
+        {
+          schema = state.schema;
+          governor = state.governor;
+          sizes = [
+            ("assets", state.assets.size()),
+            ("capabilities", state.capabilities.size()),
+            ("reactions", state.reactions.size()),
+            ("comments", state.comments.size()),
+            ("roles", state.roles.size()),
+          ];
+        }
+      };
+    };
+  };
+
+  func messagingEvidence(result : Types.MessagingExport) : Types.Evidence {
+    switch (result) {
+      case (#Err(message)) { Runtime.trap("messaging_domain export_state failed: " # message) };
+      case (#Ok(state)) {
+        {
+          schema = state.schema;
+          governor = state.governor;
+          sizes = [
+            ("roles", state.roles.size()),
+            ("conversations", state.conversations.size()),
+            ("messages", state.messages.size()),
+            ("receipts", state.receipts.size()),
+            ("unread", state.unread.size()),
+          ];
+        }
+      };
+    };
+  };
+
+  // Issues export_state() on both the given principals concurrently (both
+  // inter-canister calls are sent before either is awaited) and resolves
+  // both results, so a slow domain canister on one side doesn't serialize
+  // behind the other. Motoko's scoped-await rule requires each future to be
+  // awaited in the same function scope that created it, so the issue+await
+  // pairs are inlined per domain branch. Traps immediately if the domain is
+  // unsupported.
+  func fetchEvidencePair(domain : Text, first : Principal, second : Principal) : async* (Types.Evidence, Types.Evidence) {
     switch (domain) {
       case ("events_domain") {
-        let target : Types.EventsDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
-          case (#Err(message)) { Runtime.trap("events_domain export_state failed: " # message) };
-          case (#Ok(state)) {
-            {
-              schema = state.schema;
-              governor = state.governor;
-              sizes = [
-                ("roles", state.roles.size()),
-                ("events", state.events.size()),
-                ("rsvps", state.rsvps.size()),
-                ("attendance", state.attendance.size()),
-                ("lineups", state.lineups.size()),
-                ("duties", state.duties.size()),
-                ("roster", state.roster.size()),
-                ("recurrences", state.recurrences.size()),
-              ];
-            }
-          };
-        };
+        let firstTarget : Types.EventsDomainActor = actor (Principal.toText(first));
+        let secondTarget : Types.EventsDomainActor = actor (Principal.toText(second));
+        let firstFuture = firstTarget.export_state();
+        let secondFuture = secondTarget.export_state();
+        (eventsEvidence(await firstFuture), eventsEvidence(await secondFuture))
       };
       case ("competition_domain") {
-        let target : Types.CompetitionDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
-          case (#Err(message)) { Runtime.trap("competition_domain export_state failed: " # message) };
-          case (#Ok(state)) {
-            {
-              schema = state.schema;
-              governor = state.governor;
-              sizes = [
-                ("roles", state.roles.size()),
-                ("competitions", state.competitions.size()),
-                ("entries", state.entries.size()),
-                ("tokens", state.tokens.size()),
-                ("seasons", state.seasons.size()),
-                ("matches", state.matches.size()),
-              ];
-            }
-          };
-        };
+        let firstTarget : Types.CompetitionDomainActor = actor (Principal.toText(first));
+        let secondTarget : Types.CompetitionDomainActor = actor (Principal.toText(second));
+        let firstFuture = firstTarget.export_state();
+        let secondFuture = secondTarget.export_state();
+        (competitionEvidence(await firstFuture), competitionEvidence(await secondFuture))
       };
       case ("media_metadata") {
-        let target : Types.MediaMetadataActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
-          case (#Err(message)) { Runtime.trap("media_metadata export_state failed: " # message) };
-          case (#Ok(state)) {
-            {
-              schema = state.schema;
-              governor = state.governor;
-              sizes = [
-                ("assets", state.assets.size()),
-                ("capabilities", state.capabilities.size()),
-                ("reactions", state.reactions.size()),
-                ("comments", state.comments.size()),
-                ("roles", state.roles.size()),
-              ];
-            }
-          };
-        };
+        let firstTarget : Types.MediaMetadataActor = actor (Principal.toText(first));
+        let secondTarget : Types.MediaMetadataActor = actor (Principal.toText(second));
+        let firstFuture = firstTarget.export_state();
+        let secondFuture = secondTarget.export_state();
+        (mediaEvidence(await firstFuture), mediaEvidence(await secondFuture))
       };
       case ("messaging_domain") {
-        let target : Types.MessagingDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
-          case (#Err(message)) { Runtime.trap("messaging_domain export_state failed: " # message) };
-          case (#Ok(state)) {
-            {
-              schema = state.schema;
-              governor = state.governor;
-              sizes = [
-                ("roles", state.roles.size()),
-                ("conversations", state.conversations.size()),
-                ("messages", state.messages.size()),
-                ("receipts", state.receipts.size()),
-                ("unread", state.unread.size()),
-              ];
-            }
-          };
-        };
+        let firstTarget : Types.MessagingDomainActor = actor (Principal.toText(first));
+        let secondTarget : Types.MessagingDomainActor = actor (Principal.toText(second));
+        let firstFuture = firstTarget.export_state();
+        let secondFuture = secondTarget.export_state();
+        (messagingEvidence(await firstFuture), messagingEvidence(await secondFuture))
       };
       case (_) { Runtime.trap("Unsupported domain for orchestration: " # domain) };
     };
@@ -267,8 +309,7 @@ persistent actor {
     requireGovernor(caller);
     let current = findActive(id);
     if (current.phase != #started) { Runtime.trap("Invalid export transition") };
-    let sourceEvidence = await* fetchEvidence(current.domain, current.source);
-    let destinationEvidence = await* fetchEvidence(current.domain, current.destination);
+    let (sourceEvidence, destinationEvidence) = await* fetchEvidencePair(current.domain, current.source, current.destination);
     if (sourceEvidence.schema != destinationEvidence.schema) {
       let aborted = { current with phase = #aborted };
       completed := completed.concat([aborted]);
@@ -290,8 +331,7 @@ persistent actor {
     requireGovernor(caller);
     let current = findActive(id);
     if (current.phase != #imported) { Runtime.trap("Invalid verify transition") };
-    let sourceEvidence = await* fetchEvidence(current.domain, current.source);
-    let destinationEvidence = await* fetchEvidence(current.domain, current.destination);
+    let (sourceEvidence, destinationEvidence) = await* fetchEvidencePair(current.domain, current.source, current.destination);
     let sourceChecksum = buildChecksum(sourceEvidence.schema, sourceEvidence.governor, sourceEvidence.sizes);
     let destinationChecksum = buildChecksum(destinationEvidence.schema, destinationEvidence.governor, destinationEvidence.sizes);
     let sourceCount = recordCountOf(sourceEvidence.sizes);
