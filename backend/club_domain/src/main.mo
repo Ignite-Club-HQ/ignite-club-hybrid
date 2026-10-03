@@ -2188,6 +2188,27 @@ persistent actor {
     #Ok(item)
   };
 
+  // ---- Global app config (app_settings parity for pre-auth boot reads) ----
+  // Public reads (anonymous allowed — the backend routing config must be
+  // fetchable before sign-in); writes are governor-only. Values are plain
+  // text; never store secrets here — canister state is replica-visible.
+  public query func get_app_config(key : Text) : async ?Text {
+    switch (appConfig.find(func((k, _)) = k == key)) {
+      case (?(_, v)) ?v;
+      case null null;
+    }
+  };
+
+  public shared ({ caller }) func set_app_config(key : Text, value : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Only governor can set app config");
+    if (key.size() == 0 or key.size() > 128) return #Err("Key must be 1-128 chars");
+    if (value.size() > 65_536) return #Err("Value must be at most 64KiB");
+    if (appConfig.size() >= 64 and appConfig.find(func((k, _)) = k == key) == null) return #Err("At most 64 app config keys");
+    appConfig := appConfig.filter(func((k, _)) = k != key).concat([(key, value)]);
+    #Ok
+  };
+
   // ---- Duplicate team-name check (CreateTeamPage parity) ----
   // Case-insensitive, ignores soft-deleted teams, scoped to the club.
   public query func check_team_name_unique(club_id : Text, name : Text) : async { #Ok : Bool; #Err : Text } {
