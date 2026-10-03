@@ -74,6 +74,7 @@ export interface ClubProfile {
   'description' : [] | [string],
   'created_at_ms' : bigint,
   'logo_url' : [] | [string],
+  'sport' : [] | [string],
   'playhq_org_id' : [] | [string],
   'is_active' : boolean,
   'primary_color' : [] | [string],
@@ -477,7 +478,7 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'create_club' : ActorMethod<
-    [string, string, string, [] | [string]],
+    [string, string, string, [] | [string], [] | [string]],
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,

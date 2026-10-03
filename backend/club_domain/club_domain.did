@@ -391,6 +391,7 @@ type ClubProfile =
    primary_color: opt text;
    secondary_color: opt text;
    slug: text;
+   sport: opt text;
  };
 type ClubJoinRequest = 
  record {
@@ -545,11 +546,11 @@ service : {
                     Err: text;
                     Ok: Child;
                   });
-  create_club: (id: text, name: text, slug: text, description: opt text) ->
-   (variant {
-      Err: text;
-      Ok: ClubProfile;
-    });
+  create_club: (id: text, name: text, slug: text, description: opt text,
+   sport: opt text) -> (variant {
+                          Err: text;
+                          Ok: ClubProfile;
+                        });
   create_news_post: (club_id: text, title: text, body: text, status: 
    text) -> (variant {
                Err: text;

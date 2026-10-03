@@ -80,6 +80,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
         [],
       ),
+    'get_file' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(VaultFile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_folder' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(VaultFolder), 'Err' : IDL.Text })],

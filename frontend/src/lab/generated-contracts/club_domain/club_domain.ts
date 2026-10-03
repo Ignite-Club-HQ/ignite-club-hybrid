@@ -144,6 +144,7 @@ export interface ClubProfile {
     description?: string;
     created_at_ms: bigint;
     logo_url?: string;
+    sport?: string;
     playhq_org_id?: string;
     is_active: boolean;
     primary_color?: string;
@@ -598,7 +599,7 @@ export interface club_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    create_club(id: string, name: string, slug: string, description: string | null): Promise<{
+    create_club(id: string, name: string, slug: string, description: string | null, sport: string | null): Promise<{
         __kind__: "Ok";
         Ok: ClubProfile;
     } | {
@@ -1591,14 +1592,14 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.create_child_for_parent_on_team(arg0, arg1, arg2);
         return from_candid_variant_n16(result);
     }
-    async create_club(arg0: string, arg1: string, arg2: string, arg3: string | null): Promise<{
+    async create_club(arg0: string, arg1: string, arg2: string, arg3: string | null, arg4: string | null): Promise<{
         __kind__: "Ok";
         Ok: ClubProfile;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.create_club(arg0, arg1, arg2, to_candid_opt_n14(arg3));
+        const result = await this.actor.create_club(arg0, arg1, arg2, to_candid_opt_n14(arg3), to_candid_opt_n14(arg4));
         return from_candid_variant_n37(result);
     }
     async create_news_post(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
@@ -3268,6 +3269,7 @@ function from_candid_record_n39(value: {
     description: [] | [string];
     created_at_ms: bigint;
     logo_url: [] | [string];
+    sport: [] | [string];
     playhq_org_id: [] | [string];
     is_active: boolean;
     primary_color: [] | [string];
@@ -3281,6 +3283,7 @@ function from_candid_record_n39(value: {
     description?: string;
     created_at_ms: bigint;
     logo_url?: string;
+    sport?: string;
     playhq_org_id?: string;
     is_active: boolean;
     primary_color?: string;
@@ -3295,6 +3298,7 @@ function from_candid_record_n39(value: {
         description: record_opt_to_undefined(from_candid_opt_n6(value.description)),
         created_at_ms: value.created_at_ms,
         logo_url: record_opt_to_undefined(from_candid_opt_n6(value.logo_url)),
+        sport: record_opt_to_undefined(from_candid_opt_n6(value.sport)),
         playhq_org_id: record_opt_to_undefined(from_candid_opt_n6(value.playhq_org_id)),
         is_active: value.is_active,
         primary_color: record_opt_to_undefined(from_candid_opt_n6(value.primary_color)),
@@ -5158,6 +5162,7 @@ function to_candid_record_n164(value: {
     description?: string;
     created_at_ms: bigint;
     logo_url?: string;
+    sport?: string;
     playhq_org_id?: string;
     is_active: boolean;
     primary_color?: string;
@@ -5171,6 +5176,7 @@ function to_candid_record_n164(value: {
     description: [] | [string];
     created_at_ms: bigint;
     logo_url: [] | [string];
+    sport: [] | [string];
     playhq_org_id: [] | [string];
     is_active: boolean;
     primary_color: [] | [string];
@@ -5185,6 +5191,7 @@ function to_candid_record_n164(value: {
         description: value.description ? candid_some(value.description) : candid_none(),
         created_at_ms: value.created_at_ms,
         logo_url: value.logo_url ? candid_some(value.logo_url) : candid_none(),
+        sport: value.sport ? candid_some(value.sport) : candid_none(),
         playhq_org_id: value.playhq_org_id ? candid_some(value.playhq_org_id) : candid_none(),
         is_active: value.is_active,
         primary_color: value.primary_color ? candid_some(value.primary_color) : candid_none(),
