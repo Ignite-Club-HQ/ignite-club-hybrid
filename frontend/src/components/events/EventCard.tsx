@@ -774,6 +774,9 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   });
 
   const handleRemindClick = async () => {
+    // NEEDS-CANISTER: guarded companion of remindMutation above; the menu
+    // item calling this is hidden for ICP clubs (hasPro fails closed).
+    if (isFeatureRoutedToIcp("events")) return;
     const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
     const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
     let memberQuery = supabase.from("user_roles").select("user_id");
