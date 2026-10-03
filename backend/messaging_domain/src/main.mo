@@ -364,6 +364,49 @@ persistent actor {
     };
   };
 
+  // Realtime poke fan-out: hands each chat member (including the sender —
+  // their other devices need it too) a tiny {conversation_id, sequence} poke
+  // via the WS channel. Never carries message content; clients refetch
+  // through the normal certified query path. Fire-and-forget and fully
+  // fail-open: with no gateway connected every send is a no-op and chat
+  // works exactly as before (adaptive polling).
+  func fanOutWsPoke(conversation_id : Text, sequence : Nat64) : async () {
+    var conv : ?Types.Conversation = null;
+    for (c in conversations.values()) { if (c.id == conversation_id) { conv := ?c } };
+    switch (conv) {
+      case null {};
+      case (?conversation) {
+        let members = switch (getGroupMetadataFor(conversation.id)) {
+          case (?meta) { if (meta.members.size() > 0) { meta.members } else { conversation.participants } };
+          case null { conversation.participants };
+        };
+        let bytes = to_candid (#chat_poke({ conversation_id; sequence }) : Types.WsAppMessage);
+        var sent = 0;
+        label send for (p in members.values()) {
+          // Same 500-recipient cap as the notification fan-out.
+          if (sent >= 500) { break send };
+          sent += 1;
+          try { ignore await ws.send(p, bytes) } catch (_) {};
+        };
+      };
+    };
+  };
+
+  func fanOutWsPokeForMessage(msg : Types.Message) : async () {
+    await fanOutWsPoke(msg.conversation_id, msg.sequence);
+  };
+
+  // Reactions mutate `reactions` without bumping the conversation sequence,
+  // so they poke with the current sequence as the version marker.
+  func fanOutWsReactionPoke(message_id : Text) : async () {
+    for (m in messages.values()) {
+      if (m.id == message_id) {
+        await fanOutWsPoke(m.conversation_id, m.sequence);
+        return;
+      };
+    };
+  };
+
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
