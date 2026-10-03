@@ -39,7 +39,7 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
 
   // ==================== Types ====================
 
@@ -145,6 +145,10 @@ persistent actor {
 
   var metadata_version : Nat32;
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
 
   // Verified guardian -> child (pii_id) relationships backing can_read /
   // grant_pii_read authorization. Seeded empty, populated via

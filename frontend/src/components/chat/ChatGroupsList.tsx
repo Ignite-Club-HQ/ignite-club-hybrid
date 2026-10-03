@@ -2,8 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { softDeleteLiveGroup } from "@/live/features/messaging";
+import { softDeleteLiveGroup, listLiveGroupsByClub, listLiveGroupsByTeam } from "@/live/features/messaging";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -36,22 +35,40 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ["chat-groups", { clubId, teamId }],
     queryFn: async () => {
-      let query = supabase.from("chat_groups").select("*");
-      
-      if (teamId) {
-        query = query.eq("team_id", teamId);
-      } else if (clubId) {
-        query = query.eq("club_id", clubId);
-      }
-      
-      const { data, error } = await query.order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as ChatGroup[];
+      const groups = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          let query = supabase.from("chat_groups").select("*");
+
+          if (teamId) {
+            query = query.eq("team_id", teamId);
+          } else if (clubId) {
+            query = query.eq("club_id", clubId);
+          }
+
+          const { data, error } = await query.order("created_at", { ascending: false });
+          if (error) throw error;
+          return data as ChatGroup[];
+        },
+        icp: async (ctx) => {
+          const summaries = teamId
+            ? await listLiveGroupsByTeam(ctx, teamId)
+            : clubId
+              ? await listLiveGroupsByClub(ctx, clubId)
+              : [];
+          return summaries.map((g) => ({
+            id: g.conversationId,
+            name: g.name,
+            club_id: g.clubId,
+            team_id: g.teamId,
+            allowed_roles: [],
+            created_by: "",
+            created_at: new Date(0).toISOString(),
+          } satisfies ChatGroup));
+        },
+      });
+      return groups;
     },
-    // NEEDS-CANISTER: messaging_domain has no list-groups-by-club/team query
-    // yet, so under ICP routing this list is silently empty rather than
-    // hitting the Supabase chat_groups table.
-    enabled: (!!clubId || !!teamId) && !isFeatureRoutedToIcp("messaging"),
+    enabled: !!clubId || !!teamId,
   });
 
   const deleteGroupMutation = useMutation({

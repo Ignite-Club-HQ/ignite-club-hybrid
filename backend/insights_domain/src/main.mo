@@ -10,8 +10,12 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var webVitals : [Types.WebVital];
   var perfSamples : [Types.PerfSample];
@@ -50,13 +54,6 @@ persistent actor {
 
   // ---------- day bucketing (UTC, integer division; no calendar libs) ----------
   func dayKey(ms : Nat64) : Text { Nat64.toText(ms / 86_400_000) };
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
