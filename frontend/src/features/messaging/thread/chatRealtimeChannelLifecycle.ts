@@ -3,6 +3,7 @@ import { noteChannelRemoved, noteChannelSubscribed } from "@/lib/chatPerfDiagnos
 import { registerChannel, type RealtimeChannel, type Scope } from "@/lib/realtimeChannelRegistry";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { isChatWsHealthy, subscribeChatPokes } from "@/live/wsRealtime";
 import {
   CHAT_POLL_INTERVAL_HIDDEN_MS,
   CHAT_POLL_INTERVAL_VISIBLE_MS,
@@ -43,10 +44,15 @@ export function startChatRealtimeChannel({
     const invalidateAll = () => {
       for (const key of cacheKeys) queryClient.invalidateQueries({ queryKey: key });
     };
+    // WebSocket realtime (IC WS gateway): a poke refreshes this screen's keys
+    // immediately. While the socket is healthy the poll ticks below become a
+    // no-op safety net and resume automatically if the socket drops.
+    const unsubscribePokes = subscribeChatPokes(() => invalidateAll());
     const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
     let scheduledInterval = isVisible() ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS;
     let pollId = setInterval(() => {
       if (!isVisible()) return;
+      if (isChatWsHealthy()) return;
       invalidateAll();
     }, scheduledInterval);
 
@@ -61,6 +67,7 @@ export function startChatRealtimeChannel({
         clearInterval(pollId);
         pollId = setInterval(() => {
           if (!isVisible()) return;
+          if (isChatWsHealthy()) return;
           invalidateAll();
         }, scheduledInterval);
       }
@@ -70,6 +77,7 @@ export function startChatRealtimeChannel({
     }
 
     return () => {
+      unsubscribePokes();
       clearInterval(pollId);
       if (typeof document !== "undefined") {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
