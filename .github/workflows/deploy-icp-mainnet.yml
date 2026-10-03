@@ -2,8 +2,9 @@
 #
 # One-time setup (in the GitHub repo, from any browser):
 #   1. Fund the identity: the "Show funding address" step below prints the
-#      account address — send ~8 ICP worth of cycles there (icscan.io or an
-#      exchange conversion), or convert ICP to cycles directly.
+#      account address — send ~8 ICP there. On the next run the
+#      "Convert available ICP to cycles" step mints it into cycles
+#      automatically (0.0001 ICP is left behind for the ledger fee).
 #   2. On the FIRST run (no DEPLOYER_PEM secret yet), a fresh deployer key is
 #      generated, every canister is pointed at it, and the key file is uploaded
 #      as the "deployer-key" artifact. Download it, then:
@@ -36,9 +37,11 @@ jobs:
           node-version: "22.12.0"
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
-      - name: Install deploy tool
-        run: npm install -g icp-sdk-icp-cli --no-fund --no-audit
+      - name: Install deploy tools (icp CLI, ic-wasm for the recipes, mops for Motoko)
+        run: npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm ic-mops --no-fund --no-audit
 
       - name: Restore or create deployer identity
         env:
@@ -48,11 +51,12 @@ jobs:
           mkdir -p "$ICP_HOME/identity/keys"
           if [ -n "$DEPLOYER_PEM" ]; then
             printf '%s\n' "$DEPLOYER_PEM" | tr -d '\r' > "$ICP_HOME/identity/keys/ignite-governor.pem"
-            icp identity import ignite-governor "$ICP_HOME/identity/keys/ignite-governor.pem" --storage plaintext
+            icp identity import --from-pem "$ICP_HOME/identity/keys/ignite-governor.pem" --storage plaintext ignite-governor
             icp identity default ignite-governor
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
-            icp identity new ignite-governor --storage plaintext
+            icp identity new ignite-governor --storage plaintext \
+              --output-seed "$ICP_HOME/identity/keys/ignite-governor.seed.txt"
             icp identity default ignite-governor
             echo "key_source=generated" >> "$GITHUB_ENV"
           fi
@@ -64,6 +68,27 @@ jobs:
           echo "==> Current balances:"
           icp token balance -n ic || true
           icp cycles balance -n ic || true
+
+      - name: Convert available ICP to cycles
+        run: |
+          set -euo pipefail
+          RAW="$(icp token balance -n ic -q 2>/dev/null || icp token balance -n ic)"
+          echo "ICP balance: $RAW"
+          # Extract the first number, leave 0.0001 ICP behind for the ledger fee.
+          AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
+          if [ -z "$AMT" ]; then
+            echo "==> Could not parse ICP balance; skipping auto-conversion."
+            echo "==> If deploy fails for lack of cycles, convert manually: icp cycles mint --icp <amount> -n ic"
+            exit 0
+          fi
+          MINT="$(awk -v b="$AMT" 'BEGIN{ m = b - 0.0001; if (m <= 0) m = 0; printf "%.8f", m }')"
+          if [ "$MINT" = "0.00000000" ]; then
+            echo "==> No ICP to convert (balance $AMT). Deploy uses the existing cycles balance."
+            exit 0
+          fi
+          echo "==> Minting $MINT ICP into cycles"
+          icp cycles mint --icp "$MINT" -n ic
+          icp cycles balance -n ic
 
       - name: Point all canister configs at this deployer identity
         run: |
@@ -96,7 +121,8 @@ jobs:
           echo "     Name: DEPLOYER_PEM"
           echo "     Value: the full file text, -----BEGIN PRIVATE KEY----- line included."
           echo "==> 3. Delete the 'deployer-key' artifact from this run page after saving it."
-          echo "==> 4. Fund the account address printed above with ~8 ICP of cycles, then re-run."
+          echo "==> 4. Send ~8 ICP to the account address printed above, then re-run."
+          echo "     The workflow converts it to cycles automatically on the next run."
 
       - name: Upload canister ID mapping
         if: always()
@@ -111,5 +137,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deployer-key
-          path: ${{ env.ICP_HOME }}/identity/keys/ignite-governor.pem
+          path: |
+            ${{ env.ICP_HOME }}/identity/keys/ignite-governor.pem
+            ${{ env.ICP_HOME }}/identity/keys/ignite-governor.seed.txt
           if-no-files-found: error
