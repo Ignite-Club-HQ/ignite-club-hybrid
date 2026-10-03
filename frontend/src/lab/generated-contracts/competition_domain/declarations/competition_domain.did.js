@@ -176,8 +176,7 @@ export const idlFactory = ({ IDL }) => {
     'submission_ids' : IDL.Vec(IDL.Text),
     'age_group' : IDL.Text,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'accept_competition_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],
@@ -310,11 +309,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -512,6 +506,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

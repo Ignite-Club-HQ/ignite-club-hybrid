@@ -115,6 +115,17 @@ export interface GroupRole {
   'role' : string,
   'user' : Principal,
 }
+export interface GroupSummary {
+  'conversation_id' : string,
+  'kind' : string,
+  'name' : string,
+  'team_id' : [] | [string],
+  'description' : [] | [string],
+  'is_member' : boolean,
+  'member_count' : number,
+  'club_id' : [] | [string],
+  'avatar' : [] | [string],
+}
 export interface HttpHeader { 'value' : string, 'name' : string }
 export interface HttpRequestResult {
   'status' : bigint,
@@ -133,162 +144,7 @@ export interface LinkPreview {
   'site_name' : [] | [string],
   'image' : [] | [string],
 }
-export interface Message {
-  'id' : string,
-  'conversation_id' : string,
-  'body' : string,
-  'sender' : Principal,
-  'created_at_ms' : bigint,
-  'edited_at_ms' : [] | [bigint],
-  'attachment' : [] | [Attachment],
-  'sequence' : bigint,
-  'idempotency_key' : string,
-}
-export interface MessagePage {
-  'messages' : Array<Message>,
-  'latest_sequence' : bigint,
-  'next_sequence' : [] | [bigint],
-}
-export interface MessageWithReactions {
-  'message' : Message,
-  'reactions' : Array<ReactionSummary>,
-}
-export interface MutePreference {
-  'muted' : boolean,
-  'conversation_id' : string,
-  'user' : Principal,
-}
-export interface OnlineUser {
-  'last_seen_ms' : bigint,
-  'user' : Principal,
-  'platform' : [] | [string],
-}
-export interface PinnedMessage {
-  'id' : string,
-  'pinned_by' : Principal,
-  'conversation_id' : string,
-  'created_at_ms' : bigint,
-  'message_id' : string,
-}
-export interface Poll {
-  'id' : string,
-  'closed' : boolean,
-  'creator' : Principal,
-  'question' : string,
-  'conversation_id' : string,
-  'created_at_ms' : bigint,
-  'message_id' : [] | [string],
-  'options' : Array<string>,
-}
-export interface PollResults {
-  'poll' : Poll,
-  'total_votes' : number,
-  'counts' : Uint32Array,
-}
-export interface PollVote {
-  'poll_id' : string,
-  'user' : Principal,
-  'option_index' : number,
-}
-export interface Reaction {
-  'user' : Principal,
-  'emoji' : string,
-  'message_id' : string,
-}
-export interface ReactionSummary { 'count' : number, 'emoji' : string }
-export interface RecapConfig {
-  'model' : string,
-  'api_key' : string,
-  'endpoint_url' : string,
-}
-export interface Receipt {
-  'conversation_id' : string,
-  'read' : boolean,
-  'user' : Principal,
-  'message_id' : string,
-}
-export interface RecentConversation {
-  'last_message_sequence' : bigint,
-  'conversation_id' : string,
-  'kind' : string,
-  'last_message_at_ms' : [] | [bigint],
-}
-export interface RoleGrant {
-  'role' : string,
-  'user' : Principal,
-  'team_id' : [] | [string],
-  'club_id' : [] | [string],
-}
-export interface ScheduledMessage {
-  'id' : string,
-  'replayed_message_id' : [] | [string],
-  'conversation_id' : string,
-  'body' : string,
-  'sender' : Principal,
-  'scheduled_at_ms' : bigint,
-  'replayed_at_ms' : [] | [bigint],
-}
-export interface State {
-  'forwardRecords' : Array<ForwardRecord>,
-  'joinRequests' : Array<JoinRequest>,
-  'scheduledMessages' : Array<ScheduledMessage>,
-  'messages' : Array<Message>,
-  'schema' : number,
-  'mutePreferences' : Array<MutePreference>,
-  'dmAttachmentsDisabled' : Array<Principal>,
-  'clubDmSettings' : Array<ClubDmSettings>,
-  'groupRoles' : Array<GroupRole>,
-  'unread' : Array<Unread>,
-  'typingPings' : Array<TypingPing>,
-  'groupMetadata' : Array<GroupMetadata>,
-  'clubMemberships' : Array<ClubMembership>,
-  'pollVotes' : Array<PollVote>,
-  'governor' : Principal,
-  'conversations' : Array<Conversation>,
-  'pinnedMessages' : Array<PinnedMessage>,
-  'polls' : Array<Poll>,
-  'attachmentMetadata' : Array<AttachmentMetadata>,
-  'dmLinks' : Array<DmLink>,
-  'userMessagingSettings' : Array<UserMessagingSettings>,
-  'receipts' : Array<Receipt>,
-  'reactions' : Array<Reaction>,
-  'roles' : Array<RoleGrant>,
-  'competitionAdmins' : Array<CompetitionAdmin>,
-}
-export interface TypingPing {
-  'conversation_id' : string,
-  'name' : string,
-  'user' : Principal,
-  'last_typed_ms' : bigint,
-}
-export interface TypingUser { 'name' : string, 'user' : Principal }
-export interface Unread {
-  'conversation_id' : string,
-  'count' : bigint,
-  'user' : Principal,
-  'last_read_sequence' : bigint,
-}
-export interface UnreadSummary {
-  'conversation_id' : string,
-  'kind' : string,
-  'count' : bigint,
-}
-export interface UserMessagingSettings {
-  'ai_catchup_enabled' : boolean,
-  'user' : Principal,
-  'hide_message_preview' : boolean,
-}
-export interface WebsocketMessage {
-  'sequence_num' : bigint,
-  'content' : Uint8Array,
-  'client_key' : ClientKey,
-  'timestamp' : bigint,
-  'is_service_message' : boolean,
-}
-export type WsAppMessage = {
-    'chat_poke' : { 'conversation_id' : string, 'sequence' : bigint }
-  };
-export interface _SERVICE {
+export interface Main {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -389,7 +245,6 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'has_blocked' : ActorMethod<[Principal], boolean>,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_competition_admin' : ActorMethod<[string], boolean>,
   'leave_group' : ActorMethod<
     [string],
@@ -407,6 +262,16 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
+  'list_groups_by_club' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
+  'list_groups_by_team' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
   'list_join_requests' : ActorMethod<
     [string],
     { 'Ok' : Array<JoinRequest> } |
@@ -421,6 +286,11 @@ export interface _SERVICE {
   'list_pinned_messages' : ActorMethod<
     [string],
     { 'Ok' : Array<PinnedMessage> } |
+      { 'Err' : string }
+  >,
+  'list_read_receipts' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Receipt> } |
       { 'Err' : string }
   >,
   'list_typing' : ActorMethod<
@@ -639,5 +509,161 @@ export interface _SERVICE {
   >,
   'ws_open' : ActorMethod<[CanisterWsOpenArguments], CanisterWsOpenResult>,
 }
+export interface Message {
+  'id' : string,
+  'conversation_id' : string,
+  'body' : string,
+  'sender' : Principal,
+  'created_at_ms' : bigint,
+  'edited_at_ms' : [] | [bigint],
+  'attachment' : [] | [Attachment],
+  'sequence' : bigint,
+  'idempotency_key' : string,
+}
+export interface MessagePage {
+  'messages' : Array<Message>,
+  'latest_sequence' : bigint,
+  'next_sequence' : [] | [bigint],
+}
+export interface MessageWithReactions {
+  'message' : Message,
+  'reactions' : Array<ReactionSummary>,
+}
+export interface MutePreference {
+  'muted' : boolean,
+  'conversation_id' : string,
+  'user' : Principal,
+}
+export interface OnlineUser {
+  'last_seen_ms' : bigint,
+  'user' : Principal,
+  'platform' : [] | [string],
+}
+export interface PinnedMessage {
+  'id' : string,
+  'pinned_by' : Principal,
+  'conversation_id' : string,
+  'created_at_ms' : bigint,
+  'message_id' : string,
+}
+export interface Poll {
+  'id' : string,
+  'closed' : boolean,
+  'creator' : Principal,
+  'question' : string,
+  'conversation_id' : string,
+  'created_at_ms' : bigint,
+  'message_id' : [] | [string],
+  'options' : Array<string>,
+}
+export interface PollResults {
+  'poll' : Poll,
+  'total_votes' : number,
+  'counts' : Uint32Array,
+}
+export interface PollVote {
+  'poll_id' : string,
+  'user' : Principal,
+  'option_index' : number,
+}
+export interface Reaction {
+  'user' : Principal,
+  'emoji' : string,
+  'message_id' : string,
+}
+export interface ReactionSummary { 'count' : number, 'emoji' : string }
+export interface RecapConfig {
+  'model' : string,
+  'api_key' : string,
+  'endpoint_url' : string,
+}
+export interface Receipt {
+  'conversation_id' : string,
+  'read' : boolean,
+  'user' : Principal,
+  'message_id' : string,
+}
+export interface RecentConversation {
+  'last_message_sequence' : bigint,
+  'conversation_id' : string,
+  'kind' : string,
+  'last_message_at_ms' : [] | [bigint],
+}
+export interface RoleGrant {
+  'role' : string,
+  'user' : Principal,
+  'team_id' : [] | [string],
+  'club_id' : [] | [string],
+}
+export interface ScheduledMessage {
+  'id' : string,
+  'replayed_message_id' : [] | [string],
+  'conversation_id' : string,
+  'body' : string,
+  'sender' : Principal,
+  'scheduled_at_ms' : bigint,
+  'replayed_at_ms' : [] | [bigint],
+}
+export interface State {
+  'forwardRecords' : Array<ForwardRecord>,
+  'joinRequests' : Array<JoinRequest>,
+  'scheduledMessages' : Array<ScheduledMessage>,
+  'messages' : Array<Message>,
+  'schema' : number,
+  'mutePreferences' : Array<MutePreference>,
+  'dmAttachmentsDisabled' : Array<Principal>,
+  'clubDmSettings' : Array<ClubDmSettings>,
+  'groupRoles' : Array<GroupRole>,
+  'unread' : Array<Unread>,
+  'typingPings' : Array<TypingPing>,
+  'groupMetadata' : Array<GroupMetadata>,
+  'clubMemberships' : Array<ClubMembership>,
+  'pollVotes' : Array<PollVote>,
+  'governor' : Principal,
+  'conversations' : Array<Conversation>,
+  'pinnedMessages' : Array<PinnedMessage>,
+  'polls' : Array<Poll>,
+  'attachmentMetadata' : Array<AttachmentMetadata>,
+  'dmLinks' : Array<DmLink>,
+  'userMessagingSettings' : Array<UserMessagingSettings>,
+  'receipts' : Array<Receipt>,
+  'reactions' : Array<Reaction>,
+  'roles' : Array<RoleGrant>,
+  'competitionAdmins' : Array<CompetitionAdmin>,
+}
+export interface TypingPing {
+  'conversation_id' : string,
+  'name' : string,
+  'user' : Principal,
+  'last_typed_ms' : bigint,
+}
+export interface TypingUser { 'name' : string, 'user' : Principal }
+export interface Unread {
+  'conversation_id' : string,
+  'count' : bigint,
+  'user' : Principal,
+  'last_read_sequence' : bigint,
+}
+export interface UnreadSummary {
+  'conversation_id' : string,
+  'kind' : string,
+  'count' : bigint,
+}
+export interface UserMessagingSettings {
+  'ai_catchup_enabled' : boolean,
+  'user' : Principal,
+  'hide_message_preview' : boolean,
+}
+export interface WebsocketMessage {
+  'sequence_num' : bigint,
+  'content' : Uint8Array,
+  'client_key' : ClientKey,
+  'timestamp' : bigint,
+  'is_service_message' : boolean,
+}
+export type WsAppMessage = {
+    'chat_poke' : { 'conversation_id' : string, 'sequence' : bigint }
+  };
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

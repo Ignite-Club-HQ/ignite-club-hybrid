@@ -50,6 +50,7 @@ export interface _SERVICE {
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
+  'set_club_domain_canister' : ActorMethod<[Principal], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

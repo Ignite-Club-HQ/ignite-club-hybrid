@@ -212,6 +212,17 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
     'platform' : IDL.Opt(IDL.Text),
   });
+  const GroupSummary = IDL.Record({
+    'conversation_id' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'team_id' : IDL.Opt(IDL.Text),
+    'description' : IDL.Opt(IDL.Text),
+    'is_member' : IDL.Bool,
+    'member_count' : IDL.Nat32,
+    'club_id' : IDL.Opt(IDL.Text),
+    'avatar' : IDL.Opt(IDL.Text),
+  });
   const MessagePage = IDL.Record({
     'messages' : IDL.Vec(Message),
     'latest_sequence' : IDL.Nat64,
@@ -305,8 +316,7 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : IDL.Null,
     'Err' : IDL.Text,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -442,11 +452,6 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'has_blocked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
-    'initialize' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
     'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'leave_group' : IDL.Func(
         [IDL.Text],
@@ -464,6 +469,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
+    'list_groups_by_club' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_groups_by_team' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_join_requests' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
@@ -482,6 +497,11 @@ export const idlFactory = ({ IDL }) => {
     'list_pinned_messages' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PinnedMessage), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_read_receipts' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_typing' : IDL.Func(
@@ -737,6 +757,8 @@ export const idlFactory = ({ IDL }) => {
       ),
     'ws_open' : IDL.Func([CanisterWsOpenArguments], [CanisterWsOpenResult], []),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

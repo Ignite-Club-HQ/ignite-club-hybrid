@@ -237,163 +237,7 @@ export interface ActiveGame {
     is_active: boolean;
     pitch_state_json: string;
 }
-export interface EventGroup {
-    id: string;
-    pitch_name?: string;
-    name: string;
-    created_at_ms: bigint;
-    team_letter?: string;
-    team_b_colour?: string;
-    ability_band?: string;
-    display_order: number;
-    event_id: string;
-    colour?: string;
-}
-export interface ReminderLog {
-    id: string;
-    sent_at_ms: bigint;
-    recipient: string;
-    event_id: string;
-    channel: string;
-}
-export interface Attendance {
-    account_id: string;
-    present: boolean;
-    note: string;
-    event_id: string;
-}
-export interface AssociationEvent {
-    id: string;
-    title: string;
-    deleted: boolean;
-    association_id: string;
-    description: string;
-    created_by: Principal;
-    starts_at_ms: bigint;
-    created_at_ms: bigint;
-    ends_at_ms: bigint;
-    child_event_ids: Array<string>;
-    location?: string;
-}
-export interface Event {
-    id: string;
-    title: string;
-    creator: Principal;
-    deleted: boolean;
-    cancelled: boolean;
-    series_id?: string;
-    team_id?: string;
-    description: string;
-    starts_at_ms: bigint;
-    ends_at_ms: bigint;
-    revision: bigint;
-    club_id: string;
-    location?: string;
-    event_type: string;
-}
-export interface LineupPlayer {
-    x?: number;
-    y?: number;
-    member: string;
-    slot: string;
-    number?: number;
-    bench: boolean;
-}
-export interface HttpHeader {
-    value: string;
-    name: string;
-}
-export interface LineupEntry {
-    member: string;
-    slot: string;
-    team_id?: string;
-    event_id: string;
-}
-export interface GroupPlayerInput {
-    account_id: string;
-    team_letter?: string;
-}
-export interface EventGroupDuty {
-    account_id?: string;
-    duty: string;
-    group_id: string;
-}
-export interface PlayHQMatch {
-    external_away_team_id?: string;
-    external_home_team_id?: string;
-    away_team_name?: string;
-    home_team_name?: string;
-}
-export interface OpenDuty {
-    id: string;
-    claimed_by?: string;
-    duty: string;
-    created_at_ms: bigint;
-    event_id: string;
-}
-export interface MiniLeagueRsvp {
-    subject: RsvpSubject;
-    updated_at_ms: bigint;
-    state: string;
-    event_id: string;
-}
-export interface EventAttendance {
-    status: string;
-    marked_by: Principal;
-    subject_kind: string;
-    marked_at_ms: bigint;
-    subject_id: string;
-    notes: string;
-    event_id: string;
-}
-export interface AttendanceInput {
-    status: string;
-    subject_kind: string;
-    subject_id: string;
-    notes: string;
-}
-export interface PitchBoardSettings {
-    max_spread_minutes: number;
-    formation?: string;
-    rotate_gk_at_halftime: boolean;
-    show_lineup_picker: boolean;
-    team_id: string;
-    rotation_speed: number;
-    updated_at_ms: bigint;
-    team_size: number;
-    disable_batch_subs: boolean;
-    minutes_per_half: number;
-    disable_position_swaps: boolean;
-    show_match_header: boolean;
-}
-export interface CoachNote {
-    updated_by: Principal;
-    note: string;
-    updated_at_ms: bigint;
-    event_id: string;
-}
-export interface GameResult {
-    id: string;
-    saved_by: Principal;
-    period_scores_json: string;
-    team_id: string;
-    updated_at_ms: bigint;
-    sport: string;
-    mvp_player_name?: string;
-    away_label: string;
-    away_score: number;
-    mvp_player_id?: string;
-    event_id?: string;
-    home_label: string;
-    home_score: number;
-    player_stats_json: string;
-}
-export interface PlayHQConfig {
-    base_url: string;
-    api_key: string;
-    updated_at_ms: bigint;
-}
-export interface events_domainInterface {
+export interface MainInterface {
     addBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -719,13 +563,6 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
     is_guardian_of(principal: Principal, child_id: string): Promise<boolean>;
     is_paused(club_id: string, team_id: string, at_ms: bigint): Promise<{
         __kind__: "Ok";
@@ -1002,6 +839,13 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    send_event_reminders(event_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_attendance(event_id: string, account_id: string, present: boolean, note: string): Promise<{
         __kind__: "Ok";
         Ok: Attendance;
@@ -1051,6 +895,13 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_notification_queue_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_playhq_config(config: PlayHQConfig | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1079,7 +930,14 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    set_rsvp(event_id: string, account_id: string, state: string): Promise<{
+    set_rsvp(event_id: string, account_id: string, state: string, notes: string): Promise<{
+        __kind__: "Ok";
+        Ok: Rsvp;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_rsvp_note(event_id: string, account_id: string, notes: string): Promise<{
         __kind__: "Ok";
         Ok: Rsvp;
     } | {
@@ -1142,6 +1000,164 @@ export interface events_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+}
+export interface EventGroup {
+    id: string;
+    pitch_name?: string;
+    name: string;
+    created_at_ms: bigint;
+    team_letter?: string;
+    team_b_colour?: string;
+    ability_band?: string;
+    display_order: number;
+    event_id: string;
+    colour?: string;
+}
+export interface ReminderLog {
+    id: string;
+    sent_at_ms: bigint;
+    recipient: string;
+    event_id: string;
+    channel: string;
+}
+export interface Attendance {
+    account_id: string;
+    present: boolean;
+    note: string;
+    event_id: string;
+}
+export interface AssociationEvent {
+    id: string;
+    title: string;
+    deleted: boolean;
+    association_id: string;
+    description: string;
+    created_by: Principal;
+    starts_at_ms: bigint;
+    created_at_ms: bigint;
+    ends_at_ms: bigint;
+    child_event_ids: Array<string>;
+    location?: string;
+}
+export interface Event {
+    id: string;
+    title: string;
+    creator: Principal;
+    deleted: boolean;
+    cancelled: boolean;
+    series_id?: string;
+    team_id?: string;
+    description: string;
+    starts_at_ms: bigint;
+    ends_at_ms: bigint;
+    revision: bigint;
+    club_id: string;
+    location?: string;
+    event_type: string;
+}
+export interface LineupPlayer {
+    x?: number;
+    y?: number;
+    member: string;
+    slot: string;
+    number?: number;
+    bench: boolean;
+}
+export interface HttpHeader {
+    value: string;
+    name: string;
+}
+export interface LineupEntry {
+    member: string;
+    slot: string;
+    team_id?: string;
+    event_id: string;
+}
+export interface GroupPlayerInput {
+    account_id: string;
+    team_letter?: string;
+}
+export interface EventGroupDuty {
+    account_id?: string;
+    duty: string;
+    group_id: string;
+}
+export interface PlayHQMatch {
+    external_away_team_id?: string;
+    external_home_team_id?: string;
+    away_team_name?: string;
+    home_team_name?: string;
+}
+export interface OpenDuty {
+    id: string;
+    claimed_by?: string;
+    duty: string;
+    created_at_ms: bigint;
+    event_id: string;
+}
+export interface MiniLeagueRsvp {
+    subject: RsvpSubject;
+    updated_at_ms: bigint;
+    state: string;
+    event_id: string;
+}
+export interface EventAttendance {
+    status: string;
+    marked_by: Principal;
+    subject_kind: string;
+    marked_at_ms: bigint;
+    subject_id: string;
+    notes: string;
+    event_id: string;
+}
+export interface AttendanceInput {
+    status: string;
+    subject_kind: string;
+    subject_id: string;
+    notes: string;
+}
+export interface PitchBoardSettings {
+    max_spread_minutes: number;
+    formation?: string;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    updated_at_ms: bigint;
+    team_size: number;
+    disable_batch_subs: boolean;
+    minutes_per_half: number;
+    disable_position_swaps: boolean;
+    show_match_header: boolean;
+}
+export interface CoachNote {
+    updated_by: Principal;
+    note: string;
+    updated_at_ms: bigint;
+    event_id: string;
+}
+export interface GameResult {
+    id: string;
+    saved_by: Principal;
+    period_scores_json: string;
+    team_id: string;
+    updated_at_ms: bigint;
+    sport: string;
+    mvp_player_name?: string;
+    away_label: string;
+    away_score: number;
+    mvp_player_id?: string;
+    event_id?: string;
+    home_label: string;
+    home_score: number;
+    player_stats_json: string;
+}
+export interface PlayHQConfig {
+    base_url: string;
+    api_key: string;
+    updated_at_ms: bigint;
+}
+export interface events_domainInterface extends MainInterface {
 }
 import type { ActiveGame as _ActiveGame, AssociationEvent as _AssociationEvent, Attendance as _Attendance, Child as _Child, ChildGuardian as _ChildGuardian, ChildTeamAssignment as _ChildTeamAssignment, CoachNote as _CoachNote, Duty as _Duty, Event as _Event, EventAttendance as _EventAttendance, EventGroup as _EventGroup, EventGroupDuty as _EventGroupDuty, EventGroupPlayer as _EventGroupPlayer, EventGuest as _EventGuest, EventRoster as _EventRoster, EventSeries as _EventSeries, EventView as _EventView, GamePlayerStat as _GamePlayerStat, GamePlayerStatInput as _GamePlayerStatInput, GameResult as _GameResult, GameSummary as _GameSummary, GroupDutyInput as _GroupDutyInput, GroupPlayerInput as _GroupPlayerInput, GroupSpecInput as _GroupSpecInput, LineupEntry as _LineupEntry, LineupPlayer as _LineupPlayer, LineupSnapshot as _LineupSnapshot, MiniLeagueRsvp as _MiniLeagueRsvp, OpenDuty as _OpenDuty, PitchBoardSettings as _PitchBoardSettings, PlayHQCompetition as _PlayHQCompetition, PlayHQConfig as _PlayHQConfig, PlayHQMatch as _PlayHQMatch, PushReachability as _PushReachability, Recurrence as _Recurrence, ReminderLog as _ReminderLog, RoleGrant as _RoleGrant, RosterEntry as _RosterEntry, Rsvp as _Rsvp, RsvpSubject as _RsvpSubject, RsvpWithChild as _RsvpWithChild, TeamTrainingPause as _TeamTrainingPause } from "./declarations/events_domain.did";
 export class Events_domain implements events_domainInterface {
@@ -1597,16 +1613,6 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n3(arg3));
         return from_candid_variant_n1(result);
     }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
-        return from_candid_variant_n1(result);
-    }
     async is_guardian_of(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.is_guardian_of(arg0, arg1);
         return result;
@@ -2021,6 +2027,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.save_pitch_board_settings(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, to_candid_opt_n3(arg8), arg9, arg10);
         return from_candid_variant_n154(result);
     }
+    async send_event_reminders(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.send_event_reminders(arg0);
+        return from_candid_variant_n28(result);
+    }
     async set_attendance(arg0: string, arg1: string, arg2: boolean, arg3: string): Promise<{
         __kind__: "Ok";
         Ok: Attendance;
@@ -2091,6 +2107,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.set_mini_league_rsvp(arg0, to_candid_RsvpSubject_n158(arg1), arg2);
         return from_candid_variant_n160(result);
     }
+    async set_notification_queue_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_notification_queue_canister(arg0);
+        return from_candid_variant_n1(result);
+    }
     async set_playhq_config(arg0: PlayHQConfig | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2131,14 +2157,24 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.set_roster(arg0, arg1, to_candid_opt_n3(arg2));
         return from_candid_variant_n164(result);
     }
-    async set_rsvp(arg0: string, arg1: string, arg2: string): Promise<{
+    async set_rsvp(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
         Ok: Rsvp;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_rsvp(arg0, arg1, arg2);
+        const result = await this.actor.set_rsvp(arg0, arg1, arg2, arg3);
+        return from_candid_variant_n15(result);
+    }
+    async set_rsvp_note(arg0: string, arg1: string, arg2: string): Promise<{
+        __kind__: "Ok";
+        Ok: Rsvp;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_rsvp_note(arg0, arg1, arg2);
         return from_candid_variant_n15(result);
     }
     async soft_delete_series(arg0: string): Promise<{

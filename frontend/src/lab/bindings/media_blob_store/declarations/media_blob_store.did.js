@@ -55,6 +55,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
   });
 };
 
