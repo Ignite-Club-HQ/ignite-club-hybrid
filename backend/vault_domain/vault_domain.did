@@ -39,113 +39,112 @@ type VaultFile =
    team: opt text;
    uploaded_by: principal;
  };
+type Main = 
+ service {
+   create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
+    name: text, restricted_roles: vec text, mini_league_id: opt text,
+    sort_order: nat32, description: opt text, color: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFolder;
+     });
+   delete_file_permanent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   delete_folder: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok: VaultFolder;
+                                 });
+   get_file: (id: text) -> (variant {
+                              Err: text;
+                              Ok: opt VaultFile;
+                            }) query;
+   get_folder: (id: text) -> (variant {
+                                Err: text;
+                                Ok: opt VaultFolder;
+                              }) query;
+   grant_role: (user: principal, role: text, club_id: opt text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   list_club_files: (club: text, team: opt text, mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_club_files_with_folder: (club: text, team: opt text, mini_league_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec VaultFileWithFolder;
+                  }) query;
+   list_files: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_files_with_folder: (folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     }) query;
+   list_folders: (club: text, team: opt text, mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFolder;
+     }) query;
+   list_trashed_files: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFile;
+     }) query;
+   list_trashed_files_with_folder: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec VaultFileWithFolder;
+     }) query;
+   move_file: (id: text, folder_id: text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   register_file: (id: text, folder_id: text, club: text, team: opt text,
+    name: text, file_url: text, size: nat64, mime: text, is_external_link:
+    bool, blob_ref: opt BlobRef, mini_league_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   rename_file: (id: text, name: text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFile;
+     });
+   restore_file: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: VaultFile;
+                                });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   trash_file: (id: text) -> (variant {
+                                Err: text;
+                                Ok: VaultFile;
+                              });
+   update_folder: (id: text, name: text, restricted_roles: vec text,
+    sort_order: nat32, description: opt text, color: opt text) ->
+    (variant {
+       Err: text;
+       Ok: VaultFolder;
+     });
+ };
 type BlobRef = 
  record {
    canister: text;
    content_hash: text;
    path: text;
  };
-service : {
-  create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
-   name: text, restricted_roles: vec text, mini_league_id: opt text,
-   sort_order: nat32, description: opt text, color: opt text) ->
-   (variant {
-      Err: text;
-      Ok: VaultFolder;
-    });
-  delete_file_permanent: (id: text) -> (variant {
-                                          Err: text;
-                                          Ok;
-                                        });
-  delete_folder: (id: text) -> (variant {
-                                  Err: text;
-                                  Ok: VaultFolder;
-                                });
-  get_file: (id: text) -> (variant {
-                             Err: text;
-                             Ok: opt VaultFile;
-                           }) query;
-  get_folder: (id: text) -> (variant {
-                               Err: text;
-                               Ok: opt VaultFolder;
-                             }) query;
-  grant_role: (user: principal, role: text, club_id: opt text, team_id:
-   opt text) -> (variant {
-                   Err: text;
-                   Ok;
-                 });
-  initialize: () -> (variant {
-                       Err: text;
-                       Ok;
-                     });
-  list_club_files: (club: text, team: opt text, mini_league_id: opt text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFile;
-    }) query;
-  list_club_files_with_folder: (club: text, team: opt text, mini_league_id:
-   opt text) -> (variant {
-                   Err: text;
-                   Ok: vec VaultFileWithFolder;
-                 }) query;
-  list_files: (folder_id: text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFile;
-    }) query;
-  list_files_with_folder: (folder_id: text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFileWithFolder;
-    }) query;
-  list_folders: (club: text, team: opt text, mini_league_id: opt text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFolder;
-    }) query;
-  list_trashed_files: (club: text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFile;
-    }) query;
-  list_trashed_files_with_folder: (club: text) ->
-   (variant {
-      Err: text;
-      Ok: vec VaultFileWithFolder;
-    }) query;
-  move_file: (id: text, folder_id: text) ->
-   (variant {
-      Err: text;
-      Ok: VaultFile;
-    });
-  register_file: (id: text, folder_id: text, club: text, team: opt text,
-   name: text, file_url: text, size: nat64, mime: text, is_external_link:
-   bool, blob_ref: opt BlobRef, mini_league_id: opt text) ->
-   (variant {
-      Err: text;
-      Ok: VaultFile;
-    });
-  rename_file: (id: text, name: text) -> (variant {
-                                            Err: text;
-                                            Ok: VaultFile;
-                                          });
-  restore_file: (id: text) -> (variant {
-                                 Err: text;
-                                 Ok: VaultFile;
-                               });
-  transfer_governorship: (new_governor: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  trash_file: (id: text) -> (variant {
-                               Err: text;
-                               Ok: VaultFile;
-                             });
-  update_folder: (id: text, name: text, restricted_roles: vec text,
-   sort_order: nat32, description: opt text, color: opt text) ->
-   (variant {
-      Err: text;
-      Ok: VaultFolder;
-    });
-}
+service : (governorInit: principal) -> Main
