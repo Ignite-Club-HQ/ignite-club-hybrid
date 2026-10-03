@@ -1626,15 +1626,41 @@ export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: str
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   const result = unwrapCandid(actor.get_game_result(eventId), "Get game result") as unknown as
     | []
-    | [{ mvp_player_name: [] | [string]; [key: string]: unknown }];
+    | [{ mvp_player_name: [] | [string]; player_stats_json?: string; [key: string]: unknown }];
   if (result.length === 0) return result;
-  // The MVP name is an opaque PII reference; resolve it best effort. An
-  // unreadable reference renders as a neutral label, never an error state;
-  // legacy plaintext rows render as-is.
-  const raw = result[0].mvp_player_name.length > 0 ? result[0].mvp_player_name[0] : null;
-  if (!raw || !raw.startsWith("mvp:")) return result;
-  const names = await resolveNameRefs(ctx, [raw], "Get game result");
-  return [{ ...result[0], mvp_player_name: [names.get(raw) ?? "Player"] as [string] }];
+  const row = result[0];
+  // MVP and per-player stat names are opaque PII references; resolve them
+  // best effort. An unreadable reference renders as a neutral label, never
+  // an error state; legacy plaintext rows render as-is.
+  const refs: string[] = [];
+  const rawMvp = row.mvp_player_name.length > 0 ? row.mvp_player_name[0] : null;
+  if (rawMvp?.startsWith("mvp:")) refs.push(rawMvp);
+  let statsDoc: unknown = null;
+  if (typeof row.player_stats_json === "string") {
+    try {
+      statsDoc = JSON.parse(row.player_stats_json);
+      if (Array.isArray(statsDoc)) {
+        for (const entry of statsDoc) {
+          const name = (entry as Record<string, unknown> | null)?.name;
+          if (typeof name === "string" && name.startsWith(STAT_NAME_REF_PREFIX)) refs.push(name);
+        }
+      }
+    } catch {
+      statsDoc = null;
+    }
+  }
+  if (refs.length === 0) return result;
+  const names = await resolveNameRefs(ctx, refs, "Get game result");
+  const next: Record<string, unknown> = { ...row };
+  if (rawMvp?.startsWith("mvp:")) {
+    next.mvp_player_name = [names.get(rawMvp) ?? "Player"] as [string];
+  }
+  if (statsDoc !== null) {
+    next.player_stats_json = JSON.stringify(
+      resolveNameRefsInDoc(statsDoc, STAT_NAME_REF_PREFIX, names),
+    );
+  }
+  return [next];
 }
 
 export async function syncLiveActiveGame(
