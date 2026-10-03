@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface ActiveGameRow {
   id: string;
@@ -112,7 +113,6 @@ function SupabaseAdminActiveGamesPage() {
         .maybeSingle();
       return !!data;
     },
-    enabled: !!user?.id,
   });
 
   const { data: activeRows, isLoading: activeLoading, refetch: refetchActive } = useQuery({
