@@ -200,7 +200,15 @@ pub struct Access {
 
 thread_local! {
     static MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static STATE: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(0), Vec::new()));
+    static STATE: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(MEM_STATE), Vec::new()));
+    static ACCOUNTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_ACCOUNTS)));
+    static PRINCIPAL_INDEX: RefCell<StableBTreeMap<String, String, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_PRINCIPAL_INDEX)));
+    static PROFILES: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_PROFILES)));
+    static ENTITLEMENTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_ENTITLEMENTS)));
 }
 fn memory(id: u8) -> Memory {
     MANAGER.with(|m| m.borrow().get(MemoryId::new(id)))
@@ -213,12 +221,93 @@ fn encode<T: Serialize>(value: &T) -> Vec<u8> {
 fn decode<T: for<'a> Deserialize<'a>>(bytes: &[u8]) -> T {
     ciborium::from_reader(bytes).expect("stable decode")
 }
-fn state() -> State {
+fn state() -> CoreState {
     STATE.with(|s| decode(s.borrow().get()))
 }
-fn store(value: &State) {
+fn store(value: &CoreState) {
     STATE.with(|s| s.borrow_mut().set(encode(value)));
 }
+
+// ---- Accounts (ACCOUNTS + PRINCIPAL_INDEX) ----
+fn get_account(id: &str) -> Option<Account> {
+    ACCOUNTS.with(|m| m.borrow().get(&id.to_string())).map(|b| decode(&b))
+}
+fn put_account(account: &Account) {
+    ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(account)));
+}
+fn remove_account(id: &str) -> Option<Account> {
+    ACCOUNTS.with(|m| m.borrow_mut().remove(&id.to_string())).map(|b| decode(&b))
+}
+fn account_count() -> u64 {
+    ACCOUNTS.with(|m| m.borrow().len())
+}
+fn index_principal(principal: Principal, account_id: &str) {
+    PRINCIPAL_INDEX.with(|m| m.borrow_mut().insert(principal.to_text(), account_id.to_string()));
+}
+fn deindex_principal(principal: Principal) {
+    PRINCIPAL_INDEX.with(|m| m.borrow_mut().remove(&principal.to_text()));
+}
+fn find_account_by_principal(principal: Principal) -> Option<Account> {
+    let account_id = PRINCIPAL_INDEX.with(|m| m.borrow().get(&principal.to_text()))?;
+    get_account(&account_id)
+}
+
+// ---- Profiles ----
+fn get_profile_entry(account_id: &str) -> Option<Profile> {
+    PROFILES.with(|m| m.borrow().get(&account_id.to_string())).map(|b| decode(&b))
+}
+fn put_profile_entry(profile: &Profile) {
+    PROFILES.with(|m| m.borrow_mut().insert(profile.account_id.clone(), encode(profile)));
+}
+fn remove_profile_entry(account_id: &str) {
+    PROFILES.with(|m| m.borrow_mut().remove(&account_id.to_string()));
+}
+fn all_profiles() -> Vec<Profile> {
+    PROFILES.with(|m| m.borrow().iter().map(|(_, v)| decode(&v)).collect())
+}
+
+// ---- Entitlements ----
+/// Replay-protection key: Apple transaction ids are globally unique, so a
+/// non-empty transaction id is the key on its own (the whole point of the
+/// map is a single O(log N) lookup to both check and bind replay). Non-IAP
+/// grants (empty transaction id) fall back to a principal+product key so a
+/// governor/verifier can hold independent entitlements per product.
+fn entitlement_key(principal: Principal, product_id: &str, transaction_id: &str) -> String {
+    if transaction_id.is_empty() {
+        format!("np|{}|{}", principal.to_text(), product_id)
+    } else {
+        format!("tx|{}", transaction_id)
+    }
+}
+fn get_entitlement(key: &str) -> Option<Entitlement> {
+    ENTITLEMENTS.with(|m| m.borrow().get(&key.to_string())).map(|b| decode(&b))
+}
+fn put_entitlement(key: &str, entitlement: &Entitlement) {
+    ENTITLEMENTS.with(|m| m.borrow_mut().insert(key.to_string(), encode(entitlement)));
+}
+fn entitlements_count() -> u64 {
+    ENTITLEMENTS.with(|m| m.borrow().len())
+}
+fn all_entitlements() -> Vec<Entitlement> {
+    ENTITLEMENTS.with(|m| m.borrow().iter().map(|(_, v)| decode(&v)).collect())
+}
+/// Removes every entitlement granted to `principal` (used by erase_account).
+fn remove_entitlements_for_principal(principal: Principal) {
+    let keys: Vec<String> = ENTITLEMENTS.with(|m| {
+        m.borrow()
+            .iter()
+            .filter(|(_, v)| decode::<Entitlement>(v).principal == principal)
+            .map(|(k, _)| k)
+            .collect()
+    });
+    ENTITLEMENTS.with(|m| {
+        let mut map = m.borrow_mut();
+        for key in keys {
+            map.remove(&key);
+        }
+    });
+}
+
 fn authenticated(principal: Principal) -> Outcome<()> {
     if principal == Principal::anonymous() {
         Err("Authenticated user required".into())
@@ -226,14 +315,9 @@ fn authenticated(principal: Principal) -> Outcome<()> {
         Ok(())
     }
 }
-fn account_for(state: &State, principal: Principal) -> Outcome<Account> {
+fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
-    state
-        .accounts
-        .iter()
-        .find(|a| a.principals.contains(&principal))
-        .cloned()
-        .ok_or("Unlinked identity".into())
+    find_account_by_principal(principal).ok_or("Unlinked identity".into())
 }
 fn valid_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 128
@@ -253,44 +337,38 @@ fn account_id(principal: Principal) -> String {
         &hex[20..]
     )
 }
-fn ensure_account(state: &mut State, principal: Principal) -> Outcome<String> {
+fn ensure_account(principal: Principal) -> Outcome<String> {
     authenticated(principal)?;
-    if let Some(account) = state
-        .accounts
-        .iter()
-        .find(|a| a.principals.contains(&principal))
-    {
-        return Ok(account.id.clone());
+    if let Some(account) = find_account_by_principal(principal) {
+        return Ok(account.id);
     }
-    if state.accounts.len() >= MAX_ACCOUNTS {
+    if account_count() >= MAX_ACCOUNTS as u64 {
         return Err("Account quota reached".into());
     }
     let id = account_id(principal);
-    if state.accounts.iter().any(|a| a.id == id) {
+    if get_account(&id).is_some() {
         return Err("Account ID collision".into());
     }
-    state.accounts.push(Account {
+    put_account(&Account {
         id: id.clone(),
         principals: vec![principal],
         version: 0,
     });
+    index_principal(principal, &id);
     Ok(id)
 }
-fn require_governor(state: &State, caller: Principal) -> Outcome<()> {
+fn require_governor(state: &CoreState, caller: Principal) -> Outcome<()> {
     if state.governor == caller {
         Ok(())
     } else {
         Err("Forbidden".into())
     }
 }
-fn account_exists(state: &State, account_id: &str) -> bool {
-    state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
+fn account_exists(account_id: &str) -> bool {
+    get_account(account_id).is_some()
 }
 fn account_has_role(
-    state: &State,
+    state: &CoreState,
     id: &str,
     role: &str,
     site_id: Option<&str>,
@@ -317,7 +395,7 @@ fn account_has_role(
     })
 }
 fn excluded(
-    state: &State,
+    state: &CoreState,
     id: &str,
     site_id: Option<&str>,
     club: Option<&str>,
@@ -337,7 +415,7 @@ fn excluded(
     })
 }
 fn has_direct_team_role(
-    state: &State,
+    state: &CoreState,
     account_id: &str,
     site_id: Option<&str>,
     team_id: &str,
@@ -352,7 +430,7 @@ fn has_direct_team_role(
     })
 }
 fn team_member_access(
-    state: &State,
+    state: &CoreState,
     account_id: &str,
     site_id: Option<&str>,
     club_id: Option<&str>,
@@ -366,40 +444,82 @@ fn team_member_access(
 #[ic_cdk::init]
 fn init(init: Init) {
     assert!(init.governor != Principal::anonymous(), "invalid governor");
-    let state = State {
+    let governor_id = account_id(init.governor);
+    put_account(&Account {
+        id: governor_id.clone(),
+        principals: vec![init.governor],
+        version: 0,
+    });
+    index_principal(init.governor, &governor_id);
+    let state = CoreState {
         schema: SCHEMA,
         governor: init.governor,
-        accounts: vec![Account {
-            id: account_id(init.governor),
-            principals: vec![init.governor],
-            version: 0,
-        }],
         roles: vec![],
         families: vec![],
         exclusions: vec![],
         challenges: vec![],
         external_bindings: vec![],
         privacy_consents: vec![],
-        profiles: vec![],
         terms_acceptances: vec![],
-        entitlements: vec![],
         verifiers: vec![],
         attestation_secret: vec![],
         next_challenge: 0,
     };
     store(&state);
 }
+
+/// Splits a legacy full-blob `State` (schema 1..4, accounts/profiles/
+/// entitlements inline) into the per-entry stable maps and returns the
+/// slimmed `CoreState` to persist in memory 0 going forward. Idempotent to
+/// call only once per legacy blob (post_upgrade only invokes it when
+/// `legacy.schema < SCHEMA`).
+fn migrate_legacy_state(legacy: State) -> CoreState {
+    for account in &legacy.accounts {
+        for principal in &account.principals {
+            index_principal(*principal, &account.id);
+        }
+        put_account(account);
+    }
+    for profile in &legacy.profiles {
+        put_profile_entry(profile);
+    }
+    for entitlement in &legacy.entitlements {
+        let key = entitlement_key(
+            entitlement.principal,
+            &entitlement.product_id,
+            &entitlement.transaction_id,
+        );
+        put_entitlement(&key, entitlement);
+    }
+    CoreState {
+        schema: SCHEMA,
+        governor: legacy.governor,
+        roles: legacy.roles,
+        families: legacy.families,
+        exclusions: legacy.exclusions,
+        challenges: legacy.challenges,
+        external_bindings: legacy.external_bindings,
+        privacy_consents: legacy.privacy_consents,
+        terms_acceptances: legacy.terms_acceptances,
+        verifiers: legacy.verifiers,
+        attestation_secret: legacy.attestation_secret,
+        next_challenge: legacy.next_challenge,
+    }
+}
+
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
-    let mut state = state();
-    assert!(state.schema <= SCHEMA, "unsupported identity schema");
-    // Schema 1 -> 2: profiles were added; schema 2 -> 3: terms_acceptances
-    // were added; schema 3 -> 4: entitlements/verifiers/attestation_secret
-    // were added. All were already decoded via serde default, so the
-    // migration is just the marker bump.
-    if state.schema != SCHEMA {
-        state.schema = SCHEMA;
-        store(&state);
+    // The full legacy `State` shape (with `#[serde(default)]` on every field
+    // added after schema 1) decodes both old full-blob schemas (1..4) and
+    // the current slim `CoreState` blob (schema 5+, where accounts/
+    // profiles/entitlements simply default to empty since the map no
+    // longer carries those keys) -- so this single decode is safe at any
+    // schema.
+    let legacy: State = STATE.with(|s| decode(s.borrow().get()));
+    assert!(legacy.schema <= SCHEMA, "unsupported identity schema");
+    if legacy.schema < SCHEMA {
+        let migrated = migrate_legacy_state(legacy);
+        store(&migrated);
     }
 }
 
