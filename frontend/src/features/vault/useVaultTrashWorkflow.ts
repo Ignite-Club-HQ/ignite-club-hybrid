@@ -17,6 +17,7 @@ import {
   type VaultTrashItems,
 } from "./vaultTrashRepository";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type VaultTrashWorkflowOptions = {
   currentView: VaultFolderView;
@@ -57,7 +58,10 @@ export function useVaultTrashWorkflow({
   const { data: trashItems, isLoading: isLoadingTrash } = useQuery({
     queryKey: vaultKeys.trashForClub(clubId),
     queryFn: () => fetchVaultTrashItems(clubId!),
-    enabled,
+    // Vault trash reads Supabase photos/vault_files rows directly with no
+    // canister counterpart — stay silent (empty) when the club is ICP-routed
+    // rather than querying the wrong backend.
+    enabled: enabled && !isFeatureRoutedToIcp("vault"),
   });
 
   const deletePhotoMutation = useMutation({
@@ -144,6 +148,9 @@ export function useVaultTrashWorkflow({
 
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const emptyTrash = async () => {
+    // Fail closed: permanent-delete-photos is a Supabase edge function and
+    // has no canister equivalent; never fire it for an ICP-routed club.
+    if (isFeatureRoutedToIcp("vault")) return;
     if (!trashItems || isEmptyingTrash) return;
 
     setIsEmptyingTrash(true);

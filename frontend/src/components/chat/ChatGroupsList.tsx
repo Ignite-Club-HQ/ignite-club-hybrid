@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { softDeleteLiveGroup } from "@/live/features/messaging";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,7 +48,10 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
       if (error) throw error;
       return data as ChatGroup[];
     },
-    enabled: !!clubId || !!teamId,
+    // NEEDS-CANISTER: messaging_domain has no list-groups-by-club/team query
+    // yet, so under ICP routing this list is silently empty rather than
+    // hitting the Supabase chat_groups table.
+    enabled: (!!clubId || !!teamId) && !isFeatureRoutedToIcp("messaging"),
   });
 
   const deleteGroupMutation = useMutation({

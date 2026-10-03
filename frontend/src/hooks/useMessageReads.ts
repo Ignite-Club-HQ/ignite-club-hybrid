@@ -2,6 +2,8 @@ import { useEffect, useCallback, useMemo, useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { markLiveConversationRead } from "@/live/features/messaging";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
 type MessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
@@ -156,6 +158,10 @@ export function useMessageReads(
   // healed instead of accumulating.
   const reconcileRef = useRef<() => Promise<void>>(async () => {});
   reconcileRef.current = async () => {
+    // NEEDS-CANISTER: messaging_domain has no per-message reader-list query,
+    // so under ICP routing read receipts stay empty rather than hitting the
+    // Supabase message_reads table.
+    if (isFeatureRoutedToIcp("messaging")) return;
     const ids = messageIdsRef.current;
     if (ids.length === 0) return;
 
@@ -230,6 +236,17 @@ export function useMessageReads(
   const markAsReadMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       if (!currentUserId || ids.length === 0) return;
+
+      if (isFeatureRoutedToIcp("messaging")) {
+        // ICP: mark_read(conversation, message) advances the caller's read
+        // frontier up to the latest flushed message — one canister call
+        // covers the whole batch. No Supabase session/RPC involved.
+        await withFeatureBackend("messaging", {
+          supabase: async () => undefined, // unreachable — guarded above
+          icp: (ctx) => markLiveConversationRead(ctx, contextId, ids[ids.length - 1]),
+        });
+        return;
+      }
 
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) return;
@@ -306,15 +323,11 @@ export function useMessageReads(
   useEffect(() => {
     if (!contextId) return;
 
-    // Messaging is ICP-routed: no realtime channel to subscribe to. Poll the
-    // visible window's read receipts instead (visibility-gated, ~30s).
+    // Messaging is ICP-routed: no realtime channel to subscribe to, and
+    // per-message reader lists have no canister shape yet (NEEDS-CANISTER),
+    // so there is nothing to poll — reconcile no-ops under ICP above.
     if (isFeatureRoutedToIcp("messaging")) {
-      reconcileRef.current();
-      const poll = setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        reconcileRef.current();
-      }, 30_000);
-      return () => clearInterval(poll);
+      return;
     }
 
     const scopeKey = messageType === "broadcast" ? "broadcast" : contextId;

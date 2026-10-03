@@ -225,7 +225,8 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      {/* Export Data Card */}
+      {/* Export Data Card — Supabase-only (export edge function); hidden for Internet Identity members */}
+      {!useIcpLab && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -259,8 +260,10 @@ export default function AccountPage() {
           </Button>
         </CardContent>
       </Card>
+      )}
 
-      {/* Delete Account Card */}
+      {/* Delete Account Card — Supabase-only (delete-account edge function); hidden for Internet Identity members */}
+      {!useIcpLab && (
       <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
@@ -315,6 +318,7 @@ export default function AccountPage() {
           </AlertDialog>
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
