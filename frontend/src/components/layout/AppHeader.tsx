@@ -33,6 +33,7 @@ const DemoLoginSection = lazyWithRetry(() =>
 import igniteIcon from "@/assets/ignite-icon.png";
 import { NotificationIcon } from "@/components/NotificationIcon";
 import { setPendingChatJump, withChatJumpNonce } from "@/lib/pendingChatJump";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { filterClubScopedNotifications } from "@/lib/filterClubScopedNotifications";
 import { resolveTeamInviteRoute } from "@/lib/resolveNotificationRoute";
 import {
