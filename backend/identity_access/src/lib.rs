@@ -1458,72 +1458,45 @@ mod tests {
     #[test]
     fn exclusions_override_scoped_roles_but_not_global_role_detection() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![],
-            roles: vec![RoleGrant {
-                account_id: "a".into(),
-                role: "app_admin".into(),
-                site_id: None,
-                club: None,
-                team: None,
-            }],
-            families: vec![],
-            exclusions: vec![Exclusion {
-                account_id: "a".into(),
-                site_id: None,
-                club: "club-a".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "a".into(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "a".into(),
+            site_id: None,
+            club: "club-a".into(),
+            team: None,
+        });
         assert!(account_has_role(&state, "a", "app_admin", None, None, None));
         assert!(excluded(&state, "a", None, Some("club-a"), None));
     }
     #[test]
     fn multi_site_roles_and_exclusions_are_isolated() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![Account {
-                id: "acc-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
-            roles: vec![RoleGrant {
-                account_id: "acc-1".into(),
-                role: "club_admin".into(),
-                site_id: Some("site-a".into()),
-                club: Some("club-1".into()),
-                team: None,
-            }],
-            families: vec![],
-            exclusions: vec![Exclusion {
-                account_id: "acc-1".into(),
-                site_id: Some("site-b".into()),
-                club: "club-1".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        put_account(&Account {
+            id: "acc-1".into(),
+            principals: vec![principal(2)],
+            version: 0,
+        });
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "acc-1".into(),
+            role: "club_admin".into(),
+            site_id: Some("site-a".into()),
+            club: Some("club-1".into()),
+            team: None,
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "acc-1".into(),
+            site_id: Some("site-b".into()),
+            club: "club-1".into(),
+            team: None,
+        });
         assert!(account_has_role(
             &state,
             "acc-1",
