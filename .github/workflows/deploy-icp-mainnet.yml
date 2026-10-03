@@ -1,0 +1,91 @@
+# Ignite Club HQ — mainnet canister deploy, run from the GitHub Actions tab.
+#
+# One-time setup (in the GitHub repo, from any browser):
+#   1. Settings → Secrets and variables → Actions → New repository secret
+#      Name: DEPLOYER_PEM
+#      Value: the deployer identity's private key in PEM form
+#      (the text starting with "-----BEGIN PRIVATE KEY-----").
+#   2. Fund the identity: the "Show funding address" step below prints the
+#      account address — send ~8 ICP worth of cycles there (icscan.io or an
+#      exchange conversion), or convert ICP to cycles directly.
+# Then: Actions tab → "Deploy ICP canisters (mainnet)" → Run workflow.
+# Safe to re-run; the canister ID table is attached as an artifact.
+
+name: Deploy ICP canisters (mainnet)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+      GOVERNOR: gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deploy tool
+        run: npm install -g icp-sdk-icp-cli --no-fund --no-audit
+
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::Repository secret DEPLOYER_PEM is missing. Add it under Settings → Secrets and variables → Actions (the PEM private key text)."
+            exit 1
+          fi
+          mkdir -p "$ICP_HOME/identity/keys"
+          printf '%s\n' "$DEPLOYER_PEM" | tr -d '\r' > "$ICP_HOME/identity/keys/ignite-governor.pem"
+          icp identity import ignite-governor "$ICP_HOME/identity/keys/ignite-governor.pem" --storage plaintext
+          icp identity default ignite-governor
+
+      - name: Show funding address and balances
+        run: |
+          echo "==> Fund this account address with ICP/cycles (icscan.io or an exchange):"
+          icp identity account-id || true
+          echo "==> Current balances:"
+          icp token balance -n ic || true
+          icp cycles balance -n ic || true
+
+      - name: Verify deployer identity is the governor
+        run: |
+          set -euo pipefail
+          CURRENT="$(icp identity principal)"
+          echo "Deployer principal: $CURRENT"
+          if [ "$CURRENT" != "$GOVERNOR" ]; then
+            echo "::error::The DEPLOYER_PEM key resolves to $CURRENT but the canisters are configured for governor $GOVERNOR. Deploy the key for that principal instead, or update GOVERNOR everywhere (canister.yaml files + scripts/deploy-mainnet.sh)."
+            exit 1
+          fi
+
+      - name: Deploy + wire all 18 canisters
+        run: bash scripts/deploy-mainnet.sh
+
+      - name: Print paste-ready canister ID table
+        if: always()
+        run: |
+          IDS="deploy/mainnet/.icp/data/mappings/ic.ids.json"
+          if [ -f "$IDS" ]; then
+            echo "==> Paste into /admin/placement-settings → Canister configuration:"
+            node -e "const m=require('./$IDS');for(const [k,v] of Object.entries(m)){const id=typeof v==='string'?v:(v.ic||v.id||Object.values(v)[0]);console.log(k+'\t'+id)}"
+          fi
+
+      - name: Upload canister ID mapping
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canister-ids
+          path: deploy/mainnet/.icp/data/mappings/ic.ids.json
+          if-no-files-found: ignore
