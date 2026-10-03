@@ -1413,6 +1413,8 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       clearIcpIdentityProfileCache();
       const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
       clearIcpEntitlementsCache(principal ?? undefined);
+      const { disconnectChatRealtime } = await import("@/live/wsRealtime");
+      disconnectChatRealtime();
       const { signOutInternetIdentity } = await import("@/live/internetIdentityAuth");
       await signOutInternetIdentity();
     },

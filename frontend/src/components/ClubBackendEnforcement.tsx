@@ -152,6 +152,8 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
               : "Your club uses email sign-in. Signing you out so you can sign in with it.",
         });
         if (provider === "icp") {
+          const { disconnectChatRealtime } = await import("@/live/wsRealtime");
+          disconnectChatRealtime();
           await signOutInternetIdentity();
         } else {
           await supabase.auth.signOut();
