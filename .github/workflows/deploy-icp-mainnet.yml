@@ -63,6 +63,10 @@ jobs:
 
       - name: Show funding address and balances
         run: |
+          # Run balance queries from OUTSIDE the checkout: the committed local-lab
+          # icp.yaml at the repo root makes even `icp token balance` try to load the
+          # lab canisters' init-args files and die before touching the network.
+          mkdir -p "$RUNNER_TEMP/icp-no-project" && cd "$RUNNER_TEMP/icp-no-project"
           echo "==> Fund this account address with ICP/cycles (icscan.io or an exchange):"
           icp identity account-id || true
           echo "==> Current balances:"
@@ -72,7 +76,9 @@ jobs:
       - name: Convert available ICP to cycles
         run: |
           set -euo pipefail
-          RAW="$(icp token balance -n ic -q 2>/dev/null || icp token balance -n ic)"
+          # Outside the checkout — see "Show funding address and balances" above.
+          mkdir -p "$RUNNER_TEMP/icp-no-project" && cd "$RUNNER_TEMP/icp-no-project"
+          RAW="$(icp token balance -n ic 2>/dev/null)"
           echo "ICP balance: $RAW"
           # Extract the first number, leave 0.0001 ICP behind for the ledger fee.
           AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
