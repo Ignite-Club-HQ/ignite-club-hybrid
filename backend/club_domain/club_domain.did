@@ -473,6 +473,7 @@ type Main =
        Ok: vec TeamPlayerPosition;
      }) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
+   http_request: (request: HttpRequest) -> (HttpResponse) query;
    import_frozen_club: (club: text, listing: Listing) ->
     (variant {
        Err: text;
@@ -892,6 +893,25 @@ type InvitePayload =
    body: text;
    subject: text;
    to: text;
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec record {
+                  text;
+                  text;
+                };
+   status_code: nat16;
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   headers: vec record {
+                  text;
+                  text;
+                };
+   method: text;
+   url: text;
  };
 type Guardian = 
  record {
