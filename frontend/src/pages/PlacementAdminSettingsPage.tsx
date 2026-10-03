@@ -175,6 +175,7 @@ export default function PlacementAdminSettingsPage() {
   const { isAppAdmin, isLoading: isLoadingAuth } = useIsAppAdmin();
 
   const [rows, setRows] = useState<CanisterRow[]>([]);
+  const [wsGatewayUrl, setWsGatewayUrl] = useState("");
   const [touched, setTouched] = useState(false);
   const [defaultBackend, setDefaultBackend] = useState<BackendProvider>("supabase");
   const [countryRows, setCountryRows] = useState<CountryRuleRow[]>([]);
@@ -215,6 +216,7 @@ export default function PlacementAdminSettingsPage() {
   useEffect(() => {
     if (!touched && savedOverrides !== undefined) {
       setRows(rowsFromOverrides(savedOverrides));
+      setWsGatewayUrl(savedOverrides?.wsGatewayUrl ?? "");
     }
   }, [savedOverrides, touched]);
 
@@ -414,7 +416,8 @@ export default function PlacementAdminSettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (canisterIds: Record<string, string>) => {
-      const value = { canisterIds };
+      const trimmedGateway = wsGatewayUrl.trim();
+      const value = trimmedGateway ? { canisterIds, wsGatewayUrl: trimmedGateway } : { canisterIds };
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
         .select("id")
@@ -436,7 +439,11 @@ export default function PlacementAdminSettingsPage() {
       return canisterIds;
     },
     onSuccess: (canisterIds) => {
-      const overrides = Object.keys(canisterIds).length > 0 ? { canisterIds } : null;
+      const trimmedGateway = wsGatewayUrl.trim();
+      const overrides =
+        Object.keys(canisterIds).length > 0 || trimmedGateway
+          ? { canisterIds, ...(trimmedGateway ? { wsGatewayUrl: trimmedGateway } : {}) }
+          : null;
       applyIcpAdminOverrides(overrides);
       queryClient.invalidateQueries({ queryKey: ["app-setting", ICP_CANISTER_CONFIG_KEY] });
       setTouched(false);
@@ -563,6 +570,20 @@ export default function PlacementAdminSettingsPage() {
                 </Button>
               </div>
             ))}
+
+            <div className="space-y-2">
+              <Label htmlFor="ws-gateway-url">Chat realtime gateway URL (optional)</Label>
+              <Input
+                id="ws-gateway-url"
+                value={wsGatewayUrl}
+                onChange={(event) => { setTouched(true); setWsGatewayUrl(event.target.value); }}
+                placeholder="wss://ws.example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                The IC WebSocket gateway that pushes new-message and reaction notifications for Internet
+                Identity members. Leave empty to keep the built-in periodic refresh.
+              </p>
+            </div>
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={addRow}>
