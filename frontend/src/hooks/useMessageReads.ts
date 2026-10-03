@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { markLiveConversationRead } from "@/live/features/messaging";
+import { markLiveConversationRead, listLiveReadReceipts } from "@/live/features/messaging";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
 type MessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
@@ -163,12 +163,46 @@ export function useMessageReads(
   // healed instead of accumulating.
   const reconcileRef = useRef<() => Promise<void>>(async () => {});
   reconcileRef.current = async () => {
-    // NEEDS-CANISTER: messaging_domain has no per-message reader-list query,
-    // so under ICP routing read receipts stay empty rather than hitting the
-    // Supabase message_reads table.
-    if (isFeatureRoutedToIcp("messaging")) return;
     const ids = messageIdsRef.current;
     if (ids.length === 0) return;
+
+    if (isFeatureRoutedToIcp("messaging")) {
+      // ICP: list_read_receipts returns the whole conversation's receipts;
+      // filter down to the currently visible message window.
+      const idSet = new Set(ids);
+      const receipts = await withFeatureBackend("messaging", {
+        supabase: async () => [],
+        icp: (ctx) => listLiveReadReceipts(ctx, contextId),
+      });
+
+      const readers: Record<string, Map<string, ReaderInfo>> = {};
+      for (const receipt of receipts) {
+        if (!receipt.read || !idSet.has(receipt.messageId)) continue;
+        const userId = receipt.user.toText();
+        if (!readers[receipt.messageId]) readers[receipt.messageId] = new Map();
+        readers[receipt.messageId].set(userId, {
+          user_id: userId,
+          display_name: null,
+          avatar_url: null,
+        });
+
+        if (currentUserId && userId === currentUserId) {
+          markedAsReadCache.add(`${currentUserId}:${messageType}:${receipt.messageId}`);
+        }
+      }
+
+      const counts: Record<string, number> = {};
+      const readersMap: Record<string, ReaderInfo[]> = {};
+      for (const [msgId, readerMap] of Object.entries(readers)) {
+        counts[msgId] = readerMap.size;
+        readersMap[msgId] = Array.from(readerMap.values());
+      }
+
+      setReadCounts(counts);
+      setReadCountsToCache(contextId, counts);
+      setReadersByMessage(readersMap);
+      return;
+    }
 
     const { data, error } = await (supabase
       .from("message_reads")
@@ -328,11 +362,12 @@ export function useMessageReads(
   useEffect(() => {
     if (!contextId) return;
 
-    // Messaging is ICP-routed: no realtime channel to subscribe to, and
-    // per-message reader lists have no canister shape yet (NEEDS-CANISTER),
-    // so there is nothing to poll — reconcile no-ops under ICP above.
+    // Messaging is ICP-routed: no realtime push channel to subscribe to.
+    // Poll by reconciling the read-receipt list on an interval instead.
     if (isFeatureRoutedToIcp("messaging")) {
-      return;
+      reconcileRef.current();
+      const interval = setInterval(() => reconcileRef.current(), 5000);
+      return () => clearInterval(interval);
     }
 
     const scopeKey = messageType === "broadcast" ? "broadcast" : contextId;

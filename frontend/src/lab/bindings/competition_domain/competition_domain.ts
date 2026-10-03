@@ -51,174 +51,7 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface TeamEntry {
-    status: string;
-    team_id: string;
-    division_id?: string;
-    competition_id: string;
-    club_id: string;
-}
-export interface EoiSubmission {
-    id: string;
-    status: string;
-    registered_at_ms?: bigint;
-    preferred_teammates?: string;
-    submitted_at_ms: bigint;
-    claim_token: string;
-    assigned_team_id?: string;
-    claimed_at_ms?: bigint;
-    source: string;
-    season_id: string;
-    parent_email: string;
-    invite_sent_at_ms?: bigint;
-    updated_at_ms: bigint;
-    returning_player: boolean;
-    extra_notes?: string;
-    parent_mobile?: string;
-    player_name: string;
-    child_id?: string;
-    confirmed_at_ms?: bigint;
-    preferred_position?: string;
-    created_at_ms: bigint;
-    invite_sent_count: number;
-    parent_user_id?: Principal;
-    game_days: Array<string>;
-    notes?: string;
-    training_days: Array<string>;
-    player_dob?: string;
-    player_gender?: string;
-    allocated_at_ms?: bigint;
-    revision: bigint;
-    club_id: string;
-    skill_level?: number;
-    parent_confirmed_at_ms?: bigint;
-    withdrawn_at_ms?: bigint;
-    age_group?: string;
-    parent_name: string;
-}
-export interface ChatSettings {
-    admins_only: boolean;
-    revision: bigint;
-    competition_id: string;
-    chat_enabled: boolean;
-}
-export interface Match {
-    id: string;
-    status: string;
-    round_number?: number;
-    venue?: string;
-    duration_minutes?: number;
-    home_team: string;
-    notes?: string;
-    pitch_number?: string;
-    scheduled_at_ms?: bigint;
-    away_team: string;
-    away_score: number;
-    division_id?: string;
-    home_score: number;
-    revision: bigint;
-    arrival_minutes_before?: number;
-    competition_id: string;
-}
-export interface CompetitionInvite {
-    id: string;
-    status: string;
-    responded_at_ms?: bigint;
-    invitee: Principal;
-    role: string;
-    team_id?: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    competition_id: string;
-}
-export interface RoleGrant {
-    role: string;
-    user: Principal;
-    team_id?: string;
-    competition_id: string;
-}
-export interface JoinToken {
-    id: string;
-    issued_by: Principal;
-    used: boolean;
-    team_id: string;
-    competition_id: string;
-    expires_at_ms: bigint;
-}
-export interface Season {
-    status: string;
-    name: string;
-    divisions: Array<string>;
-    revision: bigint;
-    competition_id: string;
-}
-export interface EoiTeamSuggestion {
-    player_count: bigint;
-    avg_skill: number;
-    submission_ids: Array<string>;
-    age_group: string;
-}
-export interface Competition {
-    id: string;
-    status: string;
-    name: string;
-    season: string;
-    revision: bigint;
-    club_id: string;
-}
-export interface CompetitionJoinLink {
-    token: string;
-    revoked: boolean;
-    role: string;
-    team_id?: string;
-    created_by: Principal;
-    created_at_ms: bigint;
-    revision: bigint;
-    competition_id: string;
-}
-export interface EoiStats {
-    conversion_rate: number;
-    new_players: bigint;
-    total: bigint;
-    submitted: bigint;
-    views: bigint;
-    allocated: bigint;
-    confirmed: bigint;
-    returning_players: bigint;
-    withdrawn: bigint;
-    registered: bigint;
-}
-export interface CompetitionEngagementSummary {
-    total_matches: bigint;
-    active_teams: bigint;
-    broadcasts: bigint;
-    results_entered: bigint;
-    competition_id: string;
-}
-export interface State {
-    seasons: Array<Season>;
-    schema: number;
-    eoiSubmissions: Array<EoiSubmission>;
-    entries: Array<TeamEntry>;
-    matches: Array<Match>;
-    tokens: Array<JoinToken>;
-    chatSettings: Array<ChatSettings>;
-    competitionInvites: Array<CompetitionInvite>;
-    governor: Principal;
-    competitionJoinLinks: Array<CompetitionJoinLink>;
-    competitions: Array<Competition>;
-    roles: Array<RoleGrant>;
-}
-export interface JoinLinkPreview {
-    competition_status: string;
-    name: string;
-    season: string;
-    divisions: Array<string>;
-    competition_id: string;
-    club_id: string;
-    entered_team_ids: Array<string>;
-}
-export interface competition_domainInterface {
+export interface MainInterface {
     accept_competition_invite(invite_id: string): Promise<{
         __kind__: "Ok";
         Ok: CompetitionInvite;
@@ -391,13 +224,6 @@ export interface competition_domainInterface {
         Err: string;
     }>;
     grant_role(principal: Principal, role: string, competition_id: string, team_id: string | null): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -649,6 +475,175 @@ export interface competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+}
+export interface TeamEntry {
+    status: string;
+    team_id: string;
+    division_id?: string;
+    competition_id: string;
+    club_id: string;
+}
+export interface EoiSubmission {
+    id: string;
+    status: string;
+    registered_at_ms?: bigint;
+    preferred_teammates?: string;
+    submitted_at_ms: bigint;
+    claim_token: string;
+    assigned_team_id?: string;
+    claimed_at_ms?: bigint;
+    source: string;
+    season_id: string;
+    parent_email: string;
+    invite_sent_at_ms?: bigint;
+    updated_at_ms: bigint;
+    returning_player: boolean;
+    extra_notes?: string;
+    parent_mobile?: string;
+    player_name: string;
+    child_id?: string;
+    confirmed_at_ms?: bigint;
+    preferred_position?: string;
+    created_at_ms: bigint;
+    invite_sent_count: number;
+    parent_user_id?: Principal;
+    game_days: Array<string>;
+    notes?: string;
+    training_days: Array<string>;
+    player_dob?: string;
+    player_gender?: string;
+    allocated_at_ms?: bigint;
+    revision: bigint;
+    club_id: string;
+    skill_level?: number;
+    parent_confirmed_at_ms?: bigint;
+    withdrawn_at_ms?: bigint;
+    age_group?: string;
+    parent_name: string;
+}
+export interface ChatSettings {
+    admins_only: boolean;
+    revision: bigint;
+    competition_id: string;
+    chat_enabled: boolean;
+}
+export interface Match {
+    id: string;
+    status: string;
+    round_number?: number;
+    venue?: string;
+    duration_minutes?: number;
+    home_team: string;
+    notes?: string;
+    pitch_number?: string;
+    scheduled_at_ms?: bigint;
+    away_team: string;
+    away_score: number;
+    division_id?: string;
+    home_score: number;
+    revision: bigint;
+    arrival_minutes_before?: number;
+    competition_id: string;
+}
+export interface CompetitionInvite {
+    id: string;
+    status: string;
+    responded_at_ms?: bigint;
+    invitee: Principal;
+    role: string;
+    team_id?: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    competition_id: string;
+}
+export interface RoleGrant {
+    role: string;
+    user: Principal;
+    team_id?: string;
+    competition_id: string;
+}
+export interface JoinToken {
+    id: string;
+    issued_by: Principal;
+    used: boolean;
+    team_id: string;
+    competition_id: string;
+    expires_at_ms: bigint;
+}
+export interface Season {
+    status: string;
+    name: string;
+    divisions: Array<string>;
+    revision: bigint;
+    competition_id: string;
+}
+export interface EoiTeamSuggestion {
+    player_count: bigint;
+    avg_skill: number;
+    submission_ids: Array<string>;
+    age_group: string;
+}
+export interface Competition {
+    id: string;
+    status: string;
+    name: string;
+    season: string;
+    revision: bigint;
+    club_id: string;
+}
+export interface CompetitionJoinLink {
+    token: string;
+    revoked: boolean;
+    role: string;
+    team_id?: string;
+    created_by: Principal;
+    created_at_ms: bigint;
+    revision: bigint;
+    competition_id: string;
+}
+export interface EoiStats {
+    conversion_rate: number;
+    new_players: bigint;
+    total: bigint;
+    submitted: bigint;
+    views: bigint;
+    allocated: bigint;
+    confirmed: bigint;
+    returning_players: bigint;
+    withdrawn: bigint;
+    registered: bigint;
+}
+export interface CompetitionEngagementSummary {
+    total_matches: bigint;
+    active_teams: bigint;
+    broadcasts: bigint;
+    results_entered: bigint;
+    competition_id: string;
+}
+export interface State {
+    seasons: Array<Season>;
+    schema: number;
+    eoiSubmissions: Array<EoiSubmission>;
+    entries: Array<TeamEntry>;
+    matches: Array<Match>;
+    tokens: Array<JoinToken>;
+    chatSettings: Array<ChatSettings>;
+    competitionInvites: Array<CompetitionInvite>;
+    governor: Principal;
+    competitionJoinLinks: Array<CompetitionJoinLink>;
+    competitions: Array<Competition>;
+    roles: Array<RoleGrant>;
+}
+export interface JoinLinkPreview {
+    competition_status: string;
+    name: string;
+    season: string;
+    divisions: Array<string>;
+    competition_id: string;
+    club_id: string;
+    entered_team_ids: Array<string>;
+}
+export interface competition_domainInterface extends MainInterface {
 }
 import type { ChatSettings as _ChatSettings, Competition as _Competition, CompetitionEngagementSummary as _CompetitionEngagementSummary, CompetitionInvite as _CompetitionInvite, CompetitionJoinLink as _CompetitionJoinLink, EoiStats as _EoiStats, EoiSubmission as _EoiSubmission, EoiTeamSuggestion as _EoiTeamSuggestion, JoinLinkPreview as _JoinLinkPreview, JoinToken as _JoinToken, Match as _Match, RoleGrant as _RoleGrant, Season as _Season, State as _State, TeamEntry as _TeamEntry } from "./declarations/competition_domain.did";
 export class Competition_domain implements competition_domainInterface {
@@ -904,16 +899,6 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n7(arg3));
-        return from_candid_variant_n6(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n6(result);
     }
     async invite_team(arg0: string, arg1: string): Promise<{

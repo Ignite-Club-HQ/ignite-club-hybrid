@@ -40,7 +40,7 @@ import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties, sendLiveEventReminders } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { listLivePlayers } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
@@ -492,7 +492,10 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   });
 
   const currentRsvpStatus = (myRsvp?.status as RsvpStatus) ?? null;
-  const canSendReminders = hasPro === true;
+  // ICP-routed clubs can always send reminders via send_event_reminders
+  // (no Pro-subscription concept on-chain); Supabase clubs still require
+  // the Pro tier since that fan-out has no canister equivalent.
+  const canSendReminders = isFeatureRoutedToIcp("events") || hasPro === true;
   const { data: isEventMember = true } = useEventMembership({ id: event.id, team_id: event.team_id, club_id: event.club_id, target_team_ids: (event as any).target_team_ids });
 
   // Invalidate every cache key the household RSVP touches.
@@ -724,9 +727,18 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
 
   const remindMutation = useMutation({
     mutationFn: async () => {
-      // NEEDS-CANISTER: the member-list fan-out has no canister shape yet;
-      // the UI entry point is hidden for ICP clubs (hasPro fails closed).
-      if (isFeatureRoutedToIcp("events")) throw new Error("Reminders are not available yet for Internet Identity clubs");
+      // Hybrid routing: events_domain's send_event_reminders fans reminders
+      // out to every non-responder for the event internally — no member
+      // list/cooldown lookups are needed on this branch.
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await sendLiveEventReminders(ctx, event.id);
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
       const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
       let memberQuery = supabase.from("user_roles").select("user_id");
@@ -774,9 +786,13 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   });
 
   const handleRemindClick = async () => {
-    // NEEDS-CANISTER: guarded companion of remindMutation above; the menu
-    // item calling this is hidden for ICP clubs (hasPro fails closed).
-    if (isFeatureRoutedToIcp("events")) return;
+    if (isFeatureRoutedToIcp("events")) {
+      // send_event_reminders computes the non-responder count internally —
+      // skip the Supabase member-count lookup and show a generic confirm.
+      setNonRsvpCount(null);
+      setRemindDialogOpen(true);
+      return;
+    }
     const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
     const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
     let memberQuery = supabase.from("user_roles").select("user_id");
@@ -1298,6 +1314,8 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
               <AlertDialogDescription>
                 {nonRsvpCount === 0
                   ? "Everyone has already RSVPed to this event!"
+                  : nonRsvpCount === null
+                  ? "This will send a reminder notification to every member who hasn't RSVPed yet."
                   : `This will send a reminder notification to ${nonRsvpCount} member${nonRsvpCount === 1 ? "" : "s"} who haven't RSVPed yet.`}
               </AlertDialogDescription>
             </AlertDialogHeader>

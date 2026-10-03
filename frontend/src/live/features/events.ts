@@ -1030,6 +1030,21 @@ export async function listLiveGroupDuties(ctx: FeatureBackendContext, groupId: s
   return unwrapCandid(actor.list_group_duties(groupId), "List group duties");
 }
 
+export async function setLiveRsvpNote(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+  notes: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_rsvp_note(eventId, accountId, notes), "Set RSVP note");
+}
+
+export async function sendLiveEventReminders(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.send_event_reminders(eventId), "Send event reminders");
+}
+
 /**
  * Team training pauses (e.g. holiday breaks) — counterpart of a Supabase
  * `team_training_pauses` table used to suppress auto-generated training

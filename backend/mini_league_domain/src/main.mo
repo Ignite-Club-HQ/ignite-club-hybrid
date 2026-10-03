@@ -7,8 +7,12 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var leagues : [Types.MiniLeague];
   var sessions : [Types.MiniLeagueSession];
@@ -106,13 +110,6 @@ persistent actor {
   func findPlayer(id : Text) : ?Types.MiniLeaguePlayer { players.find(func(item) = item.id == id) };
   func findChild(id : Text) : ?Types.MiniLeagueChild { children.find(func(item) = item.id == id) };
   func nextId(prefix : Text, size : Nat) : Text { prefix # "-" # Nat.toText(size) };
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);

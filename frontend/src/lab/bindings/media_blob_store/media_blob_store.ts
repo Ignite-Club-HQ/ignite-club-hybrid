@@ -103,6 +103,7 @@ export interface media_blob_storeInterface {
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
+    set_club_domain_canister(canister_id: Principal): Promise<Result>;
 }
 import type { FinalizedBlob as _FinalizedBlob, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId } from "./declarations/media_blob_store.did";
 export class Media_blob_store implements media_blob_storeInterface {
@@ -137,6 +138,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
+        return from_candid_Result_n1(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<Result> {
+        const result = await this.actor.set_club_domain_canister(arg0);
         return from_candid_Result_n1(result);
     }
 }

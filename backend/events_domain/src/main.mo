@@ -13,8 +13,12 @@ import Call "mo:ic/Call";
 import IC "mo:ic/Types";
 import Types "types";
 
-persistent actor (governor_arg : Principal) {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var events : [Types.Event];
   var rsvps : [Types.Rsvp];
@@ -51,8 +55,6 @@ persistent actor (governor_arg : Principal) {
   // Governor-set notification_queue canister id for the event-reminder
   // fan-out hook. Fail-closed while unset, mirrors messaging_domain/club_domain.
   var notificationQueueCanister : ?Principal;
-
-  if (governor.equal(Principal.anonymous()) and not governor_arg.equal(Principal.anonymous())) { governor := governor_arg };
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };

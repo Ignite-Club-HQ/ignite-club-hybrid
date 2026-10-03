@@ -33,40 +33,7 @@ export interface EncryptedPii {
   'nonce' : Uint8Array,
   'field_id' : string,
 }
-export interface PiiDeleteResult {
-  'shredded_at' : bigint,
-  'key_destroyed' : boolean,
-}
-/**
- * / PII Access Control Canister
- * / Mediates access to personally identifiable information (PII) with
- * / field-level access policies and an audit trail.
- * /
- * / Encryption construction (vetKeys / IBE):
- * / - The canister holds NO key material. Values are encrypted client-side
- * /   with identity-based encryption (IBE) under the subnet's vetKD master
- * /   key: the writer derives this canister's IBE public key offline (master
- * /   public key -> canister key -> context subkey) and encrypts to the
- * /   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
- * /   write, so first registration of a record needs no key ceremony.
- * / - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
- * /   exact same authorization as the old decrypt path (governor, domain
- * /   owner, granted readers, verified guardians, club-scoped read grants
- * /   verified live via club_domain) and only then relays the vetKey for the
- * /   record's identity, encrypted under the caller's one-time transport key.
- * /   The subnet never sees the raw key; the canister only relays the
- * /   still-encrypted key and never sees plaintext.
- * / - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
- * /   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
- * /   deliberately exposes only the management-canister relay.
- * / - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
- * /   production). It is captured at first install and immutable for the life
- * /   of the derived keys — the deploy script MUST set it before first use.
- * / - `vetkd_derive_key` costs cycles per derivation; readers cache derived
- * /   vetKeys client-side per session, so each (pii_id, field_id) costs one
- * /   derivation per reader session.
- */
-export interface _SERVICE {
+export interface Main {
   'add_guardian_relationship' : ActorMethod<
     [Principal, string],
     { 'Ok' : null } |
@@ -132,5 +99,39 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface PiiDeleteResult {
+  'shredded_at' : bigint,
+  'key_destroyed' : boolean,
+}
+/**
+ * / PII Access Control Canister
+ * / Mediates access to personally identifiable information (PII) with
+ * / field-level access policies and an audit trail.
+ * /
+ * / Encryption construction (vetKeys / IBE):
+ * / - The canister holds NO key material. Values are encrypted client-side
+ * /   with identity-based encryption (IBE) under the subnet's vetKD master
+ * /   key: the writer derives this canister's IBE public key offline (master
+ * /   public key -> canister key -> context subkey) and encrypts to the
+ * /   identity `pii_id ++ "\u{1F}" ++ field_id` — no canister call needed to
+ * /   write, so first registration of a record needs no key ceremony.
+ * / - Readers call `get_encrypted_pii_vetkeys_batch`, which enforces the
+ * /   exact same authorization as the old decrypt path (governor, domain
+ * /   owner, granted readers, verified guardians, club-scoped read grants
+ * /   verified live via club_domain) and only then relays the vetKey for the
+ * /   record's identity, encrypted under the caller's one-time transport key.
+ * /   The subnet never sees the raw key; the canister only relays the
+ * /   still-encrypted key and never sees plaintext.
+ * / - The frontend (@icp-sdk/vetkeys) does all cryptography: transport keys,
+ * /   decryptAndVerify, IBE encrypt/decrypt. The Motoko vetKeys library
+ * /   deliberately exposes only the management-canister relay.
+ * / - VETKD_KEY_NAME selects the subnet key ("test_key_1" local, "key_1"
+ * /   production). It is captured at first install and immutable for the life
+ * /   of the derived keys — the deploy script MUST set it before first use.
+ * / - `vetkd_derive_key` costs cycles per derivation; readers cache derived
+ * /   vetKeys client-side per session, so each (pii_id, field_id) costs one
+ * /   derivation per reader session.
+ */
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

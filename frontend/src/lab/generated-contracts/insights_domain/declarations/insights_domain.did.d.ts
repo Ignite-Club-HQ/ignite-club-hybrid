@@ -130,52 +130,7 @@ export interface Feedback {
 export type FeedbackStatus = { 'Open' : null } |
   { 'InProgress' : null } |
   { 'Resolved' : null };
-export interface PerfAggregate {
-  'source' : string,
-  'count' : number,
-  'surface' : string,
-  'p50_ms' : number,
-  'p95_ms' : number,
-  'avg_ms' : number,
-}
-export interface PerfSampleInput {
-  'source' : string,
-  'cache_hit' : boolean,
-  'surface' : string,
-  'platform' : string,
-  'duration_ms' : number,
-}
-export type PhotoEngagementKind = { 'View' : null } |
-  { 'Comment' : null } |
-  { 'Reaction' : null };
-export interface PhotoEngagementTotal {
-  'views' : bigint,
-  'photo_id' : string,
-  'comments' : bigint,
-  'reactions' : bigint,
-}
-export interface SponsorBenchmarkRow {
-  'ctr' : number,
-  'clicks' : number,
-  'impressions' : number,
-  'sponsor_id' : string,
-  'unique_reach' : number,
-}
-export interface SponsorPerformance {
-  'metrics' : Array<{ 'metric' : string, 'value' : number }>,
-  'period' : string,
-  'sponsor_id' : string,
-}
-export interface UserActivityEntry {
-  'page_path' : string,
-  'started_at_ms' : bigint,
-  'session_id' : string,
-  'duration_seconds' : number,
-  'user_id' : string,
-  'club_id' : [] | [string],
-  'page_label' : string,
-}
-export interface _SERVICE {
+export interface Main {
   'ad_event_summary' : ActorMethod<
     [bigint],
     { 'Ok' : Array<AdEventSummary> } |
@@ -268,7 +223,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_app_admin' : ActorMethod<[], boolean>,
   'list_active_ads' : ActorMethod<[], Array<AppAd>>,
   'list_ad_settings' : ActorMethod<
@@ -429,5 +383,51 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface PerfAggregate {
+  'source' : string,
+  'count' : number,
+  'surface' : string,
+  'p50_ms' : number,
+  'p95_ms' : number,
+  'avg_ms' : number,
+}
+export interface PerfSampleInput {
+  'source' : string,
+  'cache_hit' : boolean,
+  'surface' : string,
+  'platform' : string,
+  'duration_ms' : number,
+}
+export type PhotoEngagementKind = { 'View' : null } |
+  { 'Comment' : null } |
+  { 'Reaction' : null };
+export interface PhotoEngagementTotal {
+  'views' : bigint,
+  'photo_id' : string,
+  'comments' : bigint,
+  'reactions' : bigint,
+}
+export interface SponsorBenchmarkRow {
+  'ctr' : number,
+  'clicks' : number,
+  'impressions' : number,
+  'sponsor_id' : string,
+  'unique_reach' : number,
+}
+export interface SponsorPerformance {
+  'metrics' : Array<{ 'metric' : string, 'value' : number }>,
+  'period' : string,
+  'sponsor_id' : string,
+}
+export interface UserActivityEntry {
+  'page_path' : string,
+  'started_at_ms' : bigint,
+  'session_id' : string,
+  'duration_seconds' : number,
+  'user_id' : string,
+  'club_id' : [] | [string],
+  'page_label' : string,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

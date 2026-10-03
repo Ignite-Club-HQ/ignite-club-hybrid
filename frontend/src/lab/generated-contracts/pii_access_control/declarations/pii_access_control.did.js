@@ -36,8 +36,7 @@ export const idlFactory = ({ IDL }) => {
     'nonce' : IDL.Vec(IDL.Nat8),
     'field_id' : IDL.Text,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'add_guardian_relationship' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -112,6 +111,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

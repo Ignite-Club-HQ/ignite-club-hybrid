@@ -185,6 +185,386 @@ type Message =
    sender: principal;
    sequence: nat64;
  };
+type Main = 
+ service {
+   addBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   add_group_members: (conversation_id: text, members: vec principal) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   approve_join_request: (conversation_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   block_user: (user: principal) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
+   broadcast_announcement: (club_id: text, team_ids: vec text,
+    include_club_chat: bool, body: text, idempotency_key: text) ->
+    (variant {
+       Err: text;
+       Ok: BroadcastResult;
+     });
+   can_dm_user: (other: principal) -> (bool) query;
+   close_poll: (poll_id: text) -> (variant {
+                                     Err: text;
+                                     Ok: Poll;
+                                   });
+   create_conversation: (club_id: text, team_id: opt text, participants:
+    vec principal) -> (variant {
+                         Err: text;
+                         Ok: Conversation;
+                       });
+   create_group_with_roles: (club_id: text, team_id: opt text, name: 
+    text, kind: text, role_entries: vec record {
+                                          principal;
+                                          text;
+                                        }) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   create_poll: (conversation_id: text, message_id: opt text, question: 
+    text, options: vec text) -> (variant {
+                                   Err: text;
+                                   Ok: Poll;
+                                 });
+   delete_message: (message_id: text) -> (variant {
+                                            Err: text;
+                                            Ok: Message;
+                                          });
+   delete_poll: (poll_id: text) -> (variant {
+                                      Err: text;
+                                      Ok;
+                                    });
+   dm_attachments_disabled: (user: principal) -> (bool) query;
+   enable_ai_catch_up_for_all_members: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   export_state: () -> (variant {
+                          Err: text;
+                          Ok: State;
+                        }) query;
+   fetch_link_preview: (url: text) -> (variant {
+                                         Err: text;
+                                         Ok: LinkPreview;
+                                       });
+   forward_message: (message_id: text, to_conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Message;
+     });
+   generate_chat_recap: (conversation_id: text, since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: text;
+     });
+   get_club_dm_settings: (club_id: text) -> (ClubDmSettings) query;
+   get_group_metadata: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     }) query;
+   get_minimum_app_versions: () ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 text;
+               };
+     }) query;
+   get_mute_preference: (conversation_id: text) -> (bool) query;
+   get_or_create_dm: (other: principal) ->
+    (variant {
+       Err: text;
+       Ok: Conversation;
+     });
+   get_poll_results: (poll_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PollResults;
+     }) query;
+   get_user_messaging_settings: () -> (UserMessagingSettings) query;
+   grant_competition_admin: (conversation_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   grant_role: ("principal": principal, role: text, club_id: opt text,
+    team_id: opt text) -> (variant {
+                             Err: text;
+                             Ok;
+                           });
+   has_blocked: (user: principal) -> (bool) query;
+   is_competition_admin: (conversation_id: text) -> (bool) query;
+   leave_group: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   listBulkAccessPrincipals: () ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
+   list_all_online_users: () ->
+    (variant {
+       Err: text;
+       Ok: vec OnlineUser;
+     }) query;
+   list_blocked_users: () -> (vec principal) query;
+   list_groups_by_club: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GroupSummary;
+     }) query;
+   list_groups_by_team: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GroupSummary;
+     }) query;
+   list_join_requests: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec JoinRequest;
+     }) query;
+   list_messages: (conversation_id: text, after: opt nat64) ->
+    (vec Message) query;
+   list_messages_page: (conversation_id: text, after: opt nat64, limit:
+    nat16) -> (variant {
+                 Err: text;
+                 Ok: MessagePage;
+               }) query;
+   list_pinned_messages: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PinnedMessage;
+     }) query;
+   list_read_receipts: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Receipt;
+     }) query;
+   list_typing: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TypingUser;
+     }) query;
+   mark_read: (conversation_id: text, message_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Receipt;
+     });
+   messages_since: (conversation_id: text, since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec MessageWithReactions;
+     }) query;
+   my_unread_counts: () -> (vec UnreadSummary) query;
+   online_count: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat64;
+     }) query;
+   pin_message: (conversation_id: text, message_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PinnedMessage;
+     });
+   presence_heartbeat: (platform: opt text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+   recapTransform: (record {
+                      context: blob;
+                      response: HttpRequestResult;
+                    }) -> (HttpRequestResult) query;
+   recent_conversations: ("principal": principal, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: vec RecentConversation;
+     }) query;
+   register_attachment_metadata: (conversation_id: text, message_id:
+    opt text, kind: text, ref_id: text, url: opt text, size_bytes:
+    opt nat64) -> (variant {
+                     Err: text;
+                     Ok: AttachmentMetadata;
+                   });
+   register_scheduled_message: (conversation_id: text, body: text,
+    scheduled_at_ms: nat64) -> (variant {
+                                  Err: text;
+                                  Ok: ScheduledMessage;
+                                });
+   reject_join_request: (conversation_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   removeBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_group_member: (conversation_id: text, member: principal) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   replay_scheduled_message: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: ScheduledMessage;
+     });
+   request_join_group: (conversation_id: text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   send_message: (conversation_id: text, body: text, idempotency_key: 
+    text, attachment: opt Attachment) -> (variant {
+                                            Err: text;
+                                            Ok: Message;
+                                          });
+   send_system_message: (to_user: principal, body: text, idempotency_key:
+    text) -> (variant {
+                Err: text;
+                Ok: Message;
+              });
+   send_welcome_message: (body: text) -> (variant {
+                                            Err: text;
+                                            Ok: Message;
+                                          });
+   set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_club_dm_allowed_roles: (club_id: text, allowed_roles: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_club_dm_settings: (club_id: text, dm_disabled: bool,
+    attachments_disabled: bool) -> (variant {
+                                      Err: text;
+                                      Ok;
+                                    });
+   set_club_message_privacy: (club_id: text, force_disable_previews: 
+    bool) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_dm_attachments_disabled: (user: principal, disabled: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_minimum_app_versions: (versions: vec record {
+                                              text;
+                                              text;
+                                            }) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_mute_preference: (conversation_id: text, muted: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_notification_queue_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_recap_config: (config: opt RecapConfig) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_typing: (conversation_id: text, is_typing: bool, name: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_user_messaging_settings: (hide_message_preview: bool,
+    ai_catchup_enabled: bool) -> (variant {
+                                    Err: text;
+                                    Ok;
+                                  });
+   soft_delete_group: (conversation_id: text) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+   toggle_reaction: (message_id: text, emoji: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unblock_user: (user: principal) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
+   unpin_message: (conversation_id: text, message_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unread_count: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: Unread;
+     }) query;
+   unread_count_by_club: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubUnreadSummary;
+     }) query;
+   update_group: (conversation_id: text, name: opt text, avatar: opt text,
+    description: opt text, admin_only_posting: opt bool) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   update_message: (message_id: text, body: text) ->
+    (variant {
+       Err: text;
+       Ok: Message;
+     });
+   upsert_club_membership: (user: principal, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   upsert_group_metadata: (conversation_id: text, name: text, kind: text,
+    club_id: opt text, team_id: opt text, members: vec principal) ->
+    (variant {
+       Err: text;
+       Ok: GroupMetadata;
+     });
+   vote_poll: (poll_id: text, option_index: nat32) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   ws_close: (args: CanisterWsCloseArguments) -> (CanisterWsCloseResult);
+   ws_get_messages: (args: CanisterWsGetMessagesArguments) ->
+    (CanisterWsGetMessagesResult) query;
+   ws_message: (args: CanisterWsMessageArguments, msg_type:
+    opt WsAppMessage) -> (CanisterWsMessageResult);
+   ws_open: (args: CanisterWsOpenArguments) -> (CanisterWsOpenResult);
+ };
 type LinkPreview = 
  record {
    description: opt text;
@@ -209,6 +589,18 @@ type HttpHeader =
  record {
    name: text;
    value: text;
+ };
+type GroupSummary = 
+ record {
+   avatar: opt text;
+   club_id: opt text;
+   conversation_id: text;
+   description: opt text;
+   is_member: bool;
+   kind: text;
+   member_count: nat32;
+   name: text;
+   team_id: opt text;
  };
 type GroupRole = 
  record {
@@ -347,371 +739,4 @@ type Attachment =
    ref_id: text;
    url: opt text;
  };
-service : {
-  addBulkAccessPrincipal: ("principal": principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  add_group_members: (conversation_id: text, members: vec principal) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  approve_join_request: (conversation_id: text, user: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  block_user: (user: principal) -> (variant {
-                                      Err: text;
-                                      Ok;
-                                    });
-  broadcast_announcement: (club_id: text, team_ids: vec text,
-   include_club_chat: bool, body: text, idempotency_key: text) ->
-   (variant {
-      Err: text;
-      Ok: BroadcastResult;
-    });
-  can_dm_user: (other: principal) -> (bool) query;
-  close_poll: (poll_id: text) -> (variant {
-                                    Err: text;
-                                    Ok: Poll;
-                                  });
-  create_conversation: (club_id: text, team_id: opt text, participants:
-   vec principal) -> (variant {
-                        Err: text;
-                        Ok: Conversation;
-                      });
-  create_group_with_roles: (club_id: text, team_id: opt text, name: text,
-   kind: text, role_entries: vec record {
-                                   principal;
-                                   text;
-                                 }) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  create_poll: (conversation_id: text, message_id: opt text, question: 
-   text, options: vec text) -> (variant {
-                                  Err: text;
-                                  Ok: Poll;
-                                });
-  delete_message: (message_id: text) -> (variant {
-                                           Err: text;
-                                           Ok: Message;
-                                         });
-  delete_poll: (poll_id: text) -> (variant {
-                                     Err: text;
-                                     Ok;
-                                   });
-  dm_attachments_disabled: (user: principal) -> (bool) query;
-  enable_ai_catch_up_for_all_members: (club_id: text) ->
-   (variant {
-      Err: text;
-      Ok: nat32;
-    });
-  export_state: () -> (variant {
-                         Err: text;
-                         Ok: State;
-                       }) query;
-  fetch_link_preview: (url: text) -> (variant {
-                                        Err: text;
-                                        Ok: LinkPreview;
-                                      });
-  forward_message: (message_id: text, to_conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: Message;
-    });
-  generate_chat_recap: (conversation_id: text, since_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: text;
-    });
-  get_club_dm_settings: (club_id: text) -> (ClubDmSettings) query;
-  get_group_metadata: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    }) query;
-  get_minimum_app_versions: () ->
-   (variant {
-      Err: text;
-      Ok: vec record {
-                text;
-                text;
-              };
-    }) query;
-  get_mute_preference: (conversation_id: text) -> (bool) query;
-  get_or_create_dm: (other: principal) ->
-   (variant {
-      Err: text;
-      Ok: Conversation;
-    });
-  get_poll_results: (poll_id: text) ->
-   (variant {
-      Err: text;
-      Ok: PollResults;
-    }) query;
-  get_user_messaging_settings: () -> (UserMessagingSettings) query;
-  grant_competition_admin: (conversation_id: text, user: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  grant_role: ("principal": principal, role: text, club_id: opt text,
-   team_id: opt text) -> (variant {
-                            Err: text;
-                            Ok;
-                          });
-  has_blocked: (user: principal) -> (bool) query;
-  initialize: () -> (variant {
-                       Err: text;
-                       Ok;
-                     });
-  is_competition_admin: (conversation_id: text) -> (bool) query;
-  leave_group: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  listBulkAccessPrincipals: () ->
-   (variant {
-      Err: text;
-      Ok: vec principal;
-    }) query;
-  list_all_online_users: () ->
-   (variant {
-      Err: text;
-      Ok: vec OnlineUser;
-    }) query;
-  list_blocked_users: () -> (vec principal) query;
-  list_join_requests: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: vec JoinRequest;
-    }) query;
-  list_messages: (conversation_id: text, after: opt nat64) ->
-   (vec Message) query;
-  list_messages_page: (conversation_id: text, after: opt nat64, limit:
-   nat16) -> (variant {
-                Err: text;
-                Ok: MessagePage;
-              }) query;
-  list_pinned_messages: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: vec PinnedMessage;
-    }) query;
-  list_typing: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: vec TypingUser;
-    }) query;
-  mark_read: (conversation_id: text, message_id: text) ->
-   (variant {
-      Err: text;
-      Ok: Receipt;
-    });
-  messages_since: (conversation_id: text, since_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: vec MessageWithReactions;
-    }) query;
-  my_unread_counts: () -> (vec UnreadSummary) query;
-  online_count: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: nat64;
-    }) query;
-  pin_message: (conversation_id: text, message_id: text) ->
-   (variant {
-      Err: text;
-      Ok: PinnedMessage;
-    });
-  presence_heartbeat: (platform: opt text) -> (variant {
-                                                 Err: text;
-                                                 Ok;
-                                               });
-  recapTransform: (record {
-                     context: blob;
-                     response: HttpRequestResult;
-                   }) -> (HttpRequestResult) query;
-  recent_conversations: ("principal": principal, limit: nat16) ->
-   (variant {
-      Err: text;
-      Ok: vec RecentConversation;
-    }) query;
-  register_attachment_metadata: (conversation_id: text, message_id: opt text,
-   kind: text, ref_id: text, url: opt text, size_bytes: opt nat64) ->
-   (variant {
-      Err: text;
-      Ok: AttachmentMetadata;
-    });
-  register_scheduled_message: (conversation_id: text, body: text,
-   scheduled_at_ms: nat64) -> (variant {
-                                 Err: text;
-                                 Ok: ScheduledMessage;
-                               });
-  reject_join_request: (conversation_id: text, user: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  removeBulkAccessPrincipal: ("principal": principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  remove_group_member: (conversation_id: text, member: principal) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  replay_scheduled_message: (id: text) ->
-   (variant {
-      Err: text;
-      Ok: ScheduledMessage;
-    });
-  request_join_group: (conversation_id: text) -> (variant {
-                                                    Err: text;
-                                                    Ok;
-                                                  });
-  send_message: (conversation_id: text, body: text, idempotency_key: 
-   text, attachment: opt Attachment) -> (variant {
-                                           Err: text;
-                                           Ok: Message;
-                                         });
-  send_system_message: (to_user: principal, body: text, idempotency_key:
-   text) -> (variant {
-               Err: text;
-               Ok: Message;
-             });
-  send_welcome_message: (body: text) -> (variant {
-                                           Err: text;
-                                           Ok: Message;
-                                         });
-  set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_club_dm_allowed_roles: (club_id: text, allowed_roles: vec text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_club_dm_settings: (club_id: text, dm_disabled: bool,
-   attachments_disabled: bool) -> (variant {
-                                     Err: text;
-                                     Ok;
-                                   });
-  set_club_message_privacy: (club_id: text, force_disable_previews: bool) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_dm_attachments_disabled: (user: principal, disabled: bool) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_minimum_app_versions: (versions: vec record {
-                                             text;
-                                             text;
-                                           }) -> (variant {
-                                                    Err: text;
-                                                    Ok;
-                                                  });
-  set_mute_preference: (conversation_id: text, muted: bool) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_notification_queue_canister: (id: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_recap_config: (config: opt RecapConfig) -> (variant {
-                                                    Err: text;
-                                                    Ok;
-                                                  });
-  set_typing: (conversation_id: text, is_typing: bool, name: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_user_messaging_settings: (hide_message_preview: bool,
-   ai_catchup_enabled: bool) -> (variant {
-                                   Err: text;
-                                   Ok;
-                                 });
-  soft_delete_group: (conversation_id: text) -> (variant {
-                                                   Err: text;
-                                                   Ok;
-                                                 });
-  toggle_reaction: (message_id: text, emoji: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  transfer_governorship: (new_governor: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  unblock_user: (user: principal) -> (variant {
-                                        Err: text;
-                                        Ok;
-                                      });
-  unpin_message: (conversation_id: text, message_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  unread_count: (conversation_id: text) ->
-   (variant {
-      Err: text;
-      Ok: Unread;
-    }) query;
-  unread_count_by_club: ("principal": principal) ->
-   (variant {
-      Err: text;
-      Ok: vec ClubUnreadSummary;
-    }) query;
-  update_group: (conversation_id: text, name: opt text, avatar: opt text,
-   description: opt text, admin_only_posting: opt bool) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  update_message: (message_id: text, body: text) ->
-   (variant {
-      Err: text;
-      Ok: Message;
-    });
-  upsert_club_membership: (user: principal, club_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  upsert_group_metadata: (conversation_id: text, name: text, kind: text,
-   club_id: opt text, team_id: opt text, members: vec principal) ->
-   (variant {
-      Err: text;
-      Ok: GroupMetadata;
-    });
-  vote_poll: (poll_id: text, option_index: nat32) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  ws_close: (args: CanisterWsCloseArguments) -> (CanisterWsCloseResult);
-  ws_get_messages: (args: CanisterWsGetMessagesArguments) ->
-   (CanisterWsGetMessagesResult) query;
-  ws_message: (args: CanisterWsMessageArguments, msg_type:
-   opt WsAppMessage) -> (CanisterWsMessageResult);
-  ws_open: (args: CanisterWsOpenArguments) -> (CanisterWsOpenResult);
-}
+service : (governorInit: principal) -> Main

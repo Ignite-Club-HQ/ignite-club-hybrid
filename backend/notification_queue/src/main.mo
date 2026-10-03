@@ -9,10 +9,14 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var items : [Types.Notification];
   var leases : [Types.Lease];
   var governor : ?Principal;
+
+  if (governor == null and not governorInit.equal(Principal.anonymous())) {
+    governor := ?governorInit;
+  };
   var workers : [Principal];
   var scheduled : [Types.ScheduledMessage];
   var digests : [Types.DigestItem];
@@ -188,14 +192,6 @@ persistent actor {
       case (?prefs) { categoryAllowed(prefs, kind) };
       case null { true };
     }
-  };
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    authenticated(caller);
-    switch (governor) {
-      case (?_) { #Err("Already initialized") };
-      case null { governor := ?caller; #Ok };
-    };
   };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {

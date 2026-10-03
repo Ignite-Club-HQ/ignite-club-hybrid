@@ -853,3 +853,72 @@ export async function listLivePinnedMessages(
   );
   return raw.map(toLivePinnedMessage);
 }
+
+export interface LiveGroupSummary {
+  conversationId: string;
+  kind: string;
+  name: string;
+  teamId: string | null;
+  clubId: string | null;
+  memberCount: number;
+  isMember: boolean;
+  description: string | null;
+  avatar: string | null;
+}
+
+function toLiveGroupSummary(raw: {
+  conversation_id: string;
+  kind: string;
+  name: string;
+  team_id: [] | [string];
+  club_id: [] | [string];
+  member_count: number;
+  is_member: boolean;
+  description: [] | [string];
+  avatar: [] | [string];
+}): LiveGroupSummary {
+  return {
+    conversationId: raw.conversation_id,
+    kind: raw.kind,
+    name: raw.name,
+    teamId: raw.team_id[0] ?? null,
+    clubId: raw.club_id[0] ?? null,
+    memberCount: Number(raw.member_count),
+    isMember: raw.is_member,
+    description: raw.description[0] ?? null,
+    avatar: raw.avatar[0] ?? null,
+  };
+}
+
+/** Groups (team/club/competition chats) scoped to a club — the canister counterpart of the `chat_groups` by-club read. */
+export async function listLiveGroupsByClub(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_groups_by_club(clubId), "List groups by club");
+  return raw.map(toLiveGroupSummary);
+}
+
+/** Groups scoped to a team — the canister counterpart of the `chat_groups` by-team read. */
+export async function listLiveGroupsByTeam(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_groups_by_team(teamId), "List groups by team");
+  return raw.map(toLiveGroupSummary);
+}
+
+export interface LiveReadReceipt {
+  conversationId: string;
+  messageId: string;
+  read: boolean;
+  user: Principal;
+}
+
+/** Per-conversation read receipts — the canister counterpart of the Supabase `message_reads` table read. */
+export async function listLiveReadReceipts(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_read_receipts(conversationId), "List read receipts");
+  return raw.map((r) => ({
+    conversationId: r.conversation_id,
+    messageId: r.message_id,
+    read: r.read,
+    user: r.user,
+  } satisfies LiveReadReceipt));
+}

@@ -9,8 +9,12 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var pointsHistory : [Types.PointsHistoryEntry];
   var userClubPoints : [Types.UserClubPoints];
@@ -90,13 +94,6 @@ persistent actor {
   func setChildPoints(club_id : Text, child_id : Text, points : Int32) {
     childClubPoints := childClubPoints.filter(func(item) = not (item.club_id == club_id and item.child_id == child_id));
     childClubPoints := childClubPoints.concat([{ child_id; club_id; points; updated_at_ms = nowMs() }]);
-  };
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
   };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {

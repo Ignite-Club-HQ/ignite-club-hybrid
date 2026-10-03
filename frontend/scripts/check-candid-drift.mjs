@@ -6,17 +6,17 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, "icp-domain-topology
 const bindingsRoot = path.join(root, "frontend", "src", "lab", "generated-contracts");
 
 function candidMethods(source) {
-  const serviceStart = source.indexOf("service :");
-  if (serviceStart < 0) throw new Error("Candid service declaration is missing");
-  const service = source.slice(serviceStart);
-  return new Set([...service.matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\(/gm)].map(match => match[1]));
+  if (!source.includes("service :")) throw new Error("Candid service declaration is missing");
+  // Actor-class contracts declare methods inside `type Main = actor { ... }`
+  // BEFORE the `service : (args) -> Main` line, so scan the whole file.
+  return new Set([...source.matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\(/gm)].map(match => match[1]));
 }
 
 function generatedMethods(source) {
-  const serviceStart = source.indexOf("export interface _SERVICE");
-  if (serviceStart < 0) throw new Error("Generated _SERVICE declaration is missing");
-  const service = source.slice(serviceStart);
-  return new Set([...service.matchAll(/^\s{2}'([A-Za-z_][A-Za-z0-9_]*)'\s*:/gm)].map(match => match[1]));
+  if (!source.includes("export interface _SERVICE")) throw new Error("Generated _SERVICE declaration is missing");
+  // Actor-class bindings emit `_SERVICE extends Main {}` with methods on the
+  // Main interface above it, so scan the whole file.
+  return new Set([...source.matchAll(/^\s{2}'([A-Za-z_][A-Za-z0-9_]*)'\s*:\s*ActorMethod</gm)].map(match => match[1]));
 }
 
 for (const role of manifest.roles) {

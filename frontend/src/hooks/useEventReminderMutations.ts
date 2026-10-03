@@ -8,6 +8,7 @@ import { resolveEventRecipients, eventRecipientContext } from "@/features/events
 import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds } from "@/features/events/reminderRecipients";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
+import { sendLiveEventReminders } from "@/live/features/events";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -76,7 +77,19 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
 
   const remindMutation = useMutation({
     mutationFn: async () => {
-      if (resolveAuthBackend() === "icp") return 0;
+      // Hybrid routing: events_domain's send_event_reminders fans reminders
+      // out to every non-responder for the event internally — no member
+      // list/cooldown lookups are needed on this branch.
+      const icpCount = await withFeatureBackend("events", {
+        supabase: () => null,
+        icp: async (ctx) => {
+          if (!id) throw new Error("Missing event ID");
+          const count = await sendLiveEventReminders(ctx, id);
+          return Number(count);
+        },
+      });
+      if (icpCount !== null) return icpCount;
+
       // Get all RSVPs for this event
       const { data: existingRsvps, error: rsvpError } = await supabase
         .from("rsvps")

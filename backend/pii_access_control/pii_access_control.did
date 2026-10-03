@@ -3,6 +3,76 @@ type PiiDeleteResult =
    key_destroyed: bool;
    shredded_at: nat64;
  };
+type Main = 
+ service {
+   add_guardian_relationship: (guardian: principal, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
+   delete_pii: (pii_id: text, field_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PiiDeleteResult;
+     });
+   emergency_shutdown: () -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   get_encrypted_pii_batch: (pii_ids: vec text, field_id: text, operation:
+    text, purpose: text) -> (variant {
+                               Err: text;
+                               Ok: vec EncryptedPii;
+                             });
+   get_encrypted_pii_vetkeys_batch: (pii_ids: vec text, field_id: text,
+    transport_public_key: blob) -> (variant {
+                                      Err: text;
+                                      Ok: vec opt blob;
+                                    });
+   grant_pii_read: (pii_id: text, field_id: text, reader: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   grant_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   my_guardian_children: () -> (vec text) query;
+   pii_vetkey_verification_key: () -> (blob);
+   register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
+    domain_owner: principal) -> (variant {
+                                   Err: text;
+                                   Ok: EncryptedPii;
+                                 });
+   remove_guardian_relationship: (guardian: principal, child_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_pii_read: (pii_id: text, field_id: text, reader: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   revoke_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_club_domain_canister: (canister: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+ };
 type EncryptedPii = 
  record {
    ciphertext: vec nat8;
@@ -56,72 +126,4 @@ type AuditFilter =
 /// - `vetkd_derive_key` costs cycles per derivation; readers cache derived
 ///   vetKeys client-side per session, so each (pii_id, field_id) costs one
 ///   derivation per reader session.
-service : {
-  add_guardian_relationship: (guardian: principal, child_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
-  delete_pii: (pii_id: text, field_id: text) ->
-   (variant {
-      Err: text;
-      Ok: PiiDeleteResult;
-    });
-  emergency_shutdown: () -> (variant {
-                               Err: text;
-                               Ok;
-                             });
-  get_encrypted_pii_batch: (pii_ids: vec text, field_id: text, operation:
-   text, purpose: text) -> (variant {
-                              Err: text;
-                              Ok: vec EncryptedPii;
-                            });
-  get_encrypted_pii_vetkeys_batch: (pii_ids: vec text, field_id: text,
-   transport_public_key: blob) -> (variant {
-                                     Err: text;
-                                     Ok: vec opt blob;
-                                   });
-  grant_pii_read: (pii_id: text, field_id: text, reader: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  grant_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  my_guardian_children: () -> (vec text) query;
-  pii_vetkey_verification_key: () -> (blob);
-  register_pii: (pii_id: text, field_id: text, ciphertext: vec nat8,
-   domain_owner: principal) -> (variant {
-                                  Err: text;
-                                  Ok: EncryptedPii;
-                                });
-  remove_guardian_relationship: (guardian: principal, child_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  revoke_pii_read: (pii_id: text, field_id: text, reader: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  revoke_pii_read_club: (pii_id: text, field_id: text, club_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  set_club_domain_canister: (canister: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  transfer_governorship: (new_governor: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-}
+service : (governorInit: principal) -> Main

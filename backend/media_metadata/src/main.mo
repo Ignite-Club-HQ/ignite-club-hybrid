@@ -1,6 +1,7 @@
 import Array "mo:core/Array";
 import Char "mo:core/Char";
 import Nat "mo:core/Nat";
+import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -10,21 +11,29 @@ import Int "mo:core/Int";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
+
   var assets : [Types.Asset];
   var capabilities : [Types.Capability];
   var reactions : [Types.Reaction];
   var comments : [Types.Comment];
   var roles : [Types.RoleGrant];
   var bulkAccessPrincipals : [Principal];
+  var galleryChatCards : [Types.GalleryChatCard];
 
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
+  transient let MAX_ASSETS = 20_000;
+  transient let MAX_CAPABILITIES = 20_000;
+  transient let MAX_REACTIONS = 20_000;
+  transient let MAX_COMMENTS = 20_000;
+  transient let MAX_ROLES = 5_000;
+  transient let MAX_BULK_ACCESS = 200;
+  transient let MAX_GALLERY_CHAT_CARDS = 20_000;
+  transient let MAX_PHOTO_IDS = 200;
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -76,7 +85,18 @@ persistent actor {
   // viewer, matching the source app's "any club member can see club media"
   // rule without replicating its full roster sync.
   func isClubMember(caller : Principal, club_id : Text) : Bool {
-    hasRole(caller, "member", ?club_id)
+    isGovernor(caller)
+      or hasRole(caller, "member", ?club_id)
+      or hasRole(caller, "club_admin", ?club_id)
+      or hasRole(caller, "team_admin", ?club_id)
+      or hasRole(caller, "coach", ?club_id)
+  };
+
+  // Club staff (not plain members) — used to gate gallery-card creation and
+  // moderation, matching the source app's "team admin/coach/club admin can
+  // post or remove a gallery card" rule.
+  func isClubStaff(caller : Principal, club_id : Text) : Bool {
+    isGovernor(caller)
       or hasRole(caller, "club_admin", ?club_id)
       or hasRole(caller, "team_admin", ?club_id)
       or hasRole(caller, "coach", ?club_id)
@@ -102,6 +122,7 @@ persistent actor {
   ) : async { #Ok : Types.Asset; #Err : Text } {
     auth(caller);
     if (not valid(club_id) or not valid(kind) or not validMime(mime) or not valid(checksum) or not valid(storage_path) or not valid(visibility)) return #Err("Invalid asset");
+    if (assets.size() >= MAX_ASSETS) return #Err("Asset limit reached");
     let encrypted = kind == "child_photo" or kind == "minor_media";
     if (encrypted and visibility == "public") return #Err("Child-sensitive media cannot be public");
     if (expires_at_ms <= nowMs()) return #Err("Asset expiry must be in the future");
@@ -161,6 +182,7 @@ persistent actor {
   public shared ({ caller }) func issue_capability(asset_id : Text, action : Text, purpose : Text, expires_at_ms : Nat64) : async { #Ok : Types.Capability; #Err : Text } {
     auth(caller);
     if (not validCapabilityAction(action) or not validPurpose(purpose) or expires_at_ms <= nowMs()) return #Err("Invalid or expired capability");
+    if (capabilities.size() >= MAX_CAPABILITIES) return #Err("Capability limit reached");
     var found_asset : ?Types.Asset = null;
     for (a in assets.values()) {
       if (a.id == asset_id) { found_asset := ?a };
@@ -211,6 +233,7 @@ persistent actor {
     if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous()) or not validRoleAssignment(role, club_id, team_id)) return #Err("Invalid role assignment");
     if (not roles.any(func(grant) = grant.user.equal(principal) and grant.role == role and grant.club_id == club_id and grant.team_id == team_id)) {
+      if (roles.size() >= MAX_ROLES) return #Err("Role limit reached");
       roles := roles.concat([{ user = principal; role; club_id; team_id }]);
     };
     #Ok
@@ -237,6 +260,7 @@ persistent actor {
         // Supabase parity: a user holds exactly one reaction per asset —
         // replace any prior reaction (regardless of kind), never accumulate.
         reactions := reactions.filter(func(r) = not (r.asset_id == asset_id and r.user.equal(caller)));
+        if (reactions.size() >= MAX_REACTIONS) return #Err("Reaction limit reached");
         let reaction : Types.Reaction = { asset_id; user = caller; kind; created_at_ms };
         reactions := reactions.concat([reaction]);
         #Ok(reaction)
@@ -265,6 +289,7 @@ persistent actor {
   public shared ({ caller }) func add_comment(asset_id : Text, body : Text, created_at_ms : Nat64) : async { #Ok : Types.Comment; #Err : Text } {
     auth(caller);
     if (not validCommentBody(body)) return #Err("Invalid comment");
+    if (comments.size() >= MAX_COMMENTS) return #Err("Comment limit reached");
     var found : ?Types.Asset = null;
     for (a in assets.values()) { if (a.id == asset_id and not a.deleted) { found := ?a } };
     switch (found) {
@@ -319,11 +344,130 @@ persistent actor {
     }
   };
 
+  // ---------------- Gallery chat cards ----------------
+  // Mirrors the Supabase gallery_chat_cards row shape (photo-share prompt
+  // cards surfaced in team chat). Supabase remains the writer today — rows
+  // are created by a DB trigger/edge function outside the frontend, not by
+  // app code — so these methods exist so the II read path returns real data
+  // once the lab is seeded, not to replace the Supabase writer.
+
+  func validGalleryPhotoIds(photo_ids : [Text]) : Bool {
+    photo_ids.size() <= MAX_PHOTO_IDS and Iter.all(photo_ids.values(), func(pid : Text) : Bool { valid(pid) })
+  };
+
+  func findGalleryCardIndex(card_id : Text) : ?Nat {
+    var found_idx : ?Nat = null;
+    var idx = 0;
+    for (c in galleryChatCards.values()) {
+      if (c.id == card_id) { found_idx := ?idx };
+      idx += 1;
+    };
+    found_idx
+  };
+
+  public shared ({ caller }) func save_gallery_chat_card(
+    id : ?Text,
+    club_id : Text,
+    team_id : Text,
+    event_id : ?Text,
+    message_id : Text,
+    hero_photo_id : ?Text,
+    hero_image_url : ?Text,
+    photo_count : Nat32,
+    photo_ids : [Text],
+    is_prompt : Bool,
+    push_sent : Bool,
+  ) : async { #Ok : Types.GalleryChatCard; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not valid(message_id)) return #Err("Invalid gallery chat card");
+    if (not validGalleryPhotoIds(photo_ids)) return #Err("Too many photo ids");
+    switch (id) {
+      case null {
+        if (not isClubStaff(caller, club_id)) return #Err("Club staff required");
+        if (galleryChatCards.size() >= MAX_GALLERY_CHAT_CARDS) return #Err("Gallery chat card limit reached");
+        let now = nowMs();
+        let card : Types.GalleryChatCard = {
+          id = "gallery-card-" # team_id # "-" # Nat.toText(galleryChatCards.size() + 1);
+          club_id;
+          team_id;
+          event_id;
+          message_id;
+          hero_photo_id;
+          hero_image_url;
+          photo_count;
+          photo_ids;
+          is_prompt;
+          push_sent;
+          uploader_id = caller;
+          created_at_ms = now;
+          updated_at_ms = now;
+        };
+        galleryChatCards := galleryChatCards.concat([card]);
+        #Ok(card)
+      };
+      case (?card_id) {
+        switch (findGalleryCardIndex(card_id)) {
+          case null { #Err("Gallery chat card not found") };
+          case (?i) {
+            let existing = galleryChatCards[i];
+            if (not existing.uploader_id.equal(caller) and not isClubStaff(caller, existing.club_id)) return #Err("Card author or club staff required");
+            let updated : Types.GalleryChatCard = {
+              existing with
+              club_id;
+              team_id;
+              event_id;
+              message_id;
+              hero_photo_id;
+              hero_image_url;
+              photo_count;
+              photo_ids;
+              is_prompt;
+              push_sent;
+              updated_at_ms = nowMs();
+            };
+            galleryChatCards := Array.tabulate<Types.GalleryChatCard>(galleryChatCards.size(), func(position) {
+              if (position == i) updated else galleryChatCards[position]
+            });
+            #Ok(updated)
+          };
+        }
+      };
+    }
+  };
+
+  public query ({ caller }) func get_gallery_chat_card(card_id : Text) : async ?Types.GalleryChatCard {
+    for (c in galleryChatCards.values()) {
+      if (c.id == card_id and isClubMember(caller, c.club_id)) return ?c;
+    };
+    null
+  };
+
+  public query ({ caller }) func list_gallery_chat_cards(club_id : Text, team_id : Text) : async [Types.GalleryChatCard] {
+    if (caller.equal(Principal.anonymous()) or not isClubMember(caller, club_id)) return [];
+    Array.filter<Types.GalleryChatCard>(galleryChatCards, func(c) = c.club_id == club_id and c.team_id == team_id)
+  };
+
+  public shared ({ caller }) func delete_gallery_chat_card(card_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (findGalleryCardIndex(card_id)) {
+      case null { #Err("Gallery chat card not found") };
+      case (?i) {
+        let existing = galleryChatCards[i];
+        if (not existing.uploader_id.equal(caller) and not isClubStaff(caller, existing.club_id)) return #Err("Card author or club staff required");
+        galleryChatCards := galleryChatCards.filter(func(c) = c.id != card_id);
+        #Ok
+      };
+    }
+  };
+
   public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #Err("Governor only");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
-    if (not bulkAccessPrincipals.any(func(p) = p.equal(principal))) { bulkAccessPrincipals := bulkAccessPrincipals.concat([principal]) };
+    if (not bulkAccessPrincipals.any(func(p) = p.equal(principal))) {
+      if (bulkAccessPrincipals.size() >= MAX_BULK_ACCESS) return #Err("Bulk access limit reached");
+      bulkAccessPrincipals := bulkAccessPrincipals.concat([principal]);
+    };
     #Ok
   };
 
@@ -341,6 +485,6 @@ persistent actor {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 2; governor; assets; capabilities; reactions; comments; roles })
+    #Ok({ schema = 3; governor; assets; capabilities; reactions; comments; roles; galleryChatCards })
   };
 };

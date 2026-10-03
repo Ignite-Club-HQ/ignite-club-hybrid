@@ -61,6 +61,10 @@ service : {
                                   Err: text;
                                   Ok: VaultFolder;
                                 });
+  get_file: (id: text) -> (variant {
+                             Err: text;
+                             Ok: opt VaultFile;
+                           }) query;
   get_folder: (id: text) -> (variant {
                                Err: text;
                                Ok: opt VaultFolder;

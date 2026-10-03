@@ -1,4 +1,5 @@
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 module {
   type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
   type Team = { id : Text; club : Text };
@@ -9,7 +10,8 @@ module {
   type Draft = { url : Text; title : Text; icon : Text; is_active : Bool; open_mode : Text; subtitle : ?Text };
   type Link = { id : Text; sort_order : Nat32; created_at_ms : Nat64; draft : Draft; club_id : Text };
   type Listing = { links : [Link]; revision : Nat64 };
-  type ClubProfile = { id : Text; secondary_color : ?Text; name : Text; slug : Text; description : ?Text; created_at_ms : Nat64; logo_url : ?Text; is_active : Bool; primary_color : ?Text; deleted_at_ms : ?Nat64; playhq_tenant : ?Text; playhq_org_id : ?Text };
+  type OldClubProfile = { id : Text; secondary_color : ?Text; name : Text; slug : Text; description : ?Text; created_at_ms : Nat64; logo_url : ?Text; is_active : Bool; primary_color : ?Text; deleted_at_ms : ?Nat64; playhq_tenant : ?Text; playhq_org_id : ?Text };
+  type ClubProfile = { id : Text; secondary_color : ?Text; name : Text; slug : Text; description : ?Text; created_at_ms : Nat64; logo_url : ?Text; is_active : Bool; primary_color : ?Text; deleted_at_ms : ?Nat64; playhq_tenant : ?Text; playhq_org_id : ?Text; sport : ?Text };
   type ClubSettings = {
     contact_email : ?Text; membership_open : Bool; announcement : ?Text; public_directory : Bool; club_id : Text;
     media_sponsors_enabled : Bool; media_header_sponsors_enabled : Bool; events_sponsor_strip_enabled : Bool; chat_thread_ads_enabled : Bool;
@@ -52,7 +54,7 @@ module {
   };
   type OldActor = {
     var governor : Principal; var acl : Acl; var aclVersion : Nat64;
-    var profiles : [ClubProfile]; var settings : [ClubSettings]; var teams : [ClubTeam]; var sponsors : [ClubSponsor];
+    var profiles : [OldClubProfile]; var settings : [ClubSettings]; var teams : [ClubTeam]; var sponsors : [ClubSponsor];
     var clubListings : [(Text, Listing)]; var frozenClubs : [(Text, Nat64)];
     var accounts : [Account]; var accountExclusions : [AccountExclusion]; var accountFamilies : [Family]; var accountChallenges : [Challenge]; var accountRoles : [AccountRole]; var nextChallengeId : Nat64;
     var mutationLog : [(Text, Text, Mutation)];
@@ -104,7 +106,7 @@ module {
       var governor = old.governor;
       var acl = old.acl;
       var aclVersion = old.aclVersion;
-      var profiles = old.profiles;
+      var profiles = Array.map(old.profiles, func(p : OldClubProfile) : ClubProfile = { p with sport = null });
       var settings = old.settings;
       var teams = old.teams;
       var sponsors = old.sponsors;

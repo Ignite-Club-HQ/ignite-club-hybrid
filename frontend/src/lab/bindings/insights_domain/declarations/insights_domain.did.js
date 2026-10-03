@@ -182,8 +182,7 @@ export const idlFactory = ({ IDL }) => {
     'Comment' : IDL.Null,
     'Reaction' : IDL.Null,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'ad_event_summary' : IDL.Func(
         [IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Vec(AdEventSummary), 'Err' : IDL.Text })],
@@ -285,11 +284,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -484,6 +478,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

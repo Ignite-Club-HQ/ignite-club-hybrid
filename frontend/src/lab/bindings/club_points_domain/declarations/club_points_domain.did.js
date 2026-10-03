@@ -97,8 +97,7 @@ export const idlFactory = ({ IDL }) => {
     'total' : IDL.Nat,
     'items' : IDL.Vec(PointsHistoryEntry),
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -254,11 +253,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'initialize' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
     'listBulkAccessPrincipals' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -318,6 +312,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

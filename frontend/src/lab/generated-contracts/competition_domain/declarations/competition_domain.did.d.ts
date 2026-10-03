@@ -125,59 +125,7 @@ export interface JoinToken {
   'competition_id' : string,
   'expires_at_ms' : bigint,
 }
-export interface Match {
-  'id' : string,
-  'status' : string,
-  'round_number' : [] | [number],
-  'venue' : [] | [string],
-  'duration_minutes' : [] | [number],
-  'home_team' : string,
-  'notes' : [] | [string],
-  'pitch_number' : [] | [string],
-  'scheduled_at_ms' : [] | [bigint],
-  'away_team' : string,
-  'away_score' : number,
-  'division_id' : [] | [string],
-  'home_score' : number,
-  'revision' : bigint,
-  'arrival_minutes_before' : [] | [number],
-  'competition_id' : string,
-}
-export interface RoleGrant {
-  'role' : string,
-  'user' : Principal,
-  'team_id' : [] | [string],
-  'competition_id' : string,
-}
-export interface Season {
-  'status' : string,
-  'name' : string,
-  'divisions' : Array<string>,
-  'revision' : bigint,
-  'competition_id' : string,
-}
-export interface State {
-  'seasons' : Array<Season>,
-  'schema' : number,
-  'eoiSubmissions' : Array<EoiSubmission>,
-  'entries' : Array<TeamEntry>,
-  'matches' : Array<Match>,
-  'tokens' : Array<JoinToken>,
-  'chatSettings' : Array<ChatSettings>,
-  'competitionInvites' : Array<CompetitionInvite>,
-  'governor' : Principal,
-  'competitionJoinLinks' : Array<CompetitionJoinLink>,
-  'competitions' : Array<Competition>,
-  'roles' : Array<RoleGrant>,
-}
-export interface TeamEntry {
-  'status' : string,
-  'team_id' : string,
-  'division_id' : [] | [string],
-  'competition_id' : string,
-  'club_id' : string,
-}
-export interface _SERVICE {
+export interface Main {
   'accept_competition_invite' : ActorMethod<
     [string],
     { 'Ok' : CompetitionInvite } |
@@ -291,7 +239,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'invite_team' : ActorMethod<
     [string, string],
     { 'Ok' : TeamEntry } |
@@ -481,5 +428,58 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface Match {
+  'id' : string,
+  'status' : string,
+  'round_number' : [] | [number],
+  'venue' : [] | [string],
+  'duration_minutes' : [] | [number],
+  'home_team' : string,
+  'notes' : [] | [string],
+  'pitch_number' : [] | [string],
+  'scheduled_at_ms' : [] | [bigint],
+  'away_team' : string,
+  'away_score' : number,
+  'division_id' : [] | [string],
+  'home_score' : number,
+  'revision' : bigint,
+  'arrival_minutes_before' : [] | [number],
+  'competition_id' : string,
+}
+export interface RoleGrant {
+  'role' : string,
+  'user' : Principal,
+  'team_id' : [] | [string],
+  'competition_id' : string,
+}
+export interface Season {
+  'status' : string,
+  'name' : string,
+  'divisions' : Array<string>,
+  'revision' : bigint,
+  'competition_id' : string,
+}
+export interface State {
+  'seasons' : Array<Season>,
+  'schema' : number,
+  'eoiSubmissions' : Array<EoiSubmission>,
+  'entries' : Array<TeamEntry>,
+  'matches' : Array<Match>,
+  'tokens' : Array<JoinToken>,
+  'chatSettings' : Array<ChatSettings>,
+  'competitionInvites' : Array<CompetitionInvite>,
+  'governor' : Principal,
+  'competitionJoinLinks' : Array<CompetitionJoinLink>,
+  'competitions' : Array<Competition>,
+  'roles' : Array<RoleGrant>,
+}
+export interface TeamEntry {
+  'status' : string,
+  'team_id' : string,
+  'division_id' : [] | [string],
+  'competition_id' : string,
+  'club_id' : string,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

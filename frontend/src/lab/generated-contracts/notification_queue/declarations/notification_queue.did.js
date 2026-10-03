@@ -188,8 +188,7 @@ export const idlFactory = ({ IDL }) => {
     'min_notifications' : IDL.Nat32,
     'failure_threshold_percent' : IDL.Nat32,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'acknowledge' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
     'cancel_scheduled' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'claim' : IDL.Func([IDL.Nat64, IDL.Nat16], [Results], []),
@@ -236,11 +235,6 @@ export const idlFactory = ({ IDL }) => {
     'get_push_alert_settings' : IDL.Func([], [PushAlertSettings], ['query']),
     'grant_worker' : IDL.Func(
         [IDL.Principal],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -349,6 +343,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

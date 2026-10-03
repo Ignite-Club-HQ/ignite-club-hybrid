@@ -44,59 +44,7 @@ export interface HistoryPage {
   'items' : Array<PointsHistoryEntry>,
 }
 export interface LeaderboardEntry { 'subject_id' : string, 'points' : number }
-export interface PointsCooldown {
-  'id' : string,
-  'action_type' : string,
-  'awarded_date' : string,
-  'points_awarded' : number,
-  'user_id' : string,
-  'created_at_ms' : bigint,
-  'club_id' : string,
-  'scope_id' : string,
-}
-export interface PointsHistoryEntry {
-  'id' : string,
-  'balance_after' : number,
-  'season_id' : [] | [string],
-  'description' : string,
-  'source_id' : [] | [string],
-  'created_by' : [] | [Principal],
-  'user_id' : [] | [string],
-  'child_id' : [] | [string],
-  'created_at_ms' : bigint,
-  'source_type' : string,
-  'amount' : number,
-  'club_id' : string,
-}
-export interface RewardRedemption {
-  'id' : string,
-  'status' : string,
-  'points_spent' : number,
-  'redeemed_at_ms' : [] | [bigint],
-  'user_id' : [] | [string],
-  'child_id' : [] | [string],
-  'verified_at_ms' : [] | [bigint],
-  'created_at_ms' : bigint,
-  'reward_id' : string,
-  'verified_by' : [] | [Principal],
-  'club_id' : string,
-  'idempotency_key' : [] | [string],
-}
-export interface RoleGrant {
-  'role' : string,
-  'user' : Principal,
-  'team_id' : [] | [string],
-  'club_id' : string,
-}
-export type Subject = { 'User' : string } |
-  { 'Child' : string };
-export interface UserClubPoints {
-  'updated_at_ms' : bigint,
-  'user_id' : string,
-  'club_id' : string,
-  'points' : number,
-}
-export interface _SERVICE {
+export interface Main {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -225,7 +173,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
@@ -285,5 +232,58 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface PointsCooldown {
+  'id' : string,
+  'action_type' : string,
+  'awarded_date' : string,
+  'points_awarded' : number,
+  'user_id' : string,
+  'created_at_ms' : bigint,
+  'club_id' : string,
+  'scope_id' : string,
+}
+export interface PointsHistoryEntry {
+  'id' : string,
+  'balance_after' : number,
+  'season_id' : [] | [string],
+  'description' : string,
+  'source_id' : [] | [string],
+  'created_by' : [] | [Principal],
+  'user_id' : [] | [string],
+  'child_id' : [] | [string],
+  'created_at_ms' : bigint,
+  'source_type' : string,
+  'amount' : number,
+  'club_id' : string,
+}
+export interface RewardRedemption {
+  'id' : string,
+  'status' : string,
+  'points_spent' : number,
+  'redeemed_at_ms' : [] | [bigint],
+  'user_id' : [] | [string],
+  'child_id' : [] | [string],
+  'verified_at_ms' : [] | [bigint],
+  'created_at_ms' : bigint,
+  'reward_id' : string,
+  'verified_by' : [] | [Principal],
+  'club_id' : string,
+  'idempotency_key' : [] | [string],
+}
+export interface RoleGrant {
+  'role' : string,
+  'user' : Principal,
+  'team_id' : [] | [string],
+  'club_id' : string,
+}
+export type Subject = { 'User' : string } |
+  { 'Child' : string };
+export interface UserClubPoints {
+  'updated_at_ms' : bigint,
+  'user_id' : string,
+  'club_id' : string,
+  'points' : number,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

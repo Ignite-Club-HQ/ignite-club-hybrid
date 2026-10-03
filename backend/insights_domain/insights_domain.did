@@ -55,6 +55,264 @@ type PerfAggregate =
    source: text;
    surface: text;
  };
+type Main = 
+ service {
+   ad_event_summary: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec AdEventSummary;
+     }) query;
+   append_audit_log: (action_type: text, table_name: text, target_user_id:
+    opt text, target_user_name: opt text, details: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   client_perf_aggregate: (path: text, metric: opt text, since_ms: nat64,
+    until_ms: nat64) -> (variant {
+                           Err: text;
+                           Ok: ClientPerfAggregate;
+                         }) query;
+   club_engagement_active_users: (club_id: text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec EngagementDayPoint;
+               }) query;
+   club_engagement_benchmarks: (club_id: text, since_ms: nat64, until_ms:
+    nat64, prev_since_ms: nat64, prev_until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: EngagementBenchmarks;
+     }) query;
+   club_engagement_message_volume: (club_id: text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec EngagementDayPoint;
+               }) query;
+   club_engagement_rsvp_completion_series: (club_id: text, since_ms: 
+    nat64, until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec EngagementDayPoint;
+     }) query;
+   club_engagement_sponsor_performance: (club_id: text, since_ms: nat64,
+    until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          clicks: vec EngagementDayPoint;
+          impressions: vec EngagementDayPoint;
+        };
+     }) query;
+   club_engagement_total_unique_reach: (club_id: text, since_ms: nat64,
+    until_ms: nat64) -> (variant {
+                           Err: text;
+                           Ok: nat32;
+                         }) query;
+   club_engagement_totals: (club_id: text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: EngagementTotals;
+               }) query;
+   count_photos: (club_id: text, since_ms: nat64, until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: nat;
+     }) query;
+   create_ad: (input: AppAdInput) -> (variant {
+                                        Err: text;
+                                        Ok: AppAd;
+                                      });
+   create_admin_alert: (alert_type: text, details: text) ->
+    (variant {
+       Err: text;
+       Ok: AdminAlert;
+     });
+   delete_ad: (id: text) -> (variant {
+                               Err: text;
+                               Ok;
+                             });
+   get_ad_setting: (location: text) -> (opt AppAdSetting) query;
+   get_benchmarks: (metric_keys: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Benchmark;
+     }) query;
+   get_sponsor_benchmarks: (sponsor_ids: vec text, since_period: text,
+    until_period: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SponsorBenchmarkRow;
+     }) query;
+   get_sponsor_performance: (sponsor_id: text, period: text) ->
+    (variant {
+       Err: text;
+       Ok: SponsorPerformance;
+     }) query;
+   grant_role: ("principal": principal, role: text, club_id: text, team_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   is_app_admin: () -> (bool) query;
+   list_active_ads: () -> (vec AppAd) query;
+   list_ad_settings: () -> (variant {
+                              Err: text;
+                              Ok: vec AppAdSetting;
+                            }) query;
+   list_admin_alerts: (status: opt AlertStatus) ->
+    (variant {
+       Err: text;
+       Ok: vec AdminAlert;
+     }) query;
+   list_ads: () -> (variant {
+                      Err: text;
+                      Ok: vec AppAd;
+                    }) query;
+   list_audit_logs: (actor_filter: opt principal, action_type: opt text,
+    table_name: opt text, offset: nat32, limit: nat32) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             items: vec AuditLog;
+             total: nat32;
+           };
+     }) query;
+   list_feedback: (status: opt FeedbackStatus, offset: nat32, limit:
+    nat32) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             items: vec Feedback;
+             total: nat32;
+           };
+     }) query;
+   list_user_activity: (club_id: opt text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec UserActivityEntry;
+               }) query;
+   my_feedback: () -> (vec Feedback) query;
+   perf_aggregate: (surface: text, source: opt text, since_ms: nat64,
+    until_ms: nat64) -> (variant {
+                           Err: text;
+                           Ok: PerfAggregate;
+                         }) query;
+   photo_engagement_totals: (photo_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec PhotoEngagementTotal;
+     }) query;
+   record_active_user: (club_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_ad_event: (ad_id: text, event_type: text, context: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_client_perf: (entries: vec ClientPerfEntry) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   record_message_sent: (club_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_perf_sample: (surface: text, source: text, duration_ms: nat32,
+    cache_hit: bool, platform: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   record_perf_samples_batch: (samples: vec PerfSampleInput) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   record_photo_engagement: (photo_id: text, kind: PhotoEngagementKind) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_photo_upload: (club_id: text, photo_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_rsvp_completed: (club_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_sponsor_click: (club_id: text) -> (variant {
+                                               Err: text;
+                                               Ok;
+                                             });
+   record_sponsor_impression: (club_id: text) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+   record_sponsor_metric: (sponsor_id: text, metric: text, delta: float64,
+    account_id: opt text) -> (variant {
+                                Err: text;
+                                Ok;
+                              });
+   record_user_activity: (user_id: text, club_id: opt text, page_path: 
+    text, page_label: text, session_id: text, duration_seconds: nat32) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   record_web_vital: (metric_name: text, metric_value: float64, rating: 
+    text, page_path: text) -> (variant {
+                                 Err: text;
+                                 Ok;
+                               });
+   resolve_admin_alert: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: AdminAlert;
+                                       });
+   set_ad_active: (id: text, is_active: bool) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
+   set_benchmark: (metric_key: text, period: text, value: float64,
+    total_members: opt nat32, dau: opt nat32, wau: opt nat32, mau: opt nat32,
+    posters: opt nat32, read_rate: opt float64) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
+   submit_feedback: (kind: text, title: opt text, message: text, page_url:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: Feedback;
+                  });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   update_ad: (id: text, input: AppAdInput) ->
+    (variant {
+       Err: text;
+       Ok: AppAd;
+     });
+   update_feedback_status: (id: text, status: FeedbackStatus, admin_notes:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: Feedback;
+                  });
+   upsert_ad_setting: (location: text, is_enabled: bool, override_sponsors:
+    bool, show_only_when_no_sponsors: bool) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+ };
 type FeedbackStatus = 
  variant {
    InProgress;
@@ -197,263 +455,4 @@ type AdEventSummary =
    context: text;
    views: nat32;
  };
-service : {
-  ad_event_summary: (since_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: vec AdEventSummary;
-    }) query;
-  append_audit_log: (action_type: text, table_name: text, target_user_id:
-   opt text, target_user_name: opt text, details: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  client_perf_aggregate: (path: text, metric: opt text, since_ms: nat64,
-   until_ms: nat64) -> (variant {
-                          Err: text;
-                          Ok: ClientPerfAggregate;
-                        }) query;
-  club_engagement_active_users: (club_id: text, since_ms: nat64, until_ms:
-   nat64) -> (variant {
-                Err: text;
-                Ok: vec EngagementDayPoint;
-              }) query;
-  club_engagement_benchmarks: (club_id: text, since_ms: nat64, until_ms:
-   nat64, prev_since_ms: nat64, prev_until_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: EngagementBenchmarks;
-    }) query;
-  club_engagement_message_volume: (club_id: text, since_ms: nat64, until_ms:
-   nat64) -> (variant {
-                Err: text;
-                Ok: vec EngagementDayPoint;
-              }) query;
-  club_engagement_rsvp_completion_series: (club_id: text, since_ms: nat64,
-   until_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: vec EngagementDayPoint;
-    }) query;
-  club_engagement_sponsor_performance: (club_id: text, since_ms: nat64,
-   until_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok:
-       record {
-         clicks: vec EngagementDayPoint;
-         impressions: vec EngagementDayPoint;
-       };
-    }) query;
-  club_engagement_total_unique_reach: (club_id: text, since_ms: nat64,
-   until_ms: nat64) -> (variant {
-                          Err: text;
-                          Ok: nat32;
-                        }) query;
-  club_engagement_totals: (club_id: text, since_ms: nat64, until_ms:
-   nat64) -> (variant {
-                Err: text;
-                Ok: EngagementTotals;
-              }) query;
-  count_photos: (club_id: text, since_ms: nat64, until_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: nat;
-    }) query;
-  create_ad: (input: AppAdInput) -> (variant {
-                                       Err: text;
-                                       Ok: AppAd;
-                                     });
-  create_admin_alert: (alert_type: text, details: text) ->
-   (variant {
-      Err: text;
-      Ok: AdminAlert;
-    });
-  delete_ad: (id: text) -> (variant {
-                              Err: text;
-                              Ok;
-                            });
-  get_ad_setting: (location: text) -> (opt AppAdSetting) query;
-  get_benchmarks: (metric_keys: vec text) ->
-   (variant {
-      Err: text;
-      Ok: vec Benchmark;
-    }) query;
-  get_sponsor_benchmarks: (sponsor_ids: vec text, since_period: text,
-   until_period: text) ->
-   (variant {
-      Err: text;
-      Ok: vec SponsorBenchmarkRow;
-    }) query;
-  get_sponsor_performance: (sponsor_id: text, period: text) ->
-   (variant {
-      Err: text;
-      Ok: SponsorPerformance;
-    }) query;
-  grant_role: ("principal": principal, role: text, club_id: text, team_id:
-   opt text) -> (variant {
-                   Err: text;
-                   Ok;
-                 });
-  initialize: () -> (variant {
-                       Err: text;
-                       Ok;
-                     });
-  is_app_admin: () -> (bool) query;
-  list_active_ads: () -> (vec AppAd) query;
-  list_ad_settings: () -> (variant {
-                             Err: text;
-                             Ok: vec AppAdSetting;
-                           }) query;
-  list_admin_alerts: (status: opt AlertStatus) ->
-   (variant {
-      Err: text;
-      Ok: vec AdminAlert;
-    }) query;
-  list_ads: () -> (variant {
-                     Err: text;
-                     Ok: vec AppAd;
-                   }) query;
-  list_audit_logs: (actor_filter: opt principal, action_type: opt text,
-   table_name: opt text, offset: nat32, limit: nat32) ->
-   (variant {
-      Err: text;
-      Ok: record {
-            items: vec AuditLog;
-            total: nat32;
-          };
-    }) query;
-  list_feedback: (status: opt FeedbackStatus, offset: nat32, limit: nat32) ->
-   (variant {
-      Err: text;
-      Ok: record {
-            items: vec Feedback;
-            total: nat32;
-          };
-    }) query;
-  list_user_activity: (club_id: opt text, since_ms: nat64, until_ms:
-   nat64) -> (variant {
-                Err: text;
-                Ok: vec UserActivityEntry;
-              }) query;
-  my_feedback: () -> (vec Feedback) query;
-  perf_aggregate: (surface: text, source: opt text, since_ms: nat64,
-   until_ms: nat64) -> (variant {
-                          Err: text;
-                          Ok: PerfAggregate;
-                        }) query;
-  photo_engagement_totals: (photo_ids: vec text) ->
-   (variant {
-      Err: text;
-      Ok: vec PhotoEngagementTotal;
-    }) query;
-  record_active_user: (club_id: text, account_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_ad_event: (ad_id: text, event_type: text, context: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_client_perf: (entries: vec ClientPerfEntry) ->
-   (variant {
-      Err: text;
-      Ok: nat32;
-    });
-  record_message_sent: (club_id: text, account_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_perf_sample: (surface: text, source: text, duration_ms: nat32,
-   cache_hit: bool, platform: text) -> (variant {
-                                          Err: text;
-                                          Ok;
-                                        });
-  record_perf_samples_batch: (samples: vec PerfSampleInput) ->
-   (variant {
-      Err: text;
-      Ok: nat32;
-    });
-  record_photo_engagement: (photo_id: text, kind: PhotoEngagementKind) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_photo_upload: (club_id: text, photo_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_rsvp_completed: (club_id: text, account_id: text) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_sponsor_click: (club_id: text) -> (variant {
-                                              Err: text;
-                                              Ok;
-                                            });
-  record_sponsor_impression: (club_id: text) -> (variant {
-                                                   Err: text;
-                                                   Ok;
-                                                 });
-  record_sponsor_metric: (sponsor_id: text, metric: text, delta: float64,
-   account_id: opt text) -> (variant {
-                               Err: text;
-                               Ok;
-                             });
-  record_user_activity: (user_id: text, club_id: opt text, page_path: 
-   text, page_label: text, session_id: text, duration_seconds: nat32) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  record_web_vital: (metric_name: text, metric_value: float64, rating: 
-   text, page_path: text) -> (variant {
-                                Err: text;
-                                Ok;
-                              });
-  resolve_admin_alert: (id: text) -> (variant {
-                                        Err: text;
-                                        Ok: AdminAlert;
-                                      });
-  set_ad_active: (id: text, is_active: bool) -> (variant {
-                                                   Err: text;
-                                                   Ok;
-                                                 });
-  set_benchmark: (metric_key: text, period: text, value: float64,
-   total_members: opt nat32, dau: opt nat32, wau: opt nat32, mau: opt nat32,
-   posters: opt nat32, read_rate: opt float64) -> (variant {
-                                                     Err: text;
-                                                     Ok;
-                                                   });
-  submit_feedback: (kind: text, title: opt text, message: text, page_url:
-   opt text) -> (variant {
-                   Err: text;
-                   Ok: Feedback;
-                 });
-  transfer_governorship: (new_governor: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  update_ad: (id: text, input: AppAdInput) ->
-   (variant {
-      Err: text;
-      Ok: AppAd;
-    });
-  update_feedback_status: (id: text, status: FeedbackStatus, admin_notes:
-   opt text) -> (variant {
-                   Err: text;
-                   Ok: Feedback;
-                 });
-  upsert_ad_setting: (location: text, is_enabled: bool, override_sponsors:
-   bool, show_only_when_no_sponsors: bool) -> (variant {
-                                                 Err: text;
-                                                 Ok;
-                                               });
-}
+service : (governorInit: principal) -> Main

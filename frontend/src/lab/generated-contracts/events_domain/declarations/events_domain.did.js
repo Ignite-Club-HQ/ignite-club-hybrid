@@ -342,8 +342,7 @@ export const idlFactory = ({ IDL }) => {
     'api_key' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -658,11 +657,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
-    'initialize' : IDL.Func(
-        [],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
     'is_guardian_of' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -951,6 +945,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : PitchBoardSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'send_event_reminders' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat16, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_attendance' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
         [IDL.Variant({ 'Ok' : Attendance, 'Err' : IDL.Text })],
@@ -993,6 +992,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeagueRsvp, 'Err' : IDL.Text })],
         [],
       ),
+    'set_notification_queue_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_playhq_config' : IDL.Func(
         [IDL.Opt(PlayHQConfig)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1014,6 +1018,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_rsvp' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_rsvp_note' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
         [],
@@ -1074,6 +1083,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

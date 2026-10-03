@@ -51,184 +51,7 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export interface Benchmark {
-    dau?: number;
-    mau?: number;
-    wau?: number;
-    posters?: number;
-    value: number;
-    period: string;
-    read_rate?: number;
-    updated_at_ms: bigint;
-    total_members?: number;
-    metric_key: string;
-}
-export interface PerfSampleInput {
-    source: string;
-    cache_hit: boolean;
-    surface: string;
-    platform: string;
-    duration_ms: number;
-}
-export interface AuditLog {
-    id: string;
-    target_user_name?: string;
-    action_type: string;
-    actor_id: Principal;
-    created_at_ms: bigint;
-    details: string;
-    table_name: string;
-    target_user_id?: string;
-}
-export interface AppAdSetting {
-    is_enabled: boolean;
-    updated_at_ms: bigint;
-    override_sponsors: boolean;
-    show_only_when_no_sponsors: boolean;
-    location: string;
-}
-export interface AdminAlert {
-    id: string;
-    status: AlertStatus;
-    alert_type: string;
-    created_at_ms: bigint;
-    details: string;
-    resolved_at_ms?: bigint;
-    resolved_by?: Principal;
-}
-export interface SponsorBenchmarkRow {
-    ctr: number;
-    clicks: number;
-    impressions: number;
-    sponsor_id: string;
-    unique_reach: number;
-}
-export interface PhotoEngagementTotal {
-    views: bigint;
-    photo_id: string;
-    comments: bigint;
-    reactions: bigint;
-}
-export interface Feedback {
-    id: string;
-    status: FeedbackStatus;
-    title?: string;
-    kind: string;
-    user: Principal;
-    page_url?: string;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-    message: string;
-    admin_notes?: string;
-}
-export interface EngagementBenchmarks {
-    previous: EngagementTotals;
-    current: EngagementTotals;
-    club_id: string;
-}
-export interface PerfAggregate {
-    source: string;
-    count: number;
-    surface: string;
-    p50_ms: number;
-    p95_ms: number;
-    avg_ms: number;
-}
-export interface ClientPerfAggregate {
-    path: string;
-    count: number;
-    p50_ms: number;
-    p95_ms: number;
-    avg_ms: number;
-}
-export interface AppAdInput {
-    link_url?: string;
-    subtext?: string;
-    image_url?: string;
-    text_color?: string;
-    headline?: string;
-    name: string;
-    description?: string;
-    logo_url?: string;
-    cta_label?: string;
-    ad_type: string;
-    bg_color?: string;
-}
-export interface EngagementDayPoint {
-    day: string;
-    value: number;
-}
-export interface AdEventSummary {
-    clicks: number;
-    context: string;
-    ad_id: string;
-    views: number;
-}
-export interface EngagementTotals {
-    messages: number;
-    sponsor_clicks: number;
-    active_users: number;
-    sponsor_impressions: number;
-    club_id: string;
-    rsvps: number;
-}
-export interface ClientPerfEntry {
-    metric: string;
-    principal: Principal;
-    at_ms: bigint;
-    path: string;
-    value_ms: number;
-}
-export interface AppAd {
-    id: string;
-    link_url?: string;
-    subtext?: string;
-    image_url?: string;
-    text_color?: string;
-    headline?: string;
-    name: string;
-    description?: string;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-    logo_url?: string;
-    cta_label?: string;
-    is_active: boolean;
-    ad_type: string;
-    display_order: number;
-    bg_color?: string;
-}
-export interface UserActivityEntry {
-    page_path: string;
-    started_at_ms: bigint;
-    session_id: string;
-    duration_seconds: number;
-    user_id: string;
-    club_id?: string;
-    page_label: string;
-}
-export interface SponsorPerformance {
-    metrics: Array<{
-        metric: string;
-        value: number;
-    }>;
-    period: string;
-    sponsor_id: string;
-}
-export enum AlertStatus {
-    Open = "Open",
-    Resolved = "Resolved"
-}
-export enum FeedbackStatus {
-    Open = "Open",
-    InProgress = "InProgress",
-    Resolved = "Resolved"
-}
-export enum PhotoEngagementKind {
-    View = "View",
-    Comment = "Comment",
-    Reaction = "Reaction"
-}
-export interface insights_domainInterface {
+export interface MainInterface {
     ad_event_summary(since_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Array<AdEventSummary>;
@@ -353,13 +176,6 @@ export interface insights_domainInterface {
         Err: string;
     }>;
     grant_role(principal: Principal, role: string, club_id: string, team_id: string | null): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
         __kind__: "Ok";
         Ok: null;
     } | {
@@ -586,6 +402,185 @@ export interface insights_domainInterface {
         Err: string;
     }>;
 }
+export interface PerfSampleInput {
+    source: string;
+    cache_hit: boolean;
+    surface: string;
+    platform: string;
+    duration_ms: number;
+}
+export interface Benchmark {
+    dau?: number;
+    mau?: number;
+    wau?: number;
+    posters?: number;
+    value: number;
+    period: string;
+    read_rate?: number;
+    updated_at_ms: bigint;
+    total_members?: number;
+    metric_key: string;
+}
+export interface AuditLog {
+    id: string;
+    target_user_name?: string;
+    action_type: string;
+    actor_id: Principal;
+    created_at_ms: bigint;
+    details: string;
+    table_name: string;
+    target_user_id?: string;
+}
+export interface AppAdSetting {
+    is_enabled: boolean;
+    updated_at_ms: bigint;
+    override_sponsors: boolean;
+    show_only_when_no_sponsors: boolean;
+    location: string;
+}
+export interface AdminAlert {
+    id: string;
+    status: AlertStatus;
+    alert_type: string;
+    created_at_ms: bigint;
+    details: string;
+    resolved_at_ms?: bigint;
+    resolved_by?: Principal;
+}
+export interface SponsorBenchmarkRow {
+    ctr: number;
+    clicks: number;
+    impressions: number;
+    sponsor_id: string;
+    unique_reach: number;
+}
+export interface PhotoEngagementTotal {
+    views: bigint;
+    photo_id: string;
+    comments: bigint;
+    reactions: bigint;
+}
+export interface Feedback {
+    id: string;
+    status: FeedbackStatus;
+    title?: string;
+    kind: string;
+    user: Principal;
+    page_url?: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    message: string;
+    admin_notes?: string;
+}
+export interface EngagementBenchmarks {
+    previous: EngagementTotals;
+    current: EngagementTotals;
+    club_id: string;
+}
+export interface PerfAggregate {
+    source: string;
+    count: number;
+    surface: string;
+    p50_ms: number;
+    p95_ms: number;
+    avg_ms: number;
+}
+export interface ClientPerfAggregate {
+    path: string;
+    count: number;
+    p50_ms: number;
+    p95_ms: number;
+    avg_ms: number;
+}
+export interface AppAdInput {
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    logo_url?: string;
+    cta_label?: string;
+    ad_type: string;
+    bg_color?: string;
+}
+export interface EngagementDayPoint {
+    day: string;
+    value: number;
+}
+export interface AdEventSummary {
+    clicks: number;
+    context: string;
+    ad_id: string;
+    views: number;
+}
+export interface EngagementTotals {
+    messages: number;
+    sponsor_clicks: number;
+    active_users: number;
+    sponsor_impressions: number;
+    club_id: string;
+    rsvps: number;
+}
+export interface ClientPerfEntry {
+    metric: string;
+    principal: Principal;
+    at_ms: bigint;
+    path: string;
+    value_ms: number;
+}
+export interface AppAd {
+    id: string;
+    link_url?: string;
+    subtext?: string;
+    image_url?: string;
+    text_color?: string;
+    headline?: string;
+    name: string;
+    description?: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    logo_url?: string;
+    cta_label?: string;
+    is_active: boolean;
+    ad_type: string;
+    display_order: number;
+    bg_color?: string;
+}
+export interface UserActivityEntry {
+    page_path: string;
+    started_at_ms: bigint;
+    session_id: string;
+    duration_seconds: number;
+    user_id: string;
+    club_id?: string;
+    page_label: string;
+}
+export interface SponsorPerformance {
+    metrics: Array<{
+        metric: string;
+        value: number;
+    }>;
+    period: string;
+    sponsor_id: string;
+}
+export enum AlertStatus {
+    Open = "Open",
+    Resolved = "Resolved"
+}
+export enum FeedbackStatus {
+    Open = "Open",
+    InProgress = "InProgress",
+    Resolved = "Resolved"
+}
+export enum PhotoEngagementKind {
+    View = "View",
+    Comment = "Comment",
+    Reaction = "Reaction"
+}
+export interface insights_domainInterface extends MainInterface {
+}
 import type { AdEventSummary as _AdEventSummary, AdminAlert as _AdminAlert, AlertStatus as _AlertStatus, AppAd as _AppAd, AppAdInput as _AppAdInput, AppAdSetting as _AppAdSetting, AuditLog as _AuditLog, Benchmark as _Benchmark, ClientPerfAggregate as _ClientPerfAggregate, EngagementBenchmarks as _EngagementBenchmarks, EngagementDayPoint as _EngagementDayPoint, EngagementTotals as _EngagementTotals, Feedback as _Feedback, FeedbackStatus as _FeedbackStatus, PerfAggregate as _PerfAggregate, PhotoEngagementKind as _PhotoEngagementKind, PhotoEngagementTotal as _PhotoEngagementTotal, SponsorBenchmarkRow as _SponsorBenchmarkRow, SponsorPerformance as _SponsorPerformance, UserActivityEntry as _UserActivityEntry } from "./declarations/insights_domain.did";
 export class Insights_domain implements insights_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
@@ -774,16 +769,6 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_role(arg0, arg1, arg2, to_candid_opt_n2(arg3));
-        return from_candid_variant_n3(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n3(result);
     }
     async is_app_admin(): Promise<boolean> {

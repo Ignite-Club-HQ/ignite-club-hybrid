@@ -58,6 +58,62 @@ export type PreferencesPageResult = {
     __kind__: "Err";
     Err: string;
 };
+export interface MainInterface {
+    acknowledge(id: string, key: string): Promise<Result>;
+    cancel_scheduled(id: string, author: string): Promise<ScheduledResult>;
+    claim(now_ms: bigint, limit: number): Promise<Results>;
+    clear_inbox(user: string, club: string | null): Promise<ResultNat16>;
+    delete_notification(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    due_scheduled(now_ms: bigint, limit: number): Promise<ScheduledResults>;
+    enqueue(id: string, user: string, club: string, kind: string, body: string, key: string): Promise<Result>;
+    fail(id: string, error: string, retry_at_ms: bigint | null): Promise<Result>;
+    fan_out(users: Array<string>, club: string, kind: string, body: string, key_prefix: string, related_id: string | null): Promise<ResultNat16>;
+    get_digest(source: DigestSource, chat_scope_id: string, since_ms: bigint, limit: number): Promise<DigestResults>;
+    get_notification(id: string): Promise<Notification | null>;
+    get_preferences(user: string): Promise<Preferences>;
+    get_push_alert_settings(): Promise<PushAlertSettings>;
+    grant_worker(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_inbox(user: string, club: string | null, limit: number): Promise<Results>;
+    list_preferences_by_club(club_id: string, limit: number, offset: number): Promise<PreferencesPageResult>;
+    list_scheduled(author: string, target: string | null): Promise<ScheduledResults>;
+    mark_all_read(user: string, club: string | null): Promise<ResultNat16>;
+    mark_failed(id: string, error: string): Promise<ScheduledResult>;
+    mark_read(id: string): Promise<Result>;
+    mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
+    record_chat_notify_batch(message_id: string, conversation_id: string, sender: string, preview: string, recipients: Array<string>, mute_list: Array<string>): Promise<ChatNotifyBatchResult>;
+    record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
+    recover(): Promise<ResultNat16>;
+    schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
+    set_messaging_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    update_scheduled_message(id: string, author: string, body: string | null, image_url: string | null, scheduled_for_ms: bigint | null, recurrence: Recurrence | null, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
+    upsert_preferences(user: string, input: PreferencesInput): Promise<PreferencesResult>;
+    upsert_push_alert_settings(input: PushAlertSettingsInput): Promise<PushAlertSettings>;
+}
 export interface PreferencesInput {
     email_pitch_board_enabled: boolean;
     admin_enabled: boolean;
@@ -269,68 +325,7 @@ export enum Status {
     Processing = "Processing",
     Pending = "Pending"
 }
-export interface notification_queueInterface {
-    acknowledge(id: string, key: string): Promise<Result>;
-    cancel_scheduled(id: string, author: string): Promise<ScheduledResult>;
-    claim(now_ms: bigint, limit: number): Promise<Results>;
-    clear_inbox(user: string, club: string | null): Promise<ResultNat16>;
-    delete_notification(id: string): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    due_scheduled(now_ms: bigint, limit: number): Promise<ScheduledResults>;
-    enqueue(id: string, user: string, club: string, kind: string, body: string, key: string): Promise<Result>;
-    fail(id: string, error: string, retry_at_ms: bigint | null): Promise<Result>;
-    fan_out(users: Array<string>, club: string, kind: string, body: string, key_prefix: string, related_id: string | null): Promise<ResultNat16>;
-    get_digest(source: DigestSource, chat_scope_id: string, since_ms: bigint, limit: number): Promise<DigestResults>;
-    get_notification(id: string): Promise<Notification | null>;
-    get_preferences(user: string): Promise<Preferences>;
-    get_push_alert_settings(): Promise<PushAlertSettings>;
-    grant_worker(principal: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    list_inbox(user: string, club: string | null, limit: number): Promise<Results>;
-    list_preferences_by_club(club_id: string, limit: number, offset: number): Promise<PreferencesPageResult>;
-    list_scheduled(author: string, target: string | null): Promise<ScheduledResults>;
-    mark_all_read(user: string, club: string | null): Promise<ResultNat16>;
-    mark_failed(id: string, error: string): Promise<ScheduledResult>;
-    mark_read(id: string): Promise<Result>;
-    mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
-    record_chat_notify_batch(message_id: string, conversation_id: string, sender: string, preview: string, recipients: Array<string>, mute_list: Array<string>): Promise<ChatNotifyBatchResult>;
-    record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
-    recover(): Promise<ResultNat16>;
-    schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
-    set_messaging_domain_canister(id: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    transfer_governorship(new_governor: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    update_scheduled_message(id: string, author: string, body: string | null, image_url: string | null, scheduled_for_ms: bigint | null, recurrence: Recurrence | null, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
-    upsert_preferences(user: string, input: PreferencesInput): Promise<PreferencesResult>;
-    upsert_push_alert_settings(input: PushAlertSettingsInput): Promise<PushAlertSettings>;
+export interface notification_queueInterface extends MainInterface {
 }
 import type { ChatNotifyBatchResult as _ChatNotifyBatchResult, ChatType as _ChatType, DigestClassification as _DigestClassification, DigestItem as _DigestItem, DigestResult as _DigestResult, DigestResults as _DigestResults, DigestSource as _DigestSource, Notification as _Notification, Preferences as _Preferences, PreferencesPage as _PreferencesPage, PreferencesPageResult as _PreferencesPageResult, PreferencesResult as _PreferencesResult, PushAlertSettings as _PushAlertSettings, Recurrence as _Recurrence, Result as _Result, ResultNat16 as _ResultNat16, Results as _Results, ScheduledMessage as _ScheduledMessage, ScheduledResult as _ScheduledResult, ScheduledResults as _ScheduledResults, ScheduledStatus as _ScheduledStatus, Status as _Status } from "./declarations/notification_queue.did";
 export class Notification_queue implements notification_queueInterface {
@@ -401,16 +396,6 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_worker(arg0);
-        return from_candid_variant_n25(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
         return from_candid_variant_n25(result);
     }
     async list_inbox(arg0: string, arg1: string | null, arg2: number): Promise<Results> {

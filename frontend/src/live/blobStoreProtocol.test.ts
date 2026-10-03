@@ -68,6 +68,7 @@ describe("media_blob_store contract", () => {
       "begin_upload",
       "delete_blob",
       "finalize_upload",
+      "set_club_domain_canister",
       "get_content_hash",
       "health",
       "http_request",

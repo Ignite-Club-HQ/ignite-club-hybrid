@@ -244,101 +244,7 @@ export interface LineupSnapshot {
   'event_id' : string,
   'revision' : bigint,
 }
-export interface MiniLeagueRsvp {
-  'subject' : RsvpSubject,
-  'updated_at_ms' : bigint,
-  'state' : string,
-  'event_id' : string,
-}
-export interface OpenDuty {
-  'id' : string,
-  'claimed_by' : [] | [string],
-  'duty' : string,
-  'created_at_ms' : bigint,
-  'event_id' : string,
-}
-export interface PitchBoardSettings {
-  'max_spread_minutes' : number,
-  'formation' : [] | [string],
-  'rotate_gk_at_halftime' : boolean,
-  'show_lineup_picker' : boolean,
-  'team_id' : string,
-  'rotation_speed' : number,
-  'updated_at_ms' : bigint,
-  'team_size' : number,
-  'disable_batch_subs' : boolean,
-  'minutes_per_half' : number,
-  'disable_position_swaps' : boolean,
-  'show_match_header' : boolean,
-}
-export interface PlayHQCompetition {
-  'id' : string,
-  'name' : string,
-  'season' : [] | [string],
-}
-export interface PlayHQConfig {
-  'base_url' : string,
-  'api_key' : string,
-  'updated_at_ms' : bigint,
-}
-export interface PlayHQMatch {
-  'external_away_team_id' : [] | [string],
-  'external_home_team_id' : [] | [string],
-  'away_team_name' : [] | [string],
-  'home_team_name' : [] | [string],
-}
-export interface PushReachability {
-  'user' : Principal,
-  'updated_at_ms' : bigint,
-  'reachable' : boolean,
-}
-export interface Recurrence {
-  'until_ms' : bigint,
-  'frequency' : string,
-  'event_id' : string,
-}
-export interface ReminderLog {
-  'id' : string,
-  'sent_at_ms' : bigint,
-  'recipient' : string,
-  'event_id' : string,
-  'channel' : string,
-}
-export interface RoleGrant {
-  'role' : string,
-  'user' : Principal,
-  'team_id' : [] | [string],
-  'club_id' : string,
-}
-export interface RosterEntry {
-  'account_id' : string,
-  'child_id' : [] | [string],
-  'event_id' : string,
-}
-export interface Rsvp {
-  'account_id' : string,
-  'source' : string,
-  'updated_at_ms' : bigint,
-  'child_id' : [] | [string],
-  'state' : string,
-  'notes' : string,
-  'event_id' : string,
-  'has_paid' : [] | [boolean],
-}
-export type RsvpSubject = { 'account' : string } |
-  { 'mini_league_player' : string };
-export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
-export interface TeamTrainingPause {
-  'id' : string,
-  'team_id' : string,
-  'created_by' : Principal,
-  'starts_at_ms' : bigint,
-  'created_at_ms' : bigint,
-  'ends_at_ms' : bigint,
-  'club_id' : string,
-  'reason' : string,
-}
-export interface _SERVICE {
+export interface Main {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -610,7 +516,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'is_guardian_of' : ActorMethod<[Principal, string], boolean>,
   'is_paused' : ActorMethod<
     [string, string, bigint],
@@ -855,6 +760,11 @@ export interface _SERVICE {
     { 'Ok' : PitchBoardSettings } |
       { 'Err' : string }
   >,
+  'send_event_reminders' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
@@ -897,6 +807,11 @@ export interface _SERVICE {
     { 'Ok' : MiniLeagueRsvp } |
       { 'Err' : string }
   >,
+  'set_notification_queue_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_playhq_config' : ActorMethod<
     [[] | [PlayHQConfig]],
     { 'Ok' : null } |
@@ -918,6 +833,11 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
   'set_rsvp' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'set_rsvp_note' : ActorMethod<
     [string, string, string],
     { 'Ok' : Rsvp } |
       { 'Err' : string }
@@ -963,5 +883,100 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface MiniLeagueRsvp {
+  'subject' : RsvpSubject,
+  'updated_at_ms' : bigint,
+  'state' : string,
+  'event_id' : string,
+}
+export interface OpenDuty {
+  'id' : string,
+  'claimed_by' : [] | [string],
+  'duty' : string,
+  'created_at_ms' : bigint,
+  'event_id' : string,
+}
+export interface PitchBoardSettings {
+  'max_spread_minutes' : number,
+  'formation' : [] | [string],
+  'rotate_gk_at_halftime' : boolean,
+  'show_lineup_picker' : boolean,
+  'team_id' : string,
+  'rotation_speed' : number,
+  'updated_at_ms' : bigint,
+  'team_size' : number,
+  'disable_batch_subs' : boolean,
+  'minutes_per_half' : number,
+  'disable_position_swaps' : boolean,
+  'show_match_header' : boolean,
+}
+export interface PlayHQCompetition {
+  'id' : string,
+  'name' : string,
+  'season' : [] | [string],
+}
+export interface PlayHQConfig {
+  'base_url' : string,
+  'api_key' : string,
+  'updated_at_ms' : bigint,
+}
+export interface PlayHQMatch {
+  'external_away_team_id' : [] | [string],
+  'external_home_team_id' : [] | [string],
+  'away_team_name' : [] | [string],
+  'home_team_name' : [] | [string],
+}
+export interface PushReachability {
+  'user' : Principal,
+  'updated_at_ms' : bigint,
+  'reachable' : boolean,
+}
+export interface Recurrence {
+  'until_ms' : bigint,
+  'frequency' : string,
+  'event_id' : string,
+}
+export interface ReminderLog {
+  'id' : string,
+  'sent_at_ms' : bigint,
+  'recipient' : string,
+  'event_id' : string,
+  'channel' : string,
+}
+export interface RoleGrant {
+  'role' : string,
+  'user' : Principal,
+  'team_id' : [] | [string],
+  'club_id' : string,
+}
+export interface RosterEntry {
+  'account_id' : string,
+  'child_id' : [] | [string],
+  'event_id' : string,
+}
+export interface Rsvp {
+  'account_id' : string,
+  'source' : string,
+  'updated_at_ms' : bigint,
+  'child_id' : [] | [string],
+  'state' : string,
+  'notes' : string,
+  'event_id' : string,
+  'has_paid' : [] | [boolean],
+}
+export type RsvpSubject = { 'account' : string } |
+  { 'mini_league_player' : string };
+export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
+export interface TeamTrainingPause {
+  'id' : string,
+  'team_id' : string,
+  'created_by' : Principal,
+  'starts_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'ends_at_ms' : bigint,
+  'club_id' : string,
+  'reason' : string,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

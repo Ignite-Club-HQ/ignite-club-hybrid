@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveVaultFolder } from "@/live/features/vault";
+import { getLiveVaultFolder, getLiveVaultFile } from "@/live/features/vault";
 import { getLiveTeam, getLiveClubProfile } from "@/live/features/club";
 import { toast } from "sonner";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
@@ -96,22 +96,40 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
 
   // File card
   const fileQuery = useQuery({
-    queryKey: ["vault-file-card", fileId],
+    queryKey: ["vault-file-card", fileId, vaultIcp],
     queryFn: async () => {
       if (!fileId) return null;
-      // NEEDS-CANISTER: vault_domain exposes no file-by-id query (files are
-      // listed per folder), so the file card cannot resolve under ICP. The
-      // card is hidden for II users below rather than firing Supabase.
-      if (vaultIcp) return null;
-      const { data, error } = await supabase
-        .from("vault_files")
-        .select("id, name, file_url, file_type, file_size, is_external_link, club_id, team_id, folder_id, deleted_at")
-        .eq("id", fileId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("vault", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("vault_files")
+            .select("id, name, file_url, file_type, file_size, is_external_link, club_id, team_id, folder_id, deleted_at")
+            .eq("id", fileId)
+            .maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        // Internet Identity users: resolve the file from vault_domain.
+        icp: async (ctx) => {
+          const f = await getLiveVaultFile(ctx, fileId);
+          if (!f) return null;
+          const team = (f as { team?: string[] }).team;
+          return {
+            id: f.id,
+            name: f.name,
+            file_url: f.file_url,
+            file_type: f.mime,
+            file_size: Number(f.size),
+            is_external_link: f.is_external_link,
+            club_id: f.club,
+            team_id: team?.[0] ?? null,
+            folder_id: f.folder_id,
+            deleted_at: null,
+          };
+        },
+      });
     },
-    enabled: !!fileId && !vaultIcp,
+    enabled: !!fileId,
     staleTime: 60 * 1000,
   });
 
@@ -256,9 +274,6 @@ export const VaultFileCard = memo(function VaultFileCard({ fileId, folderId, roo
   }
 
   if (fileId) {
-    // Hidden for II users (no canister file-by-id query) — never render a
-    // "File unavailable" degraded state for a vault that is simply unrouted.
-    if (vaultIcp) return null;
     if (fileQuery.isLoading) {
       return (
         <div

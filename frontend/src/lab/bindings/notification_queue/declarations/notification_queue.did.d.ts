@@ -43,6 +43,117 @@ export type DigestResults = { 'Ok' : Array<DigestItem> } |
 export type DigestSource = { 'Club' : null } |
   { 'Group' : null } |
   { 'Team' : null };
+export interface Main {
+  'acknowledge' : ActorMethod<[string, string], Result>,
+  'cancel_scheduled' : ActorMethod<[string, string], ScheduledResult>,
+  'claim' : ActorMethod<[bigint, number], Results>,
+  'clear_inbox' : ActorMethod<[string, [] | [string]], ResultNat16>,
+  'delete_notification' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'due_scheduled' : ActorMethod<[bigint, number], ScheduledResults>,
+  'enqueue' : ActorMethod<
+    [string, string, string, string, string, string],
+    Result
+  >,
+  'fail' : ActorMethod<[string, string, [] | [bigint]], Result>,
+  'fan_out' : ActorMethod<
+    [Array<string>, string, string, string, string, [] | [string]],
+    ResultNat16
+  >,
+  'get_digest' : ActorMethod<
+    [DigestSource, string, bigint, number],
+    DigestResults
+  >,
+  'get_notification' : ActorMethod<[string], [] | [Notification]>,
+  'get_preferences' : ActorMethod<[string], Preferences>,
+  'get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
+  'grant_worker' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
+  'list_preferences_by_club' : ActorMethod<
+    [string, number, number],
+    PreferencesPageResult
+  >,
+  'list_scheduled' : ActorMethod<[string, [] | [string]], ScheduledResults>,
+  'mark_all_read' : ActorMethod<[string, [] | [string]], ResultNat16>,
+  'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
+  'mark_read' : ActorMethod<[string], Result>,
+  'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'record_chat_notify_batch' : ActorMethod<
+    [string, string, string, string, Array<string>, Array<string>],
+    ChatNotifyBatchResult
+  >,
+  'record_digest_item' : ActorMethod<
+    [
+      string,
+      string,
+      DigestSource,
+      string,
+      bigint,
+      DigestClassification,
+      string,
+      [] | [string],
+      Array<string>,
+      [] | [string],
+    ],
+    DigestResult
+  >,
+  'recover' : ActorMethod<[], ResultNat16>,
+  'schedule_message' : ActorMethod<
+    [
+      string,
+      string,
+      ChatType,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      string,
+      [] | [string],
+      [] | [string],
+      bigint,
+      Recurrence,
+      [] | [bigint],
+    ],
+    ScheduledResult
+  >,
+  'set_messaging_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'transfer_governorship' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'update_scheduled_message' : ActorMethod<
+    [
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [bigint],
+      [] | [Recurrence],
+      [] | [bigint],
+    ],
+    ScheduledResult
+  >,
+  'upsert_preferences' : ActorMethod<
+    [string, PreferencesInput],
+    PreferencesResult
+  >,
+  'upsert_push_alert_settings' : ActorMethod<
+    [PushAlertSettingsInput],
+    PushAlertSettings
+  >,
+}
 export interface Notification {
   'id' : string,
   'status' : Status,
@@ -166,117 +277,6 @@ export type Status = { 'Failed' : null } |
   { 'Delivered' : null } |
   { 'Processing' : null } |
   { 'Pending' : null };
-export interface _SERVICE {
-  'acknowledge' : ActorMethod<[string, string], Result>,
-  'cancel_scheduled' : ActorMethod<[string, string], ScheduledResult>,
-  'claim' : ActorMethod<[bigint, number], Results>,
-  'clear_inbox' : ActorMethod<[string, [] | [string]], ResultNat16>,
-  'delete_notification' : ActorMethod<
-    [string],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'due_scheduled' : ActorMethod<[bigint, number], ScheduledResults>,
-  'enqueue' : ActorMethod<
-    [string, string, string, string, string, string],
-    Result
-  >,
-  'fail' : ActorMethod<[string, string, [] | [bigint]], Result>,
-  'fan_out' : ActorMethod<
-    [Array<string>, string, string, string, string, [] | [string]],
-    ResultNat16
-  >,
-  'get_digest' : ActorMethod<
-    [DigestSource, string, bigint, number],
-    DigestResults
-  >,
-  'get_notification' : ActorMethod<[string], [] | [Notification]>,
-  'get_preferences' : ActorMethod<[string], Preferences>,
-  'get_push_alert_settings' : ActorMethod<[], PushAlertSettings>,
-  'grant_worker' : ActorMethod<
-    [Principal],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
-  'list_inbox' : ActorMethod<[string, [] | [string], number], Results>,
-  'list_preferences_by_club' : ActorMethod<
-    [string, number, number],
-    PreferencesPageResult
-  >,
-  'list_scheduled' : ActorMethod<[string, [] | [string]], ScheduledResults>,
-  'mark_all_read' : ActorMethod<[string, [] | [string]], ResultNat16>,
-  'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
-  'mark_read' : ActorMethod<[string], Result>,
-  'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
-  'record_chat_notify_batch' : ActorMethod<
-    [string, string, string, string, Array<string>, Array<string>],
-    ChatNotifyBatchResult
-  >,
-  'record_digest_item' : ActorMethod<
-    [
-      string,
-      string,
-      DigestSource,
-      string,
-      bigint,
-      DigestClassification,
-      string,
-      [] | [string],
-      Array<string>,
-      [] | [string],
-    ],
-    DigestResult
-  >,
-  'recover' : ActorMethod<[], ResultNat16>,
-  'schedule_message' : ActorMethod<
-    [
-      string,
-      string,
-      ChatType,
-      [] | [string],
-      [] | [string],
-      [] | [string],
-      [] | [string],
-      string,
-      [] | [string],
-      [] | [string],
-      bigint,
-      Recurrence,
-      [] | [bigint],
-    ],
-    ScheduledResult
-  >,
-  'set_messaging_domain_canister' : ActorMethod<
-    [Principal],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'transfer_governorship' : ActorMethod<
-    [Principal],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
-  'update_scheduled_message' : ActorMethod<
-    [
-      string,
-      string,
-      [] | [string],
-      [] | [string],
-      [] | [bigint],
-      [] | [Recurrence],
-      [] | [bigint],
-    ],
-    ScheduledResult
-  >,
-  'upsert_preferences' : ActorMethod<
-    [string, PreferencesInput],
-    PreferencesResult
-  >,
-  'upsert_push_alert_settings' : ActorMethod<
-    [PushAlertSettingsInput],
-    PushAlertSettings
-  >,
-}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];
