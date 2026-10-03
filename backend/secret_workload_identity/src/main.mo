@@ -122,14 +122,6 @@ persistent actor class Main(governorInit : Principal) {
 
   // ==================== Public Methods ====================
 
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) {
-      return #Err("Already initialized");
-    };
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
