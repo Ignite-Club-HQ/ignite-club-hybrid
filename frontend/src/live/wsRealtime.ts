@@ -62,17 +62,25 @@ const wsIdlFactory = ({ IDL }: { IDL: any }) => {
  * transforms are delegated straight through, so II delegations keep working.
  */
 class BridgedSignIdentity extends SignIdentity {
-  constructor(private readonly inner: Identity) {
+  // The app's Identity interface only exposes getPrincipal/transformRequest;
+  // II sessions always carry a signing identity, so the extra members are
+  // present at runtime and accessed through this structural view.
+  private readonly signer: Identity & {
+    getPublicKey(): unknown;
+    sign(blob: ArrayBuffer): Promise<unknown>;
+  };
+  constructor(inner: Identity) {
     super();
+    this.signer = inner as BridgedSignIdentity["signer"];
   }
   getPublicKey(): PublicKey {
-    return this.inner.getPublicKey() as unknown as PublicKey;
+    return this.signer.getPublicKey() as PublicKey;
   }
   getPrincipal(): Principal {
-    return Principal.fromText(this.inner.getPrincipal().toText());
+    return Principal.fromText(this.signer.getPrincipal().toText());
   }
   sign(blob: ArrayBuffer): Promise<Uint8Array> {
-    return this.inner.sign(blob) as unknown as Promise<Uint8Array>;
+    return this.signer.sign(blob) as Promise<Uint8Array>;
   }
   transformRequest(request: unknown): Promise<unknown> {
     return (this.inner as unknown as DfinityIdentity).transformRequest(request as never) as Promise<unknown>;
