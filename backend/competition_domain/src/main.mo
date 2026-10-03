@@ -9,7 +9,11 @@ import Time "mo:core/Time";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
-  var governor : Principal = governorInit;
+  var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var competitions : [Types.Competition];
   var entries : [Types.TeamEntry];

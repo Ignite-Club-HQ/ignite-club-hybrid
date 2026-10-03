@@ -2,6 +2,7 @@ import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
+import Option "mo:core/Option";
 import Nat64 "mo:core/Nat64";
 import Int "mo:core/Int";
 import Principal "mo:core/Principal";
@@ -744,6 +745,67 @@ persistent actor (governorInit : Principal) {
     isCompetitionAdminFor(caller, conversation_id)
   };
 
+  // Group listing for club/team chat tabs — the canister counterpart of the
+  // Supabase `chat_groups` table select used by ChatGroupsList. Scoped to
+  // callers with some standing on the club/team (governor/app_admin, a role
+  // grant for that club/team, an explicit club membership record, or
+  // existing membership in one of the matching groups) so browsing a club's
+  // group list cannot be used to probe membership of clubs/teams the caller
+  // has no relationship with.
+  func canBrowseClubGroups(caller : Principal, club_id : Text) : Bool {
+    if (caller.equal(Principal.anonymous())) return false;
+    if (isGovernor(caller) or hasRole(caller, "app_admin", null, null) or hasRole(caller, "club_admin", ?club_id, null)) return true;
+    if (clubMemberships.any(func(m) = m.user.equal(caller) and m.club_id == club_id)) return true;
+    groupMetadata.any(func(m) = m.club_id == ?club_id and m.members.any(func(p) = p.equal(caller)))
+  };
+
+  func canBrowseTeamGroups(caller : Principal, club_id : Text, team_id : Text) : Bool {
+    if (caller.equal(Principal.anonymous())) return false;
+    if (isGovernor(caller) or hasRole(caller, "app_admin", null, null) or hasRole(caller, "club_admin", ?club_id, null) or hasRole(caller, "team_admin", ?club_id, ?team_id) or hasRole(caller, "coach", ?club_id, ?team_id)) return true;
+    groupMetadata.any(func(m) = m.team_id == ?team_id and m.members.any(func(p) = p.equal(caller)))
+  };
+
+  func toGroupSummary(caller : Principal, meta : Types.GroupMetadata) : Types.GroupSummary {
+    {
+      conversation_id = meta.conversation_id;
+      name = meta.name;
+      kind = meta.kind;
+      club_id = meta.club_id;
+      team_id = meta.team_id;
+      avatar = meta.avatar;
+      description = meta.description;
+      member_count = Nat32.fromNat(meta.members.size());
+      is_member = meta.members.any(func(p) = p.equal(caller));
+    }
+  };
+
+  public query ({ caller }) func list_groups_by_club(club_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    if (not valid(club_id)) return #Err("Invalid club id");
+    if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
+    let matches = groupMetadata.filter(func(m) = m.club_id == ?club_id and m.team_id == null and not m.deleted);
+    #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
+  };
+
+  public query ({ caller }) func list_groups_by_team(team_id : Text) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    if (not valid(team_id)) return #Err("Invalid team id");
+    var club_of_team = "";
+    for (m in groupMetadata.values()) { if (m.team_id == ?team_id) { club_of_team := Option.get(m.club_id, "") } };
+    if (not canBrowseTeamGroups(caller, club_of_team, team_id)) return #Err("Team access forbidden");
+    let matches = groupMetadata.filter(func(m) = m.team_id == ?team_id and not m.deleted);
+    #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
+  };
+
+  // Read receipts for a conversation page: `receipts` already stores each
+  // member's read frontier (conversation_id, user, message_id, read) —
+  // updated by mark_read — so no new stable state is needed, only a
+  // conversation-scoped read path. Privacy-scoped to conversation members
+  // (participants or group members) so a caller only sees who has read
+  // messages in conversations they belong to.
+  public query ({ caller }) func list_read_receipts(conversation_id : Text) : async { #Ok : [Types.Receipt]; #Err : Text } {
+    if (not canAccessConversation(caller, conversation_id) and not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    #Ok(receipts.filter(func(r) = r.conversation_id == conversation_id))
+  };
+
   // Aggregated unread counts for every conversation the caller participates
   // in, annotated with each conversation's metadata kind so the frontend can
   // bucket into {teams, clubs, groups, dms, broadcast} without a second
@@ -775,6 +837,12 @@ persistent actor (governorInit : Principal) {
     switch (getGroupMetadataFor(conversation_id)) { case (?m) { m.deleted }; case null { false } }
   };
 
+  // Member-list cap shared by group creation and add_group_members: keeps a
+  // single conversation's fan-out/participant arrays bounded under
+  // user-driven growth (matches the 500-recipient cap used by the chat
+  // notify / WS poke fan-outs).
+  transient let GROUP_MEMBER_LIMIT = 500;
+
   public shared ({ caller }) func create_group_with_roles(
     club_id : Text,
     team_id : ?Text,
@@ -785,6 +853,7 @@ persistent actor (governorInit : Principal) {
     auth(caller);
     if (not valid(club_id) or not valid(name) or not validKind(kind)) return #Err("Invalid group");
     if (role_entries.size() == 0) return #Err("At least one member required");
+    if (role_entries.size() > GROUP_MEMBER_LIMIT) return #Err("Too many members: limit " # Nat.toText(GROUP_MEMBER_LIMIT));
     if (role_entries.any(func((p, r)) = p.equal(Principal.anonymous()) or not validGroupRole(r))) return #Err("Invalid role entry");
     if (not role_entries.any(func((p, _r)) = p.equal(caller))) return #Err("Creator must be a member");
     let members : [Principal] = Array.map<(Principal, Text), Principal>(role_entries, func((p, _r)) = p);
@@ -833,6 +902,7 @@ persistent actor (governorInit : Principal) {
       case (?meta, ?ci) {
         if (meta.deleted) return #Err("Group deleted");
         if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
+        if (meta.members.size() + members.size() > GROUP_MEMBER_LIMIT) return #Err("Too many members: limit " # Nat.toText(GROUP_MEMBER_LIMIT));
         var newMembers = meta.members;
         var newRoles = groupRoles;
         for (m in members.values()) {
@@ -1121,10 +1191,15 @@ persistent actor (governorInit : Principal) {
 
   // ===================== Scheduled messages & attachment metadata =====================
 
+  transient let SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION = 200;
+
   public shared ({ caller }) func register_scheduled_message(conversation_id : Text, body : Text, scheduled_at_ms : Nat64) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not valid(body)) return #Err("Invalid message body");
+    if (scheduledMessages.filter(func(r) = r.conversation_id == conversation_id).size() >= SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION) {
+      return #Err("Scheduled message limit reached: at most " # Nat.toText(SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION) # " per conversation");
+    };
     let rec : Types.ScheduledMessage = {
       id = "sched-" # conversation_id # "-" # Nat.toText(scheduledMessages.size() + 1);
       conversation_id; sender = caller; body; scheduled_at_ms; replayed_at_ms = null; replayed_message_id = null;
@@ -1159,10 +1234,15 @@ persistent actor (governorInit : Principal) {
     }
   };
 
+  transient let ATTACHMENT_METADATA_LIMIT_PER_CONVERSATION = 1000;
+
   public shared ({ caller }) func register_attachment_metadata(conversation_id : Text, message_id : ?Text, kind : Text, ref_id : Text, url : ?Text, size_bytes : ?Nat64) : async { #Ok : Types.AttachmentMetadata; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (not validAttachment({ kind; ref_id; url })) return #Err("Invalid attachment metadata");
+    if (attachmentMetadata.filter(func(a) = a.conversation_id == conversation_id).size() >= ATTACHMENT_METADATA_LIMIT_PER_CONVERSATION) {
+      return #Err("Attachment limit reached: at most " # Nat.toText(ATTACHMENT_METADATA_LIMIT_PER_CONVERSATION) # " per conversation");
+    };
     let rec : Types.AttachmentMetadata = {
       id = "att-" # conversation_id # "-" # Nat.toText(attachmentMetadata.size() + 1);
       conversation_id; message_id; kind; ref_id; url; size_bytes; uploader = caller; created_at_ms = nowMs();
