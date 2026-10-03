@@ -724,6 +724,9 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
 
   const remindMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: the member-list fan-out has no canister shape yet;
+      // the UI entry point is hidden for ICP clubs (hasPro fails closed).
+      if (isFeatureRoutedToIcp("events")) throw new Error("Reminders are not available yet for Internet Identity clubs");
       const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
       const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
       let memberQuery = supabase.from("user_roles").select("user_id");
