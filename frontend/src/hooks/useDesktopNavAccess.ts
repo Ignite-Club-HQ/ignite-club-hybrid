@@ -5,7 +5,8 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants, getLiveTeam } from "@/live/features/club";
+import { myLiveRoleGrants, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
+import { listLiveEvents } from "@/live/features/events";
 
 
 
@@ -101,16 +102,37 @@ export function useDesktopNavAccess() {
       // The pitch board only exists for football/soccer in this build — never
       // surface it for other sports.
       const boardClubIds = new Set<string>();
-      // NEEDS-CANISTER: club sport has no canister field (club_domain
-      // ClubProfile/ClubSettings carry no sport), so the pitch-board sport
-      // check cannot resolve under ICP. boardClubIds stays empty and the
-      // board rail item stays hidden for Internet Identity users — no
-      // Supabase clubs read fires.
-      if (clubIds.length > 0 && !isFeatureRoutedToIcp("membership")) {
-        const { data: clubs } = await supabase.from("clubs").select("id, sport").in("id", clubIds);
-        (clubs || []).forEach((c) => {
-          if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id as string);
-        });
+      if (clubIds.length > 0) {
+        if (isFeatureRoutedToIcp("membership")) {
+          // Internet Identity users: club sport resolves from club_domain
+          // ClubProfile.sport (added this round).
+          const profiles = await withFeatureBackend("membership", {
+            supabase: async () => [] as Array<{ id: string; sport: string | null }>,
+            icp: async (ctx) => {
+              const resolved = await Promise.all(
+                clubIds.map(async (id) => {
+                  try {
+                    const p = await getLiveClubProfile(ctx, id);
+                    const profile = Array.isArray(p) ? p[0] : p;
+                    const sport = (profile as { sport?: [] | [string] } | null | undefined)?.sport;
+                    return { id, sport: sport?.[0] ?? null };
+                  } catch {
+                    return null;
+                  }
+                }),
+              );
+              return resolved.filter((p): p is { id: string; sport: string | null } => !!p);
+            },
+          });
+          profiles.forEach((c) => {
+            if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id);
+          });
+        } else {
+          const { data: clubs } = await supabase.from("clubs").select("id, sport").in("id", clubIds);
+          (clubs || []).forEach((c) => {
+            if (hasGameBoardSupport(c.sport)) boardClubIds.add(c.id as string);
+          });
+        }
       }
 
       // Respect the active club filter: the rail reflects the club the user is
@@ -179,10 +201,29 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
     enabled: enabled && teamIds.length > 0,
     staleTime: 60_000,
     queryFn: async (): Promise<string | null> => {
-      // Under ICP the board rail item is hidden (no canister club-sport
-      // field), so there is never a board target to resolve — fail closed
-      // rather than firing a Supabase events read.
-      if (isFeatureRoutedToIcp("events")) return null;
+      // Under ICP, resolve the next game from events_domain rather than
+      // firing a Supabase events read.
+      if (isFeatureRoutedToIcp("events")) {
+        const result = await withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const events = await listLiveEvents(ctx, null, null);
+            const cutoff = Date.now() - 3 * 60 * 60 * 1000;
+            const inScope = (events as Array<{ id: string; team_id: [] | [string]; event_type: string; cancelled: boolean; starts_at_ms: bigint }>)
+              .filter((e) =>
+                !e.cancelled &&
+                e.event_type === "game" &&
+                e.team_id.length > 0 &&
+                teamIds.includes(e.team_id[0]) &&
+                Number(e.starts_at_ms) >= cutoff,
+              )
+              .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms));
+            const preferredTeamId = inScope[0]?.team_id[0] ?? teamIds[0];
+            return preferredTeamId ? `/teams/${preferredTeamId}?openPitchBoard=1` : null;
+          },
+        });
+        return result;
+      }
       const { data: events, error } = await supabase
         .from("events")
         .select("team_id, event_date")

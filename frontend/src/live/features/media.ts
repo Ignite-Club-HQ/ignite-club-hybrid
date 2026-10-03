@@ -127,9 +127,11 @@ export async function deleteLiveComment(ctx: FeatureBackendContext, commentId: s
 // Gallery chat cards (photo-share prompt cards embedded in chat)
 // ---------------------------------------------------------------------------
 
+/** Single gallery chat card; null when missing or the caller cannot view it. */
 export async function getLiveGalleryChatCard(ctx: FeatureBackendContext, cardId: string) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
-  return unwrapCandidOpt(await actor.get_gallery_chat_card(cardId));
+  const row = await actor.get_gallery_chat_card(cardId);
+  return row.length ? row[0] : null;
 }
 
 export async function listLiveGalleryChatCards(

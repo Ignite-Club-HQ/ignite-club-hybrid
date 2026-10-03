@@ -4,6 +4,9 @@ import { ImageIcon, ChevronRight } from "lucide-react";
 import { memo, useCallback, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveGalleryChatCard } from "@/live/features/media";
+import { getLiveTeam } from "@/live/features/club";
 import { useSignedPhotoUrl } from "@/hooks/useSignedPhotoUrl";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -16,14 +19,37 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
   const navigate = useNavigate();
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
-  // NEEDS-CANISTER: gallery_chat_cards (photo-share prompt cards) have no
-  // canister counterpart — the card is hidden for II users below instead of
-  // firing Supabase reads. Matches the BoardLinkCard pattern.
   const isIcp = resolveAuthBackend() === "icp";
 
   const { data: card, isLoading } = useQuery({
     queryKey: ["gallery-chat-card", cardId],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("media", {
+          icp: async (ctx) => {
+            const row = await getLiveGalleryChatCard(ctx, cardId);
+            if (!row) return null;
+            // Team name resolves from club_domain; the canister Event record
+            // has no opponent field, so opponentLabel/eventStart stay null and
+            // the headline falls back to the team-name wording.
+            const team = await getLiveTeam(ctx, row.team_id).catch(() => null);
+            const teamRow = Array.isArray(team) ? team[0] : team;
+            return {
+              id: row.id,
+              team_id: row.team_id,
+              hero_image_url: row.hero_image_url[0] ?? null,
+              photo_count: row.photo_count,
+              event_id: row.event_id[0] ?? null,
+              is_prompt: row.is_prompt,
+              created_at: new Date(Number(row.created_at_ms)).toISOString(),
+              teams: teamRow ? { name: (teamRow as { name?: string }).name ?? "Team" } : null,
+              opponentLabel: null,
+              eventStart: null,
+            };
+          },
+          supabase: async () => null,
+        });
+      }
       const { data } = await supabase
         .from("gallery_chat_cards")
         .select("id, team_id, hero_image_url, photo_count, event_id, is_prompt, created_at, teams(name)")
@@ -64,8 +90,6 @@ export const GalleryLinkCard = memo(function GalleryLinkCard({ cardId, isPromptH
     },
     [card, navigate],
   );
-
-  if (isIcp) return null;
 
   if (isLoading) {
     // Match the final gallery-card slot exactly. The card itself keeps a
