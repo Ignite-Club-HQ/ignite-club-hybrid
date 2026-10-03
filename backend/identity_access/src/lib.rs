@@ -671,9 +671,26 @@ fn access_scoped(
 
 #[ic_cdk::query]
 fn export_state() -> Outcome<State> {
-    let state = state();
-    require_governor(&state, ic_cdk::api::msg_caller())?;
-    Ok(state)
+    let core = state();
+    require_governor(&core, ic_cdk::api::msg_caller())?;
+    let accounts: Vec<Account> = ACCOUNTS.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect());
+    Ok(State {
+        schema: core.schema,
+        governor: core.governor,
+        accounts,
+        profiles: all_profiles(),
+        roles: core.roles,
+        families: core.families,
+        exclusions: core.exclusions,
+        challenges: core.challenges,
+        external_bindings: core.external_bindings,
+        privacy_consents: core.privacy_consents,
+        terms_acceptances: core.terms_acceptances,
+        entitlements: all_entitlements(),
+        verifiers: core.verifiers,
+        attestation_secret: core.attestation_secret,
+        next_challenge: core.next_challenge,
+    })
 }
 
 #[ic_cdk::query]
