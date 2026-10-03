@@ -13,6 +13,9 @@ import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Call "mo:ic/Call";
 import IC "mo:ic/Types";
+import IcWebSocketCdk "mo:ic-websocket-cdk";
+import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
+import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
 
 persistent actor {
