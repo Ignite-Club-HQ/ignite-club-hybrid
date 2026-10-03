@@ -40,7 +40,7 @@ import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { listLivePlayers } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
@@ -162,6 +162,23 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
     enabled: isPastMatch,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => null, // unreachable — guarded above
+          icp: async (ctx) => {
+            const result = await getLiveGameResult(ctx, event.id);
+            const r = result.length > 0 ? (result[0] as any) : null;
+            return r
+              ? {
+                  home_score: Number(r.home_score),
+                  away_score: Number(r.away_score),
+                  home_label: r.home_label,
+                  away_label: r.away_label,
+                }
+              : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("game_results")
         .select("home_score, away_score, home_label, away_label")
@@ -189,6 +206,10 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: hasPro } = useQuery({
     queryKey: ["event-pro-status", event.team_id, event.club_id],
     queryFn: async () => {
+      // Subscriptions are Supabase-only by design (billing has no canister
+      // shape). Fail closed for ICP-routed clubs: hasPro stays false, which
+      // also hides the reminder action below (NEEDS-CANISTER).
+      if (isFeatureRoutedToIcp("events")) return false;
       if (event.team_id) {
         const { data: teamSub } = await supabase
           .from("team_subscriptions")
@@ -210,6 +231,20 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: myRsvp, isLoading: myRsvpLoading } = useQuery({
     queryKey: ["card-rsvp", event.id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => null, // unreachable — guarded above
+          icp: async (ctx) => {
+            const mine = await listLiveMyRsvps(ctx);
+            const rsvp = mine.find(
+              (r) => r.event_id === event.id && r.child_id.length === 0,
+            );
+            // The canister Rsvp has no row id; the Supabase-shaped id is
+            // only used by the Supabase update branch below, never on ICP.
+            return rsvp ? { id: rsvp.event_id, status: rsvp.state } : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("rsvps")
         .select("id, status")
@@ -382,6 +417,22 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: attendanceCounts } = useQuery({
     queryKey: ["card-attendance-counts", event.id, event.type],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => ({ going: 0, maybe: 0, not_going: 0 }), // unreachable — guarded above
+          icp: async (ctx) => {
+            const roster = await getLiveEventRosterDetailed(ctx, event.id);
+            const counts = { going: 0, maybe: 0, not_going: 0 };
+            roster.rsvps.forEach(({ rsvp }) => {
+              if (!isSocialEvent && rsvp.child_id.length === 0) return;
+              if (rsvp.state === "going") counts.going++;
+              else if (rsvp.state === "maybe") counts.maybe++;
+              else if (rsvp.state === "not_going") counts.not_going++;
+            });
+            return counts;
+          },
+        });
+      }
       let query = supabase
         .from("rsvps")
         .select("status")
@@ -409,6 +460,25 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: myDuties } = useQuery({
     queryKey: ["card-my-duties", event.id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => [] as any[], // unreachable — guarded above
+          icp: async (ctx) => {
+            const callerText = ctx.identity.getPrincipal().toText();
+            const duties = await listLiveDuties(ctx, event.id);
+            // The canister Duty has no times; the badge renders name + status.
+            return duties
+              .filter((d) => d.account_id === callerText)
+              .map((d) => ({
+                id: `${d.event_id}:${d.duty}`,
+                name: d.duty,
+                start_time: null,
+                end_time: null,
+                status: d.completed ? "completed" : "open",
+              }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("duties")
         .select("id, name, start_time, end_time, status")
@@ -654,6 +724,9 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
 
   const remindMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: the member-list fan-out has no canister shape yet;
+      // the UI entry point is hidden for ICP clubs (hasPro fails closed).
+      if (isFeatureRoutedToIcp("events")) throw new Error("Reminders are not available yet for Internet Identity clubs");
       const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
       const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
       let memberQuery = supabase.from("user_roles").select("user_id");
@@ -701,6 +774,9 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   });
 
   const handleRemindClick = async () => {
+    // NEEDS-CANISTER: guarded companion of remindMutation above; the menu
+    // item calling this is hidden for ICP clubs (hasPro fails closed).
+    if (isFeatureRoutedToIcp("events")) return;
     const { data: rsvps } = await supabase.from("rsvps").select("user_id").eq("event_id", event.id);
     const rsvpUserIds = rsvps?.map((r) => r.user_id) || [];
     let memberQuery = supabase.from("user_roles").select("user_id");
