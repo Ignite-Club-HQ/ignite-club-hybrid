@@ -1,3 +1,4 @@
+import type { Principal } from "@icp-sdk/core/principal";
 import type { IcpTargetConfig } from "./targetRegistry";
 
 /**
