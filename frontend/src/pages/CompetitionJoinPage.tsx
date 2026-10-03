@@ -14,7 +14,12 @@ import { safeSessionSet, buildAuthPathWithIntent } from "@/lib/authRedirectStora
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { claimLocalCompetitionJoinToken } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { registerLiveCompetitionTeam } from "@/live/features/competitions";
+import { getLiveJoinLinkPreview, joinLiveCompetitionWithLink } from "@/live/features/competitions";
+import { getLiveClubProfile, getLiveTeam, listLiveTeams, myLiveRoleGrants } from "@/live/features/club";
+import { getEffectiveBackendForFeature } from "@/live/loadBackendRouting";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { AnonymousIdentity } from "@icp-sdk/core/agent";
 
 type CompInfo = {
   id: string;
