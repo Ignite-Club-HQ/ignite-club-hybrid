@@ -94,3 +94,15 @@ const distRoot = path.join(projectRoot, "dist");
 rmSync(distRoot, { recursive: true, force: true });
 cpSync(distLive, distRoot, { recursive: true });
 console.log("copied frontend/dist-live -> dist/");
+
+// The live build's HTML entry is live-index.html, but static hosting serves
+// index.html for "/" and as the SPA fallback for every page route. Without
+// it, every URL on the hosted preview answers "Not found".
+const liveIndex = path.join(distRoot, "live-index.html");
+const rootIndex = path.join(distRoot, "index.html");
+if (!existsSync(liveIndex)) {
+  console.error("dist/live-index.html missing after build; cannot create index.html.");
+  process.exit(1);
+}
+cpSync(liveIndex, rootIndex);
+console.log("copied dist/live-index.html -> dist/index.html");
