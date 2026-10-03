@@ -64,6 +64,16 @@ type JoinToken =
    team_id: text;
    used: bool;
  };
+type JoinLinkPreview = 
+ record {
+   club_id: text;
+   competition_id: text;
+   competition_status: text;
+   divisions: vec text;
+   entered_team_ids: vec text;
+   name: text;
+   season: text;
+ };
 type EoiTeamSuggestion = 
  record {
    age_group: text;
@@ -281,6 +291,11 @@ service : {
       Err: text;
       Ok: EoiStats;
     }) query;
+  get_join_link_preview: (token: text) ->
+   (variant {
+      Err: text;
+      Ok: JoinLinkPreview;
+    }) query;
   get_my_pending_eois: () ->
    (variant {
       Err: text;
@@ -315,6 +330,11 @@ service : {
       Err: text;
       Ok: RoleGrant;
     });
+  join_competition_with_link: (token: text, team_id: text, division_id:
+   opt text) -> (variant {
+                   Err: text;
+                   Ok: TeamEntry;
+                 });
   listBulkAccessPrincipals: () ->
    (variant {
       Err: text;

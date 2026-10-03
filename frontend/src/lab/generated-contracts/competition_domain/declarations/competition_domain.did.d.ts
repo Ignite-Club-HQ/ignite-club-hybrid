@@ -108,6 +108,15 @@ export interface EoiTeamSuggestion {
   'submission_ids' : Array<string>,
   'age_group' : string,
 }
+export interface JoinLinkPreview {
+  'competition_status' : string,
+  'name' : string,
+  'season' : string,
+  'divisions' : Array<string>,
+  'competition_id' : string,
+  'club_id' : string,
+  'entered_team_ids' : Array<string>,
+}
 export interface JoinToken {
   'id' : string,
   'issued_by' : Principal,
@@ -267,6 +276,11 @@ export interface _SERVICE {
     { 'Ok' : EoiStats } |
       { 'Err' : string }
   >,
+  'get_join_link_preview' : ActorMethod<
+    [string],
+    { 'Ok' : JoinLinkPreview } |
+      { 'Err' : string }
+  >,
   'get_my_pending_eois' : ActorMethod<
     [],
     { 'Ok' : Array<EoiSubmission> } |
@@ -296,6 +310,11 @@ export interface _SERVICE {
   'join_competition_by_token' : ActorMethod<
     [string],
     { 'Ok' : RoleGrant } |
+      { 'Err' : string }
+  >,
+  'join_competition_with_link' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : TeamEntry } |
       { 'Err' : string }
   >,
   'listBulkAccessPrincipals' : ActorMethod<

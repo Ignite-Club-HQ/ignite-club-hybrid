@@ -395,6 +395,45 @@ export async function joinLiveCompetitionByToken(ctx: FeatureBackendContext, tok
   return unwrapCandid(actor.join_competition_by_token(token), "Join competition");
 }
 
+/**
+ * Public join-link preview (comp info, season divisions, entered team ids).
+ * The canister allows anonymous callers, so callers may pass an
+ * AnonymousIdentity ctx when nobody is signed in yet (the join page reads
+ * this pre-auth, mirroring the Supabase SECURITY DEFINER join-token RPCs).
+ * Status hints "unknown" | "disabled" | "archived" come back as
+ * { status, preview: null } rather than throwing.
+ */
+export async function getLiveJoinLinkPreview(
+  ctx: FeatureBackendContext,
+  token: string,
+): Promise<
+  | { status: "ok"; preview: { competition_id: string; name: string; club_id: string; season: string; competition_status: string; divisions: string[]; entered_team_ids: string[] } }
+  | { status: string; preview: null }
+> {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  const result = await actor.get_join_link_preview(token);
+  if ("Err" in result) return { status: result.Err, preview: null };
+  return { status: "ok", preview: result.Ok };
+}
+
+/**
+ * Team-admin self-entry via a competition join link: validates the token
+ * canister-side and registers the team (optional division) — unlike
+ * registerLiveCompetitionTeam this needs no competition-management rights.
+ */
+export async function joinLiveCompetitionWithLink(
+  ctx: FeatureBackendContext,
+  token: string,
+  teamId: string,
+  divisionId: string | null,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.join_competition_with_link(token, teamId, candidOpt(divisionId)),
+    "Join competition",
+  );
+}
+
 /** Removes a recorded match (distinct from editing its details). */
 export async function deleteLiveMatch(ctx: FeatureBackendContext, matchId: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
