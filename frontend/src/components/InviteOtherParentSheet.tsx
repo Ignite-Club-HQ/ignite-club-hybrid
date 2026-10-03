@@ -83,8 +83,9 @@ export default function InviteOtherParentSheet({
           return (data?.club_id as string | null) ?? null;
         },
         icp: async (ctx) => {
-          const team = await getLiveTeam(ctx, teamIds[0]);
-          return (team.club as string | null) ?? null;
+          const teamOpt = await getLiveTeam(ctx, teamIds[0]);
+          const team = teamOpt[0];
+          return team ? (team.club as string | null) : null;
         },
       });
     },
