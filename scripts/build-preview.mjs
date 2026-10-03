@@ -6,27 +6,19 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, rmSync, cpSync } from "node:fs";
 import path from "node:path";
+import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
 
-// The platform install step does not always run (or its node_modules are not
-// visible to the build step), so make sure the frontend's pinned dependencies
-// are present before building. Without this, npx silently fetches a wrong
-// vite version and the config bundle fails with ERR_MODULE_NOT_FOUND.
+// Install only if package-lock changed, serialized with the platform install
+// and the dev server so concurrent `npm ci` runs can't corrupt node_modules.
 const viteCli = path.join(frontendDir, "node_modules", "vite", "bin", "vite.js");
-if (!existsSync(viteCli)) {
-  console.log("frontend dependencies missing; running npm ci in frontend/...");
-  const install = spawnSync(
-    process.platform === "win32" ? "npm.cmd" : "npm",
-    ["ci", "--no-fund", "--no-audit"],
-    { cwd: frontendDir, stdio: "inherit" },
-  );
-  if (install.status !== 0) process.exit(install.status ?? 1);
-  if (!existsSync(viteCli)) {
-    console.error("frontend dependencies are still missing after npm ci; cannot build.");
-    process.exit(1);
-  }
+try {
+  ensureFrontendDeps();
+} catch (err) {
+  console.error(`cannot build: ${err?.message ?? err}`);
+  process.exit(1);
 }
 
 // The platform build step does not always inject the Supabase connection
