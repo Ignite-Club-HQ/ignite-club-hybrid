@@ -248,6 +248,56 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
     ],
     queryFn: async () => {
       if ((event as any).adults_only) return [] as any[];
+      if (isFeatureRoutedToIcp("events")) {
+        // ICP: children, roster assignments and RSVPs all come from
+        // events_domain (caller-principal scoped); child names are PII and
+        // resolve best-effort from pii_access_control. No Supabase reads.
+        return withFeatureBackend("events", {
+          supabase: async () => [] as any[], // unreachable — guarded above
+          icp: async (ctx) => {
+            const mine = await getLiveMyChildren(ctx);
+            if (mine.length === 0) return [] as any[];
+            let children = mine.map((c) => ({ id: c.id }));
+            const eligibleTeamIds = getEventEligibleTeamIds(event as any);
+            if (eligibleTeamIds) {
+              const assignmentLists = await Promise.all(
+                children.map((c) => getLiveMyChildTeamAssignments(ctx, c.id)),
+              );
+              children = children.filter((c, i) =>
+                (assignmentLists[i] || []).some((a) => eligibleTeamIds.includes(a.team_id)),
+              );
+            } else if (event.mini_league_id) {
+              // Mini-league roster scope: derive eligibility from the event's
+              // mini-league RSVPs (the canister tracks child players via the
+              // RSVP audience — mirrors the Supabase mini_league_players filter).
+              const mlRsvps = await listLiveMiniLeagueRsvps(ctx, event.id);
+              const allowed = new Set(
+                (mlRsvps || []).map((r: any) => r.rsvp?.child_id?.[0] ?? r.child_id).filter(Boolean),
+              );
+              children = children.filter((c) => allowed.has(c.id));
+            } else {
+              // Club-wide event with no team scope — can't verify roster.
+              children = [];
+            }
+            if (children.length === 0) return [] as any[];
+            const childIds = children.map((c) => c.id);
+            const [names, rsvpRows] = await Promise.all([
+              resolveLivePiiTextBatch(ctx, childIds, "name", "child_rsvps", "Household RSVP child names"),
+              getMyLiveChildRsvps(ctx, event.id, null),
+            ]);
+            const byChild = new Map<string, { id: string; status: string }>();
+            (rsvpRows || []).forEach((r) => {
+              const childId = r.rsvp.child_id[0];
+              if (childId) byChild.set(childId, { id: `${r.rsvp.event_id}:${childId}`, status: r.rsvp.state });
+            });
+            return children.map((c) => ({
+              child_id: c.id,
+              name: names.get(c.id) ?? "Child",
+              rsvp: byChild.get(c.id) || null,
+            }));
+          },
+        });
+      }
       const [ownChildren, guardianLinks] = await Promise.all([
         supabase.from("children").select("id, name").eq("parent_id", user!.id),
         supabase
