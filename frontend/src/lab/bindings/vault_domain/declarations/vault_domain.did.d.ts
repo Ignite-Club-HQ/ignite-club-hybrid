@@ -15,45 +15,7 @@ export interface BlobRef {
   'content_hash' : string,
   'canister' : string,
 }
-export interface VaultFile {
-  'id' : string,
-  'mini_league_id' : [] | [string],
-  'club' : string,
-  'mime' : string,
-  'name' : string,
-  'size' : bigint,
-  'team' : [] | [string],
-  'file_url' : string,
-  'created_at_ms' : bigint,
-  'blob_ref' : [] | [BlobRef],
-  'deleted_by' : [] | [Principal],
-  'folder_id' : string,
-  'is_external_link' : boolean,
-  'deleted_at_ms' : [] | [bigint],
-  'uploaded_by' : Principal,
-}
-export interface VaultFileWithFolder {
-  'folder_name' : [] | [string],
-  'folder_path' : Array<string>,
-  'file' : VaultFile,
-}
-export interface VaultFolder {
-  'id' : string,
-  'mini_league_id' : [] | [string],
-  'club' : string,
-  'name' : string,
-  'color' : [] | [string],
-  'team' : [] | [string],
-  'restricted_roles' : Array<string>,
-  'sort_order' : number,
-  'description' : [] | [string],
-  'created_by' : Principal,
-  'created_at_ms' : bigint,
-  'parent_id' : [] | [string],
-  'deleted_by' : [] | [Principal],
-  'deleted_at_ms' : [] | [bigint],
-}
-export interface _SERVICE {
+export interface Main {
   'create_folder' : ActorMethod<
     [
       string,
@@ -95,7 +57,6 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'list_club_files' : ActorMethod<
     [string, [] | [string], [] | [string]],
     { 'Ok' : Array<VaultFile> } |
@@ -179,5 +140,44 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface VaultFile {
+  'id' : string,
+  'mini_league_id' : [] | [string],
+  'club' : string,
+  'mime' : string,
+  'name' : string,
+  'size' : bigint,
+  'team' : [] | [string],
+  'file_url' : string,
+  'created_at_ms' : bigint,
+  'blob_ref' : [] | [BlobRef],
+  'deleted_by' : [] | [Principal],
+  'folder_id' : string,
+  'is_external_link' : boolean,
+  'deleted_at_ms' : [] | [bigint],
+  'uploaded_by' : Principal,
+}
+export interface VaultFileWithFolder {
+  'folder_name' : [] | [string],
+  'folder_path' : Array<string>,
+  'file' : VaultFile,
+}
+export interface VaultFolder {
+  'id' : string,
+  'mini_league_id' : [] | [string],
+  'club' : string,
+  'name' : string,
+  'color' : [] | [string],
+  'team' : [] | [string],
+  'restricted_roles' : Array<string>,
+  'sort_order' : number,
+  'description' : [] | [string],
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'parent_id' : [] | [string],
+  'deleted_by' : [] | [Principal],
+  'deleted_at_ms' : [] | [bigint],
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

@@ -397,8 +397,7 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'season_status' : IDL.Text,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'accept_identity_link' : IDL.Func(
         [IDL.Nat64],
         [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
@@ -677,11 +676,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'import_links' : IDL.Func(
         [Snapshot],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -1126,6 +1120,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

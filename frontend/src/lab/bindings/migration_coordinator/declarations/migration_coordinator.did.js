@@ -27,8 +27,7 @@ export const idlFactory = ({ IDL }) => {
     'phase' : Phase,
     'recordCount' : IDL.Nat,
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'abort' : IDL.Func([IDL.Nat], [Migration], []),
     'begin' : IDL.Func(
         [IDL.Text, IDL.Principal, IDL.Principal, IDL.Nat, IDL.Text],
@@ -36,7 +35,6 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'commit' : IDL.Func([IDL.Nat], [Migration], []),
-    'initialize' : IDL.Func([], [], []),
     'markExported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'markImported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'orchestrateExport' : IDL.Func([IDL.Nat], [Migration], []),
@@ -49,6 +47,8 @@ export const idlFactory = ({ IDL }) => {
     'transfer_governorship' : IDL.Func([IDL.Principal], [], []),
     'verify' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

@@ -10,6 +10,21 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Main {
+  'abort' : ActorMethod<[bigint], Migration>,
+  'begin' : ActorMethod<
+    [string, Principal, Principal, bigint, string],
+    Migration
+  >,
+  'commit' : ActorMethod<[bigint], Migration>,
+  'markExported' : ActorMethod<[bigint, bigint, string], Migration>,
+  'markImported' : ActorMethod<[bigint, bigint, string], Migration>,
+  'orchestrateExport' : ActorMethod<[bigint], Migration>,
+  'orchestrateVerify' : ActorMethod<[bigint], Migration>,
+  'status' : ActorMethod<[], [[] | [Migration], Array<Migration>]>,
+  'transfer_governorship' : ActorMethod<[Principal], undefined>,
+  'verify' : ActorMethod<[bigint, bigint, string], Migration>,
+}
 export interface Migration {
   'id' : bigint,
   'destination' : Principal,
@@ -26,21 +41,6 @@ export type Phase = { 'exported' : null } |
   { 'imported' : null } |
   { 'started' : null } |
   { 'committed' : null };
-export interface _SERVICE {
-  'abort' : ActorMethod<[bigint], Migration>,
-  'begin' : ActorMethod<
-    [string, Principal, Principal, bigint, string],
-    Migration
-  >,
-  'commit' : ActorMethod<[bigint], Migration>,
-  'initialize' : ActorMethod<[], undefined>,
-  'markExported' : ActorMethod<[bigint, bigint, string], Migration>,
-  'markImported' : ActorMethod<[bigint, bigint, string], Migration>,
-  'orchestrateExport' : ActorMethod<[bigint], Migration>,
-  'orchestrateVerify' : ActorMethod<[bigint], Migration>,
-  'status' : ActorMethod<[], [[] | [Migration], Array<Migration>]>,
-  'transfer_governorship' : ActorMethod<[Principal], undefined>,
-  'verify' : ActorMethod<[bigint, bigint, string], Migration>,
-}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

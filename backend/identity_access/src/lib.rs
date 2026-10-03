@@ -1401,33 +1401,34 @@ mod tests {
     fn principal(value: u8) -> Principal {
         Principal::self_authenticating([value; 32])
     }
-    #[test]
-    fn ids_and_role_scope_are_bounded() {
-        assert!(valid_id("club-a"));
-        assert!(!valid_id(""));
-        assert!(!valid_id(&"x".repeat(129)));
-        let governor = principal(1);
-        let mut state = State {
+    fn empty_core_state(governor: Principal) -> CoreState {
+        CoreState {
             schema: SCHEMA,
             governor,
-            accounts: vec![Account {
-                id: "account-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
             roles: vec![],
             families: vec![],
             exclusions: vec![],
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
-            profiles: vec![],
             terms_acceptances: vec![],
-            entitlements: vec![],
             verifiers: vec![],
             attestation_secret: vec![],
             next_challenge: 0,
-        };
+        }
+    }
+    #[test]
+    fn ids_and_role_scope_are_bounded() {
+        assert!(valid_id("club-a"));
+        assert!(!valid_id(""));
+        assert!(!valid_id(&"x".repeat(129)));
+        let governor = principal(1);
+        put_account(&Account {
+            id: "account-1".into(),
+            principals: vec![principal(2)],
+            version: 0,
+        });
+        let mut state = empty_core_state(governor);
         state.roles.push(RoleGrant {
             account_id: "account-1".into(),
             role: "club_admin".into(),
@@ -1451,78 +1452,51 @@ mod tests {
             Some("club-b"),
             None
         ));
-        assert!(account_exists(&state, "account-1"));
-        assert!(!account_exists(&state, "missing"));
+        assert!(account_exists("account-1"));
+        assert!(!account_exists("missing"));
     }
     #[test]
     fn exclusions_override_scoped_roles_but_not_global_role_detection() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![],
-            roles: vec![RoleGrant {
-                account_id: "a".into(),
-                role: "app_admin".into(),
-                site_id: None,
-                club: None,
-                team: None,
-            }],
-            families: vec![],
-            exclusions: vec![Exclusion {
-                account_id: "a".into(),
-                site_id: None,
-                club: "club-a".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "a".into(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "a".into(),
+            site_id: None,
+            club: "club-a".into(),
+            team: None,
+        });
         assert!(account_has_role(&state, "a", "app_admin", None, None, None));
         assert!(excluded(&state, "a", None, Some("club-a"), None));
     }
     #[test]
     fn multi_site_roles_and_exclusions_are_isolated() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![Account {
-                id: "acc-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
-            roles: vec![RoleGrant {
-                account_id: "acc-1".into(),
-                role: "club_admin".into(),
-                site_id: Some("site-a".into()),
-                club: Some("club-1".into()),
-                team: None,
-            }],
-            families: vec![],
-            exclusions: vec![Exclusion {
-                account_id: "acc-1".into(),
-                site_id: Some("site-b".into()),
-                club: "club-1".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        put_account(&Account {
+            id: "acc-1".into(),
+            principals: vec![principal(2)],
+            version: 0,
+        });
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "acc-1".into(),
+            role: "club_admin".into(),
+            site_id: Some("site-a".into()),
+            club: Some("club-1".into()),
+            team: None,
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "acc-1".into(),
+            site_id: Some("site-b".into()),
+            club: "club-1".into(),
+            team: None,
+        });
         assert!(account_has_role(
             &state,
             "acc-1",
@@ -1558,35 +1532,17 @@ mod tests {
     #[test]
     fn guardian_access_respects_club_exclusion() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![Account {
-                id: "guardian-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
-            roles: vec![],
-            families: vec![FamilyLink {
-                account_id: "guardian-1".into(),
-                child_id: "child-9".into(),
-            }],
-            exclusions: vec![Exclusion {
-                account_id: "guardian-1".into(),
-                site_id: Some("site-a".into()),
-                club: "club-1".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.families.push(FamilyLink {
+            account_id: "guardian-1".into(),
+            child_id: "child-9".into(),
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "guardian-1".into(),
+            site_id: Some("site-a".into()),
+            club: "club-1".into(),
+            team: None,
+        });
 
         let connected = state
             .families
@@ -1609,38 +1565,21 @@ mod tests {
     #[test]
     fn direct_team_roles_are_exact_membership_without_admin_bypass() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![],
-            roles: vec![
-                RoleGrant {
-                    account_id: "player".into(),
-                    role: "player".into(),
-                    site_id: Some("site-a".into()),
-                    club: Some("club-a".into()),
-                    team: Some("team-a".into()),
-                },
-                RoleGrant {
-                    account_id: "admin".into(),
-                    role: "app_admin".into(),
-                    site_id: None,
-                    club: None,
-                    team: None,
-                },
-            ],
-            families: vec![],
-            exclusions: vec![],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "player".into(),
+            role: "player".into(),
+            site_id: Some("site-a".into()),
+            club: Some("club-a".into()),
+            team: Some("team-a".into()),
+        });
+        state.roles.push(RoleGrant {
+            account_id: "admin".into(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
 
         assert!(team_member_access(
             &state,
@@ -1679,33 +1618,18 @@ mod tests {
     #[test]
     fn field_access_requires_explicit_consent_or_self_access() {
         let governor = principal(1);
-        let account_self = Account {
+        put_account(&Account {
             id: "user-1".into(),
             principals: vec![principal(2)],
             version: 0,
-        };
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![account_self],
-            roles: vec![],
-            families: vec![],
-            exclusions: vec![],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![PrivacyConsent {
-                account_id: "user-1".into(),
-                purpose: "child_photo_processing".into(),
-                granted: true,
-                updated_at_ns: 0,
-            }],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        });
+        let mut state = empty_core_state(governor);
+        state.privacy_consents.push(PrivacyConsent {
+            account_id: "user-1".into(),
+            purpose: "child_photo_processing".into(),
+            granted: true,
+            updated_at_ns: 0,
+        });
 
         assert!(state
             .privacy_consents
@@ -1713,7 +1637,7 @@ mod tests {
             .any(|entry| entry.account_id == "user-1"
                 && entry.purpose == "child_photo_processing"
                 && entry.granted));
-        assert!(state.accounts.iter().any(|entry| entry.id == "user-1"));
+        assert!(account_exists("user-1"));
     }
 
     #[test]
@@ -1962,6 +1886,158 @@ mod tests {
         let decoded: State = decode(&bytes);
         assert_eq!(decoded.schema, 1);
         assert!(decoded.profiles.is_empty());
+    }
+
+    #[test]
+    fn legacy_schema4_blob_splits_into_maps_on_migration() {
+        let governor = principal(1);
+        let user = principal(2);
+        let legacy = State {
+            schema: 4,
+            governor,
+            accounts: vec![Account {
+                id: "user-1".into(),
+                principals: vec![user],
+                version: 3,
+            }],
+            profiles: vec![Profile {
+                account_id: "user-1".into(),
+                display_name: "Paul".into(),
+                avatar_ref: None,
+                updated_at_ns: 7,
+            }],
+            roles: vec![RoleGrant {
+                account_id: "user-1".into(),
+                role: "club_admin".into(),
+                site_id: None,
+                club: Some("club-a".into()),
+                team: None,
+            }],
+            families: vec![],
+            exclusions: vec![],
+            challenges: vec![],
+            external_bindings: vec![],
+            privacy_consents: vec![],
+            terms_acceptances: vec![],
+            entitlements: vec![Entitlement {
+                principal: user,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            }],
+            verifiers: vec![],
+            attestation_secret: vec![],
+            next_challenge: 9,
+        };
+        let migrated = migrate_legacy_state(legacy);
+        assert_eq!(migrated.schema, SCHEMA);
+        assert_eq!(migrated.governor, governor);
+        assert_eq!(migrated.roles.len(), 1);
+        assert_eq!(migrated.next_challenge, 9);
+        // The big collections now live in the maps, not the blob.
+        let account = get_account("user-1").expect("account migrated into map");
+        assert_eq!(account.version, 3);
+        assert_eq!(
+            find_account_by_principal(user).map(|a| a.id),
+            Some("user-1".to_string())
+        );
+        assert_eq!(
+            get_profile_entry("user-1").map(|p| p.display_name),
+            Some("Paul".to_string())
+        );
+        let key = entitlement_key(user, "pro", "tx-1");
+        assert!(get_entitlement(&key).is_some());
+    }
+
+    #[test]
+    fn entitlement_replay_by_different_principal_is_rejected() {
+        let first = principal(2);
+        let second = principal(3);
+        let key = entitlement_key(first, "pro", "tx-1");
+        put_entitlement(
+            &key,
+            &Entitlement {
+                principal: first,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            },
+        );
+        // Mirror upsert_entitlement's replay guard: the key is derived from
+        // the transaction id alone, so a different principal collides with
+        // the bound record and must be rejected; the same principal may
+        // re-verify.
+        let existing = get_entitlement(&entitlement_key(second, "pro", "tx-1"))
+            .expect("transaction id resolves to the bound record");
+        assert_ne!(existing.principal, second, "replay must be rejected");
+        let same = get_entitlement(&entitlement_key(first, "pro", "tx-1"))
+            .expect("same principal re-verifies against the same record");
+        assert_eq!(same.principal, first);
+    }
+
+    #[test]
+    fn erase_account_cleanup_clears_maps_and_blob_entries() {
+        let user = principal(2);
+        put_account(&Account {
+            id: "user-1".into(),
+            principals: vec![user],
+            version: 1,
+        });
+        index_principal(user, "user-1");
+        put_profile_entry(&Profile {
+            account_id: "user-1".into(),
+            display_name: "Gone".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        let key = entitlement_key(user, "pro", "tx-1");
+        put_entitlement(
+            &key,
+            &Entitlement {
+                principal: user,
+                product_id: "pro".into(),
+                transaction_id: "tx-1".into(),
+                expires_at_ms: 100,
+                source: "iap".into(),
+                granted_at_ms: 50,
+            },
+        );
+        let mut state = empty_core_state(principal(1));
+        state.roles.push(RoleGrant {
+            account_id: "user-1".into(),
+            role: "club_admin".into(),
+            site_id: None,
+            club: Some("club-a".into()),
+            team: None,
+        });
+        state.terms_acceptances.push(TermsAcceptance {
+            account_id: "user-1".into(),
+            terms_version: 1,
+            accepted_at_ms: 0,
+        });
+        // Mirror erase_account's cleanup sequence (the handler itself needs
+        // msg_caller, which is unavailable in tests).
+        let erased = remove_account("user-1").expect("account exists");
+        for p in &erased.principals {
+            deindex_principal(*p);
+            remove_entitlements_for_principal(*p);
+        }
+        remove_profile_entry("user-1");
+        state.roles.retain(|grant| grant.account_id != "user-1");
+        state
+            .terms_acceptances
+            .retain(|entry| entry.account_id != "user-1");
+        assert!(!account_exists("user-1"));
+        assert!(find_account_by_principal(user).is_none());
+        assert!(get_profile_entry("user-1").is_none());
+        assert!(get_entitlement(&key).is_none());
+        assert_eq!(entitlements_count(), 0);
+        assert!(state.roles.is_empty());
+        assert!(state.terms_acceptances.is_empty());
     }
 
     #[test]

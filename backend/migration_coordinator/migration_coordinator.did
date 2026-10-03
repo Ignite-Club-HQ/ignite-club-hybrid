@@ -18,17 +18,18 @@ type Migration =
    schemaVersion: nat;
    source: principal;
  };
-service : {
-  abort: (id: nat) -> (Migration);
-  begin: (domain: text, source: principal, destination: principal,
-   schemaVersion: nat, checksum: text) -> (Migration);
-  commit: (id: nat) -> (Migration);
-  initialize: () -> ();
-  markExported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
-  markImported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
-  orchestrateExport: (id: nat) -> (Migration);
-  orchestrateVerify: (id: nat) -> (Migration);
-  status: () -> (opt Migration, vec Migration) query;
-  transfer_governorship: (new_governor: principal) -> ();
-  verify: (id: nat, recordCount: nat, checksum: text) -> (Migration);
-}
+type Main = 
+ service {
+   abort: (id: nat) -> (Migration);
+   begin: (domain: text, source: principal, destination: principal,
+    schemaVersion: nat, checksum: text) -> (Migration);
+   commit: (id: nat) -> (Migration);
+   markExported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+   markImported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+   orchestrateExport: (id: nat) -> (Migration);
+   orchestrateVerify: (id: nat) -> (Migration);
+   status: () -> (opt Migration, vec Migration) query;
+   transfer_governorship: (new_governor: principal) -> ();
+   verify: (id: nat, recordCount: nat, checksum: text) -> (Migration);
+ };
+service : (governorInit: principal) -> Main
