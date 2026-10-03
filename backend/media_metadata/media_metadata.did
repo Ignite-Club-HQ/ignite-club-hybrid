@@ -3,6 +3,7 @@ type State =
    assets: vec Asset;
    capabilities: vec Capability;
    comments: vec Comment;
+   galleryChatCards: vec GalleryChatCard;
    governor: principal;
    reactions: vec Reaction;
    roles: vec RoleGrant;
@@ -21,6 +22,112 @@ type Reaction =
    created_at_ms: nat64;
    kind: text;
    user: principal;
+ };
+type Main = 
+ service {
+   addBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   add_comment: (asset_id: text, body: text, created_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: Comment;
+     });
+   add_reaction: (asset_id: text, kind: text, created_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: Reaction;
+     });
+   delete_asset: (asset_id: text) -> (variant {
+                                        Err: text;
+                                        Ok: Asset;
+                                      });
+   delete_comment: (comment_id: text) -> (variant {
+                                            Err: text;
+                                            Ok: Comment;
+                                          });
+   delete_gallery_chat_card: (card_id: text) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+   export_state: () -> (variant {
+                          Err: text;
+                          Ok: State;
+                        }) query;
+   get_asset: (asset_id: text) -> (opt Asset) query;
+   get_gallery_chat_card: (card_id: text) -> (opt GalleryChatCard) query;
+   grant_role: ("principal": principal, role: text, club_id: opt text,
+    team_id: opt text) -> (variant {
+                             Err: text;
+                             Ok;
+                           });
+   issue_capability: (asset_id: text, action: text, purpose: text,
+    expires_at_ms: nat64) -> (variant {
+                                Err: text;
+                                Ok: Capability;
+                              });
+   listBulkAccessPrincipals: () ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
+   list_assets: (club_id: text) -> (vec Asset) query;
+   list_comments: (asset_id: text) -> (vec Comment) query;
+   list_gallery_chat_cards: (club_id: text, team_id: text) ->
+    (vec GalleryChatCard) query;
+   list_reactions: (asset_id: text) -> (vec Reaction) query;
+   register_asset: (club_id: text, kind: text, mime: text, checksum: 
+    text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: Asset;
+     });
+   removeBulkAccessPrincipal: ("principal": principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_reaction: (asset_id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   save_gallery_chat_card: (id: opt text, club_id: text, team_id: text,
+    event_id: opt text, message_id: text, hero_photo_id: opt text,
+    hero_image_url: opt text, photo_count: nat32, photo_ids: vec text,
+    is_prompt: bool, push_sent: bool) ->
+    (variant {
+       Err: text;
+       Ok: GalleryChatCard;
+     });
+   set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
+    (variant {
+       Err: text;
+       Ok: Asset;
+     });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+ };
+type GalleryChatCard = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   event_id: opt text;
+   hero_image_url: opt text;
+   hero_photo_id: opt text;
+   id: text;
+   is_prompt: bool;
+   message_id: text;
+   photo_count: nat32;
+   photo_ids: vec text;
+   push_sent: bool;
+   team_id: text;
+   updated_at_ms: nat64;
+   uploader_id: principal;
  };
 type Comment = 
  record {
@@ -64,80 +171,4 @@ type Asset =
    storage_path: text;
    visibility: text;
  };
-service : {
-  addBulkAccessPrincipal: ("principal": principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  add_comment: (asset_id: text, body: text, created_at_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: Comment;
-    });
-  add_reaction: (asset_id: text, kind: text, created_at_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: Reaction;
-    });
-  delete_asset: (asset_id: text) -> (variant {
-                                       Err: text;
-                                       Ok: Asset;
-                                     });
-  delete_comment: (comment_id: text) -> (variant {
-                                           Err: text;
-                                           Ok: Comment;
-                                         });
-  export_state: () -> (variant {
-                         Err: text;
-                         Ok: State;
-                       }) query;
-  get_asset: (asset_id: text) -> (opt Asset) query;
-  grant_role: ("principal": principal, role: text, club_id: opt text,
-   team_id: opt text) -> (variant {
-                            Err: text;
-                            Ok;
-                          });
-  initialize: () -> (variant {
-                       Err: text;
-                       Ok;
-                     });
-  issue_capability: (asset_id: text, action: text, purpose: text,
-   expires_at_ms: nat64) -> (variant {
-                               Err: text;
-                               Ok: Capability;
-                             });
-  listBulkAccessPrincipals: () ->
-   (variant {
-      Err: text;
-      Ok: vec principal;
-    }) query;
-  list_assets: (club_id: text) -> (vec Asset) query;
-  list_comments: (asset_id: text) -> (vec Comment) query;
-  list_reactions: (asset_id: text) -> (vec Reaction) query;
-  register_asset: (club_id: text, kind: text, mime: text, checksum: text,
-   storage_path: text, visibility: text, expires_at_ms: nat64) ->
-   (variant {
-      Err: text;
-      Ok: Asset;
-    });
-  removeBulkAccessPrincipal: ("principal": principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-  remove_reaction: (asset_id: text) -> (variant {
-                                          Err: text;
-                                          Ok;
-                                        });
-  set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
-   (variant {
-      Err: text;
-      Ok: Asset;
-    });
-  transfer_governorship: (new_governor: principal) ->
-   (variant {
-      Err: text;
-      Ok;
-    });
-}
+service : (governorInit: principal) -> Main

@@ -6,7 +6,7 @@ import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus, setLiveRsvpNote } from "@/live/features/events";
 import { recordLiveRsvpCompleted } from "@/live/features/insights";
 
 export type RsvpStatus = "going" | "not_going" | "maybe";
@@ -267,12 +267,27 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
 
   const saveRsvpNoteMutation = useMutation({
     mutationFn: async ({ childId, note }: { childId?: string; note: string | null }) => {
-      if (resolveAuthBackend() === "icp") return;
-      if (resolveAuthBackend() === "icp") return;
       const target = childId
         ? childRsvps.find((r) => r.child_id === childId)
         : myRsvp;
       if (!target) throw new Error("Please choose a response first.");
+
+      // Hybrid routing: events_domain's set_rsvp_note is keyed by
+      // (event_id, account_id) with no child_id parameter, so only the
+      // caller's own RSVP note is wired here.
+      const routedToIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          if (!id || !user?.id) throw new Error("Missing event or user ID");
+          if (childId) {
+            throw new Error("Notes for mini-league players aren't available on this backend yet.");
+          }
+          await setLiveRsvpNote(ctx, id, user.id, note ?? "");
+          return true;
+        },
+      });
+      if (routedToIcp) return;
+
       const { error } = await supabase
         .from("rsvps")
         .update({ notes: note })

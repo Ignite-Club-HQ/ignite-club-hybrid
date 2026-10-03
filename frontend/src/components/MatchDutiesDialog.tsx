@@ -4,6 +4,7 @@ import { Plus, X, Loader2, Check, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { setLiveGroupDuty, removeLiveGroupDuty, listLiveGroupDuties } from "@/live/features/events";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -16,7 +17,6 @@ import {
 import { toast } from "sonner";
 import { AddDutySheet } from "@/components/AddDutySheet";
 import { cn } from "@/lib/utils";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface GroupDuty {
   id: string;
@@ -56,15 +56,36 @@ export function MatchDutiesDialog({
   // Fetch group duties
   const { data: duties, isLoading: dutiesLoading } = useQuery({
     queryKey: ["event-group-duties", groupId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_group_duties")
-        .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
-        .eq("group_id", groupId)
-        .order("created_at");
-      if (error) throw error;
-      return data as GroupDuty[];
-    },
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("event_group_duties")
+            .select("*, assignee:profiles!event_group_duties_assigned_to_fkey(display_name)")
+            .eq("group_id", groupId)
+            .order("created_at");
+          if (error) throw error;
+          return data as GroupDuty[];
+        },
+        // Hybrid routing: events_domain's EventGroupDuty is keyed by
+        // (group_id, duty name) with no row id/points/profile join — the
+        // duty name doubles as the id and assignee display names aren't
+        // resolvable without a canister-side profile lookup.
+        icp: async (ctx) => {
+          const rows = await listLiveGroupDuties(ctx, groupId);
+          return rows.map((row) => {
+            const assignedTo = row.account_id[0] ?? null;
+            return {
+              id: row.duty,
+              name: row.duty,
+              assigned_to: assignedTo,
+              status: assignedTo ? "confirmed" : "pending",
+              points: 0,
+              assignee: null,
+            } satisfies GroupDuty;
+          });
+        },
+      }),
     enabled: open && !!groupId,
   });
 
@@ -133,9 +154,20 @@ export function MatchDutiesDialog({
   });
 
   // Add duty mutation
-      if (resolveAuthBackend() === "icp") return;
   const addDutyMutation = useMutation({
     mutationFn: async (name: string) => {
+      // Hybrid routing: the canister's set_group_duty creates-or-updates a
+      // group duty row keyed by (group_id, duty name) — a direct match for
+      // adding a new unassigned duty here.
+      const addedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          await setLiveGroupDuty(ctx, groupId, name, null);
+          return true;
+        },
+      });
+      if (addedOnIcp) return;
+
       const { error } = await supabase.from("event_group_duties").insert({
         group_id: groupId,
         name,
@@ -150,10 +182,29 @@ export function MatchDutiesDialog({
     onError: (error: Error) => toast.error(error.message),
   });
 
-      if (resolveAuthBackend() === "icp") return;
   // Assign duty mutation
   const assignDutyMutation = useMutation({
     mutationFn: async ({ dutyId, assignedTo }: { dutyId: string; assignedTo: string | null }) => {
+      // Hybrid routing: the canister's set_group_duty takes an optional
+      // account, so both assigning and unassigning (assignedTo === null)
+      // map directly onto it — keyed by group + duty name.
+      const assignedOnIcp = await withFeatureBackend("events", {
+        supabase: () => false,
+        icp: async (ctx) => {
+          const duty = duties?.find((candidate) => candidate.id === dutyId);
+          if (!duty?.name) throw new Error("Duty not found");
+          await setLiveGroupDuty(ctx, groupId, duty.name, assignedTo);
+          return true;
+        },
+      });
+      if (assignedOnIcp) {
+        queryClient.invalidateQueries({ queryKey: ["event-group-duties", groupId] });
+        setView("list");
+        setSelectedDuty(null);
+        toast.success("Duty updated");
+        return;
+      }
+
       const { error } = await supabase
         .from("event_group_duties")
         .update({ assigned_to: assignedTo, status: assignedTo ? "confirmed" : "pending" })
@@ -168,11 +219,24 @@ export function MatchDutiesDialog({
     },
     onError: (error: Error) => toast.error(error.message),
   });
-      if (resolveAuthBackend() === "icp") return;
 
   // Delete duty mutation
   const deleteDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
+      // Hybrid routing: the canister's remove_group_duty is keyed by
+      // group + duty name, so it covers both assigned and unassigned duties.
+      const duty = duties?.find((candidate) => candidate.id === dutyId);
+      if (duty?.name) {
+        const removedOnIcp = await withFeatureBackend("events", {
+          supabase: () => false,
+          icp: async (ctx) => {
+            await removeLiveGroupDuty(ctx, groupId, duty.name);
+            return true;
+          },
+        });
+        if (removedOnIcp) return;
+      }
+
       const { error } = await supabase.from("event_group_duties").delete().eq("id", dutyId);
       if (error) throw error;
     },
