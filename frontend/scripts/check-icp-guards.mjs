@@ -12,8 +12,8 @@ const srcRoot = path.resolve(import.meta.dirname, "../src");
 
 const callPatterns = [
   /\binvokeFunction\s*\(/, // edge functions via helper
-  /\.functions\.invoke\s*\(/,
-  /\.storage\.from\s*\(/,
+  /\.functions\s*\.\s*invoke\s*\(/, // tolerant of line breaks: .functions\n.invoke(
+  /\.storage\s*\.\s*from\s*\(/, // tolerant of line breaks: .storage\n.from(
 ];
 
 const guardPatterns = [
