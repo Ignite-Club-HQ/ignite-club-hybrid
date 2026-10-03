@@ -283,6 +283,7 @@ export default function EditClubPage() {
                 is_active: true,
                 created_at_ms: BigInt(Date.now()),
                 deleted_at_ms: [],
+                sport: [],
                 // No PlayHQ connection on a freshly created club.
                 playhq_tenant: [],
                 playhq_org_id: [],
