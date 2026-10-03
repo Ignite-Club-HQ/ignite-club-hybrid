@@ -655,14 +655,15 @@ function SupabaseManageUsersPage() {
           const { fanOutLiveNotifications } = await import("@/live/features/notifications");
           await withFeatureBackend("notifications", {
             supabase: async () => {},
-            icp: async (ctx) =>
-              fanOutLiveNotifications(ctx, {
+            icp: async (ctx) => {
+              await fanOutLiveNotifications(ctx, {
                 userIds,
                 clubId: clubId || userIds[0],
                 kind: "membership",
                 body: `You have been assigned the ${role.replace('_', ' ')} role`,
                 idempotencyKeyPrefix: `role-assign-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
-              }),
+              });
+            },
           });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
@@ -741,14 +742,15 @@ function SupabaseManageUsersPage() {
           const { fanOutLiveNotifications } = await import("@/live/features/notifications");
           await withFeatureBackend("notifications", {
             supabase: async () => {},
-            icp: async (ctx) =>
-              fanOutLiveNotifications(ctx, {
+            icp: async (ctx) => {
+              await fanOutLiveNotifications(ctx, {
                 userIds,
                 clubId: clubId || userIds[0],
                 kind: "membership",
                 body: `Your ${role.replace('_', ' ')} role has been removed`,
                 idempotencyKeyPrefix: `role-remove-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
-              }),
+              });
+            },
           });
         } catch (e) {
           throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");

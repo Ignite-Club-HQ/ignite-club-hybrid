@@ -1837,15 +1837,16 @@ function SupabaseJoinTeamPage() {
         const { fanOutLiveNotifications } = await import("@/live/features/notifications");
         await withFeatureBackend("notifications", {
           supabase: async () => {},
-          icp: async (ctx) =>
-            fanOutLiveNotifications(ctx, {
+          icp: async (ctx) => {
+            await fanOutLiveNotifications(ctx, {
               userIds: recipientIds,
               clubId: clubId ?? invite.team_id,
               kind: "membership",
               body: message,
               idempotencyKeyPrefix: `unlinked-parent-${invite.team_id}-${user.id}`,
               relatedId: invite.team_id,
-            }),
+            });
+          },
         });
       } else {
         await supabase.from("notifications").insert(rows);
