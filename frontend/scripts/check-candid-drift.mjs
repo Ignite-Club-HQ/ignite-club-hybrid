@@ -16,7 +16,7 @@ function generatedMethods(source) {
   if (!source.includes("export interface _SERVICE")) throw new Error("Generated _SERVICE declaration is missing");
   // Actor-class bindings emit `_SERVICE extends Main {}` with methods on the
   // Main interface above it, so scan the whole file.
-  return new Set([...source.matchAll(/^\s{2}'([A-Za-z_][A-Za-z0-9_]*)'\s*:/gm)].map(match => match[1]));
+  return new Set([...source.matchAll(/^\s{2}'([A-Za-z_][A-Za-z0-9_]*)'\s*:\s*ActorMethod</gm)].map(match => match[1]));
 }
 
 for (const role of manifest.roles) {
