@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import igniteIcon from "@/assets/ignite-icon.png";
 import { guardClubListResult } from "@/lib/clubListEmptyGuard";
 
@@ -27,6 +28,9 @@ export function ClubThemeToggle() {
     queryKey: ["all-user-clubs-for-theme-v2", user?.id],
     placeholderData: keepPreviousData,
     staleTime: 60_000,
+    // Currently dead code (imported by AppHeader but never rendered); guarded
+    // anyway so re-enabling it can never fire Supabase reads for II users.
+    enabled: !!user?.id && resolveAuthBackend() !== "icp",
     queryFn: async () => {
       if (!user?.id) return [];
 
