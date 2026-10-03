@@ -5,8 +5,8 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants, getLiveTeam, getLiveClubProfile } from "@/live/features/club";
-import { listLiveEvents } from "@/live/features/events";
+// features/club + features/events are imported lazily at the icp call sites
+// below so the ICP SDK stays out of the entry chunk.
 
 
 
@@ -39,7 +39,7 @@ export function useDesktopNavAccess() {
         // list replaces the Supabase `user_roles` read.
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
-          icp: (ctx) => myLiveRoleGrants(ctx),
+          icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         });
         rows = grants.map((g) => ({ role: g.role, club_id: g.club ?? null, team_id: g.team ?? null }));
       } else {
@@ -64,6 +64,7 @@ export function useDesktopNavAccess() {
           const teams = await withFeatureBackend("membership", {
             supabase: async () => [] as Array<{ id: string; name: string; club_id: string | null }>,
             icp: async (ctx) => {
+              const { getLiveTeam } = await import("@/live/features/club");
               const resolved = await Promise.all(
                 teamIds.map(async (id) => {
                   try {
@@ -109,6 +110,7 @@ export function useDesktopNavAccess() {
           const profiles = await withFeatureBackend("membership", {
             supabase: async () => [] as Array<{ id: string; sport: string | null }>,
             icp: async (ctx) => {
+              const { getLiveClubProfile } = await import("@/live/features/club");
               const resolved = await Promise.all(
                 clubIds.map(async (id) => {
                   try {
@@ -207,6 +209,7 @@ export function useNextPitchBoardTarget(teamIds: string[], enabled: boolean) {
         const result = await withFeatureBackend("events", {
           supabase: async () => null,
           icp: async (ctx) => {
+            const { listLiveEvents } = await import("@/live/features/events");
             const events = await listLiveEvents(ctx, null, null);
             const cutoff = Date.now() - 3 * 60 * 60 * 1000;
             const inScope = (events as Array<{ id: string; team_id: [] | [string]; event_type: string; cancelled: boolean; starts_at_ms: bigint }>)

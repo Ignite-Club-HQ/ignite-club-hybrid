@@ -14,7 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { isIgniteSupportUser } from "@/lib/systemUser";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveCompetitions } from "@/live/features/competitions";
+// features/competitions is imported lazily in the icp provider below so the
+// ICP SDK stays out of the entry chunk (this hook runs on club-scoped pages).
 
 /**
  * Club scope guard.
@@ -92,6 +93,7 @@ export function useClubScopeGuard() {
           // whether the active club's own competition list contains this
           // competition id instead (covers the organiser-club case and the
           // common case of staying within one club's competitions).
+          const { listLiveCompetitions } = await import("@/live/features/competitions");
           const competitions = await listLiveCompetitions(ctx, activeClubFilter);
           const found = (competitions as Array<{ id: string }>).some((c) => c.id === competitionId);
           return found ? [activeClubFilter] : null;

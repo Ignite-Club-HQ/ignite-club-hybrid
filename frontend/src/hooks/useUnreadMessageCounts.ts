@@ -7,7 +7,8 @@ import {
 import { Capacitor } from "@capacitor/core";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveUnreadCounts } from "@/live/features/messaging";
+// features/messaging is imported lazily at the call site so the ICP SDK
+// stays out of the entry chunk (unread counts poll app-wide).
 
 /**
  * Shared query key for the unread-message-counts RPC. Every consumer
@@ -32,6 +33,7 @@ async function fetchIcpUnreadMessageCounts(): Promise<UnreadMessageCounts> {
   return withFeatureBackend("messaging", {
     supabase: async () => createEmptyUnreadMessageCounts(),
     icp: async (ctx) => {
+      const { myLiveUnreadCounts } = await import("@/live/features/messaging");
       const summaries = await myLiveUnreadCounts(ctx);
       const counts = createEmptyUnreadMessageCounts();
       for (const summary of summaries) {

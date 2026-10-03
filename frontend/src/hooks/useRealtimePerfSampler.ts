@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { getPlatform } from "@/lib/nativePush";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLivePerfSamplesBatch, type LivePerfSampleInput } from "@/live/features/insights";
+import type { LivePerfSampleInput } from "@/live/features/insights";
+// recordLivePerfSamplesBatch is imported lazily at the call site so the ICP
+// SDK stays out of the entry chunk (this sampler runs app-wide).
 
 /**
  * Lightweight realtime latency sampler.
@@ -94,6 +96,7 @@ export function useRealtimePerfSampler(userId: string | undefined) {
               cache_hit: false,
               platform,
             }));
+            const { recordLivePerfSamplesBatch } = await import("@/live/features/insights");
             await recordLivePerfSamplesBatch(ctx, samples);
           },
         });
