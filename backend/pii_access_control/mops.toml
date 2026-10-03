@@ -6,6 +6,11 @@ args = [ "--default-persistent-actors" ]
 
 [canisters.pii_access_control]
 main = "src/main.mo"
+candid = "pii_access_control.did"
+
+[canisters.pii_access_control.migrations]
+chain = "src/backend/migrations"
+check-limit = 1
 
 [dependencies]
 core = "2.6.1"

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PendingInviteChildMatch } from "@/components/members/ChildAndSecondGuardianFields";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type ExistingTeamChildRow = {
   id: string;
@@ -24,6 +25,12 @@ export function useAddTeamMemberRosterData({
   clubId,
   needsParentData,
 }: UseAddTeamMemberRosterDataArgs) {
+  // II users never match CSV-imported emails/names against existing accounts
+  // via Supabase — club_domain has no email-indexed/name-indexed account
+  // lookup yet, so these queries are skipped entirely and the CSV import
+  // proceeds without any existing-account matches (never a degraded error).
+  const isIcp = isFeatureRoutedToIcp("membership");
+
   const { data: existingMembers } = useQuery({
     queryKey: ["team-member-ids", teamId],
     queryFn: async () => {
@@ -33,7 +40,7 @@ export function useAddTeamMemberRosterData({
         .eq("team_id", teamId);
       return data?.map((member: { user_id: string }) => member.user_id) || [];
     },
-    enabled: open && !!teamId,
+    enabled: open && !!teamId && !isIcp,
   });
 
   const { data: existingMemberNames = [] } = useQuery({
@@ -43,7 +50,7 @@ export function useAddTeamMemberRosterData({
       const { data } = await selectCachedProfilesByIds(existingMembers);
       return data || [];
     },
-    enabled: open && !!teamId && (existingMembers?.length || 0) > 0,
+    enabled: open && !!teamId && !isIcp && (existingMembers?.length || 0) > 0,
   });
 
   const { data: clubBranding } = useQuery({
@@ -56,7 +63,7 @@ export function useAddTeamMemberRosterData({
         .single();
       return data;
     },
-    enabled: !!clubId,
+    enabled: !!clubId && !isIcp,
   });
 
   const { data: clubChildren = [] } = useQuery({
@@ -165,7 +172,7 @@ export function useAddTeamMemberRosterData({
         parent_name: child.parent_id ? parentMap.get(child.parent_id) || "Unknown" : "Unknown",
       }));
     },
-    enabled: open && !!clubId && needsParentData,
+    enabled: open && !!clubId && needsParentData && !isIcp,
   });
 
   const { data: pendingInviteChildren = [] } = useQuery<PendingInviteChildMatch[]>({
@@ -218,7 +225,7 @@ export function useAddTeamMemberRosterData({
 
       return Array.from(pendingChildren.values());
     },
-    enabled: open && !!teamId && needsParentData,
+    enabled: open && !!teamId && needsParentData && !isIcp,
   });
 
   const memberNameMatchesExisting = (name: string) => {
