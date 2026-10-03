@@ -613,10 +613,11 @@ export async function createLiveClub(
   name: string,
   slug: string,
   description: string,
+  sport?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.create_club(id, name, slug, candidOpt(description || null)),
+    actor.create_club(id, name, slug, candidOpt(description || null), candidOpt(sport || null)),
     "Create club",
   );
 }

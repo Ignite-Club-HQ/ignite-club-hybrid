@@ -218,9 +218,10 @@ export async function setLiveEventRsvp(
   eventId: string,
   accountId: string,
   state: string,
+  notes = "",
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.set_rsvp(eventId, accountId, state), "Set RSVP");
+  return unwrapCandid(actor.set_rsvp(eventId, accountId, state, notes), "Set RSVP");
 }
 
 export async function setLiveEventAttendance(

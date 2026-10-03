@@ -481,10 +481,8 @@ export async function removeLiveAdmin(ctx: FeatureBackendContext, miniLeagueId: 
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-export async function initializeLiveMiniLeagueDomain(ctx: FeatureBackendContext) {
-  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.initialize(), "Initialize mini league domain");
-}
+// Governor is now an install argument on mini_league_domain; there is no
+// initialize() to call. See backend/AGENTS.md deploy rules.
 
 export async function grantLiveMiniLeagueRole(
   ctx: FeatureBackendContext,
