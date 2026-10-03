@@ -1663,6 +1663,12 @@ export async function getLiveGameResult(ctx: FeatureBackendContext, eventId: str
   return [next];
 }
 
+// Pitch-state syncs fire every few seconds during a live game, so PII
+// registration is cached per (ref, name): a player's name is only pushed to
+// pii_access_control the first time it is seen (or when it changes), and the
+// deterministic ref is reused on every subsequent sync.
+const pitchNameRegistrations = new Map<string, string>();
+
 export async function syncLiveActiveGame(
   ctx: FeatureBackendContext,
   input: {
@@ -1673,11 +1679,40 @@ export async function syncLiveActiveGame(
   },
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  // Player names embedded in the pitch-state JSON are PII: mask them with
+  // opaque references before they cross to events_domain.
+  let pitchStateJson = input.pitchStateJson;
+  try {
+    const doc = JSON.parse(input.pitchStateJson) as { players?: Array<{ id?: unknown; name?: unknown }> };
+    const players = Array.isArray(doc?.players) ? doc.players : [];
+    const named = players.filter(
+      (p): p is { id: string; name: string } =>
+        typeof p?.id === "string" && typeof p?.name === "string" && p.name.trim().length > 0,
+    );
+    if (named.length > 0 && input.teamId) {
+      const clubId = clubIdFromTeamId(input.teamId);
+      const refs = new Map<string, string>();
+      await Promise.all(
+        named.map(async (p) => {
+          const ref = `${PITCH_NAME_REF_PREFIX}${input.teamId}:${p.id}`;
+          if (pitchNameRegistrations.get(ref) !== p.name.trim()) {
+            await registerLivePiiText(ctx, ref, "name", p.name.trim());
+            if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
+            pitchNameRegistrations.set(ref, p.name.trim());
+          }
+          refs.set(p.id, ref);
+        }),
+      );
+      pitchStateJson = JSON.stringify({ ...doc, players: substituteNameRefs(players, refs) });
+    }
+  } catch {
+    // Non-JSON or unexpected shape: pass through untouched (legacy behavior).
+  }
   return unwrapCandid(
     actor.sync_active_game(
       candidOpt(input.teamId),
       input.timerStateJson,
-      input.pitchStateJson,
+      pitchStateJson,
       input.boardSessionId,
     ),
     "Sync active game",

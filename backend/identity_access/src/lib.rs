@@ -4,7 +4,7 @@
 use candid::{CandidType, Principal};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, StableCell,
+    DefaultMemoryImpl, StableBTreeMap, StableCell,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +12,24 @@ use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
-const SCHEMA: u32 = 4;
+/// Legacy blob (memory 0) schema marker. Bumped 4 -> 5 when accounts,
+/// profiles and entitlements were split out of the monolithic blob into
+/// their own StableBTreeMaps (see ACCOUNTS/PRINCIPAL_INDEX/PROFILES/
+/// ENTITLEMENTS below). post_upgrade migrates any blob with schema < 5.
+const SCHEMA: u32 = 5;
+/// Legacy memory id: the slimmed State blob (governor/roles/families/
+/// exclusions/challenges/external_bindings/privacy_consents/
+/// terms_acceptances/verifiers/attestation_secret/next_challenge).
+const MEM_STATE: u8 = 0;
+/// account_id -> CBOR-encoded Account.
+const MEM_ACCOUNTS: u8 = 1;
+/// principal (text) -> account_id, so account_for/ensure_account are O(log N).
+const MEM_PRINCIPAL_INDEX: u8 = 2;
+/// account_id -> CBOR-encoded Profile.
+const MEM_PROFILES: u8 = 3;
+/// transaction_id (or a principal+product_id fallback key for non-IAP
+/// grants) -> CBOR-encoded Entitlement.
+const MEM_ENTITLEMENTS: u8 = 4;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -143,6 +160,27 @@ pub struct State {
     /// minted by the session-free IAP verification endpoint. Empty until the
     /// governor calls `set_attestation_secret`; redemption is rejected while
     /// empty.
+    #[serde(default)]
+    pub attestation_secret: Vec<u8>,
+    pub next_challenge: u64,
+}
+/// Slimmed on-disk shape of the legacy blob (memory 0) once schema >= 5:
+/// accounts, profiles and entitlements live in their own StableBTreeMaps
+/// instead of being re-encoded in full on every single update.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CoreState {
+    pub schema: u32,
+    pub governor: Principal,
+    pub roles: Vec<RoleGrant>,
+    pub families: Vec<FamilyLink>,
+    pub exclusions: Vec<Exclusion>,
+    pub challenges: Vec<LinkChallenge>,
+    pub external_bindings: Vec<ExternalSiteBinding>,
+    pub privacy_consents: Vec<PrivacyConsent>,
+    #[serde(default)]
+    pub terms_acceptances: Vec<TermsAcceptance>,
+    #[serde(default)]
+    pub verifiers: Vec<Principal>,
     #[serde(default)]
     pub attestation_secret: Vec<u8>,
     pub next_challenge: u64,
