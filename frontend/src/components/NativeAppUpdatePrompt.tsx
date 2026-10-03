@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveMinimumAppVersions } from "@/live/features/messaging";
+// features/messaging is imported lazily in the icp provider below so the
+// ICP SDK stays out of the entry chunk (this component mounts at app start).
 import { consumePendingForceUpdatePrompt } from '@/lib/notificationLaunchHandler';
 import {
   AlertDialog,
@@ -63,7 +64,10 @@ export function NativeAppUpdatePrompt() {
             const { data } = await supabase.functions.invoke('public-minimum-app-version', { method: 'GET' });
             return (data?.value ?? {}) as Record<string, string>;
           },
-          icp: async (ctx) => Object.fromEntries(await getLiveMinimumAppVersions(ctx)),
+          icp: async (ctx) => {
+            const { getLiveMinimumAppVersions } = await import("@/live/features/messaging");
+            return Object.fromEntries(await getLiveMinimumAppVersions(ctx));
+          },
         });
         const requiredVersion = minVersions?.[platform];
         if (!requiredVersion) return;

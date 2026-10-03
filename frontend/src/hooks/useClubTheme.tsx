@@ -13,7 +13,8 @@ import {
   getAppliedNotificationClubSwitch,
 } from "@/lib/notificationClubSwitch";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants } from "@/live/features/club";
+// features/club is imported lazily at the icp call sites below so the ICP
+// SDK stays out of the entry chunk (this hook mounts on every club page).
 
 
 interface HSLColor {
@@ -758,7 +759,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
         // canister's caller-scoped role-grant list is the membership source.
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
-          icp: (ctx) => myLiveRoleGrants(ctx),
+          icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         });
         clubIds = [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))];
       } else {
@@ -903,7 +904,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       if (isIcp) {
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
-          icp: (ctx) => myLiveRoleGrants(ctx),
+          icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         });
         grants.forEach((g) => g.club && ids.add(g.club));
       } else {
