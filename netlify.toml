@@ -10,10 +10,28 @@
   CI = "true"
   IGNITE_LIVE_BUILD = "1"
 
+# Same-origin server endpoints (replacements for the old Supabase edge
+# functions giphy-search and fetch-link-preview, which are not deployed on
+# the connected Supabase project). Handlers live in netlify/functions/ and
+# are served under /api/* via the redirects below; the preview's Vite dev
+# server middleware (frontend/vite.live.config.ts) serves the same paths.
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/giphy-search"
+  to = "/.netlify/functions/giphy-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/fetch-link-preview"
+  to = "/.netlify/functions/fetch-link-preview"
+  status = 200
+
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
-    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://cdrxmelhysdqrccttsjg.supabase.co https://icp-api.io https://id.ai; frame-src https://id.ai; object-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; manifest-src 'none'; media-src 'self' blob:"
+    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.giphy.com; font-src 'self'; connect-src 'self' https://cdrxmelhysdqrccttsjg.supabase.co https://icp-api.io https://id.ai; frame-src https://id.ai; object-src 'none'; worker-src 'self'; base-uri 'none'; form-action 'none'; manifest-src 'none'; media-src 'self' blob:"

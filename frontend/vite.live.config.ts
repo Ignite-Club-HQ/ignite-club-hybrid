@@ -1,6 +1,10 @@
 import path from "node:path";
 import { defineConfig } from "vite";
 import { visualizer } from "rollup-plugin-visualizer";
+// @ts-expect-error plain-JS Netlify function handlers have no type declarations
+import giphySearchHandler from "./netlify/functions/giphy-search.mjs";
+// @ts-expect-error plain-JS Netlify function handlers have no type declarations
+import fetchLinkPreviewHandler from "./netlify/functions/fetch-link-preview.mjs";
 
 if (process.env.IGNITE_LIVE_BUILD !== "1") {
   throw new Error("Live builds must use the guarded build:live script");
@@ -45,6 +49,44 @@ export default defineConfig({
     ],
   },
   plugins: [
+    {
+      // Serves the same-origin /api endpoints in the preview that Netlify
+      // Functions serve in production (frontend/netlify/functions/*). Must be
+      // registered before ignite-live-index-rewrite, which would otherwise
+      // rewrite these extensionless paths to live-index.html.
+      name: "ignite-live-api",
+      configureServer(server) {
+        const routes: Record<string, (req: Request) => Promise<Response>> = {
+          "/api/giphy-search": giphySearchHandler,
+          "/api/fetch-link-preview": fetchLinkPreviewHandler,
+        };
+        server.middlewares.use(async (req, res, next) => {
+          const path = (req.url || "/").split("?")[0];
+          const handler = routes[path];
+          if (!handler) return next();
+          try {
+            const chunks: Buffer[] = [];
+            for await (const chunk of req) chunks.push(chunk as Buffer);
+            const body = Buffer.concat(chunks);
+            const request = new Request(`http://localhost${path}`, {
+              method: req.method ?? "GET",
+              headers: {
+                "content-type": req.headers["content-type"] ?? "application/json",
+              },
+              body: body.length > 0 ? body : undefined,
+            });
+            const response = await handler(request);
+            res.statusCode = response.status;
+            response.headers.forEach((value, key) => res.setHeader(key, value));
+            res.end(Buffer.from(await response.arrayBuffer()));
+          } catch {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Internal error" }));
+          }
+        });
+      },
+    },
     {
       // The live entry point is live-index.html (not the default index.html),
       // so rewrite the root URL in dev — otherwise the dev server 404s on "/".
