@@ -1241,6 +1241,8 @@ export default function ClubChatPage() {
       channelKey: `club-messages-${clubId}`,
       userId: user?.id,
       scope: { kind: "club", id: clubId },
+      cacheKeys: [["club-messages", clubId]],
+      queryClient,
     });
   }, [clubId, queryClient, clubRealtimeMode, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete, useIcpLab]);
 

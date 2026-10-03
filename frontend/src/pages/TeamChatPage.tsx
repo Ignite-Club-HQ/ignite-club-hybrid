@@ -1442,6 +1442,8 @@ export default function TeamChatPage() {
       channelKey: `team-messages-${teamId}`,
       userId: user?.id,
       scope: { kind: "team", id: teamId },
+      cacheKeys: [["team-messages", teamId]],
+      queryClient,
     });
   }, [teamId, queryClient, teamRealtimeMode, user?.id, reconcileScope, applyRealtimeReaction, applyRealtimeReactionDelete]);
 
