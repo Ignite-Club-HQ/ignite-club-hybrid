@@ -2244,4 +2244,204 @@ persistent actor class Main(governorInit : Principal) {
     };
     #Ok(null)
   };
+
+  // ---- Public club-website read endpoint ----
+  // Serves GET /club?id=<clubId>&scope=<club|subscription|teams|sponsors|all>
+  // as JSON for the club website's backend (server-to-server, no auth — this
+  // is the same data the public query calls above already expose
+  // anonymously). Only website-facing fields are serialized: shell-team
+  // contact name/email, PlayHQ link ids, principals and other internal or
+  // PII fields never leave the canister through this endpoint.
+
+  func jsonEscape(t : Text) : Text {
+    var out = "";
+    for (c in t.chars()) {
+      switch (c) {
+        case ('\"') { out #= "\\\"" };
+        case ('\\') { out #= "\\\\" };
+        case ('\n') { out #= "\\n" };
+        case ('\r') { out #= "\\r" };
+        case ('\t') { out #= "\\t" };
+        case (ch) {
+          // Strip other control characters (invalid raw in JSON strings).
+          if (ch >= ' ') out #= Text.fromChar(ch);
+        };
+      };
+    };
+    out
+  };
+
+  func jStr(t : Text) : Text { "\"" # jsonEscape(t) # "\"" };
+
+  func jOptStr(value : ?Text) : Text {
+    switch (value) { case null "null"; case (?t) jStr(t) }
+  };
+
+  func jBool(b : Bool) : Text { if (b) "true" else "false" };
+
+  func jOptNat64(value : ?Nat64) : Text {
+    switch (value) { case null "null"; case (?n) Nat64.toText(n) }
+  };
+
+  func clubJson(p : Types.ClubProfile) : Text {
+    "{\"id\":" # jStr(p.id)
+    # ",\"name\":" # jStr(p.name)
+    # ",\"slug\":" # jStr(p.slug)
+    # ",\"description\":" # jOptStr(p.description)
+    # ",\"logo_url\":" # jOptStr(p.logo_url)
+    # ",\"primary_color\":" # jOptStr(p.primary_color)
+    # ",\"secondary_color\":" # jOptStr(p.secondary_color)
+    # ",\"sport\":" # jOptStr(p.sport)
+    # ",\"is_active\":" # jBool(p.is_active)
+    # "}"
+  };
+
+  func subscriptionJson(s : Types.ClubSubscription) : Text {
+    "{\"club_id\":" # jStr(s.club_id)
+    # ",\"plan\":" # jStr(s.plan)
+    # ",\"is_pro\":" # jBool(s.is_pro)
+    # ",\"is_pro_football\":" # jBool(s.is_pro_football)
+    # ",\"is_trial\":" # jBool(s.is_trial)
+    # ",\"team_limit\":" # (switch (s.team_limit) { case null "null"; case (?n) Nat32.toText(n) })
+    # ",\"expires_at_ms\":" # jOptNat64(s.expires_at_ms)
+    # ",\"trial_ends_at_ms\":" # jOptNat64(s.trial_ends_at_ms)
+    # ",\"cancelled_at_ms\":" # jOptNat64(s.cancelled_at_ms)
+    # ",\"activated_at_ms\":" # jOptNat64(s.activated_at_ms)
+    # "}"
+  };
+
+  func teamJson(t : Types.ClubTeam) : Text {
+    "{\"id\":" # jStr(t.id)
+    # ",\"name\":" # jStr(t.name)
+    # ",\"division\":" # jOptStr(t.division)
+    # ",\"gender\":" # jOptStr(t.gender)
+    # ",\"age_group\":" # jOptStr(t.age_group)
+    # ",\"description\":" # jOptStr(t.description)
+    # ",\"logo_url\":" # jOptStr(t.logo_url)
+    # ",\"team_type\":" # jOptStr(t.team_type)
+    # ",\"is_active\":" # jBool(t.is_active)
+    # ",\"archived\":" # jBool(t.archived)
+    # "}"
+  };
+
+  func sponsorJson(s : Types.ClubSponsor) : Text {
+    "{\"id\":" # jStr(s.id)
+    # ",\"name\":" # jStr(s.name)
+    # ",\"tier\":" # jStr(s.tier)
+    # ",\"website_url\":" # jOptStr(s.website_url)
+    # ",\"logo_url\":" # jOptStr(s.logo_url)
+    # ",\"description\":" # jOptStr(s.description)
+    # ",\"sort_order\":" # Nat32.toText(s.sort_order)
+    # ",\"is_team_only\":" # jBool(s.is_team_only)
+    # ",\"exposure_percentage\":" # (switch (s.exposure_percentage) { case null "null"; case (?n) Nat8.toText(n) })
+    # ",\"is_active\":" # jBool(s.is_active)
+    # "}"
+  };
+
+  func queryParam(url : Text, name : Text) : ?Text {
+    let parts = Iter.toArray(Text.split(url, #char '?'));
+    if (parts.size() < 2) return null;
+    for (pair in Text.split(parts[1], #char '&')) {
+      let kv = Iter.toArray(Text.split(pair, #char '='));
+      if (kv.size() > 0 and kv[0] == name) {
+        if (kv.size() > 1) return ?kv[1];
+        return ?"";
+      };
+    };
+    null
+  };
+
+  func jsonResponse(status : Nat16, body : Text) : HttpResponse {
+    {
+      status_code = status;
+      headers = [
+        ("content-type", "application/json"),
+        // The website backend caches its side; never serve stale club data.
+        ("cache-control", "no-cache"),
+      ];
+      body = Text.toBlob(body);
+    }
+  };
+
+  public query func http_request(request : HttpRequest) : async HttpResponse {
+    if (request.method != "GET") {
+      return jsonResponse(405, "{\"error\":\"method not allowed\"}");
+    };
+    let path = switch (Text.split(request.url, #char '?').next()) {
+      case (?head) head;
+      case null request.url;
+    };
+    if (path != "/club" and path != "club") {
+      return jsonResponse(404, "{\"error\":\"not found\"}");
+    };
+    let clubId = switch (queryParam(request.url, "id")) {
+      case (?id) id;
+      case null { return jsonResponse(400, "{\"error\":\"missing id\"}") };
+    };
+    let scope = switch (queryParam(request.url, "scope")) {
+      case (?s) s;
+      case null "all";
+    };
+    if (scope != "club" and scope != "subscription" and scope != "teams" and scope != "sponsors" and scope != "all") {
+      return jsonResponse(400, "{\"error\":\"invalid scope\"}");
+    };
+    var profile : ?Types.ClubProfile = null;
+    for (p in profiles.values()) {
+      if (p.id == clubId) profile := ?p;
+    };
+    let club = switch (profile) {
+      case null { return jsonResponse(404, "{\"error\":\"unknown club\"}") };
+      case (?p) {
+        if (p.deleted_at_ms != null) {
+          return jsonResponse(404, "{\"error\":\"unknown club\"}");
+        };
+        p
+      };
+    };
+
+    var body = "{";
+    var first = true;
+    if (scope == "all" or scope == "club") {
+      body #= "\"club\":" # clubJson(club);
+      first := false;
+    };
+    if (scope == "all" or scope == "subscription") {
+      if (not first) body #= ",";
+      var sub : ?Types.ClubSubscription = null;
+      for (s in clubSubscriptions.values()) {
+        if (s.club_id == clubId) sub := ?s;
+      };
+      body #= "\"subscription\":" # (switch (sub) { case null "null"; case (?s) subscriptionJson(s) });
+      first := false;
+    };
+    if (scope == "all" or scope == "teams") {
+      if (not first) body #= ",";
+      body #= "\"teams\":[";
+      var firstTeam = true;
+      for (t in teams.values()) {
+        if (t.club_id == clubId and t.deleted_at_ms == null) {
+          if (not firstTeam) body #= ",";
+          body #= teamJson(t);
+          firstTeam := false;
+        };
+      };
+      body #= "]";
+      first := false;
+    };
+    if (scope == "all" or scope == "sponsors") {
+      if (not first) body #= ",";
+      body #= "\"sponsors\":[";
+      var firstSponsor = true;
+      for (s in sponsors.values()) {
+        if (s.club_id == clubId) {
+          if (not firstSponsor) body #= ",";
+          body #= sponsorJson(s);
+          firstSponsor := false;
+        };
+      };
+      body #= "]";
+    };
+    body #= "}";
+    jsonResponse(200, body)
+  };
 }
