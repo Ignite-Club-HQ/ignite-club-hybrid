@@ -48,28 +48,23 @@ export interface Comment {
   'created_at_ms' : bigint,
   'asset_id' : string,
 }
-export interface Reaction {
-  'kind' : string,
-  'user' : Principal,
+export interface GalleryChatCard {
+  'id' : string,
+  'uploader_id' : Principal,
+  'photo_ids' : Array<string>,
+  'photo_count' : number,
+  'hero_image_url' : [] | [string],
+  'is_prompt' : boolean,
+  'team_id' : string,
+  'updated_at_ms' : bigint,
   'created_at_ms' : bigint,
-  'asset_id' : string,
+  'push_sent' : boolean,
+  'hero_photo_id' : [] | [string],
+  'event_id' : [] | [string],
+  'message_id' : string,
+  'club_id' : string,
 }
-export interface RoleGrant {
-  'role' : string,
-  'user' : Principal,
-  'team_id' : [] | [string],
-  'club_id' : [] | [string],
-}
-export interface State {
-  'capabilities' : Array<Capability>,
-  'schema' : number,
-  'assets' : Array<Asset>,
-  'governor' : Principal,
-  'comments' : Array<Comment>,
-  'reactions' : Array<Reaction>,
-  'roles' : Array<RoleGrant>,
-}
-export interface _SERVICE {
+export interface Main {
   'addBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -91,14 +86,19 @@ export interface _SERVICE {
     { 'Ok' : Comment } |
       { 'Err' : string }
   >,
+  'delete_gallery_chat_card' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'export_state' : ActorMethod<[], { 'Ok' : State } | { 'Err' : string }>,
   'get_asset' : ActorMethod<[string], [] | [Asset]>,
+  'get_gallery_chat_card' : ActorMethod<[string], [] | [GalleryChatCard]>,
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
-  'initialize' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
   'issue_capability' : ActorMethod<
     [string, string, string, bigint],
     { 'Ok' : Capability } |
@@ -111,6 +111,10 @@ export interface _SERVICE {
   >,
   'list_assets' : ActorMethod<[string], Array<Asset>>,
   'list_comments' : ActorMethod<[string], Array<Comment>>,
+  'list_gallery_chat_cards' : ActorMethod<
+    [string, string],
+    Array<GalleryChatCard>
+  >,
   'list_reactions' : ActorMethod<[string], Array<Reaction>>,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
@@ -127,6 +131,23 @@ export interface _SERVICE {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'save_gallery_chat_card' : ActorMethod<
+    [
+      [] | [string],
+      string,
+      string,
+      [] | [string],
+      string,
+      [] | [string],
+      [] | [string],
+      number,
+      Array<string>,
+      boolean,
+      boolean,
+    ],
+    { 'Ok' : GalleryChatCard } |
+      { 'Err' : string }
+  >,
   'set_blob_ref' : ActorMethod<
     [string, [] | [BlobRef]],
     { 'Ok' : Asset } |
@@ -138,5 +159,28 @@ export interface _SERVICE {
       { 'Err' : string }
   >,
 }
+export interface Reaction {
+  'kind' : string,
+  'user' : Principal,
+  'created_at_ms' : bigint,
+  'asset_id' : string,
+}
+export interface RoleGrant {
+  'role' : string,
+  'user' : Principal,
+  'team_id' : [] | [string],
+  'club_id' : [] | [string],
+}
+export interface State {
+  'capabilities' : Array<Capability>,
+  'schema' : number,
+  'assets' : Array<Asset>,
+  'governor' : Principal,
+  'comments' : Array<Comment>,
+  'galleryChatCards' : Array<GalleryChatCard>,
+  'reactions' : Array<Reaction>,
+  'roles' : Array<RoleGrant>,
+}
+export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

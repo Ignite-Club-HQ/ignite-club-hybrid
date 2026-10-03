@@ -53,6 +53,22 @@ export const idlFactory = ({ IDL }) => {
     'purpose' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
+  const GalleryChatCard = IDL.Record({
+    'id' : IDL.Text,
+    'uploader_id' : IDL.Principal,
+    'photo_ids' : IDL.Vec(IDL.Text),
+    'photo_count' : IDL.Nat32,
+    'hero_image_url' : IDL.Opt(IDL.Text),
+    'is_prompt' : IDL.Bool,
+    'team_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'push_sent' : IDL.Bool,
+    'hero_photo_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Opt(IDL.Text),
+    'message_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const RoleGrant = IDL.Record({
     'role' : IDL.Text,
     'user' : IDL.Principal,
@@ -65,11 +81,11 @@ export const idlFactory = ({ IDL }) => {
     'assets' : IDL.Vec(Asset),
     'governor' : IDL.Principal,
     'comments' : IDL.Vec(Comment),
+    'galleryChatCards' : IDL.Vec(GalleryChatCard),
     'reactions' : IDL.Vec(Reaction),
     'roles' : IDL.Vec(RoleGrant),
   });
-  
-  return IDL.Service({
+  const Main = IDL.Service({
     'addBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -95,19 +111,24 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Comment, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_gallery_chat_card' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_asset' : IDL.Func([IDL.Text], [IDL.Opt(Asset)], ['query']),
+    'get_gallery_chat_card' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(GalleryChatCard)],
+        ['query'],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
-    'initialize' : IDL.Func(
-        [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -123,6 +144,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_assets' : IDL.Func([IDL.Text], [IDL.Vec(Asset)], ['query']),
     'list_comments' : IDL.Func([IDL.Text], [IDL.Vec(Comment)], ['query']),
+    'list_gallery_chat_cards' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(GalleryChatCard)],
+        ['query'],
+      ),
     'list_reactions' : IDL.Func([IDL.Text], [IDL.Vec(Reaction)], ['query']),
     'register_asset' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
@@ -139,6 +165,23 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'save_gallery_chat_card' : IDL.Func(
+        [
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Nat32,
+          IDL.Vec(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'Ok' : GalleryChatCard, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_blob_ref' : IDL.Func(
         [IDL.Text, IDL.Opt(BlobRef)],
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
@@ -150,6 +193,8 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
   });
+  
+  return Main;
 };
 
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => { return [IDL.Principal]; };

@@ -57,6 +57,142 @@ export interface Reaction {
     created_at_ms: bigint;
     asset_id: string;
 }
+export interface MainInterface {
+    addBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    add_comment(asset_id: string, body: string, created_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    add_reaction(asset_id: string, kind: string, created_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Reaction;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_asset(asset_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_comment(comment_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Comment;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_gallery_chat_card(card_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    export_state(): Promise<{
+        __kind__: "Ok";
+        Ok: State;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_asset(asset_id: string): Promise<Asset | null>;
+    get_gallery_chat_card(card_id: string): Promise<GalleryChatCard | null>;
+    grant_role(principal: Principal, role: string, club_id: string | null, team_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    issue_capability(asset_id: string, action: string, purpose: string, expires_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Capability;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    listBulkAccessPrincipals(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_assets(club_id: string): Promise<Array<Asset>>;
+    list_comments(asset_id: string): Promise<Array<Comment>>;
+    list_gallery_chat_cards(club_id: string, team_id: string): Promise<Array<GalleryChatCard>>;
+    list_reactions(asset_id: string): Promise<Array<Reaction>>;
+    register_asset(club_id: string, kind: string, mime: string, checksum: string, storage_path: string, visibility: string, expires_at_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    removeBulkAccessPrincipal(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    remove_reaction(asset_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    save_gallery_chat_card(id: string | null, club_id: string, team_id: string, event_id: string | null, message_id: string, hero_photo_id: string | null, hero_image_url: string | null, photo_count: number, photo_ids: Array<string>, is_prompt: boolean, push_sent: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: GalleryChatCard;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_blob_ref(asset_id: string, blob_ref: BlobRef | null): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    transfer_governorship(new_governor: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+}
+export interface GalleryChatCard {
+    id: string;
+    uploader_id: Principal;
+    photo_ids: Array<string>;
+    photo_count: number;
+    hero_image_url?: string;
+    is_prompt: boolean;
+    team_id: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    push_sent: boolean;
+    hero_photo_id?: string;
+    event_id?: string;
+    message_id: string;
+    club_id: string;
+}
 export interface Comment {
     id: string;
     deleted: boolean;
@@ -93,6 +229,7 @@ export interface State {
     assets: Array<Asset>;
     governor: Principal;
     comments: Array<Comment>;
+    galleryChatCards: Array<GalleryChatCard>;
     reactions: Array<Reaction>;
     roles: Array<RoleGrant>;
 }
@@ -110,118 +247,9 @@ export interface Capability {
     purpose: string;
     expires_at_ms: bigint;
 }
-export interface media_metadataInterface {
-    addBulkAccessPrincipal(principal: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    add_comment(asset_id: string, body: string, created_at_ms: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Comment;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    add_reaction(asset_id: string, kind: string, created_at_ms: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Reaction;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    delete_asset(asset_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: Asset;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    delete_comment(comment_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: Comment;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    export_state(): Promise<{
-        __kind__: "Ok";
-        Ok: State;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    get_asset(asset_id: string): Promise<Asset | null>;
-    grant_role(principal: Principal, role: string, club_id: string | null, team_id: string | null): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    issue_capability(asset_id: string, action: string, purpose: string, expires_at_ms: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Capability;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    listBulkAccessPrincipals(): Promise<{
-        __kind__: "Ok";
-        Ok: Array<Principal>;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    list_assets(club_id: string): Promise<Array<Asset>>;
-    list_comments(asset_id: string): Promise<Array<Comment>>;
-    list_reactions(asset_id: string): Promise<Array<Reaction>>;
-    register_asset(club_id: string, kind: string, mime: string, checksum: string, storage_path: string, visibility: string, expires_at_ms: bigint): Promise<{
-        __kind__: "Ok";
-        Ok: Asset;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    removeBulkAccessPrincipal(principal: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    remove_reaction(asset_id: string): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    set_blob_ref(asset_id: string, blob_ref: BlobRef | null): Promise<{
-        __kind__: "Ok";
-        Ok: Asset;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
-    transfer_governorship(new_governor: Principal): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }>;
+export interface media_metadataInterface extends MainInterface {
 }
-import type { Asset as _Asset, BlobRef as _BlobRef, Capability as _Capability, Comment as _Comment, Reaction as _Reaction, RoleGrant as _RoleGrant, State as _State } from "./declarations/media_metadata.did";
+import type { Asset as _Asset, BlobRef as _BlobRef, Capability as _Capability, Comment as _Comment, GalleryChatCard as _GalleryChatCard, Reaction as _Reaction, RoleGrant as _RoleGrant, State as _State } from "./declarations/media_metadata.did";
 export class Media_metadata implements media_metadataInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async addBulkAccessPrincipal(arg0: Principal): Promise<{
@@ -274,6 +302,16 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.delete_comment(arg0);
         return from_candid_variant_n2(result);
     }
+    async delete_gallery_chat_card(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_gallery_chat_card(arg0);
+        return from_candid_variant_n1(result);
+    }
     async export_state(): Promise<{
         __kind__: "Ok";
         Ok: State;
@@ -286,7 +324,11 @@ export class Media_metadata implements media_metadataInterface {
     }
     async get_asset(arg0: string): Promise<Asset | null> {
         const result = await this.actor.get_asset(arg0);
-        return from_candid_opt_n16(result);
+        return from_candid_opt_n19(result);
+    }
+    async get_gallery_chat_card(arg0: string): Promise<GalleryChatCard | null> {
+        const result = await this.actor.get_gallery_chat_card(arg0);
+        return from_candid_opt_n20(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string | null, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -295,17 +337,7 @@ export class Media_metadata implements media_metadataInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n17(arg2), to_candid_opt_n17(arg3));
-        return from_candid_variant_n1(result);
-    }
-    async initialize(): Promise<{
-        __kind__: "Ok";
-        Ok: null;
-    } | {
-        __kind__: "Err";
-        Err: string;
-    }> {
-        const result = await this.actor.initialize();
+        const result = await this.actor.grant_role(arg0, arg1, to_candid_opt_n21(arg2), to_candid_opt_n21(arg3));
         return from_candid_variant_n1(result);
     }
     async issue_capability(arg0: string, arg1: string, arg2: string, arg3: bigint): Promise<{
@@ -316,7 +348,7 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.issue_capability(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n18(result);
+        return from_candid_variant_n22(result);
     }
     async listBulkAccessPrincipals(): Promise<{
         __kind__: "Ok";
@@ -326,7 +358,7 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.listBulkAccessPrincipals();
-        return from_candid_variant_n19(result);
+        return from_candid_variant_n23(result);
     }
     async list_assets(arg0: string): Promise<Array<Asset>> {
         const result = await this.actor.list_assets(arg0);
@@ -335,6 +367,10 @@ export class Media_metadata implements media_metadataInterface {
     async list_comments(arg0: string): Promise<Array<Comment>> {
         const result = await this.actor.list_comments(arg0);
         return result;
+    }
+    async list_gallery_chat_cards(arg0: string, arg1: string): Promise<Array<GalleryChatCard>> {
+        const result = await this.actor.list_gallery_chat_cards(arg0, arg1);
+        return from_candid_vec_n12(result);
     }
     async list_reactions(arg0: string): Promise<Array<Reaction>> {
         const result = await this.actor.list_reactions(arg0);
@@ -370,6 +406,16 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.remove_reaction(arg0);
         return from_candid_variant_n1(result);
     }
+    async save_gallery_chat_card(arg0: string | null, arg1: string, arg2: string, arg3: string | null, arg4: string, arg5: string | null, arg6: string | null, arg7: number, arg8: Array<string>, arg9: boolean, arg10: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: GalleryChatCard;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.save_gallery_chat_card(to_candid_opt_n21(arg0), arg1, arg2, to_candid_opt_n21(arg3), arg4, to_candid_opt_n21(arg5), to_candid_opt_n21(arg6), arg7, arg8, arg9, arg10);
+        return from_candid_variant_n24(result);
+    }
     async set_blob_ref(arg0: string, arg1: BlobRef | null): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -377,7 +423,7 @@ export class Media_metadata implements media_metadataInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n20(arg1));
+        const result = await this.actor.set_blob_ref(arg0, to_candid_opt_n25(arg1));
         return from_candid_variant_n4(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
@@ -394,8 +440,11 @@ export class Media_metadata implements media_metadataInterface {
 function from_candid_Asset_n5(value: _Asset): Asset {
     return from_candid_record_n6(value);
 }
-function from_candid_RoleGrant_n13(value: _RoleGrant): RoleGrant {
+function from_candid_GalleryChatCard_n13(value: _GalleryChatCard): GalleryChatCard {
     return from_candid_record_n14(value);
+}
+function from_candid_RoleGrant_n17(value: _RoleGrant): RoleGrant {
+    return from_candid_record_n18(value);
 }
 function from_candid_State_n9(value: _State): State {
     return from_candid_record_n10(value);
@@ -403,8 +452,11 @@ function from_candid_State_n9(value: _State): State {
 function from_candid_opt_n15(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n16(value: [] | [_Asset]): Asset | null {
+function from_candid_opt_n19(value: [] | [_Asset]): Asset | null {
     return value.length === 0 ? null : from_candid_Asset_n5(value[0]);
+}
+function from_candid_opt_n20(value: [] | [_GalleryChatCard]): GalleryChatCard | null {
+    return value.length === 0 ? null : from_candid_GalleryChatCard_n13(value[0]);
 }
 function from_candid_opt_n7(value: [] | [_BlobRef]): BlobRef | null {
     return value.length === 0 ? null : value[0];
@@ -415,6 +467,7 @@ function from_candid_record_n10(value: {
     assets: Array<_Asset>;
     governor: Principal;
     comments: Array<_Comment>;
+    galleryChatCards: Array<_GalleryChatCard>;
     reactions: Array<_Reaction>;
     roles: Array<_RoleGrant>;
 }): {
@@ -423,6 +476,7 @@ function from_candid_record_n10(value: {
     assets: Array<Asset>;
     governor: Principal;
     comments: Array<Comment>;
+    galleryChatCards: Array<GalleryChatCard>;
     reactions: Array<Reaction>;
     roles: Array<RoleGrant>;
 } {
@@ -432,11 +486,60 @@ function from_candid_record_n10(value: {
         assets: from_candid_vec_n11(value.assets),
         governor: value.governor,
         comments: value.comments,
+        galleryChatCards: from_candid_vec_n12(value.galleryChatCards),
         reactions: value.reactions,
-        roles: from_candid_vec_n12(value.roles)
+        roles: from_candid_vec_n16(value.roles)
     };
 }
 function from_candid_record_n14(value: {
+    id: string;
+    uploader_id: Principal;
+    photo_ids: Array<string>;
+    photo_count: number;
+    hero_image_url: [] | [string];
+    is_prompt: boolean;
+    team_id: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    push_sent: boolean;
+    hero_photo_id: [] | [string];
+    event_id: [] | [string];
+    message_id: string;
+    club_id: string;
+}): {
+    id: string;
+    uploader_id: Principal;
+    photo_ids: Array<string>;
+    photo_count: number;
+    hero_image_url?: string;
+    is_prompt: boolean;
+    team_id: string;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+    push_sent: boolean;
+    hero_photo_id?: string;
+    event_id?: string;
+    message_id: string;
+    club_id: string;
+} {
+    return {
+        id: value.id,
+        uploader_id: value.uploader_id,
+        photo_ids: value.photo_ids,
+        photo_count: value.photo_count,
+        hero_image_url: record_opt_to_undefined(from_candid_opt_n15(value.hero_image_url)),
+        is_prompt: value.is_prompt,
+        team_id: value.team_id,
+        updated_at_ms: value.updated_at_ms,
+        created_at_ms: value.created_at_ms,
+        push_sent: value.push_sent,
+        hero_photo_id: record_opt_to_undefined(from_candid_opt_n15(value.hero_photo_id)),
+        event_id: record_opt_to_undefined(from_candid_opt_n15(value.event_id)),
+        message_id: value.message_id,
+        club_id: value.club_id
+    };
+}
+function from_candid_record_n18(value: {
     role: string;
     user: Principal;
     team_id: [] | [string];
@@ -524,7 +627,26 @@ function from_candid_variant_n1(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n18(value: {
+function from_candid_variant_n2(value: {
+    Ok: _Comment;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Comment;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n22(value: {
     Ok: _Capability;
 } | {
     Err: string;
@@ -543,7 +665,7 @@ function from_candid_variant_n18(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n19(value: {
+function from_candid_variant_n23(value: {
     Ok: Array<Principal>;
 } | {
     Err: string;
@@ -562,20 +684,20 @@ function from_candid_variant_n19(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n2(value: {
-    Ok: _Comment;
+function from_candid_variant_n24(value: {
+    Ok: _GalleryChatCard;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Comment;
+    Ok: GalleryChatCard;
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_GalleryChatCard_n13(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -641,13 +763,16 @@ function from_candid_variant_n8(value: {
 function from_candid_vec_n11(value: Array<_Asset>): Array<Asset> {
     return value.map((x)=>from_candid_Asset_n5(x));
 }
-function from_candid_vec_n12(value: Array<_RoleGrant>): Array<RoleGrant> {
-    return value.map((x)=>from_candid_RoleGrant_n13(x));
+function from_candid_vec_n12(value: Array<_GalleryChatCard>): Array<GalleryChatCard> {
+    return value.map((x)=>from_candid_GalleryChatCard_n13(x));
 }
-function to_candid_opt_n17(value: string | null): [] | [string] {
+function from_candid_vec_n16(value: Array<_RoleGrant>): Array<RoleGrant> {
+    return value.map((x)=>from_candid_RoleGrant_n17(x));
+}
+function to_candid_opt_n21(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n20(value: BlobRef | null): [] | [_BlobRef] {
+function to_candid_opt_n25(value: BlobRef | null): [] | [_BlobRef] {
     return value === null ? candid_none() : candid_some(value);
 }
 export interface CreateActorOptions {
