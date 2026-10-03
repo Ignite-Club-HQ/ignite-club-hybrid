@@ -12,7 +12,8 @@
  */
 
 import { withFeatureBackend } from "@/live/featureRouter";
-import { recordLiveClientPerf } from "@/live/features/insights";
+// features/insights is imported lazily at the call site so the ICP SDK
+// stays out of the entry chunk (this logger runs app-wide).
 
 const SLOW_THRESHOLD_MS = 5_000;
 
@@ -121,6 +122,7 @@ export function maybeLogSlowFetch(opts: {
         });
       },
       icp: async (ctx) => {
+        const { recordLiveClientPerf } = await import("@/live/features/insights");
         await recordLiveClientPerf(ctx, [
           {
             metric: entry.query_name,

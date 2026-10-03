@@ -6,7 +6,8 @@ import {
   getCurrentInternetIdentity,
   signOutInternetIdentity,
 } from "@/live/internetIdentityAuth";
-import { getLiveMyRoleGrants } from "@/live/features/membership";
+// features/membership is imported lazily at the call site so the ICP SDK
+// stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { isIcpAuthAvailable } from "@/live/authBackendMode";
 import {
@@ -96,6 +97,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         let clubIds: string[] = [];
         if (identity) {
           try {
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
             const grants = await getLiveMyRoleGrants({ identity, target: getActiveIcpTarget() });
             clubIds = [...new Set(grants.map(g => g.club[0]).filter((id): id is string => !!id))];
           } catch (error) {

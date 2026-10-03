@@ -45,7 +45,8 @@ import { invalidateNotificationSurfaces } from "@/lab/notificationCachePolicy";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveMiniLeague } from "@/live/features/miniLeagues";
+// features/miniLeagues is imported lazily at the call site so the ICP SDK
+// stays out of the entry chunk (the header mounts on every page).
 
 // Preload Ignite icon so it's instantly available when switching from club theme
 const preloadedIgniteIcon = new Image();
@@ -1071,6 +1072,7 @@ export function AppHeader() {
               },
               icp: async (ctx) => {
                 try {
+                  const { getLiveMiniLeague } = await import("@/live/features/miniLeagues");
                   const league = await getLiveMiniLeague(ctx, relatedId);
                   return { id: league.id };
                 } catch {

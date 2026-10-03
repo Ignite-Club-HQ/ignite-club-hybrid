@@ -1,7 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { setLiveEventRsvp, adminUpsertLiveRsvp } from "@/live/features/events";
+// features/events is imported lazily at the call site so the ICP SDK stays
+// out of the entry chunk (the offline RSVP queue installs at app start).
 
 export type QueuedRsvpStatus = "going" | "maybe" | "not_going";
 
@@ -95,6 +96,7 @@ async function sendQueuedRsvp(r: QueuedRsvp): Promise<boolean> {
       return withFeatureBackend("events", {
         supabase: () => false,
         icp: async (ctx) => {
+          const { setLiveEventRsvp, adminUpsertLiveRsvp } = await import("@/live/features/events");
           if (r.childId) {
             await adminUpsertLiveRsvp(ctx, r.eventId, r.userId, r.status, {
               childId: r.childId,

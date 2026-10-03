@@ -15,7 +15,8 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+// features/identityAccessClient is imported lazily at the call site so the
+// ICP SDK stays out of the entry chunk (profile caching runs app-wide).
 
 export interface CachedProfile {
   id: string;
@@ -83,6 +84,7 @@ async function flushBatch() {
         return (data ?? []) as CachedProfile[];
       },
       icp: async (ctx) => {
+        const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
         const profiles = await listLiveProfilesByIds(ctx, ids);
         return profiles.map((p): CachedProfile => ({
           id: p.account_id,
