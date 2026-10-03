@@ -263,7 +263,7 @@ fn remove_profile_entry(account_id: &str) {
     PROFILES.with(|m| m.borrow_mut().remove(&account_id.to_string()));
 }
 fn all_profiles() -> Vec<Profile> {
-    PROFILES.with(|m| m.borrow().iter().map(|(_, v)| decode(&v)).collect())
+    PROFILES.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect())
 }
 
 // ---- Entitlements ----
@@ -289,15 +289,15 @@ fn entitlements_count() -> u64 {
     ENTITLEMENTS.with(|m| m.borrow().len())
 }
 fn all_entitlements() -> Vec<Entitlement> {
-    ENTITLEMENTS.with(|m| m.borrow().iter().map(|(_, v)| decode(&v)).collect())
+    ENTITLEMENTS.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect())
 }
 /// Removes every entitlement granted to `principal` (used by erase_account).
 fn remove_entitlements_for_principal(principal: Principal) {
     let keys: Vec<String> = ENTITLEMENTS.with(|m| {
         m.borrow()
             .iter()
-            .filter(|(_, v)| decode::<Entitlement>(v).principal == principal)
-            .map(|(k, _)| k)
+            .filter(|e| decode::<Entitlement>(&e.value()).principal == principal)
+            .map(|e| e.key().clone())
             .collect()
     });
     ENTITLEMENTS.with(|m| {
