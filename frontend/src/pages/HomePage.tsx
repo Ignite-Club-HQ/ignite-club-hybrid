@@ -1851,7 +1851,21 @@ export default function HomePage() {
   useEffect(() => {
     setHasRevealed(false);
   }, [user?.id, activeClubFilter]);
-  const showContent = computedShowContent || hasRevealed;
+
+  // Failsafe: never trap the user on the loading skeleton. If a section
+  // never reports ready (e.g. its code chunk failed to load on a stale
+  // cache, or a query hangs), reveal the page after a grace period once
+  // auth has initialized. The empty-state welcome stays gated on resolved
+  // memberships, so this can't flash the wrong content.
+  const [revealTimedOut, setRevealTimedOut] = useState(false);
+  useEffect(() => {
+    setRevealTimedOut(false);
+    if (!initialized || computedShowContent || hasRevealed) return;
+    const timer = setTimeout(() => setRevealTimedOut(true), 10000);
+    return () => clearTimeout(timer);
+  }, [initialized, computedShowContent, hasRevealed, user?.id, activeClubFilter]);
+
+  const showContent = computedShowContent || hasRevealed || revealTimedOut;
 
   // Empty-state gate: only show the "Find or Join a Club" welcome once we
   // authoritatively know the user has zero clubs AND zero teams. The
