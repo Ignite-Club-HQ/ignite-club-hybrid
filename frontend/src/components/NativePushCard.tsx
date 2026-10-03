@@ -167,6 +167,7 @@ export function NativePushCard({ userId }: NativePushCardProps) {
     });
     
     try {
+      // icp-guard: allow push delivery stays Supabase-only by design (no canister shape)
       const { data, error } = await supabase.functions.invoke('test-push-notification', {
         body: { delay: testPushDelay }
       });

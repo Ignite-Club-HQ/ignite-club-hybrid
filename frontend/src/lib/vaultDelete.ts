@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 /** Server-side batch bound for permanent-delete-photos. */
 export const VAULT_DELETE_CHUNK = 100;
@@ -36,6 +37,9 @@ export async function permanentlyDeleteVaultItems(opts: {
   fileIds?: string[];
   deletionType?: string;
 }): Promise<VaultDeleteResult> {
+  // NEEDS-CANISTER: permanent deletion of ICP blob-store objects has no
+  // canister shape yet; fail closed rather than deleting via Supabase.
+  assertSupabaseWritePath("vault", "permanent vault deletion");
   const photoIds = Array.from(new Set(opts.photoIds ?? []));
   const fileIds = Array.from(new Set(opts.fileIds ?? []));
   const deletionType = opts.deletionType ?? "permanent";

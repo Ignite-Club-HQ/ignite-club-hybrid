@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { selectCachedProfileById } from "@/lib/profileCache";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 type RoleRequestAction = "approve" | "deny";
@@ -44,6 +45,9 @@ export async function processRoleRequest(
   client: IgniteSupabaseClient = supabase,
   profileLookup: ProfileLookup = selectCachedProfileById,
 ): Promise<void> {
+  // NEEDS-CANISTER: role-request approve/deny + notification email have no
+  // canister shape yet; fail closed rather than writing to the wrong backend.
+  assertSupabaseWritePath("membership", "role request processing");
   const { data, error: fetchError } = await client.from("role_requests").select(`
     *,
     teams:team_id(id, name, club_id, clubs:club_id(id, name, logo_url)),

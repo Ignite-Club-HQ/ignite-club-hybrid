@@ -157,6 +157,7 @@ export function LinkDriveFolderDialog({ open, onOpenChange, vaultFolderId, clubI
   const startOAuth = async () => {
     try {
       setLoading(true);
+      // icp-guard: allow Google Drive import stays Supabase-only by design (no canister shape)
       const { data, error } = await supabase.functions.invoke('google-drive-import?action=get-auth-url', {
         body: { redirectUri: getRedirectUri() },
       });

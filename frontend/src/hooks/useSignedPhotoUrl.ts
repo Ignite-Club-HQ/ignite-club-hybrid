@@ -120,6 +120,7 @@ async function createSignedUrlDirect(url: string): Promise<string | null> {
   if (!privatePath) return null;
 
   const { bucket, path } = privatePath;
+  // icp-guard: allow media bytes stay in Supabase storage by design; ICP blob-store objects resolve via resolveIcpBlobObjectUrl instead
   const { data, error } = await withTimeout(
     supabase.storage.from(bucket).createSignedUrl(path, SIGNED_URL_EXPIRES_IN_SECONDS),
     REQUEST_TIMEOUT_MS,

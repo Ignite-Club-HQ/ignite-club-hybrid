@@ -111,6 +111,7 @@ function SupabaseAppSettingsPage() {
 
   const runPhotoPromptMutation = useMutation({
     mutationFn: async () => {
+      // icp-guard: allow app-admin tooling (manual photo-prompt run) stays Supabase-only by design
       const { data, error } = await supabase.functions.invoke("post-game-photo-prompts", {
         body: {},
       });
