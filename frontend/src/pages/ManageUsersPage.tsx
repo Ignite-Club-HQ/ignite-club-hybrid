@@ -531,14 +531,27 @@ function SupabaseManageUsersPage() {
       if (error) throw error;
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      const notifyError = resolveAuthBackend() === "icp" 
-        ? null // NEEDS-CANISTER: App Admin notifications stay Supabase-only
-        : (await supabase.from("notifications").insert({
-            user_id: userId,
-            type: "membership",
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+          await sendGamificationNotification({
+            userId,
+            clubId: userId,
+            kind: "membership",
             message: "You have been granted App Admin privileges",
-          })).error;
-      if (notifyError) throw new RoleNotificationError(notifyError.message);
+            dedupHours: 0,
+          });
+        } catch (e) {
+          throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
+        }
+      } else {
+        const notifyError = (await supabase.from("notifications").insert({
+          user_id: userId,
+          type: "membership",
+          message: "You have been granted App Admin privileges",
+        })).error;
+        if (notifyError) throw new RoleNotificationError(notifyError.message);
+      }
     },
     onSuccess: (_, { displayName }) => {
       queryClient.invalidateQueries({ queryKey: ["app-admins"] });
@@ -570,14 +583,27 @@ function SupabaseManageUsersPage() {
       if (error) throw error;
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      const notifyError = resolveAuthBackend() === "icp"
-        ? null // NEEDS-CANISTER: App Admin notifications stay Supabase-only
-        : (await supabase.from("notifications").insert({
-            user_id: userId,
-            type: "membership",
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+          await sendGamificationNotification({
+            userId,
+            clubId: userId,
+            kind: "membership",
             message: "Your App Admin privileges have been removed",
-          })).error;
-      if (notifyError) throw new RoleNotificationError(notifyError.message);
+            dedupHours: 0,
+          });
+        } catch (e) {
+          throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
+        }
+      } else {
+        const notifyError = (await supabase.from("notifications").insert({
+          user_id: userId,
+          type: "membership",
+          message: "Your App Admin privileges have been removed",
+        })).error;
+        if (notifyError) throw new RoleNotificationError(notifyError.message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-admins"] });
@@ -623,10 +649,28 @@ function SupabaseManageUsersPage() {
         message: `You have been assigned the ${role.replace('_', ' ')} role`,
       }));
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      const notifyError = resolveAuthBackend() === "icp"
-        ? null // NEEDS-CANISTER: Bulk role notifications stay Supabase-only
-        : (await supabase.from("notifications").insert(notifications)).error;
-      if (notifyError) throw new RoleNotificationError(notifyError.message);
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+          await withFeatureBackend("notifications", {
+            supabase: async () => {},
+            icp: async (ctx) =>
+              fanOutLiveNotifications(ctx, {
+                userIds,
+                clubId: clubId || userIds[0],
+                kind: "membership",
+                body: `You have been assigned the ${role.replace('_', ' ')} role`,
+                idempotencyKeyPrefix: `role-assign-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
+              }),
+          });
+        } catch (e) {
+          throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
+        }
+      } else {
+        const notifyError = (await supabase.from("notifications").insert(notifications)).error;
+        if (notifyError) throw new RoleNotificationError(notifyError.message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["search-users-manage"] });
@@ -691,10 +735,28 @@ function SupabaseManageUsersPage() {
         message: `Your ${role.replace('_', ' ')} role has been removed`,
       }));
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      const notifyError = resolveAuthBackend() === "icp"
-        ? null // NEEDS-CANISTER: Bulk role notifications stay Supabase-only
-        : (await supabase.from("notifications").insert(notifications)).error;
-      if (notifyError) throw new RoleNotificationError(notifyError.message);
+      if (resolveAuthBackend() === "icp") {
+        try {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+          await withFeatureBackend("notifications", {
+            supabase: async () => {},
+            icp: async (ctx) =>
+              fanOutLiveNotifications(ctx, {
+                userIds,
+                clubId: clubId || userIds[0],
+                kind: "membership",
+                body: `Your ${role.replace('_', ' ')} role has been removed`,
+                idempotencyKeyPrefix: `role-remove-${role}-${clubId || "none"}-${teamId || "none"}-${Date.now()}`,
+              }),
+          });
+        } catch (e) {
+          throw new RoleNotificationError((e as Error)?.message ?? "Notification failed");
+        }
+      } else {
+        const notifyError = (await supabase.from("notifications").insert(notifications)).error;
+        if (notifyError) throw new RoleNotificationError(notifyError.message);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["search-users-manage"] });
