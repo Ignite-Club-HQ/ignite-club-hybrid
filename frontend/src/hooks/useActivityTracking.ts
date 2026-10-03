@@ -6,7 +6,8 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
-import { recordLiveUserActivity } from "@/live/features/insights";
+// features/insights is imported lazily at the call site so the ICP SDK
+// stays out of the entry chunk (activity tracking runs app-wide).
 
 // Generate a unique session ID per browser session
 const SESSION_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -114,6 +115,7 @@ export function useActivityTracking() {
     try {
       const identity = await getCurrentInternetIdentity();
       if (!identity) return;
+      const { recordLiveUserActivity } = await import("@/live/features/insights");
       await recordLiveUserActivity(
         { identity, target: getActiveIcpTarget() },
         identity.getPrincipal().toText(),
