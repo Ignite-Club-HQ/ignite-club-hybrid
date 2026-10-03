@@ -1188,7 +1188,29 @@ persistent actor {
     } else {
       reactions := reactions.concat([{ message_id; user = caller; emoji }]);
     };
+    ignore fanOutWsReactionPoke(message_id);
     #Ok
+  };
+
+  // ===================== Realtime pokes (IC WebSocket) =====================
+  // The four standard gateway-facing methods the IC WebSocket gateway
+  // requires. All state and authorization live in the SDK; the app layer
+  // only ever sends poke messages (Types.WsAppMessage).
+
+  public shared ({ caller }) func ws_open(args : IcWebSocketCdk.CanisterWsOpenArguments) : async IcWebSocketCdk.CanisterWsOpenResult {
+    await ws.ws_open(caller, args);
+  };
+
+  public shared ({ caller }) func ws_close(args : IcWebSocketCdk.CanisterWsCloseArguments) : async IcWebSocketCdk.CanisterWsCloseResult {
+    await ws.ws_close(caller, args);
+  };
+
+  public shared ({ caller }) func ws_message(args : IcWebSocketCdk.CanisterWsMessageArguments, msg_type : ?Types.WsAppMessage) : async IcWebSocketCdk.CanisterWsMessageResult {
+    await ws.ws_message(caller, args, msg_type);
+  };
+
+  public shared query ({ caller }) func ws_get_messages(args : IcWebSocketCdk.CanisterWsGetMessagesArguments) : async IcWebSocketCdk.CanisterWsGetMessagesResult {
+    ws.ws_get_messages(caller, args);
   };
 
   func reactionsSummaryFor(message_id : Text) : [Types.ReactionSummary] {
