@@ -1,0 +1,8 @@
+# Plain persistent actor: no install argument. The governor is read from the
+# GOVERNOR_PRINCIPAL canister environment variable (fail-closed while unset).
+name: media_blob_store
+recipe:
+  type: "@dfinity/motoko@v5.1.0"
+settings:
+  environment_variables:
+    GOVERNOR_PRINCIPAL: "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae"
