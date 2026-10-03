@@ -237,6 +237,17 @@ export function useMessageReads(
     mutationFn: async (ids: string[]) => {
       if (!currentUserId || ids.length === 0) return;
 
+      if (isFeatureRoutedToIcp("messaging")) {
+        // ICP: mark_read(conversation, message) advances the caller's read
+        // frontier up to the latest flushed message — one canister call
+        // covers the whole batch. No Supabase session/RPC involved.
+        await withFeatureBackend("messaging", {
+          supabase: async () => undefined, // unreachable — guarded above
+          icp: (ctx) => markLiveConversationRead(ctx, contextId, ids[ids.length - 1]),
+        });
+        return;
+      }
+
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) return;
 
