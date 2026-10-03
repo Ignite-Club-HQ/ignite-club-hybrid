@@ -67,6 +67,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { toast } from "sonner";
 import { QuickSetupDutyDialog } from "@/components/QuickSetupDutyDialog";
 import { ManualMatchDialog } from "@/components/ManualMatchDialog";
@@ -1272,6 +1273,7 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
                 onPlayerTap={handlePlayerTap}
                 onTeamTap={handleTeamTap}
                 onQuickAssignDuty={(dutyId, selectedGroup) => {
+                  if (resolveAuthBackend() === "icp") return;
                   setQuickAssignDutyId(dutyId);
                   setActiveDutiesGroup(selectedGroup);
                 }}

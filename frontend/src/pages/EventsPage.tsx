@@ -15,6 +15,7 @@ import { EventCard } from "@/components/events/EventCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PageLoading } from "@/components/ui/page-loading";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Drawer,
@@ -444,6 +445,7 @@ export default function EventsPage() {
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-filter", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, clubFilter, userMemberships?.teamIds],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") return [];
       if (useIcpLab) {
         return fixtureData.getLocalLabTeamList().map((team) => ({
           id: team.id,

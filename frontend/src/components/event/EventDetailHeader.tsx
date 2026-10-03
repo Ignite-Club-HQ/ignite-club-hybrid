@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+import { resolveAuthBackend } from "@/live/authBackendMode";
 } from "@/components/ui/dropdown-menu";
 
 type EventType = "game" | "training" | "social";
@@ -76,6 +77,7 @@ export function EventDetailHeader({
                   <Pencil className="h-4 w-4 mr-2" />
                   Edit {eventTypeLabel}
                 </DropdownMenuItem>
+                {resolveAuthBackend() !== "icp" && isUpcoming && (canSendReminders ? (
                 {isUpcoming && (canSendReminders ? (
                   <DropdownMenuItem onClick={onSendReminders}>
                     <Bell className="h-4 w-4 mr-2 text-primary" />
@@ -88,10 +90,13 @@ export function EventDetailHeader({
                     <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1">Pro</Badge>
                   </DropdownMenuItem>
                 ))}
+                ))}
+                {resolveAuthBackend() !== "icp" && isUpcoming && (
                 {isUpcoming && (
                   <DropdownMenuItem onClick={onResendInvites}>
                     <UserPlus className="h-4 w-4 mr-2 text-primary" />
                     Resend Invites
+                )}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />

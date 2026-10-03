@@ -4,6 +4,7 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { queueRsvp } from "@/lib/rsvpQueue";
 import { awardEarlyRsvpPoints } from "@/lib/earlyRsvpPoints";
 import { setLocalEventRsvp } from "@/lab/localEventsService";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, adminUpdateLiveRsvpStatus } from "@/live/features/events";
 import { recordLiveRsvpCompleted } from "@/live/features/insights";
@@ -266,6 +267,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
 
   const saveRsvpNoteMutation = useMutation({
     mutationFn: async ({ childId, note }: { childId?: string; note: string | null }) => {
+      if (resolveAuthBackend() === "icp") return;
       const target = childId
         ? childRsvps.find((r) => r.child_id === childId)
         : myRsvp;
@@ -486,6 +488,7 @@ export function useEventRsvpMutations(params: UseEventRsvpMutationsArgs) {
   // Toggle payment status mutation
   const togglePaymentMutation = useMutation({
     mutationFn: async ({ userId, isPaid }: { userId: string; isPaid: boolean }) => {
+      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) {
         queryClient.setQueryData(eventKeys.payments(id), (current: unknown) => {
           const rows = Array.isArray(current) ? current : [];

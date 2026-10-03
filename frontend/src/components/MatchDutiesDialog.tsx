@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { AddDutySheet } from "@/components/AddDutySheet";
 import { cn } from "@/lib/utils";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface GroupDuty {
   id: string;
@@ -55,6 +56,7 @@ export function MatchDutiesDialog({
   // Fetch group duties
   const { data: duties, isLoading: dutiesLoading } = useQuery({
     queryKey: ["event-group-duties", groupId],
+      if (resolveAuthBackend() === "icp") return [];
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_group_duties")
@@ -132,6 +134,7 @@ export function MatchDutiesDialog({
   });
 
   // Add duty mutation
+      if (resolveAuthBackend() === "icp") return;
   const addDutyMutation = useMutation({
     mutationFn: async (name: string) => {
       const { error } = await supabase.from("event_group_duties").insert({
@@ -148,6 +151,7 @@ export function MatchDutiesDialog({
     onError: (error: Error) => toast.error(error.message),
   });
 
+      if (resolveAuthBackend() === "icp") return;
   // Assign duty mutation
   const assignDutyMutation = useMutation({
     mutationFn: async ({ dutyId, assignedTo }: { dutyId: string; assignedTo: string | null }) => {
@@ -165,6 +169,7 @@ export function MatchDutiesDialog({
     },
     onError: (error: Error) => toast.error(error.message),
   });
+      if (resolveAuthBackend() === "icp") return;
 
   // Delete duty mutation
   const deleteDutyMutation = useMutation({

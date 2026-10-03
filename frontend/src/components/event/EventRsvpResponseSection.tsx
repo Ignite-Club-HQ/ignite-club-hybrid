@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { Separator } from "@/components/ui/separator";
 import {
   isParentFirstEvent,
@@ -182,6 +183,7 @@ export function EventRsvpResponseSection({
                   ))}
                 </div>
                 {childRsvp && (
+                {resolveAuthBackend() !== "icp" && (
                   <button
                     type="button"
                     onClick={() => setNoteTarget({ kind: "child", childId: child.id, subjectName: child.name })}
@@ -192,6 +194,7 @@ export function EventRsvpResponseSection({
                       {childRsvp.notes || "Add a note…"}
                     </span>
                   </button>
+                )}
                 )}
                 <TrainingDefaultControl
                   teamId={event.team_id ?? null}
@@ -255,6 +258,7 @@ export function EventRsvpResponseSection({
           {String(myRsvp.notes ?? "").startsWith("Present") ? "Mark absent" : "Mark present"}
         </Button>
       )}
+      {resolveAuthBackend() !== "icp" && myRsvp && (
       {myRsvp && (
         <button
           type="button"
@@ -265,6 +269,7 @@ export function EventRsvpResponseSection({
           <span className={myRsvp.notes ? "text-foreground" : undefined}>
             {myRsvp.notes || "Add a note…"}
           </span>
+      )}
         </button>
       )}
       {showPaymentStatus && myRsvp?.status === "going" && (

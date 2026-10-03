@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 import { getLiveVaultFolder, listLiveVaultFolders } from "@/live/features/vault";
@@ -1344,7 +1345,7 @@ function SupabaseVaultPage() {
               onUpload={handleDialogUpload}
               isUploading={uploading}
               targetName={currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "club" ? currentView.clubName : "Vault")}
-            />
+            />)}
           </Suspense>
 
           <VaultDriveLinkDialogs
@@ -1511,8 +1512,9 @@ function SupabaseVaultPage() {
           purchasedStorageGb={purchasedStorageGb}
           scheduledDowngradeGb={scheduledDowngradeGb}
           storageDowngradeAt={storageDowngradeAt}
-        />
-        </Suspense>
+            />
+            )}
+          </Suspense>
       )}
 
       <VaultFolderManagementDialogs
