@@ -394,14 +394,11 @@ function SupabaseCompetitionJoinPage() {
           return (data as any[])?.[0]?.competition_id;
         },
         icp: async (ctx) => {
-          // Provisional mapping: register_team is the organizer-facing entry
-          // point on competition_domain and has no token/division concept —
-          // token validation and division assignment stay Supabase-only
-          // (no canister shape). This calls it with the already-resolved
-          // competition from the token lookup above; verify post-deploy.
-          const team = teams.find((t) => t.id === teamId);
-          await registerLiveCompetitionTeam(ctx, comp!.id, teamId, team?.club_id ?? "");
-          // stays Supabase: no canister shape for division assignment.
+          // join_competition_with_link validates the token canister-side and
+          // registers the team with its division in one call — no
+          // competition-management rights needed (the link is the
+          // organiser's authorization).
+          await joinLiveCompetitionWithLink(ctx, token, teamId, divisionId || null);
           return comp!.id;
         },
       });
