@@ -18,8 +18,8 @@ import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
 import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
 
-persistent actor {
-  var governor : Principal;
+persistent actor (governorInit : Principal) {
+  var governor : Principal = governorInit;
   var roles : [Types.RoleGrant];
   var conversations : [Types.Conversation];
   var messages : [Types.Message];
@@ -67,13 +67,6 @@ persistent actor {
   transient let wsHandlers = IcWebSocketCdkTypes.WsHandlers(null, null, null);
   transient let ws = IcWebSocketCdk.IcWebSocket(wsState, wsParams, wsHandlers);
   ws.init<system>();
-
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
