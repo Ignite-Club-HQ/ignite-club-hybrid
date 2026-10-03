@@ -444,6 +444,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, caller, body, idempotency_key, attachment);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }
@@ -489,6 +490,7 @@ persistent actor {
           if (not already) {
             let posted = postMessage(i, caller, body, key, null);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             delivered += 1;
           };
         };
@@ -1115,6 +1117,7 @@ persistent actor {
             };
             let posted = postMessage(ci, caller, orig.body, key, orig.attachment);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
             #Ok(posted)
           };
@@ -1153,6 +1156,7 @@ persistent actor {
           case (?ci) {
             let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null);
             ignore fanOutChatNotify(posted);
+            ignore fanOutWsPokeForMessage(posted);
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
             scheduledMessages := Array.tabulate<Types.ScheduledMessage>(scheduledMessages.size(), func(pos) = if (pos == i) updated else scheduledMessages[pos]);
             #Ok(updated)
@@ -1570,6 +1574,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, caller, body, idempotency_key, null);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }
@@ -1613,6 +1618,7 @@ persistent actor {
       case (?i) {
         let posted = postMessage(i, governor, body, idempotency_key, null);
         ignore fanOutChatNotify(posted);
+        ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
       };
     }
