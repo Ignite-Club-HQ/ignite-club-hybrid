@@ -413,6 +413,22 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: attendanceCounts } = useQuery({
     queryKey: ["card-attendance-counts", event.id, event.type],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => ({ going: 0, maybe: 0, not_going: 0 }), // unreachable — guarded above
+          icp: async (ctx) => {
+            const roster = await getLiveEventRosterDetailed(ctx, event.id);
+            const counts = { going: 0, maybe: 0, not_going: 0 };
+            roster.rsvps.forEach(({ rsvp }) => {
+              if (!isSocialEvent && rsvp.child_id.length === 0) return;
+              if (rsvp.state === "going") counts.going++;
+              else if (rsvp.state === "maybe") counts.maybe++;
+              else if (rsvp.state === "not_going") counts.not_going++;
+            });
+            return counts;
+          },
+        });
+      }
       let query = supabase
         .from("rsvps")
         .select("status")
@@ -440,6 +456,25 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: myDuties } = useQuery({
     queryKey: ["card-my-duties", event.id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => [] as any[], // unreachable — guarded above
+          icp: async (ctx) => {
+            const callerText = ctx.identity.getPrincipal().toText();
+            const duties = await listLiveDuties(ctx, event.id);
+            // The canister Duty has no times; the badge renders name + status.
+            return duties
+              .filter((d) => d.account_id === callerText)
+              .map((d) => ({
+                id: `${d.event_id}:${d.duty}`,
+                name: d.duty,
+                start_time: null,
+                end_time: null,
+                status: d.completed ? "completed" : "open",
+              }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("duties")
         .select("id, name, start_time, end_time, status")
