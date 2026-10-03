@@ -97,6 +97,20 @@ module {
   // a set of competitions over a time window. broadcasts always reports 0 —
   // broadcast records stay in Supabase (competition_broadcasts) by design.
   public type CompetitionEngagementSummary = { competition_id : Text; active_teams : Nat; total_matches : Nat; results_entered : Nat; broadcasts : Nat };
+  // Public, anonymous-readable preview behind a competition join link —
+  // mirrors the Supabase SECURITY DEFINER RPCs (get_competition_by_join_token,
+  // list_divisions_by_join_token, get_competition_join_token_status,
+  // list_entered_team_ids_by_join_token) the join page reads pre-auth.
+  // entered_team_ids covers entries with status accepted|invited.
+  public type JoinLinkPreview = {
+    competition_id : Text;
+    name : Text;
+    club_id : Text;
+    season : Text;
+    competition_status : Text;
+    divisions : [Text];
+    entered_team_ids : [Text];
+  };
   public type State = {
     schema : Nat32;
     governor : Principal;

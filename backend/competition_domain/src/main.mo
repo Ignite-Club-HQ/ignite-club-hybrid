@@ -592,6 +592,71 @@ persistent actor {
     }
   };
 
+  // Public join-link preview, callable pre-auth (anonymous callers allowed —
+  // mirrors the Supabase SECURITY DEFINER join-token RPCs). Exposes only
+  // non-sensitive fields. #Err carries "unknown" | "disabled" | "archived"
+  // so the join page can pick the right message without a second call.
+  public query func get_join_link_preview(token : Text) : async { #Ok : Types.JoinLinkPreview; #Err : Text } {
+    switch (competitionJoinLinks.find(func(item) = item.token == token)) {
+      case null #Err("unknown");
+      case (?link) {
+        if (link.revoked) return #Err("disabled");
+        let competition = switch (competitions.find(func(item) = item.id == link.competition_id)) {
+          case (?c) c;
+          case null return #Err("unknown");
+        };
+        if (competition.status == "archived") return #Err("archived");
+        // Divisions of the active season, else the most recently created one.
+        let compSeasons = seasons.filter(func(item) = item.competition_id == link.competition_id);
+        let season = switch (compSeasons.find(func(item) = item.status == "active")) {
+          case (?s) ?s;
+          case null if (compSeasons.size() == 0) null else ?compSeasons[compSeasons.size() - 1];
+        };
+        #Ok({
+          competition_id = competition.id;
+          name = competition.name;
+          club_id = competition.club_id;
+          season = competition.season;
+          competition_status = competition.status;
+          divisions = switch (season) { case (?s) s.divisions; case null [] };
+          entered_team_ids = entries.filter(func(item) = item.competition_id == link.competition_id and (item.status == "accepted" or item.status == "invited")).map(func(item) = item.team_id);
+        })
+      };
+    }
+  };
+
+  // Team-admin self-entry via a competition join link: validates the token,
+  // then registers the caller's team with an optional division. Unlike
+  // register_team/invite_team this does not require competition-management
+  // rights — the join link IS the organiser's authorization.
+  public shared ({ caller }) func join_competition_with_link(token : Text, team_id : Text, division_id : ?Text) : async { #Ok : Types.TeamEntry; #Err : Text } {
+    auth(caller);
+    if (not valid(team_id)) return #Err("team_not_found");
+    switch (competitionJoinLinks.find(func(item) = item.token == token)) {
+      case null #Err("invalid_token");
+      case (?link) {
+        if (link.revoked) return #Err("invalid_token");
+        let competition = switch (competitions.find(func(item) = item.id == link.competition_id)) {
+          case (?c) c;
+          case null return #Err("Competition not found");
+        };
+        if (competition.status == "archived") return #Err("Competition archived");
+        if (not canManageEntryTeam(caller, competition.club_id, team_id)) return #Err("not_team_admin");
+        if (entries.any(func(item) = item.competition_id == link.competition_id and item.team_id == team_id)) return #Err("Team already entered");
+        switch (division_id) {
+          case (?d) {
+            if (d.size() > 128) return #Err("Invalid division");
+            if (not seasons.any(func(s) = s.competition_id == link.competition_id and s.divisions.any(func(div) = div == d))) return #Err("Invalid division");
+          };
+          case null {};
+        };
+        let entry : Types.TeamEntry = { competition_id = link.competition_id; team_id; club_id = competition.club_id; status = "accepted"; division_id };
+        entries := entries.concat([entry]);
+        #Ok(entry)
+      };
+    }
+  };
+
   // ---------------- Match deletion / round trimming ----------------
 
   public shared ({ caller }) func delete_match(match_id : Text) : async { #Ok; #Err : Text } {
