@@ -10,10 +10,14 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   transient let challengeTtlNs : Nat64 = 600_000_000_000;
 
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var acl : Types.Acl;
   var aclVersion : Nat64;
 
@@ -71,12 +75,6 @@ persistent actor {
   // routing config. Never store secrets here — state is replica-visible.
   var appConfig : [(Text, Text)];
 
-  public shared ({ caller }) func initialize() : async { #Ok; #Err : Text } {
-    auth(caller);
-    if (not governor.equal(Principal.anonymous())) return #Err("Already initialized");
-    governor := caller;
-    #Ok
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);

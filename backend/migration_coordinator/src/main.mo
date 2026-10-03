@@ -11,8 +11,12 @@ import Types "types";
 // Loosely-typed domain export interfaces live in Types (types.mo) so the
 // actor remains the only non-imported declaration in this program.
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
   var governor : ?Principal;
+
+  if (governor == null and not governorInit.equal(Principal.anonymous())) {
+    governor := ?governorInit;
+  };
   var nextId : Nat;
   var active : ?Types.Migration;
   var completed : [Types.Migration];
@@ -210,13 +214,6 @@ persistent actor {
     };
   };
 
-  public shared ({ caller }) func initialize() : async () {
-    if (not authenticated(caller)) { Runtime.trap("Authenticated caller required") };
-    switch (governor) {
-      case (?_) { Runtime.trap("Governor already initialized") };
-      case null { governor := ?caller };
-    };
-  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async () {
     requireGovernor(caller);

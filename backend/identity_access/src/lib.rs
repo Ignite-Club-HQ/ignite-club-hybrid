@@ -4,7 +4,7 @@
 use candid::{CandidType, Principal};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl, StableCell,
+    DefaultMemoryImpl, StableBTreeMap, StableCell,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +12,24 @@ use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Outcome<T> = Result<T, String>;
-const SCHEMA: u32 = 4;
+/// Legacy blob (memory 0) schema marker. Bumped 4 -> 5 when accounts,
+/// profiles and entitlements were split out of the monolithic blob into
+/// their own StableBTreeMaps (see ACCOUNTS/PRINCIPAL_INDEX/PROFILES/
+/// ENTITLEMENTS below). post_upgrade migrates any blob with schema < 5.
+const SCHEMA: u32 = 5;
+/// Legacy memory id: the slimmed State blob (governor/roles/families/
+/// exclusions/challenges/external_bindings/privacy_consents/
+/// terms_acceptances/verifiers/attestation_secret/next_challenge).
+const MEM_STATE: u8 = 0;
+/// account_id -> CBOR-encoded Account.
+const MEM_ACCOUNTS: u8 = 1;
+/// principal (text) -> account_id, so account_for/ensure_account are O(log N).
+const MEM_PRINCIPAL_INDEX: u8 = 2;
+/// account_id -> CBOR-encoded Profile.
+const MEM_PROFILES: u8 = 3;
+/// transaction_id (or a principal+product_id fallback key for non-IAP
+/// grants) -> CBOR-encoded Entitlement.
+const MEM_ENTITLEMENTS: u8 = 4;
 const MAX_ACCOUNTS: usize = 10_000;
 const MAX_PRINCIPALS: usize = 8;
 const MAX_ROLES: usize = 100_000;
@@ -147,6 +164,27 @@ pub struct State {
     pub attestation_secret: Vec<u8>,
     pub next_challenge: u64,
 }
+/// Slimmed on-disk shape of the legacy blob (memory 0) once schema >= 5:
+/// accounts, profiles and entitlements live in their own StableBTreeMaps
+/// instead of being re-encoded in full on every single update.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CoreState {
+    pub schema: u32,
+    pub governor: Principal,
+    pub roles: Vec<RoleGrant>,
+    pub families: Vec<FamilyLink>,
+    pub exclusions: Vec<Exclusion>,
+    pub challenges: Vec<LinkChallenge>,
+    pub external_bindings: Vec<ExternalSiteBinding>,
+    pub privacy_consents: Vec<PrivacyConsent>,
+    #[serde(default)]
+    pub terms_acceptances: Vec<TermsAcceptance>,
+    #[serde(default)]
+    pub verifiers: Vec<Principal>,
+    #[serde(default)]
+    pub attestation_secret: Vec<u8>,
+    pub next_challenge: u64,
+}
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Init {
     pub governor: Principal,
@@ -162,7 +200,15 @@ pub struct Access {
 
 thread_local! {
     static MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static STATE: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(0), Vec::new()));
+    static STATE: RefCell<StableCell<Vec<u8>, Memory>> = RefCell::new(StableCell::init(memory(MEM_STATE), Vec::new()));
+    static ACCOUNTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_ACCOUNTS)));
+    static PRINCIPAL_INDEX: RefCell<StableBTreeMap<String, String, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_PRINCIPAL_INDEX)));
+    static PROFILES: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_PROFILES)));
+    static ENTITLEMENTS: RefCell<StableBTreeMap<String, Vec<u8>, Memory>> =
+        RefCell::new(StableBTreeMap::init(memory(MEM_ENTITLEMENTS)));
 }
 fn memory(id: u8) -> Memory {
     MANAGER.with(|m| m.borrow().get(MemoryId::new(id)))
@@ -175,12 +221,93 @@ fn encode<T: Serialize>(value: &T) -> Vec<u8> {
 fn decode<T: for<'a> Deserialize<'a>>(bytes: &[u8]) -> T {
     ciborium::from_reader(bytes).expect("stable decode")
 }
-fn state() -> State {
+fn state() -> CoreState {
     STATE.with(|s| decode(s.borrow().get()))
 }
-fn store(value: &State) {
+fn store(value: &CoreState) {
     STATE.with(|s| s.borrow_mut().set(encode(value)));
 }
+
+// ---- Accounts (ACCOUNTS + PRINCIPAL_INDEX) ----
+fn get_account(id: &str) -> Option<Account> {
+    ACCOUNTS.with(|m| m.borrow().get(&id.to_string())).map(|b| decode(&b))
+}
+fn put_account(account: &Account) {
+    ACCOUNTS.with(|m| m.borrow_mut().insert(account.id.clone(), encode(account)));
+}
+fn remove_account(id: &str) -> Option<Account> {
+    ACCOUNTS.with(|m| m.borrow_mut().remove(&id.to_string())).map(|b| decode(&b))
+}
+fn account_count() -> u64 {
+    ACCOUNTS.with(|m| m.borrow().len())
+}
+fn index_principal(principal: Principal, account_id: &str) {
+    PRINCIPAL_INDEX.with(|m| m.borrow_mut().insert(principal.to_text(), account_id.to_string()));
+}
+fn deindex_principal(principal: Principal) {
+    PRINCIPAL_INDEX.with(|m| m.borrow_mut().remove(&principal.to_text()));
+}
+fn find_account_by_principal(principal: Principal) -> Option<Account> {
+    let account_id = PRINCIPAL_INDEX.with(|m| m.borrow().get(&principal.to_text()))?;
+    get_account(&account_id)
+}
+
+// ---- Profiles ----
+fn get_profile_entry(account_id: &str) -> Option<Profile> {
+    PROFILES.with(|m| m.borrow().get(&account_id.to_string())).map(|b| decode(&b))
+}
+fn put_profile_entry(profile: &Profile) {
+    PROFILES.with(|m| m.borrow_mut().insert(profile.account_id.clone(), encode(profile)));
+}
+fn remove_profile_entry(account_id: &str) {
+    PROFILES.with(|m| m.borrow_mut().remove(&account_id.to_string()));
+}
+fn all_profiles() -> Vec<Profile> {
+    PROFILES.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect())
+}
+
+// ---- Entitlements ----
+/// Replay-protection key: Apple transaction ids are globally unique, so a
+/// non-empty transaction id is the key on its own (the whole point of the
+/// map is a single O(log N) lookup to both check and bind replay). Non-IAP
+/// grants (empty transaction id) fall back to a principal+product key so a
+/// governor/verifier can hold independent entitlements per product.
+fn entitlement_key(principal: Principal, product_id: &str, transaction_id: &str) -> String {
+    if transaction_id.is_empty() {
+        format!("np|{}|{}", principal.to_text(), product_id)
+    } else {
+        format!("tx|{}", transaction_id)
+    }
+}
+fn get_entitlement(key: &str) -> Option<Entitlement> {
+    ENTITLEMENTS.with(|m| m.borrow().get(&key.to_string())).map(|b| decode(&b))
+}
+fn put_entitlement(key: &str, entitlement: &Entitlement) {
+    ENTITLEMENTS.with(|m| m.borrow_mut().insert(key.to_string(), encode(entitlement)));
+}
+fn entitlements_count() -> u64 {
+    ENTITLEMENTS.with(|m| m.borrow().len())
+}
+fn all_entitlements() -> Vec<Entitlement> {
+    ENTITLEMENTS.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect())
+}
+/// Removes every entitlement granted to `principal` (used by erase_account).
+fn remove_entitlements_for_principal(principal: Principal) {
+    let keys: Vec<String> = ENTITLEMENTS.with(|m| {
+        m.borrow()
+            .iter()
+            .filter(|e| decode::<Entitlement>(&e.value()).principal == principal)
+            .map(|e| e.key().clone())
+            .collect()
+    });
+    ENTITLEMENTS.with(|m| {
+        let mut map = m.borrow_mut();
+        for key in keys {
+            map.remove(&key);
+        }
+    });
+}
+
 fn authenticated(principal: Principal) -> Outcome<()> {
     if principal == Principal::anonymous() {
         Err("Authenticated user required".into())
@@ -188,14 +315,9 @@ fn authenticated(principal: Principal) -> Outcome<()> {
         Ok(())
     }
 }
-fn account_for(state: &State, principal: Principal) -> Outcome<Account> {
+fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
-    state
-        .accounts
-        .iter()
-        .find(|a| a.principals.contains(&principal))
-        .cloned()
-        .ok_or("Unlinked identity".into())
+    find_account_by_principal(principal).ok_or("Unlinked identity".into())
 }
 fn valid_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 128
@@ -215,44 +337,38 @@ fn account_id(principal: Principal) -> String {
         &hex[20..]
     )
 }
-fn ensure_account(state: &mut State, principal: Principal) -> Outcome<String> {
+fn ensure_account(principal: Principal) -> Outcome<String> {
     authenticated(principal)?;
-    if let Some(account) = state
-        .accounts
-        .iter()
-        .find(|a| a.principals.contains(&principal))
-    {
-        return Ok(account.id.clone());
+    if let Some(account) = find_account_by_principal(principal) {
+        return Ok(account.id);
     }
-    if state.accounts.len() >= MAX_ACCOUNTS {
+    if account_count() >= MAX_ACCOUNTS as u64 {
         return Err("Account quota reached".into());
     }
     let id = account_id(principal);
-    if state.accounts.iter().any(|a| a.id == id) {
+    if get_account(&id).is_some() {
         return Err("Account ID collision".into());
     }
-    state.accounts.push(Account {
+    put_account(&Account {
         id: id.clone(),
         principals: vec![principal],
         version: 0,
     });
+    index_principal(principal, &id);
     Ok(id)
 }
-fn require_governor(state: &State, caller: Principal) -> Outcome<()> {
+fn require_governor(state: &CoreState, caller: Principal) -> Outcome<()> {
     if state.governor == caller {
         Ok(())
     } else {
         Err("Forbidden".into())
     }
 }
-fn account_exists(state: &State, account_id: &str) -> bool {
-    state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
+fn account_exists(account_id: &str) -> bool {
+    get_account(account_id).is_some()
 }
 fn account_has_role(
-    state: &State,
+    state: &CoreState,
     id: &str,
     role: &str,
     site_id: Option<&str>,
@@ -279,7 +395,7 @@ fn account_has_role(
     })
 }
 fn excluded(
-    state: &State,
+    state: &CoreState,
     id: &str,
     site_id: Option<&str>,
     club: Option<&str>,
@@ -299,7 +415,7 @@ fn excluded(
     })
 }
 fn has_direct_team_role(
-    state: &State,
+    state: &CoreState,
     account_id: &str,
     site_id: Option<&str>,
     team_id: &str,
@@ -314,7 +430,7 @@ fn has_direct_team_role(
     })
 }
 fn team_member_access(
-    state: &State,
+    state: &CoreState,
     account_id: &str,
     site_id: Option<&str>,
     club_id: Option<&str>,
@@ -328,61 +444,95 @@ fn team_member_access(
 #[ic_cdk::init]
 fn init(init: Init) {
     assert!(init.governor != Principal::anonymous(), "invalid governor");
-    let state = State {
+    let governor_id = account_id(init.governor);
+    put_account(&Account {
+        id: governor_id.clone(),
+        principals: vec![init.governor],
+        version: 0,
+    });
+    index_principal(init.governor, &governor_id);
+    let state = CoreState {
         schema: SCHEMA,
         governor: init.governor,
-        accounts: vec![Account {
-            id: account_id(init.governor),
-            principals: vec![init.governor],
-            version: 0,
-        }],
         roles: vec![],
         families: vec![],
         exclusions: vec![],
         challenges: vec![],
         external_bindings: vec![],
         privacy_consents: vec![],
-        profiles: vec![],
         terms_acceptances: vec![],
-        entitlements: vec![],
         verifiers: vec![],
         attestation_secret: vec![],
         next_challenge: 0,
     };
     store(&state);
 }
+
+/// Splits a legacy full-blob `State` (schema 1..4, accounts/profiles/
+/// entitlements inline) into the per-entry stable maps and returns the
+/// slimmed `CoreState` to persist in memory 0 going forward. Idempotent to
+/// call only once per legacy blob (post_upgrade only invokes it when
+/// `legacy.schema < SCHEMA`).
+fn migrate_legacy_state(legacy: State) -> CoreState {
+    for account in &legacy.accounts {
+        for principal in &account.principals {
+            index_principal(*principal, &account.id);
+        }
+        put_account(account);
+    }
+    for profile in &legacy.profiles {
+        put_profile_entry(profile);
+    }
+    for entitlement in &legacy.entitlements {
+        let key = entitlement_key(
+            entitlement.principal,
+            &entitlement.product_id,
+            &entitlement.transaction_id,
+        );
+        put_entitlement(&key, entitlement);
+    }
+    CoreState {
+        schema: SCHEMA,
+        governor: legacy.governor,
+        roles: legacy.roles,
+        families: legacy.families,
+        exclusions: legacy.exclusions,
+        challenges: legacy.challenges,
+        external_bindings: legacy.external_bindings,
+        privacy_consents: legacy.privacy_consents,
+        terms_acceptances: legacy.terms_acceptances,
+        verifiers: legacy.verifiers,
+        attestation_secret: legacy.attestation_secret,
+        next_challenge: legacy.next_challenge,
+    }
+}
+
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
-    let mut state = state();
-    assert!(state.schema <= SCHEMA, "unsupported identity schema");
-    // Schema 1 -> 2: profiles were added; schema 2 -> 3: terms_acceptances
-    // were added; schema 3 -> 4: entitlements/verifiers/attestation_secret
-    // were added. All were already decoded via serde default, so the
-    // migration is just the marker bump.
-    if state.schema != SCHEMA {
-        state.schema = SCHEMA;
-        store(&state);
+    // The full legacy `State` shape (with `#[serde(default)]` on every field
+    // added after schema 1) decodes both old full-blob schemas (1..4) and
+    // the current slim `CoreState` blob (schema 5+, where accounts/
+    // profiles/entitlements simply default to empty since the map no
+    // longer carries those keys) -- so this single decode is safe at any
+    // schema.
+    let legacy: State = STATE.with(|s| decode(s.borrow().get()));
+    assert!(legacy.schema <= SCHEMA, "unsupported identity schema");
+    if legacy.schema < SCHEMA {
+        let migrated = migrate_legacy_state(legacy);
+        store(&migrated);
     }
 }
 
 #[ic_cdk::query]
 fn whoami() -> Outcome<Account> {
-    account_for(&state(), ic_cdk::api::msg_caller())
+    account_for(ic_cdk::api::msg_caller())
 }
 
 #[ic_cdk::update]
 fn register_account() -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
-    let mut state = state();
-    let account_id = ensure_account(&mut state, caller)?;
-    let account = state
-        .accounts
-        .iter()
-        .find(|account| account.id == account_id)
-        .cloned()
-        .ok_or("Account unavailable")?;
-    store(&state);
-    Ok(account)
+    let account_id = ensure_account(caller)?;
+    get_account(&account_id).ok_or("Account unavailable".into())
 }
 
 fn valid_display_name(value: &str) -> bool {
@@ -395,8 +545,7 @@ fn valid_display_name(value: &str) -> bool {
 #[ic_cdk::update]
 fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let state = state();
-    let account_id = account_for(&state, caller)?.id;
+    let account_id = account_for(caller)?.id;
     if !valid_display_name(&display_name) {
         return Err("Display name must be 1-80 characters".into());
     }
@@ -409,24 +558,15 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
         avatar_ref,
         updated_at_ns: ic_cdk::api::time(),
     };
-    let mut state = state;
-    state.profiles.retain(|p| p.account_id != account_id);
-    state.profiles.push(profile.clone());
-    store(&state);
+    put_profile_entry(&profile);
     Ok(profile)
 }
 
 /// The caller's own profile, or an error when none has been set yet.
 #[ic_cdk::query]
 fn get_profile() -> Outcome<Profile> {
-    let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
-    state
-        .profiles
-        .iter()
-        .find(|p| p.account_id == account_id)
-        .cloned()
-        .ok_or("Profile not set".into())
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
+    get_profile_entry(&account_id).ok_or("Profile not set".into())
 }
 
 /// Batch profile lookup by account id (principal text / user id), used by
@@ -434,10 +574,7 @@ fn get_profile() -> Outcome<Profile> {
 /// Unknown ids are skipped rather than causing an error.
 #[ic_cdk::query]
 fn get_profiles_by_ids(ids: Vec<String>) -> Vec<Profile> {
-    let state = state();
-    ids.iter()
-        .filter_map(|id| state.profiles.iter().find(|p| &p.account_id == id).cloned())
-        .collect()
+    ids.iter().filter_map(|id| get_profile_entry(id)).collect()
 }
 
 /// Case-insensitive substring search over display names — the ICP-mode
@@ -453,21 +590,15 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
         return Err("Search text is required".into());
     }
     let cap = limit.clamp(1, 25) as usize;
-    let state = state();
     let mut results = Vec::new();
-    for profile in &state.profiles {
+    for profile in all_profiles() {
         if profile.display_name.trim().is_empty()
             || !profile.display_name.to_lowercase().contains(&needle)
         {
             continue;
         }
-        let principal = match state
-            .accounts
-            .iter()
-            .find(|a| a.id == profile.account_id)
-            .and_then(|a| a.principals.first())
-        {
-            Some(p) => *p,
+        let principal = match get_account(&profile.account_id).and_then(|a| a.principals.first().copied()) {
+            Some(p) => p,
             None => continue,
         };
         results.push(ProfileSearchResult {
@@ -487,7 +618,7 @@ fn search_profiles(query: String, limit: u16) -> Outcome<Vec<ProfileSearchResult
 #[ic_cdk::query]
 fn my_roles() -> Outcome<Vec<RoleGrant>> {
     let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
     Ok(state
         .roles
         .iter()
@@ -509,7 +640,7 @@ fn access_scoped(
     child: Option<String>,
 ) -> Outcome<Access> {
     let state = state();
-    let account = account_for(&state, ic_cdk::api::msg_caller())?;
+    let account = account_for(ic_cdk::api::msg_caller())?;
     let account_id = account.id;
     let site_ref = site_id.as_deref();
     let club_ref = club.as_deref();
@@ -540,16 +671,33 @@ fn access_scoped(
 
 #[ic_cdk::query]
 fn export_state() -> Outcome<State> {
-    let state = state();
-    require_governor(&state, ic_cdk::api::msg_caller())?;
-    Ok(state)
+    let core = state();
+    require_governor(&core, ic_cdk::api::msg_caller())?;
+    let accounts: Vec<Account> = ACCOUNTS.with(|m| m.borrow().iter().map(|e| decode(&e.value())).collect());
+    Ok(State {
+        schema: core.schema,
+        governor: core.governor,
+        accounts,
+        profiles: all_profiles(),
+        roles: core.roles,
+        families: core.families,
+        exclusions: core.exclusions,
+        challenges: core.challenges,
+        external_bindings: core.external_bindings,
+        privacy_consents: core.privacy_consents,
+        terms_acceptances: core.terms_acceptances,
+        entitlements: all_entitlements(),
+        verifiers: core.verifiers,
+        attestation_secret: core.attestation_secret,
+        next_challenge: core.next_challenge,
+    })
 }
 
 #[ic_cdk::query]
 fn get_external_bindings(account_id: String) -> Outcome<Vec<ExternalSiteBinding>> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -564,7 +712,7 @@ fn get_external_bindings(account_id: String) -> Outcome<Vec<ExternalSiteBinding>
 fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -581,13 +729,9 @@ fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
 fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     authenticated(target)?;
-    if state
-        .accounts
-        .iter()
-        .any(|a| a.principals.contains(&target))
-    {
+    if find_account_by_principal(target).is_some() {
         return Err("Target identity already assigned".into());
     }
     if account.principals.len() >= MAX_PRINCIPALS {
@@ -632,18 +776,10 @@ fn accept_link(id: u64) -> Outcome<Account> {
     if challenge.target != caller || ic_cdk::api::time() >= challenge.expires_at_ns {
         return Err("Invalid or expired challenge".into());
     }
-    if state
-        .accounts
-        .iter()
-        .any(|account| account.principals.contains(&caller))
-    {
+    if find_account_by_principal(caller).is_some() {
         return Err("Identity already assigned".into());
     }
-    let account = state
-        .accounts
-        .iter_mut()
-        .find(|account| account.id == challenge.account_id)
-        .ok_or("Account unavailable")?;
+    let mut account = get_account(&challenge.account_id).ok_or("Account unavailable")?;
     if challenge.accepted
         || account.version != challenge.expected_version
         || !account.principals.contains(&challenge.issuer)
@@ -658,24 +794,20 @@ fn accept_link(id: u64) -> Outcome<Account> {
         return Err("Identity quota reached".into());
     }
     account.principals.push(caller);
+    put_account(&account);
+    index_principal(caller, &account.id);
     state.challenges[index].accepted = true;
-    let result = account.clone();
     store(&state);
-    Ok(result)
+    Ok(account)
 }
 #[ic_cdk::update]
 fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
-    let mut state = state();
-    let current = account_for(&state, caller)?;
+    let current = account_for(caller)?;
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
     }
-    let account = state
-        .accounts
-        .iter_mut()
-        .find(|account| account.id == current.id)
-        .expect("account exists");
+    let mut account = get_account(&current.id).expect("account exists");
     if account.version != expected_version {
         return Err("Account version conflict".into());
     }
@@ -684,9 +816,9 @@ fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
         .checked_add(1)
         .ok_or("Account version exhausted")?;
     account.principals.retain(|item| *item != principal);
-    let result = account.clone();
-    store(&state);
-    Ok(result)
+    put_account(&account);
+    deindex_principal(principal);
+    Ok(account)
 }
 
 #[ic_cdk::update]
@@ -701,7 +833,7 @@ fn bind_external_site(
     if !valid_id(&account_id) || !valid_id(&site_id) || !valid_id(&external_user_id) {
         return Err("Invalid external binding parameters".into());
     }
-    if !state.accounts.iter().any(|a| a.id == account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.external_bindings.iter().any(|b| {
@@ -741,7 +873,7 @@ fn set_privacy_consent(
 ) -> Outcome<PrivacyConsent> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -780,7 +912,7 @@ fn set_privacy_consent(
 fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account_id = account_for(&state, caller)?.id;
+    let account_id = account_for(caller)?.id;
     if terms_version == 0 {
         return Err("terms_version must be positive".into());
     }
@@ -812,7 +944,7 @@ fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
 fn get_terms_acceptance(account_id: String) -> Outcome<Option<TermsAcceptance>> {
     let caller = ic_cdk::api::msg_caller();
     let state = state();
-    let account = account_for(&state, caller)?;
+    let account = account_for(caller)?;
     if account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
@@ -829,7 +961,7 @@ fn get_terms_acceptance(account_id: String) -> Outcome<Option<TermsAcceptance>> 
 #[ic_cdk::query]
 fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
     let state = state();
-    let account_id = account_for(&state, ic_cdk::api::msg_caller())?.id;
+    let account_id = account_for(ic_cdk::api::msg_caller())?.id;
     Ok(state
         .terms_acceptances
         .iter()
@@ -841,31 +973,21 @@ fn my_terms_acceptance() -> Outcome<Option<TermsAcceptance>> {
 fn erase_account(account_id: String) -> Outcome<()> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let caller_account = account_for(&state, caller)?;
+    let caller_account = account_for(caller)?;
     if caller_account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
-    if state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id && account.principals.contains(&state.governor))
-    {
+    let account = get_account(&account_id).ok_or("Unknown account")?;
+    if account.principals.contains(&state.governor) {
         return Err("Governor account cannot be erased".into());
     }
-    if !state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
-    {
-        return Err("Unknown account".into());
+    let erased_principals = account.principals.clone();
+    remove_account(&account_id);
+    for principal in &erased_principals {
+        deindex_principal(*principal);
+        remove_entitlements_for_principal(*principal);
     }
-    let erased_principals = state
-        .accounts
-        .iter()
-        .find(|account| account.id == account_id)
-        .map(|account| account.principals.clone())
-        .unwrap_or_default();
-    state.accounts.retain(|account| account.id != account_id);
+    remove_profile_entry(&account_id);
     state.roles.retain(|grant| grant.account_id != account_id);
     state.families.retain(|link| link.account_id != account_id);
     state
@@ -874,9 +996,6 @@ fn erase_account(account_id: String) -> Outcome<()> {
     state
         .external_bindings
         .retain(|binding| binding.account_id != account_id);
-    state
-        .profiles
-        .retain(|profile| profile.account_id != account_id);
     state
         .privacy_consents
         .retain(|consent| consent.account_id != account_id);
@@ -919,7 +1038,7 @@ fn grant_role_scoped(
     {
         return Err("Invalid role fields".into());
     }
-    if !account_exists(&state, &account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.roles.len() >= MAX_ROLES {
@@ -956,11 +1075,7 @@ fn set_family(account_id: String, child_id: String) -> Outcome<()> {
     if state.families.len() >= MAX_FAMILIES {
         return Err("Family quota reached".into());
     }
-    if !state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
-    {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state
@@ -1000,7 +1115,7 @@ fn set_exclusion_scoped(
     {
         return Err("Invalid exclusion fields".into());
     }
-    if !account_exists(&state, &account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.exclusions.len() >= MAX_EXCLUSIONS {
@@ -1095,7 +1210,6 @@ fn attestation_message(
     .into_bytes()
 }
 fn upsert_entitlement(
-    state: &mut State,
     principal: Principal,
     product_id: String,
     transaction_id: String,
@@ -1105,42 +1219,29 @@ fn upsert_entitlement(
     if !valid_id(&product_id) || !valid_id(&source) {
         return Err("Invalid entitlement fields".into());
     }
+    let key = entitlement_key(principal, &product_id, &transaction_id);
     // Replay protection: once an Apple transaction id has been redeemed, it
     // is permanently bound to the first principal that redeemed it. The same
     // principal may re-verify (idempotent refresh, e.g. renewal), but a
     // different principal submitting the same transaction id is rejected.
-    if !transaction_id.is_empty() {
-        if let Some(existing) = state
-            .entitlements
-            .iter()
-            .find(|e| e.transaction_id == transaction_id)
-        {
-            if existing.principal != principal {
-                return Err("Transaction already redeemed by another identity".into());
-            }
+    let existing = get_entitlement(&key);
+    if let Some(existing) = &existing {
+        if !transaction_id.is_empty() && existing.principal != principal {
+            return Err("Transaction already redeemed by another identity".into());
         }
     }
-    if state.entitlements.len() >= MAX_ENTITLEMENTS
-        && !state.entitlements.iter().any(|e| {
-            e.principal == principal && e.product_id == product_id && e.transaction_id == transaction_id
-        })
-    {
+    if existing.is_none() && entitlements_count() >= MAX_ENTITLEMENTS as u64 {
         return Err("Entitlement quota reached".into());
     }
     let record = Entitlement {
         principal,
-        product_id: product_id.clone(),
-        transaction_id: transaction_id.clone(),
+        product_id,
+        transaction_id,
         expires_at_ms,
         source,
         granted_at_ms: ic_cdk::api::time() / 1_000_000,
     };
-    state.entitlements.retain(|e| {
-        !(e.principal == principal
-            && e.product_id == product_id
-            && e.transaction_id == transaction_id)
-    });
-    state.entitlements.push(record.clone());
+    put_entitlement(&key, &record);
     Ok(record)
 }
 
@@ -1207,8 +1308,7 @@ fn set_entitlement(
         return Err("Forbidden".into());
     }
     authenticated(principal)?;
-    let record = upsert_entitlement(&mut state, principal, product_id, transaction_id, expires_at_ms, source)?;
-    store(&state);
+    let record = upsert_entitlement(principal, product_id, transaction_id, expires_at_ms, source)?;
     Ok(record)
 }
 
@@ -1233,7 +1333,7 @@ fn redeem_entitlement(
 ) -> Outcome<Entitlement> {
     let caller = ic_cdk::api::msg_caller();
     authenticated(caller)?;
-    let mut state = state();
+    let state = state();
     if state.attestation_secret.is_empty() {
         return Err("IAP attestation is not configured".into());
     }
@@ -1246,8 +1346,7 @@ fn redeem_entitlement(
     if !constant_time_eq(&expected, &provided) {
         return Err("Invalid attestation signature".into());
     }
-    let record = upsert_entitlement(&mut state, caller, product_id, transaction_id, expires_at_ms, source)?;
-    store(&state);
+    let record = upsert_entitlement(caller, product_id, transaction_id, expires_at_ms, source)?;
     Ok(record)
 }
 
@@ -1256,12 +1355,9 @@ fn redeem_entitlement(
 fn get_my_entitlements() -> Outcome<Vec<Entitlement>> {
     let caller = ic_cdk::api::msg_caller();
     authenticated(caller)?;
-    let state = state();
-    Ok(state
-        .entitlements
-        .iter()
+    Ok(all_entitlements()
+        .into_iter()
         .filter(|e| e.principal == caller)
-        .cloned()
         .collect())
 }
 
@@ -1270,11 +1366,9 @@ fn get_my_entitlements() -> Outcome<Vec<Entitlement>> {
 #[ic_cdk::query]
 fn is_pro(principal: Principal) -> Outcome<bool> {
     authenticated(ic_cdk::api::msg_caller())?;
-    let state = state();
     let now_ms = ic_cdk::api::time() / 1_000_000;
-    Ok(state
-        .entitlements
-        .iter()
+    Ok(all_entitlements()
+        .into_iter()
         .any(|e| e.principal == principal && e.expires_at_ms > now_ms))
 }
 
@@ -1282,7 +1376,7 @@ fn is_pro(principal: Principal) -> Outcome<bool> {
 fn check_field_access(account_id: String, section: String) -> Outcome<bool> {
     let state = state();
     let caller = ic_cdk::api::msg_caller();
-    let caller_account = account_for(&state, caller)?;
+    let caller_account = account_for(caller)?;
     if state.governor == caller || caller_account.id == account_id {
         return Ok(true);
     }

@@ -12,7 +12,7 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 
-persistent actor {
+persistent actor class Main(governorInit : Principal) {
 
   // ==================== Types ====================
 
@@ -64,6 +64,10 @@ persistent actor {
   var workloads : [WorkloadIdentity] = [];
   var secret_audit_log : [SecretAccessAudit] = [];
   var governor : Principal = Principal.anonymous();
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
 
   // Whitelist of valid scopes
   let allowed_scope_whitelist : [Text] = [
