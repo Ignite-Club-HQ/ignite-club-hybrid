@@ -40,7 +40,7 @@ import { TeamChip, getTeamRailColor } from "@/components/events/TeamChip";
 import { getEventTypeIcon, getEventTypeAccent, getEventTypeAccentClasses } from "@/lib/eventTypeIcon";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps } from "@/live/features/events";
+import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
 import { listLivePlayers } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
@@ -162,6 +162,23 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
     enabled: isPastMatch,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => null, // unreachable — guarded above
+          icp: async (ctx) => {
+            const result = await getLiveGameResult(ctx, event.id);
+            const r = result.length > 0 ? (result[0] as any) : null;
+            return r
+              ? {
+                  home_score: Number(r.home_score),
+                  away_score: Number(r.away_score),
+                  home_label: r.home_label,
+                  away_label: r.away_label,
+                }
+              : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("game_results")
         .select("home_score, away_score, home_label, away_label")
