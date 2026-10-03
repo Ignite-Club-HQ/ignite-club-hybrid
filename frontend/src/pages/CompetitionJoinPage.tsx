@@ -166,8 +166,8 @@ function SupabaseCompetitionJoinPage() {
           // Organiser club name lives on club_domain — best-effort join.
           let clubName: string | null = null;
           try {
-            const profile = await getLiveClubProfile(ctx, preview.club_id);
-            clubName = profile?.name ?? null;
+            const row = await getLiveClubProfile(ctx, preview.club_id);
+            clubName = row.length ? row[0].name : null;
           } catch {
             clubName = null;
           }
@@ -239,8 +239,8 @@ function SupabaseCompetitionJoinPage() {
           const clubName = async (clubId: string) => {
             if (!clubNames.has(clubId)) {
               try {
-                const profile = await getLiveClubProfile(ctx, clubId);
-                clubNames.set(clubId, profile?.name ?? null);
+                const row = await getLiveClubProfile(ctx, clubId);
+                clubNames.set(clubId, row.length ? row[0].name : null);
               } catch {
                 clubNames.set(clubId, null);
               }
