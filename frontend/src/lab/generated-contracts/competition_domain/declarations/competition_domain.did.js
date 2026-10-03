@@ -161,6 +161,15 @@ export const idlFactory = ({ IDL }) => {
     'withdrawn' : IDL.Nat,
     'registered' : IDL.Nat,
   });
+  const JoinLinkPreview = IDL.Record({
+    'competition_status' : IDL.Text,
+    'name' : IDL.Text,
+    'season' : IDL.Text,
+    'divisions' : IDL.Vec(IDL.Text),
+    'competition_id' : IDL.Text,
+    'club_id' : IDL.Text,
+    'entered_team_ids' : IDL.Vec(IDL.Text),
+  });
   const EoiTeamSuggestion = IDL.Record({
     'player_count' : IDL.Nat,
     'avg_skill' : IDL.Float64,
@@ -289,6 +298,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EoiStats, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_join_link_preview' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : JoinLinkPreview, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_my_pending_eois' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(EoiSubmission), 'Err' : IDL.Text })],
@@ -322,6 +336,11 @@ export const idlFactory = ({ IDL }) => {
     'join_competition_by_token' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : RoleGrant, 'Err' : IDL.Text })],
+        [],
+      ),
+    'join_competition_with_link' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
         [],
       ),
     'listBulkAccessPrincipals' : IDL.Func(
