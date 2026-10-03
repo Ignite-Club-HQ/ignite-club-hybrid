@@ -1532,35 +1532,17 @@ mod tests {
     #[test]
     fn guardian_access_respects_club_exclusion() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![Account {
-                id: "guardian-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
-            roles: vec![],
-            families: vec![FamilyLink {
-                account_id: "guardian-1".into(),
-                child_id: "child-9".into(),
-            }],
-            exclusions: vec![Exclusion {
-                account_id: "guardian-1".into(),
-                site_id: Some("site-a".into()),
-                club: "club-1".into(),
-                team: None,
-            }],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.families.push(FamilyLink {
+            account_id: "guardian-1".into(),
+            child_id: "child-9".into(),
+        });
+        state.exclusions.push(Exclusion {
+            account_id: "guardian-1".into(),
+            site_id: Some("site-a".into()),
+            club: "club-1".into(),
+            team: None,
+        });
 
         let connected = state
             .families
@@ -1583,38 +1565,21 @@ mod tests {
     #[test]
     fn direct_team_roles_are_exact_membership_without_admin_bypass() {
         let governor = principal(1);
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![],
-            roles: vec![
-                RoleGrant {
-                    account_id: "player".into(),
-                    role: "player".into(),
-                    site_id: Some("site-a".into()),
-                    club: Some("club-a".into()),
-                    team: Some("team-a".into()),
-                },
-                RoleGrant {
-                    account_id: "admin".into(),
-                    role: "app_admin".into(),
-                    site_id: None,
-                    club: None,
-                    team: None,
-                },
-            ],
-            families: vec![],
-            exclusions: vec![],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: "player".into(),
+            role: "player".into(),
+            site_id: Some("site-a".into()),
+            club: Some("club-a".into()),
+            team: Some("team-a".into()),
+        });
+        state.roles.push(RoleGrant {
+            account_id: "admin".into(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
 
         assert!(team_member_access(
             &state,
@@ -1653,33 +1618,18 @@ mod tests {
     #[test]
     fn field_access_requires_explicit_consent_or_self_access() {
         let governor = principal(1);
-        let account_self = Account {
+        put_account(&Account {
             id: "user-1".into(),
             principals: vec![principal(2)],
             version: 0,
-        };
-        let state = State {
-            schema: SCHEMA,
-            governor,
-            accounts: vec![account_self],
-            roles: vec![],
-            families: vec![],
-            exclusions: vec![],
-            challenges: vec![],
-            external_bindings: vec![],
-            privacy_consents: vec![PrivacyConsent {
-                account_id: "user-1".into(),
-                purpose: "child_photo_processing".into(),
-                granted: true,
-                updated_at_ns: 0,
-            }],
-            profiles: vec![],
-            terms_acceptances: vec![],
-            entitlements: vec![],
-            verifiers: vec![],
-            attestation_secret: vec![],
-            next_challenge: 0,
-        };
+        });
+        let mut state = empty_core_state(governor);
+        state.privacy_consents.push(PrivacyConsent {
+            account_id: "user-1".into(),
+            purpose: "child_photo_processing".into(),
+            granted: true,
+            updated_at_ns: 0,
+        });
 
         assert!(state
             .privacy_consents
@@ -1687,7 +1637,7 @@ mod tests {
             .any(|entry| entry.account_id == "user-1"
                 && entry.purpose == "child_photo_processing"
                 && entry.granted));
-        assert!(state.accounts.iter().any(|entry| entry.id == "user-1"));
+        assert!(account_exists("user-1"));
     }
 
     #[test]
