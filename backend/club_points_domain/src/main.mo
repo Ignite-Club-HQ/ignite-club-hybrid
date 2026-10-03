@@ -300,9 +300,9 @@ persistent actor {
   public query ({ caller }) func get_child_points_batch(club_id : Text, child_ids : [Text]) : async { #Ok : [(Text, Int32)]; #Err : Text } {
     auth(caller);
     if (child_ids.size() > 500) return #Err("At most 500 child ids per batch");
-    childClubPoints
+    #Ok(childClubPoints
       .filter(func(item) = item.club_id == club_id and child_ids.any(func(id) = id == item.child_id) and canReadSubject(caller, club_id, #Child(item.child_id)))
-      .map(func(item) = (item.child_id, item.points))
+      .map(func(item) = (item.child_id, item.points)))
   };
 
   // Window start (ms) for leaderboard queries — mirrors the Supabase

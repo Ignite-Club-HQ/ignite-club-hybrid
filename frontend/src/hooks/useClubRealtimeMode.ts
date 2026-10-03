@@ -1,16 +1,28 @@
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useFreeClubPollingEnabled } from "@/hooks/useFreeClubPollingEnabled";
+import { useIsDocumentVisible } from "@/hooks/useIsDocumentVisible";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export type ClubRealtimeMode = "realtime" | "polling";
 
 /**
- * Polling interval used for Free-tier clubs when the admin flag is ON.
- * Kept intentionally moderate (30s) so message delay stays acceptable while
- * still cutting WebSocket load by an order of magnitude vs. always-on
- * realtime channels.
+ * Polling interval used for Free-tier/ICP clubs while the chat screen's tab
+ * is visible — fast enough to feel live without hammering the canister.
  */
-export const FREE_CLUB_POLL_INTERVAL_MS = 30_000;
+export const CHAT_POLL_INTERVAL_VISIBLE_MS = 10_000;
+
+/**
+ * Polling interval used for Free-tier/ICP clubs while the tab is hidden —
+ * slowed way down since there's no one watching; an immediate invalidation
+ * fires on visibility regain to catch up instantly.
+ */
+export const CHAT_POLL_INTERVAL_HIDDEN_MS = 60_000;
+
+/**
+ * @deprecated kept for backwards compatibility with existing call sites/tests
+ * that expect a single constant; equals the visible-tab interval.
+ */
+export const FREE_CLUB_POLL_INTERVAL_MS = CHAT_POLL_INTERVAL_VISIBLE_MS;
 
 /**
  * Decides whether a given club's chat should use Supabase Realtime or fall
@@ -23,6 +35,10 @@ export const FREE_CLUB_POLL_INTERVAL_MS = 30_000;
  * Defaults to "realtime" while Pro status is loading, when clubId is null,
  * or when the flag is off — so a transient unknown never silently downgrades
  * a Pro club's real-time experience.
+ *
+ * The returned `intervalMs` is visibility-aware: faster while the tab is
+ * visible/focused, slower while it's hidden, so backgrounded tabs don't keep
+ * hammering the canister/DB.
  */
 export function useClubRealtimeMode(clubId: string | null | undefined): {
   mode: ClubRealtimeMode;
@@ -30,6 +46,7 @@ export function useClubRealtimeMode(clubId: string | null | undefined): {
 } {
   const pollingFlagOn = useFreeClubPollingEnabled();
   const { hasPro, isLoading } = useClubProAccess(clubId ?? null);
+  const isDocumentVisible = useIsDocumentVisible();
 
   const messagingOnIcp = isFeatureRoutedToIcp("messaging");
   const shouldPoll =
@@ -38,6 +55,6 @@ export function useClubRealtimeMode(clubId: string | null | undefined): {
 
   return {
     mode: shouldPoll ? "polling" : "realtime",
-    intervalMs: FREE_CLUB_POLL_INTERVAL_MS,
+    intervalMs: isDocumentVisible ? CHAT_POLL_INTERVAL_VISIBLE_MS : CHAT_POLL_INTERVAL_HIDDEN_MS,
   };
 }
