@@ -1299,7 +1299,7 @@ export default function HomePage() {
         // empty under ICP until a club directory canister can supply this.
         icp: async () => [] as MiniLeague[],
       }),
-    enabled: !!user && teamDialogOpen,
+    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1688,6 +1688,7 @@ export default function HomePage() {
 
   const teamRequestMutation = useMutation({
     mutationFn: async () => {
+      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
       if (isLeagueSelected && actualLeagueId) {
         // Handle league join request
@@ -1767,6 +1768,7 @@ export default function HomePage() {
   // Dedicated mutation for "Request additional access" buttons on a team the
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
+      if (resolveAuthBackend() === "icp") return;
     mutationFn: async (role: TeamRole) => {
       if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
