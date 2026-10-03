@@ -13,8 +13,12 @@ import Call "mo:ic/Call";
 import IC "mo:ic/Types";
 import Types "types";
 
-persistent actor (governor_arg : Principal) {
+persistent actor class Main(governorInit : Principal) {
   var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var events : [Types.Event];
   var rsvps : [Types.Rsvp];

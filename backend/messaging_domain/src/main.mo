@@ -19,8 +19,12 @@ import IcWebSocketCdkState "mo:ic-websocket-cdk/State";
 import IcWebSocketCdkTypes "mo:ic-websocket-cdk/Types";
 import Types "types";
 
-persistent actor (governorInit : Principal) {
-  var governor : Principal = governorInit;
+persistent actor class Main(governorInit : Principal) {
+  var governor : Principal;
+
+  if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
+    governor := governorInit;
+  };
   var roles : [Types.RoleGrant];
   var conversations : [Types.Conversation];
   var messages : [Types.Message];
