@@ -219,7 +219,19 @@ export default function JoinClubPage() {
       // Send notification to the new member
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {
-        // NEEDS-CANISTER: Join club notifications stay Supabase-only
+        try {
+          const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+          await sendGamificationNotification({
+            userId: user.id,
+            clubId: invite.club_id,
+            kind: "membership",
+            message: `You've joined ${invite.clubs?.name} as ${roleLabels[roleToAdd]}`,
+            relatedId: invite.club_id,
+            dedupHours: 0,
+          });
+        } catch (e) {
+          console.error("[JoinClub] Failed to send join notification:", e);
+        }
       } else {
         await supabase.from("notifications").insert({
           user_id: user.id,

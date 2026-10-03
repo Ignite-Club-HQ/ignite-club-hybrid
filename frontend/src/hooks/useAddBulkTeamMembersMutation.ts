@@ -326,7 +326,19 @@ export function useAddBulkTeamMembersMutation({
 
           const { resolveAuthBackend } = await import("@/live/authBackendMode");
           if (resolveAuthBackend() === "icp") {
-            // NEEDS-CANISTER: Membership notifications stay Supabase-only
+            try {
+              const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+              await sendGamificationNotification({
+                userId: member.selectedUser.id,
+                clubId,
+                kind: "membership",
+                message: `You have been added to ${teamName} as ${roleOptions.find(r => r.value === memberRole)?.label}`,
+                relatedId: teamId,
+                dedupHours: 0,
+              });
+            } catch (e) {
+              console.error("[AddBulkTeamMembers] Failed to notify added member:", e);
+            }
           } else {
             await supabase.from("notifications").insert({
               user_id: member.selectedUser.id,
