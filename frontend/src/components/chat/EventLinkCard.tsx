@@ -34,7 +34,7 @@ export const EventLinkCard = memo(function EventLinkCard({ eventId }: EventLinkC
         // Internet Identity users: resolve the event from events_domain.
         // Caller-scoped list + find mirrors eventDetailRepository's pattern.
         icp: async (ctx) => {
-          const events = (await listLiveEvents(ctx)) as Array<Record<string, unknown>>;
+          const events = (await listLiveEvents(ctx)) as unknown as Array<Record<string, unknown>>;
           const e = events.find((ev) => ev.id === eventId && !ev.deleted);
           if (!e) return null;
           const startsAt = new Date(Number(e.starts_at_ms));
