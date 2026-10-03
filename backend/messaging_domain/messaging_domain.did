@@ -1,3 +1,17 @@
+type WsAppMessage = variant {
+                      chat_poke:
+                       record {
+                         conversation_id: text;
+                         sequence: nat64;
+                       };};
+type WebsocketMessage = 
+ record {
+   client_key: ClientKey;
+   content: blob;
+   is_service_message: bool;
+   sequence_num: nat64;
+   timestamp: nat64;
+ };
 type UserMessagingSettings = 
  record {
    ai_catchup_enabled: bool;
@@ -216,6 +230,7 @@ type GroupMetadata =
    name: text;
    team_id: opt text;
  };
+type GatewayPrincipal = principal;
 type ForwardRecord = 
  record {
    from_conversation_id: text;
@@ -261,6 +276,53 @@ type ClubDmSettings =
    club_id: text;
    dm_disabled: bool;
    force_disable_previews: bool;
+ };
+type ClientPrincipal = principal;
+type ClientKey = 
+ record {
+   client_nonce: nat64;
+   client_principal: ClientPrincipal;
+ };
+type CanisterWsOpenResult = 
+ variant {
+   Err: text;
+   Ok;
+ };
+type CanisterWsOpenArguments = 
+ record {
+   client_nonce: nat64;
+   gateway_principal: GatewayPrincipal;
+ };
+type CanisterWsMessageResult = 
+ variant {
+   Err: text;
+   Ok;
+ };
+type CanisterWsMessageArguments = record {msg: WebsocketMessage;};
+type CanisterWsGetMessagesResult = 
+ variant {
+   Err: text;
+   Ok: CanisterOutputCertifiedMessages;
+ };
+type CanisterWsGetMessagesArguments = record {nonce: nat64;};
+type CanisterWsCloseResult = 
+ variant {
+   Err: text;
+   Ok;
+ };
+type CanisterWsCloseArguments = record {client_key: ClientKey;};
+type CanisterOutputMessage = 
+ record {
+   client_key: ClientKey;
+   content: blob;
+   key: text;
+ };
+type CanisterOutputCertifiedMessages = 
+ record {
+   cert: blob;
+   is_end_of_queue: bool;
+   messages: vec CanisterOutputMessage;
+   tree: blob;
  };
 type BroadcastResult = 
  record {
@@ -646,4 +708,10 @@ service : {
       Err: text;
       Ok;
     });
+  ws_close: (args: CanisterWsCloseArguments) -> (CanisterWsCloseResult);
+  ws_get_messages: (args: CanisterWsGetMessagesArguments) ->
+   (CanisterWsGetMessagesResult) query;
+  ws_message: (args: CanisterWsMessageArguments, msg_type:
+   opt WsAppMessage) -> (CanisterWsMessageResult);
+  ws_open: (args: CanisterWsOpenArguments) -> (CanisterWsOpenResult);
 }
