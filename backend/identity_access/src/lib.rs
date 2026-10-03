@@ -731,11 +731,7 @@ fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let mut state = state();
     let account = account_for(caller)?;
     authenticated(target)?;
-    if state
-        .accounts
-        .iter()
-        .any(|a| a.principals.contains(&target))
-    {
+    if find_account_by_principal(target).is_some() {
         return Err("Target identity already assigned".into());
     }
     if account.principals.len() >= MAX_PRINCIPALS {
@@ -780,18 +776,10 @@ fn accept_link(id: u64) -> Outcome<Account> {
     if challenge.target != caller || ic_cdk::api::time() >= challenge.expires_at_ns {
         return Err("Invalid or expired challenge".into());
     }
-    if state
-        .accounts
-        .iter()
-        .any(|account| account.principals.contains(&caller))
-    {
+    if find_account_by_principal(caller).is_some() {
         return Err("Identity already assigned".into());
     }
-    let account = state
-        .accounts
-        .iter_mut()
-        .find(|account| account.id == challenge.account_id)
-        .ok_or("Account unavailable")?;
+    let mut account = get_account(&challenge.account_id).ok_or("Account unavailable")?;
     if challenge.accepted
         || account.version != challenge.expected_version
         || !account.principals.contains(&challenge.issuer)
@@ -806,24 +794,20 @@ fn accept_link(id: u64) -> Outcome<Account> {
         return Err("Identity quota reached".into());
     }
     account.principals.push(caller);
+    put_account(&account);
+    index_principal(caller, &account.id);
     state.challenges[index].accepted = true;
-    let result = account.clone();
     store(&state);
-    Ok(result)
+    Ok(account)
 }
 #[ic_cdk::update]
 fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
-    let mut state = state();
     let current = account_for(caller)?;
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
     }
-    let account = state
-        .accounts
-        .iter_mut()
-        .find(|account| account.id == current.id)
-        .expect("account exists");
+    let mut account = get_account(&current.id).expect("account exists");
     if account.version != expected_version {
         return Err("Account version conflict".into());
     }
@@ -832,9 +816,9 @@ fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
         .checked_add(1)
         .ok_or("Account version exhausted")?;
     account.principals.retain(|item| *item != principal);
-    let result = account.clone();
-    store(&state);
-    Ok(result)
+    put_account(&account);
+    deindex_principal(principal);
+    Ok(account)
 }
 
 #[ic_cdk::update]
@@ -849,7 +833,7 @@ fn bind_external_site(
     if !valid_id(&account_id) || !valid_id(&site_id) || !valid_id(&external_user_id) {
         return Err("Invalid external binding parameters".into());
     }
-    if !state.accounts.iter().any(|a| a.id == account_id) {
+    if !account_exists(&account_id) {
         return Err("Unknown account".into());
     }
     if state.external_bindings.iter().any(|b| {
@@ -993,27 +977,17 @@ fn erase_account(account_id: String) -> Outcome<()> {
     if caller_account.id != account_id && state.governor != caller {
         return Err("Forbidden".into());
     }
-    if state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id && account.principals.contains(&state.governor))
-    {
+    let account = get_account(&account_id).ok_or("Unknown account")?;
+    if account.principals.contains(&state.governor) {
         return Err("Governor account cannot be erased".into());
     }
-    if !state
-        .accounts
-        .iter()
-        .any(|account| account.id == account_id)
-    {
-        return Err("Unknown account".into());
+    let erased_principals = account.principals.clone();
+    remove_account(&account_id);
+    for principal in &erased_principals {
+        deindex_principal(*principal);
+        remove_entitlements_for_principal(*principal);
     }
-    let erased_principals = state
-        .accounts
-        .iter()
-        .find(|account| account.id == account_id)
-        .map(|account| account.principals.clone())
-        .unwrap_or_default();
-    state.accounts.retain(|account| account.id != account_id);
+    remove_profile_entry(&account_id);
     state.roles.retain(|grant| grant.account_id != account_id);
     state.families.retain(|link| link.account_id != account_id);
     state
@@ -1022,9 +996,6 @@ fn erase_account(account_id: String) -> Outcome<()> {
     state
         .external_bindings
         .retain(|binding| binding.account_id != account_id);
-    state
-        .profiles
-        .retain(|profile| profile.account_id != account_id);
     state
         .privacy_consents
         .retain(|consent| consent.account_id != account_id);
