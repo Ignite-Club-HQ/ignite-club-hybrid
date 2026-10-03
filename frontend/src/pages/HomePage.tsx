@@ -843,7 +843,7 @@ export default function HomePage() {
         .is("deleted_at", null);
       return (data || []).map((t: any) => t.id as string);
     },
-    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0,
+    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0 && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -872,7 +872,7 @@ export default function HomePage() {
       // Fallback covers teams.is_pro (set by website trial signup).
       return resolveHomeProAccess(clubSubsResult.data, teamSubsResult.data, teamsResult.data);
     },
-    enabled: !!user && !!userMemberships,
+    enabled: !!user && !!userMemberships && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -907,7 +907,7 @@ export default function HomePage() {
         return { ...club, hasPro: !!hasPro };
       });
     },
-    enabled: !!user && !!userMemberships,
+    enabled: !!user && !!userMemberships && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -1245,7 +1245,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Club[];
     },
-    enabled: !!user && (teamDialogOpen || !!activeClubFilter),
+    enabled: !!user && (teamDialogOpen || !!activeClubFilter) && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1269,7 +1269,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Team[];
     },
-    enabled: !!user && teamDialogOpen,
+    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1299,7 +1299,7 @@ export default function HomePage() {
         // empty under ICP until a club directory canister can supply this.
         icp: async () => [] as MiniLeague[],
       }),
-    enabled: !!user && teamDialogOpen,
+    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1378,7 +1378,7 @@ export default function HomePage() {
       // Coaches and team admins require Pro Football subscription for pitch board access
       return soccerTeams.filter(t => proFootballTeamIds.has(t.id));
     },
-    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0,
+    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0 && resolveAuthBackend() !== "icp",
 
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1471,7 +1471,7 @@ export default function HomePage() {
       // Return only teams with Pro Football
       return soccerTeams.filter(t => proFootballTeamIds.has(t.id));
     },
-    enabled: !!user && !!userMemberships && ((userMemberships?.teamIds?.length ?? 0) > 0 || (userMemberships?.clubIds?.length ?? 0) > 0),
+    enabled: !!user && !!userMemberships && ((userMemberships?.teamIds?.length ?? 0) > 0 || (userMemberships?.clubIds?.length ?? 0) > 0) && resolveAuthBackend() !== "icp",
 
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1490,7 +1490,7 @@ export default function HomePage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!user,
+    enabled: !!user && resolveAuthBackend() !== "icp",
     staleTime: 2 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -1645,7 +1645,7 @@ export default function HomePage() {
 
       return Array.from(childrenMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     },
-    enabled: !!showChildLinker,
+    enabled: !!showChildLinker && resolveAuthBackend() !== "icp",
   });
 
   // Check if user already has the SPECIFIC role they're requesting in the selected team/league
@@ -1679,7 +1679,7 @@ export default function HomePage() {
       if (error) throw error;
       return (data || []).map(r => r.role as TeamRole);
     },
-    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && !useIcpLab,
+    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && resolveAuthBackend() !== "icp",
     staleTime: 30_000,
   });
 
@@ -1688,6 +1688,7 @@ export default function HomePage() {
 
   const teamRequestMutation = useMutation({
     mutationFn: async () => {
+      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
       if (isLeagueSelected && actualLeagueId) {
         // Handle league join request
@@ -1768,6 +1769,7 @@ export default function HomePage() {
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
     mutationFn: async (role: TeamRole) => {
+      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
       if (userRoles?.some(r => r.team_id === selectedTeam && r.role === role)) {

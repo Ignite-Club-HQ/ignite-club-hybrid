@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { formatRelativePast } from "@/lib/formatRelativeTime";
 
 type RsvpStatus = "going" | "maybe" | "not_going";
@@ -271,7 +272,7 @@ export function EventAttendanceRosterSection({
     const remindChildId = isMiniLeagueEvent ? child.child_id : (child.child_id || child.id);
     const recipientKey = remindParentId || remindChildId || child.id;
     const canRemind = !isPendingChild && !!(remindParentId || remindChildId);
-    const remind = canManageEvent && canRemind
+    const remind = canManageEvent && canRemind && resolveAuthBackend() !== "icp"
       ? reminderButton({
           userId: remindParentId,
           childId: remindChildId,
@@ -319,7 +320,7 @@ export function EventAttendanceRosterSection({
   };
 
   const renderNotRespondedAdult = (member: any) => {
-    const remind = canManageEvent
+    const remind = canManageEvent && resolveAuthBackend() !== "icp"
       ? reminderButton({
           userId: member.id,
           recipientKey: member.id,

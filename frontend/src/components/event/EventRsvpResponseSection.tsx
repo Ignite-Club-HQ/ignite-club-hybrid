@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { Separator } from "@/components/ui/separator";
 import {
   isParentFirstEvent,
@@ -181,7 +182,7 @@ export function EventRsvpResponseSection({
                     </Button>
                   ))}
                 </div>
-                {childRsvp && (
+                {childRsvp && resolveAuthBackend() !== "icp" && (
                   <button
                     type="button"
                     onClick={() => setNoteTarget({ kind: "child", childId: child.id, subjectName: child.name })}
@@ -255,7 +256,7 @@ export function EventRsvpResponseSection({
           {String(myRsvp.notes ?? "").startsWith("Present") ? "Mark absent" : "Mark present"}
         </Button>
       )}
-      {myRsvp && (
+      {myRsvp && resolveAuthBackend() !== "icp" && (
         <button
           type="button"
           onClick={() => setNoteTarget({ kind: "self", subjectName: "You" })}

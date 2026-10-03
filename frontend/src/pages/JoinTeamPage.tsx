@@ -373,7 +373,7 @@ function SupabaseJoinTeamPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!inviteMiniLeagueId,
+    enabled: !!inviteMiniLeagueId && resolveAuthBackend() !== "icp",
   });
 
   const inviteEntityName = inviteMiniLeague?.name || invite?.teams?.name || invite?.teams?.clubs?.name || "organization";
@@ -406,7 +406,7 @@ function SupabaseJoinTeamPage() {
       const { data } = await query;
       return data?.map(r => r.role as AppRole) || [];
     },
-    enabled: !!invite && !!user,
+    enabled: !!invite && !!user && resolveAuthBackend() !== "icp",
   });
 
   // Does the signed-in user already belong to a DIFFERENT club? Used to show a
@@ -430,7 +430,7 @@ function SupabaseJoinTeamPage() {
         .maybeSingle();
       return (club?.name as string) ?? null;
     },
-    enabled: !!user && !!invite,
+    enabled: !!user && !!invite && resolveAuthBackend() !== "icp",
     staleTime: 60 * 1000,
   });
 
@@ -535,7 +535,7 @@ function SupabaseJoinTeamPage() {
       const linked = new Set((guardians || []).map((g: any) => g.child_id));
       return candidates.filter((c: any) => !linked.has(c.id));
     },
-    enabled: !!invite?.team_id && showChildStep,
+    enabled: !!invite?.team_id && showChildStep && resolveAuthBackend() !== "icp",
   });
 
   // Check if user needs to complete their profile first

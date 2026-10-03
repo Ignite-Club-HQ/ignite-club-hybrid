@@ -4,6 +4,7 @@ import { Crown, Loader2, Plus, Trash2, BarChart3 } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLivePoll } from "@/live/features/messaging";
@@ -93,7 +94,7 @@ export function CreatePollDialog({ open, onOpenChange, chatType, chatId, onCreat
   // Resolve the owning club so we can show the Free-tier usage meter & enforce caps.
   const { data: resolvedClubId } = useQuery({
     queryKey: ["poll-club-resolve", chatType, chatId, clubIdProp],
-    enabled: open && !clubIdProp && !!chatId,
+    enabled: open && !clubIdProp && !!chatId && resolveAuthBackend() !== "icp",
     staleTime: 5 * 60_000,
     queryFn: async () => {
       if (clubIdProp) return clubIdProp;

@@ -1,3 +1,4 @@
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { ArrowLeft, Bell, MoreVertical, Pencil, Share2, Trash2, UserPlus, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,19 +77,19 @@ export function EventDetailHeader({
                   <Pencil className="h-4 w-4 mr-2" />
                   Edit {eventTypeLabel}
                 </DropdownMenuItem>
-                {isUpcoming && (canSendReminders ? (
+                {resolveAuthBackend() !== "icp" && (canSendReminders ? (
                   <DropdownMenuItem onClick={onSendReminders}>
                     <Bell className="h-4 w-4 mr-2 text-primary" />
                     Send Reminders
                   </DropdownMenuItem>
-                ) : !isLoadingHasTeamPro && (
+                ) : !isLoadingHasTeamPro ? (
                   <DropdownMenuItem disabled>
                     <Bell className="h-4 w-4 mr-2" />
                     Send Reminders
                     <Badge variant="secondary" className="ml-auto text-[10px] h-4 px-1">Pro</Badge>
                   </DropdownMenuItem>
-                ))}
-                {isUpcoming && (
+                ) : null)}
+                {resolveAuthBackend() !== "icp" && canSendReminders && (
                   <DropdownMenuItem onClick={onResendInvites}>
                     <UserPlus className="h-4 w-4 mr-2 text-primary" />
                     Resend Invites

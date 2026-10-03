@@ -9,6 +9,7 @@ import { resolveReminderRecipients, applyReminderCooldown, normalizeRecipientIds
 import { withFeatureBackend } from "@/live/featureRouter";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 
+import { resolveAuthBackend } from "@/live/authBackendMode";
 const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 export interface UseEventReminderMutationsArgs {
@@ -75,6 +76,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
 
   const remindMutation = useMutation({
     mutationFn: async () => {
+      if (resolveAuthBackend() === "icp") return 0;
       // Get all RSVPs for this event
       const { data: existingRsvps, error: rsvpError } = await supabase
         .from("rsvps")
@@ -144,6 +146,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
   // in that case we derive recipients entirely from the linked child (children.parent_id + child_guardians).
   const individualRemindMutation = useMutation({
     mutationFn: async ({ userId, displayName, childId }: { userId?: string; displayName: string; childId?: string }) => {
+      if (resolveAuthBackend() === "icp") return { displayName, count: 0, isChild: !!childId, recipientKey: userId || childId || displayName };
       let recipientIds: string[] = normalizeRecipientIds([userId]);
 
       if (childId) {
@@ -264,6 +267,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
   // Resend event invites to members who haven't been notified yet
   const resendInvitesMutation = useMutation({
     mutationFn: async () => {
+      if (resolveAuthBackend() === "icp") return 0;
       if (!event || !id) throw new Error("No event");
 
       // Shared recipient policy (same audience as bulk reminders)
