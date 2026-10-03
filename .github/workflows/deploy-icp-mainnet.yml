@@ -52,12 +52,15 @@ jobs:
           PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
           if [ -n "$DEPLOYER_PEM" ]; then
             # Normalize common paste issues: CRLF line endings, literal "\n"
-            # escape sequences, and any stray text before/after the PEM block.
+            # escape sequences, a JSON wrapper like {"private_key": "..."},
+            # and any stray text before/after the PEM block.
             printf '%s' "$DEPLOYER_PEM" \
               | tr -d '\r' \
               | sed 's/\\\\n/\n/g' \
               | sed 's/\\n/\n/g' \
               | sed -n '/-----BEGIN/,/-----END/p' \
+              | sed 's/^.*-----BEGIN/-----BEGIN/' \
+              | sed 's/\(-----END [A-Z ]*KEY-----\).*$/\1/' \
               > "$PEM_FILE"
             echo "==> Cleaned key file starts with: $(head -1 "$PEM_FILE")"
             if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
@@ -67,8 +70,26 @@ jobs:
               echo "the DEPLOYER_PEM repository secret, then re-run this workflow."
               exit 1
             fi
+            # Fail early with a clear message if the pasted key is the wrong TYPE
+            # (e.g. an RSA key made by another tool). The Internet Computer only
+            # accepts secp256k1 or Ed25519 keys — like the one the first run
+            # generated into the 'deployer-key' artifact.
+            if openssl pkcs8 -in "$PEM_FILE" -nocrypt -out "$RUNNER_TEMP/key-check.der" -outform DER 2>/dev/null; then
+              ALGO="$(openssl asn1parse -inform DER -in "$RUNNER_TEMP/key-check.der" 2>/dev/null | grep -m1 'OBJECT' || true)"
+              rm -f "$RUNNER_TEMP/key-check.der"
+              if printf '%s' "$ALGO" | grep -qi 'rsa'; then
+                echo "::error::The DEPLOYER_PEM secret holds an RSA key, which the Internet Computer does not accept."
+                echo "This is NOT the key this workflow generated. The funded account address"
+                echo "belongs to the identity from your FIRST run — use that key instead:"
+                echo "open that run page → Artifacts → deployer-key → ignite-governor.pem,"
+                echo "copy its full text, and update the DEPLOYER_PEM repository secret."
+                exit 1
+              fi
+            fi
             icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
             icp identity default ignite-governor
+            echo "==> Restored deployer principal: $(icp identity principal)"
+            echo "==> This MUST match the principal whose account address you funded."
             echo "key_source=secret" >> "$GITHUB_ENV"
           else
             icp identity new ignite-governor --storage plaintext \
