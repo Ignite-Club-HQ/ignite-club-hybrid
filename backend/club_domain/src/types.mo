@@ -65,6 +65,9 @@ module {
     // columns; null means the club has no PlayHQ connection.
     playhq_tenant : ?Text;
     playhq_org_id : ?Text;
+    // Sport this club plays, mirroring the Supabase `clubs.sport` column.
+    // null means not yet set.
+    sport : ?Text;
   };
   // Compact branding read for invite/email surfaces — the canister
   // counterpart of selecting name/logo_url/contact_email off the clubs row.
