@@ -33,7 +33,7 @@ const myTeamsCarouselImport = () =>
     default: module.MyTeamsPremiumCarousel,
   }));
 myTeamsCarouselImport();
-const MyTeamsPremiumCarousel = lazy(myTeamsCarouselImport);
+const MyTeamsPremiumCarousel = lazyWithRetry(myTeamsCarouselImport);
 
 interface HomeDashboardRole {
   role: string;
