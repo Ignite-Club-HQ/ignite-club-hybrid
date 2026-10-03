@@ -81,6 +81,11 @@ persistent actor MediaBlobStore {
   var blobs : [BlobRecord];
   var pending_uploads : [PendingUpload];
   var next_upload_seq : Nat64;
+  // Principal of the club_domain canister used to verify club-staff delete
+  // rights on clubs/<clubId>/ paths; set post-install via
+  // set_club_domain_canister. While unset, only owner/governor may delete
+  // (fail closed).
+  var club_domain_canister : ?Principal;
 
   // ==================== Helpers ====================
 
