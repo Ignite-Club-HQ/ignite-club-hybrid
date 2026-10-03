@@ -73,12 +73,20 @@ export default function InviteOtherParentSheet({
     enabled: open && !!teamIds[0],
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("teams")
-        .select("club_id")
-        .eq("id", teamIds[0])
-        .maybeSingle();
-      return (data?.club_id as string | null) ?? null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("teams")
+            .select("club_id")
+            .eq("id", teamIds[0])
+            .maybeSingle();
+          return (data?.club_id as string | null) ?? null;
+        },
+        icp: async (ctx) => {
+          const team = await getLiveTeam(ctx, teamIds[0]);
+          return (team.club as string | null) ?? null;
+        },
+      });
     },
   });
 
@@ -87,14 +95,24 @@ export default function InviteOtherParentSheet({
     queryKey: ["parent-invite-user-search", debouncedName, scopeClubId],
     queryFn: async () => {
       if (debouncedName.length < 2) return [];
-      const { data } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedName,
-        _limit: 6,
-        _club_id: scopeClubId ?? null,
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedName,
+            _limit: 6,
+            _club_id: scopeClubId ?? null,
+          });
+          return ((data || []) as Array<{ id: string; display_name: string | null; avatar_url: string | null }>)
+            .filter(u => u.id !== user?.id)
+            .map(u => ({ id: u.id, display_name: u.display_name, avatar_url: u.avatar_url }));
+        },
+        // ICP: identity_access search_profiles (display names live there in
+        // plaintext by design — member search depends on them).
+        icp: async (ctx) => {
+          const rows = await searchLiveProfiles(ctx, debouncedName, 6);
+          return rows.filter(u => u.id !== user?.id);
+        },
       });
-      return ((data || []) as Array<{ id: string; display_name: string | null; avatar_url: string | null }>)
-        .filter(u => u.id !== user?.id)
-        .map(u => ({ id: u.id, display_name: u.display_name, avatar_url: u.avatar_url }));
     },
     enabled: open && debouncedName.length >= 2 && !selectedUser && (!teamIds[0] || !!scopeClubId),
   });
