@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isLiveAppAdmin } from "@/live/features/insights";
+// features/insights is imported lazily in the icp provider below so the ICP
+// SDK stays out of the entry chunk (this hook runs on most pages).
 
 /**
  * Single authoritative source of app-admin permission detection.
@@ -45,7 +46,7 @@ export async function fetchIsAppAdmin(userId: string): Promise<boolean> {
       if (error) throw error;
       return !!data;
     },
-    icp: async (ctx) => isLiveAppAdmin(ctx),
+    icp: async (ctx) => (await import("@/live/features/insights")).isLiveAppAdmin(ctx),
   });
 }
 
