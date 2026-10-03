@@ -120,6 +120,7 @@ function SupabaseAdminIcpLlmTestPage() {
     setLoading(true);
     setResult(null);
     try {
+      // icp-guard: allow app-admin diagnostic tooling stays Supabase-only by design
       const { data, error } = await supabase.functions.invoke("icp-llm-test", {
         body: { prompt, system: system || undefined, model },
       });

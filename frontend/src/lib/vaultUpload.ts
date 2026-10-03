@@ -52,6 +52,7 @@ export async function settleVaultStorage(reservationId: string | null, committed
 }
 
 /** Best-effort removal of an orphaned object after a failed metadata insert. */
+// icp-guard: allow compensation for the Supabase media-bytes upload path only, which is gated upstream (media bytes stay Supabase by design)
 export async function compensateVaultUpload(storagePath: string) {
   try {
     await supabase.storage.from(VAULT_BUCKET).remove([storagePath]);

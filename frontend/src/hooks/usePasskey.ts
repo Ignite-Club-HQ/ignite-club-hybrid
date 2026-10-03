@@ -281,6 +281,7 @@ export function usePasskey() {
       }
 
       // Request registration options from server
+      // icp-guard: allow passkey auth is part of the Supabase sign-in system by design (II users never reach this)
       const { data: optionsData, error: optionsError } = await supabase.functions.invoke(
         'passkey-register',
         {

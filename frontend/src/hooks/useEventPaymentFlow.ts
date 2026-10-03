@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { createMemberCheckout, listenForPaymentStatus } from "@/lib/memberCheckout";
+import { assertSupabaseWritePath } from "@/live/featureGuards";
 
 export interface UseEventPaymentFlowArgs {
   supabase: any;
@@ -47,6 +48,10 @@ export function useEventPaymentFlow(params: UseEventPaymentFlowArgs) {
 
   const handlePayNow = async () => {
     if (!event || !user || !eventPrice) return;
+
+    // Non-iOS payments stay Supabase-only by design; fail closed under ICP
+    // rather than creating a checkout against the wrong backend.
+    assertSupabaseWritePath("events", "event payments");
 
     if (useIcpLab) {
       toast({

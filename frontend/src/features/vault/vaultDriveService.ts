@@ -26,6 +26,7 @@ export async function resolveVaultDriveTitles(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultDriveTitleSummary | undefined> {
+  // icp-guard: allow Google Drive import stays Supabase-only by design (no canister shape)
   const { data, error } = await client.functions.invoke("resolve-drive-titles", {
     body: { clubId },
   });
