@@ -1,4 +1,5 @@
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 module {
   type RoleGrant = { user : Principal; role : Text; club : ?Text; team : ?Text };
   type Team = { id : Text; club : Text };
@@ -105,7 +106,7 @@ module {
       var governor = old.governor;
       var acl = old.acl;
       var aclVersion = old.aclVersion;
-      var profiles = old.profiles.map(func(p : OldClubProfile) : ClubProfile = { p with sport = null });
+      var profiles = Array.map(old.profiles, func(p : OldClubProfile) : ClubProfile = { p with sport = null });
       var settings = old.settings;
       var teams = old.teams;
       var sponsors = old.sponsors;
