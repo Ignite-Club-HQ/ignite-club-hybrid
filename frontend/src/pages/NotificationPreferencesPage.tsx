@@ -39,14 +39,215 @@ interface NotificationPreferenceRow {
   pitch_board_enabled: boolean | null;
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLivePreferencesByClub } from "@/live/features/notifications";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function NotificationPreferencesPage() {
   if (isFeatureRoutedToIcp("notifications")) {
-    return <IcpUnavailablePage title="Notification preferences are unavailable in ICP lab mode" description="Preference persistence and external push or email delivery are not connected to ICP services yet." />;
+    return <IcpNotificationPreferencesPage />;
   }
   return <SupabaseNotificationPreferencesPage />;
+}
+
+interface IcpUserNotificationData {
+  id: string;
+  display_name: string | null;
+  emailMessagesEnabled: boolean;
+  emailEventsEnabled: boolean;
+  emailMediaEnabled: boolean;
+  pushMessagesEnabled: boolean;
+  pushEventsEnabled: boolean;
+  pushMediaEnabled: boolean;
+}
+
+/**
+ * ICP branch: preferences come from notification_queue's paged
+ * list_preferences_by_club (club filter is a canister-side no-op), display
+ * names from identity_access. Push *registration* stats have no canister
+ * equivalent (push delivery stays Supabase by design), so the push
+ * registered column/stat is hidden rather than shown as empty.
+ */
+function IcpNotificationPreferencesPage() {
+  const { isAppAdmin, isLoading: adminLoading } = useIsAppAdmin();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["icp-notification-preferences"],
+    queryFn: async () =>
+      withFeatureBackend("notifications", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const page = await listLivePreferencesByClub(ctx, "", 500, 0);
+          const items = page.items ?? [];
+          const ids = items.map((p) => p.user);
+          const profiles = await listLiveProfilesByIds(ctx, ids).catch(() => []);
+          const nameMap = new Map<string, string | null>(
+            (profiles as any[]).map((p) => [p.id, p.display_name ?? null]),
+          );
+          const users: IcpUserNotificationData[] = items.map((p) => ({
+            id: p.user,
+            display_name: nameMap.get(p.user) ?? null,
+            emailMessagesEnabled: p.email_messages_enabled,
+            emailEventsEnabled: p.email_events_enabled,
+            emailMediaEnabled: p.email_media_enabled,
+            pushMessagesEnabled: p.messages_enabled,
+            pushEventsEnabled: p.events_enabled,
+            pushMediaEnabled: p.media_enabled,
+          }));
+          return {
+            total: Number(page.total),
+            usersWithEmailEnabled: users.filter((u) => u.emailMessagesEnabled).length,
+            users,
+          };
+        },
+      }),
+    enabled: isAppAdmin,
+  });
+
+  if (adminLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!isAppAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  const users = data?.users;
+
+  const StatusBadge = ({ enabled }: { enabled: boolean }) => (
+    enabled ? (
+      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30">
+        <CheckCircle2 className="h-3 w-3 mr-1" />
+        On
+      </Badge>
+    ) : (
+      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
+        <XCircle className="h-3 w-3 mr-1" />
+        Off
+      </Badge>
+    )
+  );
+
+  return (
+    <div className="space-y-6 py-4">
+      <div>
+        <h1 className="text-2xl font-bold">Notification Preferences</h1>
+        <p className="text-muted-foreground text-sm">View user push and email notification settings</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3 px-3 text-center">
+            <Users className="h-5 w-5 mx-auto text-muted-foreground mb-1" />
+            <p className="text-2xl font-bold">{isLoading ? "-" : (data?.total ?? "-")}</p>
+            <p className="text-xs text-muted-foreground">Users with Saved Preferences</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 px-3 text-center">
+            <Mail className="h-5 w-5 mx-auto text-primary mb-1" />
+            <p className="text-2xl font-bold">{isLoading ? "-" : (data?.usersWithEmailEnabled ?? "-")}</p>
+            <p className="text-xs text-muted-foreground">Email Enabled</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            User Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <Tabs defaultValue="push" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="push">Push</TabsTrigger>
+                <TabsTrigger value="email">Email</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="push" className="mt-0">
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead className="text-center">Messages</TableHead>
+                        <TableHead className="text-center">Schedule</TableHead>
+                        <TableHead className="text-center">Media</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users?.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="font-medium">
+                            <p className="truncate max-w-[120px]">{user.display_name || "—"}</p>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.pushMessagesEnabled} />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.pushEventsEnabled} />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.pushMediaEnabled} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="email" className="mt-0">
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead className="text-center">Messages</TableHead>
+                        <TableHead className="text-center">Schedule</TableHead>
+                        <TableHead className="text-center">Media</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users?.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="font-medium">
+                            <p className="truncate max-w-[120px]">{user.display_name || "—"}</p>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.emailMessagesEnabled} />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.emailEventsEnabled} />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatusBadge enabled={user.emailMediaEnabled} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function SupabaseNotificationPreferencesPage() {
