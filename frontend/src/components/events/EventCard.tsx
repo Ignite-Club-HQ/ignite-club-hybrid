@@ -268,12 +268,11 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
                 (assignmentLists[i] || []).some((a) => eligibleTeamIds.includes(a.team_id)),
               );
             } else if (event.mini_league_id) {
-              // Mini-league roster scope: derive eligibility from the event's
-              // mini-league RSVPs (the canister tracks child players via the
-              // RSVP audience — mirrors the Supabase mini_league_players filter).
-              const mlRsvps = await listLiveMiniLeagueRsvps(ctx, event.id);
+              // Mini-league roster scope: mini_league_domain players linked
+              // to a child record — mirrors the Supabase mini_league_players filter.
+              const players = await listLivePlayers(ctx, event.mini_league_id);
               const allowed = new Set(
-                (mlRsvps || []).map((r: any) => r.rsvp?.child_id?.[0] ?? r.child_id).filter(Boolean),
+                (players || []).map((p) => p.child_id[0]).filter((id): id is string => !!id),
               );
               children = children.filter((c) => allowed.has(c.id));
             } else {
