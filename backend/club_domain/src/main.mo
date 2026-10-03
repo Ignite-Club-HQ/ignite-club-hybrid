@@ -1,6 +1,8 @@
 import Array "mo:core/Array";
 import Int "mo:core/Int";
+import Iter "mo:core/Iter";
 import Nat "mo:core/Nat";
+import Nat8 "mo:core/Nat8";
 import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
@@ -9,6 +11,20 @@ import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Types "types";
+
+// IC HTTP gateway request/response shapes for `http_request` (same contract
+// media_blob_store uses). Body is raw bytes; JSON is encoded by hand below.
+type HttpRequest = {
+  url : Text;
+  method : Text;
+  headers : [(Text, Text)];
+  body : Blob;
+};
+type HttpResponse = {
+  status_code : Nat16;
+  headers : [(Text, Text)];
+  body : Blob;
+};
 
 persistent actor class Main(governorInit : Principal) {
   transient let challengeTtlNs : Nat64 = 600_000_000_000;
