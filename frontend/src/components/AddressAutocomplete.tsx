@@ -76,7 +76,9 @@ export function AddressAutocomplete({
 
   // Fetch user's saved favorite locations
   useEffect(() => {
-    if (!user) return;
+    // saved_locations is Supabase-only (NEEDS-CANISTER: no saved-places
+    // shape) — never read it for II principals.
+    if (!user || icpMode) return;
     
     const fetchFavorites = async () => {
       const { data, error } = await supabase
@@ -215,6 +217,7 @@ export function AddressAutocomplete({
   };
 
   const handleSaveAsFavorite = async () => {
+    if (icpMode) return; // saved_locations has no canister equivalent (NEEDS-CANISTER)
     if (!user || !currentAddress?.address) {
       toast.error("Please select an address first");
       return;
@@ -252,7 +255,7 @@ export function AddressAutocomplete({
 
   const handleRemoveFavorite = async (e: React.MouseEvent, locationId: string) => {
     e.stopPropagation();
-    if (!user) return;
+    if (!user || icpMode) return;
 
     try {
       const { error } = await supabase

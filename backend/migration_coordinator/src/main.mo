@@ -77,16 +77,44 @@ persistent actor {
     total
   };
 
-  // Fetches export evidence from a domain canister principal, dispatching on
-  // the migration's recorded domain name. Traps (via the underlying inter-
-  // canister call failure or an explicit trap) if the domain is unsupported
-  // or the domain canister rejects the caller (only governor / bulk-access
-  // allowlisted principals may call export_state on the domain canisters).
-  func fetchEvidence(domain : Text, principal : Principal) : async* Types.Evidence {
+  // Dispatches export_state() on a domain canister principal based on the
+  // migration's recorded domain name, *without* awaiting the response. The
+  // underlying inter-canister call is already sent as soon as this returns,
+  // so callers can issue several of these back-to-back (e.g. for source and
+  // destination) before awaiting any of them, running the calls concurrently
+  // instead of serializing one behind the other. Traps immediately if the
+  // domain is unsupported.
+  func issueExport(domain : Text, principal : Principal) : Types.PendingExport {
     switch (domain) {
       case ("events_domain") {
         let target : Types.EventsDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
+        #events(target.export_state());
+      };
+      case ("competition_domain") {
+        let target : Types.CompetitionDomainActor = actor (Principal.toText(principal));
+        #competition(target.export_state());
+      };
+      case ("media_metadata") {
+        let target : Types.MediaMetadataActor = actor (Principal.toText(principal));
+        #media(target.export_state());
+      };
+      case ("messaging_domain") {
+        let target : Types.MessagingDomainActor = actor (Principal.toText(principal));
+        #messaging(target.export_state());
+      };
+      case (_) { Runtime.trap("Unsupported domain for orchestration: " # domain) };
+    };
+  };
+
+  // Awaits a pending export_state() call previously issued by issueExport
+  // and normalizes it into the uniform Evidence shape. Traps (preserving the
+  // original error reporting semantics) if the domain canister reported an
+  // export failure or rejected the caller (only governor / bulk-access
+  // allowlisted principals may call export_state on the domain canisters).
+  func resolveExport(pending : Types.PendingExport) : async* Types.Evidence {
+    switch (pending) {
+      case (#events(future)) {
+        switch (await future) {
           case (#Err(message)) { Runtime.trap("events_domain export_state failed: " # message) };
           case (#Ok(state)) {
             {
@@ -106,9 +134,8 @@ persistent actor {
           };
         };
       };
-      case ("competition_domain") {
-        let target : Types.CompetitionDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
+      case (#competition(future)) {
+        switch (await future) {
           case (#Err(message)) { Runtime.trap("competition_domain export_state failed: " # message) };
           case (#Ok(state)) {
             {
@@ -126,9 +153,8 @@ persistent actor {
           };
         };
       };
-      case ("media_metadata") {
-        let target : Types.MediaMetadataActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
+      case (#media(future)) {
+        switch (await future) {
           case (#Err(message)) { Runtime.trap("media_metadata export_state failed: " # message) };
           case (#Ok(state)) {
             {
@@ -145,9 +171,8 @@ persistent actor {
           };
         };
       };
-      case ("messaging_domain") {
-        let target : Types.MessagingDomainActor = actor (Principal.toText(principal));
-        switch (await target.export_state()) {
+      case (#messaging(future)) {
+        switch (await future) {
           case (#Err(message)) { Runtime.trap("messaging_domain export_state failed: " # message) };
           case (#Ok(state)) {
             {
@@ -164,8 +189,19 @@ persistent actor {
           };
         };
       };
-      case (_) { Runtime.trap("Unsupported domain for orchestration: " # domain) };
     };
+  };
+
+  // Issues export_state() on both the given principals concurrently (both
+  // inter-canister calls are sent before either is awaited) and resolves
+  // both results, so a slow domain canister on one side doesn't serialize
+  // behind the other.
+  func fetchEvidencePair(domain : Text, first : Principal, second : Principal) : async* (Types.Evidence, Types.Evidence) {
+    let firstPending = issueExport(domain, first);
+    let secondPending = issueExport(domain, second);
+    let firstEvidence = await* resolveExport(firstPending);
+    let secondEvidence = await* resolveExport(secondPending);
+    (firstEvidence, secondEvidence)
   };
 
   public shared ({ caller }) func initialize() : async () {
@@ -267,8 +303,7 @@ persistent actor {
     requireGovernor(caller);
     let current = findActive(id);
     if (current.phase != #started) { Runtime.trap("Invalid export transition") };
-    let sourceEvidence = await* fetchEvidence(current.domain, current.source);
-    let destinationEvidence = await* fetchEvidence(current.domain, current.destination);
+    let (sourceEvidence, destinationEvidence) = await* fetchEvidencePair(current.domain, current.source, current.destination);
     if (sourceEvidence.schema != destinationEvidence.schema) {
       let aborted = { current with phase = #aborted };
       completed := completed.concat([aborted]);
@@ -290,8 +325,7 @@ persistent actor {
     requireGovernor(caller);
     let current = findActive(id);
     if (current.phase != #imported) { Runtime.trap("Invalid verify transition") };
-    let sourceEvidence = await* fetchEvidence(current.domain, current.source);
-    let destinationEvidence = await* fetchEvidence(current.domain, current.destination);
+    let (sourceEvidence, destinationEvidence) = await* fetchEvidencePair(current.domain, current.source, current.destination);
     let sourceChecksum = buildChecksum(sourceEvidence.schema, sourceEvidence.governor, sourceEvidence.sizes);
     let destinationChecksum = buildChecksum(destinationEvidence.schema, destinationEvidence.governor, destinationEvidence.sizes);
     let sourceCount = recordCountOf(sourceEvidence.sizes);

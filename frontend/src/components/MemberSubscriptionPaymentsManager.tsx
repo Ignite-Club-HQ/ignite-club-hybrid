@@ -111,7 +111,8 @@ export default function MemberSubscriptionPaymentsManager({
       if (error) throw error;
       return data || [];
     },
-    enabled: !!teamId,
+    // child_team_assignments is Supabase-only (NEEDS-CANISTER) — skip for II.
+    enabled: !!teamId && resolveAuthBackend() !== "icp",
   });
 
   // Build payable entries: adult players + child players
@@ -218,6 +219,9 @@ export default function MemberSubscriptionPaymentsManager({
       if (error) throw error;
       return data;
     },
+    // club_subscriptions member-payment fields stay Supabase (non-IAP payments
+    // are Supabase-only by design) — skip for II.
+    enabled: resolveAuthBackend() !== "icp",
   });
 
   // Check if current user has paid for current tab type

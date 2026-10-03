@@ -51,4 +51,17 @@ module {
   // Uniform view of any domain's export evidence, extracted from whichever
   // export shape matched the migration's recorded domain.
   public type Evidence = { schema : Nat32; governor : Principal; sizes : [(Text, Nat)] };
+
+  // A domain's export_state() call already dispatched (message sent) but not
+  // yet awaited, tagged by which domain actor issued it so the caller can
+  // await it later and decode the matching response shape. Letting callers
+  // issue several of these before awaiting any of them is what allows
+  // orchestrateExport/orchestrateVerify to run their source+destination
+  // export_state calls concurrently instead of one-at-a-time.
+  public type PendingExport = {
+    #events : async EventsExport;
+    #competition : async CompetitionExport;
+    #media : async MediaExport;
+    #messaging : async MessagingExport;
+  };
 }

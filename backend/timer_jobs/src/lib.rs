@@ -598,10 +598,10 @@ fn jobs_is_empty() -> bool {
     JOBS.with(|jobs| jobs.borrow().is_empty())
 }
 
-fn governor() -> Principal {
+fn governor() -> Outcome<Principal> {
     metadata()
         .governor
-        .expect("timer queue is not initialized")
+        .ok_or_else(|| "Timer queue is not initialized".to_string())
 }
 
 fn is_worker_or_governor(actor: Principal, meta: &Metadata) -> bool {
@@ -656,7 +656,10 @@ fn grant_worker_scope(worker: Principal, scope: String) -> Outcome<()> {
     if actor == Principal::anonymous() {
         return Err("Authenticated caller required".into());
     }
-    let expected_governor = meta.governor.expect("timer queue is not initialized");
+    let expected_governor = match meta.governor {
+        Some(governor) => governor,
+        None => return Err("Timer queue is not initialized".into()),
+    };
     if actor != expected_governor {
         return Err("Governor required".into());
     }
@@ -684,7 +687,10 @@ fn grant_callback_scope(callback: Principal, scope: String) -> Outcome<()> {
     if actor == Principal::anonymous() {
         return Err("Authenticated caller required".into());
     }
-    let expected_governor = meta.governor.expect("timer queue is not initialized");
+    let expected_governor = match meta.governor {
+        Some(governor) => governor,
+        None => return Err("Timer queue is not initialized".into()),
+    };
     if actor != expected_governor {
         return Err("Governor required".into());
     }
@@ -722,7 +728,7 @@ fn schedule_with_callback(
     if actor == Principal::anonymous() {
         return Err("Authenticated user required".into());
     }
-    let _governor = governor();
+    let _governor = governor()?;
     if let Some(existing) = get_job_entry(&id) {
         return Ok(existing);
     }
@@ -768,7 +774,9 @@ fn claim_with_lease(now_ms: u64, limit: u16, lease_ms: u64) -> Outcome<Vec<Job>>
         return Err("Invalid claim bounds".into());
     }
     let meta = metadata();
-    let _governor = meta.governor.expect("timer queue is not initialized");
+    if meta.governor.is_none() {
+        return Err("Timer queue is not initialized".into());
+    }
     if !is_worker_or_governor(actor, &meta) {
         return Err("Worker capability required".into());
     }
@@ -782,7 +790,7 @@ fn claim_with_lease(now_ms: u64, limit: u16, lease_ms: u64) -> Outcome<Vec<Job>>
             Some(job) => job,
             None => continue,
         };
-        let scope_allowed = actor == meta.governor.unwrap()
+        let scope_allowed = actor == meta.governor.unwrap_or(Principal::anonymous())
             || meta.workers.iter().any(|capability| {
                 capability.worker == actor
                     && (capability.scope == "*" || capability.scope == job.scope)
@@ -815,7 +823,9 @@ fn complete(id: String, idempotency_key: String) -> Outcome<Job> {
         return Err("Authenticated caller required".into());
     }
     let meta = metadata();
-    let _governor = meta.governor.expect("timer queue is not initialized");
+    if meta.governor.is_none() {
+        return Err("Timer queue is not initialized".into());
+    }
     if !is_worker_or_governor(actor, &meta) {
         return Err("Worker capability required".into());
     }
@@ -842,7 +852,9 @@ fn fail(id: String, error: String, retry_at_ms: Option<u64>) -> Outcome<Job> {
         return Err("Authenticated caller required".into());
     }
     let meta = metadata();
-    let _governor = meta.governor.expect("timer queue is not initialized");
+    if meta.governor.is_none() {
+        return Err("Timer queue is not initialized".into());
+    }
     if !is_worker_or_governor(actor, &meta) {
         return Err("Worker capability required".into());
     }
@@ -871,7 +883,9 @@ fn recover_expired(now_ms: u64) -> Outcome<u16> {
         return Err("Authenticated user required".into());
     }
     let meta = metadata();
-    let _governor = meta.governor.expect("timer queue is not initialized");
+    if meta.governor.is_none() {
+        return Err("Timer queue is not initialized".into());
+    }
     if !is_worker_or_governor(actor, &meta) {
         return Err("Worker capability required".into());
     }
@@ -919,7 +933,7 @@ fn arm(next_run_at_ms: u64) -> Outcome<QueueState> {
 #[ic_cdk::query]
 fn get_job(id: String) -> Option<Job> {
     authenticated().ok()?;
-    let _governor = governor();
+    governor().ok()?;
     get_job_entry(&id)
 }
 
@@ -931,7 +945,7 @@ fn get_state() -> QueueState {
 #[ic_cdk::query]
 fn export_state() -> Outcome<Snapshot> {
     authenticated()?;
-    let _governor = governor();
+    let _governor = governor()?;
     Ok(Snapshot {
         jobs: all_job_entries(),
         state: queue_state(),
@@ -941,7 +955,7 @@ fn export_state() -> Outcome<Snapshot> {
 #[ic_cdk::query]
 fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
     authenticated()?;
-    let _governor = governor();
+    let _governor = governor()?;
     let local = all_job_entries();
     let matching = snapshot
         .jobs
@@ -958,7 +972,7 @@ fn reconcile(snapshot: Snapshot) -> Outcome<Reconciliation> {
 #[ic_cdk::query]
 fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
     authenticated()?;
-    let _governor = governor();
+    let _governor = governor()?;
     if limit == 0 || limit > 100 {
         return Err("Invalid page size".into());
     }
@@ -978,7 +992,7 @@ fn list_jobs(start_after: Option<String>, limit: u16) -> Outcome<Page> {
 #[ic_cdk::update]
 fn import_state(snapshot: Snapshot) -> Outcome<()> {
     authenticated()?;
-    let _governor = governor();
+    let _governor = governor()?;
     if !jobs_is_empty() {
         return Err("Destination is not empty".into());
     }
