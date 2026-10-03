@@ -2,6 +2,8 @@ import { useEffect, useCallback, useMemo, useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { markLiveConversationRead } from "@/live/features/messaging";
 import { selectCachedProfilesByIds, selectCachedProfileById } from "@/lib/profileCache";
 
 type MessageType = "team" | "club" | "group" | "broadcast" | "dm" | "club_admin";
