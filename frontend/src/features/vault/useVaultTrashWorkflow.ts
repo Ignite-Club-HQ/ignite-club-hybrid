@@ -17,6 +17,7 @@ import {
   type VaultTrashItems,
 } from "./vaultTrashRepository";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 type VaultTrashWorkflowOptions = {
   currentView: VaultFolderView;

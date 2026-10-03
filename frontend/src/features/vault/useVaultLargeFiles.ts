@@ -5,6 +5,7 @@ import { invalidateVaultCache } from "./vaultQueryKeys";
 import { summarizeVaultDeletion, buildVaultDeleteMessage } from "./vaultDeleteReporting";
 import { fetchVaultLargeFiles } from "./vaultLargeFileRepository";
 import { prepareVaultLargeFileDeletion, sortVaultLargeFileItems, type VaultLargeFileItem, type VaultLargeFileSort } from "./vaultLargeFileManagement";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 export interface UseVaultLargeFilesOptions {
   currentClubId?: string;
