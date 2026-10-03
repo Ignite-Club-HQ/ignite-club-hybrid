@@ -526,10 +526,10 @@ function SupabaseCompleteProfilePage() {
           // the old send-welcome-dm edge function); it verifies the caller is
           // the recipient. The generated types file predates it, hence the
           // narrow cast on the rpc name.
-          (supabase.rpc as (
+          ((supabase.rpc as unknown as (
             fn: string,
             args: Record<string, unknown>,
-          ) => Promise<{ error: { message: string } | null }>)(
+          ) => Promise<{ error: { message: string } | null }>))(
             "send_welcome_dm",
             { p_user_id: user.id, p_message: welcomeMessage },
           ).then(({ error: welcomeError }) => {
