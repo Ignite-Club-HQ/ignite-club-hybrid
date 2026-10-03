@@ -1514,6 +1514,62 @@ export interface LiveGameResultInput {
   mvpPlayerName?: string | null;
 }
 
+// Player names embedded in the game-result stats JSON are PII: each name is
+// registered on pii_access_control under an opaque reference and only the
+// reference reaches events_domain. The club read grant lets club members
+// decrypt the names when rendering history. All registration is best effort.
+const STAT_NAME_REF_PREFIX = "statname:";
+const PITCH_NAME_REF_PREFIX = "pitchname:";
+
+async function registerJsonNameRefs(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  scope: string,
+  prefix: string,
+  entries: Array<{ key: string; name: string }>,
+): Promise<Map<string, string>> {
+  const clubId = clubIdFromTeamId(teamId);
+  const refs = new Map<string, string>();
+  await Promise.all(
+    entries.map(async ({ key, name }) => {
+      const ref = `${prefix}${scope}:${key}`;
+      await registerLivePiiText(ctx, ref, "name", name);
+      if (clubId) await grantLiveClubPiiRead(ctx, ref, "name", clubId);
+      refs.set(key, ref);
+    }),
+  );
+  return refs;
+}
+
+/** Replace `name` fields in a parsed JSON doc with opaque PII refs. */
+function substituteNameRefs(doc: unknown, refs: Map<string, string>): unknown {
+  if (!Array.isArray(doc)) return doc;
+  return doc.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.id !== "string" || typeof rec.name !== "string") return entry;
+    const ref = refs.get(rec.id);
+    return ref ? { ...rec, name: ref } : entry;
+  });
+}
+
+/** Resolve opaque PII refs back to names in a parsed JSON doc, best effort. */
+function resolveNameRefsInDoc(
+  doc: unknown,
+  prefix: string,
+  names: Map<string, string>,
+): unknown {
+  if (!Array.isArray(doc)) return doc;
+  return doc.map((entry) => {
+    if (!entry || typeof entry !== "object") return entry;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.name !== "string" || !rec.name.startsWith(prefix)) return entry;
+    // An unreadable reference renders as a neutral label, never an error
+    // state; legacy plaintext rows render as-is.
+    return { ...rec, name: names.get(rec.name) ?? "Player" };
+  });
+}
+
 export async function saveLiveGameResult(
   ctx: FeatureBackendContext,
   input: LiveGameResultInput,
@@ -1524,6 +1580,30 @@ export async function saveLiveGameResult(
   const mvpName = input.mvpPlayerName?.trim()
     ? await registerMvpNameRef(ctx, input, input.mvpPlayerName.trim())
     : input.mvpPlayerName ?? null;
+  // Player names inside the stats JSON are masked the same way.
+  let playerStatsJson = input.playerStatsJson;
+  try {
+    const stats = JSON.parse(input.playerStatsJson) as Array<{ id?: unknown; name?: unknown }>;
+    if (Array.isArray(stats)) {
+      const named = stats.filter(
+        (s): s is { id: string; name: string } =>
+          typeof s?.id === "string" && typeof s?.name === "string" && s.name.trim().length > 0,
+      );
+      if (named.length > 0) {
+        const scope = input.eventId ?? `${input.teamId}:${crypto.randomUUID()}`;
+        const refs = await registerJsonNameRefs(
+          ctx,
+          input.teamId,
+          scope,
+          STAT_NAME_REF_PREFIX,
+          named.map((s) => ({ key: s.id, name: s.name.trim() })),
+        );
+        playerStatsJson = JSON.stringify(substituteNameRefs(stats, refs));
+      }
+    }
+  } catch {
+    // Non-JSON or unexpected shape: pass through untouched (legacy behavior).
+  }
   return unwrapCandid(
     actor.save_game_result(
       input.teamId,
@@ -1534,7 +1614,7 @@ export async function saveLiveGameResult(
       input.homeScore,
       input.awayScore,
       input.periodScoresJson,
-      input.playerStatsJson,
+      playerStatsJson,
       candidOpt(input.mvpPlayerId),
       candidOpt(mvpName),
     ),
