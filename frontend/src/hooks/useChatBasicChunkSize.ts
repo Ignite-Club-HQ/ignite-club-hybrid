@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const QUERY_KEY = ["app-setting", "chat_basic_chunk_size"] as const;
 const DEFAULT_CHUNK = 100;
@@ -40,6 +41,8 @@ export function useChatBasicChunkSize(): number {
   });
 
   useEffect(() => {
+    // Realtime is Supabase-only; II users rely on the query's staleTime.
+    if (resolveAuthBackend() === "icp") return;
     const channel = supabase
       .channel("app-settings-chat-basic-chunk")
       .on(

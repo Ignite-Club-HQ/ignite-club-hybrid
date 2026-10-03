@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const QUERY_KEY = ["app-setting", "free_club_polling_enabled"] as const;
 
@@ -34,6 +35,8 @@ export function useFreeClubPollingEnabled(): boolean {
   });
 
   useEffect(() => {
+    // Realtime is Supabase-only; II users rely on the query's staleTime.
+    if (resolveAuthBackend() === "icp") return;
     const channel = supabase
       .channel("app-settings-free-club-polling")
       .on(
