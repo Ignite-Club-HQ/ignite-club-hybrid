@@ -1,0 +1,9 @@
+# VETKD_KEY_NAME MUST be the production key (key_1) at first install — it is
+# immutable afterwards and a mismatch makes all stored ciphertext undecryptable.
+name: pii_access_control
+recipe:
+  type: "@dfinity/motoko@v5.1.0"
+init_args: '(principal "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae")'
+settings:
+  environment_variables:
+    VETKD_KEY_NAME: "key_1"

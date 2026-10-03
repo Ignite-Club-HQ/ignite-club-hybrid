@@ -1,0 +1,8 @@
+# init() takes no arguments; the governor is set by the post-deploy
+# initialize() call in scripts/deploy-mainnet.sh (first caller wins).
+name: timer_jobs
+recipe:
+  type: "@dfinity/rust@v3.3.0"
+  configuration:
+    candid: timer_jobs.did
+    locked: false

@@ -1,0 +1,4 @@
+name: secret_workload_identity
+recipe:
+  type: "@dfinity/motoko@v5.1.0"
+init_args: '(principal "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae")'

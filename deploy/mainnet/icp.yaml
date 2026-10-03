@@ -1,0 +1,22 @@
+# Ignite Club HQ — mainnet deploy project.
+# Deploy with: scripts/deploy-mainnet.sh  (or manually: cd deploy/mainnet && icp deploy -e ic)
+# Canister IDs land in deploy/mainnet/.icp/data/mappings/ic.ids.json — commit that file.
+canisters:
+  - ../../backend/club_domain/canister.yaml
+  - ../../backend/club_points_domain/canister.yaml
+  - ../../backend/competition_domain/canister.yaml
+  - ../../backend/events_domain/canister.yaml
+  - ../../backend/identity_access/canister.yaml
+  - ../../backend/insights_domain/canister.yaml
+  - ../../backend/media_blob_store/canister.yaml
+  - ../../backend/media_metadata/canister.yaml
+  - ../../backend/messaging_domain/canister.yaml
+  - ../../backend/migration_coordinator/canister.yaml
+  - ../../backend/mini_league_domain/canister.yaml
+  - ../../backend/notification_queue/canister.yaml
+  - ../../backend/pii_access_control/canister.yaml
+  - ../../backend/placement_registry/canister.yaml
+  - ../../backend/secret_workload_identity/canister.yaml
+  - ../../backend/shard_router/canister.yaml
+  - ../../backend/timer_jobs/canister.yaml
+  - ../../backend/vault_domain/canister.yaml

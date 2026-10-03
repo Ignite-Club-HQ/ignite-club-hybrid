@@ -1,0 +1,7 @@
+name: shard_router
+recipe:
+  type: "@dfinity/rust@v3.3.0"
+  configuration:
+    candid: shard_router.did
+    locked: false
+init_args: '(record { governor = principal "gwyap-pqop5-msidu-vlkov-zuejr-7gqjr-dwvkx-2yhgy-mdaxt-2giwn-cae" })'
