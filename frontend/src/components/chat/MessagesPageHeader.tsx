@@ -88,6 +88,10 @@ export function MessagesPageHeader({
             </Button>
           )}
 
+          {/* Scheduled messages have no canister counterpart — the page fails
+              closed for II users, so hide the entry point instead (blocked
+              options are hidden, never shown as unavailable). */}
+          {!isFeatureRoutedToIcp("messaging") && (
           <Button
             variant="outline"
             size="icon"

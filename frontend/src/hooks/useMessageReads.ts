@@ -40,6 +40,10 @@ let _authListenerInstalled = false;
 function ensureAuthListener() {
   if (_authListenerInstalled) return;
   _authListenerInstalled = true;
+  // Internet Identity sessions have no Supabase auth client: attaching this
+  // listener would instantiate the lazy client for nothing, since the
+  // SIGNED_OUT/SIGNED_IN/USER_UPDATED events it clears on never fire.
+  if (resolveAuthBackend() === "icp") return;
   try {
     supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT" || event === "SIGNED_IN" || event === "USER_UPDATED") {

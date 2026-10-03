@@ -1469,7 +1469,9 @@ export function AppHeader() {
                 <span className="text-sm">{effectiveTheme === "dark" ? "Light Mode" : "Dark Mode"}</span>
               </DropdownMenuItem>
 
-              {isAppAdmin && (
+              {/* Demo-account tooling is Supabase-only by design — hidden for
+                  Internet Identity app admins rather than failing on tap. */}
+              {isAppAdmin && resolveAuthBackend() !== "icp" && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
@@ -1513,7 +1515,7 @@ export function AppHeader() {
             </SwipeableDropdownContent>
           </DropdownMenu>
           </div>
-          {isAppAdmin && (
+          {isAppAdmin && resolveAuthBackend() !== "icp" && (
             <Suspense fallback={null}>
               <DemoLoginSection open={demoLoginOpen} onOpenChange={setDemoLoginOpen} />
             </Suspense>
