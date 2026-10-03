@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { downloadTextReport } from "@/lib/reportExport";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 function csvEscape(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -23,6 +24,13 @@ export interface ClubRosterRow {
  * Archived/deleted teams are excluded.
  */
 export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow[]> {
+  // NEEDS-CANISTER: no club-wide player/guardian roster read exists on
+  // club_domain yet. Callers hide this for Internet Identity accounts;
+  // fail closed here too so a future caller can never fire Supabase
+  // roster queries for an II user.
+  if (resolveAuthBackend() === "icp") {
+    throw new Error("Player list export is not available for Internet Identity accounts.");
+  }
   const { data: teams, error: teamsError } = await supabase
     .from("teams")
     .select("id, name, level_age, lifecycle_status, deleted_at")

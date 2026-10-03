@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Capacitor } from "@capacitor/core";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 const NUDGE_DISMISSED_PREFIX = "notification-nudge-dismissed-";
 const NUDGE_STATUS_PREFIX = "notification-nudge-status-";
@@ -37,6 +38,15 @@ export function useNotificationNudge(userId: string | undefined, context: string
   useEffect(() => {
     if (!userId) {
       setHasPushEnabled(null);
+      setIsLoading(false);
+      return;
+    }
+
+    // Push registration is Supabase-only by design and Internet Identity
+    // users have no Supabase session — never query fcm_tokens /
+    // push_subscriptions for them, and never nudge them to enable push.
+    if (resolveAuthBackend() === "icp") {
+      setHasPushEnabled(true);
       setIsLoading(false);
       return;
     }
