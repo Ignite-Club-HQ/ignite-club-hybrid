@@ -1401,33 +1401,34 @@ mod tests {
     fn principal(value: u8) -> Principal {
         Principal::self_authenticating([value; 32])
     }
-    #[test]
-    fn ids_and_role_scope_are_bounded() {
-        assert!(valid_id("club-a"));
-        assert!(!valid_id(""));
-        assert!(!valid_id(&"x".repeat(129)));
-        let governor = principal(1);
-        let mut state = State {
+    fn empty_core_state(governor: Principal) -> CoreState {
+        CoreState {
             schema: SCHEMA,
             governor,
-            accounts: vec![Account {
-                id: "account-1".into(),
-                principals: vec![principal(2)],
-                version: 0,
-            }],
             roles: vec![],
             families: vec![],
             exclusions: vec![],
             challenges: vec![],
             external_bindings: vec![],
             privacy_consents: vec![],
-            profiles: vec![],
             terms_acceptances: vec![],
-            entitlements: vec![],
             verifiers: vec![],
             attestation_secret: vec![],
             next_challenge: 0,
-        };
+        }
+    }
+    #[test]
+    fn ids_and_role_scope_are_bounded() {
+        assert!(valid_id("club-a"));
+        assert!(!valid_id(""));
+        assert!(!valid_id(&"x".repeat(129)));
+        let governor = principal(1);
+        put_account(&Account {
+            id: "account-1".into(),
+            principals: vec![principal(2)],
+            version: 0,
+        });
+        let mut state = empty_core_state(governor);
         state.roles.push(RoleGrant {
             account_id: "account-1".into(),
             role: "club_admin".into(),
@@ -1451,8 +1452,8 @@ mod tests {
             Some("club-b"),
             None
         ));
-        assert!(account_exists(&state, "account-1"));
-        assert!(!account_exists(&state, "missing"));
+        assert!(account_exists("account-1"));
+        assert!(!account_exists("missing"));
     }
     #[test]
     fn exclusions_override_scoped_roles_but_not_global_role_detection() {
