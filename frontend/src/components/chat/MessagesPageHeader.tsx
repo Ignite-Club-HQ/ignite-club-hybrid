@@ -102,6 +102,7 @@ export function MessagesPageHeader({
           >
             <Clock className="h-5 w-5" />
           </Button>
+          )}
           <CreateActionButton ariaLabel="New message" onClick={onOpenNewMessage} />
         </div>
       </div>

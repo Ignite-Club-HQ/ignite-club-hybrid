@@ -5,7 +5,7 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { myLiveRoleGrants } from "@/live/features/club";
+import { myLiveRoleGrants, getLiveTeam } from "@/live/features/club";
 
 
 
@@ -57,11 +57,38 @@ export function useDesktopNavAccess() {
       let teamClubMap = new Map<string, string>();
       let teamNameMap = new Map<string, string>();
       if (teamIds.length > 0) {
-        const { data: teams } = await supabase.from("teams").select("id, name, club_id").in("id", teamIds);
-        teamClubMap = new Map(
-          (teams || []).filter((t) => !!t.club_id).map((t) => [t.id as string, t.club_id as string]),
-        );
-        teamNameMap = new Map((teams || []).map((t) => [t.id as string, (t.name as string) ?? "Team"]));
+        if (isFeatureRoutedToIcp("membership")) {
+          // Internet Identity users: resolve team -> club from club_domain
+          // (same shape as the Supabase teams read below).
+          const teams = await withFeatureBackend("membership", {
+            supabase: async () => [] as Array<{ id: string; name: string; club_id: string | null }>,
+            icp: async (ctx) => {
+              const resolved = await Promise.all(
+                teamIds.map(async (id) => {
+                  try {
+                    const t = (await getLiveTeam(ctx, id)) as { id: string; name?: string; club_id?: string; club?: string } | null;
+                    return t
+                      ? { id: t.id, name: t.name ?? "Team", club_id: (t.club_id ?? t.club) ?? null }
+                      : null;
+                  } catch {
+                    return null;
+                  }
+                }),
+              );
+              return resolved.filter((t): t is { id: string; name: string; club_id: string | null } => !!t);
+            },
+          });
+          teamClubMap = new Map(
+            teams.filter((t) => !!t.club_id).map((t) => [t.id, t.club_id as string]),
+          );
+          teamNameMap = new Map(teams.map((t) => [t.id, t.name]));
+        } else {
+          const { data: teams } = await supabase.from("teams").select("id, name, club_id").in("id", teamIds);
+          teamClubMap = new Map(
+            (teams || []).filter((t) => !!t.club_id).map((t) => [t.id as string, t.club_id as string]),
+          );
+          teamNameMap = new Map((teams || []).map((t) => [t.id as string, (t.name as string) ?? "Team"]));
+        }
       }
 
       const clubIds = Array.from(
