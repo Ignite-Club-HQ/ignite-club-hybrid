@@ -725,15 +725,31 @@ export function ChatParticipantsList({
       refreshChatRemovedTeamMember(queryClient, effectiveTeamId, chatType, chatId);
     };
 
-    // NEEDS-CANISTER: notification_queue enqueue call.
-    const notifyError = isFeatureRoutedToIcp("notifications")
-      ? new Error("Notifications aren't available yet on the Internet Identity notifications backend.")
-      : (await supabase.from("notifications").insert({
-          user_id: selectedMember.userId,
-          type: "membership",
+    let notifyError: Error | null = null;
+    if (isFeatureRoutedToIcp("notifications")) {
+      try {
+        const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+        const notifyClubId = resolvedClubId ?? (chatType === "club" ? chatId : clubId) ?? effectiveTeamId;
+        await sendGamificationNotification({
+          userId: selectedMember.userId,
+          clubId: notifyClubId,
+          kind: "membership",
           message: `You have been removed from ${chatName || "the team"}`,
-          related_id: effectiveTeamId,
-        })).error;
+          relatedId: effectiveTeamId,
+          dedupHours: 0,
+        });
+      } catch (e) {
+        console.error("[ChatParticipantsList] Failed to notify removed member:", e);
+        notifyError = e instanceof Error ? e : new Error("Notification failed");
+      }
+    } else {
+      notifyError = (await supabase.from("notifications").insert({
+        user_id: selectedMember.userId,
+        type: "membership",
+        message: `You have been removed from ${chatName || "the team"}`,
+        related_id: effectiveTeamId,
+      })).error;
+    }
 
     refreshMembership();
     if (notifyError) {

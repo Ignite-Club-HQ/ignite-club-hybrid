@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { readLiveAppConfig } from "./appConfig";
 import {
   BACKEND_ROUTING_CONFIG_KEY,
   applyBackendRoutingConfig,
@@ -30,7 +31,8 @@ import { getUserClubIds } from "./userClubs";
  */
 /**
  * Loads the routing config with explicit precedence:
- *   stored app_settings row > build-time env > localStorage cache > default.
+ *   stored app_settings row > build-time env > canister app_config >
+ *   localStorage cache > default.
  * The build-time and cache fallbacks exist so an ICP-routed deployment still
  * boots on ICP when Supabase is unreachable — previously this silently fell
  * back to Supabase-everywhere and the app could not even learn it should be

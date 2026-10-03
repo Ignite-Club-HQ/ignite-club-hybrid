@@ -490,7 +490,19 @@ export function PendingInviteWelcomeDialog() {
                   const playerName = meta.player_name || meta.children?.[0]?.name || "Your child";
                   const { resolveAuthBackend } = await import("@/live/authBackendMode");
                   if (resolveAuthBackend() === "icp") {
-                    // NEEDS-CANISTER: League join notifications stay Supabase-only
+                    try {
+                      const { sendGamificationNotification } = await import("@/lib/gamificationNotify");
+                      await sendGamificationNotification({
+                        userId: user.id,
+                        clubId: clubId ?? miniLeagueId,
+                        kind: "membership",
+                        message: `${playerName} has been added to a league`,
+                        relatedId: miniLeagueId,
+                        dedupHours: 0,
+                      });
+                    } catch (e) {
+                      console.error("[InviteAutoAccept] Failed to send mini-league join notification:", e);
+                    }
                   } else {
                     await supabase.from("notifications").insert({
                       user_id: user.id,
