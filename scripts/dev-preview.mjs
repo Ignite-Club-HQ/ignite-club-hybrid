@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, statSync, rmSync } from "node:fs";
 import path from "node:path";
+import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
@@ -26,23 +27,14 @@ function loadRootEnvFile() {
 }
 loadRootEnvFile();
 
-// The platform install step does not always run (or its node_modules end up
-// incomplete, e.g. vite present in name only). Install before starting, then
-// call the installed Vite binary directly so we never fall back to npx
-// downloading a mismatched version.
+// Install (only if package-lock changed), serialized with the platform install
+// step so two `npm ci` runs can never overlap and corrupt node_modules.
 const viteBin = path.join(frontendDir, "node_modules", "vite", "bin", "vite.js");
-if (!existsSync(viteBin)) {
-  console.log("frontend dependencies missing; running npm ci in frontend/...");
-  const install = spawnSync(
-    process.platform === "win32" ? "npm.cmd" : "npm",
-    ["ci", "--no-fund", "--no-audit"],
-    { cwd: frontendDir, stdio: "inherit" },
-  );
-  if (install.status !== 0) process.exit(install.status ?? 1);
-  if (!existsSync(viteBin)) {
-    console.error("frontend dependencies are still missing after npm ci; cannot start the preview.");
-    process.exit(1);
-  }
+try {
+  ensureFrontendDeps();
+} catch (err) {
+  console.error(`cannot start the preview: ${err?.message ?? err}`);
+  process.exit(1);
 }
 
 // Drop Vite's pre-bundled dependency cache when the lockfile is newer than

@@ -24,6 +24,7 @@ import { IOSInstallPrompt } from "@/components/IOSInstallPrompt";
 import { PushNotificationManager } from "@/components/PushNotificationManager";
 import { PWAPendingInviteHandler } from "@/components/PWAPendingInviteHandler";
 import AppNavigatorBridge from "@/components/AppNavigatorBridge";
+import ParamRedirect from "@/components/ParamRedirect";
 
 import { NativeAppUpdatePrompt } from "@/components/NativeAppUpdatePrompt";
 // Lazy-loaded: LegalReacceptanceGate is inert (returns null) unless an admin
@@ -469,6 +470,15 @@ const App = () => {
 <Route path="/claim-team" element={<ClaimTeamPage />} />
 <Route path="/competitions/join" element={<CompetitionJoinPage />} />
                 <Route path="/index" element={<Navigate to="/" replace />} />
+                <Route path="/index.html" element={<Navigate to="/" replace />} />
+                <Route path="/live-index.html" element={<Navigate to="/" replace />} />
+                {/* Old/alternate links still used by some buttons — redirect instead of 404 */}
+                <Route path="/teams" element={<Navigate to="/" replace />} />
+                <Route path="/teams/:id/chat" element={<ParamRedirect to="/messages/:id" />} />
+                <Route path="/teams/:id/watch-live" element={<ParamRedirect to="/teams/:id" />} />
+                <Route path="/watch/team/:id" element={<ParamRedirect to="/teams/:id" />} />
+                <Route path="/groups/:id/chat" element={<ParamRedirect to="/groups/:id" />} />
+                <Route path="/clubs/:id/chat" element={<ParamRedirect to="/messages/club/:id" />} />
 
 
 
