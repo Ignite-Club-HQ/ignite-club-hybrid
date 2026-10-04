@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { TeamAvatar } from "@/components/competition/TeamAvatar";
+import { navigateApp } from "@/lib/appNavigator";
 
 export function LadderView({ rows, divisions, isAdmin = false }: { rows: any[]; divisions: any[]; isAdmin?: boolean }) {
   const [filterDivisionId, setFilterDivisionId] = useState<string>("_all");
