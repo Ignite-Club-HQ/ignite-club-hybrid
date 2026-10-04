@@ -17,3 +17,14 @@ Goal: give Internet Identity app admins the same admin tools as Supabase mode, m
 
 ## Blocked by design (not moving)
 - Stripe Settings, Promo Codes, AdMob, Send Update Reminder, Push Analytics, Realtime Health, Set Temp Password, AI Chat Recap rollout (external worker), Chat Photo Reminders (external worker), Club Backups (vault edge functions)
+
+## Club setup wizard ICP enablement — DONE
+- [x] Removed the hard "ICP lab mode" placeholder gate so the real wizard renders in ICP mode (teams, invites, branding, sponsors, review all already had ICP branches)
+- [x] Working-groups step: ICP branch creates role groups via messaging_domain create_group_with_roles, seeding club admins/committee as members and the creator as owner
+- [x] Draft persistence (localStorage) now allowed in ICP mode
+- Verified: typecheck 0 diagnostics, preview build OK, messaging + featureRouter tests pass (11/11)
+
+## Open
+- [ ] Duplicate teams reported after publish — not yet investigated
+- [ ] ClubDetailPage ICP gaps: team folders, club role requests, club deletion, subscription changes still throw "unavailable" (need canister counterparts)
+- [ ] Canister changes (set_app_config admin access, deleted chats, DM attachments) pending mainnet redeploy via deploy-icp-mainnet workflow
