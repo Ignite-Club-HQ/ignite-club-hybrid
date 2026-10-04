@@ -138,9 +138,91 @@ function getWarmedAuthClient(): { client: InternetIdentityAuthClient; target: Ic
   return activeClient && activeTarget?.alias === target.alias ? { client: activeClient, target } : undefined;
 }
 
+/**
+ * Calls `client.signIn()` and recovers when the window channel to id.ai dies
+ * on the way back. On Android Chrome the II ceremony runs in a separate tab;
+ * while it's open our tab is hidden and the signer's postMessage channel is
+ * throttled or dropped, so the `signIn()` promise rejects with "Channel was
+ * closed…" (or never settles) even though Internet Identity already stored a
+ * valid session. Members experienced this as "I had to tap sign in twice":
+ * the second tap took the `isAuthenticated()` fast path. When our tab becomes
+ * visible again, poll briefly for that stored session and use it — and if the
+ * promise still rejects afterwards, check one last time before giving up.
+ */
+async function signInWithStoredSessionRecovery(
+  client: InternetIdentityAuthClient,
+  returnTo?: string,
+): Promise<Identity> {
+  const signInPromise = client.signIn(returnTo ? { returnTo } : undefined);
+
+  const recoveredFromStoredSession = (async (): Promise<Identity | null> => {
+    if (typeof document === "undefined") return null;
+    await new Promise<void>((resolve) => {
+      if (document.visibilityState === "visible") {
+        resolve();
+        return;
+      }
+      const onVisible = () => {
+        if (document.visibilityState === "visible") {
+          document.removeEventListener("visibilitychange", onVisible);
+          resolve();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisible);
+    });
+    // Our tab is back in front. II stores its session near the end of the
+    // ceremony, so give it a few seconds to appear.
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      if (client.isAuthenticated()) return client.getIdentity();
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return null;
+  })();
+
+  const settled = await Promise.race([
+    signInPromise.then(
+      (identity) => ({ kind: "signed-in" as const, identity }),
+      (error) => ({ kind: "failed" as const, error }),
+    ),
+    recoveredFromStoredSession.then((identity) =>
+      identity ? ({ kind: "recovered" as const, identity }) : ({ kind: "no-stored-session" as const }),
+    ),
+  ]);
+
+  if (settled.kind === "signed-in") return settled.identity;
+  if (settled.kind === "recovered") {
+    console.warn("[InternetIdentity] Sign-in channel did not answer; using the stored Internet Identity session.");
+    // The original promise may reject later (channel closed) — swallow it so
+    // it never surfaces as an unhandled rejection.
+    void signInPromise.catch(() => undefined);
+    return settled.identity;
+  }
+  if (settled.kind === "failed") {
+    if (client.isAuthenticated()) {
+      console.warn("[InternetIdentity] Sign-in failed after II stored a session; recovering.", settled.error);
+      return client.getIdentity();
+    }
+    throw settled.error;
+  }
+  // No stored session appeared within the window — keep waiting for the
+  // real answer (desktop popup still open, or a slow connection).
+  try {
+    return await signInPromise;
+  } catch (error) {
+    if (client.isAuthenticated()) {
+      console.warn("[InternetIdentity] Sign-in failed after II stored a session; recovering.", error);
+      return client.getIdentity();
+    }
+    throw error;
+  }
+}
+
 export async function signInWithInternetIdentity(returnTo?: string): Promise<InternetIdentitySession> {
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
-  const identity = client.isAuthenticated() ? await client.getIdentity() : await client.signIn(returnTo ? { returnTo } : undefined);
+  const identity = client.isAuthenticated()
+    ? await client.getIdentity()
+    : await signInWithStoredSessionRecovery(client, returnTo);
   const principal = identity.getPrincipal();
   if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") {
     throw new Error("Internet Identity returned an anonymous principal.");
