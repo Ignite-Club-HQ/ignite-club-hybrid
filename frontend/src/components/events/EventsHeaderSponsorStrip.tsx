@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -95,18 +97,32 @@ export function EventsHeaderSponsorStrip({
         const enabled = await isEventsStripEnabledForClub(activeClubFilter);
         return { clubId: enabled ? activeClubFilter : (null as string | null) };
       }
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user!.id);
-      const clubIds = new Set<string>();
-      (roles ?? []).forEach((r: any) => r.club_id && clubIds.add(r.club_id));
-      const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
-      if (teamIds.length) {
-        const { data: teams } = await supabase
-          .from("teams").select("club_id").in("id", teamIds);
-        (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
-      }
+      // In ICP mode the Supabase user_roles/teams lookups reject the II
+      // principal (not a UUID) — resolve the member's clubs from the
+      // club_domain role grants instead.
+      const clubIds = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user!.id);
+          const ids = new Set<string>();
+          (roles ?? []).forEach((r: any) => r.club_id && ids.add(r.club_id));
+          const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
+          if (teamIds.length) {
+            const { data: teams } = await supabase
+              .from("teams").select("club_id").in("id", teamIds);
+            (teams ?? []).forEach((t: any) => t.club_id && ids.add(t.club_id));
+          }
+          return ids;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          const ids = new Set<string>();
+          grants.forEach((g) => g.club[0] && ids.add(g.club[0]));
+          return ids;
+        },
+      });
       if (clubIds.size === 0) return { clubId: null as string | null };
       for (const candidateClubId of clubIds) {
         if (await isEventsStripEnabledForClub(candidateClubId)) {
