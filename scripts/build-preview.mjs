@@ -102,3 +102,11 @@ if (!existsSync(liveIndex)) {
 }
 cpSync(liveIndex, rootIndex);
 console.log("copied dist/live-index.html -> dist/index.html");
+
+// Deep links (e.g. /auth, /admin/placement-settings) must also reach the app:
+// static hosting answers them with a plain "Not Found" unless a fallback is
+// provided. 404.html covers hosts that serve it for unmatched paths, and
+// _redirects covers Netlify-convention hosts.
+cpSync(liveIndex, path.join(distRoot, "404.html"));
+writeFileSync(path.join(distRoot, "_redirects"), "/* /index.html 200\n");
+console.log("wrote dist/404.html and dist/_redirects for SPA deep-link fallback");
