@@ -315,12 +315,36 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
   const teamHasIndividualPro = teamSubscription?.is_pro || teamSubscription?.is_pro_football ||
                                (teamSubscription as any)?.admin_pro_override || (teamSubscription as any)?.admin_pro_football_override;
   
-  const isTeamPro = clubHasPro || (!clubHasPro && teamHasIndividualPro);
+  const isTeamPro = clubHasPro || (!clubHasPro && teamHasIndividualPro) || callerIapPro;
 
   // Fetch team members (players and parents with children)
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["team-members-attendance", teamId],
     queryFn: async () => {
+      // ICP: roster comes from club_domain team role grants + identity profiles.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const grants = await listLiveTeamRoleGrants(ctx, teamId!);
+            const wanted = grants.filter((g) => ["player", "parent", "coach", "team_admin"].includes(g.role));
+            const profiles = await listLiveProfilesByIds(ctx, wanted.map((g) => g.account_id)).catch(() => []);
+            const byId = new Map(profiles.map((p: { id: string }) => [p.id, p]));
+            return wanted.map((g) => {
+              const p = byId.get(g.account_id) as { display_name?: string | null; avatar_ref?: [] | [string] } | undefined;
+              return {
+                user_id: g.account_id,
+                role: g.role,
+                profiles: {
+                  id: g.account_id,
+                  display_name: p?.display_name ?? null,
+                  avatar_url: p?.avatar_ref?.[0] ?? null,
+                },
+              };
+            });
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select(`
@@ -334,13 +358,36 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Fetch children assigned to this team (use RPC to bypass RLS limits on child_team_assignments)
   const { data: teamChildren = [] } = useQuery({
     queryKey: ["team-children-attendance", teamId],
     queryFn: async () => {
+      // ICP: child assignments come from events_domain; names are vetKeys
+      // PII decrypted through the club-scoped read grants (best effort).
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const live = await getLiveTeam(ctx, teamId!);
+            const assignments = await listLiveChildTeamAssignments(ctx, live.club_id, teamId!);
+            if (!assignments.length) return [];
+            const childIds = [...new Set(assignments.map((a) => a.child_id))];
+            const names = await resolveLivePiiTextBatch(ctx, childIds, "name", "attendance_stats", "Attendance child names");
+            return assignments.map((a) => ({
+              child_id: a.child_id,
+              children: {
+                id: a.child_id,
+                name: names.get(a.child_id) ?? "Player",
+                parent_id: null,
+                profiles: null,
+              },
+            }));
+          },
+        });
+      }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc(
         "get_team_children_for_pitch_board",
         { p_team_id: teamId! }
@@ -370,7 +417,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         },
       }));
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Fetch events for the team in date range
