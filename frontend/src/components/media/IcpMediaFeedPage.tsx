@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Image as ImageIcon, Flag, MessageCircle, RefreshCw } from "lucide-react";
+import { Image as ImageIcon, Flag, MessageCircle, RefreshCw, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { CreateActionButton } from "@/components/CreateActionButton";
+import { compressImage } from "@/lib/imageCompression";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 import {
   listLiveAssets,
@@ -16,7 +19,9 @@ import {
   listLiveComments,
   addLiveComment,
   liveAssetSource,
+  registerLiveAsset,
 } from "@/live/features/media";
+import { isIcpMediaUploadUnavailable, tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
 
 interface LiveAsset {
@@ -126,6 +131,12 @@ export function IcpMediaFeedPage() {
   const [commentDraft, setCommentDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Uploads fail closed for ICP sessions until the media_blob_store canister
+  // is configured — the button stays hidden in that case (same gate as the
+  // Supabase media page's upload controls).
+  const uploadAvailable = !isIcpMediaUploadUnavailable();
 
   const loadFeed = useCallback(async () => {
     if (!clubId) {
@@ -171,6 +182,52 @@ export function IcpMediaFeedPage() {
 
   useEffect(() => { void loadFeed(); }, [loadFeed]);
 
+  const handleFilesSelected = useCallback(async (fileList: FileList | null) => {
+    if (!clubId || !fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setIsUploading(true);
+    let uploaded = 0;
+    try {
+      for (const original of files) {
+        const { file } = await compressImage(original);
+        const ext = original.name.split(".").pop() || "jpg";
+        const path = `clubs/${clubId}/${principal ?? "member"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        // Fail closed: bytes must go to the blob store in ICP mode, never to
+        // plaintext Supabase storage. A configured-but-failed upload throws.
+        const blobUpload = await tryUploadMediaToBlobStore({
+          storagePath: path,
+          file,
+          mime: file.type || "application/octet-stream",
+        });
+        if (!blobUpload) {
+          throw new Error("Media blob store is not configured");
+        }
+        await withMediaBackend(async (ctx) => {
+          await registerLiveAsset(ctx, {
+            clubId,
+            kind: "photo",
+            mime: file.type || "application/octet-stream",
+            checksum: blobUpload.blobRef.content_hash,
+            storagePath: blobUpload.blobRef.path,
+            visibility: "club",
+            contentLength: file.size,
+            blobRef: blobUpload.blobRef,
+          });
+        });
+        uploaded += 1;
+      }
+      if (uploaded > 0) {
+        toast.success(uploaded === 1 ? "Photo added" : `${uploaded} photos added`);
+      }
+    } catch {
+      toast.error("The upload didn't finish — please try again");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (uploaded > 0) void loadFeed();
+    }
+  }, [clubId, principal, loadFeed]);
+
   const handleReact = useCallback(async (assetId: string) => {
     const current = reactionsByAsset[assetId] ?? [];
     const hasReacted = principal !== null && current.some((reaction) => reaction.user.toText() === principal);
@@ -206,7 +263,27 @@ export function IcpMediaFeedPage() {
 
   return (
     <div className="py-6 pb-32 space-y-6 soft-reveal">
-      <div className="flex items-center justify-between gap-2"><h1 className="text-2xl font-bold">Media</h1></div>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Media</h1>
+        {clubId && uploadAvailable && (
+          isUploading ? (
+            <div className="inline-flex h-11 w-11 items-center justify-center" aria-label="Uploading">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : (
+            <CreateActionButton ariaLabel="Add photo" onClick={() => fileInputRef.current?.click()} />
+          )
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        aria-hidden="true"
+        onChange={(e) => void handleFilesSelected(e.target.files)}
+      />
       {loadError ? (
         <Card className="flex flex-col items-center gap-3 p-8 text-center">
           <p className="text-sm font-medium">Photos couldn't load right now</p>
@@ -223,7 +300,16 @@ export function IcpMediaFeedPage() {
       ) : isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{[0, 1].map(i => <PhotoSkeleton key={i} />)}</div>
       ) : assets.length === 0 ? (
-        <Card className="flex flex-col items-center gap-2 p-8 text-center"><ImageIcon className="h-6 w-6 text-muted-foreground" /><p className="text-sm font-medium">No media yet</p></Card>
+        <Card className="flex flex-col items-center gap-2 p-8 text-center">
+          <ImageIcon className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">No media yet</p>
+          {uploadAvailable && (
+            <Button size="sm" className="mt-2" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
+              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Add photos
+            </Button>
+          )}
+        </Card>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {assets.map(asset => {
