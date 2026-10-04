@@ -689,6 +689,8 @@ persistent actor class Main(governorInit : Principal) {
       description = switch (existing) { case (?m) { m.description }; case null { null } };
       deleted = switch (existing) { case (?m) { m.deleted }; case null { false } };
       admin_only_posting = switch (existing) { case (?m) { m.admin_only_posting }; case null { false } };
+      deleted_at_ms = switch (existing) { case (?m) { m.deleted_at_ms }; case null { null } };
+      deleted_by = switch (existing) { case (?m) { m.deleted_by }; case null { null } };
     };
     groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
     groupMetadata := groupMetadata.concat([updated]);
@@ -869,6 +871,7 @@ persistent actor class Main(governorInit : Principal) {
     let meta : Types.GroupMetadata = {
       conversation_id = conversation.id; name; kind; club_id = ?club_id; team_id; members;
       created_at_ms = nowMs(); avatar = null; description = null; deleted = false; admin_only_posting = false;
+      deleted_at_ms = null; deleted_by = null;
     };
     groupMetadata := groupMetadata.concat([meta]);
     groupRoles := groupRoles.concat(Array.map<(Principal, Text), Types.GroupRole>(role_entries, func((p, r)) = { conversation_id = conversation.id; user = p; role = r }));
