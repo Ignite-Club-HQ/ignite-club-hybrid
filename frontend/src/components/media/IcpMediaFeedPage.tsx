@@ -263,7 +263,27 @@ export function IcpMediaFeedPage() {
 
   return (
     <div className="py-6 pb-32 space-y-6 soft-reveal">
-      <div className="flex items-center justify-between gap-2"><h1 className="text-2xl font-bold">Media</h1></div>
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-bold">Media</h1>
+        {clubId && uploadAvailable && (
+          isUploading ? (
+            <div className="inline-flex h-11 w-11 items-center justify-center" aria-label="Uploading">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : (
+            <CreateActionButton ariaLabel="Add photo" onClick={() => fileInputRef.current?.click()} />
+          )
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        aria-hidden="true"
+        onChange={(e) => void handleFilesSelected(e.target.files)}
+      />
       {loadError ? (
         <Card className="flex flex-col items-center gap-3 p-8 text-center">
           <p className="text-sm font-medium">Photos couldn't load right now</p>
