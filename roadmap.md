@@ -13,7 +13,7 @@ Goal: give Internet Identity app admins the same admin tools as Supabase mode, m
 - [x] DM attachment restrictions (messaging_domain: list_dm_attachments_disabled, list_club_dm_settings; AdminDmAttachmentsPage dual-mode + menu entry)
 - [x] Manage Ads (insights_domain ad CRUD already live; ad creative in ICP mode now compresses to an inline data URL instead of throwing)
 - [ ] Active Games (no canister holds live coaching-board state — useRemoteFillInSync is Supabase-only; needs that sync moved to a canister before an admin view is possible)
-- [ ] App Settings (club_domain app_config exists, but most settings are only read by Supabase-mode code — wiring them would be dead config; needs product decision)
+- [x] App Settings (club_domain app_config; set_app_config now allows app admins — needs mainnet redeploy. ICP page + runtime readers wired: club_creation_locked, chat_virtualization_enabled, chat_basic_chunk_size, welcome_dm_message. Supabase-only settings — photo prompts, notif prefetch, free-club polling, AI recap, legal reacceptance — stay off the ICP page by design)
 
 ## Blocked by design (not moving)
 - Stripe Settings, Promo Codes, AdMob, Send Update Reminder, Push Analytics, Realtime Health, Set Temp Password, AI Chat Recap rollout (external worker), Chat Photo Reminders (external worker), Club Backups (vault edge functions)
