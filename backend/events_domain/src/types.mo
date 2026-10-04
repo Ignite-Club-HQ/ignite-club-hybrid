@@ -2,7 +2,12 @@ module {
   public type RoleGrant = { user : Principal; role : Text; club_id : Text; team_id : ?Text };
   // deleted: soft-delete flag added for delete_event/soft_delete_series — existing
   // rows migrate with deleted = false.
-  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool };
+  // opponent/address/mini_league_id mirror the Supabase events columns the
+  // schedule UI renders (EventCard) but the canister previously dropped.
+  // updated_at_ms mirrors Supabase's updated_at for staleness checks; existing
+  // rows migrate with nulls and updated_at_ms = starts_at_ms (migration
+  // 20261009_000000).
+  public type Event = { id : Text; club_id : Text; team_id : ?Text; title : Text; description : Text; event_type : Text; location : ?Text; cancelled : Bool; creator : Principal; starts_at_ms : Nat64; ends_at_ms : Nat64; series_id : ?Text; revision : Nat64; deleted : Bool; opponent : ?Text; address : ?Text; mini_league_id : ?Text; updated_at_ms : Nat64 };
   // Association-scoped fan-out parent (Phase 3, F5) — mirrors the Supabase
   // events row with association_id set and association_event_id null. Kept
   // as a separate store so the core Event type (and every existing event

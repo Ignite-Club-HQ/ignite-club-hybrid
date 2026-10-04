@@ -67,6 +67,10 @@ persistent actor class Main(governorInit : Principal) {
   func validLocation(value : ?Text) : Bool {
     switch (value) { case null true; case (?text) text.size() <= 256 }
   };
+  // Optional record-link id (mini_league_id) — same length bound as valid().
+  func validOptId(value : ?Text) : Bool {
+    switch (value) { case null true; case (?text) text.size() <= 128 }
+  };
   // "fortnightly" mirrors the frontend recurring-series workflow's step
   // classification (createEventTransaction in createEventWorkflow.ts), which
   // buckets a 8-14 day gap as fortnightly distinct from weekly/monthly.
@@ -147,12 +151,12 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+  public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+    auth(caller); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
-    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false };
+    let created : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent; address; mini_league_id; updated_at_ms = nowMs() };
     events := events.concat([created]); #Ok(created)
   };
 
@@ -171,7 +175,7 @@ persistent actor class Main(governorInit : Principal) {
     var created : [Types.Event] = [];
     var index = 0;
     for (club_id in club_ids.values()) {
-      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false } : Types.Event)]);
+      created := created.concat([({ id = "evt-" # club_id # "-" # Nat.toText(events.size() + index); club_id; team_id = null; title; description; event_type = "social"; location; cancelled = false; creator = caller; starts_at_ms; ends_at_ms; series_id = null; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs() } : Types.Event)]);
       index += 1;
     };
     events := events.concat(created);
@@ -237,7 +241,7 @@ persistent actor class Main(governorInit : Principal) {
     let base = events.size();
     let children = Array.tabulate<Types.Event>(maxCount, func(index) {
       let offset = step * Nat.toNat64(index);
-      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false }
+      { id = "evt-" # club_id # "-" # Nat.toText(base + index); club_id; team_id; title; description; event_type; location; cancelled = false; creator = caller; starts_at_ms = first_starts_at_ms + offset; ends_at_ms = first_starts_at_ms + offset + duration; series_id = ?seriesId; revision = 1; deleted = false; opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs() }
     });
     series := series.concat([created]);
     events := events.concat(children);
@@ -363,13 +367,13 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
+  public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
-        let updated : Types.Event = { current with title; description; event_type; location; starts_at_ms; ends_at_ms; revision = current.revision + 1 };
+        if (not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event update");
+        let updated : Types.Event = { current with title; description; event_type; location; opponent; address; mini_league_id; starts_at_ms; ends_at_ms; revision = current.revision + 1; updated_at_ms = nowMs() };
         var index = 0;
         for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
         #Err("Event not found")
@@ -384,7 +388,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
-        let updated : Types.Event = { current with cancelled; revision = current.revision + 1 };
+        let updated : Types.Event = { current with cancelled; revision = current.revision + 1; updated_at_ms = nowMs() };
         var index = 0;
         for (item in events.values()) { if (item.id == id) { replaceEvent(index, updated); return #Ok(updated) }; index += 1 };
         #Err("Event not found")
@@ -801,6 +805,7 @@ persistent actor class Main(governorInit : Principal) {
           club_id = item.club_id; team_id = item.team_id; title = item.title; description = item.description;
           event_type = item.event_type; location = item.location; cancelled = false; creator = caller;
           starts_at_ms; ends_at_ms; series_id = ?series_id; revision = 1; deleted = false;
+          opponent = null; address = null; mini_league_id = null; updated_at_ms = nowMs();
         };
         events := events.concat([created]);
         #Ok(created)
