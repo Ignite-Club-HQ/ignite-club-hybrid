@@ -59,6 +59,7 @@ type StatusFilter = "all" | FeedbackStatus;
 
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveFeedback, updateLiveFeedbackStatus } from "@/live/features/insights";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function ManageFeedbackPage() {
   return <SupabaseManageFeedbackPage />;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { ArrowLeft, Shield, Trash2, Search, Loader2, Users, AlertTriangle, UserPlus, UserMinus, X, Filter, History, Download, Mail, Flame, BarChart3 } from "lucide-react";
 import { Suspense } from "react";
 
