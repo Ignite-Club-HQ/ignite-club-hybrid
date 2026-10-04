@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Image as ImageIcon, Flag, MessageCircle, RefreshCw } from "lucide-react";
+import { Image as ImageIcon, Flag, MessageCircle, RefreshCw, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { CreateActionButton } from "@/components/CreateActionButton";
+import { compressImage } from "@/lib/imageCompression";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
 import {
   listLiveAssets,
@@ -16,7 +19,9 @@ import {
   listLiveComments,
   addLiveComment,
   liveAssetSource,
+  registerLiveAsset,
 } from "@/live/features/media";
+import { isIcpMediaUploadUnavailable, tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
 
 interface LiveAsset {
