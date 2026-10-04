@@ -122,3 +122,8 @@ for (const route of staticRoutes) {
   cpSync(rootIndex, path.join(dir, "index.html"));
 }
 console.log(`pre-rendered ${staticRoutes.length} static route shells (dist<route>/index.html)`);
+
+// Probe: the hosting serves exact file paths only (/auth/index.html works,
+// /auth does not). Test whether an extensionless file is served as HTML.
+cpSync(rootIndex, path.join(distRoot, "auth"));
+console.log("wrote extensionless probe file dist/auth");
