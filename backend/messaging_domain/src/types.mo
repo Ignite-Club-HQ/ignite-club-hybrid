@@ -29,6 +29,11 @@ module {
     description : ?Text;
     deleted : Bool;
     admin_only_posting : Bool;
+    // Set by soft_delete_group so the admin deleted-chats tool can show
+    // when/who; cleared on restore. Null for groups deleted before these
+    // fields existed.
+    deleted_at_ms : ?Nat64;
+    deleted_by : ?Principal;
   };
 
   // Shared-club membership record backing `can_dm_user`: two users may DM
