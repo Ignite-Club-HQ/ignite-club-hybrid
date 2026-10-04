@@ -352,7 +352,8 @@ export default function EditTeamPage() {
             description: description.trim() ? [description.trim()] : [],
             logo_url: logoUrl ? [logoUrl] : [],
             team_type: teamType ? [teamType] : [],
-            // Folder, class-mode and auto-RSVP DM fields stay Supabase-only.
+            folder_id: folderId ? [folderId] : [],
+            // Class-mode and auto-RSVP DM fields stay Supabase-only.
             // Shell-team claim fields are not editable from this flow.
             archived: !isActive,
             is_shell: false,

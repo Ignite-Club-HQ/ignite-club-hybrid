@@ -90,7 +90,9 @@ import {
   restoreLiveTeam,
   deleteLiveTeamPermanent,
   removeLiveMember,
+  requestLiveRole,
 } from "@/live/features/membership";
+import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
@@ -168,8 +170,54 @@ export default function TeamDetailPage() {
   const { data: team, isLoading, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team", id],
     queryFn: async () => {
-      if (useIcpLab && id) {
-        return fixtureData.getLocalLabTeamDetail(id) ?? null;
+      if (isFeatureRoutedToIcp("membership") && id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveTeam(ctx, id);
+            const t = row.length ? row[0] : null;
+            if (!t) return null;
+            const [profileRow, sub] = await Promise.all([
+              getLiveClubProfile(ctx, t.club_id),
+              getLiveClubSubscription(ctx, t.club_id),
+            ]);
+            const club = profileRow.length ? profileRow[0] : null;
+            // Map the canister team + club onto the Supabase row shape this
+            // page renders (including the clubs join).
+            return {
+              id: t.id,
+              club_id: t.club_id,
+              name: t.name,
+              division: t.division[0] ?? null,
+              gender: t.gender[0] ?? null,
+              age_group: t.age_group[0] ?? null,
+              description: t.description[0] ?? null,
+              logo_url: t.logo_url[0] ?? null,
+              team_type: t.team_type[0] ?? null,
+              is_active: t.is_active,
+              is_archived: t.archived,
+              is_shell: t.is_shell,
+              folder_id: t.folder_id[0] ?? null,
+              is_pro: sub?.is_pro ?? false,
+              // Supabase-only columns with no canister equivalent.
+              class_day: null,
+              sponsor_id: null,
+              deleted_at: t.deleted_at_ms.length
+                ? new Date(Number(t.deleted_at_ms[0])).toISOString()
+                : null,
+              clubs: club
+                ? {
+                    id: club.id,
+                    name: club.name,
+                    is_pro: sub?.is_pro ?? false,
+                    sport: club.sport[0] ?? null,
+                    class_mode_enabled: false,
+                    bot_user_id: null,
+                  }
+                : null,
+            };
+          },
+        });
       }
 
       const { data, error } = await supabase
@@ -860,9 +908,16 @@ export default function TeamDetailPage() {
 
   const requestRoleMutation = useMutation({
     mutationFn: async () => {
-      if (useIcpLab) throw new Error("Team role requests are unavailable in ICP lab mode.");
-      // PROVISIONAL: no canister shape for role requests yet.
-      if (isIcpAccount) throw new Error("Requesting a team role isn't available for Internet Identity accounts yet.");
+      // Canister request_role stores no parent/child metadata, so the
+      // child-link prompts below stay Supabase-only; the ICP branch submits
+      // the bare role request.
+      if (isIcpAccount) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => { await requestLiveRole(ctx, team!.club_id, selectedRole, id!); },
+        });
+        return;
+      }
       const metadata: Record<string, any> = {};
       if (selectedRole === "parent") {
         const trimmedNew = newChildName.trim();

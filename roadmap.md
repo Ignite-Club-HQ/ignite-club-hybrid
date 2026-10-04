@@ -26,5 +26,5 @@ Goal: give Internet Identity app admins the same admin tools as Supabase mode, m
 
 ## Open
 - [ ] Duplicate teams reported after publish — not yet investigated
-- [ ] ClubDetailPage ICP gaps: team folders, club role requests, club deletion, subscription changes still throw "unavailable" (need canister counterparts)
+- [x] Club page ICP follow-ups (done, typecheck 0 diagnostics): team folders (club_domain state+methods+migration 20261008_000000, bindings regenerated); ClubDetailPage — club/teams/folders/clubSubscription queries ICP-wired, folder mutations + subscription toggle to canister, role-request and club-deletion lab gates removed; TeamDetailPage — team query ICP-wired (activates existing delete/restore/permanent/member-removal branches), team role request via requestLiveRole (no parent/child metadata on canister); CreateTeamPage — club/team-count/subscription/folders queries ICP-wired, folder_id set on create and edit. Canister changes need the deploy-icp-mainnet workflow run before they work live
 - [ ] Canister changes (set_app_config admin access, deleted chats, DM attachments) pending mainnet redeploy via deploy-icp-mainnet workflow

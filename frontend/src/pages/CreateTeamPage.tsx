@@ -22,7 +22,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { saveLiveMembershipTeam, addLiveRoleGrant, getLiveMyRoleGrants } from "@/live/features/membership";
-import { checkLiveTeamNameUnique } from "@/live/features/club";
+import { checkLiveTeamNameUnique, getLiveClubProfile, listLiveTeams, getLiveClubSubscription, listLiveTeamFolders } from "@/live/features/club";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Principal } from "@icp-sdk/core/principal";
 import { AssignTeamAdminSection, TeamAdminAssignment } from "@/components/AssignTeamAdminSection";
@@ -78,6 +78,23 @@ export default function CreateTeamPage() {
           contact_email: null,
         } : null;
       }
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubProfile(ctx, clubId!);
+            const p = row.length ? row[0] : null;
+            return p
+              ? {
+                  name: p.name,
+                  logo_url: p.logo_url[0] ?? null,
+                  class_mode_enabled: false,
+                  contact_email: null,
+                }
+              : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("name, logo_url, class_mode_enabled, contact_email")
@@ -131,6 +148,15 @@ export default function CreateTeamPage() {
       if (useIcpLab) {
         return getLocalLabTeamList().filter((team) => team.club_id === clubId).length;
       }
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const liveTeams = await listLiveTeams(ctx, clubId!);
+            return liveTeams.filter((t) => t.deleted_at_ms.length === 0).length;
+          },
+        });
+      }
       const { count, error } = await supabase
         .from("teams")
         .select("*", { count: "exact", head: true })
@@ -145,7 +171,17 @@ export default function CreateTeamPage() {
     queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return null;
-      if (isFeatureRoutedToIcp("membership")) return null; // NEEDS-CANISTER: club subscriptions not yet on canister
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, clubId!);
+            return sub
+              ? { team_limit: sub.team_limit.length ? Number(sub.team_limit[0]) : null }
+              : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -161,7 +197,24 @@ export default function CreateTeamPage() {
     queryKey: ["team-folders", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return [];
-      if (isFeatureRoutedToIcp("membership")) return []; // NEEDS-CANISTER: team folders not yet on canister
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const rows = await listLiveTeamFolders(ctx, clubId!);
+            return rows
+              .map((f) => ({
+                id: f.id,
+                club_id: f.club_id,
+                name: f.name,
+                description: f.description[0] ?? null,
+                color: f.color,
+                sort_order: Number(f.sort_order),
+              }))
+              .sort((a, b) => a.sort_order - b.sort_order);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("team_folders")
         .select("*")
@@ -336,10 +389,9 @@ export default function CreateTeamPage() {
 
     // Create the team (without logo - will update after upload).
     // Routes to club_domain's save_team when placement settings resolve ICP
-    // for membership; provisional mapping (canister ClubTeam has only
-    // id/name/division/gender/is_active/club_id/age_group — description,
-    // logo, folder, team_type, class and RSVP-audience fields stay
-    // Supabase-only; verify against the deployed canister).
+    // for membership; description, logo, folder and team_type are on the
+    // canister ClubTeam — class-mode and RSVP-audience fields stay
+    // Supabase-only.
     const { data: team, error: teamError } = await withFeatureBackend<{ data: { id: string; name?: string } | null; error: { code?: string } | null }>("membership", {
       supabase: async () => supabase
       .from("teams")
@@ -375,8 +427,9 @@ export default function CreateTeamPage() {
             age_group: levelAge.trim() ? [levelAge.trim()] : [],
             description: description.trim() ? [description.trim()] : [],
             // Logo uploads after team creation (same as the Supabase branch);
-            // folder, class-mode and RSVP-audience fields stay Supabase-only.
+            // class-mode and RSVP-audience fields stay Supabase-only.
             logo_url: [],
+            folder_id: folderId ? [folderId] : [],
             team_type: teamType ? [teamType] : [],
             // Shell-team claim fields are not applicable to teams created
             // directly through this flow.

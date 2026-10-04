@@ -116,6 +116,35 @@ export async function saveLiveTeam(ctx: FeatureBackendContext, team: LiveClubTea
   return unwrapCandid(actor.save_team(team), "Save team");
 }
 
+export type LiveTeamFolder = Parameters<ClubDomainActor["save_team_folder"]>[0];
+
+export async function listLiveTeamFolders(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_team_folders(clubId), "List team folders");
+}
+
+/** Insert or update a folder (upsert keyed by folder id). Club-admin gated canister-side. */
+export async function saveLiveTeamFolder(ctx: FeatureBackendContext, folder: LiveTeamFolder) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_team_folder(folder), "Save team folder");
+}
+
+/** Deletes the folder; teams in it fall back to the unfiled group canister-side. */
+export async function deleteLiveTeamFolder(ctx: FeatureBackendContext, folderId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_team_folder(folderId), "Delete team folder");
+}
+
+/** Moves a team into a folder, or back to the unfiled group when folderId is null. */
+export async function setLiveTeamFolder(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  folderId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_team_folder(teamId, candidOpt(folderId)), "Move team to folder");
+}
+
 export async function listLiveSponsors(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_sponsors(clubId), "List sponsors");

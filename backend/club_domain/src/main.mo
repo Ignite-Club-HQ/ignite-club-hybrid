@@ -268,6 +268,66 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(res)
   };
 
+  // Team folders (Supabase team_folders counterpart): club-admin-managed
+  // groupings for the club's teams list. Folder metadata is website-safe
+  // (name/description/color only), so the read is unauthenticated like
+  // list_teams; writes are club-admin gated via the folder's owning club.
+  var teamFolders : [Types.TeamFolder];
+
+  public shared ({ caller }) func save_team_folder(folder : Types.TeamFolder) : async { #Ok : Types.TeamFolder; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
+    let name = Text.trim(folder.name, #char ' ');
+    if (name.size() == 0 or name.size() > 80) return #Err("Folder name must be 1-80 characters");
+    let saved = { folder with name = name };
+    teamFolders := teamFolders.filter(func(f) = f.id != folder.id).concat([saved]);
+    #Ok(saved)
+  };
+
+  public shared ({ caller }) func delete_team_folder(folder_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (teamFolders.find(func(f) = f.id == folder_id)) {
+      case null { #Err("Folder not found") };
+      case (?folder) {
+        if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
+        teamFolders := teamFolders.filter(func(f) = f.id != folder_id);
+        // Teams in the deleted folder fall back to the unfiled group.
+        teams := teams.map(func(t) = if (t.folder_id == ?folder_id) ({ t with folder_id = null }) else t);
+        #Ok
+      };
+    };
+  };
+
+  public query func list_team_folders(club_id : Text) : async { #Ok : [Types.TeamFolder]; #Err : Text } {
+    var res : [Types.TeamFolder] = [];
+    for (f in teamFolders.values()) {
+      if (f.club_id == club_id) res := res.concat([f]);
+    };
+    #Ok(res)
+  };
+
+  public shared ({ caller }) func set_team_folder(team_id : Text, folder_id : ?Text) : async { #Ok : Types.ClubTeam; #Err : Text } {
+    auth(caller);
+    switch (teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+        switch (folder_id) {
+          case (?fid) {
+            switch (teamFolders.find(func(f) = f.id == fid)) {
+              case null { return #Err("Folder not found") };
+              case (?f) { if (f.club_id != team.club_id) return #Err("Folder belongs to a different club") };
+            };
+          };
+          case null {};
+        };
+        let updated = { team with folder_id = folder_id };
+        teams := teams.map(func(t) = if (t.id == team_id) updated else t);
+        #Ok(updated)
+      };
+    };
+  };
+
   public shared ({ caller }) func save_sponsor(sponsor : Types.ClubSponsor) : async { #Ok : Types.ClubSponsor; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, sponsor.club_id)) return #Err("Club admin required");
@@ -1138,6 +1198,7 @@ persistent actor class Main(governorInit : Principal) {
       shell_contact_name = contact_name;
       shell_invited_by = ?caller;
       playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
+      folder_id = null;
     };
     teams := teams.concat([team]);
     #Ok(team)
@@ -1594,6 +1655,7 @@ persistent actor class Main(governorInit : Principal) {
           shell_invited_by = null;
           archived = false;
           playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
+          folder_id = null;
         };
         teams := teams.concat([team]);
         let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
