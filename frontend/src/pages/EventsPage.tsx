@@ -549,7 +549,32 @@ export default function EventsPage() {
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-filter", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, clubFilter, userMemberships?.teamIds],
     queryFn: async () => {
-      if (resolveAuthBackend() === "icp") return [];
+      // Live ICP mode: list canister teams for the member's clubs, scoped to
+      // teams they belong to (club admins/app admins see every team).
+      if (isIcpAuthBackend && !useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const m = userMemberships;
+            if (!m) return [] as { id: string; name: string; club_id: string }[];
+            const scopeClubIds = clubFilter ? [clubFilter] : m.clubIds;
+            const out: { id: string; name: string; club_id: string }[] = [];
+            for (const clubId of scopeClubIds) {
+              const teams = await listLiveTeams(ctx, clubId).catch(() => [] as any[]);
+              for (const team of teams as any[]) {
+                if (team.deleted_at_ms?.length || team.archived) continue;
+                const canSee =
+                  m.isAppAdmin ||
+                  m.teamIds.includes(team.id) ||
+                  m.clubAdminClubIds.includes(clubId);
+                if (!canSee) continue;
+                out.push({ id: team.id, name: team.name, club_id: clubId });
+              }
+            }
+            return out.sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       if (useIcpLab) {
         return fixtureData.getLocalLabTeamList().map((team) => ({
           id: team.id,
