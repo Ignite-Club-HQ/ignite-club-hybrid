@@ -853,6 +853,15 @@ export default function AuthPage() {
                   {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
                   Continue with Internet Identity
                 </Button>
+                <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                  {II_SIGN_IN_HINT}
+                </p>
+                {isLikelyInAppBrowser() && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
+                    You're viewing this inside another app's built-in browser, where sign-in often can't finish.
+                    Tap the menu (⋮) and choose “Open in Chrome” (or “Open in Safari”), then sign in there.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
