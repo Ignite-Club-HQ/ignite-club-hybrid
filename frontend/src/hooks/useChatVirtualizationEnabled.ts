@@ -22,6 +22,20 @@ export function useChatVirtualizationEnabled(): boolean {
   const { data } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: async () => {
+      // ICP mode: the setting lives on club_domain's app_config store
+      // (public anonymous query; lazy-imported so the ICP SDK stays out of
+      // the entry chunk). Anything that isn't an explicit `false` is enabled.
+      if (resolveAuthBackend() === "icp") {
+        const { readLiveAppConfig } = await import("@/live/appConfig");
+        const raw = await readLiveAppConfig("chat_virtualization_enabled");
+        if (raw == null) return true;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          return parsed !== false && parsed !== "false";
+        } catch {
+          return true;
+        }
+      }
       const { data: row } = await supabase
         .from("app_settings")
         .select("value")

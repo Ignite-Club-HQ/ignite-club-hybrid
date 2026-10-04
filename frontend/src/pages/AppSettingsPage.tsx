@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Settings, Lock, Unlock, Loader2, Camera, Play, Zap, ZapOff, ListOrdered, Sparkles, Rocket, Radio } from "lucide-react";
+import { ArrowLeft, Settings, Lock, Unlock, Loader2, Camera, Play, Zap, ZapOff, ListOrdered, Sparkles, Rocket, Radio, MessageSquare } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,9 +18,22 @@ import { LegalReacceptanceAdminCard } from "@/components/admin/LegalReacceptance
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabAppSettings } from "@/lab/fixtureDataLayer";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  decodeAppSettingBool,
+  decodeAppSettingNumber,
+  decodeAppSettingString,
+  getLiveAppSetting,
+  setLiveAppSetting,
+} from "@/live/features/appSettings";
 
 export default function AppSettingsPage() {
   const navigate = useNavigate();
+  if (resolveAuthBackend() === "icp") {
+    return <IcpAppSettingsPage />;
+  }
   if (resolveLocalAuthMode(window.location.search, true)) {
     const settings = getLocalLabAppSettings();
     return (
@@ -601,6 +614,315 @@ function SupabaseAppSettingsPage() {
         </Card>
 
         <LegalReacceptanceAdminCard />
+
+        <div className="text-center text-sm text-muted-foreground pt-4">
+          <p>Current status: {isClubCreationLocked ? "Only app admins can create clubs" : "Anyone can create clubs"}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ICP-mode App Settings. Only the backend-agnostic global settings live on
+// the canisters (club_domain app_config): club-creation lock, chat
+// virtualisation kill-switch, basic-mode chunk size and the welcome DM text.
+// Photo prompts, notification prefetch, free-club polling, AI recap and
+// legal reacceptance are Supabase/worker-backed by design and are not shown.
+// Writes require the governor or an app-admin role, enforced canister-side.
+interface IcpAppSettings {
+  clubCreationLocked: boolean;
+  chatVirtEnabled: boolean;
+  chatBasicChunkSize: number;
+  welcomeMessage: string;
+}
+
+const ICP_SETTINGS_QUERY_KEY = ["icp-app-settings"] as const;
+
+function IcpAppSettingsPage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { isAppAdmin, isLoading: isLoadingAuth } = useIsAppAdmin();
+
+  const { data: settings, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ICP_SETTINGS_QUERY_KEY,
+    queryFn: () =>
+      withFeatureBackend("admin", {
+        // Unreachable: this page only renders when the auth backend is ICP.
+        supabase: async () => null,
+        icp: async (ctx): Promise<IcpAppSettings> => {
+          const [lock, virt, chunk, welcome] = await Promise.all([
+            getLiveAppSetting(ctx, "club_creation_locked"),
+            getLiveAppSetting(ctx, "chat_virtualization_enabled"),
+            getLiveAppSetting(ctx, "chat_basic_chunk_size"),
+            getLiveAppSetting(ctx, WELCOME_DM_SETTING_KEY),
+          ]);
+          const chunkN = decodeAppSettingNumber(chunk, 100);
+          return {
+            clubCreationLocked: decodeAppSettingBool(lock, false),
+            chatVirtEnabled: decodeAppSettingBool(virt, true),
+            chatBasicChunkSize: Math.min(500, Math.max(10, Math.floor(chunkN))),
+            welcomeMessage: decodeAppSettingString(welcome, DEFAULT_WELCOME_DM_MESSAGE),
+          };
+        },
+      }),
+    enabled: isAppAdmin,
+  });
+
+  const updateSettingMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: unknown }) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {},
+        icp: async (ctx) => setLiveAppSetting(ctx, key, value),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ICP_SETTINGS_QUERY_KEY });
+      // Propagate to the runtime readers (chat hooks, create-club page).
+      queryClient.invalidateQueries({ queryKey: ["app-setting", vars.key] });
+      queryClient.invalidateQueries({ queryKey: ["appSettings", vars.key] });
+      toast({ title: "Setting updated" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update setting",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isClubCreationLocked = settings?.clubCreationLocked ?? false;
+  const isChatVirtEnabled = settings?.chatVirtEnabled ?? true;
+  const savedChunkSize = settings?.chatBasicChunkSize ?? 100;
+  const savedWelcomeMessage = settings?.welcomeMessage ?? DEFAULT_WELCOME_DM_MESSAGE;
+
+  const [chunkInput, setChunkInput] = useState<string>(String(savedChunkSize));
+  useEffect(() => {
+    setChunkInput(String(savedChunkSize));
+  }, [savedChunkSize]);
+
+  const [welcomeInput, setWelcomeInput] = useState<string>(savedWelcomeMessage);
+  useEffect(() => {
+    setWelcomeInput(savedWelcomeMessage);
+  }, [savedWelcomeMessage]);
+
+  const handleSaveChunkSize = () => {
+    const n = Math.min(500, Math.max(10, Math.floor(Number(chunkInput) || 0)));
+    setChunkInput(String(n));
+    if (n === savedChunkSize) return;
+    updateSettingMutation.mutate({ key: "chat_basic_chunk_size", value: n });
+  };
+
+  const handleSaveWelcomeMessage = () => {
+    const trimmed = welcomeInput.trim();
+    if (trimmed.length === 0 || trimmed === savedWelcomeMessage) return;
+    updateSettingMutation.mutate({ key: WELCOME_DM_SETTING_KEY, value: trimmed });
+  };
+
+  if (isLoadingAuth || (isAppAdmin && isLoadingSettings)) {
+    return <PageLoading />;
+  }
+
+  if (!isAppAdmin) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col bg-background">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-lg font-semibold">App Settings</h1>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-muted-foreground">Access denied. App admin role required.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-[100dvh] flex flex-col bg-background">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+        <div className="flex items-center gap-3 px-4 py-3">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">App Settings</h1>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {isClubCreationLocked ? (
+                <Lock className="h-5 w-5 text-amber-500" />
+              ) : (
+                <Unlock className="h-5 w-5 text-green-500" />
+              )}
+              Club Creation
+            </CardTitle>
+            <CardDescription>
+              Control whether users can create new clubs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="club-creation-lock" className="text-base font-medium">
+                  Lock club creation
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, only app admins can create new clubs. Use this during pilot programs or to control growth.
+                </p>
+              </div>
+              <Switch
+                id="club-creation-lock"
+                checked={isClubCreationLocked}
+                onCheckedChange={() =>
+                  updateSettingMutation.mutate({ key: "club_creation_locked", value: !isClubCreationLocked })
+                }
+                disabled={updateSettingMutation.isPending}
+              />
+            </div>
+            {updateSettingMutation.isPending && (
+              <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Updating...
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              {isChatVirtEnabled ? (
+                <Zap className="h-5 w-5 text-green-500" />
+              ) : (
+                <ZapOff className="h-5 w-5 text-amber-500" />
+              )}
+              Chat virtualisation
+            </CardTitle>
+            <CardDescription>
+              Emergency kill-switch. When OFF, every chat page renders as a basic mapped list (most recent messages only) instead of the virtualised scroller. Use only if virtualisation is causing freezes — turn back on once resolved. May take up to 5 min to propagate to active sessions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="chat-virt-toggle" className="text-base font-medium">
+                  Enable chat virtualisation
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {isChatVirtEnabled
+                    ? "Normal mode: full message history with virtualised scrolling."
+                    : "Fallback mode: basic scroller, recent messages only, no infinite scroll-up."}
+                </p>
+              </div>
+              <Switch
+                id="chat-virt-toggle"
+                checked={isChatVirtEnabled}
+                onCheckedChange={() =>
+                  updateSettingMutation.mutate({ key: "chat_virtualization_enabled", value: !isChatVirtEnabled })
+                }
+                disabled={updateSettingMutation.isPending}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListOrdered className="h-5 w-5 text-primary" />
+              Basic-mode chunk size
+            </CardTitle>
+            <CardDescription>
+              When chat virtualisation is OFF, this controls how many messages basic mode renders initially and reveals each time someone taps "Load earlier messages". Lower = safer on low-end Android, higher = fewer taps to reach older history. Allowed: 10–500.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end gap-3">
+              <div className="space-y-1 flex-1">
+                <Label htmlFor="chunk-size-input" className="text-base font-medium">
+                  Messages per chunk
+                </Label>
+                <Input
+                  id="chunk-size-input"
+                  type="number"
+                  inputMode="numeric"
+                  min={10}
+                  max={500}
+                  step={10}
+                  value={chunkInput}
+                  onChange={(e) => setChunkInput(e.target.value)}
+                  disabled={updateSettingMutation.isPending}
+                />
+              </div>
+              <Button
+                onClick={handleSaveChunkSize}
+                disabled={
+                  updateSettingMutation.isPending ||
+                  String(savedChunkSize) === chunkInput.trim()
+                }
+              >
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Currently saved: {savedChunkSize}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Welcome message
+            </CardTitle>
+            <CardDescription>
+              Sent from Ignite Support when a new member completes their profile.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              value={welcomeInput}
+              onChange={(e) => setWelcomeInput(e.target.value)}
+              rows={3}
+              disabled={updateSettingMutation.isPending}
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleSaveWelcomeMessage}
+                disabled={
+                  updateSettingMutation.isPending ||
+                  welcomeInput.trim().length === 0 ||
+                  welcomeInput.trim() === savedWelcomeMessage
+                }
+              >
+                {updateSettingMutation.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                )}
+                Save
+              </Button>
+              {welcomeInput.trim() !== DEFAULT_WELCOME_DM_MESSAGE && (
+                <Button
+                  variant="ghost"
+                  onClick={() => setWelcomeInput(DEFAULT_WELCOME_DM_MESSAGE)}
+                  disabled={updateSettingMutation.isPending}
+                >
+                  Reset to default
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="text-center text-sm text-muted-foreground pt-4">
           <p>Current status: {isClubCreationLocked ? "Only app admins can create clubs" : "Anyone can create clubs"}</p>

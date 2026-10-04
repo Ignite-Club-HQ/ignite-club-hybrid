@@ -24,6 +24,16 @@ export function useChatBasicChunkSize(): number {
   const { data } = useQuery({
     queryKey: QUERY_KEY,
     queryFn: async () => {
+      // ICP mode: read club_domain's app_config store (public anonymous
+      // query; lazy-imported so the ICP SDK stays out of the entry chunk).
+      if (resolveAuthBackend() === "icp") {
+        const { readLiveAppConfig } = await import("@/live/appConfig");
+        const raw = await readLiveAppConfig("chat_basic_chunk_size");
+        if (raw == null) return DEFAULT_CHUNK;
+        const n = Number(JSON.parse(raw));
+        if (!Number.isFinite(n) || n <= 0) return DEFAULT_CHUNK;
+        return Math.min(MAX_CHUNK, Math.max(MIN_CHUNK, Math.floor(n)));
+      }
       const { data: row } = await supabase
         .from("app_settings")
         .select("value")
