@@ -100,18 +100,29 @@ if (!existsSync(liveIndex)) {
   console.error("dist/live-index.html missing after build; cannot create index.html.");
   process.exit(1);
 }
-cpSync(liveIndex, rootIndex);
-console.log("copied dist/live-index.html -> dist/index.html");
+// Ship the service worker (refresh fallback: a 404 page load is answered
+// with the app shell) and register it from the hosted HTML only — dev keeps
+// the Vite server's own SPA fallback and never registers it.
+cpSync(path.join(projectRoot, "scripts", "static", "sw.js"), path.join(distRoot, "sw.js"));
+const swRegistration =
+  "<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){" +
+  "navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){});});}</script>";
+const liveHtml = readFileSync(liveIndex, "utf8");
+if (!liveHtml.includes("</body>")) {
+  console.error("dist/live-index.html has no </body>; cannot inject the service worker registration.");
+  process.exit(1);
+}
+writeFileSync(rootIndex, liveHtml.replace("</body>", `${swRegistration}</body>`));
+console.log("wrote dist/index.html (live-index.html + service worker registration) and dist/sw.js");
 
 // Deep links (e.g. /auth, /admin/placement-settings) must also reach the app.
 // The Lovable static hosting for this project has NO SPA fallback: unmatched
 // paths get a plain-text "Not Found" (verified 2026-10-04 — 404.html,
 // _redirects, vercel.json and firebase.json rewrite conventions are all
 // ignored, and netlify.toml is only used by the separate Netlify deploy).
-// The only mechanism the hosting honors is real files on disk, so emit a
-// directory index for every static route in App.tsx. Parameterized routes
-// (/join/:token, /teams/:id, ...) can't be enumerated; app code must never
-// force a full-page load to a dynamic path on the hosted site.
+// Directory shells below are served only at exact /route/index.html paths;
+// the service worker covers refreshes on every other address once the app
+// has been opened from "/" once.
 const appTsx = readFileSync(path.join(frontendDir, "src", "App.tsx"), "utf8");
 const staticRoutes = [...appTsx.matchAll(/path="([^"]+)"/g)]
   .map((m) => m[1])
@@ -122,8 +133,3 @@ for (const route of staticRoutes) {
   cpSync(rootIndex, path.join(dir, "index.html"));
 }
 console.log(`pre-rendered ${staticRoutes.length} static route shells (dist<route>/index.html)`);
-
-// Probe: the hosting serves exact file paths only (/auth/index.html works,
-// /auth does not). Test whether an extensionless file is served as HTML.
-cpSync(rootIndex, path.join(distRoot, "probe-ext"));
-console.log("wrote extensionless probe file dist/probe-ext");
