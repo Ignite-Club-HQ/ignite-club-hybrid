@@ -125,19 +125,19 @@ export default function ClubSetupWizardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const useIcpLab = isFeatureRoutedToIcp("membership");
-  const providerKey = useIcpLab ? "icp" : "supabase";
+  const useIcp = isFeatureRoutedToIcp("membership");
+  const providerKey = useIcp ? "icp" : "supabase";
   usePageTitle("Set up your club");
 
   const [stepIndex, setStepIndex] = useState(0);
-  const { hasPro, isLoading: proLoading } = useClubProAccess(clubId, { enabled: !useIcpLab });
+  const { hasPro, isLoading: proLoading } = useClubProAccess(clubId, { enabled: !useIcp });
 
 
 
   const { data: club } = useQuery<SetupClub | null>({
     queryKey: ["club", clubId, "setup", providerKey],
     queryFn: async () => {
-      if (useIcpLab) {
+      if (useIcp) {
         // NEEDS-CANISTER: club_domain's ClubSettings has no per-field theme
         // breakdown matching the Supabase HSL columns; only name/logo/theme
         // enabled are mapped, which is enough to drive this wizard's steps.
@@ -226,7 +226,7 @@ export default function ClubSetupWizardPage() {
   const { data: existingTeams } = useQuery<SetupTeam[]>({
     queryKey: ["club-teams", clubId, "setup", providerKey],
     queryFn: async () => {
-      if (useIcpLab) {
+      if (useIcp) {
         const teams = await withFeatureBackend("membership", {
           icp: (ctx) => listLiveTeams(ctx, clubId!),
           supabase: async () => { throw new Error("unreachable"); },
@@ -264,7 +264,7 @@ export default function ClubSetupWizardPage() {
   }, [existingTeams]);
 
   useEffect(() => {
-    if (useIcpLab || !storageKey) return;
+    if (useIcp || !storageKey) return;
     try {
       localStorage.setItem(
         storageKey,
@@ -273,7 +273,7 @@ export default function ClubSetupWizardPage() {
     } catch {
       /* quota — ignore */
     }
-  }, [useIcpLab, storageKey, teams, committee, groups, teamInvites]);
+  }, [useIcp, storageKey, teams, committee, groups, teamInvites]);
 
   const savedTeams = teams.filter((t) => t.createdTeamId);
 
@@ -438,7 +438,7 @@ export default function ClubSetupWizardPage() {
 
     // Optional email send — Supabase-only (allowed exception: transactional
     // email delivery has no ICP canister counterpart).
-    if (invite.email.trim() && !useIcpLab) {
+    if (invite.email.trim() && !useIcp) {
       try {
         const { data: res, error: fnErr } = await supabase.functions.invoke(
           "send-email",
@@ -578,7 +578,7 @@ export default function ClubSetupWizardPage() {
 
   const progress = ((safeStepIndex + 1) / STEPS.length) * 100;
 
-  if (useIcpLab) {
+  if (useIcp) {
     return (
       <div className="min-h-[100dvh] bg-background px-4 py-6">
         <div className="mx-auto max-w-2xl space-y-4">
