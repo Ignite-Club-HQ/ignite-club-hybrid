@@ -182,6 +182,52 @@ export function IcpMediaFeedPage() {
 
   useEffect(() => { void loadFeed(); }, [loadFeed]);
 
+  const handleFilesSelected = useCallback(async (fileList: FileList | null) => {
+    if (!clubId || !fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setIsUploading(true);
+    let uploaded = 0;
+    try {
+      for (const original of files) {
+        const { file } = await compressImage(original);
+        const ext = original.name.split(".").pop() || "jpg";
+        const path = `clubs/${clubId}/${principal ?? "member"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        // Fail closed: bytes must go to the blob store in ICP mode, never to
+        // plaintext Supabase storage. A configured-but-failed upload throws.
+        const blobUpload = await tryUploadMediaToBlobStore({
+          storagePath: path,
+          file,
+          mime: file.type || "application/octet-stream",
+        });
+        if (!blobUpload) {
+          throw new Error("Media blob store is not configured");
+        }
+        await withMediaBackend(async (ctx) => {
+          await registerLiveAsset(ctx, {
+            clubId,
+            kind: "photo",
+            mime: file.type || "application/octet-stream",
+            checksum: blobUpload.blobRef.content_hash,
+            storagePath: blobUpload.blobRef.path,
+            visibility: "club",
+            contentLength: file.size,
+            blobRef: blobUpload.blobRef,
+          });
+        });
+        uploaded += 1;
+      }
+      if (uploaded > 0) {
+        toast.success(uploaded === 1 ? "Photo added" : `${uploaded} photos added`);
+      }
+    } catch {
+      toast.error("The upload didn't finish — please try again");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (uploaded > 0) void loadFeed();
+    }
+  }, [clubId, principal, loadFeed]);
+
   const handleReact = useCallback(async (assetId: string) => {
     const current = reactionsByAsset[assetId] ?? [];
     const hasReacted = principal !== null && current.some((reaction) => reaction.user.toText() === principal);
