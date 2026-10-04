@@ -112,6 +112,10 @@ function LogoClubThemeDropdown() {
             // the same store create_club writes the creator's grant to.
             // The canister has no theme-HSL columns, so clubs render with
             // hasTheme false (locked) until theming lands on canisters.
+            // Lazy-imported: the header mounts on every page, so the ICP SDK
+            // must stay out of the entry chunk (same rule as miniLeagues).
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const { getLiveClubProfile, getLiveClubSubscription } = await import("@/live/features/club");
             const grants = await getLiveMyRoleGrants(ctx);
             const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
             if (!clubIds.length) return guardClubListResult(`all-user-clubs:${user.id}`, []);
