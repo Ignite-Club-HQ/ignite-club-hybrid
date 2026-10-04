@@ -1,0 +1,14 @@
+{
+  "club_points_domain": "itj33-nyaaa-aaaal-qxlla-cai",
+  "competition_domain": "jqfs5-zaaaa-aaaal-qxlnq-cai",
+  "identity_access": "mq2sj-fiaaa-aaaal-qxlqa-cai",
+  "media_blob_store": "jlaoy-dyaaa-aaaal-qxlpa-cai",
+  "messaging_domain": "mx3u5-iqaaa-aaaal-qxlqq-cai",
+  "migration_coordinator": "jmbim-oaaaa-aaaal-qxlpq-cai",
+  "mini_league_domain": "jzgzb-piaaa-aaaal-qxlma-cai",
+  "notification_queue": "jfcdq-yiaaa-aaaal-qxloa-cai",
+  "pii_access_control": "iui5p-aaaaa-aaaal-qxllq-cai",
+  "shard_router": "jcdfe-vqaaa-aaaal-qxloq-cai",
+  "timer_jobs": "j6h7v-cqaaa-aaaal-qxlmq-cai",
+  "vault_domain": "jxeuj-uyaaa-aaaal-qxlna-cai"
+}
