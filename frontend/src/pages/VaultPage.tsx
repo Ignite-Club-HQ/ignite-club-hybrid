@@ -17,6 +17,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
+import { listLiveTeamSubscriptions, liveHasAnyPro } from "@/live/features/proAccess";
 import { getLiveVaultFolder, listLiveVaultFolders } from "@/live/features/vault";
 import { fetchIcpEntitlements } from "@/live/identityEntitlements";
 import { useAuth } from "@/hooks/useAuth";
@@ -200,9 +201,13 @@ function SupabaseVaultPage() {
             teams = teams.filter((t) => allowed.has(t.id));
           }
 
-          // No per-team Pro entitlement on ICP — show every team the caller
-          // can otherwise see, regardless of the caller's own Pro status.
-          return teams;
+          // ICP Pro: a club "Free Pro" grant (or the caller's IAP, already
+          // reflected in currentClubHasPro) covers every team; otherwise only
+          // teams with their own club_domain Pro grant are shown — mirroring
+          // the Supabase team_subscriptions filter above.
+          if (currentClubHasPro || teams.length === 0) return teams;
+          const subs = await listLiveTeamSubscriptions(ctx, teams.map((t) => t.id));
+          return teams.filter((t) => liveHasAnyPro(subs.get(t.id)));
         },
       });
     },
