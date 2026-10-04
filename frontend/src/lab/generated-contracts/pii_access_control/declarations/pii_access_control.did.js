@@ -80,6 +80,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'my_guardian_children' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'pii_vetkey_verification_key' : IDL.Func([], [IDL.Vec(IDL.Nat8)], []),
+    'purge_club_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'register_pii' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat8), IDL.Principal],
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],

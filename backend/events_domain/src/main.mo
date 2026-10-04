@@ -55,6 +55,10 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-set notification_queue canister id for the event-reminder
   // fan-out hook. Fail-closed while unset, mirrors messaging_domain/club_domain.
   var notificationQueueCanister : ?Principal;
+  // Governor-set club_domain canister id for the permanent-delete fan-out.
+  // Fail-closed while unset: delete_club_data/delete_team_data reject every
+  // caller until the deploy script wires this.
+  var clubDomainCanister : ?Principal;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -1709,6 +1713,83 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
     notificationQueueCanister := ?id;
     #Ok
+  };
+
+  // ---- club_domain permanent-delete fan-out ----
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  // Removes every event, series, RSVP, attendance, duty, roster, lineup,
+  // game, and training-pause record in scope. `club` additionally clears
+  // club-keyed state (series, training pauses, child team assignments);
+  // `doomedTeams` clears team-keyed state (game data, pitch boards, active
+  // games). Returns the number of events removed.
+  func purgeScope(isDoomedEvent : (Types.Event) -> Bool, doomedTeams : [Text], club : ?Text) : Nat32 {
+    let doomedIds = events.filter(isDoomedEvent).map(func(e) = e.id);
+    func inDoomed(eventId : Text) : Bool { doomedIds.any(func(d) = d == eventId) };
+    func inDoomedTeam(teamId : Text) : Bool { doomedTeams.any(func(d) = d == teamId) };
+    func inClub(value : Text) : Bool { switch (club) { case (?c) { value == c }; case null { false } } };
+    let doomedGroupIds = eventGroups.filter(func(g) = inDoomed(g.event_id)).map(func(g) = g.id);
+    func inDoomedGroup(groupId : Text) : Bool { doomedGroupIds.any(func(d) = d == groupId) };
+    events := events.filter(func(e) = not inDoomed(e.id));
+    series := series.filter(func(s) = not inClub(s.club_id) and (switch (s.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } }));
+    rsvps := rsvps.filter(func(r) = not inDoomed(r.event_id));
+    attendance := attendance.filter(func(a) = not inDoomed(a.event_id));
+    lineups := lineups.filter(func(l) = not inDoomed(l.event_id));
+    lineupSnapshots := lineupSnapshots.filter(func(l) = not inDoomed(l.event_id));
+    duties := duties.filter(func(d) = not inDoomed(d.event_id));
+    roster := roster.filter(func(r) = not inDoomed(r.event_id));
+    recurrences := recurrences.filter(func(r) = not inDoomed(r.event_id));
+    eventAttendance := eventAttendance.filter(func(a) = not inDoomed(a.event_id));
+    eventGuests := eventGuests.filter(func(g) = not inDoomed(g.event_id));
+    coachNotes := coachNotes.filter(func(n) = not inDoomed(n.event_id));
+    eventViews := eventViews.filter(func(v) = not inDoomed(v.event_id));
+    reminderLogs := reminderLogs.filter(func(l) = not inDoomed(l.event_id));
+    openDuties := openDuties.filter(func(d) = not inDoomed(d.event_id));
+    miniLeagueRsvps := miniLeagueRsvps.filter(func(r) = not inDoomed(r.event_id));
+    eventGroups := eventGroups.filter(func(g) = not inDoomed(g.event_id));
+    eventGroupPlayers := eventGroupPlayers.filter(func(p) = not inDoomedGroup(p.group_id));
+    eventGroupDuties := eventGroupDuties.filter(func(d) = not inDoomedGroup(d.group_id));
+    gameSummaries := gameSummaries.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
+    gamePlayerStats := gamePlayerStats.filter(func(g) = not inDoomed(g.event_id) and not inDoomedTeam(g.team_id));
+    gameResults := gameResults.filter(func(g) = (switch (g.event_id) { case (?e) { not inDoomed(e) }; case null { true } }) and not inDoomedTeam(g.team_id));
+    activeGames := activeGames.filter(func(g) = switch (g.team_id) { case (?t) { not inDoomedTeam(t) }; case null { true } });
+    pitchBoardSettings := pitchBoardSettings.filter(func(s) = not inDoomedTeam(s.team_id));
+    teamTrainingPauses := teamTrainingPauses.filter(func(p) = not inClub(p.club_id) and not inDoomedTeam(p.team_id));
+    childTeamAssignments := childTeamAssignments.filter(func(a) = not inClub(a.club_id) and not inDoomedTeam(a.team_id));
+    Nat.toNat32(doomedIds.size())
+  };
+
+  // Called by club_domain when a club is permanently deleted (manually or
+  // by the 30-day auto-purge). Only the configured club_domain canister may
+  // call; fail-closed while unset.
+  public shared ({ caller }) func delete_club_data(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
+    };
+    // Team-keyed state has no club column, so derive the club's team ids
+    // from the records that do carry one.
+    var teamIds : [Text] = [];
+    func noteTeam(teamId : Text) { if (not teamIds.any(func(t) = t == teamId)) teamIds := teamIds.concat([teamId]) };
+    for (e in events.values()) { if (e.club_id == club_id) { switch (e.team_id) { case (?t) noteTeam(t); case null {} } } };
+    for (a in childTeamAssignments.values()) { if (a.club_id == club_id) noteTeam(a.team_id) };
+    for (p in teamTrainingPauses.values()) { if (p.club_id == club_id) noteTeam(p.team_id) };
+    #Ok(purgeScope(func(e) = e.club_id == club_id, teamIds, ?club_id))
+  };
+
+  // Called by club_domain when a single team is permanently deleted.
+  public shared ({ caller }) func delete_team_data(team_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
+    };
+    #Ok(purgeScope(func(e) = e.team_id == ?team_id, [team_id], null))
   };
 
   public shared ({ caller }) func send_event_reminders(event_id : Text) : async { #Ok : Nat16; #Err : Text } {

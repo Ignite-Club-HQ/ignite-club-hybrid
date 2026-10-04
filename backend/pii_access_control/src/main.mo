@@ -553,6 +553,24 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Removes every club-scoped read grant for a permanently deleted club.
+  // Called by club_domain's permanent-delete / 30-day auto-purge fan-out;
+  // only the configured club_domain canister may call (fail-closed while
+  // unset). The encrypted records themselves stay — they are parent- or
+  // event-creator-owned, not club-owned — but without a grant no club
+  // member can ever derive a vetKey for them again.
+  public shared ({ caller }) func purge_club_grants(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (club_domain_canister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
+    };
+    if (club_id == "") return #Err("Invalid club_id");
+    let before = club_read_grants.size();
+    club_read_grants := club_read_grants.filter(func(g) = g.club_id != club_id);
+    log_audit(caller, club_id, "*", "purge_club_grants", true, "Club read grants purged for deleted club");
+    #Ok(Nat.toNat32(before - club_read_grants.size()))
+  };
+
   public shared ({ caller }) func delete_pii(
     pii_id : Text,
     field_id : Text

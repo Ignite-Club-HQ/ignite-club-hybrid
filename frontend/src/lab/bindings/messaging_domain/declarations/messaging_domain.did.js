@@ -371,6 +371,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Poll, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_club_data' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_message' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
@@ -379,6 +384,11 @@ export const idlFactory = ({ IDL }) => {
     'delete_poll' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_team_data' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
     'dm_attachments_disabled' : IDL.Func(
@@ -651,6 +661,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_club_dm_settings' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

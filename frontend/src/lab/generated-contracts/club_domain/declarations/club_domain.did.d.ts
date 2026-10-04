@@ -621,6 +621,11 @@ export interface Main {
     [string],
     Array<ProfileTeamHistoryEntry>
   >,
+  'purge_expired_deletions' : ActorMethod<
+    [],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'reject_club_join_request' : ActorMethod<
     [string],
     { 'Ok' : ClubJoinRequest } |
@@ -815,7 +820,22 @@ export interface Main {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'set_events_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_messaging_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_notification_queue_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_pii_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
       { 'Err' : string }

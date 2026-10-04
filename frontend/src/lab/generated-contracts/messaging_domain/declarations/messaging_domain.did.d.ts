@@ -185,12 +185,22 @@ export interface Main {
     { 'Ok' : Poll } |
       { 'Err' : string }
   >,
+  'delete_club_data' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'delete_message' : ActorMethod<
     [string],
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
   'delete_poll' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'delete_team_data' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'enable_ai_catch_up_for_all_members' : ActorMethod<
     [string],
@@ -414,6 +424,11 @@ export interface Main {
   >,
   'set_club_dm_settings' : ActorMethod<
     [string, boolean, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

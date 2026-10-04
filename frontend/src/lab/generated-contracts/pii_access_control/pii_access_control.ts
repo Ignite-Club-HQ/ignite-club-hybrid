@@ -111,6 +111,13 @@ export interface MainInterface {
     }>;
     my_guardian_children(): Promise<Array<string>>;
     pii_vetkey_verification_key(): Promise<Uint8Array>;
+    purge_club_grants(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     register_pii(pii_id: string, field_id: string, ciphertext: Uint8Array, domain_owner: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -290,6 +297,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.pii_vetkey_verification_key();
         return result;
     }
+    async purge_club_grants(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.purge_club_grants(arg0);
+        return from_candid_variant_n9(result);
+    }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
         Ok: EncryptedPii;
@@ -298,7 +315,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n9(result);
+        return from_candid_variant_n10(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -373,6 +390,25 @@ function from_candid_variant_n1(value: {
         Err: value.Err
     } : value;
 }
+function from_candid_variant_n10(value: {
+    Ok: _EncryptedPii;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: EncryptedPii;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
 function from_candid_variant_n4(value: {
     Ok: _PiiDeleteResult;
 } | {
@@ -431,12 +467,12 @@ function from_candid_variant_n6(value: {
     } : value;
 }
 function from_candid_variant_n9(value: {
-    Ok: _EncryptedPii;
+    Ok: number;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: EncryptedPii;
+    Ok: number;
 } | {
     __kind__: "Err";
     Err: string;

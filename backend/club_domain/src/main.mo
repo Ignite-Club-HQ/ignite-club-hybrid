@@ -11,6 +11,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import Timer "mo:core/Timer";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
@@ -83,6 +84,12 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-set notification_queue canister id for the manual-payment fee
   // reminder fan-out (Phase 3 F6). Fail-closed while unset.
   var notificationQueueCanister : ?Principal;
+  // Governor-set downstream canister ids for the permanent-delete fan-out.
+  // While unset, that domain's cross-canister cleanup is skipped (the local
+  // purge still completes) — mirrored by the deploy script's wiring calls.
+  var eventsDomainCanister : ?Principal;
+  var messagingDomainCanister : ?Principal;
+  var piiCanister : ?Principal;
   var clubSubscriptions : [Types.ClubSubscription];
 
   // Global app-wide config key/value store (app_settings parity for values
@@ -1057,7 +1064,8 @@ persistent actor class Main(governorInit : Principal) {
       case (?team) {
         if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
         if (team.deleted_at_ms == null) return #Err("Team must be soft-deleted first");
-        teams := teams.filter(func(t) = t.id != id);
+        purgeTeamLocal(id);
+        await fanOutTeamPurged(id);
         #Ok
       };
     }
@@ -1118,10 +1126,8 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Club not found") };
       case (?club) {
         if (club.deleted_at_ms == null) return #Err("Club must be soft-deleted first");
-        profiles := profiles.filter(func(p) = p.id != id);
-        settings := settings.filter(func(s) = s.club_id != id);
-        teams := teams.filter(func(t) = t.club_id != id);
-        sponsors := sponsors.filter(func(s) = s.club_id != id);
+        purgeClubLocal(id);
+        await fanOutClubPurged(id);
         #Ok
       };
     }
@@ -2221,6 +2227,184 @@ persistent actor class Main(governorInit : Principal) {
     notificationQueueCanister := ?id;
     #Ok
   };
+
+  // ---- Permanent-delete fan-out + 30-day auto-purge ----
+  // Soft-deleted clubs/teams stay restorable for 30 days; a daily timer then
+  // purges them permanently (same window as the Supabase purge job).
+  // Permanent delete — manual or automatic — also fans out to events_domain
+  // (events, RSVPs, duties, game data), messaging_domain (conversations,
+  // messages, polls), and pii_access_control (club read grants) so no
+  // club-scoped data is orphaned on other canisters. Cross-canister calls
+  // are best-effort: a failed fan-out never blocks the local purge.
+  transient let purgeWindowMs : Nat64 = 2_592_000_000; // 30 days in milliseconds
+
+  public shared ({ caller }) func set_events_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    eventsDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    messagingDomainCanister := ?id;
+    #Ok
+  };
+
+  public shared ({ caller }) func set_pii_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    piiCanister := ?id;
+    #Ok
+  };
+
+  // Removes every club_domain record scoped to one team. Callers must have
+  // already verified the team is soft-deleted and the caller may delete it.
+  func purgeTeamLocal(teamId : Text) {
+    teams := teams.filter(func(t) = t.id != teamId);
+    acl := {
+      teams = acl.teams.filter(func(t) = t.id != teamId);
+      guardians = acl.guardians;
+      clubs = acl.clubs;
+      children = acl.children;
+      exclusions = acl.exclusions;
+      roles = acl.roles.filter(func(r) = r.team != ?teamId);
+    };
+    accountRoles := accountRoles.filter(func(r) = r.team != ?teamId);
+    parentInvites := parentInvites.filter(func(i) = i.team_id != ?teamId);
+    roleRequests := roleRequests.filter(func(r) = r.team != ?teamId);
+    teamInvites := teamInvites.filter(func(i) = i.team_id != teamId);
+    teamInviteLinks := teamInviteLinks.filter(func(l) = l.team_id != teamId);
+    pendingInvites := pendingInvites.filter(func(i) = i.team_id != ?teamId);
+    teamPlayerPositions := teamPlayerPositions.filter(func(p) = p.team_id != teamId);
+    teamCaptains := teamCaptains.filter(func(c) = c.team_id != teamId);
+    teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.team_id != teamId);
+    seasonTeamSummaries := seasonTeamSummaries.filter(func(s) = s.team_id != teamId);
+    seasonPlayerStats := seasonPlayerStats.filter(func(s) = s.team_id != teamId);
+  };
+
+  // Removes every club_domain record scoped to one club, including its
+  // teams. Children/guardian/family records are parent-owned (shared with
+  // events_domain) and are deliberately kept; global account records,
+  // theme preferences, and app config are not club-scoped.
+  func purgeClubLocal(id : Text) {
+    let clubTeamIds = teams.filter(func(t) = t.club_id == id).map(func(t) = t.id);
+    func isClubTeam(teamId : Text) : Bool { clubTeamIds.any(func(t) = t == teamId) };
+    profiles := profiles.filter(func(p) = p.id != id);
+    settings := settings.filter(func(s) = s.club_id != id);
+    teams := teams.filter(func(t) = t.club_id != id);
+    teamFolders := teamFolders.filter(func(f) = f.club_id != id);
+    sponsors := sponsors.filter(func(s) = s.club_id != id);
+    clubListings := clubListings.filter(func(e) = e.0 != id);
+    frozenClubs := frozenClubs.filter(func(e) = e.0 != id);
+    acl := {
+      teams = acl.teams.filter(func(t) = t.club != id);
+      guardians = acl.guardians;
+      clubs = acl.clubs.filter(func(c) = c != id);
+      children = acl.children;
+      exclusions = acl.exclusions.filter(func(e) = e.club != id);
+      roles = acl.roles.filter(func(r) = r.club != ?id and (switch (r.team) { case (?t) { not isClubTeam(t) }; case null { true } }));
+    };
+    accountRoles := accountRoles.filter(func(r) = r.club != ?id and (switch (r.team) { case (?t) { not isClubTeam(t) }; case null { true } }));
+    newsPosts := newsPosts.filter(func(n) = n.club_id != id);
+    parentInvites := parentInvites.filter(func(i) = i.club_id != id);
+    roleRequests := roleRequests.filter(func(r) = r.club != id);
+    teamInvites := teamInvites.filter(func(i) = i.club_id != id);
+    teamInviteLinks := teamInviteLinks.filter(func(l) = l.club_id != id);
+    pendingInvites := pendingInvites.filter(func(i) = i.club_id != id);
+    teamCreationRequests := teamCreationRequests.filter(func(r) = r.club_id != id);
+    teamPlayerPositions := teamPlayerPositions.filter(func(p) = not isClubTeam(p.team_id));
+    teamCaptains := teamCaptains.filter(func(c) = not isClubTeam(c.team_id));
+    clubJoinRequests := clubJoinRequests.filter(func(r) = r.club_id != id);
+    clubTerms := clubTerms.filter(func(t) = t.club_id != id);
+    removedMembers := removedMembers.filter(func(r) = r.club != id);
+    memberPayments := memberPayments.filter(func(p) = p.club_id != id);
+    teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = not isClubTeam(a.team_id));
+    seasons := seasons.filter(func(s) = s.club_id != id);
+    seasonTeamSummaries := seasonTeamSummaries.filter(func(s) = s.club_id != id);
+    seasonPlayerStats := seasonPlayerStats.filter(func(s) = s.club_id != id);
+    clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != id);
+  };
+
+  func fanOutTeamPurged(teamId : Text) : async () {
+    switch (eventsDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { delete_team_data : shared (Text) -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.delete_team_data(teamId) } catch (_) {};
+      };
+    };
+    switch (messagingDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { delete_team_data : shared (Text) -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.delete_team_data(teamId) } catch (_) {};
+      };
+    };
+  };
+
+  func fanOutClubPurged(clubId : Text) : async () {
+    switch (eventsDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { delete_club_data : shared (Text) -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.delete_club_data(clubId) } catch (_) {};
+      };
+    };
+    switch (messagingDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { delete_club_data : shared (Text) -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.delete_club_data(clubId) } catch (_) {};
+      };
+    };
+    switch (piiCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { purge_club_grants : shared (Text) -> async { #Ok : Nat32; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.purge_club_grants(clubId) } catch (_) {};
+      };
+    };
+  };
+
+  // Purges every club/team whose soft-delete is older than the retention
+  // window. Returns the number of records purged (clubs + teams).
+  func purgeExpiredDeletions() : async Nat32 {
+    let now = nowMs();
+    var purged : Nat32 = 0;
+    let doomedClubs = profiles.filter(func(p) = switch (p.deleted_at_ms) { case (?ts) { ts + purgeWindowMs < now }; case null { false } });
+    for (club in doomedClubs.values()) {
+      purgeClubLocal(club.id);
+      await fanOutClubPurged(club.id);
+      purged += 1;
+    };
+    // Teams of a purged club are already gone from `teams` at this point, so
+    // this only catches teams soft-deleted independently of their club.
+    let doomedTeams = teams.filter(func(t) = switch (t.deleted_at_ms) { case (?ts) { ts + purgeWindowMs < now }; case null { false } });
+    for (team in doomedTeams.values()) {
+      purgeTeamLocal(team.id);
+      await fanOutTeamPurged(team.id);
+      purged += 1;
+    };
+    purged
+  };
+
+  // Governor-triggerable manual sweep; the daily timer runs the same path.
+  public shared ({ caller }) func purge_expired_deletions() : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    #Ok(await purgeExpiredDeletions())
+  };
+
+  // Daily auto-purge sweep. The timer id is intentionally discarded — the
+  // sweep runs for the lifetime of the canister and never needs cancelling.
+  // Transient: timers are not persisted across upgrades, so the initializer
+  // re-arms the sweep on every upgrade.
+  transient let _purgeTimer = Timer.recurringTimer<system>(#seconds(86_400), func() : async () { ignore await purgeExpiredDeletions() });
 
   // Reminds every club member who has no `mark_member_paid` record for the
   // given period/type — i.e. everyone still "pending" for that fee. Fails

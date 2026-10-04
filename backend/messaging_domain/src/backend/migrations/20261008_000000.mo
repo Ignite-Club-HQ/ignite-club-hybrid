@@ -150,6 +150,8 @@ module {
     var typingPings : [TypingPing];
     var pinnedMessages : [PinnedMessage];
     var notificationQueueCanister : ?Principal;
+    // Fail-closed until the deploy script wires club_domain.
+    var clubDomainCanister : ?Principal;
     var minimumAppVersions : [(Text, Text)];
   };
   // Adds deleted_at_ms/deleted_by to group metadata so the Deleted Chats
@@ -202,6 +204,7 @@ module {
       var typingPings = old.typingPings;
       var pinnedMessages = old.pinnedMessages;
       var notificationQueueCanister = old.notificationQueueCanister;
+      var clubDomainCanister = null;
       var minimumAppVersions = old.minimumAppVersions;
     }
   };
