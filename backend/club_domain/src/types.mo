@@ -154,6 +154,31 @@ module {
     cancelled_at_ms : ?Nat64;
     activated_at_ms : ?Nat64;
   };
+  // team_subscriptions parity: per-team Pro flags, platform admin overrides,
+  // and pitch-board settings. Pro flags are platform-written only (a team
+  // cannot grant itself Pro); pitch fields are team-admin writable through
+  // save_team_pitch_settings, which never touches the Pro flags.
+  public type TeamSubscription = {
+    team_id : Text;
+    is_pro : Bool;
+    is_pro_football : Bool;
+    is_trial : Bool;
+    trial_ends_at_ms : ?Nat64;
+    cancelled_at_ms : ?Nat64;
+    admin_pro_override : Bool;
+    admin_pro_football_override : Bool;
+    disable_auto_subs : Bool;
+    rotation_speed : Nat32;
+    disable_position_swaps : Bool;
+    disable_batch_subs : Bool;
+    rotate_gk_at_halftime : Bool;
+    minutes_per_half : ?Nat32;
+    max_spread_minutes : ?Nat32;
+    team_size : ?Nat32;
+    formation : ?Text;
+    show_lineup_picker : Bool;
+    disable_team_pom_rewards : Bool;
+  };
   // is_team_only mirrors the Supabase "team sponsors only" strip toggle;
   // exposure_percentage is the strip rotation share (0-100).
   public type ClubSponsor = {
