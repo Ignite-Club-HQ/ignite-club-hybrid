@@ -279,7 +279,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
     let name = Text.trim(folder.name, #char ' ');
     if (name.size() == 0 or name.size() > 80) return #Err("Folder name must be 1-80 characters");
-    let saved = { folder with name };
+    let saved = { folder with name = name };
     teamFolders := teamFolders.filter(func(f) = f.id != folder.id).concat([saved]);
     #Ok(saved)
   };
@@ -321,7 +321,7 @@ persistent actor class Main(governorInit : Principal) {
           };
           case null {};
         };
-        let updated = { team with folder_id };
+        let updated = { team with folder_id = folder_id };
         teams := teams.map(func(t) = if (t.id == team_id) updated else t);
         #Ok(updated)
       };
