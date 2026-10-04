@@ -255,6 +255,48 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(conversation)
   };
 
+  // Find-or-create the canonical club/team chat conversation. The id is
+  // deterministic — team id for team chats, club id for the club chat — so
+  // the frontend can poll and send by the id it already knows. Only the
+  // governor or the configured club_domain canister may provision these:
+  // club_domain verifies membership against its authoritative role store
+  // before fanning out, so an end user can never self-join a chat here.
+  // Existing conversations merge any missing participants (new members).
+  public shared ({ caller }) func ensure_conversation(club_id : Text, team_id : ?Text, participants : [Principal]) : async { #Ok : Types.Conversation; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) {
+      switch (clubDomainCanister) {
+        case (?cd) { if (not caller.equal(cd)) return #Err("Club domain only") };
+        case null { return #Err("Club domain not configured") };
+      };
+    };
+    if (not valid(club_id) or participants.size() == 0) return #Err("Invalid conversation participants");
+    if (participants.any(func(p) = p.equal(Principal.anonymous()))) return #Err("Invalid conversation participants");
+    let conversationId = switch (team_id) {
+      case (?t) { if (not valid(t)) return #Err("Invalid conversation participants"); t };
+      case null { club_id };
+    };
+    switch (findConversationIndex(conversationId)) {
+      case (?i) {
+        let conv = conversations[i];
+        var merged = conv.participants;
+        for (p in participants.values()) {
+          if (not merged.any(func(existing) = existing.equal(p))) {
+            merged := merged.concat([p]);
+          };
+        };
+        let updated : Types.Conversation = { conv with participants = merged };
+        conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
+        #Ok(updated)
+      };
+      case null {
+        let conversation : Types.Conversation = { id = conversationId; club_id; team_id; participants; next_sequence = 1 };
+        conversations := conversations.concat([conversation]);
+        #Ok(conversation)
+      };
+    }
+  };
+
   func findConversationIndex(conversation_id : Text) : ?Nat {
     var idx = 0;
     for (c in conversations.values()) {
