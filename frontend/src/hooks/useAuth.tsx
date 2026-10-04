@@ -22,6 +22,7 @@ import { markProfileCompleted } from "@/components/InviteFlowProgress";
 import { isNativePlatform, unregisterNativePush } from "@/lib/nativePush";
 import { isTransientAuthFailure } from "@/lib/authRecoveryClassification";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
+import { buildAuthPathWithRedirect } from "@/lib/authRedirectStorage";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 // Value exports (signInWithInternetIdentity/signOutInternetIdentity) are loaded
 // dynamically at call time below. That module statically imports the ICP
