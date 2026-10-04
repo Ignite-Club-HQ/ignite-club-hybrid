@@ -22,6 +22,14 @@ import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
 import { format, formatDistanceToNow } from "date-fns";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isLiveAppAdmin } from "@/live/features/insights";
+import { listLiveClubs, myLiveRoleGrants } from "@/live/features/club";
+import {
+  listLiveDeletedGroups,
+  purgeLiveGroup,
+  restoreLiveGroup,
+} from "@/live/features/messaging";
 
 interface DeletedGroup {
   id: string;
@@ -40,16 +48,7 @@ interface DeletedGroup {
 
 const RETENTION_DAYS = 30;
 
-import { resolveAuthBackend } from "@/live/authBackendMode";
-
-// NEEDS-CANISTER: messaging_domain only exposes soft_delete_group — there is
-// no list-deleted/restore/purge surface, so this tool is Supabase-only. Every
-// query and mutation is gated so no II principal reaches Supabase.
-const isIcpPageMode = () => resolveAuthBackend() === "icp";
-
-export default SupabaseAdminDeletedChatsPage;
-
-function SupabaseAdminDeletedChatsPage() {
+export default function AdminDeletedChatsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -58,22 +57,37 @@ function SupabaseAdminDeletedChatsPage() {
 
   const { data: access, isLoading: checkingAccess } = useQuery({
     queryKey: ["deleted-chats-access", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return { isAppAdmin: false, clubAdminClubs: [] as string[] };
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role, club_id")
-        .eq("user_id", user.id)
-        .in("role", ["app_admin", "club_admin"]);
-      const rows = data ?? [];
-      return {
-        isAppAdmin: rows.some((r) => r.role === "app_admin"),
-        clubAdminClubs: rows
-          .filter((r) => r.role === "club_admin" && r.club_id)
-          .map((r) => r.club_id as string),
-      };
-    },
-    enabled: !!user?.id && !isIcpPageMode(),
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          if (!user?.id) return { isAppAdmin: false, clubAdminClubs: [] as string[] };
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role, club_id")
+            .eq("user_id", user.id)
+            .in("role", ["app_admin", "club_admin"]);
+          const rows = data ?? [];
+          return {
+            isAppAdmin: rows.some((r) => r.role === "app_admin"),
+            clubAdminClubs: rows
+              .filter((r) => r.role === "club_admin" && r.club_id)
+              .map((r) => r.club_id as string),
+          };
+        },
+        icp: async (ctx) => {
+          const [appAdmin, grants] = await Promise.all([
+            isLiveAppAdmin(ctx),
+            myLiveRoleGrants(ctx),
+          ]);
+          return {
+            isAppAdmin: appAdmin,
+            clubAdminClubs: grants
+              .filter((g) => g.role === "club_admin" && g.club.length > 0)
+              .map((g) => g.club[0]!),
+          };
+        },
+      }),
+    enabled: !!user?.id,
   });
 
   const isAppAdmin = !!access?.isAppAdmin;
@@ -82,54 +96,95 @@ function SupabaseAdminDeletedChatsPage() {
 
   const { data: groups = [], isLoading } = useQuery({
     queryKey: ["admin-deleted-chats"],
-    queryFn: async (): Promise<DeletedGroup[]> => {
-      // RLS scopes results: app admins see all, club admins see only their clubs
-      const { data, error } = await supabase
-        .from("chat_groups")
-        .select(
-          "id,name,deleted_at,deleted_by,created_by,club_id,team_id,mini_league_id,membership_mode"
-        )
-        .not("deleted_at", "is", null)
-        .order("deleted_at", { ascending: false });
-      if (error) throw error;
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async (): Promise<DeletedGroup[]> => {
+          // RLS scopes results: app admins see all, club admins see only their clubs
+          const { data, error } = await supabase
+            .from("chat_groups")
+            .select(
+              "id,name,deleted_at,deleted_by,created_by,club_id,team_id,mini_league_id,membership_mode"
+            )
+            .not("deleted_at", "is", null)
+            .order("deleted_at", { ascending: false });
+          if (error) throw error;
 
-      const rows = (data ?? []) as any as DeletedGroup[];
-      const userIds = Array.from(
-        new Set(rows.flatMap((r) => [r.deleted_by, r.created_by]).filter(Boolean))
-      ) as string[];
-      const clubIds = Array.from(new Set(rows.map((r) => r.club_id).filter(Boolean))) as string[];
+          const rows = (data ?? []) as any as DeletedGroup[];
+          const userIds = Array.from(
+            new Set(rows.flatMap((r) => [r.deleted_by, r.created_by]).filter(Boolean))
+          ) as string[];
+          const clubIds = Array.from(new Set(rows.map((r) => r.club_id).filter(Boolean))) as string[];
 
-      const [profilesRes, clubsRes] = await Promise.all([
-        userIds.length
-          ? selectCachedProfilesByIds(userIds)
-          : Promise.resolve({ data: [] as any[] }),
-        clubIds.length
-          ? supabase.from("clubs").select("id, name").in("id", clubIds)
-          : Promise.resolve({ data: [] as any[] }),
-      ]);
-      const nameMap = new Map<string, string>((profilesRes.data ?? []).map((p: any) => [p.id as string, (p.display_name ?? "") as string]));
-      const clubMap = new Map<string, string>(
-        (clubsRes.data ?? []).map((c: any): [string, string] => [c.id, c.name]),
-      );
-      return rows.map((r) => ({
-        ...r,
-        deleter_name: r.deleted_by ? nameMap.get(r.deleted_by) ?? null : null,
-        creator_name: nameMap.get(r.created_by) ?? null,
-        club_name: r.club_id ? clubMap.get(r.club_id) ?? null : null,
-      }));
-    },
-    enabled: hasAccess && !isIcpPageMode(),
+          const [profilesRes, clubsRes] = await Promise.all([
+            userIds.length
+              ? selectCachedProfilesByIds(userIds)
+              : Promise.resolve({ data: [] as any[] }),
+            clubIds.length
+              ? supabase.from("clubs").select("id, name").in("id", clubIds)
+              : Promise.resolve({ data: [] as any[] }),
+          ]);
+          const nameMap = new Map<string, string>((profilesRes.data ?? []).map((p: any) => [p.id as string, (p.display_name ?? "") as string]));
+          const clubMap = new Map<string, string>(
+            (clubsRes.data ?? []).map((c: any): [string, string] => [c.id, c.name]),
+          );
+          return rows.map((r) => ({
+            ...r,
+            deleter_name: r.deleted_by ? nameMap.get(r.deleted_by) ?? null : null,
+            creator_name: nameMap.get(r.created_by) ?? null,
+            club_name: r.club_id ? clubMap.get(r.club_id) ?? null : null,
+          }));
+        },
+        icp: async (ctx): Promise<DeletedGroup[]> => {
+          const [deleted, clubs] = await Promise.all([
+            listLiveDeletedGroups(ctx),
+            (async () => {
+              const out: { id: string; name: string }[] = [];
+              let cursor: string | null = null;
+              for (let i = 0; i < 20; i++) {
+                const batch = await listLiveClubs(ctx, cursor, 50);
+                out.push(...batch.map((c) => ({ id: c.id, name: c.name })));
+                if (batch.length < 50) break;
+                cursor = batch[batch.length - 1]!.id;
+              }
+              return out;
+            })(),
+          ]);
+          const clubMap = new Map(clubs.map((c) => [c.id, c.name]));
+          return deleted.map((g) => ({
+            id: g.conversationId,
+            name: g.name,
+            deleted_at: new Date(g.deletedAtMs ?? g.createdAtMs).toISOString(),
+            deleted_by: g.deletedBy,
+            created_by: "",
+            club_id: g.clubId,
+            team_id: g.teamId,
+            mini_league_id: null,
+            membership_mode: g.kind,
+            // The canister stores the deleter as a principal; identity_access
+            // has no principal->profile lookup, so show a shortened principal.
+            deleter_name: g.deletedBy ? `${g.deletedBy.slice(0, 10)}…` : null,
+            creator_name: null,
+            club_name: g.clubId ? clubMap.get(g.clubId) ?? null : null,
+          }));
+        },
+      }),
+    enabled: hasAccess,
   });
 
   const restoreMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (isIcpPageMode()) return;
-      const { error } = await supabase
-        .from("chat_groups")
-        .update({ deleted_at: null, deleted_by: null } as any)
-        .eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("chat_groups")
+            .update({ deleted_at: null, deleted_by: null } as any)
+            .eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await restoreLiveGroup(ctx, id);
+        },
+      }),
     onSuccess: () => {
       toast.success("Chat restored");
       queryClient.invalidateQueries({ queryKey: ["admin-deleted-chats"] });
@@ -140,11 +195,16 @@ function SupabaseAdminDeletedChatsPage() {
   });
 
   const purgeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (isIcpPageMode()) return;
-      const { error } = await supabase.from("chat_groups").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("chat_groups").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await purgeLiveGroup(ctx, id);
+        },
+      }),
     onSuccess: () => {
       toast.success("Chat permanently deleted");
       setPurgeTarget(null);
@@ -257,7 +317,7 @@ function SupabaseAdminDeletedChatsPage() {
                         {format(deletedDate, "MMM d, yyyy 'at' h:mm a")}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Created by {g.creator_name ?? "Unknown"} ·{" "}
+                        {g.creator_name ? `Created by ${g.creator_name} · ` : ""}
                         {daysLeft > 0
                           ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left in retention`
                           : "Retention expired"}
