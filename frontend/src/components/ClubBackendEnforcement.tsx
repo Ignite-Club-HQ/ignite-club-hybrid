@@ -100,6 +100,10 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const identity = await getCurrentInternetIdentity();
         const provider: BackendProvider = identity ? "icp" : "supabase";
         let clubIds: string[] = [];
+        // App admins administer the whole app (Placement Settings, routing
+        // config) from Supabase-backed screens, so a club pin must never sign
+        // them out of their Supabase session.
+        let isAppAdmin = false;
         if (identity) {
           try {
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
@@ -111,7 +115,9 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
             console.warn("[club-backend] Could not load ICP role grants.", error);
           }
         } else {
-          clubIds = await fetchSupabaseClubIds(user.id);
+          const membership = await fetchSupabaseMembership(user.id);
+          clubIds = membership.clubIds;
+          isAppAdmin = membership.isAppAdmin;
         }
         if (cancelled) return;
         setUserClubIds(clubIds);
