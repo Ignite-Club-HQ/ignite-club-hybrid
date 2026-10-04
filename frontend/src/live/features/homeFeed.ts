@@ -149,13 +149,7 @@ const MERGED_EVENTS_CAP = 100;
 export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
 ): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
-  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
-  let memberships: LiveHomeMemberships;
-  try {
-    memberships = deriveLiveMemberships(await client.myRoles());
-  } finally {
-    client.dispose();
-  }
+  const memberships = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
 
   const eventResults = await Promise.all([
     ...memberships.clubIds.map((clubId) => listLiveEvents(ctx, clubId, null)),
