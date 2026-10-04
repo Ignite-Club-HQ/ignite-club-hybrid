@@ -73,16 +73,20 @@ export interface Event {
   'title' : string,
   'creator' : Principal,
   'deleted' : boolean,
+  'mini_league_id' : [] | [string],
   'cancelled' : boolean,
   'series_id' : [] | [string],
   'team_id' : [] | [string],
   'description' : string,
+  'updated_at_ms' : bigint,
   'starts_at_ms' : bigint,
+  'address' : [] | [string],
   'ends_at_ms' : bigint,
   'revision' : bigint,
   'club_id' : string,
   'location' : [] | [string],
   'event_type' : string,
+  'opponent' : [] | [string],
 }
 export interface EventAttendance {
   'status' : string,
@@ -323,6 +327,9 @@ export interface Main {
       string,
       string,
       string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
       [] | [string],
       bigint,
       bigint,
@@ -873,7 +880,18 @@ export interface Main {
       { 'Err' : string }
   >,
   'update_event' : ActorMethod<
-    [string, string, string, string, [] | [string], bigint, bigint],
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      bigint,
+      bigint,
+    ],
     { 'Ok' : Event } |
       { 'Err' : string }
   >,

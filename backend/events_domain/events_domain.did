@@ -187,11 +187,12 @@ type Main =
                                     Ok: nat16;
                                   });
    create_event: (club_id: text, team_id: opt text, title: text, description:
-    text, event_type: text, location: opt text, starts_at_ms: nat64,
-    ends_at_ms: nat64) -> (variant {
-                             Err: text;
-                             Ok: Event;
-                           });
+    text, event_type: text, location: opt text, opponent: opt text, address:
+    opt text, mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: Event;
+               });
    create_event_group: (event_id: text, name: text, team_letter: opt text,
     colour: opt text, ability_band: opt text, pitch_name: opt text) ->
     (variant {
@@ -680,7 +681,8 @@ type Main =
        Ok: Duty;
      });
    update_event: (id: text, title: text, description: text, event_type: 
-    text, location: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
+    text, location: opt text, opponent: opt text, address: opt text,
+    mini_league_id: opt text, starts_at_ms: nat64, ends_at_ms: nat64) ->
     (variant {
        Err: text;
        Ok: Event;
@@ -877,6 +879,7 @@ type EventAttendance =
  };
 type Event = 
  record {
+   address: opt text;
    cancelled: bool;
    club_id: text;
    creator: principal;
@@ -886,11 +889,14 @@ type Event =
    event_type: text;
    id: text;
    location: opt text;
+   mini_league_id: opt text;
+   opponent: opt text;
    revision: nat64;
    series_id: opt text;
    starts_at_ms: nat64;
    team_id: opt text;
    title: text;
+   updated_at_ms: nat64;
  };
 type Duty = 
  record {
