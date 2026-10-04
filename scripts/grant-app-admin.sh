@@ -33,8 +33,12 @@ if [ "$MATCHES" != "1" ]; then
   exit 1
 fi
 
-ACCOUNT_ID="$(printf '%s' "$OUT" | grep -oE 'account_id = "[^"]+"' | head -1 | sed 's/^account_id = "//; s/"$//')"
-PRINCIPAL="$(printf '%s' "$OUT" | grep -oE 'principal = principal "[^"]+"' | head -1 | sed 's/^principal = principal "//; s/"$//')"
+# The candid text form quotes reserved words, so the field prints as
+#   "principal" = principal "aaaaa-...";
+# Match the principal value itself, and tolerate a failed grep so the friendly
+# error below prints instead of a silent set -e exit.
+ACCOUNT_ID="$(printf '%s' "$OUT" | grep -oE 'account_id = "[^"]+"' | head -1 | sed 's/^account_id = "//; s/"$//' || true)"
+PRINCIPAL="$(printf '%s' "$OUT" | grep -oE 'principal "[a-z0-9-]{20,}"' | head -1 | sed 's/^principal "//; s/"$//' || true)"
 [ -n "$ACCOUNT_ID" ] && [ -n "$PRINCIPAL" ] || { echo "ERROR: could not parse account id / principal"; exit 1; }
 echo "==> Found account $ACCOUNT_ID (principal $PRINCIPAL)"
 
