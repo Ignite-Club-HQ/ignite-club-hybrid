@@ -1,0 +1,20 @@
+{
+  "club_domain": "mzzzv-taaaa-aaaal-qxlrq-cai",
+  "club_points_domain": "itj33-nyaaa-aaaal-qxlla-cai",
+  "competition_domain": "jqfs5-zaaaa-aaaal-qxlnq-cai",
+  "events_domain": "m6y7b-6yaaa-aaaal-qxlra-cai",
+  "identity_access": "mq2sj-fiaaa-aaaal-qxlqa-cai",
+  "insights_domain": "mf5de-eaaaa-aaaal-qxltq-cai",
+  "media_blob_store": "jlaoy-dyaaa-aaaal-qxlpa-cai",
+  "media_metadata": "mc4fq-jyaaa-aaaal-qxlta-cai",
+  "messaging_domain": "mx3u5-iqaaa-aaaal-qxlqq-cai",
+  "migration_coordinator": "jmbim-oaaaa-aaaal-qxlpq-cai",
+  "mini_league_domain": "jzgzb-piaaa-aaaal-qxlma-cai",
+  "notification_queue": "jfcdq-yiaaa-aaaal-qxloa-cai",
+  "pii_access_control": "iui5p-aaaaa-aaaal-qxllq-cai",
+  "placement_registry": "ml7om-7qaaa-aaaal-qxlsq-cai",
+  "secret_workload_identity": "mm6iy-siaaa-aaaal-qxlsa-cai",
+  "shard_router": "jcdfe-vqaaa-aaaal-qxloq-cai",
+  "timer_jobs": "j6h7v-cqaaa-aaaal-qxlmq-cai",
+  "vault_domain": "jxeuj-uyaaa-aaaal-qxlna-cai"
+}
