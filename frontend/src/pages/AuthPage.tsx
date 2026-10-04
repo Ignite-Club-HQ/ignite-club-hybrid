@@ -17,7 +17,7 @@ import { InviteFlowProgress, getInviteFlowContext, clearInviteFlowContext } from
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
-import { useIcpAuthScreen } from "@/live/authBackendMode";
+import { isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
 import { describeIcpSignInError, isLikelyInAppBrowser, II_SIGN_IN_HINT } from "@/lib/internetIdentitySignInHelp";
 
 import { z } from "zod";
@@ -142,9 +142,15 @@ export default function AuthPage() {
   // `?auth=email` lets app admins reach the Supabase email sign-in even when
   // their club is pinned to ICP — app-admin accounts live in Supabase, so the
   // Internet Identity screen alone would lock them out of Placement Settings.
-  const forceEmailAuth =
-    new URLSearchParams(window.location.search).get("auth") === "email";
-  const useIcpLab = useIcpAuthScreen() && !forceEmailAuth;
+  const authParam = new URLSearchParams(window.location.search).get("auth");
+  const forceEmailAuth = authParam === "email";
+  // `?auth=icp` is the symmetric recovery hatch: if the cached club-backend
+  // hint was ever lost (e.g. a failed membership lookup cleared it), the
+  // screen would default to email even for an ICP-pinned club — this lets the
+  // member force the Internet Identity screen and re-cache the hint on
+  // sign-in. Only honoured when canisters are actually configured.
+  const forceIcpAuth = authParam === "icp" && isIcpAuthAvailable();
+  const useIcpLab = forceIcpAuth || (useIcpAuthScreen() && !forceEmailAuth);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1131,6 +1137,23 @@ export default function AuthPage() {
                         Sign up here
                       </button>
                     </div>
+                  )}
+                  {/* Recovery hatch: when this visitor's club is pinned to ICP
+                      but the cached hint was lost, the screen defaults to
+                      email — offer a way back to the Internet Identity
+                      screen. Only shown when canisters are configured. */}
+                  {isIcpAuthAvailable() && (
+                    <button
+                      type="button"
+                      className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline pt-1"
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams);
+                        params.set("auth", "icp");
+                        setSearchParams(params, { replace: true });
+                      }}
+                    >
+                      Club member? Sign in with Internet Identity instead
+                    </button>
                   )}
                 </form>
               </CardContent>
