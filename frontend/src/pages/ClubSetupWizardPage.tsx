@@ -292,13 +292,30 @@ export default function ClubSetupWizardPage() {
             id: teamId,
             club_id: clubId!,
             name: draft.name.trim(),
-            level_age: candidOpt(draft.levelAge.trim() || null),
+            age_group: candidOpt(draft.levelAge.trim() || null),
             description: candidOpt(null),
             logo_url: candidOpt(null),
-            default_rsvp_audience: candidOpt(
-              defaultRsvpAudienceForTeam(draft.name, draft.levelAge),
-            ),
-          } as any);
+            // The canister takes the whole ClubTeam record — every key must
+            // be present or candid encoding rejects the call.
+            division: [],
+            gender: [],
+            team_type: [],
+            folder_id: [],
+            is_active: true,
+            archived: false,
+            deleted_at_ms: [],
+            is_shell: false,
+            shell_invited_by: [],
+            shell_contact_name: [],
+            shell_contact_email: [],
+            shell_claim_token: [],
+            shell_claimed_at_ms: [],
+            shell_claimed_by: [],
+            playhq_team_id: [],
+            playhq_competition_id: [],
+            playhq_auto_create_events: false,
+            // RSVP audience / class-mode fields stay Supabase-only.
+          });
           // Grant the creator team_admin — the canister counterpart of the
           // Supabase RPC's auto-admin assignment.
           await addLiveRoleGrant(ctx, Principal.fromText(user!.id), clubId!, "team_admin", team.id);
