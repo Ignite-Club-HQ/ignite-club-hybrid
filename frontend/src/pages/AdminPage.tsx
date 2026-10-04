@@ -79,6 +79,24 @@ function IcpAdminPage() {
             onClick={() => navigate("/admin/feedback")}
           />
           <AdminMenuItem
+            icon={BarChart3}
+            label="Sponsor Analytics"
+            description="View sponsor performance metrics"
+            onClick={() => navigate("/admin/sponsor-analytics")}
+          />
+          <AdminMenuItem
+            icon={Bell}
+            label="Notification Preferences"
+            description="Global notification settings"
+            onClick={() => navigate("/admin/notification-preferences")}
+          />
+          <AdminMenuItem
+            icon={Bug}
+            label="Chat Virt Debug"
+            description="Capture row-height drift and scroll jolts in any chat thread"
+            onClick={() => navigate("/admin/chat-virt-debug")}
+          />
+          <AdminMenuItem
             icon={Globe2}
             label="Infrastructure / Placement Settings"
             description="ICP canisters, default backend, and per-country eligibility"
@@ -93,6 +111,12 @@ function IcpAdminPage() {
           <CardDescription>Performance and usage analytics</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
+          <AdminMenuItem
+            icon={TrendingUp}
+            label="Engagement"
+            description="Activity trends per club"
+            onClick={() => navigate("/admin/engagement")}
+          />
           <AdminMenuItem
             icon={Activity}
             label="Online Users"

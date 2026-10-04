@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveSponsorBenchmarks, getLiveBenchmarks } from "@/live/features/insights";
+import { listLiveClubs, listLiveSponsors } from "@/live/features/club";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -67,42 +69,62 @@ export default function SponsorAnalyticsPage() {
  */
 function IcpSponsorAnalyticsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [selectedClub, setSelectedClub] = useState<string>("all");
 
-  const { data: isAppAdmin, isLoading: checkingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  // Admin gate + club/sponsor display metadata come from the canisters too —
+  // an Internet Identity app admin has no Supabase session, so user_roles and
+  // the clubs/sponsors tables are unreadable here.
+  const { isAppAdmin, isLoading: checkingAdmin } = useIsAppAdmin();
 
   const { data: clubs } = useQuery({
-    queryKey: ["all-clubs-for-filter"],
-    queryFn: async () => {
-      const { data } = await supabase.from("clubs").select("id, name").order("name");
-      return data || [];
-    },
+    queryKey: ["icp-all-clubs-for-filter"],
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => [] as { id: string; name: string }[],
+        icp: async (ctx) => {
+          const out: { id: string; name: string }[] = [];
+          let cursor: string | null = null;
+          for (let i = 0; i < 20; i++) {
+            const batch = await listLiveClubs(ctx, cursor, 50);
+            out.push(
+              ...batch
+                .filter((c) => c.is_active && c.deleted_at_ms.length === 0)
+                .map((c) => ({ id: c.id, name: c.name })),
+            );
+            if (batch.length < 50) break;
+            cursor = batch[batch.length - 1]!.id;
+          }
+          return out.sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
     enabled: isAppAdmin === true,
   });
 
   const { data: sponsors } = useQuery({
-    queryKey: ["all-sponsors-for-icp-analytics", selectedClub],
-    queryFn: async () => {
-      let q = supabase.from("sponsors").select("id, name, logo_url, club_id, clubs!club_id(name)");
-      if (selectedClub !== "all") q = q.eq("club_id", selectedClub);
-      const { data } = await q;
-      return data || [];
-    },
-    enabled: isAppAdmin === true,
+    queryKey: ["icp-all-sponsors-for-analytics", selectedClub, clubs],
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => [] as any[],
+        icp: async (ctx) => {
+          const targets =
+            selectedClub === "all" ? (clubs ?? []) : (clubs ?? []).filter((c) => c.id === selectedClub);
+          const rows: any[] = [];
+          for (const club of targets) {
+            const list = await listLiveSponsors(ctx, club.id);
+            rows.push(
+              ...list.map((s) => ({
+                id: s.id,
+                name: s.name,
+                logo_url: s.logo_url[0] ?? null,
+                club_id: s.club_id,
+                clubs: { name: club.name },
+              })),
+            );
+          }
+          return rows;
+        },
+      }),
+    enabled: isAppAdmin === true && !!clubs,
   });
 
   const sponsorIds = (sponsors ?? []).map((s) => s.id);

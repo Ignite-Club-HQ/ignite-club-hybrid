@@ -90,8 +90,9 @@ import {
   getLiveAdEventSummary,
   countLivePhotos,
   getLivePhotoEngagementTotals,
+  isLiveAppAdmin,
 } from "@/live/features/insights";
-import { listLiveSponsors, listLiveAcceptedInvites, getLiveInviteStats } from "@/live/features/club";
+import { listLiveSponsors, listLiveAcceptedInvites, getLiveInviteStats, myLiveRoleGrants, getLiveClubProfile, listLiveTeams, listLiveClubs } from "@/live/features/club";
 import {
   listLiveCompetitions,
   listLiveCompetitionEntries,
@@ -157,14 +158,94 @@ export default function ClubEngagementAnalyticsPage({
     );
   }
 
+  // Live ICP: the insights canister aggregates per club only — there is no
+  // platform-wide rollup — so the app-admin "platform" view becomes a club
+  // picker that renders the normal club view for the chosen club.
+  if (mode === "platform" && isFeatureRoutedToIcp("analytics")) {
+    return <IcpPlatformEngagementPage />;
+  }
+
   return <SupabaseClubEngagementAnalyticsPage mode={mode} />;
+}
+
+function IcpPlatformEngagementPage() {
+  const navigate = useNavigate();
+  const [pickedClubId, setPickedClubId] = useState<string | null>(null);
+
+  const { data: clubs = [], isLoading } = useQuery({
+    queryKey: ["icp-engagement-club-list"],
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => [] as { id: string; name: string }[],
+        icp: async (ctx) => {
+          const out: { id: string; name: string }[] = [];
+          let cursor: string | null = null;
+          for (let i = 0; i < 20; i++) {
+            const batch = await listLiveClubs(ctx, cursor, 50);
+            out.push(
+              ...batch
+                .filter((c) => c.is_active && c.deleted_at_ms.length === 0)
+                .map((c) => ({ id: c.id, name: c.name })),
+            );
+            if (batch.length < 50) break;
+            cursor = batch[batch.length - 1]!.id;
+          }
+          return out.sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
+  });
+
+  if (pickedClubId) {
+    return (
+      <div>
+        <div className="container max-w-6xl mx-auto px-4 pt-4 flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setPickedClubId(null)}>
+            Change club
+          </Button>
+        </div>
+        <SupabaseClubEngagementAnalyticsPage key={pickedClubId} mode="club" forceClubId={pickedClubId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">Engagement</h1>
+          <p className="text-sm text-muted-foreground">Pick a club to view its engagement analytics.</p>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </div>
+      ) : clubs.length === 0 ? (
+        <p className="text-center py-8 text-muted-foreground">No clubs found.</p>
+      ) : (
+        <div className="space-y-2">
+          {clubs.map((club) => (
+            <Card key={club.id} className="cursor-pointer hover:bg-muted" onClick={() => setPickedClubId(club.id)}>
+              <CardContent className="p-4">
+                <p className="font-medium">{club.name}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SupabaseClubEngagementAnalyticsPage({
   mode = "club",
-}: { mode?: "club" | "platform" } = {}) {
+  forceClubId = null,
+}: { mode?: "club" | "platform"; forceClubId?: string | null } = {}) {
   const params = useParams<{ clubId: string }>();
-  const clubId = mode === "platform" ? null : params.clubId ?? null;
+  const clubId = forceClubId ?? (mode === "platform" ? null : params.clubId ?? null);
   const isPlatform = mode === "platform";
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -223,6 +304,22 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: access, isLoading: accessLoading } = useQuery({
     queryKey: ["club-engagement-access", user?.id, clubId, mode],
     queryFn: async () => {
+      // ICP: an Internet Identity admin has no Supabase session, so access is
+      // checked against the canisters — app admins via insights_domain,
+      // club staff via their club_domain role grants.
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => ({ isAdmin: false, isCompAdmin: false }),
+          icp: async (ctx) => {
+            if (await isLiveAppAdmin(ctx)) return { isAdmin: true, isCompAdmin: true };
+            const grants = await myLiveRoleGrants(ctx);
+            const isClubStaff = grants.some(
+              (g) => g.club[0] === clubId && (g.role === "club_admin" || g.role === "committee_member"),
+            );
+            return { isAdmin: isClubStaff, isCompAdmin: false };
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, club_id")
@@ -243,6 +340,15 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: club } = useQuery({
     queryKey: ["club-engagement-meta", clubId],
     queryFn: async () => {
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const profile = await getLiveClubProfile(ctx, clubId!);
+            return { id: profile.id, name: profile.name };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name")
@@ -257,6 +363,16 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: teams = [] } = useQuery({
     queryKey: ["club-engagement-teams", clubId, isPlatform],
     queryFn: async () => {
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as { id: string; name: string; is_archived: boolean }[],
+          icp: async (ctx) =>
+            (await listLiveTeams(ctx, requireIcpClubId()))
+              .filter((t) => !t.archived && t.deleted_at_ms.length === 0)
+              .map((t) => ({ id: t.id, name: t.name, is_archived: false }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+        });
+      }
       let q = supabase
         .from("teams")
         .select("id, name, is_archived")
