@@ -34,6 +34,21 @@ export function isIcpAuthAvailable(): boolean {
 }
 
 /**
+ * Pre-auth fallback when no club hint is cached (fresh browser, cleared
+ * storage, new device): if every club pin in the routing config names the
+ * same backend, that backend is the best guess for an unknown visitor —
+ * otherwise a fresh device would always land on the country default even
+ * though every pinned club uses ICP. Mixed or no pins → null (country rules).
+ * App admins keep the "sign in with email instead" link on the ICP screen.
+ */
+function unanimousClubPin(config: ReturnType<typeof getBackendRoutingConfig>): BackendProvider | null {
+  const pins = new Set(Object.values(config.clubBackendOverrides ?? {}));
+  if (pins.size !== 1) return null;
+  const [only] = [...pins];
+  return only === "icp" || only === "supabase" ? only : null;
+}
+
+/**
  * The backend the current visitor should authenticate against, combining the
  * saved routing config, their country (profile override, else IP, else
  * unknown), and canister availability. Inherits the safety net from
@@ -49,7 +64,7 @@ export function resolveAuthBackend(): BackendProvider {
   const clubIds = getUserClubIds();
   const pin = clubIds.length > 0
     ? resolveClubBackendOverride(config, clubIds)
-    : readCachedClubBackendHint();
+    : readCachedClubBackendHint() ?? unanimousClubPin(config);
   if (pin === "supabase") return "supabase";
   if (pin === "icp") return isIcpAuthAvailable() ? "icp" : "supabase";
   return resolveBackendForCountry(config, country, isIcpAuthAvailable());
