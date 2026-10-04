@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, Suspense, useMemo, type ReactNode } from "react";
 import { prefetchProfiles } from "@/hooks/useProfiles";
 import { cacheProfiles, getProfileFromCache, selectCachedProfileById, selectCachedProfilesByIds } from "@/lib/profileCache";
+import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Calendar, MessageCircle, Settings, Trash2, UserPlus, Loader2, Crown, Pencil, LayoutGrid, Plus, RefreshCw, CreditCard, Flame, Building2, Lock, FolderOpen, BarChart3, Archive, ArchiveRestore, ClipboardCheck, Copy, ChevronRight, ArrowRightLeft, Trophy, Eye, Radio, MoreVertical, Image as ImageIcon, FileText } from "lucide-react";
@@ -1177,6 +1178,9 @@ export default function TeamDetailPage() {
           queryClient.invalidateQueries({ queryKey: ["club", team.club_id] });
           queryClient.invalidateQueries({ queryKey: ["club-teams", team.club_id] });
         }
+        // Refresh the home carousel (React Query + localStorage snapshot) and
+        // every team-derived list so the deleted team disappears immediately.
+        await invalidateTeamLists(queryClient, user?.id);
         setShowDeleteDialog(false);
         toast({ title: "Team deleted", description: "You can restore it within 30 days." });
         navigate(`/clubs/${team?.club_id}`);
@@ -1337,6 +1341,7 @@ export default function TeamDetailPage() {
     if (user?.id) {
       queryClient.invalidateQueries({ queryKey: ["my-teams-with-messages", user.id] });
     }
+    await invalidateTeamLists(queryClient, user?.id);
   };
 
   const handlePermanentDeleteTeam = async () => {
