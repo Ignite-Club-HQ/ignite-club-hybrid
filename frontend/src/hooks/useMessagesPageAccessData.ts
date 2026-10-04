@@ -202,7 +202,7 @@ export function useMessagesPageAccessData({
       }
       return false;
     },
-    enabled,
+    enabled: !!userId && initialized,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev: boolean | undefined) => prev,
   });
@@ -211,6 +211,18 @@ export function useMessagesPageAccessData({
     queryKey: ["club-pro-status", memberClubIds],
     queryFn: async () => {
       if (!memberClubIds.length) return {};
+      // ICP: per-club Pro grants live on club_domain.
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        return withFeatureBackend("messaging", {
+          supabase: async () => ({}),
+          icp: async (ctx) => {
+            const { listLiveClubSubscriptions, liveHasAnyPro } = await import("@/live/features/proAccess");
+            const subs = await listLiveClubSubscriptions(ctx, memberClubIds);
+            return Object.fromEntries(memberClubIds.map((id) => [id, liveHasAnyPro(subs.get(id))]));
+          },
+        });
+      }
       const { data: subscriptions, error } = await client
         .from("club_subscriptions")
         .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at")
@@ -221,7 +233,7 @@ export function useMessagesPageAccessData({
         return [id, !!subscription && isActiveProSubscription(subscription)];
       }));
     },
-    enabled: memberClubIds.length > 0 && !useIcpLab && resolveAuthBackend() !== "icp",
+    enabled: memberClubIds.length > 0 && initialized,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev: Record<string, boolean> | undefined) => prev,
     retry: 2,
