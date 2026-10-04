@@ -104,6 +104,12 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         // config) from Supabase-backed screens, so a club pin must never sign
         // them out of their Supabase session.
         let isAppAdmin = false;
+        // False when the membership lookup failed, so the hint cache below
+        // is left untouched: resolving a pin from an empty membership list
+        // yields null, and caching null would ERASE the hint — after the next
+        // sign-out /auth would fall back to country rules and show the wrong
+        // sign-in screen until the user signed in again.
+        let membershipKnown = true;
         if (identity) {
           try {
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
@@ -112,6 +118,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
           } catch (error) {
             // Canister unreachable or not deployed: keep memberships empty so
             // routing falls back to country rules / the cached hint.
+            membershipKnown = false;
             console.warn("[club-backend] Could not load ICP role grants.", error);
           }
         } else {
@@ -124,7 +131,7 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
 
         const config = getBackendRoutingConfig();
         const pin = resolveClubBackendOverride(config, clubIds);
-        cacheClubBackendHint(pin);
+        if (membershipKnown) cacheClubBackendHint(pin);
         if (pin === null) {
           sessionStorage.removeItem(ENFORCED_KEY);
           settle();
