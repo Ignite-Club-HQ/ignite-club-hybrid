@@ -986,8 +986,78 @@ persistent actor class Main(governorInit : Principal) {
       case (?meta) {
         if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
-        groupMetadata := groupMetadata.concat([{ meta with deleted = true }]);
+        groupMetadata := groupMetadata.concat([{ meta with deleted = true; deleted_at_ms = ?nowMs(); deleted_by = ?caller }]);
         #Ok
+      };
+    }
+  };
+
+  // Admin restore/purge for the Deleted Chats tool. App admins act on any
+  // group; club admins only on groups of their own club.
+  func canAdminRestore(caller : Principal, meta : Types.GroupMetadata) : Bool {
+    isGovernor(caller) or hasRole(caller, "app_admin", null, null) or
+    (switch (meta.club_id) { case (?c) { hasRole(caller, "club_admin", ?c, null) }; case null { false } })
+  };
+
+  public query ({ caller }) func list_deleted_groups() : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
+    auth(caller);
+    if (isGovernor(caller) or hasRole(caller, "app_admin", null, null)) {
+      return #Ok(groupMetadata.filter(func(m) = m.deleted));
+    };
+    if (hasRole(caller, "club_admin", null, null)) {
+      return #Ok(groupMetadata.filter(func(m) = m.deleted and (switch (m.club_id) { case (?c) { hasRole(caller, "club_admin", ?c, null) }; case null { false } })));
+    };
+    #Err("Admin access required")
+  };
+
+  public shared ({ caller }) func restore_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (not meta.deleted) return #Err("Group is not deleted");
+        if (not canAdminRestore(caller, meta)) return #Err("Admin access required");
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        groupMetadata := groupMetadata.concat([{ meta with deleted = false; deleted_at_ms = null; deleted_by = null }]);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func purge_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (not meta.deleted) return #Err("Group is not deleted");
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        let scope = "group:" # conversation_id;
+        scopeMembers := scopeMembers.filter(func(r) = r.scope != scope);
+        messages := messages.filter(func(m) = m.scope != scope);
+        receipts := receipts.filter(func(r) = r.scope != scope);
+        groupReactions := groupReactions.filter(func(r) = r.scope != scope);
+        scopeSettings := scopeSettings.filter(func(s) = s.scope != scope);
+        pins := pins.filter(func(p) = p.scope != scope);
+        joinRequests := joinRequests.filter(func(r) = not (r.scope == scope and r.conversation_id == conversation_id));
+        #Ok
+      };
+    }
+  };
+
+  // Admin listing of the DM-attachment restriction lists. The per-user set
+  // stores principals directly; the per-club list returns full club settings.
+  public query ({ caller }) func list_dm_attachments_disabled() : async { #Ok : [Principal]; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    #Ok(dmAttachmentsDisabled)
+  };
+
+  public query ({ caller }) func list_club_dm_settings() : async { #Ok : [Types.ClubDmSettings]; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    #Ok(clubDmSettings.values().toArray())
+  };
       };
     }
   };
