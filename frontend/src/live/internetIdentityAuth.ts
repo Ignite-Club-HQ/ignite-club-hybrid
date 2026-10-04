@@ -299,8 +299,11 @@ export async function resumeInternetIdentitySession(): Promise<InternetIdentityS
 export async function getCurrentInternetIdentity(): Promise<Identity | null> {
   if (!activeClient) return null;
   try {
-    if (!activeClient.isAuthenticated()) return null;
+    // getIdentity() waits for the client's async restore from storage;
+    // checking isAuthenticated() first can answer "no" during that window and
+    // make a perfectly valid session look expired.
     const identity = await activeClient.getIdentity();
+    if (!activeClient.isAuthenticated()) return null;
     const principal = identity.getPrincipal();
     if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") return null;
     return identity;
