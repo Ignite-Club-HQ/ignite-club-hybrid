@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, rmSync, cpSync } from "node:fs";
 import path from "node:path";
 import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
+import { syncCanisterIds } from "./sync-canister-ids.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
@@ -36,6 +37,7 @@ function loadRootEnvFile() {
   }
 }
 loadRootEnvFile();
+syncCanisterIds();
 
 // Last-resort fallback: the connected project's public URL and anon key.
 // Both are browser-safe (the anon key ships in the client bundle anyway) and
