@@ -398,11 +398,22 @@ export function AppHeader() {
   const hintAlreadySeen = user?.id ? hasSeenClubSwitcherHint(user.id) : true;
   const { data: userClubCount = 0 } = useQuery({
     queryKey: ["user-club-count-for-switcher-hint", user?.id],
-    enabled: !!user?.id && !hintAlreadySeen && resolveAuthBackend() !== "icp",
+    enabled: !!user?.id && !hintAlreadySeen,
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!user?.id) return 0;
-      if (resolveAuthBackend() === "icp") return 0;
+      if (resolveAuthBackend() === "icp") {
+        // Lazy-imported: the header mounts on every page, so the ICP SDK
+        // must stay out of the entry chunk (same rule as miniLeagues).
+        const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return new Set(grants.map(g => g.club[0]).filter(Boolean)).size;
+          },
+        });
+      }
       const db = supabase as any;
       const [clubRoles, teamRoles, teamMemberships, clubPlayers] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
