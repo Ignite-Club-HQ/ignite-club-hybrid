@@ -585,6 +585,11 @@ export interface Main {
     { 'Ok' : Array<TeamInvite> } |
       { 'Err' : string }
   >,
+  'list_team_role_grants' : ActorMethod<
+    [string],
+    { 'Ok' : Array<AccountRole> } |
+      { 'Err' : string }
+  >,
   'list_team_sponsor_allocations' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamSponsorAllocation> } |

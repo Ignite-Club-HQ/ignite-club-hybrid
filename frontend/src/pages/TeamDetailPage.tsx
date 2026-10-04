@@ -91,8 +91,12 @@ import {
   deleteLiveTeamPermanent,
   removeLiveMember,
   requestLiveRole,
+  getLiveMyRoleGrants,
+  listLiveTeamRoleGrants,
 } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
@@ -433,6 +437,19 @@ export default function TeamDetailPage() {
   const { data: isClubAdmin, isLoading: isClubAdminLoading, isFetching: isClubAdminFetching } = useQuery({
     queryKey: ["is-club-admin", user?.id, team?.club_id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        // Live ICP: role grants live on club_domain; Supabase user_roles has
+        // no rows for Internet Identity accounts, so this query would always
+        // come back false (and the team page would offer "Request to Join"
+        // to the club's own creator).
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.some((g) => g.role === "club_admin" && (g.club?.[0] ?? null) === team!.club_id);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("id")
@@ -572,6 +589,41 @@ export default function TeamDetailPage() {
   const { data: rawMembers = [], isLoading: isMembersLoading, isFetching: isMembersFetching, isError: isMembersError, error: membersError, refetch: refetchMembers } = useQuery({
     queryKey: membershipKeys.teamRoles(id),
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        // Live ICP: the member list comes from club_domain role grants, not
+        // Supabase user_roles (which has no rows for II accounts).
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            let grants: Array<{ account_id: string; role: string }>;
+            try {
+              grants = await listLiveTeamRoleGrants(ctx, id!);
+            } catch {
+              // Pre-deploy canisters lack list_team_role_grants; fall back to
+              // the caller's own grants so they at least see themselves.
+              grants = (await getLiveMyRoleGrants(ctx))
+                .filter((g) => (g.team?.[0] ?? null) === id!)
+                .map((g) => ({ account_id: g.user.toText(), role: g.role }));
+            }
+            const accountIds = [...new Set(grants.map((g) => g.account_id))];
+            const profiles = accountIds.length > 0
+              ? await listLiveProfilesByIds(ctx, accountIds).catch(() => [])
+              : [];
+            const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+            return grants.map((g) => {
+              const p = profileMap.get(g.account_id);
+              return {
+                id: `${g.account_id}:${g.role}`,
+                user_id: g.account_id,
+                role: g.role,
+                profiles: p
+                  ? { id: g.account_id, display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null }
+                  : null,
+              };
+            });
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("id, user_id, role, profiles (id, display_name, avatar_url)")
@@ -714,6 +766,19 @@ export default function TeamDetailPage() {
   const { data: userRoleRows = [], isLoading: isUserRoleLoading } = useQuery({
     queryKey: ["user-team-roles", id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        // Live ICP: own role grants from club_domain (no Supabase user_roles
+        // rows exist for II accounts).
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants
+              .filter((g) => (g.team?.[0] ?? null) === id!)
+              .map((g) => ({ role: g.role, via_captain: null as boolean | null }));
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, via_captain")
@@ -736,19 +801,10 @@ export default function TeamDetailPage() {
     : userRoles.includes("coach") ? "coach"
     : userRoles[0] ?? null;
 
-  const { data: isAppAdmin, isLoading: isAppAdminLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !useIcpLab,
-  });
+  // Shared app-admin detection: Supabase user_roles in Supabase mode,
+  // insights_domain in ICP mode. The shared hook owns the ["is-app-admin"]
+  // query key so every page resolves it the same way.
+  const { isAppAdmin, isLoading: isAppAdminLoading } = useIsAppAdmin();
 
   const isCoachOrAdmin = userRole === "team_admin" || userRole === "coach" || isAppAdmin;
   const isAdmin = isCoachOrAdmin;

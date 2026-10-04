@@ -617,6 +617,11 @@ type Main =
        Err: text;
        Ok: vec TeamInvite;
      }) query;
+   list_team_role_grants: (team: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AccountRole;
+     }) query;
    list_team_sponsor_allocations: (club_id: text) ->
     (variant {
        Err: text;
