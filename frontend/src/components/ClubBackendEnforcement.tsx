@@ -137,6 +137,13 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
           settle();
           return;
         }
+        if (isAppAdmin) {
+          console.info(
+            `[club-backend] App admin signed in via ${provider} while a club pin requires ${required} — skipping enforcement so admin settings stay reachable.`,
+          );
+          settle();
+          return;
+        }
         if (sessionStorage.getItem(ENFORCED_KEY)) {
           console.warn(
             "[club-backend] Club pin requires backend",
