@@ -97,9 +97,11 @@ async function uploadAdImage(file: File): Promise<string> {
   const filePath = `ads/${fileName}`;
   // Platform-level ad creatives have no club scope, so the blob store's
   // club-grant path prefix does not apply — readers could not decrypt an
-  // on-chain URL. Gate ICP mode off Supabase storage entirely instead.
+  // on-chain URL. In ICP mode the creative is instead compressed to a data
+  // URL stored directly in the ad record (insights_domain), which every
+  // member reads through the normal ad-serving path.
   if (resolveAuthBackend() === "icp") {
-    throw new Error("Ad creative uploads are not available yet for Internet Identity accounts");
+    return compressImageToDataUrl(file);
   }
   const { error: uploadError } = await supabase.storage
     .from("app-ads")
