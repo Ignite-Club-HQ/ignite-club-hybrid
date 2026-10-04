@@ -1405,6 +1405,49 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       cancelled = true;
     };
   }, []);
+  // Pick up a sign-in that finished while this tab wasn't listening (tab
+  // reloaded by the phone, or the reply from the Internet Identity tab got
+  // lost). Runs once the client is warm and whenever the tab comes back,
+  // only while signed out. Safe alongside a tap-driven sign-in: until that
+  // finishes the client reports no session, and a stuck tap (dead channel)
+  // must not block this recovery.
+  useEffect(() => {
+    if (!iiSignInReady || principal) return;
+    let cancelled = false;
+    let resuming = false;
+    const tryResume = async () => {
+      if (resuming || cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      resuming = true;
+      try {
+        const mod = internetIdentityModuleRef.current ?? (await import("@/live/internetIdentityAuth"));
+        const resumed = await mod.resumeInternetIdentitySession();
+        if (resumed && !cancelled) {
+          console.info("[Auth] Resumed a completed Internet Identity sign-in.");
+          localStorage.setItem("ignite_icp_internet_identity_session", JSON.stringify(resumed));
+          setSession(resumed);
+        }
+      } catch (error) {
+        console.warn("[Auth] Could not resume Internet Identity session:", error);
+      } finally {
+        resuming = false;
+      }
+    };
+    void tryResume();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void tryResume();
+    };
+    const onReturn = () => void tryResume();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onReturn);
+    window.addEventListener("pageshow", onReturn);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onReturn);
+      window.removeEventListener("pageshow", onReturn);
+    };
+  }, [iiSignInReady, principal]);
   const signInWithIcp = async (): Promise<{ error: Error | null }> => {
     try {
       // Use the already-preloaded module reference when available so this
