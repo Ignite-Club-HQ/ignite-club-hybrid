@@ -863,6 +863,19 @@ export default function AuthPage() {
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
                   {II_SIGN_IN_HINT}
                 </p>
+                <button
+                  type="button"
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => {
+                    // Keep the existing intent params (mode / next / invite)
+                    // and just request the Supabase email screen.
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("auth", "email");
+                    navigateApp(`${window.location.pathname}?${params.toString()}`);
+                  }}
+                >
+                  Club or app admin? Sign in with email instead
+                </button>
                 {isLikelyInAppBrowser() && (
                   <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
                     You're viewing this inside another app's built-in browser, where sign-in often can't finish.
