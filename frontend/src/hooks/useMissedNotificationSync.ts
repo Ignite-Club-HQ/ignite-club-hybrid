@@ -118,7 +118,9 @@ export function useMissedNotificationSync(userId: string | undefined) {
         
         browserNotification.onclick = () => {
           window.focus();
-          window.location.href = '/notifications';
+          // Soft navigation — a full page load to a deep path hits the
+          // hosting's plain "Not Found" (no SPA fallback).
+          navigateApp('/notifications');
           browserNotification.close();
         };
         

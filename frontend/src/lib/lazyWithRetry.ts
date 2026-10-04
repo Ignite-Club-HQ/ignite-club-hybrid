@@ -74,7 +74,11 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
       const deadline = Date.now() + RECOVERY_WINDOW_MS;
       while (Date.now() < deadline) {
         if (shouldAttemptReload()) {
-          window.location.reload();
+          // Reload the ROOT, not the current URL: the published/preview
+          // hosting has no SPA fallback, so reloading a deep path returns a
+          // plain-text "Not Found". The app re-navigates to the route after
+          // boot (and a stale chunk manifest is refreshed either way).
+          window.location.replace("/");
           // Keep the promise pending while the reload happens so no error UI flashes.
           await new Promise(() => {});
         }

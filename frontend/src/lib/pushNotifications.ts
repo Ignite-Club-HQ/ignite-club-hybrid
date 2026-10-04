@@ -986,7 +986,9 @@ export async function resetPushNotifications(userId?: string, reloadAfter = fals
       } catch (e) {
         // Ignore storage errors
       }
-      window.location.reload();
+      // Reload the root, not the current URL — the hosting has no SPA
+      // fallback, so reloading a deep path shows a plain "Not Found".
+      window.location.replace("/");
       return { success: true };
     }
     
