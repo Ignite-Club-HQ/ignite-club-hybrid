@@ -85,7 +85,8 @@ import {
 } from "@/live/features/events";
 import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
-import { fetchIcpEntitlements } from "@/live/identityEntitlements";
+import { getLiveTeamSubscription } from "@/live/features/club";
+import { mapLiveTeamSubscriptionToRow, resolveLiveProAccess, resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
