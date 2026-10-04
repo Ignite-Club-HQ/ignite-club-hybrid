@@ -210,7 +210,9 @@ export default function EventsPage() {
   // Persist view mode preference to profile
   const handleViewModeChange = async (newMode: "list" | "calendar") => {
     setViewMode(newMode);
-    if (user) {
+    // View-mode preference persists to the Supabase profile only — in ICP
+    // mode there is no profiles row for the II principal, so keep it local.
+    if (user && !isIcpAuthBackend) {
       await supabase
         .from("profiles")
         .update({ events_view_mode: newMode })
@@ -926,7 +928,10 @@ export default function EventsPage() {
 
   // Get IDs of events user has viewed
   const eventIds = events?.map(e => e.id) || [];
-  const { data: viewedEventIds } = useUserEventViews(useIcpLab ? undefined : user?.id, useIcpLab ? [] : eventIds);
+  // Event-view tracking is Supabase-only; skip it in ICP mode (the II
+  // principal is not a UUID and would just error).
+  const skipViewTracking = useIcpLab || isIcpAuthBackend;
+  const { data: viewedEventIds } = useUserEventViews(skipViewTracking ? undefined : user?.id, skipViewTracking ? [] : eventIds);
 
   const handleClubChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
@@ -1021,13 +1026,15 @@ export default function EventsPage() {
     });
   }, [user, userMemberships, membershipsLoading, isLoading, isFetching, events, isInitialLoad, isStuckOnSpinner]);
 
-  // Subscribe to server-side schedule refresh broadcasts for clubs the user belongs to.
-  useScheduleBroadcastListener(userMemberships?.clubIds);
+  // Subscribe to server-side schedule refresh broadcasts for clubs the user
+  // belongs to. Broadcasts are Supabase realtime — no canister equivalent yet,
+  // so ICP mode skips the subscription and the admin broadcast action.
+  useScheduleBroadcastListener(isIcpAuthBackend ? undefined : userMemberships?.clubIds);
 
   // Long-press on the refresh button (admins only) sends a broadcast that
   // forces every connected member's schedule to re-fetch.
   const adminClubIds = userMemberships?.clubAdminClubIds ?? [];
-  const canBroadcast = adminClubIds.length > 0;
+  const canBroadcast = !isIcpAuthBackend && adminClubIds.length > 0;
   const broadcastTargetClubId = clubFilter && adminClubIds.includes(clubFilter)
     ? clubFilter
     : adminClubIds[0];
