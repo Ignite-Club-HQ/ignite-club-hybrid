@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { TeamAvatar } from "@/components/competition/TeamAvatar";
+import { navigateApp } from "@/lib/appNavigator";
 
 export function LadderView({ rows, divisions, isAdmin = false }: { rows: any[]; divisions: any[]; isAdmin?: boolean }) {
   const [filterDivisionId, setFilterDivisionId] = useState<string>("_all");
@@ -355,8 +356,10 @@ function LadderDivisionCard({ title, rows, isHidden = false }: { title: string; 
                       className="group cursor-pointer hover:bg-accent/40 active:bg-accent/60 transition-colors"
                       onClick={() => {
                         // In-app navigation: a full page load to this dynamic
-                        // path gets a plain "Not Found" from the hosting.
-                        navigate(`/teams/${r.team_id}`);
+                        // path gets a plain "Not Found" from the hosting. This
+                        // row lives in LadderDivisionCard, which has no router
+                        // hook — use the app navigator bridge instead.
+                        navigateApp(`/teams/${r.team_id}`);
                       }}
                     >
                       {RowContent}

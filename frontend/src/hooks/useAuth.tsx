@@ -13,6 +13,7 @@ import { clearUserScopedCaches } from "@/lib/clearUserScopedCaches";
 import { revokeAllForUser } from "@/lib/realtimeChannelRegistry";
 import { setAuthThemeHint } from "@/lib/authThemeHint";
 import { mark as coldMark } from "@/lib/coldStartMarks";
+import { navigateApp } from "@/lib/appNavigator";
 
 
 import { syncPasskeyAccountsFromDatabase } from "@/hooks/usePasskey";
