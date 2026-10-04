@@ -300,7 +300,16 @@ export function IcpMediaFeedPage() {
       ) : isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{[0, 1].map(i => <PhotoSkeleton key={i} />)}</div>
       ) : assets.length === 0 ? (
-        <Card className="flex flex-col items-center gap-2 p-8 text-center"><ImageIcon className="h-6 w-6 text-muted-foreground" /><p className="text-sm font-medium">No media yet</p></Card>
+        <Card className="flex flex-col items-center gap-2 p-8 text-center">
+          <ImageIcon className="h-6 w-6 text-muted-foreground" />
+          <p className="text-sm font-medium">No media yet</p>
+          {uploadAvailable && (
+            <Button size="sm" className="mt-2" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
+              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Add photos
+            </Button>
+          )}
+        </Card>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {assets.map(asset => {
