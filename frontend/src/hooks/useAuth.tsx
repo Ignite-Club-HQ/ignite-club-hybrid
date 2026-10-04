@@ -1551,7 +1551,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       // gone, or the member gets signed straight back in and the auth
       // screen hangs on "Finishing sign in…".
       const { signOutInternetIdentity } = await import("@/live/internetIdentityAuth");
+      setIiSignInReady(false);
       await signOutInternetIdentity();
+      // Sign-out disposed the auth client — prepare a fresh one so the next
+      // tap opens the Internet Identity window straight away.
+      setIiWarmGeneration((g) => g + 1);
       localStorage.removeItem("ignite_icp_internet_identity_session");
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
