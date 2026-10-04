@@ -110,3 +110,17 @@ console.log("copied dist/live-index.html -> dist/index.html");
 cpSync(liveIndex, path.join(distRoot, "404.html"));
 writeFileSync(path.join(distRoot, "_redirects"), "/* /index.html 200\n");
 console.log("wrote dist/404.html and dist/_redirects for SPA deep-link fallback");
+
+// Probes: several static hosts honor platform-specific rewrite configs. Each
+// gets a unique probe path so a single deploy can reveal which (if any) the
+// hosting respects. 200.html is the Surge-style global fallback convention.
+writeFileSync(
+  path.join(distRoot, "vercel.json"),
+  JSON.stringify({ rewrites: [{ source: "/probe-vercel", destination: "/index.html" }] }) + "\n",
+);
+writeFileSync(
+  path.join(distRoot, "firebase.json"),
+  JSON.stringify({ hosting: { rewrites: [{ source: "/probe-firebase", destination: "/index.html" }] } }) + "\n",
+);
+cpSync(liveIndex, path.join(distRoot, "200.html"));
+console.log("wrote rewrite-convention probe files (vercel.json, firebase.json, 200.html)");
