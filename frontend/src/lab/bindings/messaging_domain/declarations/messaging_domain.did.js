@@ -19,7 +19,9 @@ export const idlFactory = ({ IDL }) => {
     'description' : IDL.Opt(IDL.Text),
     'created_at_ms' : IDL.Nat64,
     'admin_only_posting' : IDL.Bool,
+    'deleted_by' : IDL.Opt(IDL.Principal),
     'club_id' : IDL.Opt(IDL.Text),
+    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'avatar' : IDL.Opt(IDL.Text),
   });
   const BroadcastResult = IDL.Record({
@@ -469,6 +471,21 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
+    'list_club_dm_settings' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubDmSettings), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_deleted_groups' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_dm_attachments_disabled' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_groups_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
@@ -540,6 +557,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'purge_group' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'recapTransform' : IDL.Func(
         [
           IDL.Record({
@@ -593,6 +615,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'request_join_group' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

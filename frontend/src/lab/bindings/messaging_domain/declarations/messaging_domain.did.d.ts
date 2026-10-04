@@ -107,7 +107,9 @@ export interface GroupMetadata {
   'description' : [] | [string],
   'created_at_ms' : bigint,
   'admin_only_posting' : boolean,
+  'deleted_by' : [] | [Principal],
   'club_id' : [] | [string],
+  'deleted_at_ms' : [] | [bigint],
   'avatar' : [] | [string],
 }
 export interface GroupRole {
@@ -262,6 +264,21 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
+  'list_club_dm_settings' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubDmSettings> } |
+      { 'Err' : string }
+  >,
+  'list_deleted_groups' : ActorMethod<
+    [],
+    { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
+  'list_dm_attachments_disabled' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_groups_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<GroupSummary> } |
@@ -324,6 +341,7 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'purge_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'recapTransform' : ActorMethod<
     [{ 'context' : Uint8Array, 'response' : HttpRequestResult }],
     HttpRequestResult
@@ -368,6 +386,7 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'send_message' : ActorMethod<
     [string, string, string, [] | [Attachment]],
     { 'Ok' : Message } |
