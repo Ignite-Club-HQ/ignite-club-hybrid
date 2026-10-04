@@ -37,6 +37,8 @@ import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams } 
 import { candidOpt } from "@/live/features/candid";
 import { addLiveRoleGrant } from "@/live/features/membership";
 import { createLivePendingInvite } from "@/live/features/club";
+import { createLiveGroupWithRoles } from "@/live/features/messaging";
+import { fetchLiveMessagingCandidates } from "@/live/messagingCandidates";
 import { Principal } from "@icp-sdk/core/principal";
 import {
   StepIntro,
@@ -264,7 +266,7 @@ export default function ClubSetupWizardPage() {
   }, [existingTeams]);
 
   useEffect(() => {
-    if (useIcp || !storageKey) return;
+    if (!storageKey) return;
     try {
       localStorage.setItem(
         storageKey,
@@ -273,7 +275,7 @@ export default function ClubSetupWizardPage() {
     } catch {
       /* quota — ignore */
     }
-  }, [useIcp, storageKey, teams, committee, groups, teamInvites]);
+  }, [storageKey, teams, committee, groups, teamInvites]);
 
   const savedTeams = teams.filter((t) => t.createdTeamId);
 
@@ -578,34 +580,6 @@ export default function ClubSetupWizardPage() {
 
   const progress = ((safeStepIndex + 1) / STEPS.length) * 100;
 
-  if (useIcp) {
-    return (
-      <div className="min-h-[100dvh] bg-background px-4 py-6">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <Button variant="ghost" onClick={() => navigate(clubId ? `/clubs/${clubId}` : "/clubs")}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to club
-          </Button>
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-            <h1 className="text-lg font-semibold">Club setup is unavailable in ICP lab mode</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {club
-                ? `${club.name} is a synthetic fixture. Team creation, invitations, branding, and setup progress are not persisted.`
-                : "This synthetic club is unavailable. Team creation, invitations, branding, and setup progress are not enabled."}
-            </p>
-          </div>
-          {existingTeams && existingTeams.length > 0 && (
-            <div className="rounded-xl border p-4">
-              <h2 className="font-medium">Synthetic teams</h2>
-              <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-                {existingTeams.map((team) => <li key={team.id}>{team.name}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background">
       {/* Header */}
@@ -832,6 +806,42 @@ function OperationalGroupsStep({
       return;
     }
     update(g.tempId, { status: "saving" });
+
+    if (isFeatureRoutedToIcp("messaging")) {
+      // ICP counterpart: messaging_domain groups have explicit members (no
+      // role-based membership mode), so seed the club's current club_admins
+      // and committee_members; the creator owns the group.
+      try {
+        await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const creator = Principal.fromText(userId);
+            const roleEntries: Array<[Principal, string]> = [[creator, "owner"]];
+            const seen = new Set<string>([creator.toText()]);
+            const candidates = await fetchLiveMessagingCandidates(ctx, [clubId], new Set());
+            for (const candidate of candidates) {
+              const key = candidate.principal.toText();
+              if (seen.has(key)) continue;
+              const matched = candidate.roles.find(
+                (r) => r.clubId === clubId && (r.role === "club_admin" || r.role === "committee_member"),
+              );
+              if (!matched) continue;
+              seen.add(key);
+              roleEntries.push([candidate.principal, matched.role === "club_admin" ? "admin" : "member"]);
+            }
+            const meta = await createLiveGroupWithRoles(ctx, clubId, null, g.name.trim(), "role_group", roleEntries);
+            update(g.tempId, { status: "saved", createdId: meta.conversation_id });
+          },
+        });
+      } catch (err: any) {
+        update(g.tempId, { status: "error", errorMsg: err?.message });
+        toast({ title: "Could not create group", description: err?.message, variant: "destructive" });
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["chat-groups"] });
+      return;
+    }
+
     const { data, error } = await supabase
       .from("chat_groups")
       .insert({
