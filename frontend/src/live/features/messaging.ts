@@ -1,5 +1,5 @@
 import type { Principal } from "@icp-sdk/core/principal";
-import { connectLiveMessagingDomain } from "../domains";
+import { connectLiveClubDomain, connectLiveMessagingDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
 
@@ -26,6 +26,20 @@ export async function createLiveConversation(
     actor.create_conversation(clubId, candidOpt(teamId), participants),
     "Create conversation",
   );
+}
+
+/**
+ * Provisions the club chat and every team chat of a club on the messaging
+ * canister (find-or-create with current membership). Any club member may
+ * trigger it; the chat pages call this before first read/send so a
+ * conversation missing on the messaging canister self-heals.
+ */
+export async function ensureLiveClubConversations(
+  ctx: FeatureBackendContext,
+  clubId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.ensure_club_conversations(clubId), "Ensure club conversations");
 }
 
 export async function listLiveMessages(

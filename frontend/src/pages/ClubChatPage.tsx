@@ -102,7 +102,8 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveMessagesPage, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 
 const MESSAGES_PER_PAGE = 30;

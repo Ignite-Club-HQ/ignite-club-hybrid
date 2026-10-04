@@ -117,7 +117,8 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveMessagesPage, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const PinVaultSheet = lazyWithRetry(() => import("@/components/chat/PinVaultSheet").then(m => ({ default: m.PinVaultSheet })));
