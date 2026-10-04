@@ -76,6 +76,7 @@ module {
     var seasonPlayerStats : [SeasonPlayerStat];
     var notificationQueueCanister : ?Principal;
     var clubSubscriptions : [ClubSubscription];
+    var appConfig : [(Text, Text)];
   };
   type NewActor = {
     var governor : Principal; var acl : Acl; var aclVersion : Nat64;
