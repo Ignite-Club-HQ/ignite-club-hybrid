@@ -394,6 +394,11 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   ensure_club_conversations: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
    export_acl: () -> (variant {
                         Err: text;
                         Ok: Config;

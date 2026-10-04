@@ -363,6 +363,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'ensure_club_conversations' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'export_acl' : ActorMethod<[], { 'Ok' : Config } | { 'Err' : string }>,
   'export_frozen_club' : ActorMethod<
     [string],
