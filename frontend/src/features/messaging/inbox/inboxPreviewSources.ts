@@ -132,8 +132,10 @@ export async function fetchMemberClubsWithMessages(
   if (resolveAuthBackend() === "icp") {
     const ctx = await getIcpFeatureBackendContext();
     const roleGrants = await getLiveMyRoleGrants(ctx);
+    // club_domain RoleGrant is { club, team, role, user } — candid opt fields
+    // arrive as [] | [string].
     const clubIds = [...new Set(
-      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+      (roleGrants as any[]).map((grant) => grant.club?.[0] ?? grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
     )] as string[];
     if (clubIds.length === 0) return { clubs: [] as InboxClub[], latestMessages: {} };
     const allClubs = await listLiveMembershipClubs(ctx);
@@ -220,11 +222,13 @@ export async function fetchTeamsWithMessages(
   if (resolveAuthBackend() === "icp") {
     const ctx = await getIcpFeatureBackendContext();
     const roleGrants = await getLiveMyRoleGrants(ctx);
+    // club_domain RoleGrant is { club, team, role, user } — candid opt fields
+    // arrive as [] | [string].
     const teamIds = [...new Set(
-      (roleGrants as any[]).map((grant) => grant.team_id?.[0]).filter(Boolean),
+      (roleGrants as any[]).map((grant) => grant.team?.[0] ?? grant.team_id?.[0]).filter(Boolean),
     )] as string[];
     const clubIds = [...new Set(
-      (roleGrants as any[]).map((grant) => grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
+      (roleGrants as any[]).map((grant) => grant.club?.[0] ?? grant.club_id?.[0] ?? grant.club_id).filter(Boolean),
     )] as string[];
     if (teamIds.length === 0 || clubIds.length === 0) return { teams: [] as InboxTeam[], latestMessages: {} };
     const allClubs = await listLiveMembershipClubs(ctx);
