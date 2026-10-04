@@ -18,6 +18,7 @@ import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
 import { useIcpAuthScreen } from "@/live/authBackendMode";
+import { describeIcpSignInError, isLikelyInAppBrowser, II_SIGN_IN_HINT } from "@/lib/internetIdentitySignInHelp";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -731,6 +732,10 @@ export default function AuthPage() {
       let message = error.message;
       if (message.includes("Network") || message.includes("fetch")) {
         message = "Please check your internet connection and try again.";
+      } else if (useIcpLab) {
+        // Translate terse signer errors ("Channel was closed before a
+        // response was received") into what happened and what to do next.
+        message = describeIcpSignInError(message);
       }
       toast({
         title: useIcpLab ? "Unable to sign in with Internet Identity" : "Unable to sign in with Google",
