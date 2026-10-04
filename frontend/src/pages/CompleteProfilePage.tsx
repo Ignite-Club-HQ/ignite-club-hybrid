@@ -547,6 +547,7 @@ function SupabaseCompleteProfilePage() {
           return;
         }
       }
+      }
 
       // Set light theme as default for new users (only if no theme is already active)
       const existingTheme = localStorage.getItem('app-theme');
