@@ -560,7 +560,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('[Auth] PASSWORD_RECOVERY event - routing to reset password');
           handleSession(currentSession, false, false);
           if (typeof window !== 'undefined' && window.location.pathname !== '/reset-password') {
-            window.location.href = '/reset-password';
+            // Soft navigation — a full page load to a deep path hits the
+            // hosting's plain "Not Found" (no SPA fallback).
+            navigateApp('/reset-password');
           }
         } else if (event === 'SIGNED_IN') {
           const isSameUserResuming = !!previousUserId && previousUserId === incomingUserId;
