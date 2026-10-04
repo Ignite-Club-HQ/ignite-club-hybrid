@@ -2613,7 +2613,7 @@ persistent actor class Main(governorInit : Principal) {
         is_pro = false; is_pro_football = false; is_trial = false;
         trial_ends_at_ms = null; cancelled_at_ms = null;
         admin_pro_override = false; admin_pro_football_override = false;
-        disable_auto_subs = false; rotation_speed = 1 : Nat32;
+        disable_auto_subs = false; rotation_speed = (1 : Nat32);
         disable_position_swaps = false; disable_batch_subs = false;
         rotate_gk_at_halftime = true; minutes_per_half = null;
         max_spread_minutes = null; team_size = null;
