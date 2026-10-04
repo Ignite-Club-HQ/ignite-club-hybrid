@@ -34,6 +34,17 @@ type TeamInvite =
    role: text;
    team_id: text;
  };
+type TeamFolder = 
+ record {
+   club_id: text;
+   color: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   description: opt text;
+   id: text;
+   name: text;
+   sort_order: nat32;
+ };
 type TeamCreationRequest = 
  record {
    age_group: opt text;
@@ -375,6 +386,10 @@ type Main =
                                     Err: text;
                                     Ok;
                                   });
+   delete_team_folder: (folder_id: text) -> (variant {
+                                               Err: text;
+                                               Ok;
+                                             });
    delete_team_permanent: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -592,6 +607,11 @@ type Main =
        Err: text;
        Ok: vec TeamCreationRequest;
      }) query;
+   list_team_folders: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamFolder;
+     }) query;
    list_team_invites: (club_id: text, team_id: opt text) ->
     (variant {
        Err: text;
@@ -763,6 +783,11 @@ type Main =
                                      Err: text;
                                      Ok: ClubTeam;
                                    });
+   save_team_folder: (folder: TeamFolder) ->
+    (variant {
+       Err: text;
+       Ok: TeamFolder;
+     });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {
                                Err: text;
@@ -814,6 +839,11 @@ type Main =
     (variant {
        Err: text;
        Ok;
+     });
+   set_team_folder: (team_id: text, folder_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ClubTeam;
      });
    set_team_player_position: (team_id: text, member_id: text, position:
     text) -> (variant {
@@ -963,6 +993,7 @@ type ClubTeam =
    deleted_at_ms: opt nat64;
    description: opt text;
    division: opt text;
+   folder_id: opt text;
    gender: opt text;
    id: text;
    is_active: bool;
