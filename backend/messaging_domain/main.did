@@ -258,6 +258,11 @@ type Main =
        Err: text;
        Ok: nat32;
      });
+   ensure_conversation: (club_id: text, team_id: opt text, participants:
+    vec principal) -> (variant {
+                         Err: text;
+                         Ok: Conversation;
+                       });
    export_state: () -> (variant {
                           Err: text;
                           Ok: State;

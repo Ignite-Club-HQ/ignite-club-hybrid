@@ -117,7 +117,8 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveMessagesPage, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 const PinVaultSheet = lazyWithRetry(() => import("@/components/chat/PinVaultSheet").then(m => ({ default: m.PinVaultSheet })));
@@ -487,6 +488,57 @@ export default function TeamChatPage() {
           hasOlderMessages: false,
           fromCache: false,
         };
+      }
+
+      // Live ICP: team id doubles as the conversation id on the messaging
+      // canister (deterministic ids; club_domain provisions via
+      // ensure_club_conversations). Reactions, replies and forwarded
+      // metadata are Supabase-only for now.
+      if (isFeatureRoutedToIcp("messaging") && teamId && user?.id) {
+        return await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            if (team?.club_id) {
+              try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
+            }
+            const page = await listLiveMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE + 1);
+            const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
+            const profilesMap = await fetchProfilesWithCache(authorIds);
+            const messages = page.messages
+              .slice()
+              .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+              .slice(0, MESSAGES_PER_PAGE)
+              .map((m: any) => {
+                const profile = profilesMap.get(m.sender.toText());
+                const attachment = m.attachment?.[0];
+                return {
+                  id: m.id,
+                  text: m.body,
+                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
+                  edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+                  author_id: m.sender.toText(),
+                  team_id: teamId,
+                  reply_to_id: null,
+                  deleted_at: null,
+                  is_club_announcement: false,
+                  club_announcement_name: null,
+                  is_system_message: false,
+                  forwarded_from_user_id: null,
+                  forwarded_at: null,
+                  forwarded_source_label: null,
+                  profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+                  reactions: [],
+                  reply_to: null,
+                };
+              }) as unknown as Message[];
+            return {
+              messages,
+              hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+              fromCache: false,
+            };
+          },
+        });
       }
 
       // If offline, return cached messages using the React Query online manager
@@ -1233,7 +1285,10 @@ export default function TeamChatPage() {
   const { mode: teamRealtimeMode, intervalMs: teamPollIntervalMs } = useClubRealtimeMode(team?.club_id ?? null);
 
   useEffect(() => {
-    if (!teamId || useIcpLab || teamRealtimeMode !== "polling") return;
+    if (!teamId || useIcpLab) return;
+    // The messaging canister has no realtime broadcast — live ICP always polls.
+    const icpMessaging = isFeatureRoutedToIcp("messaging");
+    if (!icpMessaging && teamRealtimeMode !== "polling") return;
     const id = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
     }, teamPollIntervalMs);
@@ -1526,9 +1581,11 @@ export default function TeamChatPage() {
           if (error) throw error;
         },
         icp: async (ctx) => {
-          // Provisional mapping: team id doubles as the conversation id (same
-          // convention as the read-side poll). Reply threading is
-          // Supabase-only.
+          // Team id doubles as the conversation id (deterministic on the
+          // messaging canister). Reply threading is Supabase-only.
+          if (team?.club_id) {
+            try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
+          }
           const attachment = image_url
             ? { kind: "image", refId: image_url, url: image_url }
             : (() => {

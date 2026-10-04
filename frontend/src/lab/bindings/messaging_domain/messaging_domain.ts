@@ -361,6 +361,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    ensure_conversation(club_id: string, team_id: string | null, participants: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     export_state(): Promise<{
         __kind__: "Ok";
         Ok: State;
@@ -1110,6 +1117,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.enable_ai_catch_up_for_all_members(arg0);
         return from_candid_variant_n16(result);
+    }
+    async ensure_conversation(arg0: string, arg1: string | null, arg2: Array<Principal>): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ensure_conversation(arg0, to_candid_opt_n12(arg1), arg2);
+        return from_candid_variant_n13(result);
     }
     async export_state(): Promise<{
         __kind__: "Ok";

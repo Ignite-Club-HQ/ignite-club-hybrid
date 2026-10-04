@@ -255,8 +255,13 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func save_team(team : Types.ClubTeam) : async { #Ok : Types.ClubTeam; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
+    let isNew = not teams.any(func(t) = t.id == team.id);
     teams := teams.filter(func(t) = t.id != team.id);
     teams := teams.concat([team]);
+    if (isNew) {
+      // Provision the team chat on the messaging canister (best-effort).
+      ignore fanOutEnsureConversation(team.club_id, ?team.id, teamChatParticipants(team.club_id, team.id));
+    };
     #Ok(team)
   };
 
@@ -926,6 +931,12 @@ persistent actor class Main(governorInit : Principal) {
     acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club; team }]) };
     let accountId = accountIdFor(user);
     accountRoles := accountRoles.concat([{ account_id = accountId; club = ?club; role; team }]);
+    // Refresh chat participants so the member sees their chats immediately.
+    ignore fanOutEnsureConversation(club, null, clubChatParticipants(club));
+    switch (team) {
+      case (?t) { ignore fanOutEnsureConversation(club, ?t, teamChatParticipants(club, t)) };
+      case null {};
+    };
     #Ok
   };
 
@@ -1008,6 +1019,11 @@ persistent actor class Main(governorInit : Principal) {
         if (req.status != "pending") return #Err("Request already processed");
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = req.role; club = ?req.club; team = req.team }]) };
         accountRoles := accountRoles.concat([{ account_id = req.account_id; club = ?req.club; role = req.role; team = req.team }]);
+        ignore fanOutEnsureConversation(req.club, null, clubChatParticipants(req.club));
+        switch (req.team) {
+          case (?t) { ignore fanOutEnsureConversation(req.club, ?t, teamChatParticipants(req.club, t)) };
+          case null {};
+        };
         let updated : Types.RoleRequest = { req with status = "approved"; decided_at_ms = ?nowMs(); decided_by = ?caller };
         roleRequests := roleRequests.map(func(r) = if (r.id == id) updated else r);
         #Ok(updated)
@@ -1605,6 +1621,8 @@ persistent actor class Main(governorInit : Principal) {
       acl := { acl with roles = acl.roles.concat([{ user; role; club = ?club_id; team = ?team_id }]) };
       accountRoles := accountRoles.concat([{ account_id = accountIdFor(user); club = ?club_id; role; team = ?team_id }]);
     };
+    ignore fanOutEnsureConversation(club_id, null, clubChatParticipants(club_id));
+    ignore fanOutEnsureConversation(club_id, ?team_id, teamChatParticipants(club_id, team_id));
     #Ok(users.size())
   };
 
@@ -1781,6 +1799,8 @@ persistent actor class Main(governorInit : Principal) {
     profiles := profiles.concat([profile]);
     acl := { acl with roles = acl.roles.concat([{ user = caller; role = "club_admin"; club = ?id; team = null }]) };
     accountRoles := accountRoles.concat([{ account_id = accountIdFor(caller); club = ?id; role = "club_admin"; team = null }]);
+    // Provision the club chat on the messaging canister (best-effort).
+    ignore fanOutEnsureConversation(id, null, [caller]);
     #Ok(profile)
   };
 
@@ -1815,6 +1835,7 @@ persistent actor class Main(governorInit : Principal) {
         if (req.status != "pending") return #Err("Request already processed");
         acl := { acl with roles = acl.roles.concat([{ user = req.user; role = "member"; club = ?req.club_id; team = null }]) };
         accountRoles := accountRoles.concat([{ account_id = accountIdFor(req.user); club = ?req.club_id; role = "member"; team = null }]);
+        ignore fanOutEnsureConversation(req.club_id, null, clubChatParticipants(req.club_id));
         let updated : Types.ClubJoinRequest = { req with status = "approved"; decided_at_ms = ?nowMs(); decided_by = ?caller };
         clubJoinRequests := clubJoinRequests.map(func(r) = if (r.id == id) updated else r);
         #Ok(updated)
@@ -2328,6 +2349,76 @@ persistent actor class Main(governorInit : Principal) {
     seasonTeamSummaries := seasonTeamSummaries.filter(func(s) = s.club_id != id);
     seasonPlayerStats := seasonPlayerStats.filter(func(s) = s.club_id != id);
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != id);
+  };
+
+  // ---- Chat conversation provisioning (messaging_domain fan-out) ----
+  // The messaging canister keys club/team chats by deterministic id (club
+  // id / team id); these helpers keep those conversations and their
+  // participant lists in sync with this canister's authoritative roles.
+
+  // Club-chat participants: every principal holding any grant scoped to the
+  // club. App-wide grants (club == null, e.g. app_admin) are excluded —
+  // they are not club members.
+  func clubChatParticipants(clubId : Text) : [Principal] {
+    var result : [Principal] = [];
+    for (grant in acl.roles.values()) {
+      if (grant.club == ?clubId and result.size() < 500 and not result.any(func(p) = p.equal(grant.user))) {
+        result := result.concat([grant.user]);
+      };
+    };
+    result
+  };
+
+  // Team-chat participants: principals with a grant for this team plus club
+  // admins (club staff can read and post in every team chat, matching the
+  // Supabase client behaviour).
+  func teamChatParticipants(clubId : Text, teamId : Text) : [Principal] {
+    var result : [Principal] = [];
+    for (grant in acl.roles.values()) {
+      let inScope = grant.club == ?clubId and (grant.team == ?teamId or grant.role == "club_admin");
+      if (inScope and result.size() < 500 and not result.any(func(p) = p.equal(grant.user))) {
+        result := result.concat([grant.user]);
+      };
+    };
+    result
+  };
+
+  // Best-effort: a missing/unconfigured messaging canister never blocks
+  // club or membership writes.
+  func fanOutEnsureConversation(clubId : Text, teamId : ?Text, participants : [Principal]) : async () {
+    if (participants.size() == 0) return;
+    switch (messagingDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { ensure_conversation : shared (Text, ?Text, [Principal]) -> async { #Ok : { id : Text }; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.ensure_conversation(clubId, teamId, participants) } catch (_) {};
+      };
+    };
+  };
+
+  // Ensures the club chat and every live team chat of the club exist with
+  // current membership. Idempotent; returns conversations ensured.
+  func fanOutEnsureClubConversations(clubId : Text) : async Nat32 {
+    var ensured : Nat32 = 0;
+    await fanOutEnsureConversation(clubId, null, clubChatParticipants(clubId));
+    ensured += 1;
+    for (team in teams.values()) {
+      if (team.club_id == clubId and team.deleted_at_ms == null) {
+        await fanOutEnsureConversation(clubId, ?team.id, teamChatParticipants(clubId, team.id));
+        ensured += 1;
+      };
+    };
+    ensured
+  };
+
+  // Lazy catch-up any club member may call — provisions chats for clubs
+  // and teams created before this wiring existed. The chat pages call this
+  // before first read/send so a missing conversation self-heals.
+  public shared ({ caller }) func ensure_club_conversations(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    if (messagingDomainCanister == null) return #Err("Messaging domain not configured");
+    #Ok(await fanOutEnsureClubConversations(club_id))
   };
 
   func fanOutTeamPurged(teamId : Text) : async () {

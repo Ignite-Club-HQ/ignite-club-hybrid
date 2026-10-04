@@ -401,6 +401,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_conversation' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
     'export_state' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : State, 'Err' : IDL.Text })],

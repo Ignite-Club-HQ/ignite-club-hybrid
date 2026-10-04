@@ -590,6 +590,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_club_conversations' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'export_acl' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Config, 'Err' : IDL.Text })],
