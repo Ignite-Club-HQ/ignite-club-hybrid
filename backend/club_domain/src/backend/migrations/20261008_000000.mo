@@ -103,6 +103,12 @@ module {
     var clubSubscriptions : [ClubSubscription];
     var appConfig : [(Text, Text)];
     var teamFolders : [TeamFolder];
+    // Downstream canister ids for the permanent-delete fan-out; fail-open-
+    // by-skip (cleanup skipped while unset) until the deploy script wires
+    // them.
+    var eventsDomainCanister : ?Principal;
+    var messagingDomainCanister : ?Principal;
+    var piiCanister : ?Principal;
   };
   public func migration(old : OldActor) : NewActor {
     {
@@ -144,6 +150,9 @@ module {
       var clubSubscriptions = old.clubSubscriptions;
       var appConfig = old.appConfig;
       var teamFolders = [];
+      var eventsDomainCanister = null;
+      var messagingDomainCanister = null;
+      var piiCanister = null;
     }
   };
 };

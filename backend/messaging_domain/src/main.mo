@@ -58,6 +58,10 @@ persistent actor class Main(governorInit : Principal) {
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
   var notificationQueueCanister : ?Principal;
+  // Governor-set club_domain canister id for the permanent-delete fan-out.
+  // Fail-closed while unset: delete_club_data/delete_team_data reject every
+  // caller until the deploy script wires this.
+  var clubDomainCanister : ?Principal;
   // Platform -> minimum required version/build, set by the governor. Read by
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).
@@ -305,6 +309,72 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
     notificationQueueCanister := ?id;
     #Ok
+  };
+
+  // ---- club_domain permanent-delete fan-out ----
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  // Removes every conversation in scope plus all conversation-keyed state
+  // (messages, receipts, polls, attachments, reactions, pins, joins, mutes,
+  // scheduled sends, forwards, group roles/metadata). `club` additionally
+  // clears club-keyed state (memberships, DM settings). Returns the number
+  // of conversations removed. Per-user state (blocks, presence, personal
+  // settings) and global config are deliberately kept.
+  func purgeConversations(isDoomed : (Types.Conversation) -> Bool, club : ?Text) : Nat32 {
+    let doomedIds = conversations.filter(isDoomed).map(func(c) = c.id);
+    func inDoomed(conversationId : Text) : Bool { doomedIds.any(func(d) = d == conversationId) };
+    func inClub(value : Text) : Bool { switch (club) { case (?c) { value == c }; case null { false } } };
+    let doomedMessageIds = messages.filter(func(m) = inDoomed(m.conversation_id)).map(func(m) = m.id);
+    func isDoomedMessage(messageId : Text) : Bool { doomedMessageIds.any(func(d) = d == messageId) };
+    let doomedPollIds = polls.filter(func(p) = inDoomed(p.conversation_id)).map(func(p) = p.id);
+    func isDoomedPoll(pollId : Text) : Bool { doomedPollIds.any(func(d) = d == pollId) };
+    conversations := conversations.filter(func(c) = not inDoomed(c.id));
+    messages := messages.filter(func(m) = not inDoomed(m.conversation_id));
+    receipts := receipts.filter(func(r) = not inDoomed(r.conversation_id));
+    unread := unread.filter(func(u) = not inDoomed(u.conversation_id));
+    groupMetadata := groupMetadata.filter(func(g) = not inDoomed(g.conversation_id) and (switch (g.club_id) { case (?c) { not inClub(c) }; case null { true } }));
+    clubMemberships := clubMemberships.filter(func(m) = not inClub(m.club_id));
+    competitionAdmins := competitionAdmins.filter(func(a) = not inDoomed(a.conversation_id));
+    groupRoles := groupRoles.filter(func(r) = not inDoomed(r.conversation_id));
+    joinRequests := joinRequests.filter(func(r) = not inDoomed(r.conversation_id));
+    polls := polls.filter(func(p) = not inDoomed(p.conversation_id));
+    pollVotes := pollVotes.filter(func(v) = not isDoomedPoll(v.poll_id));
+    mutePreferences := mutePreferences.filter(func(m) = not inDoomed(m.conversation_id));
+    dmLinks := dmLinks.filter(func(l) = not inDoomed(l.conversation_id));
+    forwardRecords := forwardRecords.filter(func(f) = not inDoomed(f.to_conversation_id) and not inDoomed(f.from_conversation_id));
+    scheduledMessages := scheduledMessages.filter(func(s) = not inDoomed(s.conversation_id));
+    attachmentMetadata := attachmentMetadata.filter(func(a) = not inDoomed(a.conversation_id));
+    reactions := reactions.filter(func(r) = not isDoomedMessage(r.message_id));
+    clubDmSettings := clubDmSettings.filter(func(s) = not inClub(s.club_id));
+    typingPings := typingPings.filter(func(t) = not inDoomed(t.conversation_id));
+    pinnedMessages := pinnedMessages.filter(func(p) = not inDoomed(p.conversation_id));
+    Nat.toNat32(doomedIds.size())
+  };
+
+  // Called by club_domain when a club is permanently deleted (manually or
+  // by the 30-day auto-purge). Only the configured club_domain canister may
+  // call; fail-closed while unset.
+  public shared ({ caller }) func delete_club_data(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
+    };
+    #Ok(purgeConversations(func(c) = c.club_id == club_id, ?club_id))
+  };
+
+  // Called by club_domain when a single team is permanently deleted.
+  public shared ({ caller }) func delete_team_data(team_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    switch (clubDomainCanister) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
+    };
+    #Ok(purgeConversations(func(c) = c.team_id == ?team_id, null))
   };
 
   func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {

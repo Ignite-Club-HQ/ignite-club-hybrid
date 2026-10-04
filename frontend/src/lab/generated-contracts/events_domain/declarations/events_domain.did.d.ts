@@ -397,6 +397,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_club_data' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'delete_event' : ActorMethod<[string], { 'Ok' : Event } | { 'Err' : string }>,
   'delete_event_group' : ActorMethod<
     [string],
@@ -405,6 +410,11 @@ export interface Main {
   >,
   'delete_series' : ActorMethod<
     [string, bigint],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'delete_team_data' : ActorMethod<
+    [string],
     { 'Ok' : number } |
       { 'Err' : string }
   >,
@@ -775,6 +785,11 @@ export interface Main {
   'set_attendance' : ActorMethod<
     [string, string, boolean, string],
     { 'Ok' : Attendance } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_coach_note' : ActorMethod<

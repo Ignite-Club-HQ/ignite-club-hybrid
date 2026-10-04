@@ -891,6 +891,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(ProfileTeamHistoryEntry)],
         ['query'],
       ),
+    'purge_expired_deletions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'reject_club_join_request' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubJoinRequest, 'Err' : IDL.Text })],
@@ -1097,7 +1102,22 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_events_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_messaging_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_notification_queue_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pii_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],

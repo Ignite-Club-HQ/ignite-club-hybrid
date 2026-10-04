@@ -392,6 +392,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    delete_club_data(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     delete_event(id: string): Promise<{
         __kind__: "Ok";
         Ok: Event;
@@ -407,6 +414,13 @@ export interface MainInterface {
         Err: string;
     }>;
     delete_series(id: string, from_ms: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    delete_team_data(team_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
     } | {
@@ -849,6 +863,13 @@ export interface MainInterface {
     set_attendance(event_id: string, account_id: string, present: boolean, note: string): Promise<{
         __kind__: "Ok";
         Ok: Attendance;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_club_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -1386,6 +1407,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.deactivate_active_game(to_candid_opt_n3(arg0));
         return from_candid_variant_n1(result);
     }
+    async delete_club_data(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_club_data(arg0);
+        return from_candid_variant_n40(result);
+    }
     async delete_event(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Event;
@@ -1414,6 +1445,16 @@ export class Events_domain implements events_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_series(arg0, arg1);
+        return from_candid_variant_n40(result);
+    }
+    async delete_team_data(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_team_data(arg0);
         return from_candid_variant_n40(result);
     }
     async delete_team_training_pause(arg0: string): Promise<{
@@ -2050,6 +2091,16 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.set_attendance(arg0, arg1, arg2, arg3);
         return from_candid_variant_n155(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n1(result);
     }
     async set_coach_note(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

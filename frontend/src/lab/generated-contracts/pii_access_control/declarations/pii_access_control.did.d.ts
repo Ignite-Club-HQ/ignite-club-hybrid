@@ -68,6 +68,11 @@ export interface Main {
   >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
   'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
+  'purge_club_grants' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'register_pii' : ActorMethod<
     [string, string, Uint8Array, Principal],
     { 'Ok' : EncryptedPii } |

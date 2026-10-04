@@ -523,6 +523,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_club_data' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_event' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
@@ -535,6 +540,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'delete_series' : IDL.Func(
         [IDL.Text, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_team_data' : IDL.Func(
+        [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
@@ -960,6 +970,11 @@ export const idlFactory = ({ IDL }) => {
     'set_attendance' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Bool, IDL.Text],
         [IDL.Variant({ 'Ok' : Attendance, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_coach_note' : IDL.Func(

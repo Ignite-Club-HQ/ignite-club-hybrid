@@ -45,6 +45,8 @@ cid() { node -e "const m=require('$IDS_JSON');const v=m['$1'];if(!v){console.err
 CLUB_DOMAIN="$(cid club_domain)"
 NOTIFICATION_QUEUE="$(cid notification_queue)"
 MESSAGING_DOMAIN="$(cid messaging_domain)"
+EVENTS_DOMAIN="$(cid events_domain)"
+PII_ACCESS_CONTROL="$(cid pii_access_control)"
 
 echo "==> Wiring: timer_jobs.initialize() (first-caller-wins governor)"
 icp canister call timer_jobs initialize '()' -e ic
@@ -62,6 +64,16 @@ icp canister call events_domain set_notification_queue_canister "(principal \"$N
 
 echo "==> Wiring: media_blob_store -> club_domain"
 icp canister call media_blob_store set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e ic
+
+echo "==> Wiring: permanent-delete fan-out (club_domain -> events/messaging/pii, events/messaging <- club_domain)"
+# Without these, club_domain skips cross-canister cleanup (local purge still
+# completes) and events_domain/messaging_domain reject every delete_*_data
+# call — fail-open-by-skip on the sender, fail-closed on the receivers.
+icp canister call club_domain set_events_domain_canister "(principal \"$EVENTS_DOMAIN\")" -e ic
+icp canister call club_domain set_messaging_domain_canister "(principal \"$MESSAGING_DOMAIN\")" -e ic
+icp canister call club_domain set_pii_canister "(principal \"$PII_ACCESS_CONTROL\")" -e ic
+icp canister call events_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e ic
+icp canister call messaging_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e ic
 
 echo ""
 echo "==> Deploy complete. Canister IDs — paste into /admin/placement-settings → Canister configuration:"
