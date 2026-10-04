@@ -19,7 +19,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import * as fixtureData from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
 import { getSportEmoji, SPORT_EMOJIS } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -127,7 +129,33 @@ export default function ClubsPage() {
     queryKey: ["clubs"],
     queryFn: async () => {
       if (useIcpLab) {
-        return fixtureData.getLocalLabClubList() as Club[];
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // The caller's clubs come from their club_domain role grants —
+            // the same store create_club writes the creator's club_admin
+            // grant to. There is no public club directory on the canister,
+            // so the search box only searches within these.
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const clubs = await Promise.all(clubIds.map(async (clubId) => {
+              const row = await getLiveClubProfile(ctx, clubId);
+              const p = row.length ? row[0] : null;
+              if (!p || p.deleted_at_ms.length) return null;
+              return {
+                id: p.id,
+                name: p.name,
+                logo_url: p.logo_url[0] ?? null,
+                description: p.description[0] ?? null,
+                sport: p.sport[0] ?? null,
+                is_pro: false,
+                created_by: null,
+                primary_sponsor_id: null,
+              } as Club;
+            }));
+            return clubs.filter((c): c is Club => c !== null);
+          },
+        });
       }
 
       const { data, error } = await supabase
