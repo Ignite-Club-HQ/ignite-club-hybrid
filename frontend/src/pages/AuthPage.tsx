@@ -139,18 +139,14 @@ export default function AuthPage() {
   // Auth screen follows Admin → Infrastructure / Placement Settings:
   // Internet Identity when ICP is the effective backend for this visitor,
   // Supabase email/password + Google otherwise.
-  // `?auth=email` lets app admins reach the Supabase email sign-in even when
-  // their club is pinned to ICP — app-admin accounts live in Supabase, so the
-  // Internet Identity screen alone would lock them out of Placement Settings.
+  // `?auth=icp` is the recovery hatch: if the cached club-backend hint was
+  // ever lost (e.g. a failed membership lookup cleared it), the screen would
+  // default to email even for an ICP-pinned club — this lets the member force
+  // the Internet Identity screen and re-cache the hint on sign-in. Only
+  // honoured when canisters are actually configured.
   const authParam = new URLSearchParams(window.location.search).get("auth");
-  const forceEmailAuth = authParam === "email";
-  // `?auth=icp` is the symmetric recovery hatch: if the cached club-backend
-  // hint was ever lost (e.g. a failed membership lookup cleared it), the
-  // screen would default to email even for an ICP-pinned club — this lets the
-  // member force the Internet Identity screen and re-cache the hint on
-  // sign-in. Only honoured when canisters are actually configured.
   const forceIcpAuth = authParam === "icp" && isIcpAuthAvailable();
-  const useIcpLab = forceIcpAuth || (useIcpAuthScreen() && !forceEmailAuth);
+  const useIcpLab = forceIcpAuth || useIcpAuthScreen();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -869,19 +865,6 @@ export default function AuthPage() {
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
                   {II_SIGN_IN_HINT}
                 </p>
-                <button
-                  type="button"
-                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
-                  onClick={() => {
-                    // Keep the existing intent params (mode / next / invite)
-                    // and just request the Supabase email screen.
-                    const params = new URLSearchParams(searchParams);
-                    params.set("auth", "email");
-                    setSearchParams(params, { replace: true });
-                  }}
-                >
-                  Club or app admin? Sign in with email instead
-                </button>
                 {isLikelyInAppBrowser() && (
                   <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
                     You're viewing this inside another app's built-in browser, where sign-in often can't finish.
