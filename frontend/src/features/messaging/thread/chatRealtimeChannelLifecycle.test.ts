@@ -105,12 +105,15 @@ describe("startChatRealtimeChannel", () => {
       expect(subscribe).not.toHaveBeenCalled();
       expect(registerChannel).not.toHaveBeenCalled();
 
+      // Visible-tab poll interval is 10s (CHAT_POLL_INTERVAL_VISIBLE_MS),
+      // so 30s of fake time yields three ticks.
       vi.advanceTimersByTime(30000);
       expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["dm-messages", "conv-1"] });
+      expect(invalidateQueries).toHaveBeenCalledTimes(3);
 
       cleanup();
       vi.advanceTimersByTime(60000);
-      expect(invalidateQueries).toHaveBeenCalledTimes(1);
+      expect(invalidateQueries).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }
