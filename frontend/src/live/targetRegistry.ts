@@ -1,4 +1,5 @@
 import { mergeIcpTargetWithAdminOverrides } from "./icpAdminOverrides";
+import { DEPLOYED_MAINNET_CANISTER_IDS } from "./generated/deployedCanisterIds";
 
 type BackendProvider = "supabase" | "icp";
 
@@ -161,7 +162,9 @@ function defaultIcpTargets(): IcpTargetConfig[] {
       alias: optionalEnv("IGNITE_LIVE_ICP_ALIAS") ?? DEFAULT_ICP_ALIAS,
       networkKind: optionalEnv("IGNITE_LIVE_ICP_NETWORK_KIND") === "cloud_engine" ? "cloud_engine" : "public_mainnet",
       host: optionalEnv("IGNITE_LIVE_ICP_HOST") ?? DEFAULT_ICP_HOST,
-      canisterIds: canisterIds ? JSON.parse(canisterIds) as Record<string, string> : {},
+      // Env JSON wins; otherwise fall back to the deployed mainnet ID table
+      // synced from deploy/mainnet/.icp/data/mappings/ic.ids.json at build time.
+      canisterIds: canisterIds ? JSON.parse(canisterIds) as Record<string, string> : { ...DEPLOYED_MAINNET_CANISTER_IDS },
       wsGatewayUrl: optionalEnv("IGNITE_LIVE_ICP_WS_GATEWAY_URL"),
       supportedDomains: optionalEnv("IGNITE_LIVE_ICP_SUPPORTED_DOMAINS")?.split(",").map(item => item.trim()).filter(Boolean),
       residencyProfile: optionalEnv("IGNITE_LIVE_ICP_RESIDENCY_PROFILE"),

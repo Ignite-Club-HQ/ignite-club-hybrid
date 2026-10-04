@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync, statSync, rmSync } from "node:fs";
 import path from "node:path";
 import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
+import { syncCanisterIds } from "./sync-canister-ids.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDir = path.join(projectRoot, "frontend");
@@ -26,6 +27,7 @@ function loadRootEnvFile() {
   }
 }
 loadRootEnvFile();
+syncCanisterIds();
 
 // Install (only if package-lock changed), serialized with the platform install
 // step so two `npm ci` runs can never overlap and corrupt node_modules.
