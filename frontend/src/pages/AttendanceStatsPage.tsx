@@ -226,7 +226,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         return withFeatureBackend("events", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const live = (await getLiveTeam(ctx, teamId!)) as { id: string; name: string; club_id: string };
+            const live = (await getLiveTeam(ctx, teamId!)) as unknown as { id: string; name: string; club_id: string };
             const club = await getLiveClubProfile(ctx, live.club_id).catch(() => null);
             return {
               id: live.id,
@@ -373,7 +373,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         return withFeatureBackend("events", {
           supabase: async () => [],
           icp: async (ctx) => {
-            const live = (await getLiveTeam(ctx, teamId!)) as { club_id: string };
+            const live = (await getLiveTeam(ctx, teamId!)) as unknown as { club_id: string };
             const assignments = await listLiveChildTeamAssignments(ctx, live.club_id, teamId!);
             if (!assignments.length) return [];
             const childIds = [...new Set(assignments.map((a) => a.child_id))];
