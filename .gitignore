@@ -8,5 +8,11 @@ frontend/.vitest-cache/
 !.env.example
 *.pem
 .icp/
+# Keep the mainnet canister ID mapping (reruns must reuse existing canisters)
+!deploy/mainnet/.icp/
+deploy/mainnet/.icp/*
+!deploy/mainnet/.icp/data/
+deploy/mainnet/.icp/data/*
+!deploy/mainnet/.icp/data/mappings/
 .local-icp/
 target/
