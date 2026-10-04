@@ -1,3 +1,4 @@
+import type { Principal } from "@icp-sdk/core/principal";
 import type { FeatureBackendContext } from "../featureRouter";
 import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 
@@ -42,6 +43,29 @@ export async function searchLiveProfiles(
       id: row.account_id,
       display_name: row.display_name,
       avatar_url: row.avatar_ref[0] ?? null,
+    }));
+  } finally {
+    client.dispose();
+  }
+}
+
+/**
+ * Same search as `searchLiveProfiles` but keeps the principal — needed by
+ * admin tools that key restrictions/roles on principals rather than account
+ * ids (e.g. the DM attachment restrictions page).
+ */
+export async function searchLiveProfilesWithPrincipals(
+  ctx: FeatureBackendContext,
+  query: string,
+  limit: number,
+): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null }>> {
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+  try {
+    const rows = await client.searchProfiles(query, limit);
+    return rows.map((row) => ({
+      accountId: row.account_id,
+      principal: row.principal,
+      displayName: row.display_name,
     }));
   } finally {
     client.dispose();

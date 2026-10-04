@@ -344,8 +344,9 @@ function SupabaseClubEngagementAnalyticsPage({
         return withFeatureBackend("membership", {
           supabase: async () => null,
           icp: async (ctx) => {
-            const profile = await getLiveClubProfile(ctx, clubId!);
-            return { id: profile.id, name: profile.name };
+            const opt = await getLiveClubProfile(ctx, clubId!);
+            const profile = opt[0];
+            return profile ? { id: profile.id, name: profile.name } : null;
           },
         });
       }
