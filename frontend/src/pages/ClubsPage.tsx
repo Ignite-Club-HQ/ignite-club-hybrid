@@ -175,6 +175,25 @@ export default function ClubsPage() {
   const { data: sponsors } = useQuery({
     queryKey: ["club-sponsors-list"],
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const perClub = await Promise.all(clubIds.map((clubId) => listLiveSponsors(ctx, clubId)));
+            return perClub.flat()
+              .filter((s) => s.is_active)
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                logo_url: s.logo_url[0] ?? null,
+                website_url: s.website_url[0] ?? null,
+                club_id: s.club_id,
+              }) as Sponsor);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("sponsors")
         .select("id, name, logo_url, website_url, club_id")
@@ -189,6 +208,23 @@ export default function ClubsPage() {
   const { data: clubSubscriptions } = useQuery({
     queryKey: ["club-subscriptions-list"],
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const subs = await Promise.all(clubIds.map((clubId) => getLiveClubSubscription(ctx, clubId)));
+            return subs.filter((s): s is NonNullable<typeof s> => s !== null).map((s) => ({
+              club_id: s.club_id,
+              is_pro: s.is_pro,
+              is_pro_football: s.is_pro_football,
+              admin_pro_override: s.admin_pro_override,
+              admin_pro_football_override: s.admin_pro_football_override,
+            }) as ClubSubscription);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("club_subscriptions")
         .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override");
