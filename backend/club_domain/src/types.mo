@@ -176,6 +176,19 @@ module {
     sponsor_id : Text;
     team_id : Text;
   };
+  // Mirrors the Supabase team_folders table: club-admin-managed groupings
+  // for the club's teams list. Website-safe metadata only (name,
+  // description, color) — reads are unauthenticated like list_teams.
+  public type TeamFolder = {
+    id : Text;
+    club_id : Text;
+    name : Text;
+    description : ?Text;
+    color : Text;
+    sort_order : Nat32;
+    created_by : Principal;
+    created_at_ms : Nat64;
+  };
   // Shell-team fields mirror the Supabase `teams.shell_*` columns: a
   // club admin can pre-create a "shell" team for a coach/manager who has
   // not signed up yet, mint a claim token, and the invited person claims
@@ -207,6 +220,9 @@ module {
     playhq_team_id : ?Text;
     playhq_competition_id : ?Text;
     playhq_auto_create_events : Bool;
+    // Team-folder grouping mirroring the Supabase `teams.folder_id` column;
+    // null means the team is unfiled.
+    folder_id : ?Text;
   };
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
