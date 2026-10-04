@@ -1,3 +1,25 @@
+type TeamSubscription = 
+ record {
+   admin_pro_football_override: bool;
+   admin_pro_override: bool;
+   cancelled_at_ms: opt nat64;
+   disable_auto_subs: bool;
+   disable_batch_subs: bool;
+   disable_position_swaps: bool;
+   disable_team_pom_rewards: bool;
+   formation: opt text;
+   is_pro: bool;
+   is_pro_football: bool;
+   is_trial: bool;
+   max_spread_minutes: opt nat32;
+   minutes_per_half: opt nat32;
+   rotate_gk_at_halftime: bool;
+   rotation_speed: nat32;
+   show_lineup_picker: bool;
+   team_id: text;
+   team_size: opt nat32;
+   trial_ends_at_ms: opt nat64;
+ };
 type TeamSponsorAllocation = 
  record {
    sponsor_id: text;
@@ -492,6 +514,11 @@ type Main =
        Err: text;
        Ok: vec TeamPlayerPosition;
      }) query;
+   get_team_subscription: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt TeamSubscription;
+     }) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
    import_frozen_club: (club: text, listing: Listing) ->
@@ -801,6 +828,20 @@ type Main =
     (variant {
        Err: text;
        Ok: TeamFolder;
+     });
+   save_team_pitch_settings: (team_id: text, disable_auto_subs: bool,
+    rotation_speed: nat32, disable_position_swaps: bool, disable_batch_subs:
+    bool, rotate_gk_at_halftime: bool, minutes_per_half: opt nat32,
+    max_spread_minutes: opt nat32, team_size: opt nat32, formation: opt text,
+    show_lineup_picker: bool, disable_team_pom_rewards: bool) ->
+    (variant {
+       Err: text;
+       Ok: TeamSubscription;
+     });
+   save_team_subscription: (item: TeamSubscription) ->
+    (variant {
+       Err: text;
+       Ok: TeamSubscription;
      });
    send_fee_reminders: (club_id: text, payment_period: text, payment_type:
     text, message: text) -> (variant {

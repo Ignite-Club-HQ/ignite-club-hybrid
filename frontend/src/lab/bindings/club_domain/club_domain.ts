@@ -637,6 +637,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_team_subscription(team_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     has_club_staff_role(user: Principal, club_id: string): Promise<boolean>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
     import_frozen_club(club: string, listing: Listing): Promise<{
@@ -1086,6 +1093,20 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    save_team_pitch_settings(team_id: string, disable_auto_subs: boolean, rotation_speed: number, disable_position_swaps: boolean, disable_batch_subs: boolean, rotate_gk_at_halftime: boolean, minutes_per_half: number | null, max_spread_minutes: number | null, team_size: number | null, formation: string | null, show_lineup_picker: boolean, disable_team_pom_rewards: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    save_team_subscription(item: TeamSubscription): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     send_fee_reminders(club_id: string, payment_period: string, payment_type: string, message: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -1319,6 +1340,27 @@ export interface ClubBranding {
     contact_email?: string;
     logo_url?: string;
 }
+export interface TeamSubscription {
+    max_spread_minutes?: number;
+    formation?: string;
+    trial_ends_at_ms?: bigint;
+    is_trial: boolean;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    is_pro: boolean;
+    disable_auto_subs: boolean;
+    team_size?: number;
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    disable_batch_subs: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms?: bigint;
+    minutes_per_half?: number;
+    disable_position_swaps: boolean;
+    disable_team_pom_rewards: boolean;
+}
 export interface PendingInvite {
     id: string;
     status: string;
@@ -1334,6 +1376,16 @@ export interface PendingInvite {
     invited_by: Principal;
     club_id: string;
 }
+export interface SeasonTeamSummary {
+    season_id: string;
+    avg_attendance_pct: number;
+    team_id: string;
+    updated_at_ms: bigint;
+    roster_size: number;
+    team_name: string;
+    events_count: number;
+    club_id: string;
+}
 export interface MemberPayment {
     id: string;
     payment_type: string;
@@ -1345,20 +1397,6 @@ export interface MemberPayment {
     payment_period: string;
     amount: number;
     club_id: string;
-}
-export interface SeasonTeamSummary {
-    season_id: string;
-    avg_attendance_pct: number;
-    team_id: string;
-    updated_at_ms: bigint;
-    roster_size: number;
-    team_name: string;
-    events_count: number;
-    club_id: string;
-}
-export interface InviteStats {
-    total: bigint;
-    accepted: bigint;
 }
 export interface TeamCreationRequest {
     id: string;
@@ -1372,6 +1410,10 @@ export interface TeamCreationRequest {
     club_id: string;
     decided_by?: Principal;
     age_group?: string;
+}
+export interface InviteStats {
+    total: bigint;
+    accepted: bigint;
 }
 export interface Config {
     acl: Acl;
@@ -1497,7 +1539,7 @@ export interface Challenge {
 }
 export interface club_domainInterface extends MainInterface {
 }
-import type { AcceptedInvite as _AcceptedInvite, Account as _Account, AccountExclusion as _AccountExclusion, AccountRole as _AccountRole, Acl as _Acl, Challenge as _Challenge, Child as _Child, ClubBranding as _ClubBranding, ClubJoinRequest as _ClubJoinRequest, ClubProfile as _ClubProfile, ClubSettings as _ClubSettings, ClubSponsor as _ClubSponsor, ClubSubscription as _ClubSubscription, ClubTeam as _ClubTeam, ClubTerm as _ClubTerm, Config as _Config, Draft as _Draft, Exclusion as _Exclusion, Family as _Family, Guardian as _Guardian, InvitePayload as _InvitePayload, InviteStats as _InviteStats, Link as _Link, Listing as _Listing, MemberPayment as _MemberPayment, Mutation as _Mutation, NewsPost as _NewsPost, Operation as _Operation, ParentInvite as _ParentInvite, PendingInvite as _PendingInvite, ProfileTeamHistoryEntry as _ProfileTeamHistoryEntry, RemovedMember as _RemovedMember, Request as _Request, RoleGrant as _RoleGrant, RoleRequest as _RoleRequest, Season as _Season, SeasonPlayerStat as _SeasonPlayerStat, SeasonTeamSummary as _SeasonTeamSummary, Snapshot as _Snapshot, State as _State, Team as _Team, TeamCaptain as _TeamCaptain, TeamCreationRequest as _TeamCreationRequest, TeamFolder as _TeamFolder, TeamInvite as _TeamInvite, TeamInviteLink as _TeamInviteLink, TeamPlayerPosition as _TeamPlayerPosition, TeamSponsorAllocation as _TeamSponsorAllocation } from "./declarations/club_domain.did";
+import type { AcceptedInvite as _AcceptedInvite, Account as _Account, AccountExclusion as _AccountExclusion, AccountRole as _AccountRole, Acl as _Acl, Challenge as _Challenge, Child as _Child, ClubBranding as _ClubBranding, ClubJoinRequest as _ClubJoinRequest, ClubProfile as _ClubProfile, ClubSettings as _ClubSettings, ClubSponsor as _ClubSponsor, ClubSubscription as _ClubSubscription, ClubTeam as _ClubTeam, ClubTerm as _ClubTerm, Config as _Config, Draft as _Draft, Exclusion as _Exclusion, Family as _Family, Guardian as _Guardian, InvitePayload as _InvitePayload, InviteStats as _InviteStats, Link as _Link, Listing as _Listing, MemberPayment as _MemberPayment, Mutation as _Mutation, NewsPost as _NewsPost, Operation as _Operation, ParentInvite as _ParentInvite, PendingInvite as _PendingInvite, ProfileTeamHistoryEntry as _ProfileTeamHistoryEntry, RemovedMember as _RemovedMember, Request as _Request, RoleGrant as _RoleGrant, RoleRequest as _RoleRequest, Season as _Season, SeasonPlayerStat as _SeasonPlayerStat, SeasonTeamSummary as _SeasonTeamSummary, Snapshot as _Snapshot, State as _State, Team as _Team, TeamCaptain as _TeamCaptain, TeamCreationRequest as _TeamCreationRequest, TeamFolder as _TeamFolder, TeamInvite as _TeamInvite, TeamInviteLink as _TeamInviteLink, TeamPlayerPosition as _TeamPlayerPosition, TeamSponsorAllocation as _TeamSponsorAllocation, TeamSubscription as _TeamSubscription } from "./declarations/club_domain.did";
 export class Club_domain implements club_domainInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_identity_link(arg0: bigint): Promise<{
@@ -2027,6 +2069,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.get_team_player_positions(arg0);
         return from_candid_variant_n100(result);
     }
+    async get_team_subscription(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_team_subscription(arg0);
+        return from_candid_variant_n101(result);
+    }
     async has_club_staff_role(arg0: Principal, arg1: string): Promise<boolean> {
         const result = await this.actor.has_club_staff_role(arg0, arg1);
         return result;
@@ -2042,7 +2094,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.import_frozen_club(arg0, to_candid_Listing_n101(arg1));
+        const result = await this.actor.import_frozen_club(arg0, to_candid_Listing_n105(arg1));
         return from_candid_variant_n15(result);
     }
     async import_links(arg0: Snapshot): Promise<{
@@ -2052,7 +2104,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.import_links(to_candid_Snapshot_n108(arg0));
+        const result = await this.actor.import_links(to_candid_Snapshot_n112(arg0));
         return from_candid_variant_n15(result);
     }
     async invite_stats(arg0: string, arg1: bigint, arg2: bigint): Promise<{
@@ -2063,7 +2115,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.invite_stats(arg0, arg1, arg2);
-        return from_candid_variant_n112(result);
+        return from_candid_variant_n116(result);
     }
     async is_member_removed(arg0: string, arg1: Principal): Promise<boolean> {
         const result = await this.actor.is_member_removed(arg0, arg1);
@@ -2087,7 +2139,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_accepted_invites(arg0, arg1, arg2);
-        return from_candid_variant_n113(result);
+        return from_candid_variant_n117(result);
     }
     async list_all_sponsors(): Promise<{
         __kind__: "Ok";
@@ -2097,7 +2149,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_all_sponsors();
-        return from_candid_variant_n114(result);
+        return from_candid_variant_n118(result);
     }
     async list_children(): Promise<{
         __kind__: "Ok";
@@ -2107,7 +2159,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_children();
-        return from_candid_variant_n116(result);
+        return from_candid_variant_n120(result);
     }
     async list_club_join_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2117,7 +2169,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_club_join_requests(arg0);
-        return from_candid_variant_n117(result);
+        return from_candid_variant_n121(result);
     }
     async list_club_terms(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2127,7 +2179,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_club_terms(arg0);
-        return from_candid_variant_n119(result);
+        return from_candid_variant_n123(result);
     }
     async list_clubs(arg0: string | null, arg1: number): Promise<{
         __kind__: "Ok";
@@ -2137,7 +2189,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_clubs(to_candid_opt_n14(arg0), arg1);
-        return from_candid_variant_n120(result);
+        return from_candid_variant_n124(result);
     }
     async list_links(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -2157,7 +2209,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_member_payments(arg0, arg1, arg2);
-        return from_candid_variant_n122(result);
+        return from_candid_variant_n126(result);
     }
     async list_news(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2167,7 +2219,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_news(arg0);
-        return from_candid_variant_n126(result);
+        return from_candid_variant_n130(result);
     }
     async list_news_multi(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -2177,7 +2229,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_news_multi(arg0);
-        return from_candid_variant_n126(result);
+        return from_candid_variant_n130(result);
     }
     async list_pending_invites_by_club(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2187,7 +2239,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_pending_invites_by_club(arg0);
-        return from_candid_variant_n127(result);
+        return from_candid_variant_n131(result);
     }
     async list_removed_members(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2197,7 +2249,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_removed_members(arg0);
-        return from_candid_variant_n129(result);
+        return from_candid_variant_n133(result);
     }
     async list_role_grants(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2207,7 +2259,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_role_grants(arg0);
-        return from_candid_variant_n130(result);
+        return from_candid_variant_n134(result);
     }
     async list_role_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2217,7 +2269,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_role_requests(arg0);
-        return from_candid_variant_n131(result);
+        return from_candid_variant_n135(result);
     }
     async list_season_player_stats(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -2227,7 +2279,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_season_player_stats(arg0, arg1);
-        return from_candid_variant_n133(result);
+        return from_candid_variant_n137(result);
     }
     async list_season_team_summary(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2237,7 +2289,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_season_team_summary(arg0);
-        return from_candid_variant_n134(result);
+        return from_candid_variant_n138(result);
     }
     async list_seasons(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2247,7 +2299,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_seasons(arg0);
-        return from_candid_variant_n135(result);
+        return from_candid_variant_n139(result);
     }
     async list_sponsors(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2257,7 +2309,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_sponsors(arg0);
-        return from_candid_variant_n114(result);
+        return from_candid_variant_n118(result);
     }
     async list_team_captains(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2267,7 +2319,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_captains(arg0);
-        return from_candid_variant_n136(result);
+        return from_candid_variant_n140(result);
     }
     async list_team_creation_requests(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2277,7 +2329,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_creation_requests(arg0);
-        return from_candid_variant_n137(result);
+        return from_candid_variant_n141(result);
     }
     async list_team_folders(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2287,7 +2339,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_folders(arg0);
-        return from_candid_variant_n139(result);
+        return from_candid_variant_n143(result);
     }
     async list_team_invites(arg0: string, arg1: string | null): Promise<{
         __kind__: "Ok";
@@ -2297,7 +2349,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_invites(arg0, to_candid_opt_n14(arg1));
-        return from_candid_variant_n143(result);
+        return from_candid_variant_n147(result);
     }
     async list_team_role_grants(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2307,7 +2359,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_role_grants(arg0);
-        return from_candid_variant_n130(result);
+        return from_candid_variant_n134(result);
     }
     async list_team_sponsor_allocations(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2317,7 +2369,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_team_sponsor_allocations(arg0);
-        return from_candid_variant_n145(result);
+        return from_candid_variant_n149(result);
     }
     async list_teams(arg0: string): Promise<{
         __kind__: "Ok";
@@ -2327,7 +2379,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_teams(arg0);
-        return from_candid_variant_n146(result);
+        return from_candid_variant_n150(result);
     }
     async mark_member_paid(arg0: string, arg1: string, arg2: string | null, arg3: string, arg4: string, arg5: number, arg6: string | null): Promise<{
         __kind__: "Ok";
@@ -2337,7 +2389,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.mark_member_paid(arg0, arg1, to_candid_opt_n14(arg2), arg3, arg4, arg5, to_candid_opt_n14(arg6));
-        return from_candid_variant_n148(result);
+        return from_candid_variant_n152(result);
     }
     async move_child_to_team(arg0: string, arg1: string | null, arg2: string): Promise<{
         __kind__: "Ok";
@@ -2366,8 +2418,8 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.mutate(to_candid_Request_n149(arg0));
-        return from_candid_variant_n154(result);
+        const result = await this.actor.mutate(to_candid_Request_n153(arg0));
+        return from_candid_variant_n158(result);
     }
     async my_role_grants(): Promise<Array<RoleGrant>> {
         const result = await this.actor.my_role_grants();
@@ -2375,7 +2427,7 @@ export class Club_domain implements club_domainInterface {
     }
     async profile_team_history(arg0: string): Promise<Array<ProfileTeamHistoryEntry>> {
         const result = await this.actor.profile_team_history(arg0);
-        return from_candid_vec_n157(result);
+        return from_candid_vec_n161(result);
     }
     async purge_expired_deletions(): Promise<{
         __kind__: "Ok";
@@ -2454,7 +2506,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.replace_acl(arg0, to_candid_Acl_n160(arg1));
+        const result = await this.actor.replace_acl(arg0, to_candid_Acl_n164(arg1));
         return from_candid_variant_n75(result);
     }
     async request_club_join(arg0: string): Promise<{
@@ -2587,7 +2639,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_club_profile(to_candid_ClubProfile_n168(arg0));
+        const result = await this.actor.save_club_profile(to_candid_ClubProfile_n172(arg0));
         return from_candid_variant_n37(result);
     }
     async save_club_settings(arg0: ClubSettings): Promise<{
@@ -2597,7 +2649,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_club_settings(to_candid_ClubSettings_n170(arg0));
+        const result = await this.actor.save_club_settings(to_candid_ClubSettings_n174(arg0));
         return from_candid_variant_n34(result);
     }
     async save_club_subscription(arg0: ClubSubscription): Promise<{
@@ -2607,8 +2659,8 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_club_subscription(to_candid_ClubSubscription_n172(arg0));
-        return from_candid_variant_n174(result);
+        const result = await this.actor.save_club_subscription(to_candid_ClubSubscription_n176(arg0));
+        return from_candid_variant_n178(result);
     }
     async save_club_term(arg0: ClubTerm): Promise<{
         __kind__: "Ok";
@@ -2618,7 +2670,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_club_term(arg0);
-        return from_candid_variant_n175(result);
+        return from_candid_variant_n179(result);
     }
     async save_season(arg0: Season): Promise<{
         __kind__: "Ok";
@@ -2628,7 +2680,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_season(arg0);
-        return from_candid_variant_n176(result);
+        return from_candid_variant_n180(result);
     }
     async save_season_player_stat(arg0: SeasonPlayerStat): Promise<{
         __kind__: "Ok";
@@ -2638,7 +2690,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_season_player_stat(arg0);
-        return from_candid_variant_n177(result);
+        return from_candid_variant_n181(result);
     }
     async save_season_team_summary(arg0: SeasonTeamSummary): Promise<{
         __kind__: "Ok";
@@ -2648,7 +2700,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_season_team_summary(arg0);
-        return from_candid_variant_n178(result);
+        return from_candid_variant_n182(result);
     }
     async save_sponsor(arg0: ClubSponsor): Promise<{
         __kind__: "Ok";
@@ -2657,8 +2709,8 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_sponsor(to_candid_ClubSponsor_n179(arg0));
-        return from_candid_variant_n181(result);
+        const result = await this.actor.save_sponsor(to_candid_ClubSponsor_n183(arg0));
+        return from_candid_variant_n185(result);
     }
     async save_team(arg0: ClubTeam): Promise<{
         __kind__: "Ok";
@@ -2667,7 +2719,7 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_team(to_candid_ClubTeam_n182(arg0));
+        const result = await this.actor.save_team(to_candid_ClubTeam_n186(arg0));
         return from_candid_variant_n28(result);
     }
     async save_team_folder(arg0: TeamFolder): Promise<{
@@ -2677,8 +2729,28 @@ export class Club_domain implements club_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_team_folder(to_candid_TeamFolder_n184(arg0));
-        return from_candid_variant_n186(result);
+        const result = await this.actor.save_team_folder(to_candid_TeamFolder_n188(arg0));
+        return from_candid_variant_n190(result);
+    }
+    async save_team_pitch_settings(arg0: string, arg1: boolean, arg2: number, arg3: boolean, arg4: boolean, arg5: boolean, arg6: number | null, arg7: number | null, arg8: number | null, arg9: string | null, arg10: boolean, arg11: boolean): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.save_team_pitch_settings(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_opt_n191(arg6), to_candid_opt_n191(arg7), to_candid_opt_n191(arg8), to_candid_opt_n14(arg9), arg10, arg11);
+        return from_candid_variant_n192(result);
+    }
+    async save_team_subscription(arg0: TeamSubscription): Promise<{
+        __kind__: "Ok";
+        Ok: TeamSubscription;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.save_team_subscription(to_candid_TeamSubscription_n193(arg0));
+        return from_candid_variant_n192(result);
     }
     async send_fee_reminders(arg0: string, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
@@ -2688,7 +2760,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.send_fee_reminders(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n187(result);
+        return from_candid_variant_n195(result);
     }
     async set_app_config(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -2748,7 +2820,7 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_club_term_status(arg0, arg1);
-        return from_candid_variant_n175(result);
+        return from_candid_variant_n179(result);
     }
     async set_club_theme_enabled(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -2983,11 +3055,11 @@ function from_candid_Link_n60(value: _Link): Link {
 function from_candid_Listing_n57(value: _Listing): Listing {
     return from_candid_record_n58(value);
 }
-function from_candid_MemberPayment_n124(value: _MemberPayment): MemberPayment {
-    return from_candid_record_n125(value);
+function from_candid_MemberPayment_n128(value: _MemberPayment): MemberPayment {
+    return from_candid_record_n129(value);
 }
-function from_candid_Mutation_n155(value: _Mutation): Mutation {
-    return from_candid_record_n156(value);
+function from_candid_Mutation_n159(value: _Mutation): Mutation {
+    return from_candid_record_n160(value);
 }
 function from_candid_ParentInvite_n3(value: _ParentInvite): ParentInvite {
     return from_candid_record_n4(value);
@@ -2995,8 +3067,8 @@ function from_candid_ParentInvite_n3(value: _ParentInvite): ParentInvite {
 function from_candid_PendingInvite_n8(value: _PendingInvite): PendingInvite {
     return from_candid_record_n9(value);
 }
-function from_candid_ProfileTeamHistoryEntry_n158(value: _ProfileTeamHistoryEntry): ProfileTeamHistoryEntry {
-    return from_candid_record_n159(value);
+function from_candid_ProfileTeamHistoryEntry_n162(value: _ProfileTeamHistoryEntry): ProfileTeamHistoryEntry {
+    return from_candid_record_n163(value);
 }
 function from_candid_RoleGrant_n54(value: _RoleGrant): RoleGrant {
     return from_candid_record_n55(value);
@@ -3013,8 +3085,8 @@ function from_candid_State_n65(value: _State): State {
 function from_candid_TeamCreationRequest_n26(value: _TeamCreationRequest): TeamCreationRequest {
     return from_candid_record_n27(value);
 }
-function from_candid_TeamFolder_n141(value: _TeamFolder): TeamFolder {
-    return from_candid_record_n142(value);
+function from_candid_TeamFolder_n145(value: _TeamFolder): TeamFolder {
+    return from_candid_record_n146(value);
 }
 function from_candid_TeamInviteLink_n44(value: _TeamInviteLink): TeamInviteLink {
     return from_candid_record_n45(value);
@@ -3022,8 +3094,14 @@ function from_candid_TeamInviteLink_n44(value: _TeamInviteLink): TeamInviteLink 
 function from_candid_TeamInvite_n12(value: _TeamInvite): TeamInvite {
     return from_candid_record_n13(value);
 }
+function from_candid_TeamSubscription_n103(value: _TeamSubscription): TeamSubscription {
+    return from_candid_record_n104(value);
+}
 function from_candid_opt_n10(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n102(value: [] | [_TeamSubscription]): TeamSubscription | null {
+    return value.length === 0 ? null : from_candid_TeamSubscription_n103(value[0]);
 }
 function from_candid_opt_n5(value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
@@ -3058,7 +3136,70 @@ function from_candid_opt_n97(value: [] | [number]): number | null {
 function from_candid_opt_n99(value: [] | [_ClubTeam]): ClubTeam | null {
     return value.length === 0 ? null : from_candid_ClubTeam_n29(value[0]);
 }
-function from_candid_record_n125(value: {
+function from_candid_record_n104(value: {
+    max_spread_minutes: [] | [number];
+    formation: [] | [string];
+    trial_ends_at_ms: [] | [bigint];
+    is_trial: boolean;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    is_pro: boolean;
+    disable_auto_subs: boolean;
+    team_size: [] | [number];
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    disable_batch_subs: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms: [] | [bigint];
+    minutes_per_half: [] | [number];
+    disable_position_swaps: boolean;
+    disable_team_pom_rewards: boolean;
+}): {
+    max_spread_minutes?: number;
+    formation?: string;
+    trial_ends_at_ms?: bigint;
+    is_trial: boolean;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    is_pro: boolean;
+    disable_auto_subs: boolean;
+    team_size?: number;
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    disable_batch_subs: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms?: bigint;
+    minutes_per_half?: number;
+    disable_position_swaps: boolean;
+    disable_team_pom_rewards: boolean;
+} {
+    return {
+        max_spread_minutes: record_opt_to_undefined(from_candid_opt_n89(value.max_spread_minutes)),
+        formation: record_opt_to_undefined(from_candid_opt_n6(value.formation)),
+        trial_ends_at_ms: record_opt_to_undefined(from_candid_opt_n10(value.trial_ends_at_ms)),
+        is_trial: value.is_trial,
+        rotate_gk_at_halftime: value.rotate_gk_at_halftime,
+        show_lineup_picker: value.show_lineup_picker,
+        team_id: value.team_id,
+        rotation_speed: value.rotation_speed,
+        is_pro: value.is_pro,
+        disable_auto_subs: value.disable_auto_subs,
+        team_size: record_opt_to_undefined(from_candid_opt_n89(value.team_size)),
+        is_pro_football: value.is_pro_football,
+        admin_pro_football_override: value.admin_pro_football_override,
+        disable_batch_subs: value.disable_batch_subs,
+        admin_pro_override: value.admin_pro_override,
+        cancelled_at_ms: record_opt_to_undefined(from_candid_opt_n10(value.cancelled_at_ms)),
+        minutes_per_half: record_opt_to_undefined(from_candid_opt_n89(value.minutes_per_half)),
+        disable_position_swaps: value.disable_position_swaps,
+        disable_team_pom_rewards: value.disable_team_pom_rewards
+    };
+}
+function from_candid_record_n129(value: {
     id: string;
     payment_type: string;
     marked_by: Principal;
@@ -3130,7 +3271,7 @@ function from_candid_record_n13(value: {
         expires_at_ms: value.expires_at_ms
     };
 }
-function from_candid_record_n142(value: {
+function from_candid_record_n146(value: {
     id: string;
     name: string;
     color: string;
@@ -3160,7 +3301,7 @@ function from_candid_record_n142(value: {
         club_id: value.club_id
     };
 }
-function from_candid_record_n156(value: {
+function from_candid_record_n160(value: {
     link: [] | [_Link];
     revision: bigint;
 }): {
@@ -3172,7 +3313,7 @@ function from_candid_record_n156(value: {
         revision: value.revision
     };
 }
-function from_candid_record_n159(value: {
+function from_candid_record_n163(value: {
     season_start_date: string;
     season_id: string;
     team_id: string;
@@ -3957,6 +4098,25 @@ function from_candid_variant_n100(value: {
         Err: value.Err
     } : value;
 }
+function from_candid_variant_n101(value: {
+    Ok: [] | [_TeamSubscription];
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TeamSubscription | null;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_opt_n102(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
 function from_candid_variant_n11(value: {
     Ok: _TeamInvite;
 } | {
@@ -3976,7 +4136,7 @@ function from_candid_variant_n11(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n112(value: {
+function from_candid_variant_n116(value: {
     Ok: _InviteStats;
 } | {
     Err: string;
@@ -3995,7 +4155,7 @@ function from_candid_variant_n112(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n113(value: {
+function from_candid_variant_n117(value: {
     Ok: Array<_AcceptedInvite>;
 } | {
     Err: string;
@@ -4014,7 +4174,7 @@ function from_candid_variant_n113(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n114(value: {
+function from_candid_variant_n118(value: {
     Ok: Array<_ClubSponsor>;
 } | {
     Err: string;
@@ -4027,13 +4187,13 @@ function from_candid_variant_n114(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n115(value.Ok)
+        Ok: from_candid_vec_n119(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n116(value: {
+function from_candid_variant_n120(value: {
     Ok: Array<_Child>;
 } | {
     Err: string;
@@ -4052,7 +4212,7 @@ function from_candid_variant_n116(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n117(value: {
+function from_candid_variant_n121(value: {
     Ok: Array<_ClubJoinRequest>;
 } | {
     Err: string;
@@ -4065,13 +4225,13 @@ function from_candid_variant_n117(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n118(value.Ok)
+        Ok: from_candid_vec_n122(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n119(value: {
+function from_candid_variant_n123(value: {
     Ok: Array<_ClubTerm>;
 } | {
     Err: string;
@@ -4090,7 +4250,7 @@ function from_candid_variant_n119(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n120(value: {
+function from_candid_variant_n124(value: {
     Ok: Array<_ClubProfile>;
 } | {
     Err: string;
@@ -4103,13 +4263,13 @@ function from_candid_variant_n120(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n121(value.Ok)
+        Ok: from_candid_vec_n125(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n122(value: {
+function from_candid_variant_n126(value: {
     Ok: Array<_MemberPayment>;
 } | {
     Err: string;
@@ -4122,13 +4282,13 @@ function from_candid_variant_n122(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n123(value.Ok)
+        Ok: from_candid_vec_n127(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n126(value: {
+function from_candid_variant_n130(value: {
     Ok: Array<_NewsPost>;
 } | {
     Err: string;
@@ -4147,7 +4307,7 @@ function from_candid_variant_n126(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n127(value: {
+function from_candid_variant_n131(value: {
     Ok: Array<_PendingInvite>;
 } | {
     Err: string;
@@ -4160,13 +4320,13 @@ function from_candid_variant_n127(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n128(value.Ok)
+        Ok: from_candid_vec_n132(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n129(value: {
+function from_candid_variant_n133(value: {
     Ok: Array<_RemovedMember>;
 } | {
     Err: string;
@@ -4185,7 +4345,7 @@ function from_candid_variant_n129(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n130(value: {
+function from_candid_variant_n134(value: {
     Ok: Array<_AccountRole>;
 } | {
     Err: string;
@@ -4204,7 +4364,7 @@ function from_candid_variant_n130(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n131(value: {
+function from_candid_variant_n135(value: {
     Ok: Array<_RoleRequest>;
 } | {
     Err: string;
@@ -4217,13 +4377,13 @@ function from_candid_variant_n131(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n132(value.Ok)
+        Ok: from_candid_vec_n136(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n133(value: {
+function from_candid_variant_n137(value: {
     Ok: Array<_SeasonPlayerStat>;
 } | {
     Err: string;
@@ -4242,7 +4402,7 @@ function from_candid_variant_n133(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n134(value: {
+function from_candid_variant_n138(value: {
     Ok: Array<_SeasonTeamSummary>;
 } | {
     Err: string;
@@ -4261,7 +4421,7 @@ function from_candid_variant_n134(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n135(value: {
+function from_candid_variant_n139(value: {
     Ok: Array<_Season>;
 } | {
     Err: string;
@@ -4280,7 +4440,7 @@ function from_candid_variant_n135(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n136(value: {
+function from_candid_variant_n140(value: {
     Ok: Array<_TeamCaptain>;
 } | {
     Err: string;
@@ -4299,7 +4459,7 @@ function from_candid_variant_n136(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n137(value: {
+function from_candid_variant_n141(value: {
     Ok: Array<_TeamCreationRequest>;
 } | {
     Err: string;
@@ -4312,13 +4472,13 @@ function from_candid_variant_n137(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n138(value.Ok)
+        Ok: from_candid_vec_n142(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n139(value: {
+function from_candid_variant_n143(value: {
     Ok: Array<_TeamFolder>;
 } | {
     Err: string;
@@ -4331,13 +4491,13 @@ function from_candid_variant_n139(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n140(value.Ok)
+        Ok: from_candid_vec_n144(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n143(value: {
+function from_candid_variant_n147(value: {
     Ok: Array<_TeamInvite>;
 } | {
     Err: string;
@@ -4350,13 +4510,13 @@ function from_candid_variant_n143(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n144(value.Ok)
+        Ok: from_candid_vec_n148(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n145(value: {
+function from_candid_variant_n149(value: {
     Ok: Array<_TeamSponsorAllocation>;
 } | {
     Err: string;
@@ -4370,44 +4530,6 @@ function from_candid_variant_n145(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n146(value: {
-    Ok: Array<_ClubTeam>;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Array<ClubTeam>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_vec_n147(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n148(value: {
-    Ok: _MemberPayment;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: MemberPayment;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_MemberPayment_n124(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -4432,7 +4554,45 @@ function from_candid_variant_n15(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n154(value: {
+function from_candid_variant_n150(value: {
+    Ok: Array<_ClubTeam>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<ClubTeam>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n151(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n152(value: {
+    Ok: _MemberPayment;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: MemberPayment;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_MemberPayment_n128(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n158(value: {
     Ok: _Mutation;
 } | {
     Err: string;
@@ -4445,7 +4605,7 @@ function from_candid_variant_n154(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Mutation_n155(value.Ok)
+        Ok: from_candid_Mutation_n159(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -4470,7 +4630,7 @@ function from_candid_variant_n16(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n174(value: {
+function from_candid_variant_n178(value: {
     Ok: _ClubSubscription;
 } | {
     Err: string;
@@ -4489,7 +4649,7 @@ function from_candid_variant_n174(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n175(value: {
+function from_candid_variant_n179(value: {
     Ok: _ClubTerm;
 } | {
     Err: string;
@@ -4508,7 +4668,7 @@ function from_candid_variant_n175(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n176(value: {
+function from_candid_variant_n180(value: {
     Ok: _Season;
 } | {
     Err: string;
@@ -4527,7 +4687,7 @@ function from_candid_variant_n176(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n177(value: {
+function from_candid_variant_n181(value: {
     Ok: _SeasonPlayerStat;
 } | {
     Err: string;
@@ -4546,7 +4706,7 @@ function from_candid_variant_n177(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n178(value: {
+function from_candid_variant_n182(value: {
     Ok: _SeasonTeamSummary;
 } | {
     Err: string;
@@ -4565,7 +4725,7 @@ function from_candid_variant_n178(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n181(value: {
+function from_candid_variant_n185(value: {
     Ok: _ClubSponsor;
 } | {
     Err: string;
@@ -4579,44 +4739,6 @@ function from_candid_variant_n181(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: from_candid_ClubSponsor_n95(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n186(value: {
-    Ok: _TeamFolder;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: TeamFolder;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_TeamFolder_n141(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n187(value: {
-    Ok: number;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: number;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -4636,6 +4758,63 @@ function from_candid_variant_n19(value: {
     return "Ok" in value ? {
         __kind__: "Ok",
         Ok: from_candid_ClubJoinRequest_n20(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n190(value: {
+    Ok: _TeamFolder;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TeamFolder;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_TeamFolder_n145(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n192(value: {
+    Ok: _TeamSubscription;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TeamSubscription;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_TeamSubscription_n103(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n195(value: {
+    Ok: number;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -5179,38 +5358,38 @@ function from_candid_variant_n98(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n115(value: Array<_ClubSponsor>): Array<ClubSponsor> {
+function from_candid_vec_n119(value: Array<_ClubSponsor>): Array<ClubSponsor> {
     return value.map((x)=>from_candid_ClubSponsor_n95(x));
 }
-function from_candid_vec_n118(value: Array<_ClubJoinRequest>): Array<ClubJoinRequest> {
+function from_candid_vec_n122(value: Array<_ClubJoinRequest>): Array<ClubJoinRequest> {
     return value.map((x)=>from_candid_ClubJoinRequest_n20(x));
 }
-function from_candid_vec_n121(value: Array<_ClubProfile>): Array<ClubProfile> {
+function from_candid_vec_n125(value: Array<_ClubProfile>): Array<ClubProfile> {
     return value.map((x)=>from_candid_ClubProfile_n38(x));
 }
-function from_candid_vec_n123(value: Array<_MemberPayment>): Array<MemberPayment> {
-    return value.map((x)=>from_candid_MemberPayment_n124(x));
+function from_candid_vec_n127(value: Array<_MemberPayment>): Array<MemberPayment> {
+    return value.map((x)=>from_candid_MemberPayment_n128(x));
 }
-function from_candid_vec_n128(value: Array<_PendingInvite>): Array<PendingInvite> {
+function from_candid_vec_n132(value: Array<_PendingInvite>): Array<PendingInvite> {
     return value.map((x)=>from_candid_PendingInvite_n8(x));
 }
-function from_candid_vec_n132(value: Array<_RoleRequest>): Array<RoleRequest> {
+function from_candid_vec_n136(value: Array<_RoleRequest>): Array<RoleRequest> {
     return value.map((x)=>from_candid_RoleRequest_n23(x));
 }
-function from_candid_vec_n138(value: Array<_TeamCreationRequest>): Array<TeamCreationRequest> {
+function from_candid_vec_n142(value: Array<_TeamCreationRequest>): Array<TeamCreationRequest> {
     return value.map((x)=>from_candid_TeamCreationRequest_n26(x));
 }
-function from_candid_vec_n140(value: Array<_TeamFolder>): Array<TeamFolder> {
-    return value.map((x)=>from_candid_TeamFolder_n141(x));
+function from_candid_vec_n144(value: Array<_TeamFolder>): Array<TeamFolder> {
+    return value.map((x)=>from_candid_TeamFolder_n145(x));
 }
-function from_candid_vec_n144(value: Array<_TeamInvite>): Array<TeamInvite> {
+function from_candid_vec_n148(value: Array<_TeamInvite>): Array<TeamInvite> {
     return value.map((x)=>from_candid_TeamInvite_n12(x));
 }
-function from_candid_vec_n147(value: Array<_ClubTeam>): Array<ClubTeam> {
+function from_candid_vec_n151(value: Array<_ClubTeam>): Array<ClubTeam> {
     return value.map((x)=>from_candid_ClubTeam_n29(x));
 }
-function from_candid_vec_n157(value: Array<_ProfileTeamHistoryEntry>): Array<ProfileTeamHistoryEntry> {
-    return value.map((x)=>from_candid_ProfileTeamHistoryEntry_n158(x));
+function from_candid_vec_n161(value: Array<_ProfileTeamHistoryEntry>): Array<ProfileTeamHistoryEntry> {
+    return value.map((x)=>from_candid_ProfileTeamHistoryEntry_n162(x));
 }
 function from_candid_vec_n52(value: Array<_Child>): Array<Child> {
     return value.map((x)=>from_candid_Child_n17(x));
@@ -5227,55 +5406,61 @@ function from_candid_vec_n67(value: Array<_AccountRole>): Array<AccountRole> {
 function from_candid_vec_n73(value: Array<[string, _Listing]>): Array<[string, Listing]> {
     return value.map((x)=>from_candid_tuple_n74(x));
 }
-function to_candid_Acl_n160(value: Acl): _Acl {
-    return to_candid_record_n161(value);
+function to_candid_Acl_n164(value: Acl): _Acl {
+    return to_candid_record_n165(value);
 }
-function to_candid_Child_n163(value: Child): _Child {
-    return to_candid_record_n164(value);
+function to_candid_Child_n167(value: Child): _Child {
+    return to_candid_record_n168(value);
 }
-function to_candid_ClubProfile_n168(value: ClubProfile): _ClubProfile {
-    return to_candid_record_n169(value);
-}
-function to_candid_ClubSettings_n170(value: ClubSettings): _ClubSettings {
-    return to_candid_record_n171(value);
-}
-function to_candid_ClubSponsor_n179(value: ClubSponsor): _ClubSponsor {
-    return to_candid_record_n180(value);
-}
-function to_candid_ClubSubscription_n172(value: ClubSubscription): _ClubSubscription {
+function to_candid_ClubProfile_n172(value: ClubProfile): _ClubProfile {
     return to_candid_record_n173(value);
 }
-function to_candid_ClubTeam_n182(value: ClubTeam): _ClubTeam {
-    return to_candid_record_n183(value);
+function to_candid_ClubSettings_n174(value: ClubSettings): _ClubSettings {
+    return to_candid_record_n175(value);
 }
-function to_candid_Draft_n106(value: Draft): _Draft {
-    return to_candid_record_n107(value);
+function to_candid_ClubSponsor_n183(value: ClubSponsor): _ClubSponsor {
+    return to_candid_record_n184(value);
 }
-function to_candid_Link_n104(value: Link): _Link {
-    return to_candid_record_n105(value);
+function to_candid_ClubSubscription_n176(value: ClubSubscription): _ClubSubscription {
+    return to_candid_record_n177(value);
 }
-function to_candid_Listing_n101(value: Listing): _Listing {
-    return to_candid_record_n102(value);
+function to_candid_ClubTeam_n186(value: ClubTeam): _ClubTeam {
+    return to_candid_record_n187(value);
 }
-function to_candid_Operation_n151(value: Operation): _Operation {
-    return to_candid_variant_n152(value);
+function to_candid_Draft_n110(value: Draft): _Draft {
+    return to_candid_record_n111(value);
 }
-function to_candid_Request_n149(value: Request): _Request {
-    return to_candid_record_n150(value);
-}
-function to_candid_RoleGrant_n166(value: RoleGrant): _RoleGrant {
-    return to_candid_record_n167(value);
-}
-function to_candid_Snapshot_n108(value: Snapshot): _Snapshot {
+function to_candid_Link_n108(value: Link): _Link {
     return to_candid_record_n109(value);
 }
-function to_candid_TeamFolder_n184(value: TeamFolder): _TeamFolder {
-    return to_candid_record_n185(value);
+function to_candid_Listing_n105(value: Listing): _Listing {
+    return to_candid_record_n106(value);
+}
+function to_candid_Operation_n155(value: Operation): _Operation {
+    return to_candid_variant_n156(value);
+}
+function to_candid_Request_n153(value: Request): _Request {
+    return to_candid_record_n154(value);
+}
+function to_candid_RoleGrant_n170(value: RoleGrant): _RoleGrant {
+    return to_candid_record_n171(value);
+}
+function to_candid_Snapshot_n112(value: Snapshot): _Snapshot {
+    return to_candid_record_n113(value);
+}
+function to_candid_TeamFolder_n188(value: TeamFolder): _TeamFolder {
+    return to_candid_record_n189(value);
+}
+function to_candid_TeamSubscription_n193(value: TeamSubscription): _TeamSubscription {
+    return to_candid_record_n194(value);
 }
 function to_candid_opt_n14(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_record_n102(value: {
+function to_candid_opt_n191(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_record_n106(value: {
     links: Array<Link>;
     revision: bigint;
 }): {
@@ -5283,11 +5468,11 @@ function to_candid_record_n102(value: {
     revision: bigint;
 } {
     return {
-        links: to_candid_vec_n103(value.links),
+        links: to_candid_vec_n107(value.links),
         revision: value.revision
     };
 }
-function to_candid_record_n105(value: {
+function to_candid_record_n109(value: {
     id: string;
     sort_order: number;
     created_at_ms: bigint;
@@ -5304,11 +5489,11 @@ function to_candid_record_n105(value: {
         id: value.id,
         sort_order: value.sort_order,
         created_at_ms: value.created_at_ms,
-        draft: to_candid_Draft_n106(value.draft),
+        draft: to_candid_Draft_n110(value.draft),
         club_id: value.club_id
     };
 }
-function to_candid_record_n107(value: {
+function to_candid_record_n111(value: {
     url: string;
     title: string;
     icon: string;
@@ -5332,7 +5517,7 @@ function to_candid_record_n107(value: {
         subtitle: value.subtitle ? candid_some(value.subtitle) : candid_none()
     };
 }
-function to_candid_record_n109(value: {
+function to_candid_record_n113(value: {
     schema: number;
     clubs: Array<[string, Listing]>;
 }): {
@@ -5341,10 +5526,10 @@ function to_candid_record_n109(value: {
 } {
     return {
         schema: value.schema,
-        clubs: to_candid_vec_n110(value.clubs)
+        clubs: to_candid_vec_n114(value.clubs)
     };
 }
-function to_candid_record_n150(value: {
+function to_candid_record_n154(value: {
     request_id: string;
     club: string;
     operation: Operation;
@@ -5358,11 +5543,11 @@ function to_candid_record_n150(value: {
     return {
         request_id: value.request_id,
         club: value.club,
-        operation: to_candid_Operation_n151(value.operation),
+        operation: to_candid_Operation_n155(value.operation),
         expected_revision: value.expected_revision
     };
 }
-function to_candid_record_n153(value: {
+function to_candid_record_n157(value: {
     id?: string;
     draft: Draft;
 }): {
@@ -5371,10 +5556,10 @@ function to_candid_record_n153(value: {
 } {
     return {
         id: value.id ? candid_some(value.id) : candid_none(),
-        draft: to_candid_Draft_n106(value.draft)
+        draft: to_candid_Draft_n110(value.draft)
     };
 }
-function to_candid_record_n161(value: {
+function to_candid_record_n165(value: {
     teams: Array<Team>;
     guardians: Array<Guardian>;
     clubs: Array<string>;
@@ -5393,12 +5578,12 @@ function to_candid_record_n161(value: {
         teams: value.teams,
         guardians: value.guardians,
         clubs: value.clubs,
-        children: to_candid_vec_n162(value.children),
+        children: to_candid_vec_n166(value.children),
         exclusions: value.exclusions,
-        roles: to_candid_vec_n165(value.roles)
+        roles: to_candid_vec_n169(value.roles)
     };
 }
-function to_candid_record_n164(value: {
+function to_candid_record_n168(value: {
     id: string;
     teams: Array<string>;
     club_id?: string;
@@ -5416,7 +5601,7 @@ function to_candid_record_n164(value: {
         parent: value.parent ? candid_some(value.parent) : candid_none()
     };
 }
-function to_candid_record_n167(value: {
+function to_candid_record_n171(value: {
     club?: string;
     role: string;
     team?: string;
@@ -5434,7 +5619,7 @@ function to_candid_record_n167(value: {
         user: value.user
     };
 }
-function to_candid_record_n169(value: {
+function to_candid_record_n173(value: {
     id: string;
     secondary_color?: string;
     playhq_tenant?: string;
@@ -5479,7 +5664,7 @@ function to_candid_record_n169(value: {
         deleted_at_ms: value.deleted_at_ms ? candid_some(value.deleted_at_ms) : candid_none()
     };
 }
-function to_candid_record_n171(value: {
+function to_candid_record_n175(value: {
     logo_only_mode: boolean;
     invite_email_style?: string;
     theme_dark_accent_color?: string;
@@ -5548,7 +5733,7 @@ function to_candid_record_n171(value: {
         theme_enabled: value.theme_enabled
     };
 }
-function to_candid_record_n173(value: {
+function to_candid_record_n177(value: {
     activated_at_ms?: bigint;
     trial_ends_at_ms?: bigint;
     team_limit?: number;
@@ -5590,7 +5775,7 @@ function to_candid_record_n173(value: {
         expires_at_ms: value.expires_at_ms ? candid_some(value.expires_at_ms) : candid_none()
     };
 }
-function to_candid_record_n180(value: {
+function to_candid_record_n184(value: {
     id: string;
     website_url?: string;
     name: string;
@@ -5629,7 +5814,7 @@ function to_candid_record_n180(value: {
         exposure_percentage: value.exposure_percentage ? candid_some(value.exposure_percentage) : candid_none()
     };
 }
-function to_candid_record_n183(value: {
+function to_candid_record_n187(value: {
     id: string;
     playhq_team_id?: string;
     name: string;
@@ -5704,7 +5889,7 @@ function to_candid_record_n183(value: {
         deleted_at_ms: value.deleted_at_ms ? candid_some(value.deleted_at_ms) : candid_none()
     };
 }
-function to_candid_record_n185(value: {
+function to_candid_record_n189(value: {
     id: string;
     name: string;
     color: string;
@@ -5734,13 +5919,76 @@ function to_candid_record_n185(value: {
         club_id: value.club_id
     };
 }
-function to_candid_tuple_n111(value: [string, Listing]): [string, _Listing] {
+function to_candid_record_n194(value: {
+    max_spread_minutes?: number;
+    formation?: string;
+    trial_ends_at_ms?: bigint;
+    is_trial: boolean;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    is_pro: boolean;
+    disable_auto_subs: boolean;
+    team_size?: number;
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    disable_batch_subs: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms?: bigint;
+    minutes_per_half?: number;
+    disable_position_swaps: boolean;
+    disable_team_pom_rewards: boolean;
+}): {
+    max_spread_minutes: [] | [number];
+    formation: [] | [string];
+    trial_ends_at_ms: [] | [bigint];
+    is_trial: boolean;
+    rotate_gk_at_halftime: boolean;
+    show_lineup_picker: boolean;
+    team_id: string;
+    rotation_speed: number;
+    is_pro: boolean;
+    disable_auto_subs: boolean;
+    team_size: [] | [number];
+    is_pro_football: boolean;
+    admin_pro_football_override: boolean;
+    disable_batch_subs: boolean;
+    admin_pro_override: boolean;
+    cancelled_at_ms: [] | [bigint];
+    minutes_per_half: [] | [number];
+    disable_position_swaps: boolean;
+    disable_team_pom_rewards: boolean;
+} {
+    return {
+        max_spread_minutes: value.max_spread_minutes ? candid_some(value.max_spread_minutes) : candid_none(),
+        formation: value.formation ? candid_some(value.formation) : candid_none(),
+        trial_ends_at_ms: value.trial_ends_at_ms ? candid_some(value.trial_ends_at_ms) : candid_none(),
+        is_trial: value.is_trial,
+        rotate_gk_at_halftime: value.rotate_gk_at_halftime,
+        show_lineup_picker: value.show_lineup_picker,
+        team_id: value.team_id,
+        rotation_speed: value.rotation_speed,
+        is_pro: value.is_pro,
+        disable_auto_subs: value.disable_auto_subs,
+        team_size: value.team_size ? candid_some(value.team_size) : candid_none(),
+        is_pro_football: value.is_pro_football,
+        admin_pro_football_override: value.admin_pro_football_override,
+        disable_batch_subs: value.disable_batch_subs,
+        admin_pro_override: value.admin_pro_override,
+        cancelled_at_ms: value.cancelled_at_ms ? candid_some(value.cancelled_at_ms) : candid_none(),
+        minutes_per_half: value.minutes_per_half ? candid_some(value.minutes_per_half) : candid_none(),
+        disable_position_swaps: value.disable_position_swaps,
+        disable_team_pom_rewards: value.disable_team_pom_rewards
+    };
+}
+function to_candid_tuple_n115(value: [string, Listing]): [string, _Listing] {
     return [
         value[0],
-        to_candid_Listing_n101(value[1])
+        to_candid_Listing_n105(value[1])
     ];
 }
-function to_candid_variant_n152(value: {
+function to_candid_variant_n156(value: {
     __kind__: "SetActive";
     SetActive: {
         id: string;
@@ -5786,24 +6034,24 @@ function to_candid_variant_n152(value: {
     return value.__kind__ === "SetActive" ? {
         SetActive: value.SetActive
     } : value.__kind__ === "Save" ? {
-        Save: to_candid_record_n153(value.Save)
+        Save: to_candid_record_n157(value.Save)
     } : value.__kind__ === "Remove" ? {
         Remove: value.Remove
     } : value.__kind__ === "Reorder" ? {
         Reorder: value.Reorder
     } : value;
 }
-function to_candid_vec_n103(value: Array<Link>): Array<_Link> {
-    return value.map((x)=>to_candid_Link_n104(x));
+function to_candid_vec_n107(value: Array<Link>): Array<_Link> {
+    return value.map((x)=>to_candid_Link_n108(x));
 }
-function to_candid_vec_n110(value: Array<[string, Listing]>): Array<[string, _Listing]> {
-    return value.map((x)=>to_candid_tuple_n111(x));
+function to_candid_vec_n114(value: Array<[string, Listing]>): Array<[string, _Listing]> {
+    return value.map((x)=>to_candid_tuple_n115(x));
 }
-function to_candid_vec_n162(value: Array<Child>): Array<_Child> {
-    return value.map((x)=>to_candid_Child_n163(x));
+function to_candid_vec_n166(value: Array<Child>): Array<_Child> {
+    return value.map((x)=>to_candid_Child_n167(x));
 }
-function to_candid_vec_n165(value: Array<RoleGrant>): Array<_RoleGrant> {
-    return value.map((x)=>to_candid_RoleGrant_n166(x));
+function to_candid_vec_n169(value: Array<RoleGrant>): Array<_RoleGrant> {
+    return value.map((x)=>to_candid_RoleGrant_n170(x));
 }
 export interface CreateActorOptions {
     agent?: Agent;

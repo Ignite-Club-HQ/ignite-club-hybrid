@@ -457,6 +457,11 @@ export interface Main {
     { 'Ok' : Array<TeamPlayerPosition> } |
       { 'Err' : string }
   >,
+  'get_team_subscription' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [TeamSubscription] } |
+      { 'Err' : string }
+  >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'import_frozen_club' : ActorMethod<
@@ -770,6 +775,29 @@ export interface Main {
   'save_team_folder' : ActorMethod<
     [TeamFolder],
     { 'Ok' : TeamFolder } |
+      { 'Err' : string }
+  >,
+  'save_team_pitch_settings' : ActorMethod<
+    [
+      string,
+      boolean,
+      number,
+      boolean,
+      boolean,
+      boolean,
+      [] | [number],
+      [] | [number],
+      [] | [number],
+      [] | [string],
+      boolean,
+      boolean,
+    ],
+    { 'Ok' : TeamSubscription } |
+      { 'Err' : string }
+  >,
+  'save_team_subscription' : ActorMethod<
+    [TeamSubscription],
+    { 'Ok' : TeamSubscription } |
       { 'Err' : string }
   >,
   'send_fee_reminders' : ActorMethod<
@@ -1107,6 +1135,27 @@ export interface TeamPlayerPosition {
 export interface TeamSponsorAllocation {
   'team_id' : string,
   'sponsor_id' : string,
+}
+export interface TeamSubscription {
+  'max_spread_minutes' : [] | [number],
+  'formation' : [] | [string],
+  'trial_ends_at_ms' : [] | [bigint],
+  'is_trial' : boolean,
+  'rotate_gk_at_halftime' : boolean,
+  'show_lineup_picker' : boolean,
+  'team_id' : string,
+  'rotation_speed' : number,
+  'is_pro' : boolean,
+  'disable_auto_subs' : boolean,
+  'team_size' : [] | [number],
+  'is_pro_football' : boolean,
+  'admin_pro_football_override' : boolean,
+  'disable_batch_subs' : boolean,
+  'admin_pro_override' : boolean,
+  'cancelled_at_ms' : [] | [bigint],
+  'minutes_per_half' : [] | [number],
+  'disable_position_swaps' : boolean,
+  'disable_team_pom_rewards' : boolean,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

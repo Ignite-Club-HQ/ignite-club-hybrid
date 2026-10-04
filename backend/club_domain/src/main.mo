@@ -91,6 +91,7 @@ persistent actor class Main(governorInit : Principal) {
   var messagingDomainCanister : ?Principal;
   var piiCanister : ?Principal;
   var clubSubscriptions : [Types.ClubSubscription];
+  var teamSubscriptions : [Types.TeamSubscription];
 
   // Global app-wide config key/value store (app_settings parity for values
   // that must be readable pre-auth, e.g. the backend routing config). Values
@@ -2306,6 +2307,7 @@ persistent actor class Main(governorInit : Principal) {
     teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.team_id != teamId);
     seasonTeamSummaries := seasonTeamSummaries.filter(func(s) = s.team_id != teamId);
     seasonPlayerStats := seasonPlayerStats.filter(func(s) = s.team_id != teamId);
+    teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != teamId);
   };
 
   // Removes every club_domain record scoped to one club, including its
@@ -2561,6 +2563,81 @@ persistent actor class Main(governorInit : Principal) {
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != item.club_id);
     clubSubscriptions := clubSubscriptions.concat([item]);
     #Ok(item)
+  };
+
+  // ---- Team subscription status (team_subscriptions parity) ----
+  // Same trust model as club subscriptions: reads are member-visible (Pro
+  // gates render for every member); Pro-flag writes are platform-only
+  // (governor or app_admin) so a team cannot grant itself Pro. Pitch-board
+  // settings are team-admin writable through save_team_pitch_settings,
+  // which merges into the existing row and never touches the Pro flags.
+  public query func get_team_subscription(team_id : Text) : async { #Ok : ?Types.TeamSubscription; #Err : Text } {
+    for (s in teamSubscriptions.values()) {
+      if (s.team_id == team_id) return #Ok(?s);
+    };
+    #Ok(null)
+  };
+
+  public shared ({ caller }) func save_team_subscription(item : Types.TeamSubscription) : async { #Ok : Types.TeamSubscription; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != item.team_id);
+    teamSubscriptions := teamSubscriptions.concat([item]);
+    #Ok(item)
+  };
+
+  public shared ({ caller }) func save_team_pitch_settings(
+    team_id : Text,
+    disable_auto_subs : Bool,
+    rotation_speed : Nat32,
+    disable_position_swaps : Bool,
+    disable_batch_subs : Bool,
+    rotate_gk_at_halftime : Bool,
+    minutes_per_half : ?Nat32,
+    max_spread_minutes : ?Nat32,
+    team_size : ?Nat32,
+    formation : ?Text,
+    show_lineup_picker : Bool,
+    disable_team_pom_rewards : Bool,
+  ) : async { #Ok : Types.TeamSubscription; #Err : Text } {
+    auth(caller);
+    let team = switch (teams.find(func(t) = t.id == team_id and t.deleted_at_ms == null)) {
+      case null return #Err("Team not found");
+      case (?t) t;
+    };
+    if (not (canManageTeam(caller, team.club_id, ?team_id) or isAdmin(caller, team.club_id))) return #Err("Team admin required");
+    let base : Types.TeamSubscription = switch (teamSubscriptions.find(func(s) = s.team_id == team_id)) {
+      case (?s) s;
+      case null ({
+        team_id = team_id;
+        is_pro = false; is_pro_football = false; is_trial = false;
+        trial_ends_at_ms = null; cancelled_at_ms = null;
+        admin_pro_override = false; admin_pro_football_override = false;
+        disable_auto_subs = false; rotation_speed = (1 : Nat32);
+        disable_position_swaps = false; disable_batch_subs = false;
+        rotate_gk_at_halftime = true; minutes_per_half = null;
+        max_spread_minutes = null; team_size = null;
+        formation = null; show_lineup_picker = false;
+        disable_team_pom_rewards = false;
+      });
+    };
+    let merged : Types.TeamSubscription = {
+      base with
+      disable_auto_subs;
+      rotation_speed;
+      disable_position_swaps;
+      disable_batch_subs;
+      rotate_gk_at_halftime;
+      minutes_per_half;
+      max_spread_minutes;
+      team_size;
+      formation;
+      show_lineup_picker;
+      disable_team_pom_rewards;
+    };
+    teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != team_id);
+    teamSubscriptions := teamSubscriptions.concat([merged]);
+    #Ok(merged)
   };
 
   // ---- Global app config (app_settings parity for pre-auth boot reads) ----

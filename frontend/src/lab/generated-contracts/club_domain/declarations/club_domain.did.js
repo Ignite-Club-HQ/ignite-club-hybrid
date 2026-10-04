@@ -304,6 +304,27 @@ export const idlFactory = ({ IDL }) => {
     'member_id' : IDL.Text,
     'position' : IDL.Text,
   });
+  const TeamSubscription = IDL.Record({
+    'max_spread_minutes' : IDL.Opt(IDL.Nat32),
+    'formation' : IDL.Opt(IDL.Text),
+    'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
+    'is_trial' : IDL.Bool,
+    'rotate_gk_at_halftime' : IDL.Bool,
+    'show_lineup_picker' : IDL.Bool,
+    'team_id' : IDL.Text,
+    'rotation_speed' : IDL.Nat32,
+    'is_pro' : IDL.Bool,
+    'disable_auto_subs' : IDL.Bool,
+    'team_size' : IDL.Opt(IDL.Nat32),
+    'is_pro_football' : IDL.Bool,
+    'admin_pro_football_override' : IDL.Bool,
+    'disable_batch_subs' : IDL.Bool,
+    'admin_pro_override' : IDL.Bool,
+    'cancelled_at_ms' : IDL.Opt(IDL.Nat64),
+    'minutes_per_half' : IDL.Opt(IDL.Nat32),
+    'disable_position_swaps' : IDL.Bool,
+    'disable_team_pom_rewards' : IDL.Bool,
+  });
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
     'method' : IDL.Text,
@@ -696,6 +717,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamPlayerPosition), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_team_subscription' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(TeamSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'has_club_staff_role' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
@@ -1052,6 +1078,29 @@ export const idlFactory = ({ IDL }) => {
     'save_team_folder' : IDL.Func(
         [TeamFolder],
         [IDL.Variant({ 'Ok' : TeamFolder, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team_pitch_settings' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Bool,
+          IDL.Nat32,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Bool,
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'Ok' : TeamSubscription, 'Err' : IDL.Text })],
+        [],
+      ),
+    'save_team_subscription' : IDL.Func(
+        [TeamSubscription],
+        [IDL.Variant({ 'Ok' : TeamSubscription, 'Err' : IDL.Text })],
         [],
       ),
     'send_fee_reminders' : IDL.Func(
