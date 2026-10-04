@@ -952,6 +952,28 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
         });
       }
       if (!ids.size) return guardClubListResult(`user-clubs:${user.id}`, []);
+      if (isIcp) {
+        // Club rows live on the club_domain canister — Supabase has no
+        // clubs for Internet Identity users.
+        const { getLiveClubProfile } = await import("@/live/features/club");
+        const clubs = await withFeatureBackend("membership", {
+          supabase: async () => [] as { id: string; name: string; logo_url: string | null }[],
+          icp: async (ctx) => {
+            const rows = await Promise.all([...ids].map(async (clubId) => {
+              try {
+                const profile = await getLiveClubProfile(ctx, clubId);
+                const p = profile[0];
+                if (!p || p.deleted_at_ms.length) return null;
+                return { id: p.id, name: p.name, logo_url: p.logo_url[0] ?? null };
+              } catch {
+                return null;
+              }
+            }));
+            return rows.filter((r): r is NonNullable<typeof r> => r !== null);
+          },
+        });
+        return guardClubListResult(`user-clubs:${user.id}`, clubs);
+      }
       const { data: clubs, error: clubsError } = await supabase
         .from("clubs")
         .select("id, name, logo_url")
