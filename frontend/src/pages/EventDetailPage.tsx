@@ -950,6 +950,17 @@ export default function EventDetailPage() {
   const { data: teamSubscription } = useQuery({
     queryKey: ["team-subscription-for-pitch", event?.team_id],
     queryFn: async () => {
+      // Live ICP: the subscription row lives on club_domain (pitch settings +
+      // Pro flags); Supabase has no rows for II accounts.
+      if (isIcpAuthBackend && event?.team_id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, event.team_id!);
+            return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -958,7 +969,7 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab,
   });
 
   // Fetch team/club members for duty assignment and not responded list (with roles)
