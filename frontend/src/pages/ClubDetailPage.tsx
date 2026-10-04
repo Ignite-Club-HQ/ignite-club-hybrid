@@ -215,6 +215,20 @@ export default function ClubDetailPage() {
               sport: p.sport[0] ?? null,
               is_active: p.is_active,
               deleted_at: p.deleted_at_ms.length ? new Date(Number(p.deleted_at_ms[0])).toISOString() : null,
+              // Supabase-only columns with no canister equivalent — render
+              // with inert defaults.
+              class_mode_enabled: false,
+              primary_sponsor_id: null,
+              show_logo_in_header: false,
+              theme_primary_h: null,
+              theme_primary_s: null,
+              theme_primary_l: null,
+              theme_secondary_h: null,
+              theme_secondary_s: null,
+              theme_secondary_l: null,
+              theme_accent_h: null,
+              theme_accent_s: null,
+              theme_accent_l: null,
             };
           },
         });
@@ -924,6 +938,13 @@ export default function ClubDetailPage() {
               is_pro: sub.is_pro,
               is_pro_football: sub.is_pro_football,
               plan: sub.plan,
+              admin_pro_override: sub.admin_pro_override,
+              admin_pro_football_override: sub.admin_pro_football_override,
+              team_limit: sub.team_limit.length ? Number(sub.team_limit[0]) : null,
+              is_trial: sub.is_trial,
+              trial_ends_at: sub.trial_ends_at_ms.length
+                ? new Date(Number(sub.trial_ends_at_ms[0])).toISOString()
+                : null,
             };
           },
         });

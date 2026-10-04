@@ -199,6 +199,9 @@ export default function TeamDetailPage() {
               is_shell: t.is_shell,
               folder_id: t.folder_id[0] ?? null,
               is_pro: sub?.is_pro ?? false,
+              // Supabase-only columns with no canister equivalent.
+              class_day: null,
+              sponsor_id: null,
               deleted_at: t.deleted_at_ms.length
                 ? new Date(Number(t.deleted_at_ms[0])).toISOString()
                 : null,
