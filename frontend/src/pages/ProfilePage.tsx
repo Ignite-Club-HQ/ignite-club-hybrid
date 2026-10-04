@@ -253,7 +253,7 @@ export default function ProfilePage() {
 
       return { clubs, teams };
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Fetch points history
