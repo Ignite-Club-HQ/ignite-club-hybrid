@@ -2608,7 +2608,7 @@ persistent actor class Main(governorInit : Principal) {
     if (not (canManageTeam(caller, team.club_id, ?team_id) or isAdmin(caller, team.club_id))) return #Err("Team admin required");
     let base : Types.TeamSubscription = switch (teamSubscriptions.find(func(s) = s.team_id == team_id)) {
       case (?s) s;
-      case null {
+      case null ({
         team_id = team_id;
         is_pro = false; is_pro_football = false; is_trial = false;
         trial_ends_at_ms = null; cancelled_at_ms = null;
@@ -2619,7 +2619,7 @@ persistent actor class Main(governorInit : Principal) {
         max_spread_minutes = null; team_size = null;
         formation = null; show_lineup_picker = false;
         disable_team_pom_rewards = false;
-      };
+      });
     };
     let merged : Types.TeamSubscription = {
       base with
