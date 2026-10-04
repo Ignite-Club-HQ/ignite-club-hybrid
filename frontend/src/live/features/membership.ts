@@ -41,6 +41,16 @@ export async function listLiveRoleGrants(ctx: FeatureBackendContext, clubId: str
   return unwrapCandid(actor.list_role_grants(clubId), "List role grants");
 }
 
+/**
+ * Team-scoped roster read: any member of the team's club (club admins
+ * included) may list the team's role grants. Powers the team page member
+ * list in ICP mode — the club-wide listLiveRoleGrants is club-admin-only.
+ */
+export async function listLiveTeamRoleGrants(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_team_role_grants(teamId), "List team role grants");
+}
+
 /** Caller-scoped: children linked to the signed-in member's account. */
 export async function listLiveChildren(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);

@@ -771,6 +771,29 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(accountRoles.filter(func(grant) = grant.club == ?club or grant.club == null))
   };
 
+  // Team-scoped roster read for the team page member list: any member of the
+  // team's club (club admins included) may read that team's role grants. The
+  // full club roster stays club-admin-only (list_role_grants above).
+  public query ({ caller }) func list_team_role_grants(team : Text) : async { #Ok : [Types.AccountRole]; #Err : Text } {
+    auth(caller);
+    var club : ?Text = null;
+    label search {
+      for (t in teams.vals()) {
+        if (t.id == team) { club := ?t.club_id; break search };
+      };
+      for (t in acl.teams.vals()) {
+        if (t.id == team) { club := ?t.club; break search };
+      };
+    };
+    switch (club) {
+      case null { #Err("Unknown team") };
+      case (?clubId) {
+        if (not isMember(caller, clubId)) return #Err("Club membership required");
+        #Ok(accountRoles.filter(func(grant) = grant.team == ?team))
+      };
+    };
+  };
+
   // Caller-scoped: every role grant the caller holds across ALL clubs,
   // from the authorization-source `acl.roles` (not the `accountRoles`
   // roster mirror). No club-admin gate — callers may always see their own
