@@ -2609,7 +2609,7 @@ persistent actor class Main(governorInit : Principal) {
     let base : Types.TeamSubscription = switch (teamSubscriptions.find(func(s) = s.team_id == team_id)) {
       case (?s) s;
       case null {
-        team_id;
+        team_id = team_id;
         is_pro = false; is_pro_football = false; is_trial = false;
         trial_ends_at_ms = null; cancelled_at_ms = null;
         admin_pro_override = false; admin_pro_football_override = false;
