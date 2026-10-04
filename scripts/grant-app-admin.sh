@@ -17,7 +17,8 @@ CLUB_ID="${2:-966bdaec-ebf1-46da-b2b3-cc53bf05c422}"
 
 # The name travels inside a candid text argument — keep it to plain name
 # characters so quoting can't break.
-[[ "$SEARCH_NAME" =~ ^[A-Za-z' -]+$ ]] || { echo "ERROR: invalid name '$SEARCH_NAME'"; exit 1; }
+NAME_RE="^[A-Za-z' -]+$"
+[[ "$SEARCH_NAME" =~ $NAME_RE ]] || { echo "ERROR: invalid name '$SEARCH_NAME'"; exit 1; }
 
 cd "$(dirname "$0")/../deploy/mainnet"
 
