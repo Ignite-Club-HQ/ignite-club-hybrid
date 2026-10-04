@@ -112,7 +112,7 @@ function IcpAdminPage() {
             icon={ImageIcon}
             label="Manage Ads"
             description="Create and manage in-app advertisements"
-            onClick={() => navigate("/admin/manage-ads")}
+            onClick={() => navigate("/admin/ads")}
           />
           <AdminMenuItem
             icon={Globe2}
