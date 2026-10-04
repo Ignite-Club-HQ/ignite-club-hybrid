@@ -329,6 +329,40 @@ export default function TeamDetailPage() {
         };
       }
 
+      if (isFeatureRoutedToIcp("membership") && id) {
+        // Live ICP: team_subscriptions rows live on club_domain; Supabase
+        // has no rows for II accounts, so this would always come back empty
+        // (and Pro gates would never lift after an app-admin grant).
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, id);
+            if (!sub) return null;
+            return {
+              team_id: sub.team_id,
+              is_pro: sub.is_pro,
+              is_pro_football: sub.is_pro_football,
+              is_trial: sub.is_trial,
+              trial_ends_at: sub.trial_ends_at_ms.length ? new Date(Number(sub.trial_ends_at_ms[0])).toISOString() : null,
+              cancelled_at: sub.cancelled_at_ms.length ? new Date(Number(sub.cancelled_at_ms[0])).toISOString() : null,
+              disable_auto_subs: sub.disable_auto_subs,
+              rotation_speed: Number(sub.rotation_speed),
+              disable_position_swaps: sub.disable_position_swaps,
+              disable_batch_subs: sub.disable_batch_subs,
+              rotate_gk_at_halftime: sub.rotate_gk_at_halftime,
+              minutes_per_half: sub.minutes_per_half.length ? Number(sub.minutes_per_half[0]) : null,
+              max_spread_minutes: sub.max_spread_minutes.length ? Number(sub.max_spread_minutes[0]) : null,
+              team_size: sub.team_size.length ? Number(sub.team_size[0]) : null,
+              formation: sub.formation.length ? sub.formation[0] : null,
+              show_lineup_picker: sub.show_lineup_picker,
+              disable_team_pom_rewards: sub.disable_team_pom_rewards,
+              admin_pro_override: sub.admin_pro_override,
+              admin_pro_football_override: sub.admin_pro_football_override,
+            };
+          },
+        });
+      }
+
       const { data, error } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -501,6 +535,32 @@ export default function TeamDetailPage() {
           trial_ends_at: null,
           disable_team_pom_rewards: false,
         };
+      }
+
+      if (isFeatureRoutedToIcp("membership") && team?.club_id) {
+        // Live ICP: club_subscriptions rows live on club_domain; Supabase
+        // returns nothing for II accounts, so club-level Pro would never
+        // reach this page.
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, team!.club_id);
+            if (!sub) return null;
+            return {
+              club_id: sub.club_id,
+              is_pro: sub.is_pro,
+              is_pro_football: sub.is_pro_football,
+              is_trial: sub.is_trial,
+              cancelled_at: sub.cancelled_at_ms.length ? new Date(Number(sub.cancelled_at_ms[0])).toISOString() : null,
+              disable_auto_subs: false,
+              rotation_speed: 1,
+              admin_pro_override: sub.admin_pro_override,
+              admin_pro_football_override: sub.admin_pro_football_override,
+              trial_ends_at: sub.trial_ends_at_ms.length ? new Date(Number(sub.trial_ends_at_ms[0])).toISOString() : null,
+              disable_team_pom_rewards: false,
+            };
+          },
+        });
       }
 
       const { data, error } = await supabase
