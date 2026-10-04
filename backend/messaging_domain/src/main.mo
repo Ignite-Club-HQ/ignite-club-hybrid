@@ -1031,15 +1031,25 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Group metadata not found") };
       case (?meta) {
         if (not meta.deleted) return #Err("Group is not deleted");
+        let messageIds = messages.filter(func(m) = m.conversation_id == conversation_id).map(func(m) = m.id);
+        let pollIds = polls.filter(func(p) = p.conversation_id == conversation_id).map(func(p) = p.id);
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
-        let scope = "group:" # conversation_id;
-        scopeMembers := scopeMembers.filter(func(r) = r.scope != scope);
-        messages := messages.filter(func(m) = m.scope != scope);
-        receipts := receipts.filter(func(r) = r.scope != scope);
-        groupReactions := groupReactions.filter(func(r) = r.scope != scope);
-        scopeSettings := scopeSettings.filter(func(s) = s.scope != scope);
-        pins := pins.filter(func(p) = p.scope != scope);
-        joinRequests := joinRequests.filter(func(r) = not (r.scope == scope and r.conversation_id == conversation_id));
+        conversations := conversations.filter(func(c) = c.id != conversation_id);
+        messages := messages.filter(func(m) = m.conversation_id != conversation_id);
+        receipts := receipts.filter(func(r) = r.conversation_id != conversation_id);
+        unread := unread.filter(func(u) = u.conversation_id != conversation_id);
+        groupRoles := groupRoles.filter(func(r) = r.conversation_id != conversation_id);
+        joinRequests := joinRequests.filter(func(r) = r.conversation_id != conversation_id);
+        polls := polls.filter(func(p) = p.conversation_id != conversation_id);
+        pollVotes := pollVotes.filter(func(v) = not pollIds.any(func(id) = v.poll_id == id));
+        mutePreferences := mutePreferences.filter(func(p) = p.conversation_id != conversation_id);
+        dmLinks := dmLinks.filter(func(l) = l.conversation_id != conversation_id);
+        forwardRecords := forwardRecords.filter(func(f) = f.to_conversation_id != conversation_id and f.from_conversation_id != conversation_id);
+        scheduledMessages := scheduledMessages.filter(func(s) = s.conversation_id != conversation_id);
+        attachmentMetadata := attachmentMetadata.filter(func(a) = a.conversation_id != conversation_id);
+        reactions := reactions.filter(func(r) = not messageIds.any(func(id) = r.message_id == id));
+        typingPings := typingPings.filter(func(t) = t.conversation_id != conversation_id);
+        pinnedMessages := pinnedMessages.filter(func(p) = p.conversation_id != conversation_id);
         #Ok
       };
     }
@@ -1056,7 +1066,7 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_club_dm_settings() : async { #Ok : [Types.ClubDmSettings]; #Err : Text } {
     auth(caller);
     if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
-    #Ok(clubDmSettings.values().toArray())
+    #Ok(clubDmSettings)
   };
       };
     }
