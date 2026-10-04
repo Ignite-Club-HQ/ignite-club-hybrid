@@ -55,7 +55,9 @@ export function tryRecoverFromChunkError(): boolean {
   } catch {
     /* ignore */
   }
-  window.location.reload();
+  // Reload the root, not the current URL: the published/preview hosting has
+  // no SPA fallback, so reloading a deep path answers a plain "Not Found".
+  window.location.replace("/");
   return true;
 }
 
@@ -106,13 +108,15 @@ export class RouteErrorBoundary extends React.Component<
     } catch { /* ignore */ }
     this.setState({ error: null });
     if (typeof window !== "undefined") {
-      window.location.replace("/messages");
+      // Root, not /messages: the hosting has no SPA fallback for deep paths.
+      window.location.replace("/");
     }
   };
 
   private handleReload = () => {
     if (typeof window !== "undefined") {
-      window.location.reload();
+      // Root, not the current URL — same no-SPA-fallback reason as above.
+      window.location.replace("/");
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Trophy, ChevronDown, Check } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ export function LadderView({ rows, divisions, isAdmin = false }: { rows: any[]; 
   const [filterDivisionId, setFilterDivisionId] = useState<string>("_all");
   const [filterTeamId, setFilterTeamId] = useState<string>("_all");
   const [teamSheetOpen, setTeamSheetOpen] = useState(false);
+  const navigate = useNavigate();
 
   const hiddenDivisionIds = useMemo(
     () => new Set(divisions.filter((d: any) => d.hide_ladder).map((d: any) => d.id)),
@@ -352,7 +354,9 @@ function LadderDivisionCard({ title, rows, isHidden = false }: { title: string; 
                       key={r.team_id}
                       className="group cursor-pointer hover:bg-accent/40 active:bg-accent/60 transition-colors"
                       onClick={() => {
-                        window.location.href = `/teams/${r.team_id}`;
+                        // In-app navigation: a full page load to this dynamic
+                        // path gets a plain "Not Found" from the hosting.
+                        navigate(`/teams/${r.team_id}`);
                       }}
                     >
                       {RowContent}

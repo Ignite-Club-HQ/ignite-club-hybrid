@@ -22,6 +22,7 @@ import { markProfileCompleted } from "@/components/InviteFlowProgress";
 import { isNativePlatform, unregisterNativePush } from "@/lib/nativePush";
 import { isTransientAuthFailure } from "@/lib/authRecoveryClassification";
 import { refreshSessionOnce } from "@/lib/refreshSessionOnce";
+import { buildAuthPathWithRedirect } from "@/lib/authRedirectStorage";
 import { notificationKeys } from "@/lab/notificationQueryKeys";
 // Value exports (signInWithInternetIdentity/signOutInternetIdentity) are loaded
 // dynamically at call time below. That module statically imports the ICP
@@ -1101,8 +1102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       pendingRedirect = null;
     }
-    const redirectUrl = pendingRedirect 
-      ? `${window.location.origin}${pendingRedirect}`
+    // Return to /auth (a static path the hosting serves) with the real
+    // destination in the ?next= query — the hosting answers deep dynamic
+    // paths like /join/<token> with a plain "Not Found".
+    const redirectUrl = pendingRedirect
+      ? `${window.location.origin}${buildAuthPathWithRedirect(pendingRedirect)}`
       : `${window.location.origin}/`;
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -1153,8 +1157,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? 'https://reference.invalid'
       : window.location.origin;
     
-    const redirectUrl = pendingRedirect 
-      ? `${baseUrl}${pendingRedirect}`
+    // Native keeps the path form (App Links intercept it before any hosting
+    // is involved). Web goes through /auth?next=… because the hosting has no
+    // SPA fallback and would answer a deep path with a plain "Not Found".
+    const redirectUrl = pendingRedirect
+      ? (isNative ? `${baseUrl}${pendingRedirect}` : `${baseUrl}${buildAuthPathWithRedirect(pendingRedirect)}`)
       : `${baseUrl}/`;
       
     console.log('[Auth] Google OAuth redirect URL:', redirectUrl, 'isNative:', isNative);
