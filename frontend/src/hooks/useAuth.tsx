@@ -57,6 +57,12 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation?: boolean }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  /**
+   * Internet Identity only: false until the sign-in code is loaded and ready,
+   * so a tap can open the Internet Identity window immediately. Undefined for
+   * the Supabase provider (always ready).
+   */
+  signInReady?: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshUnreadCount: () => Promise<void>;
@@ -1371,13 +1377,29 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // be opened outside of click handler". Warming here means `signInWithIcp`
   // below can reach the actual `signIn()` call with zero awaits in front of it.
   const internetIdentityModuleRef = useRef<typeof import("@/live/internetIdentityAuth") | null>(null);
+  const [iiSignInReady, setIiSignInReady] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const mod = await import("@/live/internetIdentityAuth");
-      if (cancelled) return;
-      internetIdentityModuleRef.current = mod;
-      void mod.warmInternetIdentityAuthClient();
+      // Keep trying until the sign-in code is loaded: a slow or dropped
+      // connection must not leave the button "ready" while the first tap
+      // would still have to load code (and so lose the tap).
+      for (let attempt = 0; !cancelled; attempt++) {
+        try {
+          const mod = internetIdentityModuleRef.current ?? (await import("@/live/internetIdentityAuth"));
+          if (cancelled) return;
+          internetIdentityModuleRef.current = mod;
+          await mod.warmInternetIdentityAuthClient();
+          if (cancelled) return;
+          if (mod.isInternetIdentitySignInReady()) {
+            setIiSignInReady(true);
+            return;
+          }
+        } catch {
+          // fall through to retry
+        }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** attempt, 8000)));
+      }
     })();
     return () => {
       cancelled = true;
@@ -1416,6 +1438,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signUp: async () => ({ error: (await signInWithIcp()).error, needsEmailConfirmation: false }),
     signIn: async () => signInWithIcp(),
     signInWithGoogle: async () => signInWithIcp(),
+    signInReady: iiSignInReady,
     signOut: async () => {
       localStorage.removeItem("ignite_icp_internet_identity_session");
       setSession(null);
