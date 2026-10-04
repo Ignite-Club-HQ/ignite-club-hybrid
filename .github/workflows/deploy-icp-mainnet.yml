@@ -21,7 +21,9 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  # write: the run commits the canister ID mapping back so reruns reuse
+  # already-created canisters instead of paying to create new ones.
+  contents: write
 
 jobs:
   deploy:
@@ -214,6 +216,22 @@ jobs:
           name: canister-ids
           path: deploy/mainnet/.icp/data/mappings/ic.ids.json
           if-no-files-found: ignore
+
+      - name: Save canister ID mapping to the repo (so reruns reuse canisters)
+        if: always()
+        run: |
+          IDS="deploy/mainnet/.icp/data/mappings/ic.ids.json"
+          [ -f "$IDS" ] || { echo "No mapping file yet."; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -f "$IDS"
+          if git diff --cached --quiet; then echo "Mapping unchanged."; exit 0; fi
+          git commit -m "Update mainnet canister ID mapping [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep 5
+          done
+          echo "::warning::Could not push the mapping; download the canister-ids artifact instead."
 
       - name: Upload generated deployer key (first run only)
         if: always() && env.key_source == 'generated'
