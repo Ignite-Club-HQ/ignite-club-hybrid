@@ -320,6 +320,11 @@ export async function signOutInternetIdentity(): Promise<void> {
   const client = activeClient;
   activeClient = undefined;
   activeTarget = undefined;
+  // The cached warm-up promise is already resolved; without clearing it the
+  // next warm-up call returns instantly with no client, the button looks
+  // ready, and the first tap after sign-out loses its click ("The sign-in
+  // window couldn't open in time").
+  warmupPromise = undefined;
   const [{ clearLiveAgentCache }, { clearPiiVetKeyCache }] = await Promise.all([
     import("./icpAgent"),
     import("./piiVetKeys"),

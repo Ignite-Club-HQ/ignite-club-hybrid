@@ -1430,6 +1430,10 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // the sign-in dialog while a finished Internet Identity sign-in is being
   // picked up.
   const [iiResumePending, setIiResumePending] = useState(true);
+  // Bumped after sign-out (which disposes the auth client) so the warm-up
+  // below runs again and the button is only "ready" once a fresh client
+  // exists — otherwise the first tap after sign-out loses its click.
+  const [iiWarmGeneration, setIiWarmGeneration] = useState(0);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -1456,7 +1460,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [iiWarmGeneration]);
   // Pick up a sign-in that finished while this tab wasn't listening (tab
   // reloaded by the phone, or the reply from the Internet Identity tab got
   // lost). Runs once the client is warm and whenever the tab comes back,
