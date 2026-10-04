@@ -47,3 +47,26 @@ export async function searchLiveProfiles(
     client.dispose();
   }
 }
+
+/**
+ * Same search as `searchLiveProfiles` but keeps the principal — needed by
+ * admin tools that key restrictions/roles on principals rather than account
+ * ids (e.g. the DM attachment restrictions page).
+ */
+export async function searchLiveProfilesWithPrincipals(
+  ctx: FeatureBackendContext,
+  query: string,
+  limit: number,
+): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null }>> {
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
+  try {
+    const rows = await client.searchProfiles(query, limit);
+    return rows.map((row) => ({
+      accountId: row.account_id,
+      principal: row.principal,
+      displayName: row.display_name,
+    }));
+  } finally {
+    client.dispose();
+  }
+}
