@@ -63,7 +63,7 @@ import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/
  * a UUID, so in ICP mode that query errors and the schedule spinner never
  * clears. */
 async function getLiveEventMemberships(
-  ctx: Parameters<Parameters<typeof withFeatureBackend>[1]["icp"]>[0],
+  ctx: import("@/live/featureRouter").FeatureBackendContext,
   accountId: string,
 ) {
   const grants = await getLiveMyRoleGrants(ctx);
@@ -93,8 +93,6 @@ async function getLiveEventMemberships(
   scope.clubIds.forEach((c) => clubIds.add(c));
 
   // Team grants/roster rows whose club isn't known yet — resolve via the team.
-  const unresolved = teamIds.filter(() => false); // club derivation below
-  void unresolved;
   await Promise.all(
     teamIds.map(async (teamId) => {
       // Cheap check: if any known club lists this team we skip the fetch.
