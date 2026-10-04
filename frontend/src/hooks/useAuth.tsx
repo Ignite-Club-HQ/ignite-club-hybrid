@@ -1525,7 +1525,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     profile,
     loading: false,
     profileLoading: Boolean(principal) && !icpProfileResolved,
-    profileError: false,
+    profileError: icpProfileError,
     initialized: true,
     sessionRestoration: principal ? "authenticated" as const : "signed_out" as const,
     profileResolved: !principal || icpProfileResolved,
@@ -1535,7 +1535,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signIn: async () => signInWithIcp(),
     signInWithGoogle: async () => signInWithIcp(),
     signInReady: iiSignInReady,
-    resumingSignIn: iiResumePending,
+    // Only show "Signing you in…" once the sign-in client is actually ready
+    // to check for a finished sign-in; before that the button shows its
+    // "Getting sign-in ready…" state, so a flaky connection never strands
+    // the member on a spinner with no way forward.
+    resumingSignIn: iiResumePending && iiSignInReady,
     signOut: async () => {
       // Clear the Internet Identity session FIRST and only then drop the
       // app session: setSession(null) re-arms the silent resume effect, so
@@ -1555,15 +1559,26 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     },
     refreshProfile: async () => {
       if (!principal) return;
-      const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
-        import("@/live/internetIdentityAuth"),
-        import("@/live/identityProfile"),
-      ]);
-      const identity = await getCurrentInternetIdentity();
-      if (!identity) return;
-      const fetched = await fetchIcpIdentityProfile(identity, principal);
-      setIcpProfile(fetched);
-      setIcpProfileResolved(true);
+      try {
+        const [authMod, { fetchIcpIdentityProfile }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        await withIcpTimeout(authMod.warmInternetIdentityAuthClient(), 30000);
+        if (!authMod.isInternetIdentitySignInReady()) return; // transient — AppLayout's retry loop fires again
+        const identity = await authMod.getCurrentInternetIdentity();
+        if (!identity) {
+          await clearDeadIcpSession();
+          return;
+        }
+        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 20000);
+        setIcpProfile(fetched);
+        setIcpProfileResolved(true);
+        setIcpProfileError(false);
+      } catch (error) {
+        console.warn("[Auth] ICP profile refresh failed:", error);
+        if (!getCachedIcpIdentityProfile(principal)) setIcpProfileError(true);
+      }
     },
     refreshUnreadCount: async () => {},
     clearUnreadCount: () => {},
