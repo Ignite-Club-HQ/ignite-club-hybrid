@@ -2330,6 +2330,76 @@ persistent actor class Main(governorInit : Principal) {
     clubSubscriptions := clubSubscriptions.filter(func(s) = s.club_id != id);
   };
 
+  // ---- Chat conversation provisioning (messaging_domain fan-out) ----
+  // The messaging canister keys club/team chats by deterministic id (club
+  // id / team id); these helpers keep those conversations and their
+  // participant lists in sync with this canister's authoritative roles.
+
+  // Club-chat participants: every principal holding any grant scoped to the
+  // club. App-wide grants (club == null, e.g. app_admin) are excluded —
+  // they are not club members.
+  func clubChatParticipants(clubId : Text) : [Principal] {
+    var result : [Principal] = [];
+    for (grant in acl.roles.values()) {
+      if (grant.club == ?clubId and result.size() < 500 and not result.any(func(p) = p.equal(grant.user))) {
+        result := result.concat([grant.user]);
+      };
+    };
+    result
+  };
+
+  // Team-chat participants: principals with a grant for this team plus club
+  // admins (club staff can read and post in every team chat, matching the
+  // Supabase client behaviour).
+  func teamChatParticipants(clubId : Text, teamId : Text) : [Principal] {
+    var result : [Principal] = [];
+    for (grant in acl.roles.values()) {
+      let inScope = grant.club == ?clubId and (grant.team == ?teamId or grant.role == "club_admin");
+      if (inScope and result.size() < 500 and not result.any(func(p) = p.equal(grant.user))) {
+        result := result.concat([grant.user]);
+      };
+    };
+    result
+  };
+
+  // Best-effort: a missing/unconfigured messaging canister never blocks
+  // club or membership writes.
+  func fanOutEnsureConversation(clubId : Text, teamId : ?Text, participants : [Principal]) : async () {
+    if (participants.size() == 0) return;
+    switch (messagingDomainCanister) {
+      case null {};
+      case (?c) {
+        let target : actor { ensure_conversation : shared (Text, ?Text, [Principal]) -> async { #Ok : { id : Text }; #Err : Text } } = actor (Principal.toText(c));
+        try { ignore await target.ensure_conversation(clubId, teamId, participants) } catch (_) {};
+      };
+    };
+  };
+
+  // Ensures the club chat and every live team chat of the club exist with
+  // current membership. Idempotent; returns conversations ensured.
+  func fanOutEnsureClubConversations(clubId : Text) : async Nat32 {
+    var ensured : Nat32 = 0;
+    await fanOutEnsureConversation(clubId, null, clubChatParticipants(clubId));
+    ensured += 1;
+    for (team in teams.values()) {
+      if (team.club_id == clubId and team.deleted_at_ms == null) {
+        await fanOutEnsureConversation(clubId, ?team.id, teamChatParticipants(clubId, team.id));
+        ensured += 1;
+      };
+    };
+    ensured
+  };
+
+  // Lazy catch-up any club member may call — provisions chats for clubs
+  // and teams created before this wiring existed. The chat pages call this
+  // before first read/send so a missing conversation self-heals.
+  public shared ({ caller }) func ensure_club_conversations(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    if (messagingDomainCanister == null) return #Err("Messaging domain not configured");
+    #Ok(await fanOutEnsureClubConversations(club_id))
+  };
+
   func fanOutTeamPurged(teamId : Text) : async () {
     switch (eventsDomainCanister) {
       case null {};
