@@ -156,14 +156,22 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro")
-        .eq("club_id", clubId!)
-        .eq("is_pro", true)
-        .limit(1)
-        .maybeSingle();
-      return !!data?.is_pro;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro")
+            .eq("club_id", clubId!)
+            .eq("is_pro", true)
+            .limit(1)
+            .maybeSingle();
+          return !!data?.is_pro;
+        },
+        icp: async (ctx) => {
+          const sub = await getLiveClubSubscription(ctx, clubId!);
+          return !!sub?.is_pro;
+        },
+      });
     },
   });
 
@@ -172,13 +180,30 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId && isProClub === true,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", clubId!)
-        .eq("is_active", true)
-        .order("name");
-      return (data || []) as SponsorLite[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", clubId!)
+            .eq("is_active", true)
+            .order("name");
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) => {
+          const sponsors = await listLiveSponsors(ctx, clubId!);
+          return (sponsors as any[])
+            .filter((s) => s.is_active)
+            .map((s) => ({
+              id: s.id as string,
+              name: s.name as string,
+              logo_url: (s.logo_url?.[0] ?? null) as string | null,
+              website_url: (s.website_url?.[0] ?? null) as string | null,
+              tier: ((s.tier?.[0] ?? s.tier ?? "bronze") as SponsorTier),
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)) as SponsorLite[];
+        },
+      });
     },
   });
 
@@ -187,6 +212,9 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId && isProClub === false,
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      // App-wide ads are Supabase-only by design (ad management lives there);
+      // in ICP mode the free-club ad slot is simply off.
+      if (resolveAuthBackend() === "icp") return { is_enabled: false };
       const { data } = await supabase
         .from("app_ad_settings")
         .select("is_enabled")
