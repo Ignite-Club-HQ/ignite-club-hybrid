@@ -240,7 +240,18 @@ async function signInWithStoredSessionRecovery(
   }
 }
 
+/**
+ * Set when the member explicitly signs out. While set, the silent resume
+ * path must NOT adopt the stored delegation again — otherwise sign-out
+ * immediately re-signs the member in (the delegation outlives the click)
+ * and the auth screen hangs on "Finishing sign in…". Cleared only by an
+ * explicit tap on "Continue with Internet Identity".
+ */
+let signOutRequested = false;
+
 export async function signInWithInternetIdentity(returnTo?: string): Promise<InternetIdentitySession> {
+  // An explicit tap always re-arms the silent resume path.
+  signOutRequested = false;
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
   const identity = client.isAuthenticated()
     ? await client.getIdentity()
@@ -266,6 +277,9 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
  * `isAuthenticated()` fast path). Call this on load and when the tab returns.
  */
 export async function resumeInternetIdentitySession(): Promise<InternetIdentitySession | null> {
+  // The member tapped sign out and hasn't explicitly signed back in —
+  // never undo that by adopting the still-stored delegation.
+  if (signOutRequested) return null;
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
   // getIdentity() waits for the client's async restore from storage.
   const identity = await client.getIdentity();
@@ -296,6 +310,10 @@ export async function getCurrentInternetIdentity(): Promise<Identity | null> {
 }
 
 export async function signOutInternetIdentity(): Promise<void> {
+  // Block the silent resume path FIRST, before any await: the auth hook
+  // clears its session state right after calling us, and a resume racing
+  // in between must find this flag already set.
+  signOutRequested = true;
   const client = activeClient;
   activeClient = undefined;
   activeTarget = undefined;
@@ -310,6 +328,7 @@ export async function signOutInternetIdentity(): Promise<void> {
 }
 
 export function resetInternetIdentityAuthForTests(): void {
+  signOutRequested = false;
   activeClient?.dispose?.();
   activeClient = undefined;
   activeTarget = undefined;
