@@ -15,6 +15,25 @@ export const DEFAULT_WELCOME_DM_MESSAGE =
  */
 export async function fetchWelcomeDmMessage(): Promise<string> {
   try {
+    // ICP mode: the message lives on club_domain's app_config store (public
+    // anonymous query; lazy-imported so the ICP SDK stays out of the entry
+    // chunk). Falls back to the default text on any error or missing value.
+    const { resolveAuthBackend } = await import("@/live/authBackendMode");
+    if (resolveAuthBackend() === "icp") {
+      const { readLiveAppConfig } = await import("@/live/appConfig");
+      const raw = await readLiveAppConfig(WELCOME_DM_SETTING_KEY);
+      if (raw != null) {
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          const text = typeof parsed === "string" ? parsed : String(parsed);
+          const trimmed = text.trim();
+          if (trimmed.length > 0) return trimmed;
+        } catch {
+          /* fall through to default */
+        }
+      }
+      return DEFAULT_WELCOME_DM_MESSAGE;
+    }
     const { data: row } = await supabase
       .from("app_settings")
       .select("value")

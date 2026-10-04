@@ -24,6 +24,7 @@ import { SPORT_EMOJIS, getSportEmoji, isClassModeSport } from "@/lib/sportEmojis
 import { isCachedAppAdmin } from "@/lib/rolesCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { createLiveClub } from "@/live/features/club";
 import { slugifyClubName } from "@/lib/eoiUtils";
 
@@ -109,6 +110,18 @@ export default function CreateClubPage() {
     queryKey: ["appSettings", "club_creation_locked", useIcpLab],
     queryFn: async () => {
       if (useIcpLab) return false;
+      // ICP mode: the lock lives on club_domain's app_config store.
+      if (resolveAuthBackend() === "icp") {
+        const { readLiveAppConfig } = await import("@/live/appConfig");
+        const raw = await readLiveAppConfig("club_creation_locked");
+        if (raw == null) return false;
+        try {
+          const parsed: unknown = JSON.parse(raw);
+          return parsed === true || parsed === "true";
+        } catch {
+          return false;
+        }
+      }
       const { data } = await supabase
         .from("app_settings")
         .select("value")

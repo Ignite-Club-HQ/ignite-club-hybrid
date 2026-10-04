@@ -22,8 +22,9 @@ export default function AdminPage() {
 // useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
 // admin sees the real tooling. Only tools whose pages work against the live
 // canisters are listed — billing, AI, backups, temp-password and
-// native-storage tooling are Supabase-only (NEEDS-CANISTER), and Active
-// Games has no canister holding live coaching-board state yet.
+// native-storage tooling are Supabase-only (NEEDS-CANISTER), Active
+// Games has no canister holding live coaching-board state yet, and the
+// App Settings page shows only the canister-backed global settings.
 function IcpAdminPage() {
   const navigate = useNavigate();
   const { isAppAdmin, isLoading } = useIsAppAdmin();
@@ -119,6 +120,12 @@ function IcpAdminPage() {
             label="Infrastructure / Placement Settings"
             description="ICP canisters, default backend, and per-country eligibility"
             onClick={() => navigate("/admin/placement-settings")}
+          />
+          <AdminMenuItem
+            icon={Settings}
+            label="App Settings"
+            description="Club creation lock, chat performance switches, welcome message"
+            onClick={() => navigate("/admin/settings")}
           />
         </CardContent>
       </Card>
