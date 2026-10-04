@@ -719,17 +719,17 @@ export default function EventsPage() {
                   title: ev.title,
                   type: ev.event_type as EventType,
                   event_date: format(start, "yyyy-MM-dd"),
-                  address: null,
+                  address: (ev.address?.[0] ?? null) as string | null,
                   suburb: null,
                   location_name: (ev.location?.[0] ?? null) as string | null,
                   club_id: ev.club_id,
                   team_id: teamId,
-                  mini_league_id: null,
+                  mini_league_id: (ev.mini_league_id?.[0] ?? null) as string | null,
                   is_cancelled: !!ev.cancelled,
                   is_bye: false,
                   is_recurring: ((ev.series_id?.length ?? 0) as number) > 0,
                   parent_event_id: null,
-                  opponent: null,
+                  opponent: (ev.opponent?.[0] ?? null) as string | null,
                   teams: teamId ? { name: (await getTeamName(teamId)) ?? "Team" } : null,
                   clubs: await getClubInfo(ev.club_id),
                   // Extra fields consumed via `any` by the ICS export and
@@ -737,7 +737,7 @@ export default function EventsPage() {
                   start_time: format(start, "HH:mm"),
                   end_time: format(end, "HH:mm"),
                   description: ev.description ?? "",
-                  updated_at: start.toISOString(),
+                  updated_at: new Date(Number(ev.updated_at_ms ?? ev.starts_at_ms)).toISOString(),
                 } as Event);
               }
             }

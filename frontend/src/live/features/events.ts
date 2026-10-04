@@ -75,6 +75,12 @@ export interface LiveEventInput {
   /** Mirrors the Supabase event_type enum: game | training | social | mini_league. */
   eventType: string;
   location?: string | null;
+  /** Game opponent label (Supabase events.opponent). */
+  opponent?: string | null;
+  /** Venue street address (Supabase events.address). */
+  address?: string | null;
+  /** Link to the owning mini league (Supabase events.mini_league_id). */
+  miniLeagueId?: string | null;
   startsAtMs: number | Date;
   endsAtMs: number | Date;
 }
@@ -108,6 +114,9 @@ export async function createLiveEvent(ctx: FeatureBackendContext, input: LiveEve
       input.description,
       input.eventType,
       candidOpt(input.location),
+      candidOpt(input.opponent),
+      candidOpt(input.address),
+      candidOpt(input.miniLeagueId),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
     ),
@@ -128,6 +137,9 @@ export async function updateLiveEvent(
       input.description,
       input.eventType,
       candidOpt(input.location),
+      candidOpt(input.opponent),
+      candidOpt(input.address),
+      candidOpt(input.miniLeagueId),
       toNat64(input.startsAtMs),
       toNat64(input.endsAtMs),
     ),
