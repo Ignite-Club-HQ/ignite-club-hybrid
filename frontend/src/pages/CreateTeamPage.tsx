@@ -389,10 +389,9 @@ export default function CreateTeamPage() {
 
     // Create the team (without logo - will update after upload).
     // Routes to club_domain's save_team when placement settings resolve ICP
-    // for membership; provisional mapping (canister ClubTeam has only
-    // id/name/division/gender/is_active/club_id/age_group — description,
-    // logo, folder, team_type, class and RSVP-audience fields stay
-    // Supabase-only; verify against the deployed canister).
+    // for membership; description, logo, folder and team_type are on the
+    // canister ClubTeam — class-mode and RSVP-audience fields stay
+    // Supabase-only.
     const { data: team, error: teamError } = await withFeatureBackend<{ data: { id: string; name?: string } | null; error: { code?: string } | null }>("membership", {
       supabase: async () => supabase
       .from("teams")
@@ -428,8 +427,9 @@ export default function CreateTeamPage() {
             age_group: levelAge.trim() ? [levelAge.trim()] : [],
             description: description.trim() ? [description.trim()] : [],
             // Logo uploads after team creation (same as the Supabase branch);
-            // folder, class-mode and RSVP-audience fields stay Supabase-only.
+            // class-mode and RSVP-audience fields stay Supabase-only.
             logo_url: [],
+            folder_id: folderId ? [folderId] : [],
             team_type: teamType ? [teamType] : [],
             // Shell-team claim fields are not applicable to teams created
             // directly through this flow.
