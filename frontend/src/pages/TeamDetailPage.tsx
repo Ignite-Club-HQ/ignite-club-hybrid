@@ -766,6 +766,19 @@ export default function TeamDetailPage() {
   const { data: userRoleRows = [], isLoading: isUserRoleLoading } = useQuery({
     queryKey: ["user-team-roles", id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        // Live ICP: own role grants from club_domain (no Supabase user_roles
+        // rows exist for II accounts).
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants
+              .filter((g) => (g.team?.[0] ?? null) === id!)
+              .map((g) => ({ role: g.role, via_captain: null as boolean | null }));
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, via_captain")
@@ -788,19 +801,10 @@ export default function TeamDetailPage() {
     : userRoles.includes("coach") ? "coach"
     : userRoles[0] ?? null;
 
-  const { data: isAppAdmin, isLoading: isAppAdminLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !useIcpLab,
-  });
+  // Shared app-admin detection: Supabase user_roles in Supabase mode,
+  // insights_domain in ICP mode. The shared hook owns the ["is-app-admin"]
+  // query key so every page resolves it the same way.
+  const { isAppAdmin, isLoading: isAppAdminLoading } = useIsAppAdmin();
 
   const isCoachOrAdmin = userRole === "team_admin" || userRole === "coach" || isAppAdmin;
   const isAdmin = isCoachOrAdmin;
