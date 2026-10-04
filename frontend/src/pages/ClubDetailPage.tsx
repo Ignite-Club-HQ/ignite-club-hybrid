@@ -107,6 +107,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription } from "@/live/features/club";
+import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
   softDeleteLiveClub,
   restoreLiveClub,
