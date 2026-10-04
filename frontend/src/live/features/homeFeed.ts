@@ -1,15 +1,20 @@
 import type { FeatureBackendContext } from "../featureRouter";
-import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
 import { getLiveClubProfile } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
-import { listLiveChildren } from "./membership";
+import { getLiveMyRoleGrants, listLiveChildren } from "./membership";
 import { resolveLivePiiTextBatch } from "./vault";
 
 /**
- * Home feed -> identity_access (roles), events_domain (events + RSVPs) and
- * club_domain (club names, children). Routed to only when placement settings
+ * Home feed -> club_domain (role grants, club names, children) and
+ * events_domain (events + RSVPs). Routed to only when placement settings
  * resolve ICP for the "home"/"membership" feature areas (see
  * featureBackend.ts); until then HomePage stays on its Supabase queries.
+ *
+ * Role grants MUST come from club_domain `my_role_grants`: that is the live
+ * role store every membership write targets (create_club grants the creator
+ * club_admin there, invite acceptance and add_role_grant likewise).
+ * identity_access `my_roles` is governor-managed only and never receives
+ * club-creation grants — reading it here hid newly created clubs from Home.
  *
  * PROVISIONAL until verified against deployed canisters:
  * - event type/location/cancellation now come from the canister Event
