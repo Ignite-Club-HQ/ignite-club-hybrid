@@ -1498,16 +1498,21 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signInReady: iiSignInReady,
     resumingSignIn: iiResumePending,
     signOut: async () => {
+      // Clear the Internet Identity session FIRST and only then drop the
+      // app session: setSession(null) re-arms the silent resume effect, so
+      // the stored delegation (and its block-resume flag) must already be
+      // gone, or the member gets signed straight back in and the auth
+      // screen hangs on "Finishing sign in…".
+      const { signOutInternetIdentity } = await import("@/live/internetIdentityAuth");
+      await signOutInternetIdentity();
       localStorage.removeItem("ignite_icp_internet_identity_session");
-      setSession(null);
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
       const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
       clearIcpEntitlementsCache(principal ?? undefined);
       const { disconnectChatRealtime } = await import("@/live/wsRealtime");
       disconnectChatRealtime();
-      const { signOutInternetIdentity } = await import("@/live/internetIdentityAuth");
-      await signOutInternetIdentity();
+      setSession(null);
     },
     refreshProfile: async () => {
       if (!principal) return;

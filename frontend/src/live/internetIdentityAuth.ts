@@ -310,6 +310,10 @@ export async function getCurrentInternetIdentity(): Promise<Identity | null> {
 }
 
 export async function signOutInternetIdentity(): Promise<void> {
+  // Block the silent resume path FIRST, before any await: the auth hook
+  // clears its session state right after calling us, and a resume racing
+  // in between must find this flag already set.
+  signOutRequested = true;
   const client = activeClient;
   activeClient = undefined;
   activeTarget = undefined;
