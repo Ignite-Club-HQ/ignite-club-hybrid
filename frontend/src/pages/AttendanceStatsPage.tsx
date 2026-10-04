@@ -32,6 +32,14 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTeam, getLiveClubProfile, getLiveTeamSubscription, getLiveClubSubscription } from "@/live/features/club";
+import { mapLiveTeamSubscriptionToRow, mapLiveClubSubscriptionToRow, fetchLiveCallerIapPro } from "@/live/features/proAccess";
+import { getLiveMyRoleGrants, listLiveTeamRoleGrants } from "@/live/features/membership";
+import { isLiveAppAdmin } from "@/live/features/insights";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { listLiveEvents, getLiveEventRosterDetailed, listLiveChildTeamAssignments } from "@/live/features/events";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 
 // NEEDS-CANISTER: attendance stats aggregation has no canister shape yet — in
 // ICP mode every query on this page is disabled so no II principal reaches Supabase.
@@ -164,6 +172,24 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
   const { data: isAdmin, isLoading: loadingAdminCheck } = useQuery({
     queryKey: ["is-team-admin-attendance", user?.id, teamId],
     queryFn: async () => {
+      // ICP: admin roles resolve from club_domain role grants.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            if (await isLiveAppAdmin(ctx)) return true;
+            const [grants, team] = await Promise.all([
+              getLiveMyRoleGrants(ctx),
+              getLiveTeam(ctx, teamId!).catch(() => null),
+            ]);
+            const teamIdOf = (g: { team?: [] | [string] }) => g.team?.[0] ?? null;
+            const clubIdOf = (g: { club?: [] | [string] }) => g.club?.[0] ?? null;
+            if (grants.some((g) => ["team_admin", "coach"].includes(g.role) && teamIdOf(g) === teamId)) return true;
+            if (team && grants.some((g) => g.role === "club_admin" && clubIdOf(g) === team.club_id)) return true;
+            return false;
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, team_id, club_id")
@@ -188,13 +214,29 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       
       return false;
     },
-    enabled: !!user && !!teamId && !isIcpPageMode(),
+    enabled: !!user && !!teamId,
   });
 
   // Fetch team details
   const { data: team, isLoading: teamLoading, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team-attendance", teamId],
     queryFn: async () => {
+      // ICP: the team row and its club name come from club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const live = await getLiveTeam(ctx, teamId!);
+            const club = await getLiveClubProfile(ctx, live.club_id).catch(() => null);
+            return {
+              id: live.id,
+              name: live.name,
+              club_id: live.club_id,
+              clubs: club ? { id: live.club_id, name: club.name } : null,
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, clubs!club_id (id, name)")
@@ -203,13 +245,23 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Check Pro access - same logic as TeamDetailPage
   const { data: teamSubscription, isLoading: teamSubLoading } = useQuery({
     queryKey: ["team-subscription-attendance", teamId],
     queryFn: async () => {
+      // ICP: the team Pro grant lives on club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, teamId!);
+            return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -217,12 +269,22 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   const { data: clubSubscription, isLoading: clubSubLoading } = useQuery({
     queryKey: ["club-subscription-attendance", team?.club_id],
     queryFn: async () => {
+      // ICP: the club Pro grant lives on club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, team!.club_id);
+            return sub ? mapLiveClubSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -230,7 +292,18 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!team?.club_id && !isIcpPageMode(),
+    enabled: !!team?.club_id,
+  });
+
+  // ICP only: the caller's own IAP entitlement is global Pro for its holder.
+  const { data: callerIapPro = false } = useQuery({
+    queryKey: ["caller-iap-pro-attendance", user?.id],
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => false,
+        icp: (ctx) => fetchLiveCallerIapPro(ctx),
+      }),
+    enabled: !!user && isIcpPageMode(),
   });
 
   // Pro Access Logic (matches TeamDetailPage):
@@ -242,12 +315,36 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
   const teamHasIndividualPro = teamSubscription?.is_pro || teamSubscription?.is_pro_football ||
                                (teamSubscription as any)?.admin_pro_override || (teamSubscription as any)?.admin_pro_football_override;
   
-  const isTeamPro = clubHasPro || (!clubHasPro && teamHasIndividualPro);
+  const isTeamPro = clubHasPro || (!clubHasPro && teamHasIndividualPro) || callerIapPro;
 
   // Fetch team members (players and parents with children)
   const { data: teamMembers = [] } = useQuery({
     queryKey: ["team-members-attendance", teamId],
     queryFn: async () => {
+      // ICP: roster comes from club_domain team role grants + identity profiles.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const grants = await listLiveTeamRoleGrants(ctx, teamId!);
+            const wanted = grants.filter((g) => ["player", "parent", "coach", "team_admin"].includes(g.role));
+            const profiles = await listLiveProfilesByIds(ctx, wanted.map((g) => g.account_id)).catch(() => []);
+            const byId = new Map(profiles.map((p: { id: string }) => [p.id, p]));
+            return wanted.map((g) => {
+              const p = byId.get(g.account_id) as { display_name?: string | null; avatar_ref?: [] | [string] } | undefined;
+              return {
+                user_id: g.account_id,
+                role: g.role,
+                profiles: {
+                  id: g.account_id,
+                  display_name: p?.display_name ?? null,
+                  avatar_url: p?.avatar_ref?.[0] ?? null,
+                },
+              };
+            });
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select(`
@@ -261,13 +358,36 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Fetch children assigned to this team (use RPC to bypass RLS limits on child_team_assignments)
   const { data: teamChildren = [] } = useQuery({
     queryKey: ["team-children-attendance", teamId],
     queryFn: async () => {
+      // ICP: child assignments come from events_domain; names are vetKeys
+      // PII decrypted through the club-scoped read grants (best effort).
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const live = await getLiveTeam(ctx, teamId!);
+            const assignments = await listLiveChildTeamAssignments(ctx, live.club_id, teamId!);
+            if (!assignments.length) return [];
+            const childIds = [...new Set(assignments.map((a) => a.child_id))];
+            const names = await resolveLivePiiTextBatch(ctx, childIds, "name", "attendance_stats", "Attendance child names");
+            return assignments.map((a) => ({
+              child_id: a.child_id,
+              children: {
+                id: a.child_id,
+                name: names.get(a.child_id) ?? "Player",
+                parent_id: null,
+                profiles: null,
+              },
+            }));
+          },
+        });
+      }
       const { data: rpcChildren, error: rpcError } = await supabase.rpc(
         "get_team_children_for_pitch_board",
         { p_team_id: teamId! }
@@ -297,13 +417,41 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         },
       }));
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Fetch events for the team in date range
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["team-events-attendance", teamId, startDate, endDate, eventTypeFilter],
     queryFn: async () => {
+      // ICP: past game/training events come from events_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const allowedTypes = eventTypeFilter === "all" ? ["game", "training"] : [eventTypeFilter];
+            const live = await listLiveEvents(ctx, null, teamId!);
+            const startMs = startDate.getTime();
+            const endMs = endDate.getTime();
+            const now = Date.now();
+            return live
+              .filter((ev) =>
+                !ev.cancelled && !ev.deleted &&
+                allowedTypes.includes(ev.event_type as "game" | "training") &&
+                Number(ev.starts_at_ms) >= startMs &&
+                Number(ev.starts_at_ms) <= endMs &&
+                Number(ev.starts_at_ms) <= now)
+              .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
+              .map((ev) => ({
+                id: ev.id,
+                title: ev.title,
+                event_date: new Date(Number(ev.starts_at_ms)).toISOString(),
+                type: ev.event_type,
+                is_cancelled: ev.cancelled,
+              }));
+          },
+        });
+      }
       // Only game and training events count toward attendance stats
       const allowedTypes: ("game" | "training")[] = eventTypeFilter === "all"
         ? ["game", "training"]
@@ -324,7 +472,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       // Only include past events for attendance
       return (data || []).filter(e => isPast(parseISO(e.event_date)));
     },
-    enabled: !!teamId && !!startDate && !!endDate && !isIcpPageMode(),
+    enabled: !!teamId && !!startDate && !!endDate,
   });
 
   // Fetch RSVPs for all events
@@ -332,6 +480,27 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
     queryKey: ["team-rsvps-attendance", teamId, events.map(e => e.id)],
     queryFn: async () => {
       if (events.length === 0) return [];
+
+      // ICP: RSVPs come from the events_domain roster per event.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const rosters = await Promise.all(
+              events.map((e) => getLiveEventRosterDetailed(ctx, e.id).catch(() => null)),
+            );
+            return rosters.flatMap((roster, index) =>
+              ((roster?.rsvps ?? []) as Array<{ rsvp: { account_id: string; child_id: [] | [string]; state: string } }>).map(({ rsvp }) => ({
+                event_id: events[index].id,
+                user_id: rsvp.account_id,
+                child_id: rsvp.child_id?.[0] ?? null,
+                status: rsvp.state,
+              })),
+            );
+          },
+        });
+      }
+
       
       const { data, error } = await supabase
         .from("rsvps")
@@ -341,7 +510,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: events.length > 0 && !isIcpPageMode(),
+    enabled: events.length > 0,
   });
 
   // Calculate player stats

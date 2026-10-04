@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface Props {
   teamId: string;
@@ -37,6 +38,9 @@ const LABELS: Record<RoleKey, { title: string; desc: string }> = {
 export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
   // Mini-league/event-group boards don't use these team-scoped flags.
   const isMiniLeague = !teamId || teamId.startsWith("event-group-");
+  // ICP: push/email notifications are out of scope and the pitch_notify_*
+  // flags have no canister representation — hide the section entirely.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const [values, setValues] = useState<Record<RoleKey, boolean>>({
     coach: true,
@@ -46,7 +50,7 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (isMiniLeague) return;
+    if (isMiniLeague || isIcp) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -65,9 +69,9 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [teamId, isMiniLeague]);
+  }, [teamId, isMiniLeague, isIcp]);
 
-  if (isMiniLeague) return null;
+  if (isMiniLeague || isIcp) return null;
 
   const update = async (key: RoleKey, next: boolean) => {
     setValues((p) => ({ ...p, [key]: next }));
