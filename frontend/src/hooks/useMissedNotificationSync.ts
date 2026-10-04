@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { navigateApp } from "@/lib/appNavigator";
 
 const LAST_SYNC_KEY = "notifications-last-sync";
 const LAST_SHOWN_KEY = "notifications-last-shown";

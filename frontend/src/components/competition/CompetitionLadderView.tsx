@@ -355,8 +355,10 @@ function LadderDivisionCard({ title, rows, isHidden = false }: { title: string; 
                       className="group cursor-pointer hover:bg-accent/40 active:bg-accent/60 transition-colors"
                       onClick={() => {
                         // In-app navigation: a full page load to this dynamic
-                        // path gets a plain "Not Found" from the hosting.
-                        navigate(`/teams/${r.team_id}`);
+                        // path gets a plain "Not Found" from the hosting. This
+                        // row lives in LadderDivisionCard, which has no router
+                        // hook — use the app navigator bridge instead.
+                        navigateApp(`/teams/${r.team_id}`);
                       }}
                     >
                       {RowContent}
