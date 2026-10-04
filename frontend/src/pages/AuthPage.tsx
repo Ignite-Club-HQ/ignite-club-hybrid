@@ -18,6 +18,7 @@ import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
 import { useIcpAuthScreen } from "@/live/authBackendMode";
+import { describeIcpSignInError, isLikelyInAppBrowser, II_SIGN_IN_HINT } from "@/lib/internetIdentitySignInHelp";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -731,6 +732,10 @@ export default function AuthPage() {
       let message = error.message;
       if (message.includes("Network") || message.includes("fetch")) {
         message = "Please check your internet connection and try again.";
+      } else if (useIcpLab) {
+        // Translate terse signer errors ("Channel was closed before a
+        // response was received") into what happened and what to do next.
+        message = describeIcpSignInError(message);
       }
       toast({
         title: useIcpLab ? "Unable to sign in with Internet Identity" : "Unable to sign in with Google",
@@ -848,6 +853,15 @@ export default function AuthPage() {
                   {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
                   Continue with Internet Identity
                 </Button>
+                <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                  {II_SIGN_IN_HINT}
+                </p>
+                {isLikelyInAppBrowser() && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
+                    You're viewing this inside another app's built-in browser, where sign-in often can't finish.
+                    Tap the menu (⋮) and choose “Open in Chrome” (or “Open in Safari”), then sign in there.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
