@@ -6,6 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveSponsorBenchmarks, getLiveBenchmarks } from "@/live/features/insights";
+import { listLiveClubs, listLiveSponsors } from "@/live/features/club";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
