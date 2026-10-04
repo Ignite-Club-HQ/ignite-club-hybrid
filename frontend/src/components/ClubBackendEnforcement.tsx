@@ -48,10 +48,12 @@ import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
 
 const ENFORCED_KEY = "ignite.clubBackendEnforced";
 
-async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
+async function fetchSupabaseMembership(
+  userId: string,
+): Promise<{ clubIds: string[]; isAppAdmin: boolean }> {
   const { data: roles, error: rolesError } = await supabase
     .from("user_roles")
-    .select("club_id, team_id")
+    .select("club_id, team_id, role")
     .eq("user_id", userId);
   if (rolesError) throw rolesError;
   const directClubIds = (roles ?? []).filter(r => r.club_id).map(r => r.club_id!);
@@ -65,7 +67,10 @@ async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
     if (teamsError) throw teamsError;
     teamClubIds = (teams ?? []).map(t => t.club_id).filter((id): id is string => !!id);
   }
-  return [...new Set([...directClubIds, ...teamClubIds])];
+  return {
+    clubIds: [...new Set([...directClubIds, ...teamClubIds])],
+    isAppAdmin: (roles ?? []).some(r => r.role === "app_admin"),
+  };
 }
 
 function hasClubPins(): boolean {
@@ -95,6 +100,10 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const identity = await getCurrentInternetIdentity();
         const provider: BackendProvider = identity ? "icp" : "supabase";
         let clubIds: string[] = [];
+        // App admins administer the whole app (Placement Settings, routing
+        // config) from Supabase-backed screens, so a club pin must never sign
+        // them out of their Supabase session.
+        let isAppAdmin = false;
         if (identity) {
           try {
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
@@ -106,7 +115,9 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
             console.warn("[club-backend] Could not load ICP role grants.", error);
           }
         } else {
-          clubIds = await fetchSupabaseClubIds(user.id);
+          const membership = await fetchSupabaseMembership(user.id);
+          clubIds = membership.clubIds;
+          isAppAdmin = membership.isAppAdmin;
         }
         if (cancelled) return;
         setUserClubIds(clubIds);
@@ -123,6 +134,13 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const required = resolveBackendForUser(config, country, clubIds, isIcpAuthAvailable());
         if (required === provider) {
           sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
+          return;
+        }
+        if (isAppAdmin) {
+          console.info(
+            `[club-backend] App admin signed in via ${provider} while a club pin requires ${required} — skipping enforcement so admin settings stay reachable.`,
+          );
           settle();
           return;
         }

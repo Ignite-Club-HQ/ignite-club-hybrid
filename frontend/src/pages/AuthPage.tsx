@@ -139,7 +139,12 @@ export default function AuthPage() {
   // Auth screen follows Admin → Infrastructure / Placement Settings:
   // Internet Identity when ICP is the effective backend for this visitor,
   // Supabase email/password + Google otherwise.
-  const useIcpLab = useIcpAuthScreen();
+  // `?auth=email` lets app admins reach the Supabase email sign-in even when
+  // their club is pinned to ICP — app-admin accounts live in Supabase, so the
+  // Internet Identity screen alone would lock them out of Placement Settings.
+  const forceEmailAuth =
+    new URLSearchParams(window.location.search).get("auth") === "email";
+  const useIcpLab = useIcpAuthScreen() && !forceEmailAuth;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -174,7 +179,7 @@ export default function AuthPage() {
   // The URL is the source of truth for the invite hand-off (mode / next /
   // invite). sessionStorage is NOT consulted for auth-mode intent any more —
   // it raced with the mount-time cleanup and dumped invite users on Sign In.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const authIntent = readAuthIntent(window.location.search);
 
   // `?mode=signup` / `?mode=signin` decides the visible tab; default Sign In.
@@ -858,6 +863,19 @@ export default function AuthPage() {
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
                   {II_SIGN_IN_HINT}
                 </p>
+                <button
+                  type="button"
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => {
+                    // Keep the existing intent params (mode / next / invite)
+                    // and just request the Supabase email screen.
+                    const params = new URLSearchParams(searchParams);
+                    params.set("auth", "email");
+                    setSearchParams(params, { replace: true });
+                  }}
+                >
+                  Club or app admin? Sign in with email instead
+                </button>
                 {isLikelyInAppBrowser() && (
                   <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
                     You're viewing this inside another app's built-in browser, where sign-in often can't finish.
