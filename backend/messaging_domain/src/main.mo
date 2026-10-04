@@ -1068,9 +1068,6 @@ persistent actor class Main(governorInit : Principal) {
     if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
     #Ok(clubDmSettings)
   };
-      };
-    }
-  };
 
   public shared ({ caller }) func request_join_group(conversation_id : Text) : async { #Ok; #Err : Text } {
     auth(caller);
