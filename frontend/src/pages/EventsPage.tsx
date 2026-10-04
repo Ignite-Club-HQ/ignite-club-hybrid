@@ -627,6 +627,102 @@ export default function EventsPage() {
         }
       }
 
+      // Live ICP mode: read events from the events_domain canister. The
+      // canister Event record is slimmer than the Supabase row (single
+      // location string, no opponent/address/updated_at/mini-league link), so
+      // those fields map to null and cancelled events can't be age-filtered —
+      // all cancellations are shown.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("events", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            diagLog("events:icp-start", { clubs: clubIds.length });
+            if (teamIds.length === 0 && clubIds.length === 0) return [];
+            const selectedTeamId = teamFilter && !teamFilter.startsWith("ml:") ? teamFilter : null;
+            const scopeClubIds = clubFilter ? [clubFilter] : clubIds;
+            if (scopeClubIds.length === 0) return [];
+
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - Math.max(30, pastDaysBack));
+            const upperBound = new Date();
+            upperBound.setDate(upperBound.getDate() + (viewMode === "calendar" ? 240 : 45));
+
+            const teamNameCache = new Map<string, string | null>();
+            const clubInfoCache = new Map<string, { name: string; sport: string | null }>();
+            const getClubInfo = async (clubId: string) => {
+              if (!clubInfoCache.has(clubId)) {
+                try {
+                  const profile = await getLiveClubProfile(ctx, clubId);
+                  clubInfoCache.set(clubId, { name: profile.name, sport: (profile.sport[0] ?? null) as string | null });
+                } catch {
+                  clubInfoCache.set(clubId, { name: "Club", sport: null });
+                }
+              }
+              return clubInfoCache.get(clubId)!;
+            };
+            const getTeamName = async (teamId: string) => {
+              if (!teamNameCache.has(teamId)) {
+                try {
+                  const teamOpt = await getLiveTeam(ctx, teamId);
+                  teamNameCache.set(teamId, ((teamOpt as any)?.[0]?.name ?? null) as string | null);
+                } catch {
+                  teamNameCache.set(teamId, null);
+                }
+              }
+              return teamNameCache.get(teamId) ?? null;
+            };
+
+            const all: Event[] = [];
+            for (const clubId of scopeClubIds) {
+              const rows = await listLiveEvents(ctx, clubId, selectedTeamId);
+              for (const ev of rows as any[]) {
+                if (ev.deleted) continue;
+                const start = new Date(Number(ev.starts_at_ms));
+                if (start < thirtyDaysAgo || start > upperBound) continue;
+                if (filter !== "all" && ev.event_type !== filter) continue;
+                const teamId = (ev.team_id?.[0] ?? null) as string | null;
+                // Club-wide events (no team) show to every club member; team
+                // events show to that team's members and club admins.
+                if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
+                const end = new Date(Number(ev.ends_at_ms));
+                all.push({
+                  id: ev.id,
+                  title: ev.title,
+                  type: ev.event_type as EventType,
+                  event_date: format(start, "yyyy-MM-dd"),
+                  address: null,
+                  suburb: null,
+                  location_name: (ev.location?.[0] ?? null) as string | null,
+                  club_id: ev.club_id,
+                  team_id: teamId,
+                  mini_league_id: null,
+                  is_cancelled: !!ev.cancelled,
+                  is_bye: false,
+                  is_recurring: ((ev.series_id?.length ?? 0) as number) > 0,
+                  parent_event_id: null,
+                  opponent: null,
+                  teams: teamId ? { name: (await getTeamName(teamId)) ?? "Team" } : null,
+                  clubs: await getClubInfo(ev.club_id),
+                  // Extra fields consumed via `any` by the ICS export and
+                  // EventCard (start/end times, description).
+                  start_time: format(start, "HH:mm"),
+                  end_time: format(end, "HH:mm"),
+                  description: ev.description ?? "",
+                  updated_at: start.toISOString(),
+                } as Event);
+              }
+            }
+            all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
+
+            const finalEvents: Event[] =
+              viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
+            cacheEventsList(eventsScopeKey, finalEvents, user?.id);
+            diagLog("events:icp-end", { count: finalEvents.length });
+            return finalEvents;
+          },
+        });
+      }
+
       if (teamIds.length === 0 && clubIds.length === 0) {
         diagLog("events:end-empty-memberships");
         return [];
