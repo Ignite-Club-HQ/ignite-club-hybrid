@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { ArrowLeft, Shield, Trash2, Search, Loader2, Users, AlertTriangle, UserPlus, UserMinus, X, Filter, History, Download, Mail, Flame, BarChart3 } from "lucide-react";
 import { Suspense } from "react";
 
@@ -204,21 +205,11 @@ function SupabaseManageUsersPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
-  // Check if current user is an app admin
-  const { data: isAppAdmin, isLoading: checkingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      if (error) throw error;
-      return !!data;
-    },
-    enabled: !!user?.id,
-  });
+  // Check if current user is an app admin. Uses the shared hook so the ICP
+  // branch asks insights_domain instead of Supabase user_roles — an Internet
+  // Identity app admin has no Supabase session, so a direct table query
+  // would always deny them.
+  const { isAppAdmin, isLoading: checkingAdmin } = useIsAppAdmin();
 
   // Fetch all clubs for filters and role assignment
   const { data: allClubs } = useQuery({
