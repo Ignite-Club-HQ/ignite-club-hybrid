@@ -114,6 +114,9 @@ export async function updateEventTransaction(
         description: String(updates.description ?? ""),
         eventType: String(updates.type ?? "training"),
         location: (updates.location_name as string | null | undefined) ?? null,
+        opponent: (updates.opponent as string | null | undefined) ?? null,
+        address: (updates.address as string | null | undefined) ?? null,
+        miniLeagueId: (updates.mini_league_id as string | null | undefined) ?? null,
         startsAtMs,
         endsAtMs,
       });

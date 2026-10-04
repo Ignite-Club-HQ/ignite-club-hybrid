@@ -2,7 +2,7 @@
 moc = "1.16.1"
 
 [moc]
-args = ["--default-persistent-actors"]
+args = [ "--default-persistent-actors" ]
 
 [dependencies]
 core = "2.6.1"

@@ -120,8 +120,8 @@ export function ClubDaySummary({
           return all;
         },
         icp: async (ctx) => {
-          // NEEDS-CANISTER: opponent + address/suburb fields — the events
-          // canister record has a single location string and no opponent.
+          // Suburb stays null: the canister record has a single address
+          // string, no suburb column.
           const all: ClubDayEvent[] = [];
           const teamNameCache = new Map<string, string | null>();
           for (const clubId of clubIds) {
@@ -152,11 +152,11 @@ export function ClubDaySummary({
                 start_time: format(start, "HH:mm"),
                 end_time: format(end, "HH:mm"),
                 location_name: (ev.location?.[0] ?? null) as string | null,
-                address: null,
+                address: (ev.address?.[0] ?? null) as string | null,
                 suburb: null,
                 team_id: teamId,
                 team_name: teamName,
-                opponent: null,
+                opponent: (ev.opponent?.[0] ?? null) as string | null,
                 is_cancelled: !!ev.cancelled,
               });
             }

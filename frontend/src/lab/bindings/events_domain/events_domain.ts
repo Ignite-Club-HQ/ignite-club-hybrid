@@ -337,7 +337,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    create_event(club_id: string, team_id: string | null, title: string, description: string, event_type: string, location: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
+    create_event(club_id: string, team_id: string | null, title: string, description: string, event_type: string, location: string | null, opponent: string | null, address: string | null, mini_league_id: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
@@ -986,7 +986,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    update_event(id: string, title: string, description: string, event_type: string, location: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
+    update_event(id: string, title: string, description: string, event_type: string, location: string | null, opponent: string | null, address: string | null, mini_league_id: string | null, starts_at_ms: bigint, ends_at_ms: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
@@ -1044,16 +1044,20 @@ export interface Event {
     title: string;
     creator: Principal;
     deleted: boolean;
+    mini_league_id?: string;
     cancelled: boolean;
     series_id?: string;
     team_id?: string;
     description: string;
+    updated_at_ms: bigint;
     starts_at_ms: bigint;
+    address?: string;
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
     location?: string;
     event_type: string;
+    opponent?: string;
 }
 export interface LineupPlayer {
     x?: number;
@@ -1306,14 +1310,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.create_association_event(arg0, arg1, arg2, arg3, to_candid_opt_n3(arg4), arg5, arg6);
         return from_candid_variant_n28(result);
     }
-    async create_event(arg0: string, arg1: string | null, arg2: string, arg3: string, arg4: string, arg5: string | null, arg6: bigint, arg7: bigint): Promise<{
+    async create_event(arg0: string, arg1: string | null, arg2: string, arg3: string, arg4: string, arg5: string | null, arg6: string | null, arg7: string | null, arg8: string | null, arg9: bigint, arg10: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.create_event(arg0, to_candid_opt_n3(arg1), arg2, arg3, arg4, to_candid_opt_n3(arg5), arg6, arg7);
+        const result = await this.actor.create_event(arg0, to_candid_opt_n3(arg1), arg2, arg3, arg4, to_candid_opt_n3(arg5), to_candid_opt_n3(arg6), to_candid_opt_n3(arg7), to_candid_opt_n3(arg8), arg9, arg10);
         return from_candid_variant_n11(result);
     }
     async create_event_group(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: string | null, arg5: string | null): Promise<{
@@ -2237,14 +2241,14 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.uncomplete_duty(arg0, arg1);
         return from_candid_variant_n27(result);
     }
-    async update_event(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string | null, arg5: bigint, arg6: bigint): Promise<{
+    async update_event(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string | null, arg8: bigint, arg9: bigint): Promise<{
         __kind__: "Ok";
         Ok: Event;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_event(arg0, arg1, arg2, arg3, to_candid_opt_n3(arg4), arg5, arg6);
+        const result = await this.actor.update_event(arg0, arg1, arg2, arg3, to_candid_opt_n3(arg4), to_candid_opt_n3(arg5), to_candid_opt_n3(arg6), to_candid_opt_n3(arg7), arg8, arg9);
         return from_candid_variant_n11(result);
     }
     async update_series(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string | null, arg5: bigint): Promise<{
@@ -2536,47 +2540,59 @@ function from_candid_record_n13(value: {
     title: string;
     creator: Principal;
     deleted: boolean;
+    mini_league_id: [] | [string];
     cancelled: boolean;
     series_id: [] | [string];
     team_id: [] | [string];
     description: string;
+    updated_at_ms: bigint;
     starts_at_ms: bigint;
+    address: [] | [string];
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
     location: [] | [string];
     event_type: string;
+    opponent: [] | [string];
 }): {
     id: string;
     title: string;
     creator: Principal;
     deleted: boolean;
+    mini_league_id?: string;
     cancelled: boolean;
     series_id?: string;
     team_id?: string;
     description: string;
+    updated_at_ms: bigint;
     starts_at_ms: bigint;
+    address?: string;
     ends_at_ms: bigint;
     revision: bigint;
     club_id: string;
     location?: string;
     event_type: string;
+    opponent?: string;
 } {
     return {
         id: value.id,
         title: value.title,
         creator: value.creator,
         deleted: value.deleted,
+        mini_league_id: record_opt_to_undefined(from_candid_opt_n7(value.mini_league_id)),
         cancelled: value.cancelled,
         series_id: record_opt_to_undefined(from_candid_opt_n7(value.series_id)),
         team_id: record_opt_to_undefined(from_candid_opt_n7(value.team_id)),
         description: value.description,
+        updated_at_ms: value.updated_at_ms,
         starts_at_ms: value.starts_at_ms,
+        address: record_opt_to_undefined(from_candid_opt_n7(value.address)),
         ends_at_ms: value.ends_at_ms,
         revision: value.revision,
         club_id: value.club_id,
         location: record_opt_to_undefined(from_candid_opt_n7(value.location)),
-        event_type: value.event_type
+        event_type: value.event_type,
+        opponent: record_opt_to_undefined(from_candid_opt_n7(value.opponent))
     };
 }
 function from_candid_record_n130(value: {

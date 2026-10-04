@@ -42,6 +42,9 @@ export async function createEventTransaction(
         description: String(eventRecord.description ?? ""),
         eventType: String(eventRecord.type ?? "training"),
         location: (eventRecord.location_name as string | null | undefined) ?? null,
+        opponent: (eventRecord.opponent as string | null | undefined) ?? null,
+        address: (eventRecord.address as string | null | undefined) ?? null,
+        miniLeagueId: (eventRecord.mini_league_id as string | null | undefined) ?? null,
       };
 
       // Recurring: the canister expands the series itself. Provisional —
