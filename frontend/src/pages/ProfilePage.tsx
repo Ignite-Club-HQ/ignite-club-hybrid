@@ -27,6 +27,8 @@ import { resolveAuthBackend } from "@/live/authBackendMode";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 
 import igniteIcon from "@/assets/ignite-icon.png";
 
@@ -176,6 +178,43 @@ export default function ProfilePage() {
   const { data: myClubsAndTeams } = useQuery({
     queryKey: ["my-clubs-teams", user?.id, activeClubFilter],
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // Same club_domain role-grant store the home feed reads — this is
+            // where club creation records the creator's membership.
+            const grants = await getLiveMyRoleGrants(ctx);
+            const directClubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const teamIds = [...new Set(grants.map(g => g.team[0]).filter((t): t is string => !!t))];
+            const teamRows = (await Promise.all(teamIds.map((tid) => getLiveTeam(ctx, tid))))
+              .map((r) => (r.length ? r[0] : null))
+              .filter((t): t is NonNullable<typeof t> => t !== null && t.deleted_at_ms.length === 0);
+            const allClubIds = [...new Set([...directClubIds, ...teamRows.map((t) => t.club_id)])];
+            const clubRows = await Promise.all(allClubIds.map((cid) => getLiveClubProfile(ctx, cid)));
+            const clubById = new Map(
+              clubRows.map((r) => (r.length ? r[0] : null))
+                .filter((p): p is NonNullable<typeof p> => p !== null)
+                .map((p) => [p.id, { id: p.id, name: p.name, sport: p.sport[0] ?? null, logo_url: p.logo_url[0] ?? null }] as const)
+            );
+            let clubs = allClubIds.map((cid) => clubById.get(cid)).filter((c): c is NonNullable<typeof c> => !!c);
+            let teams = teamRows.map((t) => {
+              const club = clubById.get(t.club_id);
+              return {
+                id: t.id,
+                name: t.name,
+                club_id: t.club_id,
+                clubs: club ? { id: club.id, name: club.name, sport: club.sport } : null,
+              };
+            });
+            if (activeClubFilter) {
+              clubs = clubs.filter((c) => c.id === activeClubFilter);
+              teams = teams.filter((t) => t.club_id === activeClubFilter);
+            }
+            return { clubs, teams };
+          },
+        });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("club_id, team_id")
