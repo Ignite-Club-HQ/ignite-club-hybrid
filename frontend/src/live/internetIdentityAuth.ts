@@ -255,6 +255,29 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
 }
 
 /**
+ * Adopts an Internet Identity session the auth client already holds, without
+ * ever opening a window. Returns null when there is none.
+ *
+ * Why: on phones the II ceremony runs in a separate tab, and the app's tab
+ * can be reloaded (Chrome discards background tabs) or lose the reply on the
+ * way back — yet the auth client has already stored the delegation. The app
+ * only marked itself signed in after `signIn()` resolved, so members landed
+ * back on the sign-in screen and had to tap again (which then took the
+ * `isAuthenticated()` fast path). Call this on load and when the tab returns.
+ */
+export async function resumeInternetIdentitySession(): Promise<InternetIdentitySession | null> {
+  const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
+  // getIdentity() waits for the client's async restore from storage.
+  const identity = await client.getIdentity();
+  if (!client.isAuthenticated()) return null;
+  const principal = identity.getPrincipal();
+  if (principal.isAnonymous() || principal.toText() === "2vxsx-fae") return null;
+  const principalText = principal.toText();
+  await provisionInternetIdentityAccount(identity, principalText, target);
+  return { principal: principalText, provider: "internet-identity" };
+}
+
+/**
  * The identity of the currently signed-in Internet Identity session, or null
  * when signed out (or when the auth client has not been constructed yet).
  * Feature repositories routed to ICP use this to authenticate canister calls.
