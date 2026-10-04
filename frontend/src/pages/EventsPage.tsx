@@ -53,7 +53,70 @@ import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { getLiveAccountRosterScope } from "@/live/features/events";
+import { getLiveAccountRosterScope, listLiveEvents } from "@/live/features/events";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
+
+/** Derive the memberships shape the schedule filters need from the caller's
+ * club_domain role grants + events_domain roster scope (live ICP path).
+ * The Supabase path queries user_roles with a UUID — an II principal is not
+ * a UUID, so in ICP mode that query errors and the schedule spinner never
+ * clears. */
+async function getLiveEventMemberships(
+  ctx: import("@/live/featureRouter").FeatureBackendContext,
+  accountId: string,
+) {
+  const grants = await getLiveMyRoleGrants(ctx);
+  const roles = grants.map((g) => ({
+    club_id: (g.club[0] ?? null) as string | null,
+    team_id: (g.team[0] ?? null) as string | null,
+    role: g.role as string,
+  }));
+  const teamIds = Array.from(new Set(roles.filter((r) => r.team_id).map((r) => r.team_id as string)));
+  const clubIds = new Set(roles.filter((r) => r.club_id).map((r) => r.club_id as string));
+  const clubAdminClubIds = new Set(
+    roles.filter((r) => r.club_id && (r.role === "club_admin" || r.role === "app_admin")).map((r) => r.club_id as string),
+  );
+  const leagueAdminClubIds = new Set(
+    roles.filter((r) => r.club_id && (r.role === "league_admin" || r.role === "app_admin")).map((r) => r.club_id as string),
+  );
+  const isAppAdmin = roles.some((r) => r.role === "app_admin");
+
+  // Roster/attendance-derived scope (parent of a child on a team) — best
+  // effort, matching the Supabase child_guardians/children leg.
+  const scope = await getLiveAccountRosterScope(ctx, accountId).catch(() => ({
+    teamIds: [] as string[],
+    clubIds: [] as string[],
+    childIds: [] as string[],
+  }));
+  scope.teamIds.forEach((t) => { if (!teamIds.includes(t)) teamIds.push(t); });
+  scope.clubIds.forEach((c) => clubIds.add(c));
+
+  // Team grants/roster rows whose club isn't known yet — resolve via the team.
+  await Promise.all(
+    teamIds.map(async (teamId) => {
+      // Cheap check: if any known club lists this team we skip the fetch.
+      try {
+        const teamOpt = await getLiveTeam(ctx, teamId);
+        const clubId = (teamOpt as any)?.[0]?.club_id as string | undefined;
+        if (clubId) clubIds.add(clubId);
+      } catch { /* best effort */ }
+    }),
+  );
+
+  const miniLeagues = await listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
+  const miniLeagueIds = Array.from(new Set(miniLeagues.map((l) => l.id)));
+
+  return {
+    roles,
+    teamIds,
+    clubIds: Array.from(clubIds),
+    clubAdminClubIds: Array.from(clubAdminClubIds),
+    leagueAdminClubIds: Array.from(leagueAdminClubIds),
+    miniLeagueIds,
+    isAppAdmin,
+  };
+}
 
 type EventType = "game" | "training" | "social";
 
@@ -147,7 +210,9 @@ export default function EventsPage() {
   // Persist view mode preference to profile
   const handleViewModeChange = async (newMode: "list" | "calendar") => {
     setViewMode(newMode);
-    if (user) {
+    // View-mode preference persists to the Supabase profile only — in ICP
+    // mode there is no profiles row for the II principal, so keep it local.
+    if (user && !isIcpAuthBackend) {
       await supabase
         .from("profiles")
         .update({ events_view_mode: newMode })
@@ -180,6 +245,29 @@ export default function EventsPage() {
     queryFn: async () => {
       if (useIcpLab) {
         return fixtureData.getLocalLabClubList();
+      }
+
+      // Live ICP mode: the Supabase user_roles query below keys on a UUID and
+      // rejects an II principal, so resolve clubs from the canisters instead.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const memberships = await getLiveEventMemberships(ctx, user!.id);
+            const clubs = await Promise.all(
+              memberships.clubIds.map(async (clubId) => {
+                try {
+                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
+                  return { id: clubId, name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null };
+                } catch {
+                  return { id: clubId, name: "Club", sport: null as string | null };
+                }
+              }),
+            );
+            return clubs.sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
       }
 
       const start = performance.now();
@@ -255,11 +343,31 @@ export default function EventsPage() {
     placeholderData: (prev) => prev,
   });
   // Get user's accessible team, club, and mini league IDs for event filtering
-  const { data: userMemberships, isLoading: membershipsLoading } = useQuery({
+  const { data: userMemberships, isLoading: membershipsLoading, error: membershipsError, refetch: refetchMemberships } = useQuery({
     queryKey: ["user-memberships-for-events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona],
     queryFn: async () => {
       if (useIcpLab) {
         return fixtureData.getLocalLabHomeSnapshot(localIcpPersona).memberships;
+      }
+
+      // Live ICP mode: the Supabase user_roles query below keys on a UUID and
+      // rejects an II principal — the error left userMemberships undefined,
+      // which kept the events query disabled and the page on its spinner
+      // forever. Resolve memberships from the canisters instead.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            diagLog("memberships:icp-start");
+            const memberships = await getLiveEventMemberships(ctx, user!.id);
+            diagLog("memberships:icp-end", {
+              teamIds: memberships.teamIds.length,
+              clubIds: memberships.clubIds.length,
+              miniLeagueIds: memberships.miniLeagueIds.length,
+            });
+            return memberships;
+          },
+        });
       }
 
       // Proactively refresh JWT if it's near expiry — prevents an expired
@@ -444,7 +552,32 @@ export default function EventsPage() {
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-filter", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, clubFilter, userMemberships?.teamIds],
     queryFn: async () => {
-      if (resolveAuthBackend() === "icp") return [];
+      // Live ICP mode: list canister teams for the member's clubs, scoped to
+      // teams they belong to (club admins/app admins see every team).
+      if (isIcpAuthBackend && !useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const m = userMemberships;
+            if (!m) return [] as { id: string; name: string; club_id: string }[];
+            const scopeClubIds = clubFilter ? [clubFilter] : m.clubIds;
+            const out: { id: string; name: string; club_id: string }[] = [];
+            for (const clubId of scopeClubIds) {
+              const teams = await listLiveTeams(ctx, clubId).catch(() => [] as any[]);
+              for (const team of teams as any[]) {
+                if (team.deleted_at_ms?.length || team.archived) continue;
+                const canSee =
+                  m.isAppAdmin ||
+                  m.teamIds.includes(team.id) ||
+                  m.clubAdminClubIds.includes(clubId);
+                if (!canSee) continue;
+                out.push({ id: team.id, name: team.name, club_id: clubId });
+              }
+            }
+            return out.sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       if (useIcpLab) {
         return fixtureData.getLocalLabTeamList().map((team) => ({
           id: team.id,
@@ -520,6 +653,103 @@ export default function EventsPage() {
           }
           throw error;
         }
+      }
+
+      // Live ICP mode: read events from the events_domain canister. The
+      // canister Event record is slimmer than the Supabase row (single
+      // location string, no opponent/address/updated_at/mini-league link), so
+      // those fields map to null and cancelled events can't be age-filtered —
+      // all cancellations are shown.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("events", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            diagLog("events:icp-start", { clubs: clubIds.length });
+            if (teamIds.length === 0 && clubIds.length === 0) return [];
+            const selectedTeamId = teamFilter && !teamFilter.startsWith("ml:") ? teamFilter : null;
+            const scopeClubIds = clubFilter ? [clubFilter] : clubIds;
+            if (scopeClubIds.length === 0) return [];
+
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - Math.max(30, pastDaysBack));
+            const upperBound = new Date();
+            upperBound.setDate(upperBound.getDate() + (viewMode === "calendar" ? 240 : 45));
+
+            const teamNameCache = new Map<string, string | null>();
+            const clubInfoCache = new Map<string, { name: string; sport: string | null }>();
+            const getClubInfo = async (clubId: string) => {
+              if (!clubInfoCache.has(clubId)) {
+                try {
+                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
+                  clubInfoCache.set(clubId, { name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null });
+                } catch {
+                  clubInfoCache.set(clubId, { name: "Club", sport: null });
+                }
+              }
+              return clubInfoCache.get(clubId)!;
+            };
+            const getTeamName = async (teamId: string) => {
+              if (!teamNameCache.has(teamId)) {
+                try {
+                  const teamOpt = await getLiveTeam(ctx, teamId);
+                  teamNameCache.set(teamId, ((teamOpt as any)?.[0]?.name ?? null) as string | null);
+                } catch {
+                  teamNameCache.set(teamId, null);
+                }
+              }
+              return teamNameCache.get(teamId) ?? null;
+            };
+
+            const all: Event[] = [];
+            for (const clubId of scopeClubIds) {
+              const rows = await listLiveEvents(ctx, clubId, selectedTeamId);
+              for (const ev of rows as any[]) {
+                if (ev.deleted) continue;
+                const start = new Date(Number(ev.starts_at_ms));
+                if (start < thirtyDaysAgo || start > upperBound) continue;
+                if (filter !== "all" && ev.event_type !== filter) continue;
+                const teamId = (ev.team_id?.[0] ?? null) as string | null;
+                // Club-wide events (no team) show to every club member; team
+                // events show to that team's members and club admins.
+                if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
+                const end = new Date(Number(ev.ends_at_ms));
+                all.push({
+                  id: ev.id,
+                  title: ev.title,
+                  type: ev.event_type as EventType,
+                  event_date: format(start, "yyyy-MM-dd"),
+                  address: null,
+                  suburb: null,
+                  location_name: (ev.location?.[0] ?? null) as string | null,
+                  club_id: ev.club_id,
+                  team_id: teamId,
+                  mini_league_id: null,
+                  is_cancelled: !!ev.cancelled,
+                  is_bye: false,
+                  is_recurring: ((ev.series_id?.length ?? 0) as number) > 0,
+                  parent_event_id: null,
+                  opponent: null,
+                  teams: teamId ? { name: (await getTeamName(teamId)) ?? "Team" } : null,
+                  clubs: await getClubInfo(ev.club_id),
+                  // Extra fields consumed via `any` by the ICS export and
+                  // EventCard (start/end times, description).
+                  start_time: format(start, "HH:mm"),
+                  end_time: format(end, "HH:mm"),
+                  description: ev.description ?? "",
+                  updated_at: start.toISOString(),
+                } as Event);
+              }
+            }
+            all.sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id.localeCompare(b.id));
+
+            const finalEvents: Event[] =
+              viewMode === "calendar" ? all : (filterRecurringEvents(all) as Event[]);
+            cacheEventsList(eventsScopeKey, finalEvents, user?.id);
+            diagLog("events:icp-end", { count: finalEvents.length });
+            return finalEvents;
+          },
+        });
       }
 
       if (teamIds.length === 0 && clubIds.length === 0) {
@@ -700,7 +930,10 @@ export default function EventsPage() {
 
   // Get IDs of events user has viewed
   const eventIds = events?.map(e => e.id) || [];
-  const { data: viewedEventIds } = useUserEventViews(useIcpLab ? undefined : user?.id, useIcpLab ? [] : eventIds);
+  // Event-view tracking is Supabase-only; skip it in ICP mode (the II
+  // principal is not a UUID and would just error).
+  const skipViewTracking = useIcpLab || isIcpAuthBackend;
+  const { data: viewedEventIds } = useUserEventViews(skipViewTracking ? undefined : user?.id, skipViewTracking ? [] : eventIds);
 
   const handleClubChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
@@ -795,13 +1028,15 @@ export default function EventsPage() {
     });
   }, [user, userMemberships, membershipsLoading, isLoading, isFetching, events, isInitialLoad, isStuckOnSpinner]);
 
-  // Subscribe to server-side schedule refresh broadcasts for clubs the user belongs to.
-  useScheduleBroadcastListener(userMemberships?.clubIds);
+  // Subscribe to server-side schedule refresh broadcasts for clubs the user
+  // belongs to. Broadcasts are Supabase realtime — no canister equivalent yet,
+  // so ICP mode skips the subscription and the admin broadcast action.
+  useScheduleBroadcastListener(isIcpAuthBackend ? undefined : userMemberships?.clubIds);
 
   // Long-press on the refresh button (admins only) sends a broadcast that
   // forces every connected member's schedule to re-fetch.
   const adminClubIds = userMemberships?.clubAdminClubIds ?? [];
-  const canBroadcast = adminClubIds.length > 0;
+  const canBroadcast = !isIcpAuthBackend && adminClubIds.length > 0;
   const broadcastTargetClubId = clubFilter && adminClubIds.includes(clubFilter)
     ? clubFilter
     : adminClubIds[0];
@@ -890,6 +1125,23 @@ export default function EventsPage() {
     });
   }, [events, membershipsLoading, isLoading, userMemberships, user?.id, viewMode, filter, clubFilter, teamFilter, eventsScopeKey]);
 
+  // A failed memberships lookup must never leave the page on its spinner
+  // forever (isStuckOnSpinner includes an unconditional !userMemberships
+  // term) — show a retry instead.
+  if (membershipsError && !userMemberships) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-20 px-6 text-center">
+        <p className="text-lg font-semibold text-foreground">Unable to load your schedule</p>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          {membershipsError instanceof Error ? membershipsError.message : "Your team memberships could not be loaded."}
+        </p>
+        <Button onClick={() => refetchMemberships()} variant="outline" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Try again
+        </Button>
+      </div>
+    );
+  }
   if (isStuckOnSpinner) {
     return <PageLoading message="Loading events..." />;
   }

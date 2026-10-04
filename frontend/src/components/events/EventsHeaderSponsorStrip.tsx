@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -95,18 +97,32 @@ export function EventsHeaderSponsorStrip({
         const enabled = await isEventsStripEnabledForClub(activeClubFilter);
         return { clubId: enabled ? activeClubFilter : (null as string | null) };
       }
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user!.id);
-      const clubIds = new Set<string>();
-      (roles ?? []).forEach((r: any) => r.club_id && clubIds.add(r.club_id));
-      const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
-      if (teamIds.length) {
-        const { data: teams } = await supabase
-          .from("teams").select("club_id").in("id", teamIds);
-        (teams ?? []).forEach((t: any) => t.club_id && clubIds.add(t.club_id));
-      }
+      // In ICP mode the Supabase user_roles/teams lookups reject the II
+      // principal (not a UUID) — resolve the member's clubs from the
+      // club_domain role grants instead.
+      const clubIds = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user!.id);
+          const ids = new Set<string>();
+          (roles ?? []).forEach((r: any) => r.club_id && ids.add(r.club_id));
+          const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
+          if (teamIds.length) {
+            const { data: teams } = await supabase
+              .from("teams").select("club_id").in("id", teamIds);
+            (teams ?? []).forEach((t: any) => t.club_id && ids.add(t.club_id));
+          }
+          return ids;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          const ids = new Set<string>();
+          grants.forEach((g) => g.club[0] && ids.add(g.club[0]));
+          return ids;
+        },
+      });
       if (clubIds.size === 0) return { clubId: null as string | null };
       for (const candidateClubId of clubIds) {
         if (await isEventsStripEnabledForClub(candidateClubId)) {
@@ -140,14 +156,22 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro")
-        .eq("club_id", clubId!)
-        .eq("is_pro", true)
-        .limit(1)
-        .maybeSingle();
-      return !!data?.is_pro;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro")
+            .eq("club_id", clubId!)
+            .eq("is_pro", true)
+            .limit(1)
+            .maybeSingle();
+          return !!data?.is_pro;
+        },
+        icp: async (ctx) => {
+          const sub = await getLiveClubSubscription(ctx, clubId!);
+          return !!sub?.is_pro;
+        },
+      });
     },
   });
 
@@ -156,13 +180,30 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId && isProClub === true,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", clubId!)
-        .eq("is_active", true)
-        .order("name");
-      return (data || []) as SponsorLite[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", clubId!)
+            .eq("is_active", true)
+            .order("name");
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) => {
+          const sponsors = await listLiveSponsors(ctx, clubId!);
+          return (sponsors as any[])
+            .filter((s) => s.is_active)
+            .map((s) => ({
+              id: s.id as string,
+              name: s.name as string,
+              logo_url: (s.logo_url?.[0] ?? null) as string | null,
+              website_url: (s.website_url?.[0] ?? null) as string | null,
+              tier: ((s.tier?.[0] ?? s.tier ?? "bronze") as SponsorTier),
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name)) as SponsorLite[];
+        },
+      });
     },
   });
 
@@ -171,6 +212,9 @@ export function EventsHeaderSponsorStrip({
     enabled: !!clubId && isProClub === false,
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      // App-wide ads are Supabase-only by design (ad management lives there);
+      // in ICP mode the free-club ad slot is simply off.
+      if (resolveAuthBackend() === "icp") return { is_enabled: false };
       const { data } = await supabase
         .from("app_ad_settings")
         .select("is_enabled")
