@@ -424,6 +424,34 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
   const { data: events = [], isLoading: eventsLoading } = useQuery({
     queryKey: ["team-events-attendance", teamId, startDate, endDate, eventTypeFilter],
     queryFn: async () => {
+      // ICP: past game/training events come from events_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const allowedTypes = eventTypeFilter === "all" ? ["game", "training"] : [eventTypeFilter];
+            const live = await listLiveEvents(ctx, null, teamId!);
+            const startMs = startDate.getTime();
+            const endMs = endDate.getTime();
+            const now = Date.now();
+            return live
+              .filter((ev) =>
+                !ev.cancelled && !ev.deleted &&
+                allowedTypes.includes(ev.event_type as "game" | "training") &&
+                Number(ev.starts_at_ms) >= startMs &&
+                Number(ev.starts_at_ms) <= endMs &&
+                Number(ev.starts_at_ms) <= now)
+              .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
+              .map((ev) => ({
+                id: ev.id,
+                title: ev.title,
+                event_date: new Date(Number(ev.starts_at_ms)).toISOString(),
+                type: ev.event_type,
+                is_cancelled: ev.cancelled,
+              }));
+          },
+        });
+      }
       // Only game and training events count toward attendance stats
       const allowedTypes: ("game" | "training")[] = eventTypeFilter === "all"
         ? ["game", "training"]
@@ -444,7 +472,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       // Only include past events for attendance
       return (data || []).filter(e => isPast(parseISO(e.event_date)));
     },
-    enabled: !!teamId && !!startDate && !!endDate && !isIcpPageMode(),
+    enabled: !!teamId && !!startDate && !!endDate,
   });
 
   // Fetch RSVPs for all events
@@ -452,6 +480,27 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
     queryKey: ["team-rsvps-attendance", teamId, events.map(e => e.id)],
     queryFn: async () => {
       if (events.length === 0) return [];
+
+      // ICP: RSVPs come from the events_domain roster per event.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const rosters = await Promise.all(
+              events.map((e) => getLiveEventRosterDetailed(ctx, e.id).catch(() => null)),
+            );
+            return rosters.flatMap((roster, index) =>
+              ((roster?.rsvps ?? []) as Array<{ rsvp: { account_id: string; child_id: [] | [string]; state: string } }>).map(({ rsvp }) => ({
+                event_id: events[index].id,
+                user_id: rsvp.account_id,
+                child_id: rsvp.child_id?.[0] ?? null,
+                status: rsvp.state,
+              })),
+            );
+          },
+        });
+      }
+
       
       const { data, error } = await supabase
         .from("rsvps")
@@ -461,7 +510,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data || [];
     },
-    enabled: events.length > 0 && !isIcpPageMode(),
+    enabled: events.length > 0,
   });
 
   // Calculate player stats
