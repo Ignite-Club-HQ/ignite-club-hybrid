@@ -757,11 +757,12 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       if (isIcp) {
         // Internet Identity users have no Supabase `user_roles` rows — the
         // canister's caller-scoped role-grant list is the membership source.
+        // Candid opt fields arrive as [] | [string], so unwrap with [0].
         const grants = await withFeatureBackend("membership", {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         });
-        clubIds = [...new Set(grants.map((g) => g.club).filter((c): c is string => !!c))];
+        clubIds = [...new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c))];
       } else {
         // Get user's clubs through their roles
         const { data: userRoles, error: rolesError } = await supabase
@@ -792,6 +793,15 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       }
 
       if (!clubIds.length) return guardClubListResult(`club-themes:${user.id}`, []);
+
+      if (isIcp) {
+        // The canister has no theme-HSL columns, so no ICP club can appear in
+        // the themed (Pro + theme) catalogue. Returning [] here keeps the
+        // dropdown's locked-club branch (sourced from all-user-clubs in
+        // AppHeader) as the only entry point and avoids a Supabase `clubs`
+        // round-trip that can only fail for canister IDs.
+        return guardClubListResult(`club-themes:${user.id}`, []);
+      }
 
       // Fetch clubs with theme settings (left join on subscriptions)
       const { data: clubs, error: clubsError } = await supabase
@@ -906,7 +916,26 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
           supabase: async () => [],
           icp: async (ctx) => (await import("@/live/features/club")).myLiveRoleGrants(ctx),
         });
-        grants.forEach((g) => g.club && ids.add(g.club));
+        // Candid opt fields arrive as [] | [string], so unwrap with [0].
+        grants.forEach((g) => g.club[0] && ids.add(g.club[0]));
+        // Team-scoped grants carry no club id; resolve each team's club so
+        // team-only members still see their club in the switcher.
+        const teamIds = [...new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t))];
+        const { getLiveTeam } = await import("@/live/features/club");
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            await Promise.all(teamIds.map(async (teamId) => {
+              try {
+                const team = await getLiveTeam(ctx, teamId);
+                const clubId = team[0]?.club_id;
+                if (clubId) ids.add(clubId);
+              } catch {
+                // Best effort — a missing team must not break the switcher.
+              }
+            }));
+          },
+        });
       } else {
         const [rolesRes, teamRolesRes] = await Promise.all([
           supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
