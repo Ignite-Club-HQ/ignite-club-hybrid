@@ -85,7 +85,8 @@ import {
 } from "@/live/features/events";
 import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
-import { fetchIcpEntitlements } from "@/live/identityEntitlements";
+import { getLiveTeamSubscription } from "@/live/features/club";
+import { mapLiveTeamSubscriptionToRow, resolveLiveProAccess, resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { getLocalEvent, isLocalEventsCanisterUnavailable, listLocalEventRsvps } from "@/lab/localEventsService";
 import { personas } from "@/lab/syntheticIdentities.mjs";
@@ -662,10 +663,9 @@ export default function EventDetailPage() {
 
           return false;
         },
-        icp: async (ctx) => {
-          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
-          return summary.isPro;
-        },
+        icp: async (ctx) =>
+          // Team grant → club grant → caller's IAP entitlement (proAccess).
+          resolveLiveProFootballAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
       });
     },
     enabled: !!event?.team_id,
@@ -700,10 +700,9 @@ export default function EventDetailPage() {
 
         return false;
       },
-      icp: async (ctx) => {
-        const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
-        return summary.isPro;
-      },
+      icp: async (ctx) =>
+        // Team grant → club grant → caller's IAP entitlement (proAccess).
+        resolveLiveProAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
     }),
     enabled: (!!event?.team_id || !!event?.club_id),
   });
@@ -951,6 +950,17 @@ export default function EventDetailPage() {
   const { data: teamSubscription } = useQuery({
     queryKey: ["team-subscription-for-pitch", event?.team_id],
     queryFn: async () => {
+      // Live ICP: the subscription row lives on club_domain (pitch settings +
+      // Pro flags); Supabase has no rows for II accounts.
+      if (isIcpAuthBackend && event?.team_id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, event.team_id!);
+            return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -959,7 +969,7 @@ export default function EventDetailPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!event?.team_id && !!(canAccessPitchBoard || canViewPitchBoardReadOnly) && !useIcpLab,
   });
 
   // Fetch team/club members for duty assignment and not responded list (with roles)

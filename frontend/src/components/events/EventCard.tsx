@@ -42,6 +42,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { setLiveEventRsvp, adminUpsertLiveRsvp, setLiveEventCancelled, getLiveMyChildren, getLiveMyChildTeamAssignments, getMyLiveChildRsvps, getLiveGameResult, listLiveMyRsvps, getLiveEventRosterDetailed, listLiveDuties, sendLiveEventReminders } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
+import { resolveLiveProAccess } from "@/live/features/proAccess";
 import { listLivePlayers } from "@/live/features/miniLeagues";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 
@@ -206,10 +207,15 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
   const { data: hasPro } = useQuery({
     queryKey: ["event-pro-status", event.team_id, event.club_id],
     queryFn: async () => {
-      // Subscriptions are Supabase-only by design (billing has no canister
-      // shape). Fail closed for ICP-routed clubs: hasPro stays false, which
-      // also hides the reminder action below (NEEDS-CANISTER).
-      if (isFeatureRoutedToIcp("events")) return false;
+      // ICP: team/club Pro grants live on club_domain (app-admin "Free Pro"
+      // toggles); the caller's own IAP entitlement is global Pro. Resolving
+      // this lifts the reminder action below for Pro-granted teams.
+      if (isFeatureRoutedToIcp("events")) {
+        return withFeatureBackend("events", {
+          supabase: async () => false, // unreachable — guarded above
+          icp: (ctx) => resolveLiveProAccess(ctx, { teamId: event.team_id, clubId: event.club_id }),
+        });
+      }
       if (event.team_id) {
         const { data: teamSub } = await supabase
           .from("team_subscriptions")

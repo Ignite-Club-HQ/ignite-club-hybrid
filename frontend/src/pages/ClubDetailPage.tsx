@@ -107,6 +107,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription } from "@/live/features/club";
+import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
   softDeleteLiveClub,
   restoreLiveClub,
@@ -873,13 +874,26 @@ export default function ClubDetailPage() {
     queryFn: async () => {
       const teamIds = teams?.map(t => t.id) || [];
       if (teamIds.length === 0) return [];
+      // ICP: Pro badges come from the club_domain team subscription records.
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const subs = await listLiveTeamSubscriptions(ctx, teamIds);
+            return teamIds
+              .map((teamId) => subs.get(teamId))
+              .filter((s): s is NonNullable<typeof s> => !!s)
+              .map(mapLiveTeamSubscriptionToRow);
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("*")
         .in("team_id", teamIds);
       return data || [];
     },
-    enabled: !!teams && teams.length > 0 && !useIcpLab,
+    enabled: !!teams && teams.length > 0,
   });
 
   // Fetch team sponsor allocations with sponsor details

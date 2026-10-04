@@ -37,7 +37,17 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { isLiveAppAdmin } from "@/live/features/insights";
+import {
+  fetchLiveCallerIapPro,
+  listLiveClubSubscriptions,
+  listLiveTeamSubscriptions,
+  liveHasAnyPro,
+  liveHasFootballPro,
+  resolveLiveProFootballAccess,
+} from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
@@ -856,6 +866,23 @@ export default function HomePage() {
       const { clubIds, teamIds } = userMemberships;
       if (clubIds.length === 0 && teamIds.length === 0) return false;
 
+      // ICP: Pro grants live on club_domain (team → club → caller's IAP
+      // entitlement); Supabase has no subscription rows for II accounts.
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const [teamSubs, clubSubs] = await Promise.all([
+              listLiveTeamSubscriptions(ctx, teamIds),
+              listLiveClubSubscriptions(ctx, clubIds),
+            ]);
+            if ([...teamSubs.values()].some(liveHasAnyPro)) return true;
+            if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
+            return fetchLiveCallerIapPro(ctx);
+          },
+        });
+      }
+
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
       const [clubSubsResult, teamSubsResult, teamsResult] = await Promise.all([
         clubIds.length > 0
@@ -872,7 +899,7 @@ export default function HomePage() {
       // Fallback covers teams.is_pro (set by website trial signup).
       return resolveHomeProAccess(clubSubsResult.data, teamSubsResult.data, teamsResult.data);
     },
-    enabled: !!user && !!userMemberships && resolveAuthBackend() !== "icp",
+    enabled: !!user && !!userMemberships,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -883,6 +910,30 @@ export default function HomePage() {
   const { data: rewardClubs = [] } = useQuery({
     queryKey: ["reward-clubs-home", user?.id, activeClubFilter, userMemberships?.clubIds],
     queryFn: async () => {
+      // ICP: club profiles + Pro grants come from club_domain.
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const clubIds = activeClubFilter ? [activeClubFilter] : (userMemberships?.clubIds || []);
+            if (clubIds.length === 0) return [];
+            const [subs, profiles] = await Promise.all([
+              listLiveClubSubscriptions(ctx, clubIds),
+              Promise.all(clubIds.map((clubId) => getLiveClubProfile(ctx, clubId).catch(() => null))),
+            ]);
+            return clubIds.flatMap((clubId, index) => {
+              const profile = profiles[index];
+              if (!profile) return [];
+              return [{
+                id: clubId,
+                name: profile.name,
+                logo_url: profile.logo_url?.[0] ?? null,
+                hasPro: liveHasAnyPro(subs.get(clubId)),
+              }];
+            });
+          },
+        });
+      }
       if (activeClubFilter) {
         const [clubResult, subResult] = await Promise.all([
           supabase.from("clubs").select("id, name, logo_url").eq("id", activeClubFilter).single(),
@@ -907,7 +958,7 @@ export default function HomePage() {
         return { ...club, hasPro: !!hasPro };
       });
     },
-    enabled: !!user && !!userMemberships && resolveAuthBackend() !== "icp",
+    enabled: !!user && !!userMemberships,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
@@ -1309,6 +1360,54 @@ export default function HomePage() {
   const { data: mySoccerTeams } = useQuery({
     queryKey: ["my-soccer-teams-pro", user?.id],
     queryFn: async () => {
+      // ICP: roles, teams, club sports and Pro Football grants all resolve
+      // from the canisters (Supabase has no rows for II accounts).
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const teamIdOf = (g: { team?: [] | [string]; team_id?: [] | [string] | string | null }) =>
+              (g.team?.[0] ?? (Array.isArray(g.team_id) ? g.team_id[0] : g.team_id) ?? null) as string | null;
+            const coachAdminTeamIds = [...new Set(
+              grants
+                .filter((g) => ["coach", "team_admin"].includes(g.role))
+                .map(teamIdOf)
+                .filter((id): id is string => !!id),
+            )];
+            if (coachAdminTeamIds.length === 0) return [];
+            const teams = (await Promise.all(
+              coachAdminTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => null)),
+            )).filter((t): t is NonNullable<typeof t> => !!t && !t.deleted_at_ms.length);
+            const clubIds = [...new Set(teams.map((t) => t.club_id))];
+            const clubProfiles = new Map(
+              await Promise.all(clubIds.map(async (id) => [id, await getLiveClubProfile(ctx, id).catch(() => null)] as const)),
+            );
+            const soccerKeywords = ["soccer", "football", "futsal"];
+            const soccerTeams = teams.filter((t) => {
+              const sport = clubProfiles.get(t.club_id)?.sport?.[0]?.toLowerCase() ?? "";
+              return soccerKeywords.some((keyword) => sport.includes(keyword));
+            });
+            if (!soccerTeams.length) return [];
+            const [teamSubs, clubSubs, callerIsPro] = await Promise.all([
+              listLiveTeamSubscriptions(ctx, soccerTeams.map((t) => t.id)),
+              listLiveClubSubscriptions(ctx, clubIds),
+              fetchLiveCallerIapPro(ctx),
+            ]);
+            return soccerTeams
+              .filter((t) => callerIsPro || liveHasFootballPro(teamSubs.get(t.id)) || liveHasFootballPro(clubSubs.get(t.club_id)))
+              .map((t) => {
+                const club = clubProfiles.get(t.club_id);
+                return {
+                  id: t.id,
+                  name: t.name,
+                  club_id: t.club_id,
+                  clubs: club ? { id: t.club_id, name: club.name, sport: club.sport?.[0] ?? null } : null,
+                };
+              });
+          },
+        });
+      }
       // Only fetch teams where user is coach or team_admin (direct team edit access)
       const { data: userRoles, error: rolesError } = await supabase
         .from("user_roles")
@@ -1378,7 +1477,7 @@ export default function HomePage() {
       // Coaches and team admins require Pro Football subscription for pitch board access
       return soccerTeams.filter(t => proFootballTeamIds.has(t.id));
     },
-    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0 && resolveAuthBackend() !== "icp",
+    enabled: !!user && !!userMemberships && (userMemberships?.teamIds?.length ?? 0) > 0,
 
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1387,6 +1486,76 @@ export default function HomePage() {
   const { data: readOnlySoccerTeams } = useQuery({
     queryKey: ["read-only-soccer-teams", user?.id],
     queryFn: async () => {
+      // ICP: roles, teams, club sports and Pro Football grants all resolve
+      // from the canisters (Supabase has no rows for II accounts).
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const teamIdOf = (g: { team?: [] | [string]; team_id?: [] | [string] | string | null }) =>
+              (g.team?.[0] ?? (Array.isArray(g.team_id) ? g.team_id[0] : g.team_id) ?? null) as string | null;
+            const clubIdOf = (g: { club?: [] | [string]; club_id?: [] | [string] | string | null }) =>
+              (g.club?.[0] ?? (Array.isArray(g.club_id) ? g.club_id[0] : g.club_id) ?? null) as string | null;
+            const appAdmin = await isLiveAppAdmin(ctx);
+            const memberTeamIds = [...new Set(
+              grants
+                .filter((g) => ["player", "parent"].includes(g.role))
+                .map(teamIdOf)
+                .filter((id): id is string => !!id),
+            )];
+            const adminClubIds = [...new Set(
+              grants
+                .filter((g) => g.role === "club_admin")
+                .map(clubIdOf)
+                .filter((id): id is string => !!id),
+            )];
+            let teams: Array<{ id: string; name: string; club_id: string; deleted_at_ms: [] | [bigint] }> = [];
+            if (appAdmin) {
+              const clubs = await listLiveClubs(ctx);
+              const perClub = await Promise.all(clubs.map((c) => listLiveTeams(ctx, c.id).catch(() => [])));
+              teams = perClub.flat();
+            } else {
+              const fromClubs = (await Promise.all(
+                adminClubIds.map((id) => listLiveTeams(ctx, id).catch(() => [])),
+              )).flat();
+              const fromTeams = (await Promise.all(
+                memberTeamIds.map((id) => getLiveTeam(ctx, id).catch(() => null)),
+              )).filter((t): t is NonNullable<typeof t> => !!t);
+              const seen = new Set(fromClubs.map((t) => t.id));
+              teams = [...fromClubs, ...fromTeams.filter((t) => !seen.has(t.id))];
+            }
+            teams = teams.filter((t) => !t.deleted_at_ms.length);
+            if (!teams.length) return [];
+            const clubIds = [...new Set(teams.map((t) => t.club_id))];
+            const clubProfiles = new Map(
+              await Promise.all(clubIds.map(async (id) => [id, await getLiveClubProfile(ctx, id).catch(() => null)] as const)),
+            );
+            const soccerKeywords = ["soccer", "football", "futsal"];
+            const soccerTeams = teams.filter((t) => {
+              const sport = clubProfiles.get(t.club_id)?.sport?.[0]?.toLowerCase() ?? "";
+              return soccerKeywords.some((keyword) => sport.includes(keyword));
+            });
+            if (!soccerTeams.length) return [];
+            const [teamSubs, clubSubs, callerIsPro] = await Promise.all([
+              listLiveTeamSubscriptions(ctx, soccerTeams.map((t) => t.id)),
+              listLiveClubSubscriptions(ctx, clubIds),
+              fetchLiveCallerIapPro(ctx),
+            ]);
+            return soccerTeams
+              .filter((t) => callerIsPro || liveHasFootballPro(teamSubs.get(t.id)) || liveHasFootballPro(clubSubs.get(t.club_id)))
+              .map((t) => {
+                const club = clubProfiles.get(t.club_id);
+                return {
+                  id: t.id,
+                  name: t.name,
+                  club_id: t.club_id,
+                  clubs: club ? { id: t.club_id, name: club.name, sport: club.sport?.[0] ?? null } : null,
+                };
+              });
+          },
+        });
+      }
       // Get user's roles
       const { data: userRoles, error: rolesError } = await supabase
         .from("user_roles")
@@ -1471,7 +1640,7 @@ export default function HomePage() {
       // Return only teams with Pro Football
       return soccerTeams.filter(t => proFootballTeamIds.has(t.id));
     },
-    enabled: !!user && !!userMemberships && ((userMemberships?.teamIds?.length ?? 0) > 0 || (userMemberships?.clubIds?.length ?? 0) > 0) && resolveAuthBackend() !== "icp",
+    enabled: !!user && !!userMemberships && ((userMemberships?.teamIds?.length ?? 0) > 0 || (userMemberships?.clubIds?.length ?? 0) > 0),
 
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
@@ -1540,6 +1709,16 @@ export default function HomePage() {
         variant: "destructive",
       }),
     hasProFootballAccess: async (teamId) => {
+      // ICP: team/club Pro Football grants on club_domain + caller's IAP.
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const team = await getLiveTeam(ctx, teamId).catch(() => null);
+            return resolveLiveProFootballAccess(ctx, { teamId, clubId: team?.club_id ?? null });
+          },
+        });
+      }
       const { data: teamSubscription } = await supabase
         .from("team_subscriptions")
         .select("is_pro_football")
