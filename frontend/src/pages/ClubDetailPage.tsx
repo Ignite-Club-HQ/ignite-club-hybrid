@@ -106,7 +106,7 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, listLiveTeamSponsorAllocations } from "@/live/features/club";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription } from "@/live/features/club";
 import {
   softDeleteLiveClub,
   restoreLiveClub,
@@ -196,7 +196,28 @@ export default function ClubDetailPage() {
     queryKey: ["club", id],
     queryFn: async () => {
       if (useIcpLab && id) {
-        return fixtureData.getLocalLabClubDetail(id) ?? null;
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubProfile(ctx, id);
+            const p = row.length ? row[0] : null;
+            if (!p) return null;
+            // Map the canister profile onto the Supabase clubs row shape this
+            // page renders; the canister has no theme-HSL/sponsor columns.
+            return {
+              id: p.id,
+              name: p.name,
+              slug: p.slug,
+              description: p.description[0] ?? null,
+              logo_url: p.logo_url[0] ?? null,
+              primary_color: p.primary_color[0] ?? null,
+              secondary_color: p.secondary_color[0] ?? null,
+              sport: p.sport[0] ?? null,
+              is_active: p.is_active,
+              deleted_at: p.deleted_at_ms.length ? new Date(Number(p.deleted_at_ms[0])).toISOString() : null,
+            };
+          },
+        });
       }
 
       const { data, error } = await supabase
@@ -366,6 +387,42 @@ export default function ClubDetailPage() {
   const { data: teams } = useQuery({
     queryKey: ["club-teams", id],
     queryFn: async () => {
+      if (useIcpLab && id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const [liveTeams, liveFolders] = await Promise.all([
+              listLiveTeams(ctx, id),
+              listLiveTeamFolders(ctx, id),
+            ]);
+            const foldersById = new Map(liveFolders.map((f) => [f.id, f]));
+            return liveTeams
+              .filter((t) => t.deleted_at_ms.length === 0)
+              .map((t) => {
+                const folderId = t.folder_id[0] ?? null;
+                const folder = folderId ? foldersById.get(folderId) : undefined;
+                return {
+                  id: t.id,
+                  club_id: t.club_id,
+                  name: t.name,
+                  division: t.division[0] ?? null,
+                  gender: t.gender[0] ?? null,
+                  age_group: t.age_group[0] ?? null,
+                  description: t.description[0] ?? null,
+                  logo_url: t.logo_url[0] ?? null,
+                  team_type: t.team_type[0] ?? null,
+                  is_active: t.is_active,
+                  is_archived: t.archived,
+                  is_shell: t.is_shell,
+                  folder_id: folderId,
+                  deleted_at: null,
+                  team_folders: folder ? { id: folder.id, name: folder.name } : null,
+                };
+              })
+              .sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, team_folders!teams_folder_id_fkey(id, name)")
@@ -376,7 +433,7 @@ export default function ClubDetailPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!id && !useIcpLab,
+    enabled: !!id,
   });
 
   // Fetch user's team memberships to show "My Team" badge
@@ -404,6 +461,26 @@ export default function ClubDetailPage() {
   const { data: teamFolders = [] } = useQuery({
     queryKey: ["team-folders", id],
     queryFn: async () => {
+      if (useIcpLab && id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const rows = await listLiveTeamFolders(ctx, id);
+            return rows
+              .map((f) => ({
+                id: f.id,
+                club_id: f.club_id,
+                name: f.name,
+                description: f.description[0] ?? null,
+                color: f.color,
+                sort_order: Number(f.sort_order),
+                created_by: f.created_by.toText(),
+                created_at: new Date(Number(f.created_at_ms)).toISOString(),
+              }))
+              .sort((a, b) => a.sort_order - b.sort_order);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("team_folders")
         .select("*")
@@ -412,7 +489,7 @@ export default function ClubDetailPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!id && !useIcpLab,
+    enabled: !!id,
   });
 
   // Fetch mini leagues for this club
@@ -441,7 +518,13 @@ export default function ClubDetailPage() {
   // Mutation for moving teams between folders
   const moveTeamToFolderMutation = useMutation({
     mutationFn: async ({ teamId, folderId }: { teamId: string; folderId: string | null }) => {
-      if (useIcpLab) throw new Error("Moving teams between folders is unavailable in ICP lab mode.");
+      if (useIcpLab) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => { await setLiveTeamFolder(ctx, teamId, folderId); },
+        });
+        return;
+      }
       const { error } = await supabase
         .from("teams")
         .update({ folder_id: folderId })
@@ -460,7 +543,24 @@ export default function ClubDetailPage() {
   // Folder management mutations
   const createFolderMutation = useMutation({
     mutationFn: async (params: { name: string; description: string; color: string }) => {
-      if (useIcpLab) throw new Error("Creating team folders is unavailable in ICP lab mode.");
+      if (useIcpLab) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            await saveLiveTeamFolder(ctx, {
+              id: crypto.randomUUID(),
+              club_id: id!,
+              name: params.name,
+              description: params.description.trim() ? [params.description.trim()] : [],
+              color: params.color,
+              sort_order: teamFolders.length,
+              created_by: ctx.identity.getPrincipal(),
+              created_at_ms: BigInt(Date.now()),
+            });
+          },
+        });
+        return;
+      }
       const { error } = await supabase.from("team_folders").insert({
         club_id: id!,
         name: params.name,
@@ -483,8 +583,27 @@ export default function ClubDetailPage() {
 
   const updateFolderMutation = useMutation({
     mutationFn: async () => {
-      if (useIcpLab) throw new Error("Updating team folders is unavailable in ICP lab mode.");
       if (!editingFolder) return;
+      if (useIcpLab) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            await saveLiveTeamFolder(ctx, {
+              id: editingFolder.id,
+              club_id: id!,
+              name: folderName.trim(),
+              description: folderDescription.trim() ? [folderDescription.trim()] : [],
+              color: folderColor,
+              sort_order: (editingFolder as any).sort_order ?? 0,
+              created_by: ctx.identity.getPrincipal(),
+              created_at_ms: (editingFolder as any).created_at
+                ? BigInt(new Date((editingFolder as any).created_at).getTime())
+                : BigInt(Date.now()),
+            });
+          },
+        });
+        return;
+      }
       const { error } = await supabase
         .from("team_folders")
         .update({
@@ -510,7 +629,13 @@ export default function ClubDetailPage() {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      if (useIcpLab) throw new Error("Deleting team folders is unavailable in ICP lab mode.");
+      if (useIcpLab) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => { await deleteLiveTeamFolder(ctx, folderId); },
+        });
+        return;
+      }
       const { error } = await supabase
         .from("team_folders")
         .delete()
@@ -788,6 +913,21 @@ export default function ClubDetailPage() {
   const { data: clubSubscription } = useQuery({
     queryKey: ["club-subscription", id],
     queryFn: async () => {
+      if (useIcpLab && id) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, id);
+            if (!sub) return null;
+            return {
+              club_id: sub.club_id,
+              is_pro: sub.is_pro,
+              is_pro_football: sub.is_pro_football,
+              plan: sub.plan,
+            };
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -795,7 +935,7 @@ export default function ClubDetailPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!id && !useIcpLab,
+    enabled: !!id,
   });
 
   // Check for existing pending request
@@ -818,7 +958,6 @@ export default function ClubDetailPage() {
 
   const requestRoleMutation = useMutation({
     mutationFn: async () => {
-      if (useIcpLab) throw new Error("Club role requests are unavailable in ICP lab mode.");
       await withFeatureBackend("membership", {
         supabase: async () => {
           const { error } = await supabase.from("role_requests").insert({
@@ -857,10 +996,6 @@ export default function ClubDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (useIcpLab) {
-      toast({ title: "Club deletion is unavailable in ICP lab mode", variant: "destructive" });
-      return;
-    }
     if (isDeleting) return;
     setIsDeleting(true);
     // Club soft-delete on the canister has no team/chat cascade or
@@ -1162,10 +1297,6 @@ export default function ClubDetailPage() {
 
 
   const handlePermanentDeleteClub = async () => {
-    if (useIcpLab) {
-      toast({ title: "Permanent club deletion is unavailable in ICP lab mode", variant: "destructive" });
-      return;
-    }
     setIsDeleting(true);
     try {
       await withFeatureBackend("membership", {
@@ -1192,7 +1323,39 @@ export default function ClubDetailPage() {
   // Mutation for app admins to toggle club Pro status
   const toggleClubProMutation = useMutation({
     mutationFn: async ({ isPro, isProFootball }: { isPro: boolean; isProFootball: boolean }) => {
-      if (useIcpLab) throw new Error("Club subscription changes are unavailable in ICP lab mode.");
+      if (useIcpLab) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const existing = await getLiveClubSubscription(ctx, id!);
+            const nowMs = BigInt(Date.now());
+            const base = existing ?? {
+              club_id: id!,
+              is_pro: false,
+              is_pro_football: false,
+              admin_pro_override: false,
+              admin_pro_football_override: false,
+              expires_at_ms: [] as [] | [bigint],
+              plan: "free",
+              team_limit: [] as [] | [number],
+              trial_ends_at_ms: [] as [] | [bigint],
+              is_trial: false,
+              cancelled_at_ms: [] as [] | [bigint],
+              activated_at_ms: [] as [] | [bigint],
+            };
+            await saveLiveClubSubscription(ctx, {
+              ...base,
+              is_pro: isPro,
+              is_pro_football: isProFootball,
+              admin_pro_override: isPro,
+              admin_pro_football_override: isProFootball,
+              activated_at_ms: isPro || isProFootball ? [nowMs] : base.activated_at_ms,
+              expires_at_ms: [], // Admin-enabled = no expiry
+            });
+          },
+        });
+        return;
+      }
       // Check if subscription record exists
       if (clubSubscription) {
         // Update existing subscription
