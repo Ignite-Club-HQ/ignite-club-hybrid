@@ -48,9 +48,9 @@ export const EventLinkCard = memo(function EventLinkCard({ eventId }: EventLinkC
             location_name: null,
             location: ((e.location as string[] | undefined)?.[0] as string) ?? null,
             type: e.event_type as string,
-            opponent: null,
+            opponent: ((e.opponent as string[] | undefined)?.[0] as string) ?? null,
             is_home_game: false,
-            mini_league_id: null,
+            mini_league_id: ((e.mini_league_id as string[] | undefined)?.[0] as string) ?? null,
             is_cancelled: !!e.cancelled,
           };
         },
