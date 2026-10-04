@@ -328,6 +328,7 @@ export async function signOutInternetIdentity(): Promise<void> {
 }
 
 export function resetInternetIdentityAuthForTests(): void {
+  signOutRequested = false;
   activeClient?.dispose?.();
   activeClient = undefined;
   activeTarget = undefined;
