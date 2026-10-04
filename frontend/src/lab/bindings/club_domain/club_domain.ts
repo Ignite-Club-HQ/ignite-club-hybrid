@@ -815,6 +815,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_team_role_grants(team: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_team_sponsor_allocations(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<TeamSponsorAllocation>;
@@ -2246,6 +2253,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.list_team_invites(arg0, to_candid_opt_n14(arg1));
         return from_candid_variant_n142(result);
+    }
+    async list_team_role_grants(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<AccountRole>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_team_role_grants(arg0);
+        return from_candid_variant_n129(result);
     }
     async list_team_sponsor_allocations(arg0: string): Promise<{
         __kind__: "Ok";

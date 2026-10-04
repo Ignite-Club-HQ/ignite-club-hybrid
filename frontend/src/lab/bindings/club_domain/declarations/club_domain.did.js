@@ -837,6 +837,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_team_role_grants' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(AccountRole), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_team_sponsor_allocations' : IDL.Func(
         [IDL.Text],
         [
