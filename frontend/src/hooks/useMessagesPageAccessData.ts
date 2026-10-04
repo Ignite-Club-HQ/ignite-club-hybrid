@@ -150,6 +150,29 @@ export function useMessagesPageAccessData({
   const { data: hasAnyProAccess, isLoading: isLoadingProAccess, isFetching: isFetchingProAccess } = useQuery({
     queryKey: ["has-any-pro-access", userId],
     queryFn: async () => {
+      // ICP: role grants and Pro grants live on the canisters; the caller's
+      // own IAP entitlement is global Pro for its holder.
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        return withFeatureBackend("messaging", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const { listLiveTeamSubscriptions, listLiveClubSubscriptions, liveHasAnyPro, fetchLiveCallerIapPro } =
+              await import("@/live/features/proAccess");
+            const grants = await getLiveMyRoleGrants(ctx);
+            const teamIds = [...new Set(grants.flatMap((g) => (g.team[0] ? [g.team[0]] : [])))];
+            const clubIds = [...new Set(grants.flatMap((g) => (g.club[0] ? [g.club[0]] : [])))];
+            const [teamSubs, clubSubs] = await Promise.all([
+              listLiveTeamSubscriptions(ctx, teamIds),
+              listLiveClubSubscriptions(ctx, clubIds),
+            ]);
+            if ([...teamSubs.values()].some(liveHasAnyPro)) return true;
+            if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
+            return fetchLiveCallerIapPro(ctx);
+          },
+        });
+      }
       const { data: userTeamRoles } = await client
         .from("user_roles")
         .select("team_id, club_id")
