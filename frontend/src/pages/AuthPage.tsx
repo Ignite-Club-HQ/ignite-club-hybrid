@@ -277,8 +277,10 @@ export default function AuthPage() {
     signIn,
     signUp,
     signInWithGoogle,
+    signInReady,
     loading: authLoading,
   } = useAuth();
+  const iiPreparing = useIcpLab && signInReady === false;
 
   // Post-auth navigation target is resolved exactly once, in an effect, so
   // that the pending `redirectAfterAuth` in sessionStorage is consumed
@@ -848,10 +850,10 @@ export default function AuthPage() {
                   type="button"
                   className="w-full gap-2"
                   onClick={handleGoogleSignIn}
-                  disabled={googleLoading || authLoading}
+                  disabled={googleLoading || authLoading || iiPreparing}
                 >
-                  {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
-                  Continue with Internet Identity
+                  {googleLoading || iiPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
+                  {iiPreparing ? "Getting sign-in ready…" : "Continue with Internet Identity"}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center leading-relaxed">
                   {II_SIGN_IN_HINT}
