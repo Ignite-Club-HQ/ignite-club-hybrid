@@ -147,6 +147,7 @@ export interface ClubTeam {
   'is_active' : boolean,
   'playhq_auto_create_events' : boolean,
   'playhq_competition_id' : [] | [string],
+  'folder_id' : [] | [string],
   'shell_contact_email' : [] | [string],
   'shell_claimed_by' : [] | [Principal],
   'club_id' : string,
@@ -181,6 +182,17 @@ export interface Draft {
 export interface Exclusion { 'club' : string, 'user' : Principal }
 export interface Family { 'account_id' : string, 'child_id' : string }
 export interface Guardian { 'child' : string, 'user' : Principal }
+export interface HttpRequest {
+  'url' : string,
+  'method' : string,
+  'body' : Uint8Array,
+  'headers' : Array<[string, string]>,
+}
+export interface HttpResponse {
+  'body' : Uint8Array,
+  'headers' : Array<[string, string]>,
+  'status_code' : number,
+}
 export interface InvitePayload {
   'to' : string,
   'subject' : string,
@@ -341,6 +353,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_team_folder' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_team_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -436,6 +453,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
+  'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'import_frozen_club' : ActorMethod<
     [string, Listing],
     { 'Ok' : null } |
@@ -555,6 +573,11 @@ export interface Main {
   'list_team_creation_requests' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamCreationRequest> } |
+      { 'Err' : string }
+  >,
+  'list_team_folders' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamFolder> } |
       { 'Err' : string }
   >,
   'list_team_invites' : ActorMethod<
@@ -729,6 +752,11 @@ export interface Main {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'save_team_folder' : ActorMethod<
+    [TeamFolder],
+    { 'Ok' : TeamFolder } |
+      { 'Err' : string }
+  >,
   'send_fee_reminders' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : number } |
@@ -785,6 +813,11 @@ export interface Main {
   'set_notification_queue_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_team_folder' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
   'set_team_player_position' : ActorMethod<
@@ -1002,6 +1035,16 @@ export interface TeamCreationRequest {
   'club_id' : string,
   'decided_by' : [] | [Principal],
   'age_group' : [] | [string],
+}
+export interface TeamFolder {
+  'id' : string,
+  'name' : string,
+  'color' : string,
+  'sort_order' : number,
+  'description' : [] | [string],
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'club_id' : string,
 }
 export interface TeamInvite {
   'id' : string,
