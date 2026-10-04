@@ -104,7 +104,48 @@ function LogoClubThemeDropdown() {
     staleTime: 60_000,
     queryFn: async () => {
       if (!user?.id) return [];
-      if (resolveAuthBackend() === "icp") return [];
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // The caller's clubs come from their club_domain role grants —
+            // the same store create_club writes the creator's grant to.
+            // The canister has no theme-HSL columns, so clubs render with
+            // hasTheme false (locked) until theming lands on canisters.
+            // Lazy-imported: the header mounts on every page, so the ICP SDK
+            // must stay out of the entry chunk (same rule as miniLeagues).
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const { getLiveClubProfile, getLiveClubSubscription } = await import("@/live/features/club");
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            if (!clubIds.length) return guardClubListResult(`all-user-clubs:${user.id}`, []);
+            const clubs = await Promise.all(clubIds.map(async (clubId) => {
+              const row = await getLiveClubProfile(ctx, clubId);
+              const p = row.length ? row[0] : null;
+              if (!p || p.deleted_at_ms.length) return null;
+              const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
+              const hasPro = sub !== null &&
+                (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
+              return {
+                clubId: p.id,
+                clubName: p.name.trim(),
+                logoUrl: p.logo_url[0] ?? null,
+                hasPro,
+                hasTheme: false,
+                themeEnabled: false,
+                isSelectable: false,
+              };
+            }));
+            const result = clubs.filter((c): c is NonNullable<typeof c> => c !== null);
+            const dedupedClubs = new Map<string, (typeof result)[number]>();
+            result.forEach((club) => {
+              const normalizedName = club.clubName.toLowerCase().replace(/\s+/g, " ").trim();
+              if (!dedupedClubs.has(normalizedName)) dedupedClubs.set(normalizedName, club);
+            });
+            return guardClubListResult(`all-user-clubs:${user.id}`, Array.from(dedupedClubs.values()));
+          },
+        });
+      }
 
       // Get club IDs from user roles
       const { data: clubRoles, error: clubRolesError } = await supabase
@@ -357,11 +398,22 @@ export function AppHeader() {
   const hintAlreadySeen = user?.id ? hasSeenClubSwitcherHint(user.id) : true;
   const { data: userClubCount = 0 } = useQuery({
     queryKey: ["user-club-count-for-switcher-hint", user?.id],
-    enabled: !!user?.id && !hintAlreadySeen && resolveAuthBackend() !== "icp",
+    enabled: !!user?.id && !hintAlreadySeen,
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!user?.id) return 0;
-      if (resolveAuthBackend() === "icp") return 0;
+      if (resolveAuthBackend() === "icp") {
+        // Lazy-imported: the header mounts on every page, so the ICP SDK
+        // must stay out of the entry chunk (same rule as miniLeagues).
+        const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return new Set(grants.map(g => g.club[0]).filter(Boolean)).size;
+          },
+        });
+      }
       const db = supabase as any;
       const [clubRoles, teamRoles, teamMemberships, clubPlayers] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
