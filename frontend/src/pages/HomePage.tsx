@@ -37,7 +37,17 @@ import {
   type HomeRsvpProvider,
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { isLiveAppAdmin } from "@/live/features/insights";
+import {
+  fetchLiveCallerIapPro,
+  listLiveClubSubscriptions,
+  listLiveTeamSubscriptions,
+  liveHasAnyPro,
+  liveHasFootballPro,
+  resolveLiveProFootballAccess,
+} from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
