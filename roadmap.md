@@ -24,6 +24,12 @@ Goal: give Internet Identity app admins the same admin tools as Supabase mode, m
 - [x] Draft persistence (localStorage) now allowed in ICP mode
 - Verified: typecheck 0 diagnostics, preview build OK, messaging + featureRouter tests pass (11/11)
 
+## Club switcher inert in ICP mode — DONE
+- [x] useClubTheme user-clubs-for-switcher query: ICP branch now fetches club profiles from club_domain (getLiveClubProfile per grant club id, skipping soft-deleted) instead of falling through to the Supabase clubs table, which has no rows for Internet Identity users — this left userClubs empty so activeFreeClubData was null and the header never changed when switching clubs
+- [x] activeClubTeamIds query: ICP branch resolves team ids via listLiveTeams (skipping soft-deleted) instead of being disabled, so team-id-based content filtering works in ICP mode
+- [x] club-themes query returns [] early in ICP mode (canisters store no theme-HSL columns) and unwraps candid opt club fields with [0]
+- Verified: typecheck 0 diagnostics, club-switching tests 24/24, preview build OK. Frontend-only — works on publish, no canister redeploy
+
 ## Open
 - [ ] Duplicate teams reported after publish — root cause identified (wizard re-saves draft teams with fresh IDs); user declined the fix for now, do not pick up
 - [x] Club created in ICP mode not visible on Home — homeFeed ICP branch read memberships from identity_access `my_roles` (governor-managed only; create_club never writes there) while every membership write (create_club, invite acceptance, add_role_grant) targets club_domain. Fixed: fetchLiveHomeFeed now derives memberships from club_domain `my_role_grants` (getLiveMyRoleGrants), matching EventsPage/useAuthorizedScopes. Frontend-only fix — works on publish, no canister redeploy needed. Typecheck 0, homeFeed tests 8/8, preview build OK
