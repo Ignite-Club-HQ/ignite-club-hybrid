@@ -48,10 +48,12 @@ import { clearUserClubIds, setUserClubIds } from "@/live/userClubs";
 
 const ENFORCED_KEY = "ignite.clubBackendEnforced";
 
-async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
+async function fetchSupabaseMembership(
+  userId: string,
+): Promise<{ clubIds: string[]; isAppAdmin: boolean }> {
   const { data: roles, error: rolesError } = await supabase
     .from("user_roles")
-    .select("club_id, team_id")
+    .select("club_id, team_id, role")
     .eq("user_id", userId);
   if (rolesError) throw rolesError;
   const directClubIds = (roles ?? []).filter(r => r.club_id).map(r => r.club_id!);
@@ -65,7 +67,10 @@ async function fetchSupabaseClubIds(userId: string): Promise<string[]> {
     if (teamsError) throw teamsError;
     teamClubIds = (teams ?? []).map(t => t.club_id).filter((id): id is string => !!id);
   }
-  return [...new Set([...directClubIds, ...teamClubIds])];
+  return {
+    clubIds: [...new Set([...directClubIds, ...teamClubIds])],
+    isAppAdmin: (roles ?? []).some(r => r.role === "app_admin"),
+  };
 }
 
 function hasClubPins(): boolean {

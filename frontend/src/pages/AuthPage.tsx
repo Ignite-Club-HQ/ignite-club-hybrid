@@ -139,7 +139,12 @@ export default function AuthPage() {
   // Auth screen follows Admin → Infrastructure / Placement Settings:
   // Internet Identity when ICP is the effective backend for this visitor,
   // Supabase email/password + Google otherwise.
-  const useIcpLab = useIcpAuthScreen();
+  // `?auth=email` lets app admins reach the Supabase email sign-in even when
+  // their club is pinned to ICP — app-admin accounts live in Supabase, so the
+  // Internet Identity screen alone would lock them out of Placement Settings.
+  const forceEmailAuth =
+    new URLSearchParams(window.location.search).get("auth") === "email";
+  const useIcpLab = useIcpAuthScreen() && !forceEmailAuth;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
