@@ -131,6 +131,12 @@ export function IcpMediaFeedPage() {
   const [commentDraft, setCommentDraft] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Uploads fail closed for ICP sessions until the media_blob_store canister
+  // is configured — the button stays hidden in that case (same gate as the
+  // Supabase media page's upload controls).
+  const uploadAvailable = !isIcpMediaUploadUnavailable();
 
   const loadFeed = useCallback(async () => {
     if (!clubId) {
