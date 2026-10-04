@@ -1294,6 +1294,16 @@ export function useOptionalAuth(): AuthContextType | null {
 }
 
 /** Local ICP session seam for staged frontend migration work. */
+/** Bounds a canister/client wait so a hung call can never spin a screen forever. */
+function withIcpTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Internet Identity request timed out")), ms),
+    ),
+  ]);
+}
+
 export function IcpAuthProvider({ children, persona = "member" }: { children: ReactNode; persona?: string }) {
   const [session, setSession] = useState<InternetIdentitySession | null>(() => {
     try {
@@ -1318,45 +1328,74 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   const [icpProfileResolved, setIcpProfileResolved] = useState(() =>
     Boolean(principal && getCachedIcpIdentityProfile(principal)),
   );
+  // True when the profile could not be loaded AND there is no cache to render
+  // from. Drives the "unable to load / retry" screen instead of an endless
+  // spinner or a wrong redirect to profile completion.
+  const [icpProfileError, setIcpProfileError] = useState(false);
   const icpProfileRequestRef = useRef(0);
+  // The localStorage session said "signed in" but the Internet Identity
+  // delegation underneath is gone (expired or cleared): drop the stale
+  // session so the member lands on the sign-in screen instead of the app
+  // shell spinning on "Loading your profile…" forever.
+  const clearDeadIcpSession = useCallback(async () => {
+    console.warn("[Auth] Stored Internet Identity session is no longer valid; returning to sign-in.");
+    localStorage.removeItem("ignite_icp_internet_identity_session");
+    clearIcpIdentityProfileCache();
+    setSession(null);
+  }, []);
   useEffect(() => {
     if (!principal) {
       setIcpProfile(null);
       setIcpProfileResolved(false);
+      setIcpProfileError(false);
       return;
     }
     const cached = getCachedIcpIdentityProfile(principal);
     setIcpProfile(cached);
     setIcpProfileResolved(Boolean(cached));
+    setIcpProfileError(false);
     const requestId = ++icpProfileRequestRef.current;
     let cancelled = false;
     void (async () => {
       try {
-        const [{ getCurrentInternetIdentity }, { fetchIcpIdentityProfile }] = await Promise.all([
+        const [authMod, { fetchIcpIdentityProfile }] = await Promise.all([
           import("@/live/internetIdentityAuth"),
           import("@/live/identityProfile"),
         ]);
-        const identity = await getCurrentInternetIdentity();
-        if (!identity) return;
-        const fetched = await fetchIcpIdentityProfile(identity, principal);
+        // Wait for the sign-in client before asking who is signed in: asking
+        // too early answers null and would look like a dead session.
+        await withIcpTimeout(authMod.warmInternetIdentityAuthClient(), 30000);
+        if (!authMod.isInternetIdentitySignInReady()) {
+          // Client code itself could not load (flaky connection) — transient.
+          throw new Error("Internet Identity sign-in client unavailable");
+        }
+        const identity = await authMod.getCurrentInternetIdentity();
+        if (!identity) {
+          if (!cancelled && icpProfileRequestRef.current === requestId) {
+            await clearDeadIcpSession();
+          }
+          return;
+        }
+        const fetched = await withIcpTimeout(fetchIcpIdentityProfile(identity, principal), 20000);
         if (!cancelled && icpProfileRequestRef.current === requestId) {
           setIcpProfile(fetched);
           setIcpProfileResolved(true);
+          setIcpProfileError(false);
         }
       } catch (error) {
         console.warn("[Auth] ICP identity profile fetch failed:", error);
-        // Keep rendering from cache (or an unresolved profile) rather than
-        // fabricating identity details. A retry happens on the next mount or
-        // manual refreshProfile().
+        // Keep rendering from cache when there is one; with no cache, surface
+        // the retry screen (AppLayout auto-retries via refreshProfile()).
         if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)) {
           setIcpProfileResolved(true);
+          setIcpProfileError(true);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [principal]);
+  }, [principal, clearDeadIcpSession]);
   const user = principal ? {
     id: principal,
     aud: "authenticated",
