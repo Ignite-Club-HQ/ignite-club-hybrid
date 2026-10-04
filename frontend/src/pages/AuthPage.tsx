@@ -285,6 +285,7 @@ export default function AuthPage() {
     signUp,
     signInWithGoogle,
     signInReady,
+    resumingSignIn,
     loading: authLoading,
   } = useAuth();
   const iiPreparing = useIcpLab && signInReady === false;
@@ -853,18 +854,27 @@ export default function AuthPage() {
                     {authError}
                   </div>
                 )}
-                <Button
-                  type="button"
-                  className="w-full gap-2"
-                  onClick={handleGoogleSignIn}
-                  disabled={googleLoading || authLoading || iiPreparing}
-                >
-                  {googleLoading || iiPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
-                  {iiPreparing ? "Getting sign-in ready…" : "Continue with Internet Identity"}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                  {II_SIGN_IN_HINT}
-                </p>
+                {resumingSignIn ? (
+                  <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground" role="status" aria-live="polite">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Signing you in…
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      className="w-full gap-2"
+                      onClick={handleGoogleSignIn}
+                      disabled={googleLoading || authLoading || iiPreparing}
+                    >
+                      {googleLoading || iiPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
+                      {iiPreparing ? "Getting sign-in ready…" : "Continue with Internet Identity"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                      {II_SIGN_IN_HINT}
+                    </p>
+                  </>
+                )}
                 {isLikelyInAppBrowser() && (
                   <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
                     You're viewing this inside another app's built-in browser, where sign-in often can't finish.
