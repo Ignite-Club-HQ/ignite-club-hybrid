@@ -1198,6 +1198,7 @@ persistent actor class Main(governorInit : Principal) {
       shell_contact_name = contact_name;
       shell_invited_by = ?caller;
       playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
+      folder_id = null;
     };
     teams := teams.concat([team]);
     #Ok(team)
@@ -1654,6 +1655,7 @@ persistent actor class Main(governorInit : Principal) {
           shell_invited_by = null;
           archived = false;
           playhq_team_id = null; playhq_competition_id = null; playhq_auto_create_events = false;
+          folder_id = null;
         };
         teams := teams.concat([team]);
         let updated : Types.TeamCreationRequest = { req with status = "approved"; decided_at_ms = ?now; decided_by = ?caller; team_id = ?team.id };
