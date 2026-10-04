@@ -91,6 +91,32 @@ const EMPTY_NEW_AD = {
   description: "",
 };
 
+/**
+ * Compresses an image to a JPEG data URL small enough to store inline in an
+ * ad record on insights_domain (no blob-store club grant applies to
+ * platform-level creatives, so on-chain URLs would be undecryptable).
+ */
+async function compressImageToDataUrl(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not prepare the image for upload");
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.85, 0.7, 0.55, 0.4, 0.3]) {
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (dataUrl.length <= 1_400_000) return dataUrl; // ~1MB binary
+    }
+    throw new Error("That image is too large to store — please choose a smaller one");
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function uploadAdImage(file: File): Promise<string> {
   const fileExt = file.name.split(".").pop();
   const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
