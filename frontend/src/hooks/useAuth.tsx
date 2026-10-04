@@ -63,6 +63,14 @@ interface AuthContextType {
    * the Supabase provider (always ready).
    */
   signInReady?: boolean;
+  /**
+   * Internet Identity only: true from page load until the first attempt to
+   * resume a completed sign-in has finished. While true, the sign-in screen
+   * shows "Signing you in…" instead of the sign-in button, so a member
+   * returning from the Internet Identity window never sees the dialog again
+   * before the app appears. Undefined for the Supabase provider.
+   */
+  resumingSignIn?: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshUnreadCount: () => Promise<void>;
@@ -1378,6 +1386,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // below can reach the actual `signIn()` call with zero awaits in front of it.
   const internetIdentityModuleRef = useRef<typeof import("@/live/internetIdentityAuth") | null>(null);
   const [iiSignInReady, setIiSignInReady] = useState(false);
+  // True until the first silent resume attempt below has completed, so the
+  // sign-in screen can show a "Signing you in…" state instead of flashing
+  // the sign-in dialog while a finished Internet Identity sign-in is being
+  // picked up.
+  const [iiResumePending, setIiResumePending] = useState(true);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -1431,6 +1444,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         console.warn("[Auth] Could not resume Internet Identity session:", error);
       } finally {
         resuming = false;
+        if (!cancelled) setIiResumePending(false);
       }
     };
     void tryResume();
@@ -1482,6 +1496,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     signIn: async () => signInWithIcp(),
     signInWithGoogle: async () => signInWithIcp(),
     signInReady: iiSignInReady,
+    resumingSignIn: iiResumePending,
     signOut: async () => {
       localStorage.removeItem("ignite_icp_internet_identity_session");
       setSession(null);
