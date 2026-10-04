@@ -343,7 +343,7 @@ export default function EventsPage() {
     placeholderData: (prev) => prev,
   });
   // Get user's accessible team, club, and mini league IDs for event filtering
-  const { data: userMemberships, isLoading: membershipsLoading } = useQuery({
+  const { data: userMemberships, isLoading: membershipsLoading, error: membershipsError, refetch: refetchMemberships } = useQuery({
     queryKey: ["user-memberships-for-events", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona],
     queryFn: async () => {
       if (useIcpLab) {
@@ -1125,6 +1125,19 @@ export default function EventsPage() {
     });
   }, [events, membershipsLoading, isLoading, userMemberships, user?.id, viewMode, filter, clubFilter, teamFilter, eventsScopeKey]);
 
+  // A failed memberships lookup must never leave the page on its spinner
+  // forever (isStuckOnSpinner includes an unconditional !userMemberships
+  // term) — show a retry instead.
+  if (membershipsError && !userMemberships) {
+    return (
+      <PageErrorState
+        title="Unable to load your schedule"
+        message={getErrorMessage(membershipsError, "Your team memberships could not be loaded.")}
+        onRetry={() => refetchMemberships()}
+        retryLabel="Try again"
+      />
+    );
+  }
   if (isStuckOnSpinner) {
     return <PageLoading message="Loading events..." />;
   }
