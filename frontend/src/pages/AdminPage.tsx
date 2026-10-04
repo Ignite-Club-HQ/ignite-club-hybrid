@@ -21,9 +21,9 @@ export default function AdminPage() {
 // ICP-mode admin landing. Admin rights come from the canisters via
 // useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
 // admin sees the real tooling. Only tools whose pages work against the live
-// canisters are listed — billing, ads, AI, backups, temp-password and
-// native-storage tooling are Supabase-only (NEEDS-CANISTER), and deleted-chat
-// restore / DM attachment restrictions have no messaging_domain methods yet.
+// canisters are listed — billing, AI, backups, temp-password and
+// native-storage tooling are Supabase-only (NEEDS-CANISTER), and Active
+// Games has no canister holding live coaching-board state yet.
 function IcpAdminPage() {
   const navigate = useNavigate();
   const { isAppAdmin, isLoading } = useIsAppAdmin();
@@ -95,6 +95,24 @@ function IcpAdminPage() {
             label="Chat Virt Debug"
             description="Capture row-height drift and scroll jolts in any chat thread"
             onClick={() => navigate("/admin/chat-virt-debug")}
+          />
+          <AdminMenuItem
+            icon={RotateCcw}
+            label="Deleted Chats"
+            description="Restore or permanently delete archived group chats"
+            onClick={() => navigate("/admin/deleted-chats")}
+          />
+          <AdminMenuItem
+            icon={Paperclip}
+            label="DM Attachments"
+            description="Disable DM attachments by club or by user"
+            onClick={() => navigate("/admin/dm-attachments")}
+          />
+          <AdminMenuItem
+            icon={ImageIcon}
+            label="Manage Ads"
+            description="Create and manage in-app advertisements"
+            onClick={() => navigate("/admin/manage-ads")}
           />
           <AdminMenuItem
             icon={Globe2}
