@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ClubSetupProgressCard } from "@/components/club/ClubSetupProgressCard";
 import ClubLinksManager from "@/components/clubs/ClubLinksManager";
 import { clearClubSetupLocalState } from "@/lib/clubSetupLocalState";
+import { invalidateTeamLists } from "@/lib/invalidateTeamLists";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Plus, Crown, Settings, Trash2, Pencil, Folder, ChevronDown, ChevronRight, Loader2, Gift, Lock, MessageCircle, ArchiveRestore, Sparkles, FileSpreadsheet } from "lucide-react";
 import { sendScheduleBroadcast } from "@/lib/scheduleBroadcast";
@@ -1046,6 +1047,10 @@ export default function ClubDetailPage() {
         clearClubSetupLocalState(id!);
         queryClient.invalidateQueries({ queryKey: ["club", id] });
         queryClient.invalidateQueries({ queryKey: ["clubs"] });
+        // Cascade tombstoned the club's teams too — refresh the home
+        // carousel (React Query + localStorage snapshot) and every other
+        // team-derived list so deleted teams disappear immediately.
+        await invalidateTeamLists(queryClient, user?.id);
         toast({ title: "Club deleted", description: "You can restore it within 30 days from the clubs page." });
         navigate("/clubs");
       } catch (err) {
@@ -1212,6 +1217,7 @@ export default function ClubDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["clubs"] });
       queryClient.invalidateQueries({ queryKey: ["chat-groups"] });
       queryClient.invalidateQueries({ queryKey: ["club-members", id] });
+      await invalidateTeamLists(queryClient, user?.id);
 
       const cleanupFailures: string[] = [];
       if (outcome.teamCleanupError) cleanupFailures.push(`teams (${outcome.teamCleanupError})`);
@@ -1255,6 +1261,7 @@ export default function ClubDetailPage() {
           icp: (ctx) => restoreLiveClub(ctx, id!, true),
         });
         queryClient.invalidateQueries({ queryKey: ["club", id] });
+        await invalidateTeamLists(queryClient, user?.id);
         toast({ title: "Club restored!" });
       } catch (err) {
         toast({ title: "Error", description: `Failed to restore club: ${safeErrMessage(err)}`, variant: "destructive" });
@@ -1311,6 +1318,7 @@ export default function ClubDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["club", id] });
       queryClient.invalidateQueries({ queryKey: ["club-teams", id] });
       queryClient.invalidateQueries({ queryKey: ["chat-groups"] });
+      await invalidateTeamLists(queryClient, user?.id);
 
       const failures: string[] = [];
       if (teamRestoreError) failures.push(`teams (${teamRestoreError})`);
