@@ -4,7 +4,7 @@
 // IGNITE_LIVE_* names the live target registry requires.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { readFileSync, existsSync, rmSync, cpSync } from "node:fs";
+import { readFileSync, existsSync, rmSync, cpSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
 import { syncCanisterIds } from "./sync-canister-ids.mjs";
