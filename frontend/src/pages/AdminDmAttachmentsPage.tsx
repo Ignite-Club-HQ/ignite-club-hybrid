@@ -14,85 +14,127 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { toast } from "sonner";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { Principal } from "@icp-sdk/core/principal";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveClubDmSettings,
+  listLiveAllClubDmSettings,
+  listLiveDmAttachmentsDisabled,
+  setLiveClubDmSettings,
+  setLiveDmAttachmentsDisabled,
+} from "@/live/features/messaging";
+import { listLiveClubs } from "@/live/features/club";
+import { searchLiveProfilesWithPrincipals } from "@/live/features/identityAccessClient";
 
-// NEEDS-CANISTER: messaging_domain has no attachment-restriction surface, so
-// this tool is Supabase-only. Every query and mutation is gated so no II
-// principal reaches Supabase.
-const isIcpPageMode = () => resolveAuthBackend() === "icp";
+interface DmRestriction {
+  id: string;
+  scope: "club" | "user";
+  club_id?: string | null;
+  user_id?: string | null;
+}
 
-export default SupabaseAdminDmAttachmentsPage;
-
-function SupabaseAdminDmAttachmentsPage() {
+export default function AdminDmAttachmentsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"club" | "user">("club");
-
-  const { data: isAppAdmin, isLoading: checkingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id && !isIcpPageMode(),
-  });
+  const { isAppAdmin, isLoading: checkingAdmin } = useIsAppAdmin();
 
   const { data: restrictions, isLoading } = useQuery({
     queryKey: ["dm-attachment-restrictions"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dm_attachment_restrictions")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!isAppAdmin && !isIcpPageMode(),
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async (): Promise<DmRestriction[]> => {
+          const { data, error } = await supabase
+            .from("dm_attachment_restrictions")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return (data || []) as DmRestriction[];
+        },
+        icp: async (ctx): Promise<DmRestriction[]> => {
+          const [clubSettings, userPrincipals] = await Promise.all([
+            listLiveAllClubDmSettings(ctx),
+            listLiveDmAttachmentsDisabled(ctx),
+          ]);
+          return [
+            ...clubSettings
+              .filter((s) => s.attachmentsDisabled)
+              .map((s) => ({ id: `club:${s.clubId}`, scope: "club" as const, club_id: s.clubId })),
+            ...userPrincipals.map((p) => ({ id: `user:${p}`, scope: "user" as const, user_id: p })),
+          ];
+        },
+      }),
+    enabled: isAppAdmin === true,
   });
 
   const { data: clubs } = useQuery({
     queryKey: ["all-clubs-min"],
-    queryFn: async () => {
-      const { data } = await supabase.from("clubs").select("id, name").order("name");
-      return data || [];
-    },
-    enabled: !!isAppAdmin && !isIcpPageMode(),
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase.from("clubs").select("id, name").order("name");
+          return data || [];
+        },
+        icp: async (ctx) => {
+          const out: { id: string; name: string }[] = [];
+          let cursor: string | null = null;
+          for (let i = 0; i < 20; i++) {
+            const batch = await listLiveClubs(ctx, cursor, 50);
+            out.push(...batch.map((c) => ({ id: c.id, name: c.name })));
+            if (batch.length < 50) break;
+            cursor = batch[batch.length - 1]!.id;
+          }
+          return out.sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
+    enabled: isAppAdmin === true,
   });
 
-  const restrictedClubIds = new Set((restrictions || []).filter((r: any) => r.scope === "club").map((r: any) => r.club_id));
-  const restrictedUserIds = new Set((restrictions || []).filter((r: any) => r.scope === "user").map((r: any) => r.user_id));
+  const restrictedClubIds = new Set((restrictions || []).filter((r) => r.scope === "club").map((r) => r.club_id!));
+  const restrictedUserIds = new Set((restrictions || []).filter((r) => r.scope === "user").map((r) => r.user_id!));
+
+  // Display names for restricted users: Supabase resolves them from the
+  // profiles table; on ICP there is no principal->profile lookup, so names
+  // are known only for users restricted via this page's search this session
+  // (otherwise the shortened principal is shown).
+  const [knownUserNames, setKnownUserNames] = useState<Map<string, string>>(new Map());
 
   const { data: restrictedUserProfiles } = useQuery({
     queryKey: ["dm-restriction-user-profiles", Array.from(restrictedUserIds).sort().join(",")],
-    queryFn: async () => {
-      if (restrictedUserIds.size === 0) return [];
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, display_name, email")
-        .in("id", Array.from(restrictedUserIds));
-      return data || [];
-    },
-    enabled: !!isAppAdmin && !isIcpPageMode(),
+    queryFn: () =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          if (restrictedUserIds.size === 0) return [] as any[];
+          const { data } = await supabase
+            .from("profiles")
+            .select("id, display_name, email")
+            .in("id", Array.from(restrictedUserIds));
+          return data || [];
+        },
+        icp: async () => [] as any[],
+      }),
+    enabled: isAppAdmin === true && restrictedUserIds.size > 0,
   });
 
   const addClubMutation = useMutation({
-    mutationFn: async (clubId: string) => {
-      if (isIcpPageMode()) return;
-      const { error } = await supabase
-        .from("dm_attachment_restrictions")
-        .insert({ scope: "club", club_id: clubId, created_by: user!.id });
-      if (error) throw error;
-    },
+    mutationFn: (clubId: string) =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("dm_attachment_restrictions")
+            .insert({ scope: "club", club_id: clubId, created_by: user!.id });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const current = await getLiveClubDmSettings(ctx, clubId);
+          await setLiveClubDmSettings(ctx, clubId, current.dm_disabled, true);
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Club restricted");
@@ -101,13 +143,18 @@ function SupabaseAdminDmAttachmentsPage() {
   });
 
   const addUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      if (isIcpPageMode()) return;
-      const { error } = await supabase
-        .from("dm_attachment_restrictions")
-        .insert({ scope: "user", user_id: userId, created_by: user!.id });
-      if (error) throw error;
-    },
+    mutationFn: (userId: string) =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("dm_attachment_restrictions")
+            .insert({ scope: "user", user_id: userId, created_by: user!.id });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(userId), true);
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       qc.invalidateQueries({ queryKey: ["dm-restriction-user-profiles"] });
@@ -117,11 +164,21 @@ function SupabaseAdminDmAttachmentsPage() {
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      if (isIcpPageMode()) return;
-      const { error } = await supabase.from("dm_attachment_restrictions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (restriction: DmRestriction) =>
+      withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase.from("dm_attachment_restrictions").delete().eq("id", restriction.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          if (restriction.scope === "club") {
+            const current = await getLiveClubDmSettings(ctx, restriction.club_id!);
+            await setLiveClubDmSettings(ctx, restriction.club_id!, current.dm_disabled, false);
+          } else {
+            await setLiveDmAttachmentsDisabled(ctx, Principal.fromText(restriction.user_id!), false);
+          }
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dm-attachment-restrictions"] });
       toast.success("Restriction removed");
@@ -135,17 +192,34 @@ function SupabaseAdminDmAttachmentsPage() {
   const [searching, setSearching] = useState(false);
 
   const handleSearchUsers = async () => {
-    if (isIcpPageMode()) return;
     const q = userSearch.trim();
     if (q.length < 2) return;
     setSearching(true);
     try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, display_name, email")
-        .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
-        .limit(20);
-      setSearchedUsers(data || []);
+      const results = await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id, display_name, email")
+            .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
+            .limit(20);
+          return (data || []).map((u: any) => ({ id: u.id, display_name: u.display_name, email: u.email }));
+        },
+        icp: async (ctx) => {
+          const rows = await searchLiveProfilesWithPrincipals(ctx, q, 20);
+          return rows.map((r) => ({
+            id: r.principal.toText(),
+            display_name: r.displayName,
+            email: null as string | null,
+          }));
+        },
+      });
+      setSearchedUsers(results);
+      setKnownUserNames((prev) => {
+        const next = new Map(prev);
+        for (const u of results) if (u.display_name) next.set(u.id, u.display_name);
+        return next;
+      });
     } finally {
       setSearching(false);
     }
@@ -167,9 +241,10 @@ function SupabaseAdminDmAttachmentsPage() {
     );
   }
 
-  const clubRestrictions = (restrictions || []).filter((r: any) => r.scope === "club");
-  const userRestrictions = (restrictions || []).filter((r: any) => r.scope === "user");
+  const clubRestrictions = (restrictions || []).filter((r) => r.scope === "club");
+  const userRestrictions = (restrictions || []).filter((r) => r.scope === "user");
   const profileById = new Map((restrictedUserProfiles || []).map((p: any) => [p.id, p]));
+  const shortPrincipal = (p: string) => (p.length > 14 ? `${p.slice(0, 12)}…` : p);
 
   return (
     <div className="py-6 space-y-6">
@@ -240,7 +315,7 @@ function SupabaseAdminDmAttachmentsPage() {
               <p className="text-sm text-muted-foreground text-center py-4">No clubs restricted</p>
             ) : (
               <div className="space-y-2">
-                {clubRestrictions.map((r: any) => {
+                {clubRestrictions.map((r) => {
                   const club = clubs?.find((c: any) => c.id === r.club_id);
                   return (
                     <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
@@ -251,7 +326,7 @@ function SupabaseAdminDmAttachmentsPage() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => removeMutation.mutate(r.id)}
+                        onClick={() => removeMutation.mutate(r)}
                         disabled={removeMutation.isPending}
                       >
                         <X className="h-4 w-4" />
@@ -276,7 +351,7 @@ function SupabaseAdminDmAttachmentsPage() {
           <CardContent className="space-y-4">
             <div className="flex gap-2">
               <Input
-                placeholder="Search by name or email..."
+                placeholder="Search by name..."
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearchUsers()}
@@ -295,7 +370,9 @@ function SupabaseAdminDmAttachmentsPage() {
                     <div key={u.id} className="flex items-center justify-between p-2 rounded bg-background">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{u.display_name || "(no name)"}</p>
-                        <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                        {u.email && (
+                          <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                        )}
                       </div>
                       {isRestricted ? (
                         <Badge variant="secondary">Restricted</Badge>
@@ -324,12 +401,13 @@ function SupabaseAdminDmAttachmentsPage() {
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground px-1">Currently restricted</p>
-                {userRestrictions.map((r: any) => {
+                {userRestrictions.map((r) => {
                   const profile: any = profileById.get(r.user_id);
+                  const name = profile?.display_name || knownUserNames.get(r.user_id!) || shortPrincipal(r.user_id!);
                   return (
                     <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{profile?.display_name || r.user_id}</p>
+                        <p className="font-medium text-sm truncate">{name}</p>
                         {profile?.email && (
                           <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                         )}
@@ -337,7 +415,7 @@ function SupabaseAdminDmAttachmentsPage() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => removeMutation.mutate(r.id)}
+                        onClick={() => removeMutation.mutate(r)}
                         disabled={removeMutation.isPending}
                       >
                         <X className="h-4 w-4" />
