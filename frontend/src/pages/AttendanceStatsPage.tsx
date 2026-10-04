@@ -214,13 +214,29 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       
       return false;
     },
-    enabled: !!user && !!teamId && !isIcpPageMode(),
+    enabled: !!user && !!teamId,
   });
 
   // Fetch team details
   const { data: team, isLoading: teamLoading, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team-attendance", teamId],
     queryFn: async () => {
+      // ICP: the team row and its club name come from club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const live = await getLiveTeam(ctx, teamId!);
+            const club = await getLiveClubProfile(ctx, live.club_id).catch(() => null);
+            return {
+              id: live.id,
+              name: live.name,
+              club_id: live.club_id,
+              clubs: club ? { id: live.club_id, name: club.name } : null,
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, clubs!club_id (id, name)")
@@ -229,13 +245,23 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   // Check Pro access - same logic as TeamDetailPage
   const { data: teamSubscription, isLoading: teamSubLoading } = useQuery({
     queryKey: ["team-subscription-attendance", teamId],
     queryFn: async () => {
+      // ICP: the team Pro grant lives on club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, teamId!);
+            return sub ? mapLiveTeamSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -243,12 +269,22 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   const { data: clubSubscription, isLoading: clubSubLoading } = useQuery({
     queryKey: ["club-subscription-attendance", team?.club_id],
     queryFn: async () => {
+      // ICP: the club Pro grant lives on club_domain.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, team!.club_id);
+            return sub ? mapLiveClubSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -256,7 +292,18 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         .maybeSingle();
       return data;
     },
-    enabled: !!team?.club_id && !isIcpPageMode(),
+    enabled: !!team?.club_id,
+  });
+
+  // ICP only: the caller's own IAP entitlement is global Pro for its holder.
+  const { data: callerIapPro = false } = useQuery({
+    queryKey: ["caller-iap-pro-attendance", user?.id],
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => false,
+        icp: (ctx) => fetchLiveCallerIapPro(ctx),
+      }),
+    enabled: !!user && isIcpPageMode(),
   });
 
   // Pro Access Logic (matches TeamDetailPage):
