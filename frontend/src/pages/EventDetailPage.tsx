@@ -663,10 +663,9 @@ export default function EventDetailPage() {
 
           return false;
         },
-        icp: async (ctx) => {
-          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
-          return summary.isPro;
-        },
+        icp: async (ctx) =>
+          // Team grant → club grant → caller's IAP entitlement (proAccess).
+          resolveLiveProFootballAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
       });
     },
     enabled: !!event?.team_id,
@@ -701,10 +700,9 @@ export default function EventDetailPage() {
 
         return false;
       },
-      icp: async (ctx) => {
-        const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target);
-        return summary.isPro;
-      },
+      icp: async (ctx) =>
+        // Team grant → club grant → caller's IAP entitlement (proAccess).
+        resolveLiveProAccess(ctx, { teamId: event?.team_id ?? null, clubId: event?.club_id ?? null }),
     }),
     enabled: (!!event?.team_id || !!event?.club_id),
   });
