@@ -125,5 +125,5 @@ console.log(`pre-rendered ${staticRoutes.length} static route shells (dist<route
 
 // Probe: the hosting serves exact file paths only (/auth/index.html works,
 // /auth does not). Test whether an extensionless file is served as HTML.
-cpSync(rootIndex, path.join(distRoot, "auth"));
-console.log("wrote extensionless probe file dist/auth");
+cpSync(rootIndex, path.join(distRoot, "probe-ext"));
+console.log("wrote extensionless probe file dist/probe-ext");
