@@ -69,7 +69,6 @@ export default function SponsorAnalyticsPage() {
  */
 function IcpSponsorAnalyticsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [selectedClub, setSelectedClub] = useState<string>("all");
 
   // Admin gate + club/sponsor display metadata come from the canisters too —
