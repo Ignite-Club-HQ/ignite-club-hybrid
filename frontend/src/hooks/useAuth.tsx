@@ -1408,20 +1408,21 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // Pick up a sign-in that finished while this tab wasn't listening (tab
   // reloaded by the phone, or the reply from the Internet Identity tab got
   // lost). Runs once the client is warm and whenever the tab comes back,
-  // only while signed out and never alongside a tap-driven sign-in.
-  const iiSignInInFlightRef = useRef(false);
+  // only while signed out. Safe alongside a tap-driven sign-in: until that
+  // finishes the client reports no session, and a stuck tap (dead channel)
+  // must not block this recovery.
   useEffect(() => {
     if (!iiSignInReady || principal) return;
     let cancelled = false;
     let resuming = false;
     const tryResume = async () => {
-      if (resuming || iiSignInInFlightRef.current || cancelled) return;
+      if (resuming || cancelled) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       resuming = true;
       try {
         const mod = internetIdentityModuleRef.current ?? (await import("@/live/internetIdentityAuth"));
         const resumed = await mod.resumeInternetIdentitySession();
-        if (resumed && !cancelled && !iiSignInInFlightRef.current) {
+        if (resumed && !cancelled) {
           console.info("[Auth] Resumed a completed Internet Identity sign-in.");
           localStorage.setItem("ignite_icp_internet_identity_session", JSON.stringify(resumed));
           setSession(resumed);
@@ -1448,7 +1449,6 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     };
   }, [iiSignInReady, principal]);
   const signInWithIcp = async (): Promise<{ error: Error | null }> => {
-    iiSignInInFlightRef.current = true;
     try {
       // Use the already-preloaded module reference when available so this
       // call chain reaches `signInWithInternetIdentity()` (and, inside it,
