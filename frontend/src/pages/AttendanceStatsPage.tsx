@@ -32,6 +32,14 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTeam, getLiveClubProfile, getLiveTeamSubscription, getLiveClubSubscription } from "@/live/features/club";
+import { mapLiveTeamSubscriptionToRow, mapLiveClubSubscriptionToRow, fetchLiveCallerIapPro } from "@/live/features/proAccess";
+import { getLiveMyRoleGrants, listLiveTeamRoleGrants } from "@/live/features/membership";
+import { isLiveAppAdmin } from "@/live/features/insights";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { listLiveEvents, getLiveEventRosterDetailed, listLiveChildTeamAssignments } from "@/live/features/events";
+import { resolveLivePiiTextBatch } from "@/live/features/vault";
 
 // NEEDS-CANISTER: attendance stats aggregation has no canister shape yet — in
 // ICP mode every query on this page is disabled so no II principal reaches Supabase.
@@ -164,6 +172,24 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
   const { data: isAdmin, isLoading: loadingAdminCheck } = useQuery({
     queryKey: ["is-team-admin-attendance", user?.id, teamId],
     queryFn: async () => {
+      // ICP: admin roles resolve from club_domain role grants.
+      if (isIcpPageMode()) {
+        return withFeatureBackend("events", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            if (await isLiveAppAdmin(ctx)) return true;
+            const [grants, team] = await Promise.all([
+              getLiveMyRoleGrants(ctx),
+              getLiveTeam(ctx, teamId!).catch(() => null),
+            ]);
+            const teamIdOf = (g: { team?: [] | [string] }) => g.team?.[0] ?? null;
+            const clubIdOf = (g: { club?: [] | [string] }) => g.club?.[0] ?? null;
+            if (grants.some((g) => ["team_admin", "coach"].includes(g.role) && teamIdOf(g) === teamId)) return true;
+            if (team && grants.some((g) => g.role === "club_admin" && clubIdOf(g) === team.club_id)) return true;
+            return false;
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, team_id, club_id")
