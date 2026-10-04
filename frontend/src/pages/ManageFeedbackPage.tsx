@@ -84,19 +84,9 @@ function SupabaseManageFeedbackPage() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  // Shared hook routes the check to insights_domain in ICP mode — an
+  // Internet Identity app admin has no Supabase session for user_roles.
+  const { isAppAdmin } = useIsAppAdmin();
 
   const { data: feedback, isLoading } = useQuery({
     queryKey: ["all-feedback"],

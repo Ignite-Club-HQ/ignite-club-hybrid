@@ -9,45 +9,100 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 
 import { resolveAuthBackend } from "@/live/authBackendMode";
-
-// NEEDS-CANISTER: deleted-chat restore and DM attachment restrictions have no
-// messaging_domain methods yet (canister only exposes soft_delete_group), so
-// both tools are Supabase-only and stay off the ICP link list.
-const ICP_LAB_ADMIN_LINKS: { to: string; label: string }[] = [
-  { to: "/admin/users", label: "Manage users" },
-  { to: "/admin/feedback", label: "Feedback" },
-  { to: "/admin/active-games", label: "Active games" },
-];
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function AdminPage() {
-  const navigate = useNavigate();
   if (resolveAuthBackend() === "icp") {
+    return <IcpAdminPage />;
+  }
+  return <SupabaseAdminPage />;
+}
+
+// ICP-mode admin landing. Admin rights come from the canisters via
+// useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
+// admin sees the real tooling. Only tools whose pages work against the live
+// canisters are listed — billing, ads, AI, backups, temp-password and
+// native-storage tooling are Supabase-only (NEEDS-CANISTER), and deleted-chat
+// restore / DM attachment restrictions have no messaging_domain methods yet.
+function IcpAdminPage() {
+  const navigate = useNavigate();
+  const { isAppAdmin, isLoading } = useIsAppAdmin();
+
+  if (isLoading) {
+    return <PageLoading />;
+  }
+
+  if (!isAppAdmin) {
     return (
-      <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-        <div className="flex items-center gap-2">
+      <div className="py-6 space-y-6">
+        <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-bold">Admin</h1>
+          <h1 className="text-2xl font-bold">Admin</h1>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Synthetic ICP lab administration links. Billing, ads, AI, and native-storage tooling remain out of
-          scope for this lab per the environment's architectural boundaries.
-        </p>
-        <div className="space-y-2">
-          {ICP_LAB_ADMIN_LINKS.map((link) => (
-            <Card key={link.to} onClick={() => navigate(link.to)} className="cursor-pointer hover:border-primary transition-colors">
-              <CardContent className="p-4 flex items-center justify-between">
-                <span className="text-sm font-medium">{link.label}</span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </CardContent>
-            </Card>
-          ))}
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-muted-foreground">Access denied. Admin role required.</p>
         </div>
       </div>
     );
   }
-  return <SupabaseAdminPage />;
+
+  return (
+    <div className="py-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">Admin</h1>
+          <p className="text-sm text-muted-foreground">Management tools and settings</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">App Administration</CardTitle>
+          <CardDescription>Global app management tools</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <AdminMenuItem
+            icon={UserCog}
+            label="User Management"
+            description="Manage user accounts and roles"
+            onClick={() => navigate("/admin/users")}
+          />
+          <AdminMenuItem
+            icon={MessageSquare}
+            label="Manage Feedback"
+            description="View and respond to user feedback"
+            onClick={() => navigate("/admin/feedback")}
+          />
+          <AdminMenuItem
+            icon={Globe2}
+            label="Infrastructure / Placement Settings"
+            description="ICP canisters, default backend, and per-country eligibility"
+            onClick={() => navigate("/admin/placement-settings")}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Analytics</CardTitle>
+          <CardDescription>Performance and usage analytics</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <AdminMenuItem
+            icon={Activity}
+            label="Online Users"
+            description="See who is currently active in the app"
+            onClick={() => navigate("/admin/online-users")}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function SupabaseAdminPage() {
