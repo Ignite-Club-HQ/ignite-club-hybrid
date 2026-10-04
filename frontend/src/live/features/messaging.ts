@@ -998,12 +998,3 @@ export async function listLiveAllClubDmSettings(ctx: FeatureBackendContext): Pro
     aiCatchUpEnabled: s.ai_catch_up_enabled,
   }));
 }
-
-export async function setLiveDmAttachmentsDisabled(
-  ctx: FeatureBackendContext,
-  user: Principal,
-  disabled: boolean,
-) {
-  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.set_dm_attachments_disabled(user, disabled), "Set DM attachments disabled");
-}
