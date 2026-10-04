@@ -1,0 +1,74 @@
+# Ignite Club HQ — grant app admin to an Internet Identity user.
+#
+# Run from the GitHub Actions tab: "Grant app admin (ICP)" → Run workflow.
+# Uses the same DEPLOYER_PEM governor key as the deploy workflow — no new
+# secrets needed. Default lookup name is "Paul Cranwell"; change the input
+# to grant a different Internet Identity user later.
+
+name: Grant app admin (ICP)
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_name:
+        description: "Display name of the Internet Identity user (exact profile name)"
+        required: true
+        default: "Paul Cranwell"
+
+permissions:
+  contents: read
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install icp CLI
+        run: npm install -g @icp-sdk/icp-cli --no-fund --no-audit
+
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::The DEPLOYER_PEM repository secret is not set."
+            echo "Use the same key as the deploy workflow (the 'deployer-key' artifact"
+            echo "from the first deploy run): Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
+          printf '%s' "$DEPLOYER_PEM" \
+            | tr -d '\r' \
+            | sed 's/\\\\n/\n/g' \
+            | sed 's/\\n/\n/g' \
+            | sed -n '/-----BEGIN/,/-----END/p' \
+            | sed 's/^.*-----BEGIN/-----BEGIN/' \
+            | sed 's/\(-----END [A-Z ]*KEY-----\).*$/\1/' \
+            > "$PEM_FILE"
+          if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
+            echo "::error::The DEPLOYER_PEM secret does not contain a valid key file."
+            exit 1
+          fi
+          ALGO="$(openssl asn1parse -in "$PEM_FILE" 2>/dev/null | grep -m1 'OBJECT' || true)"
+          if printf '%s' "$ALGO" | grep -qi 'rsa'; then
+            echo "::error::The DEPLOYER_PEM secret holds an RSA key, which the Internet Computer does not accept."
+            exit 1
+          fi
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          echo "==> Governor principal: $(icp identity principal)"
+
+      - name: Grant app admin
+        env:
+          DISPLAY_NAME: ${{ inputs.display_name }}
+        run: bash scripts/grant-app-admin.sh "$DISPLAY_NAME"
