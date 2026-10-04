@@ -1130,12 +1130,16 @@ export default function EventsPage() {
   // term) — show a retry instead.
   if (membershipsError && !userMemberships) {
     return (
-      <PageErrorState
-        title="Unable to load your schedule"
-        message={getErrorMessage(membershipsError, "Your team memberships could not be loaded.")}
-        onRetry={() => refetchMemberships()}
-        retryLabel="Try again"
-      />
+      <div className="flex flex-col items-center justify-center gap-4 py-20 px-6 text-center">
+        <p className="text-lg font-semibold text-foreground">Unable to load your schedule</p>
+        <p className="text-sm text-muted-foreground max-w-sm">
+          {membershipsError instanceof Error ? membershipsError.message : "Your team memberships could not be loaded."}
+        </p>
+        <Button onClick={() => refetchMemberships()} variant="outline" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Try again
+        </Button>
+      </div>
     );
   }
   if (isStuckOnSpinner) {
