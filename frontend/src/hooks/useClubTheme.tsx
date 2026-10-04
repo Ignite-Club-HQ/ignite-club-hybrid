@@ -1240,7 +1240,19 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
   const { data: activeClubTeamIds = [] } = useQuery({
     queryKey: ["active-club-teams", activeClubTheme],
     queryFn: async () => {
-      if (!activeClubTheme || isIcp) return [];
+      if (!activeClubTheme) return [];
+      if (isIcp) {
+        // Team ids come from the club_domain canister; skip soft-deleted
+        // teams so the content filter matches what club pages show.
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as string[],
+          icp: async (ctx) => {
+            const { listLiveTeams } = await import("@/live/features/club");
+            const teams = await listLiveTeams(ctx, activeClubTheme);
+            return teams.filter((t) => !t.deleted_at_ms.length).map((t) => t.id);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("id")
@@ -1248,7 +1260,7 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       if (error) return [];
       return data.map(t => t.id);
     },
-    enabled: !!activeClubTheme && !isIcp,
+    enabled: !!activeClubTheme,
     staleTime: 300000, // Cache for 5 minutes
   });
 
