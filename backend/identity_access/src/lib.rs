@@ -128,9 +128,12 @@ pub struct Entitlement {
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct State {
-    pub schema: u32,
-    pub governor: Principal,
-    pub accounts: Vec<Account>,
+  pub schema: u32,
+  pub governor: Principal,
+  /// Empty on schema-5+ slim blobs (accounts live in their own stable map);
+  /// `#[serde(default)]` keeps those decodable through the legacy shape.
+  #[serde(default)]
+  pub accounts: Vec<Account>,
     /// One profile per account. `#[serde(default)]` keeps schema-1 stable
     /// blobs (written before profiles existed) decodable; post_upgrade bumps
     /// the schema marker once decoded.
