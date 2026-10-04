@@ -2307,6 +2307,7 @@ persistent actor class Main(governorInit : Principal) {
     teamSponsorAllocations := teamSponsorAllocations.filter(func(a) = a.team_id != teamId);
     seasonTeamSummaries := seasonTeamSummaries.filter(func(s) = s.team_id != teamId);
     seasonPlayerStats := seasonPlayerStats.filter(func(s) = s.team_id != teamId);
+    teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != teamId);
   };
 
   // Removes every club_domain record scoped to one club, including its

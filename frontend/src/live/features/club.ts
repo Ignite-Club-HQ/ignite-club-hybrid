@@ -60,6 +60,67 @@ export async function saveLiveClubSubscription(
   await unwrapCandid(actor.save_club_subscription(subscription), "Save club subscription");
 }
 
+export type LiveTeamSubscription = Parameters<ClubDomainActor["save_team_subscription"]>[0];
+
+/** Team subscription row (per-team Pro flags, admin overrides, pitch settings); null when unset. Member-readable canister-side. */
+export async function getLiveTeamSubscription(
+  ctx: FeatureBackendContext,
+  teamId: string,
+): Promise<LiveTeamSubscription | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const row = await unwrapCandid(actor.get_team_subscription(teamId), "Get team subscription");
+  return row.length ? row[0] : null;
+}
+
+/** Governor/app-admin only canister-side (Pro flags); a team cannot grant itself Pro. */
+export async function saveLiveTeamSubscription(
+  ctx: FeatureBackendContext,
+  subscription: LiveTeamSubscription,
+): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(actor.save_team_subscription(subscription), "Save team subscription");
+}
+
+export interface LiveTeamPitchSettingsInput {
+  disable_auto_subs: boolean;
+  rotation_speed: number;
+  disable_position_swaps: boolean;
+  disable_batch_subs: boolean;
+  rotate_gk_at_halftime: boolean;
+  minutes_per_half: number | null;
+  max_spread_minutes: number | null;
+  team_size: number | null;
+  formation: string | null;
+  show_lineup_picker: boolean;
+  disable_team_pom_rewards: boolean;
+}
+
+/** Team-admin writable canister-side; merges pitch fields and never touches the Pro flags. */
+export async function saveLiveTeamPitchSettings(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  fields: LiveTeamPitchSettingsInput,
+): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(
+    actor.save_team_pitch_settings(
+      teamId,
+      fields.disable_auto_subs,
+      fields.rotation_speed,
+      fields.disable_position_swaps,
+      fields.disable_batch_subs,
+      fields.rotate_gk_at_halftime,
+      fields.minutes_per_half === null ? [] : [fields.minutes_per_half],
+      fields.max_spread_minutes === null ? [] : [fields.max_spread_minutes],
+      fields.team_size === null ? [] : [fields.team_size],
+      fields.formation === null ? [] : [fields.formation],
+      fields.show_lineup_picker,
+      fields.disable_team_pom_rewards,
+    ),
+    "Save team pitch settings",
+  );
+}
+
 /** Case-insensitive team-name uniqueness check within a club (ignores soft-deleted teams). */
 export async function checkLiveTeamNameUnique(
   ctx: FeatureBackendContext,
