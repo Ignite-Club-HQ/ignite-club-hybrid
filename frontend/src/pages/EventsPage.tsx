@@ -257,8 +257,9 @@ export default function EventsPage() {
             const clubs = await Promise.all(
               memberships.clubIds.map(async (clubId) => {
                 try {
-                  const profile = await getLiveClubProfile(ctx, clubId);
-                  return { id: clubId, name: profile.name, sport: (profile.sport[0] ?? null) as string | null };
+                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
+                  return { id: clubId, name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null };
                 } catch {
                   return { id: clubId, name: "Club", sport: null as string | null };
                 }
@@ -679,8 +680,9 @@ export default function EventsPage() {
             const getClubInfo = async (clubId: string) => {
               if (!clubInfoCache.has(clubId)) {
                 try {
-                  const profile = await getLiveClubProfile(ctx, clubId);
-                  clubInfoCache.set(clubId, { name: profile.name, sport: (profile.sport[0] ?? null) as string | null });
+                  const profileOpt = await getLiveClubProfile(ctx, clubId);
+                  const profile = (profileOpt as any)?.[0] as { name?: string; sport?: string[] } | undefined;
+                  clubInfoCache.set(clubId, { name: profile?.name ?? "Club", sport: (profile?.sport?.[0] ?? null) as string | null });
                 } catch {
                   clubInfoCache.set(clubId, { name: "Club", sport: null });
                 }
