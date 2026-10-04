@@ -94,7 +94,7 @@ import {
   getLiveMyRoleGrants,
   listLiveTeamRoleGrants,
 } from "@/live/features/membership";
-import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
+import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, saveLiveTeamSubscription, saveLiveTeamPitchSettings } from "@/live/features/club";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
@@ -352,6 +352,44 @@ export default function TeamDetailPage() {
     successTitle: string,
   ) => {
     setIsSavingPitchSettings(true);
+    if (isFeatureRoutedToIcp("membership")) {
+      // Live ICP: team_subscriptions rows live on club_domain; pitch fields
+      // merge canister-side and never touch the Pro flags.
+      try {
+        const payload = buildTeamPitchSettingsPayload(
+          id!,
+          teamSubscription,
+          defaultMinutesPerHalfForTeamName(team?.name),
+          overrides,
+        );
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            await saveLiveTeamPitchSettings(ctx, id!, {
+              disable_auto_subs: payload.disable_auto_subs,
+              rotation_speed: payload.rotation_speed,
+              disable_position_swaps: payload.disable_position_swaps,
+              disable_batch_subs: (teamSubscription as any)?.disable_batch_subs ?? false,
+              rotate_gk_at_halftime: (teamSubscription as any)?.rotate_gk_at_halftime ?? true,
+              minutes_per_half: payload.minutes_per_half,
+              max_spread_minutes: (teamSubscription as any)?.max_spread_minutes ?? null,
+              team_size: payload.team_size,
+              formation: payload.formation,
+              show_lineup_picker: (teamSubscription as any)?.show_lineup_picker ?? false,
+              disable_team_pom_rewards: (teamSubscription as any)?.disable_team_pom_rewards ?? false,
+            });
+          },
+        });
+      } catch {
+        setIsSavingPitchSettings(false);
+        toast({ title: failureTitle, variant: "destructive" });
+        return;
+      }
+      setIsSavingPitchSettings(false);
+      queryClient.invalidateQueries({ queryKey: ["team-subscription", id] });
+      toast({ title: successTitle });
+      return;
+    }
     const { error } = await supabase
       .from("team_subscriptions")
       .upsert(
@@ -378,6 +416,50 @@ export default function TeamDetailPage() {
    */
   const saveAppAdminOverride = async (change: TeamAppAdminOverrideChange) => {
     const { adminProOverride, adminProFootballOverride } = computeAppAdminOverride(change, teamSubscription as any);
+
+    if (isFeatureRoutedToIcp("membership")) {
+      // Live ICP: the override row lives on club_domain; the write is
+      // app-admin gated canister-side, mirroring the Supabase RLS policy.
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const existing = await getLiveTeamSubscription(ctx, id!);
+            await saveLiveTeamSubscription(ctx, {
+              team_id: id!,
+              is_pro: existing?.is_pro ?? false,
+              is_pro_football: existing?.is_pro_football ?? false,
+              is_trial: existing?.is_trial ?? false,
+              trial_ends_at_ms: existing?.trial_ends_at_ms ?? [],
+              cancelled_at_ms: existing?.cancelled_at_ms ?? [],
+              admin_pro_override: adminProOverride,
+              admin_pro_football_override: adminProFootballOverride,
+              disable_auto_subs: existing?.disable_auto_subs ?? false,
+              rotation_speed: existing?.rotation_speed ?? 1,
+              disable_position_swaps: existing?.disable_position_swaps ?? false,
+              disable_batch_subs: existing?.disable_batch_subs ?? false,
+              rotate_gk_at_halftime: existing?.rotate_gk_at_halftime ?? true,
+              minutes_per_half: existing?.minutes_per_half ?? [],
+              max_spread_minutes: existing?.max_spread_minutes ?? [],
+              team_size: existing?.team_size ?? [],
+              formation: existing?.formation ?? [],
+              show_lineup_picker: existing?.show_lineup_picker ?? false,
+              disable_team_pom_rewards: existing?.disable_team_pom_rewards ?? false,
+            });
+          },
+        });
+      } catch {
+        toast({ title: "Failed to update", variant: "destructive" });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["team-subscription", id] });
+      toast({
+        title: "admin_pro_override" in change
+          ? change.admin_pro_override ? "Free Pro access granted" : "Free Pro access removed"
+          : change.admin_pro_football_override ? "Free Pro Football access granted" : "Free Pro Football access removed",
+      });
+      return;
+    }
 
     const { error } = await supabase
       .from("team_subscriptions")
