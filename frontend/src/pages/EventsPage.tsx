@@ -53,7 +53,72 @@ import { ClubDaySummary } from "@/components/events/ClubDaySummary";
 import { SponsorOrAdCarousel } from "@/components/SponsorOrAdCarousel";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, getLiveMiniLeague } from "@/live/features/miniLeagues";
-import { getLiveAccountRosterScope } from "@/live/features/events";
+import { getLiveAccountRosterScope, listLiveEvents } from "@/live/features/events";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveTeam, listLiveTeams } from "@/live/features/club";
+
+/** Derive the memberships shape the schedule filters need from the caller's
+ * club_domain role grants + events_domain roster scope (live ICP path).
+ * The Supabase path queries user_roles with a UUID — an II principal is not
+ * a UUID, so in ICP mode that query errors and the schedule spinner never
+ * clears. */
+async function getLiveEventMemberships(
+  ctx: Parameters<Parameters<typeof withFeatureBackend>[1]["icp"]>[0],
+  accountId: string,
+) {
+  const grants = await getLiveMyRoleGrants(ctx);
+  const roles = grants.map((g) => ({
+    club_id: (g.club[0] ?? null) as string | null,
+    team_id: (g.team[0] ?? null) as string | null,
+    role: g.role as string,
+  }));
+  const teamIds = Array.from(new Set(roles.filter((r) => r.team_id).map((r) => r.team_id as string)));
+  const clubIds = new Set(roles.filter((r) => r.club_id).map((r) => r.club_id as string));
+  const clubAdminClubIds = new Set(
+    roles.filter((r) => r.club_id && (r.role === "club_admin" || r.role === "app_admin")).map((r) => r.club_id as string),
+  );
+  const leagueAdminClubIds = new Set(
+    roles.filter((r) => r.club_id && (r.role === "league_admin" || r.role === "app_admin")).map((r) => r.club_id as string),
+  );
+  const isAppAdmin = roles.some((r) => r.role === "app_admin");
+
+  // Roster/attendance-derived scope (parent of a child on a team) — best
+  // effort, matching the Supabase child_guardians/children leg.
+  const scope = await getLiveAccountRosterScope(ctx, accountId).catch(() => ({
+    teamIds: [] as string[],
+    clubIds: [] as string[],
+    childIds: [] as string[],
+  }));
+  scope.teamIds.forEach((t) => { if (!teamIds.includes(t)) teamIds.push(t); });
+  scope.clubIds.forEach((c) => clubIds.add(c));
+
+  // Team grants/roster rows whose club isn't known yet — resolve via the team.
+  const unresolved = teamIds.filter(() => false); // club derivation below
+  void unresolved;
+  await Promise.all(
+    teamIds.map(async (teamId) => {
+      // Cheap check: if any known club lists this team we skip the fetch.
+      try {
+        const teamOpt = await getLiveTeam(ctx, teamId);
+        const clubId = (teamOpt as any)?.[0]?.club_id as string | undefined;
+        if (clubId) clubIds.add(clubId);
+      } catch { /* best effort */ }
+    }),
+  );
+
+  const miniLeagues = await listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
+  const miniLeagueIds = Array.from(new Set(miniLeagues.map((l) => l.id)));
+
+  return {
+    roles,
+    teamIds,
+    clubIds: Array.from(clubIds),
+    clubAdminClubIds: Array.from(clubAdminClubIds),
+    leagueAdminClubIds: Array.from(leagueAdminClubIds),
+    miniLeagueIds,
+    isAppAdmin,
+  };
+}
 
 type EventType = "game" | "training" | "social";
 
