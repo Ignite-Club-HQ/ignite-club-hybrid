@@ -88,7 +88,8 @@ export default function ClubsPage() {
       if (error) throw error;
       return data as { id: string; name: string; logo_url: string | null; sport: string | null; deleted_at: string; created_by: string | null }[];
     },
-    enabled: !!user,
+    // Soft-deleted clubs are tracked in Supabase only; no canister shape yet.
+    enabled: !!user && !useIcpLab,
   });
 
   const handleRestore = async (clubId: string) => {
@@ -237,6 +238,22 @@ export default function ClubsPage() {
   const { data: userRoles } = useQuery({
     queryKey: membershipKeys.userRolesFor(user?.id),
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // Mapped onto the Supabase user_roles row shape the filters below
+            // read (club_id / team_id / role).
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.map((g) => ({
+              user_id: user!.id,
+              role: g.role,
+              club_id: g.club[0] ?? null,
+              team_id: g.team[0] ?? null,
+            }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("*")
