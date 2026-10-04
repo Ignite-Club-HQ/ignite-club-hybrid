@@ -16,11 +16,30 @@ vi.mock("@/live/authBackendMode", () => ({
 const getLiveAccountRosterScopeMock = vi.fn();
 vi.mock("@/live/features/events", () => ({
   getLiveAccountRosterScope: (...args: unknown[]) => getLiveAccountRosterScopeMock(...args),
+  listLiveEvents: async () => [],
+}));
+
+vi.mock("@/live/features/membership", () => ({
+  getLiveMyRoleGrants: async () => [],
+}));
+
+vi.mock("@/live/features/club", () => ({
+  getLiveTeam: async () => [],
+  getLiveClubProfile: async () => [],
+  listLiveTeams: async () => [],
+  listLiveSponsors: async () => [],
+  getLiveClubSubscription: async () => null,
+}));
+
+vi.mock("@/live/features/miniLeagues", () => ({
+  listMyLiveMiniLeagues: async () => [],
+  listLiveMiniLeaguesByClub: async () => [],
+  getLiveMiniLeague: async () => null,
 }));
 
 vi.mock("@/live/featureRouter", () => ({
-  withFeatureBackend: async (feature: string, providers: any) =>
-    feature === "events" && eventsRoutedToIcp
+  withFeatureBackend: async (_feature: string, providers: any) =>
+    eventsRoutedToIcp
       ? providers.icp({ identity: {}, target: {} })
       : providers.supabase(),
 }));
