@@ -50,7 +50,7 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (isMiniLeague) return;
+    if (isMiniLeague || isIcp) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -69,7 +69,7 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [teamId, isMiniLeague]);
+  }, [teamId, isMiniLeague, isIcp]);
 
   if (isMiniLeague || isIcp) return null;
 
