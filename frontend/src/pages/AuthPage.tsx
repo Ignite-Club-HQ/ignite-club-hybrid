@@ -869,9 +869,9 @@ export default function AuthPage() {
                   onClick={() => {
                     // Keep the existing intent params (mode / next / invite)
                     // and just request the Supabase email screen.
-                    const params = new URLSearchParams(window.location.search);
+                    const params = new URLSearchParams(searchParams);
                     params.set("auth", "email");
-                    navigateApp(`${window.location.pathname}?${params.toString()}`);
+                    setSearchParams(params, { replace: true });
                   }}
                 >
                   Club or app admin? Sign in with email instead
