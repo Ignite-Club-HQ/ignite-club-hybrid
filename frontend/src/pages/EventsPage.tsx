@@ -245,6 +245,28 @@ export default function EventsPage() {
         return fixtureData.getLocalLabClubList();
       }
 
+      // Live ICP mode: the Supabase user_roles query below keys on a UUID and
+      // rejects an II principal, so resolve clubs from the canisters instead.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const memberships = await getLiveEventMemberships(ctx, user!.id);
+            const clubs = await Promise.all(
+              memberships.clubIds.map(async (clubId) => {
+                try {
+                  const profile = await getLiveClubProfile(ctx, clubId);
+                  return { id: clubId, name: profile.name, sport: (profile.sport[0] ?? null) as string | null };
+                } catch {
+                  return { id: clubId, name: "Club", sport: null as string | null };
+                }
+              }),
+            );
+            return clubs.sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
+
       const start = performance.now();
       diagLog("userClubs:start");
       const { data: roles, error } = await supabase
@@ -323,6 +345,26 @@ export default function EventsPage() {
     queryFn: async () => {
       if (useIcpLab) {
         return fixtureData.getLocalLabHomeSnapshot(localIcpPersona).memberships;
+      }
+
+      // Live ICP mode: the Supabase user_roles query below keys on a UUID and
+      // rejects an II principal — the error left userMemberships undefined,
+      // which kept the events query disabled and the page on its spinner
+      // forever. Resolve memberships from the canisters instead.
+      if (isIcpAuthBackend) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            diagLog("memberships:icp-start");
+            const memberships = await getLiveEventMemberships(ctx, user!.id);
+            diagLog("memberships:icp-end", {
+              teamIds: memberships.teamIds.length,
+              clubIds: memberships.clubIds.length,
+              miniLeagueIds: memberships.miniLeagueIds.length,
+            });
+            return memberships;
+          },
+        });
       }
 
       // Proactively refresh JWT if it's near expiry — prevents an expired
