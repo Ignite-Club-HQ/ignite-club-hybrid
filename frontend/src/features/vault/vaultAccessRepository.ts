@@ -82,15 +82,21 @@ export async function fetchVaultAccessibleClubs(
     supabase: async () => fetchVaultAccessibleClubsSupabase(userId, isAppAdmin, client),
     icp: async (ctx) => {
       const { listLiveClubs } = await import("@/live/features/club");
+      const { listLiveClubSubscriptions, liveHasAnyPro } = await import("@/live/features/proAccess");
       const clubs = await listLiveClubs(ctx);
-      const isPro = await fetchIcpCallerIsPro(ctx);
+      // Per-club "Free Pro" grants from club_domain plus the caller's own
+      // IAP entitlement (global Pro for its holder).
+      const [subs, callerIsPro] = await Promise.all([
+        listLiveClubSubscriptions(ctx, clubs.map((club) => club.id)),
+        fetchIcpCallerIsPro(ctx),
+      ]);
       // Byte accounting for the storage bar stays on Supabase (media bytes
       // are an approved Supabase area); ICP reports 0 so the bar renders
       // empty rather than erroring.
       return clubs.map((club) => ({
         id: club.id,
         name: club.name,
-        is_pro: isPro,
+        is_pro: callerIsPro || liveHasAnyPro(subs.get(club.id)),
         storage_used_bytes: 0,
       }));
     },
@@ -150,8 +156,11 @@ export async function fetchVaultClubHasPro(
     .maybeSingle();
       return hasVaultProEntitlement(data);
     },
-    // Per-principal IAP entitlement; no per-club Pro mapping on ICP.
-    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+    // Club "Free Pro" grant on club_domain, or the caller's IAP entitlement.
+    icp: async (ctx) => {
+      const { resolveLiveProAccess } = await import("@/live/features/proAccess");
+      return resolveLiveProAccess(ctx, { clubId });
+    },
   });
 }
 
@@ -168,7 +177,13 @@ export async function fetchVaultTeamHasPro(
     .maybeSingle();
       return hasVaultProEntitlement(data);
     },
-    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+    // Team grant → owning club's grant → caller's IAP entitlement.
+    icp: async (ctx) => {
+      const { getLiveTeam } = await import("@/live/features/club");
+      const { resolveLiveProAccess } = await import("@/live/features/proAccess");
+      const team = await getLiveTeam(ctx, teamId).catch(() => null);
+      return resolveLiveProAccess(ctx, { teamId, clubId: team?.club_id ?? null });
+    },
   });
 }
 
@@ -178,7 +193,22 @@ export async function fetchVaultAnyProAccess(
 ): Promise<boolean> {
   return withFeatureBackend("vault", {
     supabase: async () => fetchVaultAnyProAccessSupabase(userId, client),
-    icp: async (ctx) => fetchIcpCallerIsPro(ctx),
+    icp: async (ctx) => {
+      // Any Pro grant across the caller's clubs/teams, or their own IAP.
+      const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+      const { listLiveTeamSubscriptions, listLiveClubSubscriptions, liveHasAnyPro } =
+        await import("@/live/features/proAccess");
+      const grants = await getLiveMyRoleGrants(ctx);
+      const clubIds = [...new Set(grants.flatMap((g) => (g.club[0] ? [g.club[0]] : [])))];
+      const teamIds = [...new Set(grants.flatMap((g) => (g.team[0] ? [g.team[0]] : [])))];
+      const [teamSubs, clubSubs] = await Promise.all([
+        listLiveTeamSubscriptions(ctx, teamIds),
+        listLiveClubSubscriptions(ctx, clubIds),
+      ]);
+      if ([...teamSubs.values()].some(liveHasAnyPro)) return true;
+      if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
+      return fetchIcpCallerIsPro(ctx);
+    },
   });
 }
 
