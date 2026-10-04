@@ -18,8 +18,14 @@ import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
  *
  * Mainnet Internet Identity canister IDs are well-known and identical across
  * networks (see the `internet-identity` skill, skills.internetcomputer.org):
- *   - Backend  (trusted signer): rdmx6-jaaaa-aaaaa-aaadq-cai
- *   - Frontend (identityProvider.canisterId): uqzsh-gqaaa-aaaaq-qaada-cai, served at https://id.ai
+ *   - Backend  (trusted signer, mints delegations): rdmx6-jaaaa-aaaaa-aaadq-cai
+ *   - Frontend (serves the sign-in web app):       uqzsh-gqaaa-aaaaq-qaada-cai, at https://id.ai
+ * `identityProvider.canisterId` must name the BACKEND (the canister whose
+ * delegation chain the SDK validates), not the frontend that serves id.ai —
+ * naming the frontend makes every sign-in fail with "A session chain must be
+ * restricted to uqzsh-…, but this one also names rdmx6-…". On mainnet we omit
+ * `identityProvider` entirely and let the SDK use its built-in defaults
+ * (https://id.ai/authorize + rdmx6-jaaaa-aaaaa-aaadq-cai).
  * No local root key or origin-restricted fetch is used here: mainnet's root key
  * is baked into the SDK, and `shouldFetchRootKey`/`fetchRootKey()` must never be
  * called against a real network.
@@ -38,7 +44,6 @@ export interface InternetIdentitySession {
   provider: "internet-identity";
 }
 
-const MAINNET_INTERNET_IDENTITY_FRONTEND_CANISTER_ID = "uqzsh-gqaaa-aaaaq-qaada-cai";
 const MAINNET_INTERNET_IDENTITY_AUTHORIZE_URL = "https://id.ai/authorize";
 
 type AccountProvisioner = (identity: Identity, principal: string, target: IcpTargetConfig) => Promise<void>;
@@ -49,27 +54,25 @@ export function setInternetIdentityAccountProvisionerForTests(provisioner: Accou
   accountProvisionerOverride = provisioner;
 }
 
-function resolveInternetIdentityProvider(target: IcpTargetConfig): { authorizeUrl: string; canisterId: string } {
+function resolveInternetIdentityProvider(target: IcpTargetConfig): { authorizeUrl: string; canisterId: string } | undefined {
   // Approved targets may override the authorize URL for a Cloud Engine deployment
-  // that fronts its own Internet Identity instance; public mainnet always uses
-  // the well-known https://id.ai provider.
+  // that fronts its own Internet Identity instance. Public mainnet returns
+  // undefined so the SDK uses its built-in defaults (https://id.ai/authorize +
+  // the II backend canister that mints delegations).
   if (target.networkKind === "cloud_engine" && target.canisterIds.internet_identity_frontend) {
     const authorizeUrl = target.supportedDomains?.[0]
       ? `https://${target.supportedDomains[0]}/authorize`
       : MAINNET_INTERNET_IDENTITY_AUTHORIZE_URL;
     return { authorizeUrl, canisterId: target.canisterIds.internet_identity_frontend };
   }
-  return {
-    authorizeUrl: MAINNET_INTERNET_IDENTITY_AUTHORIZE_URL,
-    canisterId: MAINNET_INTERNET_IDENTITY_FRONTEND_CANISTER_ID,
-  };
+  return undefined;
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
   const provider = resolveInternetIdentityProvider(target);
   const { AuthClient } = await import("@icp-sdk/auth/client");
   return new AuthClient({
-    identityProvider: provider,
+    ...(provider ? { identityProvider: provider } : {}),
     agentOptions: {
       host: target.host,
     },
