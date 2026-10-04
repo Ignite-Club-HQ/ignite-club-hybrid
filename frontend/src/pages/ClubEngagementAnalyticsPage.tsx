@@ -242,9 +242,10 @@ function IcpPlatformEngagementPage() {
 
 function SupabaseClubEngagementAnalyticsPage({
   mode = "club",
-}: { mode?: "club" | "platform" } = {}) {
+  forceClubId = null,
+}: { mode?: "club" | "platform"; forceClubId?: string | null } = {}) {
   const params = useParams<{ clubId: string }>();
-  const clubId = mode === "platform" ? null : params.clubId ?? null;
+  const clubId = forceClubId ?? (mode === "platform" ? null : params.clubId ?? null);
   const isPlatform = mode === "platform";
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -303,6 +304,22 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: access, isLoading: accessLoading } = useQuery({
     queryKey: ["club-engagement-access", user?.id, clubId, mode],
     queryFn: async () => {
+      // ICP: an Internet Identity admin has no Supabase session, so access is
+      // checked against the canisters — app admins via insights_domain,
+      // club staff via their club_domain role grants.
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => ({ isAdmin: false, isCompAdmin: false }),
+          icp: async (ctx) => {
+            if (await isLiveAppAdmin(ctx)) return { isAdmin: true, isCompAdmin: true };
+            const grants = await myLiveRoleGrants(ctx);
+            const isClubStaff = grants.some(
+              (g) => g.club[0] === clubId && (g.role === "club_admin" || g.role === "committee_member"),
+            );
+            return { isAdmin: isClubStaff, isCompAdmin: false };
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("role, club_id")
@@ -323,6 +340,15 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: club } = useQuery({
     queryKey: ["club-engagement-meta", clubId],
     queryFn: async () => {
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const profile = await getLiveClubProfile(ctx, clubId!);
+            return { id: profile.id, name: profile.name };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name")
@@ -337,6 +363,16 @@ function SupabaseClubEngagementAnalyticsPage({
   const { data: teams = [] } = useQuery({
     queryKey: ["club-engagement-teams", clubId, isPlatform],
     queryFn: async () => {
+      if (isIcpAnalytics) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as { id: string; name: string; is_archived: boolean }[],
+          icp: async (ctx) =>
+            (await listLiveTeams(ctx, requireIcpClubId()))
+              .filter((t) => !t.archived && t.deleted_at_ms.length === 0)
+              .map((t) => ({ id: t.id, name: t.name, is_archived: false }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+        });
+      }
       let q = supabase
         .from("teams")
         .select("id, name, is_archived")
