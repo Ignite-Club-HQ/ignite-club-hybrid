@@ -128,8 +128,30 @@ let warmupPromise: Promise<void> | undefined;
  * before the user can click the sign-in button.
  */
 export function warmInternetIdentityAuthClient(): Promise<void> {
-  warmupPromise ??= getAuthClient().then(() => undefined, () => undefined);
+  if (getWarmedAuthClient()) return Promise.resolve();
+  // A failed warm-up (flaky phone connection loading the sign-in code) must
+  // not be cached — otherwise the first tap pays the load and loses the
+  // click, which members experienced as "I have to tap sign-in twice".
+  warmupPromise ??= getAuthClient().then(
+    () => undefined,
+    () => {
+      warmupPromise = undefined;
+    },
+  );
   return warmupPromise;
+}
+
+/**
+ * True once the auth client is constructed for the current target, i.e. a
+ * tap on the sign-in button can reach `client.signIn()` with no awaits in
+ * front of it. The sign-in button stays disabled until this is true.
+ */
+export function isInternetIdentitySignInReady(): boolean {
+  try {
+    return Boolean(getWarmedAuthClient());
+  } catch {
+    return false;
+  }
 }
 
 /** Synchronous fast-path used by `signInWithInternetIdentity` when already warmed. */
