@@ -689,6 +689,8 @@ persistent actor class Main(governorInit : Principal) {
       description = switch (existing) { case (?m) { m.description }; case null { null } };
       deleted = switch (existing) { case (?m) { m.deleted }; case null { false } };
       admin_only_posting = switch (existing) { case (?m) { m.admin_only_posting }; case null { false } };
+      deleted_at_ms = switch (existing) { case (?m) { m.deleted_at_ms }; case null { null } };
+      deleted_by = switch (existing) { case (?m) { m.deleted_by }; case null { null } };
     };
     groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
     groupMetadata := groupMetadata.concat([updated]);
@@ -869,6 +871,7 @@ persistent actor class Main(governorInit : Principal) {
     let meta : Types.GroupMetadata = {
       conversation_id = conversation.id; name; kind; club_id = ?club_id; team_id; members;
       created_at_ms = nowMs(); avatar = null; description = null; deleted = false; admin_only_posting = false;
+      deleted_at_ms = null; deleted_by = null;
     };
     groupMetadata := groupMetadata.concat([meta]);
     groupRoles := groupRoles.concat(Array.map<(Principal, Text), Types.GroupRole>(role_entries, func((p, r)) = { conversation_id = conversation.id; user = p; role = r }));
@@ -983,10 +986,87 @@ persistent actor class Main(governorInit : Principal) {
       case (?meta) {
         if (not canManageGroupMetadata(caller, meta) and not isGroupAdmin(caller, conversation_id)) return #Err("Group management forbidden");
         groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
-        groupMetadata := groupMetadata.concat([{ meta with deleted = true }]);
+        groupMetadata := groupMetadata.concat([{ meta with deleted = true; deleted_at_ms = ?nowMs(); deleted_by = ?caller }]);
         #Ok
       };
     }
+  };
+
+  // Admin restore/purge for the Deleted Chats tool. App admins act on any
+  // group; club admins only on groups of their own club.
+  func canAdminRestore(caller : Principal, meta : Types.GroupMetadata) : Bool {
+    isGovernor(caller) or hasRole(caller, "app_admin", null, null) or
+    (switch (meta.club_id) { case (?c) { hasRole(caller, "club_admin", ?c, null) }; case null { false } })
+  };
+
+  public query ({ caller }) func list_deleted_groups() : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
+    auth(caller);
+    if (isGovernor(caller) or hasRole(caller, "app_admin", null, null)) {
+      return #Ok(groupMetadata.filter(func(m) = m.deleted));
+    };
+    if (hasRole(caller, "club_admin", null, null)) {
+      return #Ok(groupMetadata.filter(func(m) = m.deleted and (switch (m.club_id) { case (?c) { hasRole(caller, "club_admin", ?c, null) }; case null { false } })));
+    };
+    #Err("Admin access required")
+  };
+
+  public shared ({ caller }) func restore_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (not meta.deleted) return #Err("Group is not deleted");
+        if (not canAdminRestore(caller, meta)) return #Err("Admin access required");
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        groupMetadata := groupMetadata.concat([{ meta with deleted = false; deleted_at_ms = null; deleted_by = null }]);
+        #Ok
+      };
+    }
+  };
+
+  public shared ({ caller }) func purge_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    switch (getGroupMetadataFor(conversation_id)) {
+      case null { #Err("Group metadata not found") };
+      case (?meta) {
+        if (not meta.deleted) return #Err("Group is not deleted");
+        let messageIds = messages.filter(func(m) = m.conversation_id == conversation_id).map(func(m) = m.id);
+        let pollIds = polls.filter(func(p) = p.conversation_id == conversation_id).map(func(p) = p.id);
+        groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+        conversations := conversations.filter(func(c) = c.id != conversation_id);
+        messages := messages.filter(func(m) = m.conversation_id != conversation_id);
+        receipts := receipts.filter(func(r) = r.conversation_id != conversation_id);
+        unread := unread.filter(func(u) = u.conversation_id != conversation_id);
+        groupRoles := groupRoles.filter(func(r) = r.conversation_id != conversation_id);
+        joinRequests := joinRequests.filter(func(r) = r.conversation_id != conversation_id);
+        polls := polls.filter(func(p) = p.conversation_id != conversation_id);
+        pollVotes := pollVotes.filter(func(v) = not pollIds.any(func(id) = v.poll_id == id));
+        mutePreferences := mutePreferences.filter(func(p) = p.conversation_id != conversation_id);
+        dmLinks := dmLinks.filter(func(l) = l.conversation_id != conversation_id);
+        forwardRecords := forwardRecords.filter(func(f) = f.to_conversation_id != conversation_id and f.from_conversation_id != conversation_id);
+        scheduledMessages := scheduledMessages.filter(func(s) = s.conversation_id != conversation_id);
+        attachmentMetadata := attachmentMetadata.filter(func(a) = a.conversation_id != conversation_id);
+        reactions := reactions.filter(func(r) = not messageIds.any(func(id) = r.message_id == id));
+        typingPings := typingPings.filter(func(t) = t.conversation_id != conversation_id);
+        pinnedMessages := pinnedMessages.filter(func(p) = p.conversation_id != conversation_id);
+        #Ok
+      };
+    }
+  };
+
+  // Admin listing of the DM-attachment restriction lists. The per-user set
+  // stores principals directly; the per-club list returns full club settings.
+  public query ({ caller }) func list_dm_attachments_disabled() : async { #Ok : [Principal]; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    #Ok(dmAttachmentsDisabled)
+  };
+
+  public query ({ caller }) func list_club_dm_settings() : async { #Ok : [Types.ClubDmSettings]; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    #Ok(clubDmSettings)
   };
 
   public shared ({ caller }) func request_join_group(conversation_id : Text) : async { #Ok; #Err : Text } {

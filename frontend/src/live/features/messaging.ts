@@ -922,3 +922,88 @@ export async function listLiveReadReceipts(ctx: FeatureBackendContext, conversat
     user: r.user,
   } satisfies LiveReadReceipt));
 }
+
+// ---------------------------------------------------------------------------
+// Deleted-chats admin tool (app admin: all clubs; club admin: own club).
+// ---------------------------------------------------------------------------
+
+export interface LiveDeletedGroup {
+  conversationId: string;
+  name: string;
+  kind: string;
+  clubId: string | null;
+  teamId: string | null;
+  memberCount: number;
+  createdAtMs: number;
+  deletedAtMs: number | null;
+  deletedBy: string | null;
+}
+
+/** Soft-deleted groups visible to the caller (scoped canister-side by role). */
+export async function listLiveDeletedGroups(ctx: FeatureBackendContext): Promise<LiveDeletedGroup[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_deleted_groups(), "List deleted groups");
+  return raw.map((m) => ({
+    conversationId: m.conversation_id,
+    name: m.name,
+    kind: m.kind,
+    clubId: m.club_id[0] ?? null,
+    teamId: m.team_id[0] ?? null,
+    memberCount: m.members.length,
+    createdAtMs: Number(m.created_at_ms),
+    deletedAtMs: m.deleted_at_ms[0] != null ? Number(m.deleted_at_ms[0]) : null,
+    deletedBy: m.deleted_by[0]?.toText() ?? null,
+  }));
+}
+
+export async function restoreLiveGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_group(conversationId), "Restore group");
+}
+
+/** Permanently removes a soft-deleted group and all of its data. App admin only. */
+export async function purgeLiveGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.purge_group(conversationId), "Purge group");
+}
+
+// ---------------------------------------------------------------------------
+// DM attachment restriction admin lists (app admin only).
+// ---------------------------------------------------------------------------
+
+export async function listLiveDmAttachmentsDisabled(ctx: FeatureBackendContext): Promise<string[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_dm_attachments_disabled(), "List DM attachment restrictions");
+  return raw.map((p) => p.toText());
+}
+
+export interface LiveClubDmSettings {
+  clubId: string;
+  dmDisabled: boolean;
+  attachmentsDisabled: boolean;
+  allowedRoles: string[];
+  forceDisablePreviews: boolean;
+  aiCatchUpEnabled: boolean;
+}
+
+export async function listLiveAllClubDmSettings(ctx: FeatureBackendContext): Promise<LiveClubDmSettings[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_club_dm_settings(), "List club DM settings");
+  return raw.map((s) => ({
+    clubId: s.club_id,
+    dmDisabled: s.dm_disabled,
+    attachmentsDisabled: s.attachments_disabled,
+    allowedRoles: s.allowed_roles,
+    forceDisablePreviews: s.force_disable_previews,
+    aiCatchUpEnabled: s.ai_catch_up_enabled,
+  }));
+}
+
+export async function setLiveDmAttachmentsDisabled(
+  ctx: FeatureBackendContext,
+  user: Principal,
+  disabled: boolean,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_dm_attachments_disabled(user, disabled), "Set DM attachments disabled");
+}

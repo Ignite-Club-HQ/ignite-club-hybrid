@@ -322,6 +322,21 @@ type Main =
        Ok: vec OnlineUser;
      }) query;
    list_blocked_users: () -> (vec principal) query;
+   list_club_dm_settings: () ->
+    (variant {
+       Err: text;
+       Ok: vec ClubDmSettings;
+     }) query;
+   list_deleted_groups: () ->
+    (variant {
+       Err: text;
+       Ok: vec GroupMetadata;
+     }) query;
+   list_dm_attachments_disabled: () ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
    list_groups_by_club: (club_id: text) ->
     (variant {
        Err: text;
@@ -384,6 +399,10 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   purge_group: (conversation_id: text) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
    recapTransform: (record {
                       context: blob;
                       response: HttpRequestResult;
@@ -428,6 +447,10 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   restore_group: (conversation_id: text) -> (variant {
+                                                Err: text;
+                                                Ok;
+                                              });
    send_message: (conversation_id: text, body: text, idempotency_key: 
     text, attachment: opt Attachment) -> (variant {
                                             Err: text;
@@ -616,6 +639,8 @@ type GroupMetadata =
    conversation_id: text;
    created_at_ms: nat64;
    deleted: bool;
+   deleted_at_ms: opt nat64;
+   deleted_by: opt principal;
    description: opt text;
    kind: text;
    members: vec principal;
