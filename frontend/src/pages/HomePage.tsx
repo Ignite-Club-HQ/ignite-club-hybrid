@@ -866,6 +866,23 @@ export default function HomePage() {
       const { clubIds, teamIds } = userMemberships;
       if (clubIds.length === 0 && teamIds.length === 0) return false;
 
+      // ICP: Pro grants live on club_domain (team → club → caller's IAP
+      // entitlement); Supabase has no subscription rows for II accounts.
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const [teamSubs, clubSubs] = await Promise.all([
+              listLiveTeamSubscriptions(ctx, teamIds),
+              listLiveClubSubscriptions(ctx, clubIds),
+            ]);
+            if ([...teamSubs.values()].some(liveHasAnyPro)) return true;
+            if ([...clubSubs.values()].some(liveHasAnyPro)) return true;
+            return fetchLiveCallerIapPro(ctx);
+          },
+        });
+      }
+
       // Check club subs, team subs, and teams table (for trial is_pro) in parallel
       const [clubSubsResult, teamSubsResult, teamsResult] = await Promise.all([
         clubIds.length > 0
@@ -893,6 +910,30 @@ export default function HomePage() {
   const { data: rewardClubs = [] } = useQuery({
     queryKey: ["reward-clubs-home", user?.id, activeClubFilter, userMemberships?.clubIds],
     queryFn: async () => {
+      // ICP: club profiles + Pro grants come from club_domain.
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const clubIds = activeClubFilter ? [activeClubFilter] : (userMemberships?.clubIds || []);
+            if (clubIds.length === 0) return [];
+            const [subs, profiles] = await Promise.all([
+              listLiveClubSubscriptions(ctx, clubIds),
+              Promise.all(clubIds.map((clubId) => getLiveClubProfile(ctx, clubId).catch(() => null))),
+            ]);
+            return clubIds.flatMap((clubId, index) => {
+              const profile = profiles[index];
+              if (!profile) return [];
+              return [{
+                id: clubId,
+                name: profile.name,
+                logo_url: profile.logo_url?.[0] ?? null,
+                hasPro: liveHasAnyPro(subs.get(clubId)),
+              }];
+            });
+          },
+        });
+      }
       if (activeClubFilter) {
         const [clubResult, subResult] = await Promise.all([
           supabase.from("clubs").select("id, name, logo_url").eq("id", activeClubFilter).single(),
