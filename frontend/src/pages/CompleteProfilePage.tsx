@@ -432,9 +432,51 @@ function SupabaseCompleteProfilePage() {
       return;
     }
 
+    // Internet Identity members have no Supabase session, so the Supabase
+    // session check + profiles-table write below must not run for them —
+    // they save to the identity_access canister instead (same pattern as
+    // EditProfilePage's ICP branch). Running the Supabase check here is what
+    // produced "Your sign-in session changed" for II members.
+    const isIcpLive = resolveAuthBackend() === "icp";
+
     setSaving(true);
 
     try {
+      if (isIcpLive) {
+        const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) {
+          throw new Error("Your sign-in session could not be verified. Please sign in again.");
+        }
+        // A photo picked on this screen is a base64 data URL; the canister
+        // profile stores it as the avatar reference directly. Skip only
+        // pathological sizes so a huge image can't blow the ingress limit.
+        const avatarRef = avatarUrl && avatarUrl.length <= 500_000 ? avatarUrl : null;
+        await saveIcpIdentityProfile(identity, user.id, {
+          displayName: displayName.trim(),
+          avatarRef,
+        });
+        // Mirror the display name into pii_access_control (pii_id = caller
+        // principal text, field_id = "display_name") — best effort, matching
+        // EditProfilePage; the profile save above already succeeded.
+        try {
+          const [{ getActiveIcpTarget }, { registerLivePiiText }] = await Promise.all([
+            import("@/live/targetRegistry"),
+            import("@/live/features/vault"),
+          ]);
+          await registerLivePiiText(
+            { identity, target: getActiveIcpTarget() },
+            identity.getPrincipal().toText(),
+            "display_name",
+            displayName.trim(),
+          );
+        } catch (piiError) {
+          console.warn("[CompleteProfile] display_name PII registration failed (non-fatal):", piiError);
+        }
+      } else {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       const authenticatedUser = authData?.user;
       if (authError || !authenticatedUser) {
