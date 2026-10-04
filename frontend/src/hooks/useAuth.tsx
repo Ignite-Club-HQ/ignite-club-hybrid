@@ -30,7 +30,7 @@ import { notificationKeys } from "@/lab/notificationQueryKeys";
 // agent/candid SDK and its crypto dependencies (~480KB), which must not enter
 // every page's initial chunk — only IcpAuthProvider (ICP lab auth mode) needs it.
 import type { InternetIdentitySession } from "@/live/internetIdentityAuth";
-import { getCachedIcpIdentityProfile, type IcpIdentityProfile } from "@/live/identityProfileCache";
+import { getCachedIcpIdentityProfile, clearIcpIdentityProfileCache, type IcpIdentityProfile } from "@/live/identityProfileCache";
 
 
 interface Profile {
