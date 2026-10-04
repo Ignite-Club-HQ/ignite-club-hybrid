@@ -162,7 +162,10 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         }
         // Deliberately NOT settling: keep the loader up until the reload
         // replaces the page, so no wrong-backend query can fire in between.
-        window.location.reload();
+        // Reload the ROOT, not the current URL: the published/preview hosting
+        // has no SPA fallback, so reloading a deep path (e.g. /auth) answers
+        // a plain "Not Found" instead of the app.
+        window.location.replace("/");
       } catch (error) {
         console.warn("[club-backend] Enforcement check failed.", error);
         // Fail open to the previous behavior rather than hanging the app on

@@ -4,7 +4,7 @@
 // IGNITE_LIVE_* names the live target registry requires.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { readFileSync, existsSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, rmSync, cpSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { ensureFrontendDeps } from "./ensure-frontend-deps.mjs";
 import { syncCanisterIds } from "./sync-canister-ids.mjs";
@@ -103,24 +103,22 @@ if (!existsSync(liveIndex)) {
 cpSync(liveIndex, rootIndex);
 console.log("copied dist/live-index.html -> dist/index.html");
 
-// Deep links (e.g. /auth, /admin/placement-settings) must also reach the app:
-// static hosting answers them with a plain "Not Found" unless a fallback is
-// provided. 404.html covers hosts that serve it for unmatched paths, and
-// _redirects covers Netlify-convention hosts.
-cpSync(liveIndex, path.join(distRoot, "404.html"));
-writeFileSync(path.join(distRoot, "_redirects"), "/* /index.html 200\n");
-console.log("wrote dist/404.html and dist/_redirects for SPA deep-link fallback");
-
-// Probes: several static hosts honor platform-specific rewrite configs. Each
-// gets a unique probe path so a single deploy can reveal which (if any) the
-// hosting respects. 200.html is the Surge-style global fallback convention.
-writeFileSync(
-  path.join(distRoot, "vercel.json"),
-  JSON.stringify({ rewrites: [{ source: "/probe-vercel", destination: "/index.html" }] }) + "\n",
-);
-writeFileSync(
-  path.join(distRoot, "firebase.json"),
-  JSON.stringify({ hosting: { rewrites: [{ source: "/probe-firebase", destination: "/index.html" }] } }) + "\n",
-);
-cpSync(liveIndex, path.join(distRoot, "200.html"));
-console.log("wrote rewrite-convention probe files (vercel.json, firebase.json, 200.html)");
+// Deep links (e.g. /auth, /admin/placement-settings) must also reach the app.
+// The Lovable static hosting for this project has NO SPA fallback: unmatched
+// paths get a plain-text "Not Found" (verified 2026-10-04 — 404.html,
+// _redirects, vercel.json and firebase.json rewrite conventions are all
+// ignored, and netlify.toml is only used by the separate Netlify deploy).
+// The only mechanism the hosting honors is real files on disk, so emit a
+// directory index for every static route in App.tsx. Parameterized routes
+// (/join/:token, /teams/:id, ...) can't be enumerated; app code must never
+// force a full-page load to a dynamic path on the hosted site.
+const appTsx = readFileSync(path.join(frontendDir, "src", "App.tsx"), "utf8");
+const staticRoutes = [...appTsx.matchAll(/path="([^"]+)"/g)]
+  .map((m) => m[1])
+  .filter((p) => p !== "*" && p !== "/" && !p.includes(":") && !p.endsWith(".html"));
+for (const route of staticRoutes) {
+  const dir = path.join(distRoot, ...route.split("/").filter(Boolean));
+  mkdirSync(dir, { recursive: true });
+  cpSync(rootIndex, path.join(dir, "index.html"));
+}
+console.log(`pre-rendered ${staticRoutes.length} static route shells (dist<route>/index.html)`);
