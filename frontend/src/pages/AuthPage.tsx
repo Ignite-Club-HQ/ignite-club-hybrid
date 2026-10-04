@@ -179,7 +179,7 @@ export default function AuthPage() {
   // The URL is the source of truth for the invite hand-off (mode / next /
   // invite). sessionStorage is NOT consulted for auth-mode intent any more —
   // it raced with the mount-time cleanup and dumped invite users on Sign In.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const authIntent = readAuthIntent(window.location.search);
 
   // `?mode=signup` / `?mode=signin` decides the visible tab; default Sign In.
