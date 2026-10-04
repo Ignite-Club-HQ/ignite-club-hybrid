@@ -226,7 +226,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         return withFeatureBackend("events", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const live = await getLiveTeam(ctx, teamId!);
+            const live = (await getLiveTeam(ctx, teamId!)) as unknown as { id: string; name: string; club_id: string };
             const club = await getLiveClubProfile(ctx, live.club_id).catch(() => null);
             return {
               id: live.id,
@@ -329,9 +329,11 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
             const grants = await listLiveTeamRoleGrants(ctx, teamId!);
             const wanted = grants.filter((g) => ["player", "parent", "coach", "team_admin"].includes(g.role));
             const profiles = await listLiveProfilesByIds(ctx, wanted.map((g) => g.account_id)).catch(() => []);
-            const byId = new Map(profiles.map((p: { id: string }) => [p.id, p]));
+            type LiveProfile = { id: string; display_name?: string | null; avatar_ref?: [] | [string] };
+            const byId = new Map<string, LiveProfile>();
+            (profiles as LiveProfile[]).forEach((p) => { byId.set(p.id, p); });
             return wanted.map((g) => {
-              const p = byId.get(g.account_id) as { display_name?: string | null; avatar_ref?: [] | [string] } | undefined;
+              const p = byId.get(g.account_id);
               return {
                 user_id: g.account_id,
                 role: g.role,
@@ -371,7 +373,7 @@ function SupabaseAttendanceStatsPage({ teamIdOverride, embedded }: AttendanceSta
         return withFeatureBackend("events", {
           supabase: async () => [],
           icp: async (ctx) => {
-            const live = await getLiveTeam(ctx, teamId!);
+            const live = (await getLiveTeam(ctx, teamId!)) as unknown as { club_id: string };
             const assignments = await listLiveChildTeamAssignments(ctx, live.club_id, teamId!);
             if (!assignments.length) return [];
             const childIds = [...new Set(assignments.map((a) => a.child_id))];
