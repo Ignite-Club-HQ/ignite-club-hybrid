@@ -67,6 +67,10 @@ describe("mapLiveHomeEvent", () => {
     starts_at_ms: BigInt(1_800_000_000_000),
     ends_at_ms: BigInt(1_800_003_600_000),
     revision: BigInt(3),
+    opponent: [] as [] | [string],
+    address: [] as [] | [string],
+    mini_league_id: [] as [] | [string],
+    updated_at_ms: BigInt(1_800_000_000_000),
   };
 
   it("maps the canister event to the HomePage Event shape", () => {
