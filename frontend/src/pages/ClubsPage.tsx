@@ -19,7 +19,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import * as fixtureData from "@/lab/fixtureDataLayer";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { PageLoading } from "@/components/ui/page-loading";
 import { getSportEmoji, SPORT_EMOJIS } from "@/lib/sportEmojis";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -86,7 +88,8 @@ export default function ClubsPage() {
       if (error) throw error;
       return data as { id: string; name: string; logo_url: string | null; sport: string | null; deleted_at: string; created_by: string | null }[];
     },
-    enabled: !!user,
+    // Soft-deleted clubs are tracked in Supabase only; no canister shape yet.
+    enabled: !!user && !useIcpLab,
   });
 
   const handleRestore = async (clubId: string) => {
@@ -127,7 +130,33 @@ export default function ClubsPage() {
     queryKey: ["clubs"],
     queryFn: async () => {
       if (useIcpLab) {
-        return fixtureData.getLocalLabClubList() as Club[];
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // The caller's clubs come from their club_domain role grants —
+            // the same store create_club writes the creator's club_admin
+            // grant to. There is no public club directory on the canister,
+            // so the search box only searches within these.
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const clubs = await Promise.all(clubIds.map(async (clubId) => {
+              const row = await getLiveClubProfile(ctx, clubId);
+              const p = row.length ? row[0] : null;
+              if (!p || p.deleted_at_ms.length) return null;
+              return {
+                id: p.id,
+                name: p.name,
+                logo_url: p.logo_url[0] ?? null,
+                description: p.description[0] ?? null,
+                sport: p.sport[0] ?? null,
+                is_pro: false,
+                created_by: null,
+                primary_sponsor_id: null,
+              } as Club;
+            }));
+            return clubs.filter((c): c is Club => c !== null);
+          },
+        });
       }
 
       const { data, error } = await supabase
@@ -147,6 +176,25 @@ export default function ClubsPage() {
   const { data: sponsors } = useQuery({
     queryKey: ["club-sponsors-list"],
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const perClub = await Promise.all(clubIds.map((clubId) => listLiveSponsors(ctx, clubId)));
+            return perClub.flat()
+              .filter((s) => s.is_active)
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                logo_url: s.logo_url[0] ?? null,
+                website_url: s.website_url[0] ?? null,
+                club_id: s.club_id,
+              }) as Sponsor);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("sponsors")
         .select("id, name, logo_url, website_url, club_id")
@@ -161,6 +209,23 @@ export default function ClubsPage() {
   const { data: clubSubscriptions } = useQuery({
     queryKey: ["club-subscriptions-list"],
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
+            const subs = await Promise.all(clubIds.map((clubId) => getLiveClubSubscription(ctx, clubId)));
+            return subs.filter((s): s is NonNullable<typeof s> => s !== null).map((s) => ({
+              club_id: s.club_id,
+              is_pro: s.is_pro,
+              is_pro_football: s.is_pro_football,
+              admin_pro_override: s.admin_pro_override,
+              admin_pro_football_override: s.admin_pro_football_override,
+            }) as ClubSubscription);
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("club_subscriptions")
         .select("club_id, is_pro, is_pro_football, admin_pro_override, admin_pro_football_override");
@@ -173,6 +238,22 @@ export default function ClubsPage() {
   const { data: userRoles } = useQuery({
     queryKey: membershipKeys.userRolesFor(user?.id),
     queryFn: async () => {
+      if (useIcpLab) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            // Mapped onto the Supabase user_roles row shape the filters below
+            // read (club_id / team_id / role).
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.map((g) => ({
+              user_id: user!.id,
+              role: g.role,
+              club_id: g.club[0] ?? null,
+              team_id: g.team[0] ?? null,
+            }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("*")
