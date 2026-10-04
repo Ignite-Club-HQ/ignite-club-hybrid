@@ -292,7 +292,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not isAdmin(caller, folder.club_id)) return #Err("Club admin required");
         teamFolders := teamFolders.filter(func(f) = f.id != folder_id);
         // Teams in the deleted folder fall back to the unfiled group.
-        teams := teams.map(func(t) = if (t.folder_id == ?folder_id) { t with folder_id = null } else t);
+        teams := teams.map(func(t) = if (t.folder_id == ?folder_id) ({ t with folder_id = null }) else t);
         #Ok
       };
     };
