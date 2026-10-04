@@ -54,27 +54,25 @@ export function setInternetIdentityAccountProvisionerForTests(provisioner: Accou
   accountProvisionerOverride = provisioner;
 }
 
-function resolveInternetIdentityProvider(target: IcpTargetConfig): { authorizeUrl: string; canisterId: string } {
+function resolveInternetIdentityProvider(target: IcpTargetConfig): { authorizeUrl: string; canisterId: string } | undefined {
   // Approved targets may override the authorize URL for a Cloud Engine deployment
-  // that fronts its own Internet Identity instance; public mainnet always uses
-  // the well-known https://id.ai provider.
+  // that fronts its own Internet Identity instance. Public mainnet returns
+  // undefined so the SDK uses its built-in defaults (https://id.ai/authorize +
+  // the II backend canister that mints delegations).
   if (target.networkKind === "cloud_engine" && target.canisterIds.internet_identity_frontend) {
     const authorizeUrl = target.supportedDomains?.[0]
       ? `https://${target.supportedDomains[0]}/authorize`
       : MAINNET_INTERNET_IDENTITY_AUTHORIZE_URL;
     return { authorizeUrl, canisterId: target.canisterIds.internet_identity_frontend };
   }
-  return {
-    authorizeUrl: MAINNET_INTERNET_IDENTITY_AUTHORIZE_URL,
-    canisterId: MAINNET_INTERNET_IDENTITY_FRONTEND_CANISTER_ID,
-  };
+  return undefined;
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
   const provider = resolveInternetIdentityProvider(target);
   const { AuthClient } = await import("@icp-sdk/auth/client");
   return new AuthClient({
-    identityProvider: provider,
+    ...(provider ? { identityProvider: provider } : {}),
     agentOptions: {
       host: target.host,
     },
