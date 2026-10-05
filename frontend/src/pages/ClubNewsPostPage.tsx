@@ -11,7 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClubNewsPost, useClubTeamsForNews, useTeamNamesByIds } from "@/features/news/useClubNews";
 import { parseNewsAttachments } from "@/features/news/newsAttachments";
 import NewsArticleBody from "@/components/news/NewsArticleBody";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 
 
 
@@ -19,7 +21,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 export default function ClubNewsPostPage() {
   const { newsId } = useParams<{ newsId: string }>();
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("news");
+  const isLocalLab = resolveLocalAuthMode(window.location.search, true);
   const { data: post, isLoading } = useClubNewsPost(newsId);
   const { data: teams = [] } = useClubTeamsForNews(post?.club_id ?? null);
   const { data: targetTeams = [] } = useTeamNamesByIds(post?.target_team_ids);
@@ -44,13 +46,21 @@ export default function ClubNewsPostPage() {
   const { data: author } = useQuery({
     queryKey: ["club-news-author", post?.author_id],
     queryFn: async () => {
-      if (useIcpLab) return "Local ICP Member";
-      const { data } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", post!.author_id!)
-        .maybeSingle();
-      return data?.display_name ?? null;
+      if (isLocalLab) return "Local ICP Member";
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", post!.author_id!)
+            .maybeSingle();
+          return data?.display_name ?? null;
+        },
+        icp: async (ctx) => {
+          const profiles = await listLiveProfilesByIds(ctx, [post!.author_id!]);
+          return profiles[0]?.display_name ?? null;
+        },
+      });
     },
     enabled: !!post?.author_id,
   });

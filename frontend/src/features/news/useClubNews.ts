@@ -61,6 +61,10 @@ const NEWS_COLUMNS =
   "id, club_id, title, content, image_url, author_id, target_team_ids, is_important, published_at, attachments";
 
 
+/** Canister tombstone check — soft-deleted clubs keep deleted_at_ms set. */
+const isLiveClubDeleted = (club: { deleted_at_ms?: [] | [bigint] }) =>
+  (club.deleted_at_ms?.length ?? 0) > 0;
+
 export function useClubNewsFeed(clubId?: string | null, limit = 50) {
   const snapshotScope = `${clubId ?? "all"}_${limit}`;
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
@@ -91,17 +95,24 @@ export function useClubNewsFeed(clubId?: string | null, limit = 50) {
           // Provisional: with no club filter the feed unions the member's
           // clubs (the canister requires club ids); the member's club ids
           // come from the club_domain whoami account record.
-          const posts = clubId
-            ? await listLiveNews(ctx, clubId)
-            : await (async () => {
-                // Provisional: with no club filter the feed unions the clubs
-                // visible to the caller (list_clubs is caller-scoped).
-                const { listLiveMembershipClubs } = await import("@/live/features/membership");
-                const clubs = await listLiveMembershipClubs(ctx);
-                const clubIds = clubs.map((c) => c.id);
-                if (clubIds.length === 0) return [];
-                return listLiveNewsMulti(ctx, clubIds);
-              })();
+          const posts = await (async () => {
+            if (clubId) {
+              // A soft-deleted club keeps its newsPosts on the canister;
+              // skip the fetch so the feed (and its snapshot) empties.
+              const { getLiveClubProfile } = await import("@/live/features/club");
+              const profile = await getLiveClubProfile(ctx, clubId);
+              if (!profile[0] || isLiveClubDeleted(profile[0])) return [];
+              return listLiveNews(ctx, clubId);
+            }
+            // Provisional: with no club filter the feed unions the clubs
+            // visible to the caller (list_clubs is caller-scoped), minus
+            // soft-deleted tombstones.
+            const { listLiveMembershipClubs } = await import("@/live/features/membership");
+            const clubs = await listLiveMembershipClubs(ctx);
+            const clubIds = clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id);
+            if (clubIds.length === 0) return [];
+            return listLiveNewsMulti(ctx, clubIds);
+          })();
           const rows = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
             .filter((p) => p.status === "published")
             .map(liveNewsPostToRow)
@@ -147,7 +158,7 @@ export function useClubNewsPost(newsId?: string | null) {
           // clubs (role grants) and filter. Provisional — verify post-deploy.
           const { listLiveMembershipClubs } = await import("@/live/features/membership");
           const clubs = await listLiveMembershipClubs(ctx);
-          const clubIds = clubs.map((c) => c.id);
+          const clubIds = clubs.filter((c) => !isLiveClubDeleted(c)).map((c) => c.id);
           if (clubIds.length === 0) return null;
           const posts = await listLiveNewsMulti(ctx, clubIds);
           const post = (posts as Array<Parameters<typeof liveNewsPostToRow>[0]>)
@@ -195,7 +206,9 @@ export function useNewsPublishableClubs() {
           const adminClubIds = Array.from(new Set(grants.filter(g => g.role === "club_admin").flatMap(g => g.club)));
           if (adminClubIds.length === 0) return [];
           const clubs = await listLiveMembershipClubs(ctx);
-          return clubs.filter(c => adminClubIds.includes(c.id)).map(c => ({ id: c.id, name: c.name }));
+          return clubs
+            .filter(c => adminClubIds.includes(c.id) && !isLiveClubDeleted(c))
+            .map(c => ({ id: c.id, name: c.name }));
         }
       });
     },
