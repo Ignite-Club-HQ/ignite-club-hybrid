@@ -1,7 +1,7 @@
 import type { Identity } from "@icp-sdk/core/agent";
-import type { FeatureArea } from "./featureBackend";
+import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
-import { getEffectiveBackendForFeature } from "./loadBackendRouting";
+import { getEffectiveBackendForFeature, tryGetActiveIcpTarget } from "./loadBackendRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -34,6 +34,16 @@ export async function withFeatureBackend<T>(
   providers: FeatureBackendProviders<T>,
 ): Promise<T> {
   if (getEffectiveBackendForFeature(feature) !== "icp") {
+    // An Internet Identity user has no Supabase account or data: if routing
+    // momentarily resolves to Supabase (club-membership pin not loaded yet,
+    // unpinned ICP-created club), sending their read/write to Supabase hits
+    // rows that don't exist (e.g. "team does not exist" on event create).
+    // Keep them on the canister whenever it is configured for this feature.
+    const target = tryGetActiveIcpTarget();
+    if (target && isFeatureCanisterConfigured(target, feature)) {
+      const iiIdentity = await getCurrentInternetIdentity().catch(() => null);
+      if (iiIdentity) return providers.icp({ identity: iiIdentity, target });
+    }
     return providers.supabase();
   }
   const identity = await getCurrentInternetIdentity();

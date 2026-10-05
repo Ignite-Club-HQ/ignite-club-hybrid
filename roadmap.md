@@ -8,3 +8,5 @@
 - [ ] Chat-open bundle (messages+reactions+pins) — low gain: those calls already run in parallel
 - [ ] Idle prefetch of Schedule/Messages after Home
 - [ ] Call-count instrumentation — measure after mainnet deploy
+- [x] Fix Dingo U8 event create going to Supabase (II users stay on canisters)
+- [ ] Photo storage sharding — plan written, awaiting approval

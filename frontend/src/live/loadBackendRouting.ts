@@ -196,7 +196,7 @@ export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
   return enabledForBackend[0];
 }
 
-function tryGetActiveIcpTarget(): IcpTargetConfig | null {
+export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
   try {
     return getActiveIcpTarget();
   } catch {
