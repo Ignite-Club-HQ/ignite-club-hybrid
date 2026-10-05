@@ -67,11 +67,9 @@ export async function registerLiveAsset(
       "Set blob reference",
     );
   }
-  const hasScope =
-    input.teamId || input.miniLeagueId || input.competitionId || input.eventId || input.caption || input.albumId;
-  if (hasScope) {
-    asset = await setLiveAssetScopeWithActor(actor, asset.id, input);
-  }
+  // Scope/tags are applied by the caller via setLiveAssetScope: the deployed
+  // canister only gains set_asset_scope after the media_metadata redeploy,
+  // and tag application must not fail the whole upload until then.
   return asset;
 }
 
