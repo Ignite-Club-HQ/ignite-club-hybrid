@@ -366,6 +366,11 @@ type Main =
        Err: text;
        Ok: vec JoinRequest;
      }) query;
+   list_latest_messages_page: (conversation_id: text, before: opt nat64,
+    limit: nat16) -> (variant {
+                        Err: text;
+                        Ok: MessagePage;
+                      }) query;
    list_messages: (conversation_id: text, after: opt nat64) ->
     (vec Message) query;
    list_messages_page: (conversation_id: text, after: opt nat64, limit:

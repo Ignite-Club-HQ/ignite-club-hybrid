@@ -207,6 +207,9 @@ export default function GroupChatPage() {
     if (!highlightedMessageId && highlightQuery) setHighlightQuery("");
   }, [highlightedMessageId, highlightQuery]);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  // Backward cursor for ICP scroll-back paging (null = nothing older remains).
+  const icpOlderCursorRef = useRef<number | null>(null);
+
   const [jumpRenderNonce, setJumpRenderNonce] = useState<number | string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const useVirtualizedChat = true;
@@ -949,8 +952,10 @@ export default function GroupChatPage() {
     if (messagesData && !Array.isArray(messagesData)) {
       if ((messagesData as any).fromCache) return;
       setHasOlderMessages((messagesData as any).hasOlderMessages ?? false);
+      icpOlderCursorRef.current = (messagesData as any).olderCursor ?? null;
     }
   }, [messagesData]);
+
 
   // Keep a ref to the latest localMessages so loadOlderMessages doesn't get
   // recreated on every message change (which would churn the IntersectionObserver
@@ -974,7 +979,9 @@ export default function GroupChatPage() {
     reconcileScope,
     pageSize: MESSAGES_PER_PAGE,
     supabaseClient: supabase,
+    icpOlderCursorRef,
   });
+
 
   // Keep the loader ref in sync for the anchor hook to call.
   useEffect(() => {

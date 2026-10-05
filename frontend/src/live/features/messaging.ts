@@ -71,6 +71,51 @@ export async function listLiveMessagesPage(
   );
 }
 
+/**
+ * Newest-first page read. `before = null` returns the newest `limit` messages;
+ * `before = <cursor>` returns the page just older than that cursor. The
+ * returned `next_sequence` is the backward cursor for the next-older page —
+ * null means nothing older remains. This is what a chat screen wants on open;
+ * `listLiveMessagesPage` pages forward from the OLDEST message instead.
+ */
+export async function listLiveLatestMessagesPage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  before: number | null,
+  limit: number,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  try {
+    return await unwrapCandid(
+      actor.list_latest_messages_page(
+        conversationId,
+        candidOpt(before === null ? undefined : BigInt(before)),
+        limit,
+      ),
+      "List latest messages",
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Canisters deployed before this method existed reject the call outright
+    // ("Canister has no query method '<name>'", IC0536; some paths report
+    // IC0504). Fall back to the forward read for the first page so chat still
+    // loads until the redeploy lands; scroll-back paging keeps its pre-fix
+    // behaviour on those canisters.
+    const methodMissing =
+      /has no (?:query |update |)method|IC0536|IC0504|method .*(?:not found|does not exist)|does not exist/i.test(
+        message,
+      );
+    if (before !== null || !methodMissing) throw err;
+    return unwrapCandid(
+      actor.list_messages_page(conversationId, candidOpt(undefined), limit),
+      "List messages",
+    );
+  }
+
+}
+
+
+
 export interface LiveMessageAttachment {
   /** "poll" | "news" | "image" — matches the group chat composer payloads. */
   kind: string;

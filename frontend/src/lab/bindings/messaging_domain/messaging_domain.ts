@@ -507,6 +507,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_latest_messages_page(conversation_id: string, before: bigint | null, limit: number): Promise<{
+        __kind__: "Ok";
+        Ok: MessagePage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_messages(conversation_id: string, after: bigint | null): Promise<Array<Message>>;
     list_messages_page(conversation_id: string, after: bigint | null, limit: number): Promise<{
         __kind__: "Ok";
@@ -1349,6 +1356,16 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.list_join_requests(arg0);
         return from_candid_variant_n58(result);
+    }
+    async list_latest_messages_page(arg0: string, arg1: bigint | null, arg2: number): Promise<{
+        __kind__: "Ok";
+        Ok: MessagePage;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_latest_messages_page(arg0, to_candid_opt_n59(arg1), arg2);
+        return from_candid_variant_n60(result);
     }
     async list_messages(arg0: string, arg1: bigint | null): Promise<Array<Message>> {
         const result = await this.actor.list_messages(arg0, to_candid_opt_n59(arg1));

@@ -117,7 +117,7 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { ensureLiveClubConversations, listLiveMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -188,6 +188,9 @@ export default function TeamChatPage() {
     if (!highlightedMessageId && highlightQuery) setHighlightQuery("");
   }, [highlightedMessageId, highlightQuery]);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  // Backward cursor for ICP scroll-back paging (null = nothing older remains).
+  const icpOlderCursorRef = useRef<number | null>(null);
+
   const [jumpRenderNonce, setJumpRenderNonce] = useState<number | string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   // publishing state moved to usePublishChatImage hook (declared after team load)
@@ -478,7 +481,68 @@ export default function TeamChatPage() {
     return () => { cancelled = true; };
   }, [teamId, invalidateGateTeam, queryClient, eagerInvalidateTeam]);
 
+  // Canister rows → the app's team-message shape. Shared by the first page
+  // load and by scroll-back paging so both render identically.
+  const mapLiveTeamRows = async (ctx: any, rows: any[]): Promise<Message[]> => {
+    const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
+    const profilesMap = await fetchProfilesWithCache(authorIds);
+    // Reactions persist on the canister; restore them on every refetch.
+    // Tolerate older canisters that lack list_reactions.
+    const reactionsByMessage = new Map<string, any[]>();
+    try {
+      const liveReactions = await listLiveReactions(ctx, teamId!);
+      for (const r of liveReactions) {
+        const uid = r.user.toText();
+        const list = reactionsByMessage.get(r.message_id) ?? [];
+        list.push({
+          id: `${r.message_id}:${uid}:${r.emoji}`,
+          user_id: uid,
+          reaction_type: r.emoji,
+          team_message_id: r.message_id,
+        });
+        reactionsByMessage.set(r.message_id, list);
+      }
+    } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+    // Replies persist on the canister as reply_to_id; resolve the quoted
+    // snippet from messages in the same page (reply targets outside the
+    // loaded page render without a quote, same as a deleted target).
+    const rawById = new Map<string, any>(rows.map((m: any) => [m.id, m]));
+    return rows
+      .slice()
+      .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+      .map((m: any) => {
+        const profile = profilesMap.get(m.sender.toText());
+        const attachment = m.attachment?.[0];
+        const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+        const replyTarget = replyToId ? rawById.get(replyToId) : null;
+        const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
+        return {
+          id: m.id,
+          text: m.body,
+          image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+          created_at: new Date(Number(m.created_at_ms)).toISOString(),
+          edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+          author_id: m.sender.toText(),
+          team_id: teamId,
+          reply_to_id: replyToId,
+          deleted_at: null,
+          is_club_announcement: false,
+          club_announcement_name: null,
+          is_system_message: false,
+          forwarded_from_user_id: null,
+          forwarded_at: null,
+          forwarded_source_label: null,
+          profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+          reactions: reactionsByMessage.get(m.id) ?? [],
+          reply_to: replyTarget
+            ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
+            : null,
+        };
+      }) as unknown as Message[];
+  };
+
   const { data: messagesData, isLoading: loadingMessages, isFetching } = useQuery({
+
     queryKey: ["team-messages", teamId],
     queryFn: async () => {
       markChatFetch();
@@ -500,69 +564,21 @@ export default function TeamChatPage() {
             if (team?.club_id) {
               try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
             }
-            const page = await listLiveMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE + 1);
-            const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
-            const profilesMap = await fetchProfilesWithCache(authorIds);
-            // Reactions persist on the canister; restore them on every
-            // refetch. Tolerate older canisters that lack list_reactions.
-            const reactionsByMessage = new Map<string, any[]>();
-            try {
-              const liveReactions = await listLiveReactions(ctx, teamId!);
-              for (const r of liveReactions) {
-                const uid = r.user.toText();
-                const list = reactionsByMessage.get(r.message_id) ?? [];
-                list.push({
-                  id: `${r.message_id}:${uid}:${r.emoji}`,
-                  user_id: uid,
-                  reaction_type: r.emoji,
-                  team_message_id: r.message_id,
-                });
-                reactionsByMessage.set(r.message_id, list);
-              }
-            } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
-            // Replies persist on the canister as reply_to_id; resolve the
-            // quoted snippet from messages in the same page (reply targets
-            // outside the loaded page render without a quote, same as a
-            // deleted target). Tolerate older canisters lacking reply_to_id.
-            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
-            const messages = page.messages
-              .slice()
-              .sort((a: any, b: any) => Number(b.sequence - a.sequence))
-              .slice(0, MESSAGES_PER_PAGE)
-              .map((m: any) => {
-                const profile = profilesMap.get(m.sender.toText());
-                const attachment = m.attachment?.[0];
-                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
-                const replyTarget = replyToId ? rawById.get(replyToId) : null;
-                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
-                return {
-                  id: m.id,
-                  text: m.body,
-                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
-                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
-                  edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
-                  author_id: m.sender.toText(),
-                  team_id: teamId,
-                  reply_to_id: replyToId,
-                  deleted_at: null,
-                  is_club_announcement: false,
-                  club_announcement_name: null,
-                  is_system_message: false,
-                  forwarded_from_user_id: null,
-                  forwarded_at: null,
-                  forwarded_source_label: null,
-                  profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-                  reactions: reactionsByMessage.get(m.id) ?? [],
-                  reply_to: replyTarget
-                    ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
-                    : null,
-                };
-              }) as unknown as Message[];
+            // Newest-first page: the canister returns the newest MESSAGES_PER_PAGE
+            // rows plus a backward cursor when older history remains.
+            const page = await listLiveLatestMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE);
+            const messages = await mapLiveTeamRows(ctx, page.messages);
+            const olderCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            icpOlderCursorRef.current = olderCursor;
             return {
               messages,
-              hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+              hasOlderMessages: olderCursor !== null,
               fromCache: false,
             };
+
           },
         });
       }
@@ -1131,6 +1147,55 @@ export default function TeamChatPage() {
       setHasOlderMessages(false);
       return;
     }
+    // Live ICP: walk the canister's backward cursor. Each page returns the
+    // newest rows older than the cursor plus the next cursor (null = start of
+    // the chat).
+    if (isFeatureRoutedToIcp("messaging")) {
+      const cursor = icpOlderCursorRef.current;
+      if (cursor == null) {
+        setHasOlderMessages(false);
+        return;
+      }
+      setIsLoadingOlder(true);
+      try {
+        const result = await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            const page = await listLiveLatestMessagesPage(ctx, teamId!, cursor, MESSAGES_PER_PAGE);
+            const older = await mapLiveTeamRows(ctx, page.messages);
+            const nextCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            return { older, nextCursor };
+          },
+        });
+        icpOlderCursorRef.current = result.nextCursor;
+        setHasOlderMessages(result.nextCursor !== null);
+        const mergeOlder = (existing: Message[] | undefined): Message[] => {
+          const byId = new Map<string, Message>();
+          result.older.forEach((m) => byId.set(m.id, m));
+          (existing || []).forEach((m) => byId.set(m.id, m)); // current state wins on boundary duplicates
+          const sorted = sortChatMessagesChronologically([...byId.values()]);
+          // An UPDATE received while this page was in flight must survive.
+          return (reconcileMessages(reconcileScope, sorted) ?? []) as Message[];
+        };
+        queueAnchoredPrepend(() => {
+          queryClient.setQueryData(["team-messages", teamId], (old: any) => ({
+            ...(old || {}),
+            messages: mergeOlder(old?.messages as Message[] | undefined),
+            hasOlderMessages: result.nextCursor !== null,
+          }));
+          setLocalMessages((prev) => mergeOlder(prev));
+        });
+      } catch (err) {
+        console.error("Failed to load older messages:", err);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+      return;
+    }
+
 
     setIsLoadingOlder(true);
 

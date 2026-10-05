@@ -38,3 +38,14 @@
 - [x] Root cause: ClubDetailPage's userRole + isAppAdmin queries were Supabase-only (II principal sent as UUID → no rows → not admin). Fixed: ICP branch reads my_role_grants (mirrors TeamDetailPage); isAppAdmin now uses the shared useIsAppAdmin hook.
 - [x] Checked siblings: useNewsPublishableClubs already has an ICP branch; build OK + typecheck clean.
 - NOTE: leftover probe club "Probe" (id probe-1791172353502) on mainnet — undeletable without the discarded probe identity or the governor; invisible to members (membership-scoped lists).
+
+## Chat paging / virtuoso (ICP mode)
+- [x] Live probe proved the bug: `list_messages_page(after=null)` returns the OLDEST page (35-msg probe → 1–31, next=31) while the app treats `next_sequence` as "has older" → any chat longer than one page showed the oldest messages and scroll-back silently stopped.
+- [x] Canister: new `list_latest_messages_page(conversation_id, before, limit)` — newest-first, backward cursor (`next_sequence` = oldest seq in page, null when nothing older), stale-cursor error, limit 1–100; compiled with moc 1.16.1, did + both binding sets regenerated, drift check OK, no migration needed.
+- [x] App: `listLiveLatestMessagesPage` in live/features/messaging.ts falls back to the forward read when the canister predates the method (live reject is IC0536 "Canister has no query method", not IC0504) — live-verified with a throwaway chat (3 msgs returned via fallback), so the published app keeps loading chat before the redeploy.
+- [x] Wired newest-first read + real scroll-back: TeamChatPage, ClubChatPage, GroupChatPage (useGroupMessagesQuery + useGroupOlderMessagesLoader), DirectMessagePage.
+- [x] typecheck clean (exit 0), preview build OK (exit 0).
+- [ ] BroadcastChatPage: ICP read returns LAB FIXTURES (`broadcast-icp-001`); the send path posts to the literal conversation "broadcast", which can't be shared — `send_message` requires participant access, so only the first poster could ever post.
+- [ ] ClubAdminChatPage: ICP messages query returns `{messages: [], hasOlderMessages: false}` and the conversation/club queries return null, so the screen is empty; sends create conversations nothing can list.
+- [ ] Both need canister work: broadcast = a global open-read conversation with app-admin-only posting (messaging_domain's own role store is governor-only via `grant_role`, so app-admin truth needs a deploy-time mirror or a cross-canister check); club-admin = per-club conversation registry (find-or-create + club-staff read rule).
+- [ ] User: re-run "Deploy ICP mainnet" — that one deploy also ships reactions, replies, invites, media tagging, news publishing and app settings.

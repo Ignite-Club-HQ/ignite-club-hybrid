@@ -85,7 +85,7 @@ import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveMessagesPage } from "@/live/features/messaging";
+import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -266,6 +266,9 @@ export default function DirectMessagePage() {
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  // Backward cursor for ICP scroll-back paging (null = nothing older remains).
+  const icpOlderCursorRef = useRef<number | null>(null);
+
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const loadOlderMessagesRef = useRef<(() => void) | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -503,7 +506,64 @@ export default function DirectMessagePage() {
   });
 
   // Memoize query key to prevent ChatMessage memo breaks
+  // Canister rows → the app's DM shape. Shared by the first page load and by
+  // scroll-back paging so both render identically.
+  const mapLiveDmRows = async (ctx: any, rows: any[]): Promise<DirectMessage[]> => {
+    const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
+    const profilesMap = await fetchProfilesWithCache(authorIds);
+    // Reactions persist on the canister; restore them on every refetch.
+    // Tolerate older canisters that lack list_reactions.
+    const reactionsByMessage = new Map<string, any[]>();
+    try {
+      const liveReactions = await listLiveReactions(ctx, conversationId!);
+      for (const r of liveReactions) {
+        const uid = r.user.toText();
+        const list = reactionsByMessage.get(r.message_id) ?? [];
+        list.push({
+          id: `${r.message_id}:${uid}:${r.emoji}`,
+          user_id: uid,
+          reaction_type: r.emoji,
+        });
+        reactionsByMessage.set(r.message_id, list);
+      }
+    } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+    // Replies persist on the canister as reply_to_id; resolve the quoted
+    // snippet from messages in the same page (targets outside the loaded page
+    // render without a quote, same as a deleted target).
+    const rawById = new Map<string, any>(rows.map((m: any) => [m.id, m]));
+    return rows
+      .slice()
+      .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+      .map((m: any) => {
+        const profile = profilesMap.get(m.sender.toText());
+        const attachment = m.attachment?.[0];
+        const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+        const replyTarget = replyToId ? rawById.get(replyToId) : null;
+        const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
+        return {
+          id: m.id,
+          text: m.body,
+          image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+          created_at: new Date(Number(m.created_at_ms)).toISOString(),
+          edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+          author_id: m.sender.toText(),
+          conversation_id: conversationId,
+          reply_to_id: replyToId,
+          deleted_at: null,
+          forwarded_from_user_id: null,
+          forwarded_at: null,
+          forwarded_source_label: null,
+          author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+          reply_to: replyTarget
+            ? { id: replyTarget.id, text: replyTarget.body, author_id: replyTarget.sender.toText(), author: replyProfile ? { display_name: replyProfile.display_name } : null }
+            : null,
+          reactions: reactionsByMessage.get(m.id) ?? [],
+        };
+      }) as unknown as DirectMessage[];
+  };
+
   const dmQueryKey = useMemo(() => ["dm-messages", conversationId], [conversationId]);
+
 
   // Force a fresh fetch whenever we land on this conversation. Push notifications
   // and inbox taps can land here while react-query still has stale data from a
@@ -540,45 +600,21 @@ export default function DirectMessagePage() {
             // messages in the same page (targets outside the loaded page
             // render without a quote, same as a deleted target). Tolerate
             // older canisters lacking reply_to_id.
-            const page = await listLiveMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE + 1);
-            const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
-            const profilesMap = await fetchProfilesWithCache(authorIds);
-            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
-            const messages = page.messages
-              .slice()
-              .sort((a: any, b: any) => Number(b.sequence - a.sequence))
-              .slice(0, MESSAGES_PER_PAGE)
-              .map((m: any) => {
-                const profile = profilesMap.get(m.sender.toText());
-                const attachment = m.attachment?.[0];
-                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
-                const replyTarget = replyToId ? rawById.get(replyToId) : null;
-                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
-                return {
-                  id: m.id,
-                  text: m.body,
-                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
-                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
-                  edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
-                  author_id: m.sender.toText(),
-                  conversation_id: conversationId,
-                  reply_to_id: replyToId,
-                  deleted_at: null,
-                  forwarded_from_user_id: null,
-                  forwarded_at: null,
-                  forwarded_source_label: null,
-                  author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-                  reply_to: replyTarget
-                    ? { id: replyTarget.id, text: replyTarget.body, author_id: replyTarget.sender.toText(), author: replyProfile ? { display_name: replyProfile.display_name } : null }
-                    : null,
-                  reactions: [],
-                };
-              }) as unknown as DirectMessage[];
+            // Newest-first page: the canister returns the newest MESSAGES_PER_PAGE
+            // rows plus a backward cursor when older history remains.
+            const page = await listLiveLatestMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE);
+            const messages = await mapLiveDmRows(ctx, page.messages);
+            const olderCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            icpOlderCursorRef.current = olderCursor;
             cacheDirectMessages(conversationId, messages);
             return {
               messages,
-              hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+              hasOlderMessages: olderCursor !== null,
             };
+
           },
         });
       }
@@ -889,7 +925,50 @@ export default function DirectMessagePage() {
   const loadOlderMessages = useCallback(async () => {
     const currentMessages = localMessagesRef.current;
     if (!currentMessages?.length || isLoadingOlder || !hasOlderMessages || !conversationId) return;
-    if (useIcpLab) { setHasOlderMessages(false); return; } // paging beyond the first page is Supabase-only for now
+    // Live ICP: walk the canister's backward cursor. Each page returns the
+    // newest rows older than the cursor plus the next cursor (null = start of
+    // the chat).
+    if (useIcpLab) {
+      const cursor = icpOlderCursorRef.current;
+      if (cursor == null) { setHasOlderMessages(false); return; }
+      setIsLoadingOlder(true);
+      try {
+        const result = await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            const page = await listLiveLatestMessagesPage(ctx, conversationId, cursor, MESSAGES_PER_PAGE);
+            const older = await mapLiveDmRows(ctx, page.messages);
+            const nextCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            return { older, nextCursor };
+          },
+        });
+        icpOlderCursorRef.current = result.nextCursor;
+        setHasOlderMessages(result.nextCursor !== null);
+        queryClient.setQueryData(
+          dmQueryKey,
+          (old: { messages: DirectMessage[]; hasOlderMessages: boolean } | undefined) => {
+            const existing = old?.messages || [];
+            const byId = new Map<string, DirectMessage>();
+            result.older.forEach((m) => byId.set(m.id, m));
+            existing.forEach((m) => byId.set(m.id, m)); // current state wins on boundary duplicates
+            const merged = [...byId.values()].sort(
+              (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+            );
+            cacheDirectMessages(conversationId, merged);
+            return { ...(old || {}), messages: merged, hasOlderMessages: result.nextCursor !== null };
+          },
+        );
+      } catch (err) {
+        console.error("[DM] Failed to load older messages:", err);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+      return;
+    }
+
 
     setIsLoadingOlder(true);
     const controller = new AbortController();
