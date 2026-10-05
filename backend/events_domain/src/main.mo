@@ -2,6 +2,7 @@ import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
+import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -9,6 +10,7 @@ import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Blob "mo:core/Blob";
 import Error "mo:core/Error";
+import Timer "mo:core/Timer";
 import Call "mo:ic/Call";
 import IC "mo:ic/Types";
 import Types "types";
@@ -59,6 +61,8 @@ persistent actor class Main(governorInit : Principal) {
   // Fail-closed while unset: delete_club_data/delete_team_data reject every
   // caller until the deploy script wires this.
   var clubDomainCanister : ?Principal;
+  // Scheduled RSVP reminders (hours before start); swept by _reminderTimer.
+  var autoReminders : [{ event_id : Text; hours_before : Nat16; sent : Bool }];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -1796,7 +1800,14 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     switch (requireManage(caller, event_id)) {
       case (#Err(e)) return #Err(e);
-      case (#Ok(event)) {
+      case (#Ok(event)) { await fanOutReminder(event) };
+    };
+  };
+
+  func fanOutReminder(event : Types.Event) : async { #Ok : Nat16; #Err : Text } {
+    let event_id = event.id;
+    do {
+      do {
         switch (notificationQueueCanister) {
           case null { #Err("Notification queue not configured") };
           case (?nq) {
@@ -1823,6 +1834,87 @@ persistent actor class Main(governorInit : Principal) {
       };
     };
   };
+
+  // ---- Scheduled (auto) RSVP reminders ----
+  public shared ({ caller }) func set_event_auto_reminder(event_id : Text, hours_before : ?Nat16) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_)) {};
+    };
+    let existing = autoReminders.find(func(r) = r.event_id == event_id);
+    let rest = autoReminders.filter(func(r) = r.event_id != event_id);
+    switch (hours_before) {
+      case null { autoReminders := rest };
+      case (?h) {
+        if (h == 0 or h > 720) return #Err("Invalid reminder time");
+        let sent = switch (existing) { case (?e) e.sent and e.hours_before == h; case null false };
+        autoReminders := rest.concat([{ event_id; hours_before = h; sent }]);
+      };
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func get_event_auto_reminder(event_id : Text) : async ?{ hours_before : Nat16; sent : Bool } {
+    switch (events.find(func(e) = e.id == event_id)) {
+      case null null;
+      case (?event) {
+        if (not canView(caller, event)) return null;
+        switch (autoReminders.find(func(r) = r.event_id == event_id)) {
+          case null null;
+          case (?r) ?{ hours_before = r.hours_before; sent = r.sent };
+        }
+      };
+    }
+  };
+
+  // Cancels (or reinstates) every non-deleted occurrence in a series that
+  // starts at or after from_ms, in one atomic canister call.
+  public shared ({ caller }) func set_series_cancelled(series_id : Text, cancelled : Bool, from_ms : Nat64) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    switch (requireManageSeries(caller, series_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_)) {};
+    };
+    var count : Nat32 = 0;
+    let now = nowMs();
+    events := events.map(func(e) {
+      if (e.series_id == ?series_id and not e.deleted and e.starts_at_ms >= from_ms and e.cancelled != cancelled) {
+        count += 1;
+        let u : Types.Event = { e with cancelled; revision = e.revision + 1; updated_at_ms = now };
+        u
+      } else e
+    });
+    #Ok(count)
+  };
+
+  func sweepAutoReminders() : async () {
+    let now = nowMs();
+    for (r in autoReminders.values()) {
+      if (not r.sent) {
+        switch (events.find(func(e) = e.id == r.event_id)) {
+          case null {};
+          case (?event) {
+            let dueAt : Nat64 = if (event.starts_at_ms > Nat64.fromNat(Nat16.toNat(r.hours_before)) * 3_600_000) event.starts_at_ms - Nat64.fromNat(Nat16.toNat(r.hours_before)) * 3_600_000 else 0;
+            if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
+              markReminderSent(r.event_id);
+            } else if (now >= dueAt) {
+              switch (await fanOutReminder(event)) {
+                case (#Ok(_)) markReminderSent(r.event_id);
+                case (#Err(_)) {};
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+
+  func markReminderSent(event_id : Text) {
+    autoReminders := autoReminders.map(func(r) { if (r.event_id == event_id) { { r with sent = true } } else r });
+  };
+
+  transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders() });
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");

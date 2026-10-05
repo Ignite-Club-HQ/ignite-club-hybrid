@@ -483,6 +483,10 @@ export interface Main {
     { 'Ok' : [] | [CoachNote] } |
       { 'Err' : string }
   >,
+  'get_event_auto_reminder' : ActorMethod<
+    [string],
+    [] | [{ 'hours_before' : number, 'sent' : boolean }]
+  >,
   'get_event_child' : ActorMethod<
     [string, string],
     { 'Ok' : Child } |
@@ -802,6 +806,11 @@ export interface Main {
     { 'Ok' : Duty } |
       { 'Err' : string }
   >,
+  'set_event_auto_reminder' : ActorMethod<
+    [string, [] | [number]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_event_cancelled' : ActorMethod<
     [string, boolean],
     { 'Ok' : Event } |
@@ -862,6 +871,11 @@ export interface Main {
   'set_rsvp_note' : ActorMethod<
     [string, string, string],
     { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
+  'set_series_cancelled' : ActorMethod<
+    [string, boolean, bigint],
+    { 'Ok' : number } |
       { 'Err' : string }
   >,
   'soft_delete_series' : ActorMethod<

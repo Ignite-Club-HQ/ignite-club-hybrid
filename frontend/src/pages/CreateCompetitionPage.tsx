@@ -177,7 +177,7 @@ function SupabaseCreateCompetitionPage() {
         icp: async (ctx) => {
           const ids = [...new Set((await getLiveMyRoleGrants(ctx)).filter((g) => ["club_admin", "association_admin", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
           const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
-          return profiles.flatMap((rows) => rows.filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
+          return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
         },
       });
       const { data } = await supabase

@@ -120,6 +120,11 @@ export async function updateEventTransaction(
         startsAtMs,
         endsAtMs,
       });
+      if ("reminder_hours_before" in updates) {
+        const { setLiveEventAutoReminder } = await import("@/live/features/events");
+        const hours = updates.reminder_hours_before as number | null | undefined;
+        await setLiveEventAutoReminder(ctx, input.eventId, hours ?? null);
+      }
     },
   });
 }

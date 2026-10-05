@@ -616,6 +616,15 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(CoachNote), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_event_auto_reminder' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Opt(
+            IDL.Record({ 'hours_before' : IDL.Nat16, 'sent' : IDL.Bool })
+          ),
+        ],
+        ['query'],
+      ),
     'get_event_child' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
@@ -987,6 +996,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Duty, 'Err' : IDL.Text })],
         [],
       ),
+    'set_event_auto_reminder' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat16)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_event_cancelled' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : Event, 'Err' : IDL.Text })],
@@ -1047,6 +1061,11 @@ export const idlFactory = ({ IDL }) => {
     'set_rsvp_note' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_series_cancelled' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
     'soft_delete_series' : IDL.Func(

@@ -319,6 +319,11 @@ type Main =
        Err: text;
        Ok: opt CoachNote;
      }) query;
+   get_event_auto_reminder: (event_id: text) ->
+    (opt record {
+           hours_before: nat16;
+           sent: bool;
+         }) query;
    get_event_child: (event_id: text, child_id: text) ->
     (variant {
        Err: text;
@@ -607,6 +612,11 @@ type Main =
        Err: text;
        Ok: Duty;
      });
+   set_event_auto_reminder: (event_id: text, hours_before: opt nat16) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_event_cancelled: (id: text, cancelled: bool) ->
     (variant {
        Err: text;
@@ -662,6 +672,11 @@ type Main =
        Err: text;
        Ok: Rsvp;
      });
+   set_series_cancelled: (series_id: text, cancelled: bool, from_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: nat32;
+               });
    soft_delete_series: (id: text) -> (variant {
                                         Err: text;
                                         Ok: EventSeries;

@@ -646,25 +646,18 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
         return withFeatureBackend("events", {
           supabase: () => 0,
           icp: async (ctx) => {
-            // Cancel the single occurrence via the canister's dedicated
-            // cancellation method. NEEDS-CANISTER: there is no bulk
-            // "cancel series" method on events_domain yet, so a
-            // cancelType === "series" request only cancels the anchor
-            // event here (parent, or this event if it's the parent) —
-            // sibling occurrences are not individually cancelled until
-            // that method exists.
-            const targetId =
-              cancelType === "series" && event.parent_event_id
-                ? event.parent_event_id
-                : event.id;
-            await setLiveEventCancelled(ctx, targetId, true);
-            // NEEDS-CANISTER: posting the cancellation announcement to
-            // chat (club_messages/team_messages/group_messages) has no
-            // verified messaging_domain conversation-id mapping for
-            // event-scoped club/team/mini-league chats, so it is skipped
-            // under ICP routing rather than writing to Supabase chat
-            // tables ICP users' clients never read.
-            return 0;
+            const { cancelEventOnIcp } = await import("@/features/events/icpEventCancellation");
+            const result = await cancelEventOnIcp(ctx, {
+              event,
+              cancelType: cancelType === "series" && (event.is_recurring || event.parent_event_id) ? "series" : "single",
+              customMessage,
+              sendPushNotification,
+              eventUrl: `${window.location.origin}/events/${event.id}`,
+            });
+            if (!result.chatPosted) {
+              toast({ title: "Event cancelled", description: "The chat message could not be posted." });
+            }
+            return result.notifiedCount;
           },
         });
       }

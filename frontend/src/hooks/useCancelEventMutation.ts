@@ -4,7 +4,7 @@ import { eventKeys } from "@/lab/eventQueryKeys";
 import { refreshEventCaches } from "@/lib/eventCacheRefresh";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventCancelled } from "@/live/features/events";
+import { cancelEventOnIcp } from "@/features/events/icpEventCancellation";
 
 // Thrown when a recurring-series cancellation committed only one of its two
 // writes. Records explicitly which mutation committed — never inferred from
@@ -51,15 +51,18 @@ export function useCancelEventMutation(params: UseCancelEventMutationArgs) {
       // expanded occurrences of the series), so the root id covers the whole
       // series — provisional, verify post-deploy. Chat posting and push
       // notifications below stay Supabase-only for now.
-      const icpHandled = await withFeatureBackend("events", {
-        supabase: () => false,
-        icp: async (ctx) => {
-          const rootId = isSeries ? (event?.parent_event_id || id!) : id!;
-          await setLiveEventCancelled(ctx, rootId, true);
-          return true;
-        },
+      const icpResult = await withFeatureBackend("events", {
+        supabase: () => null,
+        icp: (ctx) =>
+          cancelEventOnIcp(ctx, {
+            event: { ...event, id: id! },
+            cancelType: isSeries ? "series" : "single",
+            customMessage,
+            sendPushNotification,
+            eventUrl: `${window.location.origin}/events/${id}`,
+          }),
       });
-      if (icpHandled) return 0;
+      if (icpResult) return icpResult;
 
       if (isSeries) {
         // Either arrangement: current event is a child (use its parent id) or
@@ -207,12 +210,20 @@ export function useCancelEventMutation(params: UseCancelEventMutationArgs) {
 
       return uniqueMembers.length;
     },
-    onSuccess: () => {
+    onSuccess: (result: unknown) => {
       console.log("[CancelEvent] Success - event cancelled");
       setCancelDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: eventKeys.detail(id) });
       refreshEventCaches(queryClient, user?.id);
-      toast({ title: "Event cancelled", description: "A message has been posted to the chat" });
+      const chatPosted =
+        result && typeof result === "object" && "chatPosted" in result
+          ? (result as { chatPosted: boolean }).chatPosted
+          : true;
+      toast(
+        chatPosted
+          ? { title: "Event cancelled", description: "A message has been posted to the chat" }
+          : { title: "Event cancelled", description: "The chat message could not be posted." },
+      );
     },
     onError: (error) => {
       console.error("[CancelEvent] Mutation error:", error);

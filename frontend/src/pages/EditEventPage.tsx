@@ -614,7 +614,7 @@ function SupabaseEditEventPage() {
             const grants = await getLiveMyRoleGrants(ctx);
             const ids = [...new Set(grants.filter((g) => ["club_admin", "team_admin", "coach", "committee_member", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
             const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
-            return profiles.flatMap((rows) => rows.filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
+            return profiles.flatMap((rows) => (rows as Array<{ id: string; name: string; deleted_at_ms: [] | [bigint] }>).filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
           },
         });
       }
