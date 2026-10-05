@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
