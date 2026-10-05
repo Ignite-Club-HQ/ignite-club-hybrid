@@ -520,6 +520,11 @@ export default function TeamChatPage() {
                 reactionsByMessage.set(r.message_id, list);
               }
             } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+            // Replies persist on the canister as reply_to_id; resolve the
+            // quoted snippet from messages in the same page (reply targets
+            // outside the loaded page render without a quote, same as a
+            // deleted target). Tolerate older canisters lacking reply_to_id.
+            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
             const messages = page.messages
               .slice()
               .sort((a: any, b: any) => Number(b.sequence - a.sequence))
@@ -527,6 +532,9 @@ export default function TeamChatPage() {
               .map((m: any) => {
                 const profile = profilesMap.get(m.sender.toText());
                 const attachment = m.attachment?.[0];
+                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                const replyTarget = replyToId ? rawById.get(replyToId) : null;
+                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
                 return {
                   id: m.id,
                   text: m.body,
@@ -535,7 +543,7 @@ export default function TeamChatPage() {
                   edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
                   author_id: m.sender.toText(),
                   team_id: teamId,
-                  reply_to_id: null,
+                  reply_to_id: replyToId,
                   deleted_at: null,
                   is_club_announcement: false,
                   club_announcement_name: null,
@@ -545,7 +553,9 @@ export default function TeamChatPage() {
                   forwarded_source_label: null,
                   profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
                   reactions: reactionsByMessage.get(m.id) ?? [],
-                  reply_to: null,
+                  reply_to: replyTarget
+                    ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
+                    : null,
                 };
               }) as unknown as Message[];
             return {
