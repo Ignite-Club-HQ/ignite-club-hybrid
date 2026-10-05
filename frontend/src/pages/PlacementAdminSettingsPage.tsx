@@ -32,7 +32,8 @@ import {
   resolveFeatureBackend,
 } from "@/live/featureBackend";
 import { fetchStoredBackendRoutingConfig, getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
-import { setLiveAppSetting } from "@/live/features/appSettings";
+import { getLiveAppSetting, setLiveAppSetting } from "@/live/features/appSettings";
+import { GIPHY_API_KEY_CONFIG_KEY, decodeStoredConfigText } from "@/live/appConfig";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveClubs } from "@/live/features/club";
 import { diffClubBackendChanges, syncClubBackendChanges } from "@/live/websiteBackendSync";
@@ -278,6 +279,87 @@ export default function PlacementAdminSettingsPage() {
     queryFn: () => fetchStoredBackendRoutingConfig(),
     enabled: !!user && isAppAdmin,
   });
+
+  // GIPHY API key for the chat GIF picker — stored in club_domain's app
+  // config (ICP mode) or the app_settings table (Supabase mode). Read both
+  // mirrors so the field shows the value whichever backend saved it.
+  const [giphyKey, setGiphyKey] = useState("");
+  const [giphyTouched, setGiphyTouched] = useState(false);
+  const { data: savedGiphyKey } = useQuery({
+    queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY],
+    queryFn: async () => {
+      let value: string | null = null;
+      try {
+        const { data, error } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", GIPHY_API_KEY_CONFIG_KEY)
+          .maybeSingle();
+        if (!error && data) value = String((data as { value?: unknown }).value ?? "");
+      } catch {
+        // no Supabase session in ICP mode
+      }
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            const fromCanister = await getLiveAppSetting(ctx, GIPHY_API_KEY_CONFIG_KEY);
+            if (fromCanister) value = fromCanister;
+          },
+        });
+      } catch {
+        // canister read is best-effort
+      }
+      return decodeStoredConfigText(value);
+    },
+    enabled: !!user && isAppAdmin,
+  });
+
+  useEffect(() => {
+    if (!giphyTouched && savedGiphyKey !== undefined) {
+      setGiphyKey(savedGiphyKey ?? "");
+    }
+  }, [savedGiphyKey, giphyTouched]);
+
+  const giphyKeyMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const trimmed = key.trim();
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: existing, error: readError } = await supabase
+            .from("app_settings")
+            .select("id")
+            .eq("key", GIPHY_API_KEY_CONFIG_KEY)
+            .maybeSingle();
+          if (readError) throw readError;
+          if (existing) {
+            const { error } = await supabase
+              .from("app_settings")
+              .update({ value: trimmed })
+              .eq("key", GIPHY_API_KEY_CONFIG_KEY);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase
+              .from("app_settings")
+              .insert({ key: GIPHY_API_KEY_CONFIG_KEY, value: trimmed, description: "GIPHY API key for the chat GIF picker" } as never);
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          await setLiveAppSetting(ctx, GIPHY_API_KEY_CONFIG_KEY, trimmed);
+        },
+      });
+    },
+    onSuccess: () => {
+      setGiphyTouched(false);
+      queryClient.invalidateQueries({ queryKey: ["app-setting", GIPHY_API_KEY_CONFIG_KEY] });
+      toast({ title: "GIPHY key saved", description: "The GIF picker picks it up the next time the app is reopened." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to save GIPHY key", description: error.message, variant: "destructive" });
+    },
+  });
+
 
   useEffect(() => {
     if (routingTouched || savedRouting === undefined) return;
