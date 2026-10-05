@@ -55,3 +55,20 @@ PIVOT: the planned Supabase edge function worker was rejected by the platform (n
 - [x] Deploy wiring: deploy-mainnet.sh grants the seed-derived worker principal (grant_worker) when ICP_PUSH_WORKER_SEED is set; deploy-icp-mainnet.yml passes the secret; scripts/grant-push-worker.sh for local granting; AGENTS.md rule recorded
 - [ ] BLOCKED ON USER: GitHub repo secrets ICP_PUSH_WORKER_SEED (64 hex chars) + FCM_SERVICE_ACCOUNT_JSON (Firebase service account) — worker no-ops until both exist
 - [ ] BLOCKED ON USER: re-run deploy-icp-mainnet (ships the device-token store + grant_worker), then push works end to end
+
+## Invite flows audit in ICP mode (club, team, competition, mini-league; email + share links) — IN PROGRESS
+- [ ] Map every invite flow: creation, email send, share link, landing/claim, acceptance, membership write
+- [ ] Fix email invite sending in ICP mode (or document blocker)
+- [ ] Fix share-link landing/claim in ICP mode
+- [ ] Verify competition + mini-league invite paths
+
+## Invite flows audit — findings (2026)
+- [ ] Club/team/guardian pending invites (/join/p/<pinv-id>) unresolvable in ICP: JoinTeamPage treats all /join/p/ tokens as mini-league join links; joinMutation throws for non-mini-league pending invites. Needs canister get_pending_invite(id) preview query + accept_pending_invite wiring.
+- [ ] Shareable team invite links (TeamJoinLinkCard /join/<token>) unredeemable in ICP: resolved against wrong store (get_team_invite vs team_invite_links) and canister has no accept_team_invite_link method.
+- [ ] Email sending broken in BOTH modes: send-email edge function not deployed on live Supabase project (404). Callers degrade with toasts. Needs architecture decision (Resend edge function vs GitHub Actions worker using canister InvitePayload).
+- [ ] Security: canister invite tokens predictable (pinv-<club>-<n>-<ms>, mljl-<league>-<n>, tok-<n>-<ns>) — enumerable role grants incl. admin roles. Needs Random.blob-based tokens + token field on PendingInvite.
+- [ ] MiniLeagueDetailPage pending-invites list reads Supabase pending_invites unguarded (empty in ICP).
+- [ ] Short links /i/:code unavailable in ICP (Supabase short_code only) — full links work.
+- [x] Competition join links: full ICP cycle works (create/share/preview/join).
+- [x] Mini-league join links (admin/parent): work end-to-end via JoinTeamPage + claimLiveAdminJoinLink/joinLiveMiniLeagueByToken.
+- [x] Shell team claims (ClaimTeamPage, competition shell claim links): work.
