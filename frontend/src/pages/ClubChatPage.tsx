@@ -363,6 +363,22 @@ export default function ClubChatPage() {
     queryFn: async () => {
       if (useIcpLab && clubId) return fixtureData.getLocalLabChatClub(clubId);
 
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const profile = await getLiveClubProfile(ctx, clubId!);
+            if (!profile) return null;
+            return {
+              id: profile.id,
+              name: profile.name,
+              logo_url: profile.logo_url.length ? profile.logo_url[0] : null,
+              is_pro: false,
+            };
+          },
+        });
+      }
+
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name, logo_url, is_pro")
@@ -371,7 +387,7 @@ export default function ClubChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId && resolveAuthBackend() !== "icp",
+    enabled: !!clubId,
     staleTime: 5 * 60 * 1000,
   });
 
