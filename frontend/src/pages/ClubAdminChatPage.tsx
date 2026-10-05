@@ -192,6 +192,12 @@ function SupabaseClubAdminChatPage() {
   const [replyTo, setReplyTo] = useChatDraftReply<ClubAdminMessage>(conversationId);
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // ICP scroll-back: newest-first paging cursor (null = oldest message known)
+  // plus the scroller flags it drives. Supabase mode keeps its prior
+  // single-window behaviour (hasOlderMessages stays false).
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const icpOlderCursorRef = useRef<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
   const [pendingPollId, setPendingPollId] = useState<string | null>(null);
@@ -389,6 +395,10 @@ function SupabaseClubAdminChatPage() {
           icp: async (ctx) => {
             await ensureLiveClubAdminThread(ctx, parsed.clubId, parsed.member);
             const page = await listLiveLatestMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE);
+            icpOlderCursorRef.current =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
             const reactions = await listLiveReactions(ctx, conversationId).catch(() => []);
             const byMessage = new Map<string, ClubAdminMessage["reactions"]>();
             for (const r of reactions) {
@@ -412,7 +422,7 @@ function SupabaseClubAdminChatPage() {
               created_at: new Date(Number(m.createdAtMs)).toISOString(),
               reactions: byMessage.get(m.id) ?? [],
             })) as unknown as ClubAdminMessage[];
-            return { messages, hasOlderMessages: false };
+            return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
         });
       }
@@ -537,6 +547,14 @@ function SupabaseClubAdminChatPage() {
     if (!conversationId || !user?.id) return;
     queryClient.invalidateQueries({ queryKey: ["club-admin-messages", conversationId] });
   }, [conversationId, user?.id, queryClient]);
+
+  // ICP: mirror the first page's "older exists" flag into scroller state.
+  useEffect(() => {
+    if (resolveAuthBackend() !== "icp") return;
+    if (messagesData && !Array.isArray(messagesData)) {
+      setHasOlderMessages((messagesData as any).hasOlderMessages ?? false);
+    }
+  }, [messagesData]);
 
   // Bounded automatic recovery. If the thread fetch returns zero messages (or
   // errors) while auth/RLS/connectivity is still settling after an Android
@@ -871,7 +889,7 @@ function SupabaseClubAdminChatPage() {
         },
         icp: async (ctx) => {
           // Provisional mapping: conversation id doubles as the ICP
-          // conversation id. Reply threading is Supabase-only.
+          // conversation id. Replies persist via the canister's reply_to_id.
           const attachment = imageUrl
             ? { kind: "image", refId: imageUrl, url: imageUrl }
             : (() => {
@@ -881,7 +899,7 @@ function SupabaseClubAdminChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment);
+          inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment, replyToId ?? null);
           try {
             await recordLiveMessageSent(ctx, conversationId!, user!.id);
           } catch {
@@ -1012,6 +1030,71 @@ function SupabaseClubAdminChatPage() {
     () => filterChatMessagesForSearch(localMessages, searchQuery),
     [localMessages, searchQuery],
   );
+
+  // ICP scroll-back: walk the canister's backward cursor. Each page returns
+  // the newest rows older than the cursor plus the next cursor (null = start
+  // of the thread). Supabase mode keeps its existing single-window behaviour.
+  const loadOlderMessages = useCallback(async () => {
+    if (resolveAuthBackend() !== "icp") return;
+    if (!conversationId || isLoadingOlder || !hasOlderMessages) return;
+    if (!localMessagesRef.current?.length) return;
+    const cursor = icpOlderCursorRef.current;
+    if (cursor == null) {
+      setHasOlderMessages(false);
+      return;
+    }
+    setIsLoadingOlder(true);
+    try {
+      const result = await withFeatureBackend("messaging", {
+        supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+        icp: async (ctx) => {
+          const page = await listLiveLatestMessagesPage(ctx, conversationId, cursor, MESSAGES_PER_PAGE);
+          const nextCursor =
+            Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+              ? Number(page.next_sequence[0])
+              : null;
+          const reactions = await listLiveReactions(ctx, conversationId).catch(() => []);
+          const byMessage = new Map<string, ClubAdminMessage["reactions"]>();
+          for (const r of reactions) {
+            const list = byMessage.get(r.message_id) ?? [];
+            list.push({
+              id: `${r.message_id}:${r.user.toText()}:${r.emoji}`,
+              user_id: r.user.toText(),
+              reaction_type: r.emoji,
+            } as unknown as NonNullable<ClubAdminMessage["reactions"]>[number]);
+            byMessage.set(r.message_id, list);
+          }
+          const textById = new Map(page.messages.map((m) => [m.id, m.text]));
+          const older = page.messages.map((m) => ({
+            id: m.id,
+            conversation_id: conversationId,
+            author_id: m.authorId,
+            text: m.text,
+            image_url: m.imageUrl ?? null,
+            reply_to_id: m.replyToId ?? null,
+            reply_to: m.replyToId ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" } : null,
+            created_at: new Date(Number(m.createdAtMs)).toISOString(),
+            reactions: byMessage.get(m.id) ?? [],
+          })) as unknown as ClubAdminMessage[];
+          return { older, nextCursor };
+        },
+      });
+      icpOlderCursorRef.current = result.nextCursor;
+      setHasOlderMessages(result.nextCursor !== null);
+      // Merge by id (existing state wins on boundary duplicates) and keep
+      // chronological order — Virtuoso anchors the prepend itself.
+      setLocalMessages((prev) => {
+        const byId = new Map<string, ClubAdminMessage>();
+        result.older.forEach((m) => byId.set(m.id, m));
+        (prev || []).forEach((m) => byId.set(m.id, m));
+        return sortChatMessagesChronologically([...byId.values()]);
+      });
+    } catch (err) {
+      console.warn("[ClubAdminChat] ICP older messages failed", err);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }, [conversationId, hasOlderMessages, isLoadingOlder]);
 
   // Read receipts: mirror Club/Team chat wiring so admins can see which other
   // admins have opened a member's Contact Club message.
@@ -1365,9 +1448,9 @@ function SupabaseClubAdminChatPage() {
         ) : (
           <ChatMessagesScroller
             messages={filteredMessages || []}
-            hasOlderMessages={false}
-            isLoadingOlder={false}
-            onLoadOlder={() => {}}
+            hasOlderMessages={hasOlderMessages}
+            isLoadingOlder={isLoadingOlder}
+            onLoadOlder={loadOlderMessages}
             isPinned={isPinned}
             isKeyboardOpen={isKeyboardOpen}
             searchOpen={searchOpen}
