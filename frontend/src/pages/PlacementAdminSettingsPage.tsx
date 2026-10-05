@@ -834,6 +834,40 @@ export default function PlacementAdminSettingsPage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="text-base">Integrations</CardTitle>
+            <CardDescription>
+              Third-party services the app uses. The GIF picker searches GIPHY directly from the
+              browser — GIPHY keys are client-side keys by design, so they are safe to store in
+              canister state.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label htmlFor="giphy-api-key">GIPHY API key</Label>
+            <div className="flex gap-2">
+              <Input
+                id="giphy-api-key"
+                value={giphyKey}
+                onChange={(e) => { setGiphyTouched(true); setGiphyKey(e.target.value); }}
+                placeholder="Paste your GIPHY API key"
+                autoComplete="off"
+              />
+              <Button
+                onClick={() => giphyKeyMutation.mutate(giphyKey)}
+                disabled={giphyKeyMutation.isPending}
+              >
+                {giphyKeyMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Saved in the app's backend configuration (the Internet Computer canister in ICP mode,
+              the app settings table otherwise). Get a free key at developers.giphy.com.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Globe className="h-4 w-4" />
               Backend routing
