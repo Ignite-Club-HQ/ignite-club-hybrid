@@ -564,69 +564,21 @@ export default function TeamChatPage() {
             if (team?.club_id) {
               try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
             }
-            const page = await listLiveMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE + 1);
-            const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
-            const profilesMap = await fetchProfilesWithCache(authorIds);
-            // Reactions persist on the canister; restore them on every
-            // refetch. Tolerate older canisters that lack list_reactions.
-            const reactionsByMessage = new Map<string, any[]>();
-            try {
-              const liveReactions = await listLiveReactions(ctx, teamId!);
-              for (const r of liveReactions) {
-                const uid = r.user.toText();
-                const list = reactionsByMessage.get(r.message_id) ?? [];
-                list.push({
-                  id: `${r.message_id}:${uid}:${r.emoji}`,
-                  user_id: uid,
-                  reaction_type: r.emoji,
-                  team_message_id: r.message_id,
-                });
-                reactionsByMessage.set(r.message_id, list);
-              }
-            } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
-            // Replies persist on the canister as reply_to_id; resolve the
-            // quoted snippet from messages in the same page (reply targets
-            // outside the loaded page render without a quote, same as a
-            // deleted target). Tolerate older canisters lacking reply_to_id.
-            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
-            const messages = page.messages
-              .slice()
-              .sort((a: any, b: any) => Number(b.sequence - a.sequence))
-              .slice(0, MESSAGES_PER_PAGE)
-              .map((m: any) => {
-                const profile = profilesMap.get(m.sender.toText());
-                const attachment = m.attachment?.[0];
-                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
-                const replyTarget = replyToId ? rawById.get(replyToId) : null;
-                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
-                return {
-                  id: m.id,
-                  text: m.body,
-                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
-                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
-                  edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
-                  author_id: m.sender.toText(),
-                  team_id: teamId,
-                  reply_to_id: replyToId,
-                  deleted_at: null,
-                  is_club_announcement: false,
-                  club_announcement_name: null,
-                  is_system_message: false,
-                  forwarded_from_user_id: null,
-                  forwarded_at: null,
-                  forwarded_source_label: null,
-                  profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-                  reactions: reactionsByMessage.get(m.id) ?? [],
-                  reply_to: replyTarget
-                    ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
-                    : null,
-                };
-              }) as unknown as Message[];
+            // Newest-first page: the canister returns the newest MESSAGES_PER_PAGE
+            // rows plus a backward cursor when older history remains.
+            const page = await listLiveLatestMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE);
+            const messages = await mapLiveTeamRows(ctx, page.messages);
+            const olderCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            icpOlderCursorRef.current = olderCursor;
             return {
               messages,
-              hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+              hasOlderMessages: olderCursor !== null,
               fromCache: false,
             };
+
           },
         });
       }
