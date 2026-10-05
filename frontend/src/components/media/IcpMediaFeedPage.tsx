@@ -177,20 +177,6 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     }),
   );
 
-  // Uploader + commenter display names (account ids match principal text until
-  // principals are bound post-deploy).
-  const ownerIds = [...new Set(rawAssets.map((a) => a.owner.toText()))];
-  const profileNameById = new Map<string, string>();
-  try {
-    const profiles = (await listLiveProfilesByIds(ctx, ownerIds)) as unknown as {
-      account_id: string;
-      display_name: string;
-    }[];
-    for (const p of profiles) profileNameById.set(p.account_id, p.display_name);
-  } catch {
-    // Names fall back to "Member".
-  }
-
   const teamNameById = new Map(options.teams.map((t) => [t.id, t.name]));
   const mlNameById = new Map(options.miniLeagues.map((m) => [m.id, m.name]));
   const compNameById = new Map(options.competitions.map((c) => [c.id, c.name]));
@@ -221,7 +207,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       }[]).map((r) => ({
         user_id: r.user.toText(),
         reaction_type: r.kind,
-        profiles: { display_name: profileNameById.get(r.user.toText()) ?? null, avatar_url: null },
+        profiles: { display_name: null as string | null, avatar_url: null },
       }));
       const comments = (commentsRaw as unknown as {
         id: string;
@@ -236,7 +222,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
           text: c.body,
           user_id: c.author.toText(),
           created_at: new Date(Number(c.created_at_ms)).toISOString(),
-          profiles: { display_name: profileNameById.get(c.author.toText()) ?? null, avatar_url: null },
+          profiles: { display_name: null as string | null, avatar_url: null },
         }));
       const teamId = first.team_id[0] ?? null;
       const miniLeagueId = first.mini_league_id[0] ?? null;
@@ -246,7 +232,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         assets: sorted.map((a) => assetViews.get(a.id)!),
         representativeAssetId: first.id,
         ownerId,
-        ownerName: profileNameById.get(ownerId) ?? "Member",
+        ownerName: "Member",
         clubId: first.club_id,
         clubName: clubNameById.get(first.club_id) ?? "Club",
         teamId,
@@ -262,6 +248,30 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       } satisfies LiveMediaPost;
     }),
   );
+
+  // Display names for uploaders, reactors and commenters, looked up in one
+  // batch once every id is known.
+  const nameIds = new Set<string>();
+  for (const post of posts) {
+    nameIds.add(post.ownerId);
+    post.reactions.forEach((r) => nameIds.add(r.user_id));
+    post.comments.forEach((c) => nameIds.add(c.user_id));
+  }
+  const profileNameById = new Map<string, string>();
+  try {
+    const profiles = (await listLiveProfilesByIds(ctx, [...nameIds])) as unknown as {
+      account_id: string;
+      display_name: string;
+    }[];
+    for (const p of profiles) if (p.display_name) profileNameById.set(p.account_id, p.display_name);
+  } catch {
+    // Names fall back to "Member".
+  }
+  for (const post of posts) {
+    post.ownerName = profileNameById.get(post.ownerId) ?? "Member";
+    for (const r of post.reactions) r.profiles.display_name = profileNameById.get(r.user_id) ?? null;
+    for (const c of post.comments) c.profiles.display_name = profileNameById.get(c.user_id) ?? null;
+  }
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
   options.clubs.sort((a, b) => a.name.localeCompare(b.name));
