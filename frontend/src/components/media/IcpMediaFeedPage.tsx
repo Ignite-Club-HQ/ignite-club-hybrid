@@ -2,20 +2,20 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Images, Loader2, MessageCircle, SlidersHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useIcpSession } from "@/live/useIcpSession";
-import { withMediaBackend } from "@/live/featureBackend";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
 import type { FeatureBackendContext } from "@/live/featureRouter";
 import {
   addLiveComment,
+  addLiveReaction,
   deleteLiveAsset,
   listLiveAssets,
   listLiveComments,
   listLiveReactions,
   liveAssetSource,
-  filterLiveDeletedAssets,
-  toggleLiveReaction,
+  removeLiveReaction,
 } from "@/live/features/media";
-import { resolveIcpBlobObjectUrl } from "@/live/features/mediaDecrypt";
+import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
 import { listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
@@ -147,7 +147,8 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       for (const comp of competitions as unknown as { id: string; name: string; club_id: string }[]) {
         options.competitions.push({ id: comp.id, name: comp.name, club_id: comp.club_id });
       }
-      for (const asset of filterLiveDeletedAssets(assets) as unknown as (typeof rawAssets)[number][]) {
+      for (const asset of assets as unknown as (typeof rawAssets)[number][]) {
+        if (asset.deleted) continue;
         if (asset.kind === "photo" || asset.kind === "video") rawAssets.push(asset);
       }
     }),
@@ -158,9 +159,9 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
   await Promise.all(
     rawAssets.map(async (asset) => {
       try {
-        const url = await resolveIcpBlobObjectUrl(liveAssetSource(asset as never), {
-          ownerAccountId: asset.owner.toText(),
-        });
+        const source = liveAssetSource(asset as never);
+        if (source.kind !== "icp-blob") return;
+        const url = await resolveIcpBlobObjectUrl(source.url);
         if (!url) return;
         const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
         // blob: URLs carry no extension, so isVideoUrl can't detect video —
@@ -267,9 +268,19 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
 // Page
 // ---------------------------------------------------------------------------
 
+/** Grid placeholder used by the Supabase media page's loading states. */
+export function PhotoSkeleton() {
+  return <div className="aspect-square w-full animate-pulse rounded-xl bg-muted" />;
+}
+
 export function IcpMediaFeedPage() {
-  const { identity } = useIcpSession();
-  const principal = identity?.getPrincipal().toText();
+  const principalQuery = useQuery({
+    queryKey: ["icp-principal"],
+    staleTime: Infinity,
+    queryFn: async () =>
+      (await getCurrentInternetIdentity())?.getPrincipal().toText() ?? null,
+  });
+  const principal = principalQuery.data ?? undefined;
   const queryClient = useQueryClient();
 
   const [filterOpen, setFilterOpen] = useState(false);
@@ -284,9 +295,9 @@ export function IcpMediaFeedPage() {
 
   const feedQuery = useQuery({
     queryKey: ["icp-media-feed", principal],
-    enabled: !!identity,
+    enabled: !!principal,
     queryFn: () =>
-      withMediaBackend({
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
@@ -298,12 +309,15 @@ export function IcpMediaFeedPage() {
     queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] });
 
   const reactionMutation = useMutation({
-    mutationFn: async ({ post, emoji }: { post: LiveMediaPost; emoji: string }) =>
-      withMediaBackend({
+    mutationFn: async ({ post, emoji, remove }: { post: LiveMediaPost; emoji: string; remove?: boolean }) =>
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) => toggleLiveReaction(ctx, post.representativeAssetId, emoji),
+        icp: (ctx) =>
+          remove
+            ? removeLiveReaction(ctx, post.representativeAssetId)
+            : addLiveReaction(ctx, post.representativeAssetId, emoji, Date.now()),
       }),
     onError: (err) => toast.error(err instanceof Error ? err.message : "Reaction failed"),
     onSettled: invalidate,
@@ -311,11 +325,11 @@ export function IcpMediaFeedPage() {
 
   const commentMutation = useMutation({
     mutationFn: async ({ post, text }: { post: LiveMediaPost; text: string }) =>
-      withMediaBackend({
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text),
+        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
       }),
     onSuccess: () => setCommentInput(""),
     onError: (err) => toast.error(err instanceof Error ? err.message : "Comment failed"),
@@ -324,7 +338,7 @@ export function IcpMediaFeedPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (post: LiveMediaPost) =>
-      withMediaBackend({
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
@@ -478,7 +492,7 @@ export function IcpMediaFeedPage() {
                     onReact={(type) => reactionMutation.mutate({ post, emoji: type })}
                     onRemove={() => {
                       const mine = post.reactions.find((r) => r.user_id === principal);
-                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type });
+                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type, remove: true });
                     }}
                   />
                   <button

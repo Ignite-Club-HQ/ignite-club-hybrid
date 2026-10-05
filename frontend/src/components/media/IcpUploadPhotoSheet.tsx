@@ -4,10 +4,11 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { compressImage } from "@/lib/imageUtils";
-import { withMediaBackend } from "@/live/featureBackend";
+import { compressImage } from "@/lib/imageCompression";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
-import { tryUploadMediaToBlobStore } from "@/live/features/mediaUpload";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { mimeToExtension } from "@/lib/binaryUtils";
 
 export interface IcpUploadClubOption {
   id: string;
@@ -110,26 +111,37 @@ export function IcpUploadPhotoSheet({
     const trimmedCaption = caption.trim() || null;
     let scopePending = false;
     try {
-      await withMediaBackend({
+      await withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
         icp: async (ctx) => {
+          const principal = ctx.identity.getPrincipal().toText();
           for (let i = 0; i < files.length; i++) {
             const raw = files[i];
             const isVideo = raw.type.startsWith("video/");
             const prepared = isVideo ? { file: raw } : await compressImage(raw);
-            const uploaded = await tryUploadMediaToBlobStore(ctx, prepared.file, clubId);
+            const mime = prepared.file.type || raw.type || "application/octet-stream";
+            // The clubs/<clubId>/ prefix is what grantLiveClubPiiRead matches
+            // to give club members decrypt access.
+            const storagePath = `clubs/${clubId}/${principal}/${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 10)}.${mimeToExtension(mime)}`;
+            const uploaded = await tryUploadMediaToBlobStore({
+              storagePath,
+              file: prepared.file,
+              mime,
+            });
             if (!uploaded) {
               throw new Error("Media upload canisters are not configured");
             }
             const asset = await registerLiveAsset(ctx, {
               clubId,
               kind: isVideo ? "video" : "photo",
-              mime: prepared.file.type || raw.type || "application/octet-stream",
+              mime,
               checksum: uploaded.blobRef.content_hash,
-              storagePath: uploaded.url,
-              visibility: "club_members",
+              storagePath: uploaded.blobRef.path,
+              visibility: "club",
               contentLength: prepared.file.size,
               blobRef: uploaded.blobRef,
             });
