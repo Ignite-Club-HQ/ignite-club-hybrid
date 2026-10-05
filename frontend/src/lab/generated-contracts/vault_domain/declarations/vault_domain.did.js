@@ -176,6 +176,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'transfer_governorship' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

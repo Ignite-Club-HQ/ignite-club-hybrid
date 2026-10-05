@@ -124,6 +124,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |

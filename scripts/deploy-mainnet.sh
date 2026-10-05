@@ -58,6 +58,7 @@ icp canister call timer_jobs initialize '()' -e "$ICP_ENV"
 
 echo "==> Wiring: pii_access_control -> club_domain"
 icp canister call pii_access_control set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+icp canister call vault_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 
 echo "==> Wiring: messaging_domain <-> notification_queue"
 icp canister call messaging_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"

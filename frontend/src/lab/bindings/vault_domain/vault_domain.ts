@@ -204,6 +204,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_club_domain_canister(canister: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     transfer_governorship(new_governor: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -410,6 +417,16 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.restore_file(arg0);
         return from_candid_variant_n24(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n8(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
