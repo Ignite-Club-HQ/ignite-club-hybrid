@@ -96,16 +96,22 @@ export async function listLiveLatestMessagesPage(
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Canisters deployed before this method existed answer IC0504 ("method
-    // does not exist"). Fall back to the forward read for the first page so
-    // chat still loads until the redeploy lands; scroll-back paging keeps its
-    // pre-fix behaviour on those canisters.
-    if (before !== null || !/IC0504|does not exist/i.test(message)) throw err;
+    // Canisters deployed before this method existed reject the call outright
+    // ("Canister has no query method '<name>'", IC0536; some paths report
+    // IC0504). Fall back to the forward read for the first page so chat still
+    // loads until the redeploy lands; scroll-back paging keeps its pre-fix
+    // behaviour on those canisters.
+    const methodMissing =
+      /has no (?:query |update |)method|IC0536|IC0504|method .*(?:not found|does not exist)|does not exist/i.test(
+        message,
+      );
+    if (before !== null || !methodMissing) throw err;
     return unwrapCandid(
       actor.list_messages_page(conversationId, candidOpt(undefined), limit),
       "List messages",
     );
   }
+
 }
 
 
