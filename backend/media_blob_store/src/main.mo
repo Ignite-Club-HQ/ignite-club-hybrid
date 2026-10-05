@@ -342,13 +342,32 @@ persistent actor MediaBlobStore {
     }
   };
 
+  type Usage = {
+    total_bytes : Nat64;
+    capacity_limit_bytes : Nat64;
+    accepting_uploads : Bool;
+  };
+
+  // Sharding: the app reads this to skip full stores and to show fullness in
+  // Placement Settings. Public query — reveals only byte totals.
+  public query func get_usage() : async Usage {
+    { total_bytes; capacity_limit_bytes; accepting_uploads = total_bytes < acceptThreshold() }
+  };
+
+  // Governor-only. Setting a limit at or below the current total closes the
+  // store to new uploads (read-only); raising it reopens it.
+  public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
+    auth(caller);
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    capacity_limit_bytes := limit_bytes;
+    #Ok
+  };
+
   public query func health() : async Health {
     {
       version = "1";
       blob_count = Nat.toNat64(blobs.size());
-      total_bytes = Nat.toNat64(
-        blobs.foldLeft(0, func(acc : Nat, record : BlobRecord) : Nat = acc + record.bytes.size())
-      );
+      total_bytes;
     }
   };
 };
