@@ -1,0 +1,53 @@
+name: ICP push delivery worker
+
+# Bridges the notification_queue canister outbox to FCM so ICP-mode (Internet
+# Identity) users receive push notifications. Claims a batch every 5 minutes,
+# delivers via FCM HTTP v1, acknowledges/fails back on the canister.
+#
+# Setup (one time):
+#   1. Repo secret ICP_PUSH_WORKER_SEED — 64 hex chars (Ed25519 seed). The
+#      deploy-icp-mainnet workflow grants the derived principal as a queue
+#      worker automatically when this secret is present (or run
+#      scripts/grant-push-worker.sh locally with the governor identity).
+#   2. Repo secret FCM_SERVICE_ACCOUNT_JSON — Firebase service account JSON
+#      with the Firebase Cloud Messaging API enabled.
+#   3. ICP-mode apps must register device tokens (already wired in the app).
+#
+# Missing secrets are a no-op (green run, notice in the log), so this workflow
+# is safe to have in the repo before setup is done.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+# Serialize runs: the worker calls recover() at startup, which resets all
+# Processing items to Pending — only safe when no other run is mid-flight.
+concurrency:
+  group: icp-push-deliver
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install @icp-sdk/core for the worker
+        run: npm install --prefix "$RUNNER_TEMP/icp-push-deps" @icp-sdk/core --no-fund --no-audit
+
+      - name: Claim and deliver pending ICP notifications
+        env:
+          PUSH_WORKER_NODE_PATH: ${{ runner.temp }}/icp-push-deps/node_modules
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+        run: node scripts/icp-push-deliver.mjs

@@ -186,6 +186,8 @@ jobs:
           echo "==> already-created canisters are kept, nothing is lost."
 
       - name: Deploy + wire all 18 canisters
+        env:
+          ICP_PUSH_WORKER_SEED: ${{ secrets.ICP_PUSH_WORKER_SEED }}
         run: bash scripts/deploy-mainnet.sh
 
       - name: Print paste-ready canister ID table

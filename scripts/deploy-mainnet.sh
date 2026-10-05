@@ -62,6 +62,21 @@ echo "==> Wiring: club_domain + events_domain -> notification_queue"
 icp canister call club_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e ic
 icp canister call events_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e ic
 
+# Push delivery worker grant — principal derived from ICP_PUSH_WORKER_SEED
+# (64 hex chars). Skip silently when the secret is not configured; the
+# icp-push-deliver workflow no-ops until both this grant and its secrets exist.
+if [ -n "${ICP_PUSH_WORKER_SEED:-}" ]; then
+  NODE_PATH_DIR="$PWD/frontend/node_modules"
+  if ! node -e "require.resolve('@icp-sdk/core/identity', { paths: ['$NODE_PATH_DIR'] })" 2>/dev/null; then
+    echo "==> Installing @icp-sdk/core for push worker principal derivation"
+    mkdir -p "${RUNNER_TEMP:-/tmp}/icp-push-deps" && npm install --prefix "${RUNNER_TEMP:-/tmp}/icp-push-deps" @icp-sdk/core --no-fund --no-audit >/dev/null
+    NODE_PATH_DIR="${RUNNER_TEMP:-/tmp}/icp-push-deps/node_modules"
+  fi
+  WORKER_PRINCIPAL="$(PUSH_WORKER_NODE_PATH="$NODE_PATH_DIR" node scripts/push-worker-principal.mjs)"
+  echo "==> Granting push worker principal on notification_queue: $WORKER_PRINCIPAL"
+  icp canister call notification_queue grant_worker "(principal \"$WORKER_PRINCIPAL\")" -e ic
+fi
+
 echo "==> Wiring: media_blob_store -> club_domain"
 icp canister call media_blob_store set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e ic
 
