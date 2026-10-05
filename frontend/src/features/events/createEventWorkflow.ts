@@ -1,5 +1,20 @@
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveEvent, createLiveEventSeries, createLiveOpenDuty, setLiveEventDuty } from "@/live/features/events";
+import {
+  addLiveSeriesOccurrence,
+  createLiveEvent,
+  createLiveEventSeries,
+  createLiveOpenDuty,
+  setLiveEventAutoReminder,
+  setLiveEventDuty,
+} from "@/live/features/events";
+
+/** Start time for a child occurrence: exact date-time, or the date at the first event's local time. */
+export function occurrenceStartMs(childDate: string, firstStartMs: number): number {
+  if (childDate.includes("T")) return new Date(childDate).getTime();
+  const first = new Date(firstStartMs);
+  const [y, m, d] = childDate.split("-").map(Number);
+  return new Date(y, m - 1, d, first.getHours(), first.getMinutes(), first.getSeconds()).getTime();
+}
 
 export type CreateEventTransactionInput = {
   event: Record<string, unknown>;
@@ -47,32 +62,41 @@ export async function createEventTransaction(
         miniLeagueId: (eventRecord.mini_league_id as string | null | undefined) ?? null,
       };
 
-      // Recurring: the canister expands the series itself. Provisional —
-      // input.childDates is the browser-computed occurrence list; we derive
-      // the frequency from the median gap (weekly/fortnightly/monthly) and
-      // the end from the last occurrence rather than passing dates through.
+      const reminderHours = eventRecord.reminder_hours_before as number | null | undefined;
+      const durationMs = Math.max(endsAtMs - startsAtMs, 0) || 3_600_000;
+
+      // Recurring: the browser already computed the exact occurrence dates
+      // (selected weekdays, calendar months, skipped pauses). Create the
+      // series with only the first event, then append each exact date so
+      // ICP matches Supabase occurrence-for-occurrence.
       if (input.childDates && input.childDates.length > 0) {
-        const gaps = input.childDates
-          .slice(0, 4)
-          .map((d) => Math.round((new Date(d).getTime() - startsAtMs) / 86_400_000));
-        const step = gaps[0] ?? 7;
-        const frequency = step <= 1 ? "daily" : step <= 7 ? "weekly" : step <= 14 ? "fortnightly" : "monthly";
-        const untilMs = new Date(input.childDates[input.childDates.length - 1]).getTime();
         const { events } = await createLiveEventSeries(ctx, {
           ...base,
-          frequency,
+          frequency: "custom",
           firstStartsAtMs: startsAtMs,
-          firstEndsAtMs: endsAtMs,
-          untilMs,
+          firstEndsAtMs: startsAtMs + durationMs,
+          untilMs: startsAtMs,
         });
         const first = events[0];
         if (!first) throw new Error("Event series could not be created.");
+        const seriesId = first.series_id?.[0];
+        if (!seriesId) throw new Error("Event series could not be created.");
+        const occurrenceIds = [first.id];
+        for (const childDate of input.childDates) {
+          const childStart = occurrenceStartMs(childDate, startsAtMs);
+          if (childStart === startsAtMs) continue;
+          const occ = await addLiveSeriesOccurrence(ctx, seriesId, childStart, childStart + durationMs);
+          occurrenceIds.push(occ.id);
+        }
         for (const duty of input.duties) {
           if (duty.assigned_to) {
             await setLiveEventDuty(ctx, first.id, duty.assigned_to, duty.name);
           } else {
             await createLiveOpenDuty(ctx, first.id, duty.name);
           }
+        }
+        if (reminderHours) {
+          for (const occId of occurrenceIds) await setLiveEventAutoReminder(ctx, occId, reminderHours);
         }
         return first.id;
       }
@@ -92,6 +116,8 @@ export async function createEventTransaction(
           await createLiveOpenDuty(ctx, created.id, duty.name);
         }
       }
+
+      if (reminderHours) await setLiveEventAutoReminder(ctx, created.id, reminderHours);
 
       return created.id;
     },
