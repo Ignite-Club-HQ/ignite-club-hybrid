@@ -142,6 +142,20 @@ function SupabaseUpgradeProPage() {
   const { data: adminStatus, isLoading: loadingAdminCheck } = useQuery({
     queryKey: ["is-team-admin", user?.id, teamId],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => ({ isTeamAdmin: false, isClubAdmin: false }),
+          icp: async (ctx) => {
+            const teamRow = await getLiveTeam(ctx, teamId!);
+            const clubId = teamRow.length ? teamRow[0].club_id : null;
+            const grants = await getLiveMyRoleGrants(ctx);
+            const isClubAdmin = !!clubId && grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId);
+            const isTeamAdmin = isClubAdmin || grants.some(g =>
+              (g.role === "team_admin" || g.role === "coach") && (g.team[0] ?? null) === teamId);
+            return { isTeamAdmin, isClubAdmin };
+          },
+        });
+      }
       // First get user roles
       const { data: roles } = await supabase
         .from("user_roles")
@@ -187,8 +201,32 @@ function SupabaseUpgradeProPage() {
   const isClubAdminForTeam = adminStatus?.isClubAdmin ?? false;
 
   const { data: team, isLoading: teamLoading, fetchStatus: teamFetchStatus } = useQuery({
-    queryKey: ["team", teamId],
+    queryKey: ["team", teamId, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveTeam(ctx, teamId!);
+            const t = row.length ? row[0] : null;
+            if (!t || t.deleted_at_ms.length) return null;
+            const profile = await getLiveClubProfile(ctx, t.club_id);
+            const p = profile.length ? profile[0] : null;
+            const clubSub = await getLiveClubSubscription(ctx, t.club_id);
+            return {
+              id: t.id,
+              name: t.name,
+              club_id: t.club_id,
+              clubs: {
+                id: t.club_id,
+                name: p?.name ?? "Club",
+                is_pro: !!(clubSub?.is_pro || clubSub?.admin_pro_override),
+                sport: p?.sport[0] ?? null,
+              },
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, clubs!club_id (id, name, is_pro, sport)")
