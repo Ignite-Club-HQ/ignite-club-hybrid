@@ -176,7 +176,7 @@ module {
       var eventsDomainCanister = old.eventsDomainCanister;
       var messagingDomainCanister = old.messagingDomainCanister;
       var piiCanister = old.piiCanister;
-      var teamSubscriptions = [];
+      var teamSubscriptions = old.teamSubscriptions;
     }
   };
 };
