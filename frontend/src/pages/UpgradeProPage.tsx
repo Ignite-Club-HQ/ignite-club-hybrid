@@ -461,6 +461,12 @@ function SupabaseUpgradeProPage() {
       handleNativeIAP(tier);
       return;
     }
+    if (isIcp) {
+      // Card checkout runs through Supabase functions/Stripe, which Internet
+      // Identity sessions cannot call — point web users at the mobile app.
+      showIfDesktop();
+      return;
+    }
     const isAnnual = tier === "pro" ? isAnnualPro : isAnnualProFootball;
     setIsCheckingOut(true);
 
@@ -503,6 +509,17 @@ function SupabaseUpgradeProPage() {
 
     setIsCheckingOut(true);
     try {
+      if (isIcp) {
+        // Session-free path: verify-iap-receipt-icp mints an attestation and
+        // the entitlement is redeemed on the identity_access canister.
+        const ok = await purchaseProduct(productId, teamId!, "team");
+        if (ok) {
+          queryClient.invalidateQueries({ queryKey: ["team-subscription", teamId] });
+          invalidateProAccessQueries(queryClient);
+          toast({ title: "Upgrade Successful!", description: "Your team subscription is now active." });
+        }
+        return;
+      }
       const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
       const purchaseResult = await NativePurchases.purchaseProduct({
         productIdentifier: productId,
