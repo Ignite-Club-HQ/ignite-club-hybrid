@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Plus, Trash2, Globe2, Save, Globe, FlaskConical } from "lucide-react";
@@ -29,7 +29,8 @@ import {
   isFeatureCanisterConfigured,
   resolveFeatureBackend,
 } from "@/live/featureBackend";
-import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
+import { fetchStoredBackendRoutingConfig, getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
+import { setLiveAppSetting } from "@/live/features/appSettings";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveClubs } from "@/live/features/club";
 import { diffClubBackendChanges, syncClubBackendChanges } from "@/live/websiteBackendSync";
@@ -255,15 +256,7 @@ export default function PlacementAdminSettingsPage() {
 
   const { data: savedRouting, isLoading: isLoadingRouting } = useQuery({
     queryKey: ["app-setting", BACKEND_ROUTING_CONFIG_KEY],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_settings")
-        .select("value")
-        .eq("key", BACKEND_ROUTING_CONFIG_KEY)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? parseBackendRoutingConfig(data.value) : null;
-    },
+    queryFn: () => fetchStoredBackendRoutingConfig(),
     enabled: !!user && isAppAdmin,
   });
 
@@ -293,6 +286,7 @@ export default function PlacementAdminSettingsPage() {
     );
   }, [savedRouting, routingTouched]);
 
+  const icpRoutingSaveRef = useRef(false);
   const routingMutation = useMutation({
     mutationFn: async (config: {
       defaultBackend: BackendProvider;
@@ -301,6 +295,20 @@ export default function PlacementAdminSettingsPage() {
       countryTargets: Record<string, string>;
       clubBackendOverrides: Record<string, BackendProvider>;
     }) => {
+      icpRoutingSaveRef.current = false;
+      const stamped = { ...config, savedAtMs: Date.now() };
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        // Internet Identity admin: no Supabase session, so the app_settings
+        // row is read-only here (RLS). Save the stamped copy on club_domain's
+        // app config instead; loaders pick whichever copy is newer.
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Sign in to save routing."); },
+          icp: async (ctx) => { await setLiveAppSetting(ctx, BACKEND_ROUTING_CONFIG_KEY, stamped); },
+        });
+        icpRoutingSaveRef.current = true;
+        return config;
+      }
       const { data: existing, error: readError } = await supabase
         .from("app_settings")
         .select("id")
@@ -308,15 +316,17 @@ export default function PlacementAdminSettingsPage() {
         .maybeSingle();
       if (readError) throw readError;
       if (existing) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("app_settings")
-          .update({ value: config as never })
-          .eq("key", BACKEND_ROUTING_CONFIG_KEY);
+          .update({ value: stamped as never })
+          .eq("key", BACKEND_ROUTING_CONFIG_KEY)
+          .select("id");
         if (error) throw error;
+        if (!data || data.length === 0) throw new Error("Routing was not saved — app admin permission required.");
       } else {
         const { error } = await supabase
           .from("app_settings")
-          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: config as never, description: "App-admin backend routing: default backend, per-country eligibility, and approved targets" } as never);
+          .insert({ key: BACKEND_ROUTING_CONFIG_KEY, value: stamped as never, description: "App-admin backend routing: default backend, per-country eligibility, and approved targets" } as never);
         if (error) throw error;
       }
       return config;
@@ -334,7 +344,12 @@ export default function PlacementAdminSettingsPage() {
       // website keeps its own resolver; this is a best-effort notification
       // and never blocks the routing save itself.
       const changes = diffClubBackendChanges(savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG, config);
-      if (changes.length > 0) {
+      if (changes.length > 0 && icpRoutingSaveRef.current) {
+        toast({
+          title: "Club website not updated",
+          description: "Website sync needs a Supabase admin sign-in. The app routing change is saved and live.",
+        });
+      } else if (changes.length > 0) {
         const canisterId = tryActiveIcpTarget()?.canisterIds["club_domain"] ?? null;
         void syncClubBackendChanges(changes, canisterId).then(failures => {
           if (failures.length > 0) {
