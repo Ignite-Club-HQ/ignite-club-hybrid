@@ -12,12 +12,14 @@ import {
   resolveBackendForCountry,
   resolveClubBackendOverride,
   resolveTargetForCountry,
+  resolveIcpEngineForCountry,
+  isCloudEngineUsable,
   type ApprovedBackendTarget,
   type BackendProvider,
   type BackendRoutingConfig,
 } from "./backendRouting";
 import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
-import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
+import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
 import { getUserClubIds } from "./userClubs";
 
@@ -123,6 +125,19 @@ export async function loadBackendRoutingConfig(): Promise<void> {
   console.warn("[backend-routing] No routing config available; defaulting to Supabase.");
   applyBackendRoutingConfig(null);
 }
+
+// Country -> ICP Cloud Engine assignment feeds getActiveIcpTarget().
+registerIcpEngineResolver(() => {
+  const engine = resolveIcpEngineForCountry(getBackendRoutingConfig(), getCurrentCountry().country);
+  if (!engine) return null;
+  return {
+    alias: engine.alias,
+    host: engine.host,
+    canisterIds: engine.canisterIds,
+    region: engine.region,
+    usable: isCloudEngineUsable(engine),
+  };
+});
 
 function isIcpAvailable(): boolean {
   try {
