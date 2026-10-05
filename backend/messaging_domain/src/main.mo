@@ -705,6 +705,22 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ messages = page_messages; next_sequence = next_seq; latest_sequence = latest })
   };
 
+  // Full reaction rows (user + emoji) for a conversation so clients can
+  // render "who reacted" and restore reactions on refetch. list_messages_page
+  // intentionally stays lightweight; reactions are fetched alongside it.
+  public query ({ caller }) func list_reactions(conversation_id : Text) : async { #Ok : [Types.Reaction]; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    var result : [Types.Reaction] = [];
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id) {
+        for (r in reactions.values()) {
+          if (r.message_id == m.id) { result := result.concat([r]) };
+        };
+      };
+    };
+    #Ok(result)
+  };
+
   public query ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(unreadFor(caller, conversation_id))
@@ -1452,6 +1468,12 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func toggle_reaction(message_id : Text, emoji : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not valid(emoji)) return #Err("Invalid reaction");
+    switch (messages.find(func(m) = m.id == message_id)) {
+      case null return #Err("Message not found");
+      case (?m) {
+        if (not canReadTeamMessages(caller, m.conversation_id)) return #Err("Conversation access forbidden");
+      };
+    };
     if (reactions.any(func(r) = r.message_id == message_id and r.user.equal(caller) and r.emoji == emoji)) {
       reactions := reactions.filter(func(r) = not (r.message_id == message_id and r.user.equal(caller) and r.emoji == emoji));
     } else {
