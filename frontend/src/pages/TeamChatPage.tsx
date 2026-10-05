@@ -1687,11 +1687,7 @@ export default function TeamChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
-          try {
-            await recordLiveMessageSent(ctx, teamId!, user!.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, teamId!, user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
       return deliveredSend();

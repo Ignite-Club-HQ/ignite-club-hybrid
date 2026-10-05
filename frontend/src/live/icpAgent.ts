@@ -5,6 +5,34 @@ import type { IcpTargetConfig } from "./targetRegistry";
 import { trackIcpQueryCall, trackIcpUpdateCall } from "./pendingCalls";
 
 /**
+ * Update methods the app fires in the background (provisioning self-heal on
+ * every chat refresh, read receipts, presence, analytics counters). The user
+ * never waits on them, so they must not keep the top pending bar running.
+ */
+const SILENT_BACKGROUND_UPDATES = new Set<string>([
+  "ensure_broadcast_conversation",
+  "ensure_club_admin_thread",
+  "ensure_club_conversations",
+  "mark_read",
+  "mark_all_read",
+  "presence_heartbeat",
+  "record_active_user",
+  "record_ad_event",
+  "record_chat_notify_batch",
+  "record_client_perf",
+  "record_event_view",
+  "record_message_sent",
+  "record_perf_sample",
+  "record_perf_samples_batch",
+  "record_photo_engagement",
+  "record_sponsor_click",
+  "record_sponsor_impression",
+  "record_sponsor_metric",
+  "record_user_activity",
+  "record_web_vital",
+]);
+
+/**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/localActor.ts`.
  *
  * Unlike the lab agent, this never fetches or pins a root key and never restricts
@@ -127,7 +155,9 @@ function wrapUpdateCallsForPendingIndicator<T>(actor: T, idlFactory: IDL.Interfa
       continue;
     }
     const fn = value as (...callArgs: unknown[]) => unknown;
-    wrapped[key] = queryMethodNames.has(key)
+    wrapped[key] = SILENT_BACKGROUND_UPDATES.has(key)
+      ? fn
+      : queryMethodNames.has(key)
       ? (...args: unknown[]) => trackIcpQueryCall(fn(...args))
       : (...args: unknown[]) => trackIcpUpdateCall(fn(...args));
   }

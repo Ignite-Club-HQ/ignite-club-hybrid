@@ -1093,11 +1093,7 @@ export default function GroupChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
-          try {
-            await recordLiveMessageSent(ctx, groupId, user.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, groupId, user.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
       return deliveredSend();

@@ -991,11 +991,7 @@ export default function BroadcastChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment, reply_to_id);
-          try {
-            await recordLiveMessageSent(ctx, "broadcast", user!.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, "broadcast", user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
     },

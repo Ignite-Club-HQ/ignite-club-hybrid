@@ -905,11 +905,7 @@ function SupabaseClubAdminChatPage() {
                 return null;
               })();
           inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment, replyToId ?? null);
-          try {
-            await recordLiveMessageSent(ctx, conversationId!, user!.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, conversationId!, user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
       return { ...inserted, ...deliveredSend() };
