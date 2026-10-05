@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Images, Loader2, MessageCircle, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { withFeatureBackend } from "@/live/featureRouter";
