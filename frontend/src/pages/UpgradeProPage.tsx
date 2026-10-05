@@ -239,8 +239,17 @@ function SupabaseUpgradeProPage() {
   });
 
   const { data: subscription } = useQuery({
-    queryKey: ["team-subscription", teamId],
+    queryKey: ["team-subscription", teamId, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, teamId!);
+            return sub ? { ...mapLiveTeamSubscriptionToRow(sub), expires_at: null } : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -253,8 +262,17 @@ function SupabaseUpgradeProPage() {
 
   // Check for club-level subscription
   const { data: clubSubscription } = useQuery({
-    queryKey: ["club-subscription-for-team", team?.club_id],
+    queryKey: ["club-subscription-for-team", team?.club_id, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, team!.club_id);
+            return sub ? mapLiveClubSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
