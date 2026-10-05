@@ -54,6 +54,7 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'conversation_id' : IDL.Text,
     'body' : IDL.Text,
+    'reply_to_id' : IDL.Opt(IDL.Text),
     'sender' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
     'edited_at_ms' : IDL.Opt(IDL.Nat64),
@@ -645,7 +646,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'send_message' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment)],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),

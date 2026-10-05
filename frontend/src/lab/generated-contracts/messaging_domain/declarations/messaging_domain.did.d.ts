@@ -408,7 +408,7 @@ export interface Main {
   >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'send_message' : ActorMethod<
-    [string, string, string, [] | [Attachment]],
+    [string, string, string, [] | [Attachment], [] | [string]],
     { 'Ok' : Message } |
       { 'Err' : string }
   >,
@@ -557,6 +557,7 @@ export interface Message {
   'id' : string,
   'conversation_id' : string,
   'body' : string,
+  'reply_to_id' : [] | [string],
   'sender' : Principal,
   'created_at_ms' : bigint,
   'edited_at_ms' : [] | [bigint],
