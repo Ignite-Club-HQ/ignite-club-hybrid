@@ -1,0 +1,1235 @@
+type TeamSubscription = 
+ record {
+   admin_pro_football_override: bool;
+   admin_pro_override: bool;
+   cancelled_at_ms: opt nat64;
+   disable_auto_subs: bool;
+   disable_batch_subs: bool;
+   disable_position_swaps: bool;
+   disable_team_pom_rewards: bool;
+   formation: opt text;
+   is_pro: bool;
+   is_pro_football: bool;
+   is_trial: bool;
+   max_spread_minutes: opt nat32;
+   minutes_per_half: opt nat32;
+   rotate_gk_at_halftime: bool;
+   rotation_speed: nat32;
+   show_lineup_picker: bool;
+   team_id: text;
+   team_size: opt nat32;
+   trial_ends_at_ms: opt nat64;
+ };
+type TeamSponsorAllocation = 
+ record {
+   sponsor_id: text;
+   team_id: text;
+ };
+type TeamPlayerPosition = 
+ record {
+   member_id: text;
+   position: text;
+   team_id: text;
+ };
+type TeamInviteLink = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   revoked: bool;
+   role: text;
+   rotated_at_ms: opt nat64;
+   team_id: text;
+   token: text;
+ };
+type TeamInvite = 
+ record {
+   accepted_by: opt principal;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   revoked: bool;
+   role: text;
+   team_id: text;
+ };
+type TeamFolder = 
+ record {
+   club_id: text;
+   color: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   description: opt text;
+   id: text;
+   name: text;
+   sort_order: nat32;
+ };
+type TeamCreationRequest = 
+ record {
+   age_group: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   division: opt text;
+   id: text;
+   name: text;
+   requested_by: principal;
+   status: text;
+   team_id: opt text;
+ };
+type TeamCaptain = 
+ record {
+   team_id: text;
+   user: principal;
+ };
+type Team = 
+ record {
+   club: text;
+   id: text;
+ };
+type State = 
+ record {
+   accounts: vec Account;
+   challenges: vec Challenge;
+   exclusions: vec AccountExclusion;
+   families: vec Family;
+   next_challenge: nat64;
+   roles: vec AccountRole;
+   schema: nat32;
+ };
+type Snapshot = 
+ record {
+   clubs: vec record {
+                text;
+                Listing;
+              };
+   schema: nat32;
+ };
+type SeasonTeamSummary = 
+ record {
+   avg_attendance_pct: float64;
+   club_id: text;
+   events_count: nat32;
+   roster_size: nat32;
+   season_id: text;
+   team_id: text;
+   team_name: text;
+   updated_at_ms: nat64;
+ };
+type SeasonPlayerStat = 
+ record {
+   attendance_pct: float64;
+   club_id: text;
+   club_player_id: text;
+   events_attended: nat32;
+   events_total: nat32;
+   games_played: nat32;
+   player_name: text;
+   season_id: text;
+   team_id: text;
+   updated_at_ms: nat64;
+ };
+type Season = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   end_date: text;
+   id: text;
+   name: text;
+   start_date: text;
+   status: text;
+   updated_at_ms: nat64;
+ };
+type RoleRequest = 
+ record {
+   account_id: text;
+   club: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   id: text;
+   role: text;
+   status: text;
+   team: opt text;
+   user: principal;
+ };
+type RoleGrant = 
+ record {
+   club: opt text;
+   role: text;
+   team: opt text;
+   user: principal;
+ };
+type Request = 
+ record {
+   club: text;
+   expected_revision: nat64;
+   operation: Operation;
+   request_id: text;
+ };
+type RemovedMember = 
+ record {
+   club: text;
+   removed_at_ms: nat64;
+   removed_by: principal;
+   user: principal;
+ };
+type ProfileTeamHistoryEntry = 
+ record {
+   club_id: text;
+   club_name: text;
+   joined_at_ms: nat64;
+   membership_id: text;
+   season_end_date: text;
+   season_id: text;
+   season_name: text;
+   season_start_date: text;
+   season_status: text;
+   team_id: text;
+   team_level_age: opt text;
+   team_name: text;
+ };
+type PendingInvite = 
+ record {
+   accepted_at_ms: opt nat64;
+   accepted_by: opt principal;
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   email: text;
+   id: text;
+   invited_by: principal;
+   kind: text;
+   resent_at_ms: opt nat64;
+   role: opt text;
+   status: text;
+   team_id: opt text;
+ };
+type ParentInvite = 
+ record {
+   accepted_by: opt principal;
+   child_id: text;
+   club_id: text;
+   created_at_ms: nat64;
+   expires_at_ms: nat64;
+   id: text;
+   invited_by: principal;
+   team_id: opt text;
+ };
+type Operation = 
+ variant {
+   Remove: record {id: text;};
+   Reorder: record {
+              first: text;
+              second: text;
+            };
+   Save: record {
+           draft: Draft;
+           id: opt text;
+         };
+   SetActive: record {
+                active: bool;
+                id: text;
+              };
+ };
+type NewsPost = 
+ record {
+   attachments: vec NewsAttachment;
+   body: text;
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   id: text;
+   image_url: opt text;
+   is_important: bool;
+   revision: nat64;
+   status: text;
+   target_team_ids: opt vec text;
+   title: text;
+   updated_at_ms: nat64;
+ };
+type NewsAttachment = 
+ record {
+   anchor: opt text;
+   kind: text;
+   mime_type: opt text;
+   name: text;
+   size: nat64;
+   url: text;
+ };
+type Mutation = 
+ record {
+   link: opt Link;
+   revision: nat64;
+ };
+type MemberPayment = 
+ record {
+   amount: float64;
+   child_id: opt text;
+   club_id: text;
+   created_at_ms: nat64;
+   id: text;
+   marked_by: principal;
+   notes: opt text;
+   payment_period: text;
+   payment_type: text;
+   user_id: text;
+ };
+type Main = 
+ service {
+   accept_identity_link: (id: nat64) -> (variant {
+                                           Err: text;
+                                           Ok: Account;
+                                         });
+   accept_parent_invite: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: ParentInvite;
+     });
+   accept_pending_invite: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: PendingInvite;
+     });
+   accept_team_invite: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok: TeamInvite;
+                                      });
+   add_role_grant: (user: principal, club: text, role: text, team:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   add_team_captain: (club_id: text, team_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   admin_link_child_to_parent: (child_id: text, parent: principal) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     });
+   approve_club_join_request: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubJoinRequest;
+     });
+   approve_role_request: (id: text) -> (variant {
+                                          Err: text;
+                                          Ok: RoleRequest;
+                                        });
+   approve_team_creation_request: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamCreationRequest;
+     });
+   archive_team: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: ClubTeam;
+                                });
+   begin_identity_link: (target: principal) ->
+    (variant {
+       Err: text;
+       Ok: Challenge;
+     });
+   bulk_add_team_members: (club_id: text, team_id: text, role: text, users:
+    vec principal) -> (variant {
+                         Err: text;
+                         Ok: nat;
+                       });
+   check_team_name_unique: (club_id: text, name: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     }) query;
+   claim_shell_team: (token: text) -> (variant {
+                                         Err: text;
+                                         Ok: ClubTeam;
+                                       });
+   clear_club_theme: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   create_child_for_parent_in_club: (club_id: text, parent: principal) ->
+    (variant {
+       Err: text;
+       Ok: Child;
+     });
+   create_child_for_parent_on_team: (club_id: text, team_id: text, parent:
+    principal) -> (variant {
+                     Err: text;
+                     Ok: Child;
+                   });
+   create_club: (id: text, name: text, slug: text, description: opt text,
+    sport: opt text) -> (variant {
+                           Err: text;
+                           Ok: ClubProfile;
+                         });
+   create_news_post: (club_id: text, title: text, body: text, status: 
+    text, target_team_ids: opt vec text, is_important: bool, image_url:
+    opt text, attachments: vec NewsAttachment) ->
+    (variant {
+       Err: text;
+       Ok: NewsPost;
+     });
+   create_parent_invite: (club_id: text, team_id: opt text, child_id:
+    text) -> (variant {
+                Err: text;
+                Ok: ParentInvite;
+              });
+   create_pending_invite: (kind: text, club_id: text, team_id: opt text,
+    child_id: opt text, email: text, role: opt text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             invite: PendingInvite;
+             payload: InvitePayload;
+           };
+     });
+   create_shell_team_invite: (club_id: text, name: text, contact_email:
+    opt text, contact_name: opt text) -> (variant {
+                                            Err: text;
+                                            Ok: ClubTeam;
+                                          });
+   create_team_invite: (club_id: text, team_id: text, email: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok: TeamInvite;
+              });
+   create_team_invite_link: (club_id: text, team_id: text, role: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     });
+   delete_club_permanent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   delete_club_term: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok;
+                                    });
+   delete_news_post: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok;
+                                    });
+   delete_sponsor: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok;
+                                  });
+   delete_team_folder: (folder_id: text) -> (variant {
+                                               Err: text;
+                                               Ok;
+                                             });
+   delete_team_permanent: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   ensure_club_conversations: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
+   export_acl: () -> (variant {
+                        Err: text;
+                        Ok: Config;
+                      }) query;
+   export_frozen_club: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: Listing;
+     }) query;
+   export_identity_state: () -> (variant {
+                                   Err: text;
+                                   Ok: State;
+                                 }) query;
+   export_links: () -> (variant {
+                          Err: text;
+                          Ok: Snapshot;
+                        }) query;
+   freeze_club: (club: text, rev: nat64) -> (variant {
+                                               Err: text;
+                                               Ok: nat64;
+                                             });
+   get_app_config: (key: text) -> (opt text) query;
+   get_club_branding: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubBranding;
+     }) query;
+   get_club_link: (link_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Link;
+     }) query;
+   get_club_profile: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ClubProfile;
+     }) query;
+   get_club_settings: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ClubSettings;
+     }) query;
+   get_club_subscription: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ClubSubscription;
+     }) query;
+   get_current_season: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt Season;
+     }) query;
+   get_link: (id: text) -> (variant {
+                              Err: text;
+                              Ok: Listing;
+                            }) query;
+   get_my_theme_preference: () -> (variant {
+                                     Err: text;
+                                     Ok: opt text;
+                                   }) query;
+   get_parent_invite: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: ParentInvite;
+     }) query;
+   get_shell_team_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubTeam;
+     }) query;
+   get_sponsor: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt ClubSponsor;
+     }) query;
+   get_team: (id: text) -> (variant {
+                              Err: text;
+                              Ok: opt ClubTeam;
+                            }) query;
+   get_team_invite: (id: text) -> (variant {
+                                     Err: text;
+                                     Ok: TeamInvite;
+                                   }) query;
+   get_team_invite_link_by_token: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     }) query;
+   get_team_player_positions: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamPlayerPosition;
+     }) query;
+   get_team_subscription: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt TeamSubscription;
+     }) query;
+   has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
+   http_request: (request: HttpRequest) -> (HttpResponse) query;
+   import_frozen_club: (club: text, listing: Listing) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   import_links: (snap: Snapshot) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   invite_stats: (club_id: text, since_ms: nat64, until_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: InviteStats;
+     }) query;
+   is_member_removed: (club: text, user: principal) -> (bool) query;
+   link_guardian: (child_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   list_accepted_invites: (club_id: text, since_ms: nat64, until_ms:
+    nat64) -> (variant {
+                 Err: text;
+                 Ok: vec AcceptedInvite;
+               }) query;
+   list_all_sponsors: () -> (variant {
+                               Err: text;
+                               Ok: vec ClubSponsor;
+                             }) query;
+   list_children: () -> (variant {
+                           Err: text;
+                           Ok: vec Child;
+                         }) query;
+   list_club_join_requests: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubJoinRequest;
+     }) query;
+   list_club_terms: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTerm;
+     }) query;
+   list_clubs: (start_after: opt text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     }) query;
+   list_links: (club: text, admin_view: bool) ->
+    (variant {
+       Err: text;
+       Ok: Listing;
+     }) query;
+   list_member_payments: (club_id: text, payment_period: text, payment_type:
+    text) -> (variant {
+                Err: text;
+                Ok: vec MemberPayment;
+              }) query;
+   list_news: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec NewsPost;
+     }) query;
+   list_news_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec NewsPost;
+     }) query;
+   list_pending_invites_by_club: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PendingInvite;
+     }) query;
+   list_removed_members: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RemovedMember;
+     }) query;
+   list_role_grants: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AccountRole;
+     }) query;
+   list_role_requests: (club: text) ->
+    (variant {
+       Err: text;
+       Ok: vec RoleRequest;
+     }) query;
+   list_season_player_stats: (season_id: text, team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SeasonPlayerStat;
+     }) query;
+   list_season_team_summary: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SeasonTeamSummary;
+     }) query;
+   list_seasons: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Season;
+     }) query;
+   list_sponsors: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubSponsor;
+     }) query;
+   list_team_captains: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamCaptain;
+     }) query;
+   list_team_creation_requests: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamCreationRequest;
+     }) query;
+   list_team_folders: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamFolder;
+     }) query;
+   list_team_invites: (club_id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamInvite;
+     }) query;
+   list_team_role_grants: (team: text) ->
+    (variant {
+       Err: text;
+       Ok: vec AccountRole;
+     }) query;
+   list_team_sponsor_allocations: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamSponsorAllocation;
+     }) query;
+   list_teams: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     }) query;
+   mark_member_paid: (club_id: text, user_id: text, child_id: opt text,
+    payment_period: text, payment_type: text, amount: float64, notes:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: MemberPayment;
+                  });
+   move_child_to_team: (child_id: text, from_team: opt text, to_team:
+    text) -> (variant {
+                Err: text;
+                Ok: Child;
+              });
+   move_member_to_team: (club_id: text, user: principal, from_team: opt text,
+    to_team: text) -> (variant {
+                         Err: text;
+                         Ok;
+                       });
+   mutate: (req: Request) -> (variant {
+                                Err: text;
+                                Ok: Mutation;
+                              });
+   my_role_grants: () -> (vec RoleGrant) query;
+   profile_team_history: (profile_id: text) ->
+    (vec ProfileTeamHistoryEntry) query;
+   purge_expired_deletions: () -> (variant {
+                                     Err: text;
+                                     Ok: nat32;
+                                   });
+   reject_club_join_request: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubJoinRequest;
+     });
+   reject_role_request: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok: RoleRequest;
+                                       });
+   reject_team_creation_request: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamCreationRequest;
+     });
+   remove_member: (club: text, user: principal) -> (variant {
+                                                      Err: text;
+                                                      Ok;
+                                                    });
+   remove_role_grant: (user: principal, club: text, role: text, team:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok;
+                  });
+   remove_team_captain: (club_id: text, team_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   replace_acl: (rev: nat64, new_acl: Acl) ->
+    (variant {
+       Err: text;
+       Ok: nat64;
+     });
+   request_club_join: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubJoinRequest;
+     });
+   request_role: (club: text, role: text, team: opt text) ->
+    (variant {
+       Err: text;
+       Ok: RoleRequest;
+     });
+   request_team_creation: (club_id: text, name: text, division: opt text,
+    age_group: opt text) -> (variant {
+                               Err: text;
+                               Ok: TeamCreationRequest;
+                             });
+   resend_pending_invite: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: record {
+             invite: PendingInvite;
+             payload: InvitePayload;
+           };
+     });
+   restore_club: (id: text, cascade_teams: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubProfile;
+     });
+   restore_member: (club: text, user: principal) -> (variant {
+                                                       Err: text;
+                                                       Ok;
+                                                     });
+   restore_team: (id: text) -> (variant {
+                                  Err: text;
+                                  Ok: ClubTeam;
+                                });
+   revoke_identity: (target: principal, expected_version: nat64) ->
+    (variant {
+       Err: text;
+       Ok: Account;
+     });
+   revoke_pending_invite: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   revoke_team_invite: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   revoke_team_invite_link: (id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
+   rotate_team_invite_link: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     });
+   save_club_profile: (profile: ClubProfile) ->
+    (variant {
+       Err: text;
+       Ok: ClubProfile;
+     });
+   save_club_settings: (item: ClubSettings) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   save_club_subscription: (item: ClubSubscription) ->
+    (variant {
+       Err: text;
+       Ok: ClubSubscription;
+     });
+   save_club_term: (term: ClubTerm) -> (variant {
+                                          Err: text;
+                                          Ok: ClubTerm;
+                                        });
+   save_season: (season: Season) -> (variant {
+                                       Err: text;
+                                       Ok: Season;
+                                     });
+   save_season_player_stat: (entry: SeasonPlayerStat) ->
+    (variant {
+       Err: text;
+       Ok: SeasonPlayerStat;
+     });
+   save_season_team_summary: (entry: SeasonTeamSummary) ->
+    (variant {
+       Err: text;
+       Ok: SeasonTeamSummary;
+     });
+   save_sponsor: (sponsor: ClubSponsor) ->
+    (variant {
+       Err: text;
+       Ok: ClubSponsor;
+     });
+   save_team: (team: ClubTeam) -> (variant {
+                                     Err: text;
+                                     Ok: ClubTeam;
+                                   });
+   save_team_folder: (folder: TeamFolder) ->
+    (variant {
+       Err: text;
+       Ok: TeamFolder;
+     });
+   save_team_pitch_settings: (team_id: text, disable_auto_subs: bool,
+    rotation_speed: nat32, disable_position_swaps: bool, disable_batch_subs:
+    bool, rotate_gk_at_halftime: bool, minutes_per_half: opt nat32,
+    max_spread_minutes: opt nat32, team_size: opt nat32, formation: opt text,
+    show_lineup_picker: bool, disable_team_pom_rewards: bool) ->
+    (variant {
+       Err: text;
+       Ok: TeamSubscription;
+     });
+   save_team_subscription: (item: TeamSubscription) ->
+    (variant {
+       Err: text;
+       Ok: TeamSubscription;
+     });
+   send_fee_reminders: (club_id: text, payment_period: text, payment_type:
+    text, message: text) -> (variant {
+                               Err: text;
+                               Ok: nat16;
+                             });
+   set_app_config: (key: text, value: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+   set_club_header_toggles: (club_id: text, header_logo_enabled: bool,
+    header_club_name_enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_club_invite_email_style: (club_id: text, style: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_club_logo_only_mode: (club_id: text, enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_club_switcher_hint: (club_id: text, hint: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_club_term_status: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubTerm;
+     });
+   set_club_theme_enabled: (club_id: text, enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_club_theme_palette: (club_id: text, primary: opt text, secondary:
+    opt text, accent: opt text, dark_primary: opt text, dark_secondary:
+    opt text, dark_accent: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ClubSettings;
+     });
+   set_events_domain_canister: (id: principal) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
+   set_messaging_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_notification_queue_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_pii_canister: (id: principal) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
+   set_team_folder: (team_id: text, folder_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ClubTeam;
+     });
+   set_team_player_position: (team_id: text, member_id: text, position:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_team_sponsor_allocation: (sponsor_id: text, team_id: text, allocated:
+    bool) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_theme_preference: (preference: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
+   soft_delete_club: (id: text, cascade_teams: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubProfile;
+     });
+   soft_delete_team: (id: text) -> (variant {
+                                      Err: text;
+                                      Ok: ClubTeam;
+                                    });
+   transfer_governorship: (new_governor: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unarchive_team: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: ClubTeam;
+                                  });
+   unfreeze_club: (club: text, rev: nat64) -> (variant {
+                                                 Err: text;
+                                                 Ok;
+                                               });
+   unlink_guardian: (child_id: text, user: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   unmark_member_paid: (id: text) -> (variant {
+                                        Err: text;
+                                        Ok;
+                                      });
+   update_news_post: (id: text, title: text, body: text, status: text,
+    target_team_ids: opt vec text, is_important: bool, image_url: opt text,
+    attachments: vec NewsAttachment, expected_revision: nat64) ->
+    (variant {
+       Err: text;
+       Ok: NewsPost;
+     });
+   whoami: () -> (variant {
+                    Err: text;
+                    Ok: Account;
+                  }) query;
+ };
+type Listing = 
+ record {
+   links: vec Link;
+   revision: nat64;
+ };
+type Link = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   draft: Draft;
+   id: text;
+   sort_order: nat32;
+ };
+type InviteStats = 
+ record {
+   accepted: nat;
+   total: nat;
+ };
+type InvitePayload = 
+ record {
+   body: text;
+   subject: text;
+   to: text;
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec record {
+                  text;
+                  text;
+                };
+   status_code: nat16;
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   headers: vec record {
+                  text;
+                  text;
+                };
+   method: text;
+   url: text;
+ };
+type Guardian = 
+ record {
+   child: text;
+   user: principal;
+ };
+type Family = 
+ record {
+   account_id: text;
+   child_id: text;
+ };
+type Exclusion = 
+ record {
+   club: text;
+   user: principal;
+ };
+type Draft = 
+ record {
+   icon: text;
+   is_active: bool;
+   open_mode: text;
+   subtitle: opt text;
+   title: text;
+   url: text;
+ };
+type Config = 
+ record {
+   acl: Acl;
+   acl_version: nat64;
+   governor: principal;
+   schema: nat32;
+ };
+type ClubTerm = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   end_date: text;
+   id: text;
+   is_active: bool;
+   name: text;
+   start_date: text;
+   status: text;
+ };
+type ClubTeam = 
+ record {
+   age_group: opt text;
+   archived: bool;
+   club_id: text;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   division: opt text;
+   folder_id: opt text;
+   gender: opt text;
+   id: text;
+   is_active: bool;
+   is_shell: bool;
+   logo_url: opt text;
+   name: text;
+   playhq_auto_create_events: bool;
+   playhq_competition_id: opt text;
+   playhq_team_id: opt text;
+   shell_claim_token: opt text;
+   shell_claimed_at_ms: opt nat64;
+   shell_claimed_by: opt principal;
+   shell_contact_email: opt text;
+   shell_contact_name: opt text;
+   shell_invited_by: opt principal;
+   team_type: opt text;
+ };
+type ClubSubscription = 
+ record {
+   activated_at_ms: opt nat64;
+   admin_pro_football_override: bool;
+   admin_pro_override: bool;
+   cancelled_at_ms: opt nat64;
+   club_id: text;
+   expires_at_ms: opt nat64;
+   is_pro: bool;
+   is_pro_football: bool;
+   is_trial: bool;
+   plan: text;
+   team_limit: opt nat32;
+   trial_ends_at_ms: opt nat64;
+ };
+type ClubSponsor = 
+ record {
+   club_id: text;
+   description: opt text;
+   exposure_percentage: opt nat8;
+   id: text;
+   is_active: bool;
+   is_team_only: bool;
+   logo_url: opt text;
+   name: text;
+   sort_order: nat32;
+   tier: text;
+   website_url: opt text;
+ };
+type ClubSettings = 
+ record {
+   announcement: opt text;
+   chat_thread_ads_enabled: bool;
+   club_id: text;
+   club_switcher_hint: opt text;
+   contact_email: opt text;
+   events_sponsor_strip_enabled: bool;
+   header_club_name_enabled: bool;
+   header_logo_enabled: bool;
+   invite_email_style: opt text;
+   logo_only_mode: bool;
+   media_header_sponsors_enabled: bool;
+   media_sponsors_enabled: bool;
+   membership_open: bool;
+   public_directory: bool;
+   theme_accent_color: opt text;
+   theme_dark_accent_color: opt text;
+   theme_dark_primary_color: opt text;
+   theme_dark_secondary_color: opt text;
+   theme_enabled: bool;
+   theme_primary_color: opt text;
+   theme_secondary_color: opt text;
+ };
+type ClubProfile = 
+ record {
+   created_at_ms: nat64;
+   deleted_at_ms: opt nat64;
+   description: opt text;
+   id: text;
+   is_active: bool;
+   logo_url: opt text;
+   name: text;
+   playhq_org_id: opt text;
+   playhq_tenant: opt text;
+   primary_color: opt text;
+   secondary_color: opt text;
+   slug: text;
+   sport: opt text;
+ };
+type ClubJoinRequest = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   decided_at_ms: opt nat64;
+   decided_by: opt principal;
+   id: text;
+   status: text;
+   user: principal;
+ };
+type ClubBranding = 
+ record {
+   contact_email: opt text;
+   logo_url: opt text;
+   name: text;
+ };
+type Child = 
+ record {
+   club_id: opt text;
+   id: text;
+   parent: opt principal;
+   teams: vec text;
+ };
+type Challenge = 
+ record {
+   accepted: bool;
+   account_id: text;
+   expected_version: nat64;
+   expires_at_ns: nat64;
+   id: nat64;
+   issuer: principal;
+   target: principal;
+ };
+type Acl = 
+ record {
+   children: vec Child;
+   clubs: vec text;
+   exclusions: vec Exclusion;
+   guardians: vec Guardian;
+   roles: vec RoleGrant;
+   teams: vec Team;
+ };
+type AccountRole = 
+ record {
+   account_id: text;
+   club: opt text;
+   role: text;
+   team: opt text;
+ };
+type AccountExclusion = 
+ record {
+   account_id: text;
+   club: text;
+ };
+type Account = 
+ record {
+   id: text;
+   legacy_subject: principal;
+   principals: vec principal;
+   version: nat64;
+ };
+type AcceptedInvite = 
+ record {
+   accepted_at_ms: nat64;
+   id: text;
+   invited_user_id: text;
+ };
+service : (governorInit: principal) -> Main
