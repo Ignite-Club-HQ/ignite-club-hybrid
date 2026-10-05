@@ -22,6 +22,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import {
   listMyLiveMiniLeagues,
   listLiveMiniLeaguesByClub,
@@ -60,8 +64,20 @@ export default function MiniLeaguesPage() {
 
   // Fetch clubs where user is admin AND has Pro Football access
   const { data: adminClubs, isLoading: clubsLoading } = useQuery({
-    queryKey: ["admin-pro-football-clubs", user?.id],
+    queryKey: ["admin-pro-football-clubs", user?.id, isFeatureRoutedToIcp("membership")],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) return withFeatureBackend("membership", {
+        supabase: async () => [] as { id: string; name: string }[],
+        icp: async (ctx) => {
+          const ids = [...new Set((await getLiveMyRoleGrants(ctx)).filter((g) => ["club_admin", "league_admin", "coach", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
+          const rows = await Promise.all(ids.map(async (id) => {
+            const [profile, hasPro] = await Promise.all([getLiveClubProfile(ctx, id), resolveLiveProFootballAccess(ctx, { clubId: id })]);
+            const club = profile[0];
+            return club && !club.deleted_at_ms.length && hasPro ? { id: club.id, name: club.name } : null;
+          }));
+          return rows.filter((row): row is { id: string; name: string } => row !== null);
+        },
+      });
       // First get clubs where user is admin
       const { data: rolesData, error: rolesError } = await supabase
         .from("user_roles")
