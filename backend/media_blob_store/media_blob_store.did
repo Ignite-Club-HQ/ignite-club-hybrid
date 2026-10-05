@@ -1,3 +1,9 @@
+type Usage = 
+ record {
+   accepting_uploads: bool;
+   capacity_limit_bytes: nat64;
+   total_bytes: nat64;
+ };
 type ResultUploadId = 
  variant {
    Err: text;
@@ -50,8 +56,10 @@ service : {
   delete_blob: (path: text) -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
   get_content_hash: (path: text) -> (opt text) query;
+  get_usage: () -> (Usage) query;
   health: () -> (Health) query;
   http_request: (request: HttpRequest) -> (HttpResponse) query;
   put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
+  set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);
 }

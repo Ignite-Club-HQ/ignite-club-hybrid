@@ -20,6 +20,11 @@ export const idlFactory = ({ IDL }) => {
     'Ok' : FinalizedBlob,
     'Err' : IDL.Text,
   });
+  const Usage = IDL.Record({
+    'accepting_uploads' : IDL.Bool,
+    'total_bytes' : IDL.Nat64,
+    'capacity_limit_bytes' : IDL.Nat64,
+  });
   const Health = IDL.Record({
     'total_bytes' : IDL.Nat64,
     'version' : IDL.Text,
@@ -48,6 +53,7 @@ export const idlFactory = ({ IDL }) => {
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
     'get_content_hash' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+    'get_usage' : IDL.Func([], [Usage], ['query']),
     'health' : IDL.Func([], [Health], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'put_chunk' : IDL.Func(
@@ -55,6 +61,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
   });
 };
