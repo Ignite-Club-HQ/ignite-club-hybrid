@@ -36,7 +36,7 @@ export async function cancelEventOnIcp(
   ctx: FeatureBackendContext,
   input: IcpCancelEventInput,
 ): Promise<IcpCancelEventResult> {
-  const [{ setLiveEventCancelled, setLiveSeriesCancelled, getLiveEvent }, { sendLiveMessage }, { fanOutLiveNotifications }, { listLiveTeamRoleGrants, listLiveRoleGrants }] =
+  const [{ setLiveEventCancelled, setLiveSeriesCancelled, getLiveEventsSnapshot }, { sendLiveMessage }, { fanOutLiveNotifications }, { listLiveTeamRoleGrants, listLiveRoleGrants }] =
     await Promise.all([
       import("@/live/features/events"),
       import("@/live/features/messaging"),
@@ -47,14 +47,17 @@ export async function cancelEventOnIcp(
   const { event } = input;
   let cancelledCount = 0;
   let seriesId = event.series_id ?? null;
+  let fromMs = event.starts_at_ms ?? 0;
   if (input.cancelType === "series" && !seriesId) {
-    const live = await getLiveEvent(ctx, event.parent_event_id || event.id).catch(() => null);
+    const snapshot = await getLiveEventsSnapshot(ctx);
+    const live = (snapshot.events as Array<{ id: string; series_id: [] | [string]; starts_at_ms: bigint }>)
+      .find((e) => e.id === event.id);
     seriesId = live?.series_id?.[0] ?? null;
+    if (live) fromMs = Number(live.starts_at_ms);
   }
 
   if (input.cancelType === "series" && seriesId) {
     // Cancel every occurrence from this one onwards (past ones stay as played).
-    const fromMs = event.starts_at_ms ?? (event.event_date ? new Date(event.event_date).getTime() : 0);
     cancelledCount = Number(await setLiveSeriesCancelled(ctx, seriesId, true, fromMs));
   } else {
     await setLiveEventCancelled(ctx, event.id, true);
