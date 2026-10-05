@@ -397,6 +397,9 @@ function ChatMessageInner({
 
       let userId: string;
       if (isFeatureRoutedToIcp("messaging")) {
+        if (id.startsWith("temp-") || id.startsWith("queued-")) {
+          throw new Error("This message is still sending — try again in a moment.");
+        }
         // The canister's toggle_reaction implements add/swap/remove in one
         // call; refresh the thread from the canister after toggling.
         await withFeatureBackend("messaging", {
@@ -498,7 +501,8 @@ function ChatMessageInner({
       // Fires only after retries are exhausted: single, final rollback scoped
       // to this user's rows so other users' realtime reactions are preserved.
       rollbackOwnReactions(context?.previousReactions);
-      toast.error("Couldn't update reaction. Please try again.");
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : "";
+      toast.error(`Couldn't update reaction.${reason}`);
     },
     onSettled: () => {
       isReactionMutatingRef.current = false;
