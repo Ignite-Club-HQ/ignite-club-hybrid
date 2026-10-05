@@ -7,6 +7,7 @@ describe("GoogleMapEmbed", () => {
 
   it("embeds the event address using the public browser key", () => {
     vi.stubEnv("IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY", "public-test-key");
+    vi.spyOn(window, "location", "get").mockReturnValue({ hostname: "ignite-canister-connect.lovable.app" } as Location);
     render(<GoogleMapEmbed address="35 Driffield, Adelaide SA" />);
     const frame = screen.getByTitle("Event location map");
     expect(frame).toHaveAttribute(

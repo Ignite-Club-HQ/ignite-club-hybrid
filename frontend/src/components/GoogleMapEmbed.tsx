@@ -11,12 +11,17 @@ export function GoogleMapEmbed({
 }: GoogleMapEmbedProps) {
   const browserKey = import.meta.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY;
   const place = address.trim();
+  // The managed browser key accepts Lovable-hosted sites, not localhost or
+  // unrelated custom domains. Keep the location usable there without showing
+  // Google's "not authorized" error inside the iframe.
+  const isAuthorizedHost = typeof window !== "undefined" &&
+    /(^|\.)lovable(app|project)\.com$/.test(window.location.hostname);
   if (!place) {
     return null;
   }
 
   // A missing key must never leave a broken iframe in the event form.
-  if (!browserKey) {
+  if (!browserKey || !isAuthorizedHost) {
     return (
       <a
         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`}
