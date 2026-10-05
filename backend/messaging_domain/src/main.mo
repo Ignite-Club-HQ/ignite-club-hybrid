@@ -120,6 +120,9 @@ persistent actor class Main(governorInit : Principal) {
 
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
 
+  // Message bodies: same 4000-char cap as announcements (ids stay at 128).
+  func validBody(value : Text) : Bool { value != "" and value.size() <= 4000 };
+
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
 
   func validAttachment(attachment : Types.Attachment) : Bool {
@@ -717,7 +720,7 @@ persistent actor class Main(governorInit : Principal) {
         };
       };
     };
-    if (not valid(body) or not valid(idempotency_key)) return #Err("Invalid message");
+    if (not validBody(body) or not valid(idempotency_key)) return #Err("Invalid message");
     switch (attachment) { case (?a) { if (not validAttachment(a)) return #Err("Invalid attachment") }; case null {} };
     switch (getGroupMetadataFor(conversation_id)) {
       case (?meta) {
@@ -809,7 +812,7 @@ persistent actor class Main(governorInit : Principal) {
   };
   public shared ({ caller }) func update_message(message_id : Text, body : Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
-    if (not valid(body)) return #Err("Invalid message");
+    if (not validBody(body)) return #Err("Invalid message");
     var found_idx : ?Nat = null;
     var idx = 0;
     for (message in messages.values()) {
@@ -1725,7 +1728,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func register_scheduled_message(conversation_id : Text, body : Text, scheduled_at_ms : Nat64) : async { #Ok : Types.ScheduledMessage; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
-    if (not valid(body)) return #Err("Invalid message body");
+    if (not validBody(body)) return #Err("Invalid message body");
     if (scheduledMessages.filter(func(r) = r.conversation_id == conversation_id).size() >= SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION) {
       return #Err("Scheduled message limit reached: at most " # Nat.toText(SCHEDULED_MESSAGE_LIMIT_PER_CONVERSATION) # " per conversation");
     };
