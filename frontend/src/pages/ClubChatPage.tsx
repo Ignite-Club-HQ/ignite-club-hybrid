@@ -1459,11 +1459,7 @@ export default function ClubChatPage() {
                 return null;
               })();
           await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
-          try {
-            await recordLiveMessageSent(ctx, clubId!, user!.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, clubId!, user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
       return deliveredSend();

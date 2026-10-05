@@ -1172,11 +1172,7 @@ export default function DirectMessagePage() {
             attachment,
             replyToId || null,
           );
-          try {
-            await recordLiveMessageSent(ctx, conversationId!, user!.id);
-          } catch {
-            // best-effort engagement counter; must never block message delivery
-          }
+          void recordLiveMessageSent(ctx, conversationId!, user!.id).catch(() => { /* best-effort engagement counter */ });
           data = {
             id: (sent as any)?.id ?? createSendTempId(),
             text,
