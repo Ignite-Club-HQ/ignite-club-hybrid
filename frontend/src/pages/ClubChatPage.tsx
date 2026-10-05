@@ -424,6 +424,23 @@ export default function ClubChatPage() {
     queryFn: async () => {
       if (useIcpLab) return { is_pro: false, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false, expires_at: null };
 
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubSubscription(ctx, clubId!);
+            if (!row) return null;
+            return {
+              is_pro: row.is_pro,
+              is_pro_football: row.is_pro_football,
+              admin_pro_override: row.admin_pro_override,
+              admin_pro_football_override: row.admin_pro_football_override,
+              expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
+            };
+          },
+        });
+      }
+
       const { data } = await supabase
         .from("club_subscriptions")
         .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override, expires_at")
@@ -431,7 +448,7 @@ export default function ClubChatPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!clubId && resolveAuthBackend() !== "icp",
+    enabled: !!clubId,
     staleTime: 5 * 60 * 1000,
   });
 
