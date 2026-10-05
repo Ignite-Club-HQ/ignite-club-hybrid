@@ -64,5 +64,11 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   }
   const ciphertext = new Uint8Array(await response.arrayBuffer());
   const plaintext = await decryptPiiValue({ identity, target }, match.path, MEDIA_BLOB_PII_FIELD, ciphertext);
-  return URL.createObjectURL(new Blob([plaintext]));
+  // Copy into a plain ArrayBuffer — BlobPart rejects views over a
+  // SharedArrayBuffer-backed buffer, and the decrypted bytes come back as a
+  // Uint8Array<ArrayBufferLike>.
+  const buffer = new ArrayBuffer(plaintext.byteLength);
+  new Uint8Array(buffer).set(plaintext);
+  return URL.createObjectURL(new Blob([buffer]));
+
 }

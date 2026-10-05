@@ -22,8 +22,9 @@ interface UseGroupOlderMessagesLoaderOptions {
   pageSize: number;
   supabaseClient: GroupChatSupabaseClient;
   /** Backward cursor for live ICP scroll-back paging (set by the messages query). */
-  icpOlderCursorRef?: RefObject<number | null>;
+  icpOlderCursorRef?: { current: number | null };
 }
+
 
 
 export const useGroupOlderMessagesLoader = ({
