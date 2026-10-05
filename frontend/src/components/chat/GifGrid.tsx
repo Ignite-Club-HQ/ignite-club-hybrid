@@ -126,25 +126,16 @@ export function GifGrid({
   const loadedOnceRef = useRef(false);
 
   const fetchGifs = async (q: string) => {
-    // icp-guard: allow GIF search intentionally uses the same-origin
-    // /api/giphy-search endpoint for every sign-in method, including Internet
-    // Identity members (user decision 2026-10); the GIPHY API key must stay
-    // server-side and cannot live in canister state.
     setLoading(true);
     try {
-      const directKey = String(import.meta.env.IGNITE_LIVE_GIPHY_API_KEY ?? "").trim();
-      if (directKey) {
-        setGifs(await searchGiphyDirect(directKey, q.trim(), 24));
+      const apiKey = await resolveGiphyApiKey();
+      if (apiKey) {
+        setGifs(await searchGiphyDirect(apiKey, q.trim(), 24));
         return;
       }
-      const res = await fetch("/api/giphy-search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ query: q, limit: 24 }),
-      });
-      if (!res.ok) throw new Error(`GIF search failed (${res.status})`);
-      const data = (await res.json()) as { gifs?: GiphyResult[] } | null;
-      setGifs(data?.gifs ?? []);
+      // No key configured anywhere yet — tell the admin where to add one.
+      toast.error("GIF search needs a GIPHY API key. Add it under Settings → Placement Settings.");
+      setGifs([]);
     } catch (err) {
       console.error("[GifGrid] fetch failed:", err);
       toast.error("Couldn't load GIFs. Please try again.");
