@@ -53,8 +53,11 @@ export async function createEventTransaction(
       const base = {
         clubId: String(eventRecord.club_id ?? ""),
         teamId: (eventRecord.team_id as string | null | undefined) ?? null,
-        title: String(eventRecord.title ?? ""),
-        description: String(eventRecord.description ?? ""),
+        // The canister rejects empty or >128-char text fields ("Invalid
+        // event"/"Invalid series"); an optional blank description is sent as
+        // a single space, which renders as empty.
+        title: String(eventRecord.title ?? "").slice(0, 128),
+        description: String(eventRecord.description ?? "").trim().slice(0, 128) || " ",
         eventType: String(eventRecord.type ?? "training"),
         location: (eventRecord.location_name as string | null | undefined) ?? null,
         opponent: (eventRecord.opponent as string | null | undefined) ?? null,
@@ -72,7 +75,10 @@ export async function createEventTransaction(
       if (input.childDates && input.childDates.length > 0) {
         const { events } = await createLiveEventSeries(ctx, {
           ...base,
-          frequency: "custom",
+          // The canister only accepts daily/weekly/fortnightly/monthly. With
+          // untilMs = first start it creates just the first event; the exact
+          // dates are appended below, so the frequency value is cosmetic.
+          frequency: "weekly",
           firstStartsAtMs: startsAtMs,
           firstEndsAtMs: startsAtMs + durationMs,
           untilMs: startsAtMs,
