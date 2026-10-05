@@ -293,6 +293,7 @@ export function IcpMediaFeedPage() {
   const [selectedTeamId, setSelectedTeamId] = useState("all");
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
+  const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [actionPost, setActionPost] = useState<LiveMediaPost | null>(null);
   const pressTimerRef = useRef<number | null>(null);
@@ -335,7 +336,24 @@ export function IcpMediaFeedPage() {
         },
         icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
       }),
-    onSuccess: () => setCommentInput(""),
+    onSuccess: (_res, { post, text }) => {
+      setCommentInput("");
+      // Show the comment straight away; the feed refetch replaces it with
+      // the canister copy (the sheet reads the live post, not a snapshot).
+      setPendingComments((prev) => ({
+        ...prev,
+        [post.id]: [
+          ...(prev[post.id] ?? []),
+          {
+            id: `pending-${Date.now()}`,
+            text,
+            user_id: principal ?? "",
+            created_at: new Date().toISOString(),
+            profiles: { display_name: "You", avatar_url: null },
+          },
+        ],
+      }));
+    },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Comment failed"),
     onSettled: invalidate,
   });
@@ -366,6 +384,17 @@ export function IcpMediaFeedPage() {
       return post.teamId === selectedTeamId;
     });
   }, [feedQuery.data?.posts, selectedClubId, selectedTeamId]);
+
+  // Read comments from the freshest feed copy, not the snapshot taken when
+  // the sheet opened, and keep just-sent comments until the canister has them.
+  const activeComments = useMemo<LiveCommentView[]>(() => {
+    if (!commentPost) return [];
+    const live = feedQuery.data?.posts.find((p) => p.id === commentPost.id) ?? commentPost;
+    const pending = (pendingComments[commentPost.id] ?? []).filter(
+      (pc) => !live.comments.some((c) => c.text === pc.text),
+    );
+    return [...live.comments, ...pending];
+  }, [commentPost, feedQuery.data?.posts, pendingComments]);
 
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
@@ -580,7 +609,7 @@ export function IcpMediaFeedPage() {
         teamId={commentPost?.teamId}
         clubId={commentPost?.clubId}
         miniLeagueId={commentPost?.miniLeagueId}
-        comments={commentPost?.comments ?? []}
+        comments={activeComments}
         commentInput={commentInput}
         onCommentInputChange={setCommentInput}
         onSubmitComment={() => {
