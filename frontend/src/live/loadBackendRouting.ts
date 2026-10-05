@@ -38,7 +38,26 @@ import { getUserClubIds } from "./userClubs";
  * back to Supabase-everywhere and the app could not even learn it should be
  * on ICP.
  */
-export async function loadBackendRoutingConfig(): Promise<void> {
+function savedAtOf(value: unknown): number {
+  const raw = value && typeof value === "object" ? (value as Record<string, unknown>).savedAtMs : undefined;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 0;
+}
+
+function decodeOnChain(raw: string | null): unknown {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/**
+ * The saved routing config, whichever copy is newer: the Supabase
+ * app_settings row (written by Supabase-session admins) or the club_domain
+ * app_config copy (written by Internet Identity admins, who have no
+ * Supabase session and so cannot write the row). Each save stamps
+ * `savedAtMs`; a copy without it counts as oldest.
+ */
+export async function fetchStoredBackendRoutingConfig(): Promise<BackendRoutingConfig | null> {
+  let row: unknown = null;
+  let rowError: unknown = null;
   try {
     const { data, error } = await supabase
       .from("app_settings")
@@ -46,7 +65,19 @@ export async function loadBackendRoutingConfig(): Promise<void> {
       .eq("key", BACKEND_ROUTING_CONFIG_KEY)
       .maybeSingle();
     if (error) throw error;
-    const stored = data ? parseBackendRoutingConfig(data.value) : null;
+    row = data?.value ?? null;
+  } catch (error) {
+    rowError = error;
+  }
+  const onChain = decodeOnChain(await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY));
+  const pick = onChain && (!row || savedAtOf(onChain) > savedAtOf(row)) ? onChain : row;
+  if (!pick && rowError) throw rowError;
+  return pick ? parseBackendRoutingConfig(pick) : null;
+}
+
+export async function loadBackendRoutingConfig(): Promise<void> {
+  try {
+    const stored = await fetchStoredBackendRoutingConfig();
     if (stored) {
       applyBackendRoutingConfig(stored);
       cacheBackendRoutingConfig(stored);
@@ -71,7 +102,7 @@ export async function loadBackendRoutingConfig(): Promise<void> {
   // read anonymously — lets an ICP-only deployment boot without Supabase and
   // without a build-time env or a warm cache.
   try {
-    const onChain = await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY);
+    const onChain = decodeOnChain(await readLiveAppConfig(BACKEND_ROUTING_CONFIG_KEY));
     if (onChain) {
       const parsed = parseBackendRoutingConfig(onChain);
       if (parsed) {
