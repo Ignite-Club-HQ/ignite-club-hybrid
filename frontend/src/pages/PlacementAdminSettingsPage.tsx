@@ -30,6 +30,8 @@ import {
   resolveFeatureBackend,
 } from "@/live/featureBackend";
 import { getEffectiveBackend, getEffectiveTarget } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveClubs } from "@/live/features/club";
 import { diffClubBackendChanges, syncClubBackendChanges } from "@/live/websiteBackendSync";
 import { getCurrentCountry, setProfileCountry } from "@/live/userCountry";
 import { supabase } from "@/integrations/supabase/client";
@@ -187,9 +189,39 @@ export default function PlacementAdminSettingsPage() {
   const { data: clubs } = useQuery({
     queryKey: ["admin-clubs-for-backend-overrides"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clubs").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as { id: string; name: string }[];
+      const merged = new Map<string, string>();
+      // Supabase clubs — best-effort: an Internet Identity app admin has no
+      // Supabase session, so in ICP mode this read fails and must not blank
+      // the override picker.
+      try {
+        const { data, error } = await supabase.from("clubs").select("id, name").order("name");
+        if (!error) for (const c of (data ?? []) as { id: string; name: string }[]) merged.set(c.id, c.name);
+      } catch {
+        // no Supabase session in ICP mode
+      }
+      // Canister clubs when membership is ICP-routed — a pinned club may only
+      // exist on the canister.
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            let cursor: string | null = null;
+            for (let i = 0; i < 20; i++) {
+              const batch = await listLiveClubs(ctx, cursor, 50);
+              for (const c of batch) {
+                if (c.is_active && c.deleted_at_ms.length === 0) merged.set(c.id, c.name);
+              }
+              if (batch.length < 50) break;
+              cursor = batch[batch.length - 1]!.id;
+            }
+          },
+        });
+      } catch {
+        // canister list is best-effort too
+      }
+      return [...merged.entries()]
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: !!user && isAppAdmin,
   });
@@ -866,6 +898,12 @@ export default function PlacementAdminSettingsPage() {
                         {(clubs ?? []).map(club => (
                           <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
                         ))}
+                        {/* A pinned club whose name can't be resolved (e.g. a
+                            Supabase-only club while in ICP mode) must still be
+                            identifiable and removable instead of blank. */}
+                        {row.clubId && !(clubs ?? []).some(c => c.id === row.clubId) && (
+                          <SelectItem value={row.clubId}>Unknown club ({row.clubId.slice(0, 8)}…)</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
