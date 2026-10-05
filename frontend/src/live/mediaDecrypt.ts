@@ -1,6 +1,6 @@
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
-import { MEDIA_BLOB_STORE_KEY } from "./mediaStorage";
+import { blobAssetUrl, MEDIA_BLOB_STORE_KEY } from "./mediaStorage";
 import { decryptPiiValue } from "./piiVetKeys";
 import type { IcpTargetConfig } from "./targetRegistry";
 
@@ -27,7 +27,7 @@ const ICP_GATEWAY_HOSTS = ["icp0.io", "raw.icp0.io"];
 export function parseIcpBlobUrl(
   url: string,
   target: IcpTargetConfig | null,
-): { path: string } | null {
+): { path: string; canisterId: string } | null {
   if (!target) return null;
   const canisterId = target.canisterIds[MEDIA_BLOB_STORE_KEY];
   if (!canisterId) return null;
@@ -37,11 +37,21 @@ export function parseIcpBlobUrl(
   } catch {
     return null;
   }
-  if (!ICP_GATEWAY_HOSTS.includes(parsed.hostname)) return null;
   const segments = parsed.pathname.replace(/^\/+/, "").split("/");
-  if (segments[0] !== canisterId) return null;
-  const path = segments.slice(1).join("/");
-  return path ? { path } : null;
+  let path: string;
+  if (ICP_GATEWAY_HOSTS.includes(parsed.hostname)) {
+    // Legacy path-style URLs stored before the subdomain fix.
+    if (segments[0] !== canisterId) return null;
+    path = segments.slice(1).join("/");
+  } else if (
+    parsed.hostname === `${canisterId}.raw.icp0.io` ||
+    parsed.hostname === `${canisterId}.icp0.io`
+  ) {
+    path = segments.join("/");
+  } else {
+    return null;
+  }
+  return path ? { path, canisterId } : null;
 }
 
 /**
@@ -58,7 +68,8 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   if (!identity) {
     throw new Error("Internet Identity sign-in required to decrypt blob-store media");
   }
-  const response = await fetch(url);
+  // Always fetch via the routable raw subdomain, whatever form was stored.
+  const response = await fetch(blobAssetUrl(match.canisterId, match.path));
   if (!response.ok) {
     throw new Error(`Blob store fetch failed (${response.status})`);
   }

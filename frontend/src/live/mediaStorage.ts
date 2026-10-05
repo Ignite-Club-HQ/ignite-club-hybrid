@@ -33,9 +33,11 @@ export interface LiveAssetLocation {
 }
 
 /** Public URL for a blob served by an asset/blob-store canister. */
-export function blobAssetUrl(canisterId: string, path: string, host = "https://icp0.io"): string {
+export function blobAssetUrl(canisterId: string, path: string): string {
+  // Boundary nodes only route canister-subdomain URLs (icp0.io/<id>/… is a
+  // 400), and the blob store's uncertified http_request needs the raw domain.
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  return `${host.replace(/\/+$/, "")}/${canisterId}${cleanPath}`;
+  return `https://${canisterId}.raw.icp0.io${cleanPath}`;
 }
 
 export function resolveMediaSource(asset: LiveAssetLocation): LiveMediaSource {
