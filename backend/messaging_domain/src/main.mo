@@ -62,6 +62,34 @@ persistent actor class Main(governorInit : Principal) {
   // Fail-closed while unset: delete_club_data/delete_team_data reject every
   // caller until the deploy script wires this.
   var clubDomainCanister : ?Principal;
+
+  // Global broadcast conversation id. Mirrors the Supabase broadcast_messages
+  // feed: one platform-wide stream that every signed-in member can read, with
+  // posting restricted to platform admins. The frontend reads and posts by
+  // this fixed id, like it does for team/club chats.
+  transient let BROADCAST_CONVERSATION_ID = "broadcast";
+
+  // Club-admin room id is derived from the club id, so the frontend can read
+  // and send by an id it already knows.
+  func clubAdminConversationId(club_id : Text) : Text { "club-admin-" # club_id };
+
+  // Typed view of the club_domain queries this canister needs. Fail-closed
+  // while the club_domain canister id is unset (set_club_domain_canister).
+  type ClubDomainRef = actor {
+    is_app_admin : shared query (Principal) -> async Bool;
+    list_club_admins : shared query (Text) -> async [Principal];
+  };
+
+  func clubDomainRef() : async ?ClubDomainRef {
+    switch (clubDomainCanister) {
+      case null { null };
+      case (?cd) {
+        let ref : ClubDomainRef = actor (Principal.toText(cd));
+        ?ref
+      };
+    };
+  };
+
   // Platform -> minimum required version/build, set by the governor. Read by
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).
@@ -196,6 +224,10 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func canAccessConversation(caller : Principal, conversation_id : Text) : Bool {
+    // The platform broadcast feed is open-read for every signed-in member
+    // (mirrors the Supabase broadcast_messages read policy); posting to it is
+    // gated separately, in send_message.
+    if (conversation_id == BROADCAST_CONVERSATION_ID and not caller.equal(Principal.anonymous())) return true;
     for (item in conversations.values()) {
       if (item.id == conversation_id) {
         return item.participants.any(func(p) = p.equal(caller));
@@ -203,8 +235,12 @@ persistent actor class Main(governorInit : Principal) {
     };
     false
   };
+
   func canReadTeamMessages(caller : Principal, conversation_id : Text) : Bool {
     if (caller.equal(Principal.anonymous())) return false;
+    // Platform broadcast feed: readable by every signed-in member.
+    if (conversation_id == BROADCAST_CONVERSATION_ID) return true;
+
     for (conversation in conversations.values()) {
       if (conversation.id == conversation_id) {
         if (conversation.participants.any(func(participant) = participant.equal(caller))) return true;
@@ -296,6 +332,142 @@ persistent actor class Main(governorInit : Principal) {
       };
     }
   };
+
+  // ===================== Platform broadcast feed & club-admin rooms =====================
+
+  // Find-or-create the global broadcast conversation. Any signed-in member may
+  // call it: it provisions nothing privileged and grants no membership — reads
+  // are open to every authenticated caller (canAccessConversation), and posting
+  // is gated in send_message against club_domain's app_admin grant.
+  public shared ({ caller }) func ensure_broadcast_conversation() : async { #Ok : Types.Conversation; #Err : Text } {
+    auth(caller);
+    switch (findConversationIndex(BROADCAST_CONVERSATION_ID)) {
+      case (?i) { #Ok(conversations[i]) };
+      case null {
+        let conversation : Types.Conversation = {
+          id = BROADCAST_CONVERSATION_ID;
+          club_id = "broadcast";
+          team_id = null;
+          participants = [];
+          next_sequence = 1;
+        };
+        conversations := conversations.concat([conversation]);
+        let meta : Types.GroupMetadata = {
+          conversation_id = BROADCAST_CONVERSATION_ID;
+          name = "Broadcast";
+          kind = "broadcast";
+          club_id = null;
+          team_id = null;
+          members = [];
+          created_at_ms = nowMs();
+          avatar = null;
+          description = null;
+          deleted = false;
+          // Posting is enforced against club_domain's app_admin grant in
+          // send_message, not through this canister's own group-admin store.
+          admin_only_posting = false;
+          deleted_at_ms = null;
+          deleted_by = null;
+        };
+        groupMetadata := groupMetadata.concat([meta]);
+        #Ok(conversation)
+      };
+    }
+  };
+
+  // ===================== Club-admin threads =====================
+  // Mirrors Supabase club_admin_conversations: one thread per club member,
+  // answered by that club's admins. The thread id is derived from the club and
+  // the member, so both sides address it without a lookup, and membership is
+  // re-read from club_domain on every open: a newly promoted admin joins the
+  // thread, a removed admin leaves it.
+
+  func clubAdminThreadId(club_id : Text, member : Principal) : Text {
+    clubAdminConversationId(club_id) # "-" # Principal.toText(member)
+  };
+
+  // Find-or-create (and re-sync) one member's thread with their club's admins.
+  // The caller must be that member or one of the club's admins, so nobody can
+  // open a thread they belong to.
+  public shared ({ caller }) func ensure_club_admin_thread(club_id : Text, member : Principal) : async { #Ok : Types.Conversation; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    let clubDomain = await clubDomainRef();
+    switch (clubDomain) {
+      case null { return #Err("club_domain canister not configured") };
+      case (?cd) {
+        let admins = await cd.list_club_admins(club_id);
+        let isMember = caller.equal(member);
+        let isAdmin = admins.any(func(p) = p.equal(caller));
+        if (not isMember and not isAdmin and not isGovernor(caller)) return #Err("Not permitted");
+        // The member is always participants[0] — the admin inbox reads the
+        // thread owner from there, so keep that order stable.
+        let participants = Array.tabulate<Principal>(admins.size() + 1, func(i) { if (i == 0) { member } else { admins[i - 1] } });
+        let conversationId = clubAdminThreadId(club_id, member);
+        switch (findConversationIndex(conversationId)) {
+          case (?i) {
+            let updated : Types.Conversation = { conversations[i] with participants };
+            conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == i) { updated } else { conversations[pos] });
+            #Ok(updated)
+          };
+          case null {
+            let conversation : Types.Conversation = {
+              id = conversationId;
+              club_id;
+              team_id = null;
+              participants;
+              next_sequence = 1;
+            };
+            conversations := conversations.concat([conversation]);
+            let meta : Types.GroupMetadata = {
+              conversation_id = conversationId;
+              name = "Club admins";
+              kind = "club_admin";
+              club_id = ?club_id;
+              team_id = null;
+              members = participants;
+              created_at_ms = nowMs();
+              avatar = null;
+              description = null;
+              deleted = false;
+              admin_only_posting = false;
+              deleted_at_ms = null;
+              deleted_by = null;
+            };
+            groupMetadata := groupMetadata.concat([meta]);
+            #Ok(conversation)
+          };
+        };
+      };
+    };
+  };
+
+  // The club's admin inbox: every member thread in the club, each paired with
+  // its owner (participants[0], the invariant ensure_club_admin_thread keeps).
+  // Only that club's admins (or the governor) get the list; everyone else
+  // receives an empty one.
+  public shared ({ caller }) func list_club_admin_threads(club_id : Text) : async [{ id : Text; member : Principal }] {
+    auth(caller);
+    if (not valid(club_id)) return [];
+    let clubDomain = await clubDomainRef();
+    switch (clubDomain) {
+      case null { [] };
+      case (?cd) {
+        let admins = await cd.list_club_admins(club_id);
+        if (not admins.any(func(p) = p.equal(caller)) and not isGovernor(caller)) return [];
+        let prefix = clubAdminConversationId(club_id) # "-";
+        var out : [{ id : Text; member : Principal }] = [];
+        for (c in conversations.values()) {
+          if (Text.startsWith(c.id, #text prefix) and c.participants.size() > 0) {
+            out := out.concat([{ id = c.id; member = c.participants[0] }]);
+          };
+        };
+        out
+      };
+    };
+  };
+
+
 
   func findConversationIndex(conversation_id : Text) : ?Nat {
     var idx = 0;
@@ -521,6 +693,21 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
+    // The broadcast conversation is open-read, so the check above passes for
+    // every signed-in member; only platform admins (club_domain's app_admin
+    // grant) may post to it.
+    if (conversation_id == BROADCAST_CONVERSATION_ID and not isGovernor(caller)) {
+      let clubDomain = await clubDomainRef();
+      switch (clubDomain) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) {
+          let admin = await cd.is_app_admin(caller);
+          if (not admin) return #Err("App admin required");
+        };
+      };
+    };
+
+
     // DM blocking: refuse to post when either party has blocked the other.
     for (c in conversations.values()) {
       if (c.id == conversation_id and c.club_id == "dm") {
@@ -828,7 +1015,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func validKind(kind : Text) : Bool {
-    kind == "direct" or kind == "club" or kind == "team" or kind == "group" or kind == "broadcast" or kind == "competition"
+    kind == "direct" or kind == "club" or kind == "team" or kind == "group" or kind == "broadcast" or kind == "competition" or kind == "club_admin"
   };
 
   func canManageGroupMetadata(caller : Principal, meta : Types.GroupMetadata) : Bool {

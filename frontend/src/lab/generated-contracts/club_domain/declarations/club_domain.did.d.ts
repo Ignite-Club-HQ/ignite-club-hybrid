@@ -498,6 +498,7 @@ export interface Main {
     { 'Ok' : InviteStats } |
       { 'Err' : string }
   >,
+  'is_app_admin' : ActorMethod<[Principal], boolean>,
   'is_member_removed' : ActorMethod<[string, Principal], boolean>,
   'link_guardian' : ActorMethod<
     [string, Principal],
@@ -519,6 +520,7 @@ export interface Main {
     { 'Ok' : Array<Child> } |
       { 'Err' : string }
   >,
+  'list_club_admins' : ActorMethod<[string], Array<Principal>>,
   'list_club_join_requests' : ActorMethod<
     [string],
     { 'Ok' : Array<ClubJoinRequest> } |

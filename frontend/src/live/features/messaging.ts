@@ -254,7 +254,64 @@ function toLiveGroupMetadata(raw: {
  * Group/team/competition-thread metadata (name, kind, members) — the
  * canister counterpart of the Supabase `chat_groups` row read.
  */
+/**
+ * Provision the platform broadcast feed on the chat canister. Any signed-in
+ * member may call it — it grants no membership: reads are open to every
+ * authenticated caller canister-side, and posting is restricted to platform
+ * admins there. Returns the fixed conversation id the app reads and posts by.
+ */
+export async function ensureLiveBroadcastConversation(ctx: FeatureBackendContext): Promise<string> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.ensure_broadcast_conversation());
+  const result = 'Err' in raw ? { Err: raw.Err! } : { Ok: raw.Ok! };
+  if ('Err' in result) throw new Error(String(result.Err));
+  return result.Ok.id;
+}
+
+/**
+ * Thread id formula shared with the canister: a club's admin thread for one
+ * member. Both sides derive it, so opening a thread needs no lookup.
+ */
+export function liveClubAdminThreadId(clubId: string, member: string): string {
+  return `club-admin-${clubId}-${member}`;
+}
+
+/**
+ * Open (and re-sync) one member's thread with their club's admins. Canister-side
+ * the caller must be that member or one of the club's admins; membership is
+ * re-read from club_domain on every call, so admin changes take effect on the
+ * next open.
+ */
+export async function ensureLiveClubAdminThread(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  member: string,
+): Promise<string> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(
+    actor.ensure_club_admin_thread(clubId, Principal.fromText(member)),
+  );
+  const result = 'Err' in raw ? { Err: raw.Err! } : { Ok: raw.Ok! };
+  if ('Err' in result) throw new Error(String(result.Err));
+  return result.Ok.id;
+}
+
+/**
+ * The club's admin inbox: every member thread in the club with its owner.
+ * Canister-side only that club's admins receive anything; everyone else gets an
+ * empty list.
+ */
+export async function listLiveClubAdminThreads(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<Array<{ id: string; member: string }>> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const raw = await unwrapCandid(actor.list_club_admin_threads(clubId));
+  return raw.map((entry) => ({ id: entry.id, member: entry.member.toText() }));
+}
+
 export async function upsertLiveGroupMetadata(
+
   ctx: FeatureBackendContext,
   conversationId: string,
   kind: string,

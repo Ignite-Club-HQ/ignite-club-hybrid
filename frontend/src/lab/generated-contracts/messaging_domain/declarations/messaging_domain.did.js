@@ -402,6 +402,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_broadcast_conversation' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'ensure_club_admin_thread' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
     'ensure_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
@@ -487,6 +497,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_blocked_users' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
+    'list_club_admin_threads' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Record({ 'id' : IDL.Text, 'member' : IDL.Principal }))],
+        [],
+      ),
     'list_club_dm_settings' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubDmSettings), 'Err' : IDL.Text })],

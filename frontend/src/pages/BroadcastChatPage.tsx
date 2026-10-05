@@ -75,7 +75,7 @@ import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { useMessageReads } from "@/hooks/useMessageReads";
 import { useMarkVisibleChatMessagesRead } from "@/hooks/useMarkVisibleChatMessagesRead";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { sendLiveMessage, updateLiveMessage, ensureLiveBroadcastConversation, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
@@ -161,6 +161,8 @@ export default function BroadcastChatPage() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  // Newest-first paging cursor for the ICP canister feed (null = oldest known).
+  const icpOlderCursorRef = useRef<string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const useVirtualizedChat = true;
   // Legacy DOM refs are no longer attached (Virtuoso owns scroll). Kept as
@@ -265,7 +267,46 @@ export default function BroadcastChatPage() {
     queryKey: ["broadcast-messages"],
     queryFn: async () => {
       if (useIcpLab && user?.id) {
-        return { messages: fixtureData.getLocalLabBroadcastMessages('broadcast-icp-001', user.id), hasOlderMessages: false, reactions: [], fromCache: true };
+        // Real platform broadcast feed on the chat canister: one global
+        // conversation every signed-in member can read, posted to only by app
+        // admins (enforced canister-side). Newest page first; the cursor
+        // drives scroll-back in loadOlderMessages.
+        return await withFeatureBackend("messaging", {
+          supabase: async () => ({ messages: [] as Message[], hasOlderMessages: false }),
+          icp: async (ctx) => {
+            await ensureLiveBroadcastConversation(ctx);
+            const page = await listLiveLatestMessagesPage(ctx, "broadcast", null, MESSAGES_PER_PAGE);
+            icpOlderCursorRef.current = page.nextBefore ?? null;
+            const rows = page.messages;
+            const reactions = await listLiveReactions(ctx, "broadcast").catch(() => []);
+            const byMessage = new Map<string, Message["reactions"]>();
+            for (const r of reactions) {
+              const list = byMessage.get(r.message_id) ?? [];
+              list.push({
+                id: `${r.message_id}:${r.user.toText()}:${r.emoji}`,
+                user_id: r.user.toText(),
+                reaction_type: r.emoji,
+                broadcast_message_id: r.message_id,
+              } as unknown as NonNullable<Message["reactions"]>[number]);
+              byMessage.set(r.message_id, list);
+            }
+            const textById = new Map(rows.map((m) => [m.id, m.text]));
+            const messages = rows
+              .map((m) => ({
+                id: m.id,
+                author_id: m.authorId,
+                text: m.text,
+                image_url: m.imageUrl ?? null,
+                reply_to_id: m.replyToId ?? null,
+                reply_to: m.replyToId
+                  ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" }
+                  : null,
+                created_at: new Date(Number(m.createdAtMs)).toISOString(),
+                reactions: byMessage.get(m.id) ?? [],
+              })) as unknown as Message[];
+            return { messages, hasOlderMessages: page.hasMore };
+          },
+        });
       }
 
       // If offline, return cached messages using the shared online manager
@@ -579,6 +620,52 @@ export default function BroadcastChatPage() {
     if (!currentMessages?.length || isLoadingOlder || !hasOlderMessages) return;
 
     setIsLoadingOlder(true);
+
+    // ICP: older pages come from the chat canister's newest-first cursor.
+    if (useIcpLab && user?.id) {
+      try {
+        const older = await withFeatureBackend("messaging", {
+          supabase: async () => ({ rows: [] as Message[], hasOlder: false }),
+          icp: async (ctx) => {
+            const page = await listLiveLatestMessagesPage(
+              ctx,
+              "broadcast",
+              icpOlderCursorRef.current,
+              MESSAGES_PER_PAGE,
+            );
+            icpOlderCursorRef.current = page.nextBefore ?? null;
+            return {
+              rows: page.messages
+                .map((m) => ({
+                  id: m.id,
+                  author_id: m.authorId,
+                  text: m.text,
+                  image_url: m.imageUrl ?? null,
+                  reply_to_id: m.replyToId ?? null,
+                  reply_to: null,
+                  created_at: new Date(Number(m.createdAtMs)).toISOString(),
+                  reactions: [],
+                })) as unknown as Message[],
+              hasOlder: page.hasMore,
+            };
+          },
+        });
+        if (!older.rows.length) {
+          setHasOlderMessages(false);
+        } else {
+          // Oldest-first for the prepend, matching the Supabase path.
+          const chronological = [...older.rows].reverse();
+          setLocalMessages((prev) => [...chronological, ...prev]);
+          setHasOlderMessages(older.hasOlder);
+        }
+      } catch (err) {
+        console.warn("[BroadcastChat] ICP older messages failed", err);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+      return;
+    }
+
 
     // Create abort controller for timeout (25s headroom for slow networks)
     const controller = new AbortController();

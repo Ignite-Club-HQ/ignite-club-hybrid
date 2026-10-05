@@ -259,6 +259,16 @@ type Main =
        Err: text;
        Ok: nat32;
      });
+   ensure_broadcast_conversation: () ->
+    (variant {
+       Err: text;
+       Ok: Conversation;
+     });
+   ensure_club_admin_thread: (club_id: text, member: principal) ->
+    (variant {
+       Err: text;
+       Ok: Conversation;
+     });
    ensure_conversation: (club_id: text, team_id: opt text, participants:
     vec principal) -> (variant {
                          Err: text;
@@ -336,6 +346,11 @@ type Main =
        Ok: vec OnlineUser;
      }) query;
    list_blocked_users: () -> (vec principal) query;
+   list_club_admin_threads: (club_id: text) ->
+    (vec record {
+           id: text;
+           member: principal;
+         });
    list_club_dm_settings: () ->
     (variant {
        Err: text;

@@ -83,7 +83,8 @@ import { CLUB_ADMIN_CHAT_SCOPE } from "@/features/messaging/scopes/chatScopeAdap
 import { Capacitor } from "@capacitor/core";
 
 import { withFeatureBackend } from "@/live/featureRouter";
-import { sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { sendLiveMessage, updateLiveMessage, ensureLiveClubAdminThread, listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
+import { getLiveClubProfile } from "@/live/features/club";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { noteChatMount, noteChatUnmount } from "@/lib/chatPerfDiagnostics";
@@ -145,45 +146,28 @@ const getCachedClubAdminMessages = (conversationId: string): ClubAdminMessage[] 
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { getLocalLabAdminChatMessages } from "@/lab/fixtureDataLayer";
 
 export default function ClubAdminChatPage() {
-  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  if (useIcpLab) {
-    return <IcpLabClubAdminChatPage />;
-  }
   return <SupabaseClubAdminChatPage />;
 }
 
-/** Read-only synthetic admin chat transcript; sending and media workflows remain unavailable until messaging_domain is wired here. */
-function IcpLabClubAdminChatPage() {
-  const navigate = useNavigate();
-  const messages = getLocalLabAdminChatMessages("club-icp-001");
-
-  return (
-    <div className="container max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-bold">Admin Chat</h1>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Showing a synthetic ICP lab admin chat transcript. Sending messages and media uploads are disabled.
-      </p>
-      <div className="space-y-2">
-        {messages.map((message) => (
-          <Card key={message.id}>
-            <CardContent className="p-3">
-              <p className="text-xs font-medium text-muted-foreground">{message.author.display_name}</p>
-              <p className="text-sm">{message.text}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
+/**
+ * ICP club-admin thread ids are derived canister-side as
+ * "club-admin-<clubId>-<member>" (club ids are UUIDs — fixed 36 chars — so both
+ * parts split cleanly). The page addresses the thread by that id, exactly like
+ * the Supabase conversation id, and the canister re-checks membership on every
+ * open, so a member sees their own thread and that club's admins see every one.
+ */
+function parseIcpClubAdminThreadId(threadId: string | undefined): { clubId: string; member: string } | null {
+  if (!threadId || !threadId.startsWith("club-admin-")) return null;
+  const rest = threadId.slice("club-admin-".length);
+  if (rest.length <= 37) return null;
+  const clubId = rest.slice(0, 36);
+  const member = rest.slice(37);
+  if (!clubId || !member) return null;
+  return { clubId, member };
 }
+
 
 function SupabaseClubAdminChatPage() {
   // [chat-perf-diag] track mount/unmount lifetime
@@ -259,7 +243,13 @@ function SupabaseClubAdminChatPage() {
     isFetching: conversationIsFetching,
   } = useQuery({
     queryKey: ["club-admin-conversation", conversationId],
-    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
+    queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const parsed = parseIcpClubAdminThreadId(conversationId);
+        if (!parsed) return null;
+        return { id: conversationId!, club_id: parsed.clubId, member_user_id: parsed.member };
+      }
+
       const { data, error } = await supabase
         .from("club_admin_conversations")
         .select("*")
@@ -268,7 +258,7 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data ?? null;
     },
-    enabled: !!conversationId && authReady && resolveAuthBackend() !== "icp",
+    enabled: !!conversationId && authReady,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -284,7 +274,19 @@ function SupabaseClubAdminChatPage() {
   // Fetch club details
   const { data: club } = useQuery({
     queryKey: ["club-detail-chat", conversation?.club_id],
-    queryFn: async () => { if (resolveAuthBackend() === "icp") return null; 
+    queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const icpClubId = conversation?.club_id;
+        if (!icpClubId) return null;
+        return await withFeatureBackend("clubs", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const profile: any = await getLiveClubProfile(ctx, icpClubId);
+            return profile ? { id: icpClubId, name: profile.name ?? null, logo_url: null } : null;
+          },
+        });
+      }
+
       const clubId = conversation?.club_id;
       if (!clubId) return null;
       const { data, error } = await supabase
@@ -295,7 +297,7 @@ function SupabaseClubAdminChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!conversation?.club_id && authReady && resolveAuthBackend() !== "icp",
+    enabled: !!conversation?.club_id && authReady,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -375,7 +377,46 @@ function SupabaseClubAdminChatPage() {
     refetch: refetchMessages,
   } = useQuery({
     queryKey,
-    queryFn: async () => { if (resolveAuthBackend() === "icp") return { messages: [], hasOlderMessages: false }; 
+    queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // The thread lives on the chat canister: provision/re-sync it (the
+        // canister checks the caller is this member or one of the club's
+        // admins), then read the newest page and its reactions.
+        const parsed = parseIcpClubAdminThreadId(conversationId);
+        if (!parsed || !conversationId) return { messages: [] as ClubAdminMessage[], hasOlderMessages: false };
+        return await withFeatureBackend("messaging", {
+          supabase: async () => ({ messages: [] as ClubAdminMessage[], hasOlderMessages: false }),
+          icp: async (ctx) => {
+            await ensureLiveClubAdminThread(ctx, parsed.clubId, parsed.member);
+            const page = await listLiveLatestMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE);
+            const reactions = await listLiveReactions(ctx, conversationId).catch(() => []);
+            const byMessage = new Map<string, ClubAdminMessage["reactions"]>();
+            for (const r of reactions) {
+              const list = byMessage.get(r.message_id) ?? [];
+              list.push({
+                id: `${r.message_id}:${r.user.toText()}:${r.emoji}`,
+                user_id: r.user.toText(),
+                reaction_type: r.emoji,
+              } as unknown as NonNullable<ClubAdminMessage["reactions"]>[number]);
+              byMessage.set(r.message_id, list);
+            }
+            const textById = new Map(page.messages.map((m) => [m.id, m.text]));
+            const messages = page.messages.map((m) => ({
+              id: m.id,
+              conversation_id: conversationId,
+              author_id: m.authorId,
+              text: m.text,
+              image_url: m.imageUrl ?? null,
+              reply_to_id: m.replyToId ?? null,
+              reply_to: m.replyToId ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" } : null,
+              created_at: new Date(Number(m.createdAtMs)).toISOString(),
+              reactions: byMessage.get(m.id) ?? [],
+            })) as unknown as ClubAdminMessage[];
+            return { messages, hasOlderMessages: false };
+          },
+        });
+      }
+
       // 15s wall budget (mirrors TeamChatPage) so a socket left half-dead by an
       // Android background freeze can never leave this thread pending forever.
       const budget = createChatFetchBudget(15_000);

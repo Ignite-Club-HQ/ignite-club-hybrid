@@ -878,6 +878,29 @@ persistent actor class Main(governorInit : Principal) {
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
   };
 
+  // Platform (app) admin check exposed for sibling canisters — mirrors the
+  // private isAppAdmin. messaging_domain gates posting to the global broadcast
+  // chat on this (every signed-in member may read the feed).
+  public query func is_app_admin(user : Principal) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    acl.roles.any(func(grant) = grant.user.equal(user) and grant.role == "app_admin")
+  };
+
+  // Principals holding club_admin for this club — the membership of that
+  // club's admin chat room. App-wide app_admins are excluded on purpose: a
+  // platform admin supervises clubs through their own tools, not by sitting in
+  // every club's admin room.
+  public query func list_club_admins(club_id : Text) : async [Principal] {
+    var out : [Principal] = [];
+    for (grant in acl.roles.values()) {
+      if (grant.role == "club_admin" and grant.club == ?club_id) {
+        out := out.concat([grant.user]);
+      };
+    };
+    out
+  };
+
+
   // Caller-scoped: returns only the children linked to the caller's own
   // account via family links. Children without a matching record in
   // acl.children are skipped.
