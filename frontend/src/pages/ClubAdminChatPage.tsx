@@ -192,6 +192,12 @@ function SupabaseClubAdminChatPage() {
   const [replyTo, setReplyTo] = useChatDraftReply<ClubAdminMessage>(conversationId);
   const [editingMessage, setEditingMessage] = useState<{ id: string; text: string } | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // ICP scroll-back: newest-first paging cursor (null = oldest message known)
+  // plus the scroller flags it drives. Supabase mode keeps its prior
+  // single-window behaviour (hasOlderMessages stays false).
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const icpOlderCursorRef = useRef<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
   const [pendingPollId, setPendingPollId] = useState<string | null>(null);
@@ -389,6 +395,10 @@ function SupabaseClubAdminChatPage() {
           icp: async (ctx) => {
             await ensureLiveClubAdminThread(ctx, parsed.clubId, parsed.member);
             const page = await listLiveLatestMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE);
+            icpOlderCursorRef.current =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
             const reactions = await listLiveReactions(ctx, conversationId).catch(() => []);
             const byMessage = new Map<string, ClubAdminMessage["reactions"]>();
             for (const r of reactions) {
@@ -412,7 +422,7 @@ function SupabaseClubAdminChatPage() {
               created_at: new Date(Number(m.createdAtMs)).toISOString(),
               reactions: byMessage.get(m.id) ?? [],
             })) as unknown as ClubAdminMessage[];
-            return { messages, hasOlderMessages: false };
+            return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
         });
       }

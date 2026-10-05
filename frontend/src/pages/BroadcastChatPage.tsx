@@ -162,7 +162,7 @@ export default function BroadcastChatPage() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
   // Newest-first paging cursor for the ICP canister feed (null = oldest known).
-  const icpOlderCursorRef = useRef<string | null>(null);
+  const icpOlderCursorRef = useRef<number | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const useVirtualizedChat = true;
   // Legacy DOM refs are no longer attached (Virtuoso owns scroll). Kept as
@@ -276,7 +276,10 @@ export default function BroadcastChatPage() {
           icp: async (ctx) => {
             await ensureLiveBroadcastConversation(ctx);
             const page = await listLiveLatestMessagesPage(ctx, "broadcast", null, MESSAGES_PER_PAGE);
-            icpOlderCursorRef.current = page.nextBefore ?? null;
+            icpOlderCursorRef.current =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
             const rows = page.messages;
             const reactions = await listLiveReactions(ctx, "broadcast").catch(() => []);
             const byMessage = new Map<string, Message["reactions"]>();
@@ -304,7 +307,7 @@ export default function BroadcastChatPage() {
                 created_at: new Date(Number(m.createdAtMs)).toISOString(),
                 reactions: byMessage.get(m.id) ?? [],
               })) as unknown as Message[];
-            return { messages, hasOlderMessages: page.hasMore };
+            return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
         });
       }
