@@ -13,6 +13,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabRewards } from "@/lab/fixtureDataLayer";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function ClubRewardsPage() {
   const { clubId } = useParams<{ clubId: string }>();
@@ -37,28 +38,8 @@ export default function ClubRewardsPage() {
   });
 
   // Check if app admin or club admin
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (useIcpLab) return true;
-      return withFeatureBackend("membership", {
-        supabase: async () => {
-          const { data } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user!.id)
-            .eq("role", "app_admin")
-            .maybeSingle();
-          return !!data;
-        },
-        icp: async (ctx) => {
-          const grants = await getLiveMyRoleGrants(ctx);
-          return grants.some(g => g.role === "app_admin");
-        }
-      });
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin: isAppAdminFromHook } = useIsAppAdmin();
+  const isAppAdmin = useIcpLab ? true : isAppAdminFromHook;
 
   const { data: isClubAdmin } = useQuery({
     queryKey: ["is-club-admin-rewards", user?.id, clubId],

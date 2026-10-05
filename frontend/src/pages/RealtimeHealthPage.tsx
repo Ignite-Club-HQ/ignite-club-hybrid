@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 /**
  * Admin-only Realtime Health page.
@@ -86,20 +87,7 @@ function SupabaseRealtimeHealthPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id,
-  });
+  const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
   const proxy = useProxyConnectionCount();
 

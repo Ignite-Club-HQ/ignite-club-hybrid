@@ -20,7 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 interface ActiveGameRow {
   id: string;
@@ -99,21 +99,7 @@ function SupabaseAdminActiveGamesPage() {
   const [tab, setTab] = useState<"active" | "recent">("active");
   const [bumpKey, setBumpKey] = useState(0);
 
-  const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    // icp-guard: allow app-admin active-games tooling stays Supabase-only by design
-    enabled: !!user?.id && resolveAuthBackend() !== "icp",
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-  });
+  const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
   const { data: activeRows, isLoading: activeLoading, refetch: refetchActive } = useQuery({
     queryKey: ["admin-active-games", "active", bumpKey],

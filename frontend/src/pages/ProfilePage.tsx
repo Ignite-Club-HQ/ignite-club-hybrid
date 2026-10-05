@@ -28,6 +28,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePointsHistory, listLiveRedemptions, subjectForUser } from "@/live/features/points";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 
 import igniteIcon from "@/assets/ignite-icon.png";
@@ -92,37 +93,36 @@ export default function ProfilePage() {
     }
   }, [searchParams]);
 
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id && !useIcpLab,
-    staleTime: 0,
-    refetchOnMount: true,
-  });
+  // Shared authoritative app-admin check (Supabase or canister depending on
+  // the routed backend). A local Supabase-only query here previously shared
+  // the ["is-app-admin", userId] cache key with useIsAppAdmin and, being
+  // disabled in ICP mode, owned the cache entry with `undefined` — which is
+  // why the Admin button vanished for Internet Identity app admins.
+  const { isAppAdmin } = useIsAppAdmin();
 
-  // Check if user is team admin or coach
+  // Check if user is team admin or coach (canister role grants in ICP mode)
   const { data: isTeamAdminOrCoach } = useQuery({
-    queryKey: ["is-team-admin-coach", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .in("role", ["team_admin", "coach"])
-        .not("team_id", "is", null)
-        .limit(1);
-      return data && data.length > 0;
-    },
-    enabled: !!user && !useIcpLab,
+    queryKey: ["is-team-admin-coach", user?.id, useIcpLab],
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user!.id)
+            .in("role", ["team_admin", "coach"])
+            .not("team_id", "is", null)
+            .limit(1);
+          return !!data && data.length > 0;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(
+            (g) => (g.role === "team_admin" || g.role === "coach") && g.team.length > 0,
+          );
+        },
+      }),
+    enabled: !!user,
   });
 
   // Check if user has pro access

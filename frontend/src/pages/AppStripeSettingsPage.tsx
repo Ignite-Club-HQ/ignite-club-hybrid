@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 interface StripeConfigStatus {
@@ -60,19 +61,7 @@ function SupabaseAppStripeSettingsPage() {
   const [showSecretKey, setShowSecretKey] = useState(false);
 
   // Check if user is app admin
-  const { data: isAppAdmin, isLoading: isCheckingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin, isLoading: isCheckingAdmin } = useIsAppAdmin();
 
   // Fetch Stripe config status via secure edge function
   const { data: stripeConfig, isLoading } = useQuery<StripeConfigStatus | null>({

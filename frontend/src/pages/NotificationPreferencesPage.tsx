@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Bell, Mail, Smartphone, Users, CheckCircle2, XCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 interface NotificationStats {
   totalUsers: number;
@@ -254,19 +255,7 @@ function SupabaseNotificationPreferencesPage() {
   const { user } = useAuth();
 
   // Check if user is app_admin
-  const { data: isAdmin, isLoading: adminLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .single();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin: isAdmin, isLoading: adminLoading } = useIsAppAdmin();
 
   // Fetch notification stats
   const { data: stats, isLoading: statsLoading } = useQuery({

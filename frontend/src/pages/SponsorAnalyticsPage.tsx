@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeft, Eye, MousePointer, TrendingUp, Users } from "lucide-react";
 import { subDays, startOfDay } from "date-fns";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 type DateRange = "7d" | "30d" | "90d" | "all";
 
@@ -323,20 +322,7 @@ function SupabaseSponsorAnalyticsPage() {
   const [selectedClub, setSelectedClub] = useState<string>("all");
 
   // Check if user is app admin
-  const { data: isAppAdmin, isLoading: checkingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin, isLoading: checkingAdmin } = useIsAppAdmin();
 
   // Get date filter
   const getDateFilter = () => {

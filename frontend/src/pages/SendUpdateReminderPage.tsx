@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -33,7 +34,6 @@ interface UserWithVersion {
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function SendUpdateReminderPage() {
   const useIcpLab = isFeatureRoutedToIcp("notifications");
@@ -54,19 +54,7 @@ function SupabaseSendUpdateReminderPage() {
   const [showUpdatePreview, setShowUpdatePreview] = useState(false);
 
   // Check app_admin
-  const { data: isAppAdmin, isLoading: adminLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id,
-  });
+  const { isAppAdmin, isLoading: adminLoading } = useIsAppAdmin();
 
   // Minimum version settings
   const [minIos, setMinIos] = useState("");

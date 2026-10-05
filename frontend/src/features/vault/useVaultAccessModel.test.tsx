@@ -21,6 +21,23 @@ const fetchVaultClubHasPro = vi.fn<(clubId: string) => Promise<boolean>>();
 const fetchVaultTeamHasPro = vi.fn<(teamId: string) => Promise<boolean>>();
 const fetchVaultAnyProAccess = vi.fn<(userId: string) => Promise<boolean>>();
 
+// useVaultAccessModel now sources the app-admin flag from the shared
+// useIsAppAdmin hook; mock the hook with an equivalent useQuery so the
+// existing fetchVaultAppAdmin expectations (including pending-promise
+// loading gates) keep driving the same cache-key semantics.
+vi.mock("@/hooks/useIsAppAdmin", async () => {
+  const { useQuery } = await import("@tanstack/react-query");
+  return {
+    useIsAppAdmin: () => {
+      const query = useQuery({
+        queryKey: ["is-app-admin", "user-1"],
+        queryFn: () => fetchVaultAppAdmin("user-1"),
+      });
+      return { isAppAdmin: query.data === true, isLoading: query.isPending, error: query.error };
+    },
+  };
+});
+
 vi.mock("./vaultAccessRepository", () => ({
   fetchVaultAppAdmin: (...args: [string]) => fetchVaultAppAdmin(...args),
   fetchVaultUserRoles: (...args: [string]) => fetchVaultUserRoles(...args),
