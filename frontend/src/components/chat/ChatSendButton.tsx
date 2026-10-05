@@ -205,7 +205,7 @@ export function ChatSendButton({
             pressing && canSend && "scale-110 ring-2 ring-primary/40 ring-offset-1 ring-offset-background",
           )}
         >
-          {loading ? (
+          {loading && canSend ? (
             <Loader2 className="h-[18px] w-[18px] animate-spin" strokeWidth={2.4} />
           ) : (
             <Send
