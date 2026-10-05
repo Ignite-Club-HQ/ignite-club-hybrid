@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   getEffectiveBackendForFeature: vi.fn<(feature: string) => "supabase" | "icp">(),
   getCurrentInternetIdentity: vi.fn(),
   getActiveIcpTarget: vi.fn(() => ({ alias: "test-target" })),
+  tryGetActiveIcpTarget: vi.fn<() => unknown>(() => null),
 }));
 
 vi.mock("./loadBackendRouting", () => ({
   getEffectiveBackendForFeature: mocks.getEffectiveBackendForFeature,
+  tryGetActiveIcpTarget: mocks.tryGetActiveIcpTarget,
 }));
 
 vi.mock("./internetIdentityAuth", () => ({
@@ -24,6 +26,20 @@ describe("withFeatureBackend", () => {
   beforeEach(() => {
     mocks.getEffectiveBackendForFeature.mockReset();
     mocks.getCurrentInternetIdentity.mockReset();
+    mocks.tryGetActiveIcpTarget.mockReturnValue(null);
+  });
+
+  it("keeps an Internet Identity user on the canister when routing momentarily says Supabase", async () => {
+    mocks.getEffectiveBackendForFeature.mockReturnValue("supabase");
+    const target = { alias: "t", canisterIds: { events_domain: "aaaaa-aa" } };
+    mocks.tryGetActiveIcpTarget.mockReturnValue(target);
+    const identity = { getPrincipal: () => ({}) };
+    mocks.getCurrentInternetIdentity.mockResolvedValue(identity);
+    const supabaseFn = vi.fn(async () => "supabase-result");
+    const icpFn = vi.fn(async () => "icp-result");
+    expect(await withFeatureBackend("events", { supabase: supabaseFn, icp: icpFn })).toBe("icp-result");
+    expect(supabaseFn).not.toHaveBeenCalled();
+    expect(icpFn).toHaveBeenCalledWith({ identity, target });
   });
 
   it("calls only the supabase provider, never touching identity/ICP, when the feature is not ICP-routed", async () => {

@@ -51,13 +51,6 @@ function candid_none<T>(): [] {
 function record_opt_to_undefined<T>(arg: T | null): T | undefined {
     return arg == null ? undefined : arg;
 }
-export type Result = {
-    __kind__: "Ok";
-    Ok: null;
-} | {
-    __kind__: "Err";
-    Err: string;
-};
 export type ResultUploadId = {
     __kind__: "Ok";
     Ok: string;
@@ -65,6 +58,18 @@ export type ResultUploadId = {
     __kind__: "Err";
     Err: string;
 };
+export type Result = {
+    __kind__: "Ok";
+    Ok: null;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export interface Usage {
+    accepting_uploads: boolean;
+    total_bytes: bigint;
+    capacity_limit_bytes: bigint;
+}
 export interface HttpResponse {
     body: Uint8Array;
     headers: Array<HeaderField>;
@@ -82,13 +87,13 @@ export interface Health {
     version: string;
     blob_count: bigint;
 }
-export type HeaderField = [string, string];
 export interface HttpRequest {
     url: string;
     method: string;
     body: Uint8Array;
     headers: Array<HeaderField>;
 }
+export type HeaderField = [string, string];
 export interface FinalizedBlob {
     path: string;
     content_hash: string;
@@ -100,9 +105,11 @@ export interface media_blob_storeInterface {
     delete_blob(path: string): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
     get_content_hash(path: string): Promise<string | null>;
+    get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
+    set_capacity_limit(limit_bytes: bigint): Promise<Result>;
     set_club_domain_canister(canister_id: Principal): Promise<Result>;
 }
 import type { FinalizedBlob as _FinalizedBlob, Result as _Result, ResultFinalized as _ResultFinalized, ResultUploadId as _ResultUploadId } from "./declarations/media_blob_store.did";
@@ -128,6 +135,10 @@ export class Media_blob_store implements media_blob_storeInterface {
         const result = await this.actor.get_content_hash(arg0);
         return from_candid_opt_n7(result);
     }
+    async get_usage(): Promise<Usage> {
+        const result = await this.actor.get_usage();
+        return result;
+    }
     async health(): Promise<Health> {
         const result = await this.actor.health();
         return result;
@@ -138,6 +149,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
+        return from_candid_Result_n1(result);
+    }
+    async set_capacity_limit(arg0: bigint): Promise<Result> {
+        const result = await this.actor.set_capacity_limit(arg0);
         return from_candid_Result_n1(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<Result> {

@@ -2,7 +2,7 @@ import type { Identity } from "@icp-sdk/core/agent";
 import { idlFactory as blobStoreIdl } from "../lab/bindings/media_blob_store/declarations/media_blob_store.did.js";
 import type { _SERVICE as BlobStoreActor } from "../lab/bindings/media_blob_store/declarations/media_blob_store.did.js";
 import { createLiveActor } from "./icpAgent";
-import { blobAssetUrl, MEDIA_BLOB_STORE_KEY, type LiveBlobRef } from "./mediaStorage";
+import { blobAssetUrl, listBlobStoreKeys, MEDIA_BLOB_STORE_KEY, orderBlobStoresForPath, type LiveBlobRef } from "./mediaStorage";
 import { BLOB_CHUNK_SIZE, chunkBytes, chunkCountFor, sha256Hex } from "./blobStoreProtocol";
 import { unwrapCandid } from "./features/candid";
 import type { IcpTargetConfig } from "./targetRegistry";
@@ -18,13 +18,29 @@ import type { IcpTargetConfig } from "./targetRegistry";
  */
 
 export function isBlobStoreConfigured(target: IcpTargetConfig | null): boolean {
-  if (!target) return false;
-  const id = target.canisterIds[MEDIA_BLOB_STORE_KEY];
-  return typeof id === "string" && id.trim() !== "";
+  return listBlobStoreKeys(target).length > 0;
 }
 
-export async function connectLiveBlobStore(target: IcpTargetConfig, identity: Identity) {
-  return createLiveActor<BlobStoreActor>(target, identity, MEDIA_BLOB_STORE_KEY, "Media blob store", blobStoreIdl);
+export async function connectLiveBlobStore(target: IcpTargetConfig, identity: Identity, storeKey = MEDIA_BLOB_STORE_KEY) {
+  return createLiveActor<BlobStoreActor>(target, identity, storeKey, "Media blob store", blobStoreIdl);
+}
+
+/** Per-store usage, cached briefly so uploads skip stores known to be full. */
+const fullStores = new Map<string, number>();
+const FULL_CACHE_MS = 10 * 60_000;
+
+function knownFull(canisterId: string): boolean {
+  const at = fullStores.get(canisterId);
+  return at !== undefined && Date.now() - at < FULL_CACHE_MS;
+}
+
+export async function getLiveBlobStoreUsage(target: IcpTargetConfig, identity: Identity, storeKey: string) {
+  const { actor } = await connectLiveBlobStore(target, identity, storeKey);
+  return actor.get_usage();
+}
+
+function isStoreFullError(error: unknown): boolean {
+  return /StoreFull/.test(error instanceof Error ? error.message : String(error));
 }
 
 export interface BlobStoreUploadResult {
@@ -46,7 +62,31 @@ export async function uploadBytesToBlobStore(
   bytes: Uint8Array,
   mime: string,
 ): Promise<BlobStoreUploadResult> {
-  const { actor, canisterId } = await connectLiveBlobStore(target, identity);
+  const keys = orderBlobStoresForPath(target, path);
+  if (keys.length === 0) throw new Error("No photo store is configured.");
+  const candidates = keys.filter((k) => !knownFull(target.canisterIds[k]));
+  let lastError: unknown = null;
+  for (const key of candidates.length > 0 ? candidates : keys) {
+    try {
+      return await uploadToStore(target, identity, key, path, bytes, mime);
+    } catch (error) {
+      if (!isStoreFullError(error)) throw error;
+      fullStores.set(target.canisterIds[key], Date.now());
+      lastError = error;
+    }
+  }
+  throw new Error(`Every photo store is full — add a new store in Placement Settings. (${String(lastError)})`);
+}
+
+async function uploadToStore(
+  target: IcpTargetConfig,
+  identity: Identity,
+  storeKey: string,
+  path: string,
+  bytes: Uint8Array,
+  mime: string,
+): Promise<BlobStoreUploadResult> {
+  const { actor, canisterId } = await connectLiveBlobStore(target, identity, storeKey);
   const canister = canisterId.toText();
   const expectedHash = await sha256Hex(bytes);
 

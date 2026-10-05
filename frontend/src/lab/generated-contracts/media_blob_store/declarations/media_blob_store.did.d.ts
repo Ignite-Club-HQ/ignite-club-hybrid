@@ -38,6 +38,11 @@ export type ResultFinalized = { 'Ok' : FinalizedBlob } |
   { 'Err' : string };
 export type ResultUploadId = { 'Ok' : string } |
   { 'Err' : string };
+export interface Usage {
+  'accepting_uploads' : boolean,
+  'total_bytes' : bigint,
+  'capacity_limit_bytes' : bigint,
+}
 export interface _SERVICE {
   'abort_upload' : ActorMethod<[string], Result>,
   'begin_upload' : ActorMethod<
@@ -47,9 +52,11 @@ export interface _SERVICE {
   'delete_blob' : ActorMethod<[string], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
   'get_content_hash' : ActorMethod<[string], [] | [string]>,
+  'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
+  'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;

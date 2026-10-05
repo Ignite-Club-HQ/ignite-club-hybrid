@@ -86,8 +86,19 @@ persistent actor MediaBlobStore {
   // set_club_domain_canister. While unset, only owner/governor may delete
   // (fail closed).
   var club_domain_canister : ?Principal;
+  // Sharding (migration 20261012): running byte total and capacity limit.
+  var total_bytes : Nat64;
+  var capacity_limit_bytes : Nat64;
 
   // ==================== Helpers ====================
+
+  // New uploads are accepted up to 80% of the capacity limit.
+  func acceptThreshold() : Nat64 { capacity_limit_bytes / 10 * 8 };
+
+  func subBytes(total : Nat64, size : Nat) : Nat64 {
+    let s = Nat.toNat64(size);
+    if (s > total) 0 else total - s
+  };
 
   func auth(caller : Principal) {
     if (caller.equal(Principal.anonymous())) Runtime.trap("Anonymous callers not allowed");
@@ -134,6 +145,9 @@ persistent actor MediaBlobStore {
     auth(caller);
     if (path == "") return #Err("Invalid path");
     if (chunk_count == 0 and total_size > 0) return #Err("Chunk count does not cover total size");
+    // Sharding: refuse new bytes past the threshold so the app moves on to
+    // the next photo store. Existing blobs stay readable forever.
+    if (total_bytes + total_size > acceptThreshold()) return #Err("StoreFull");
     switch (findBlob(path)) {
       case (?existing) {
         if (not existing.owner.equal(caller) and not isGovernor<system>(caller)) {
@@ -205,7 +219,12 @@ persistent actor MediaBlobStore {
           content_hash;
         };
         // Replace any prior blob at this path (re-upload by owner/governor).
+        switch (findBlob(upload.path)) {
+          case (?prior) { total_bytes := subBytes(total_bytes, prior.bytes.size()) };
+          case null {};
+        };
         blobs := blobs.filter(func(item) { item.path != upload.path }).concat([record]);
+        total_bytes += Nat.toNat64(assembled.size());
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
         #Ok({
           path = upload.path;
@@ -286,6 +305,7 @@ persistent actor MediaBlobStore {
           };
         };
         blobs := blobs.filter(func(item) { item.path != path });
+        total_bytes := subBytes(total_bytes, record.bytes.size());
         #Ok
       };
     }
@@ -322,13 +342,32 @@ persistent actor MediaBlobStore {
     }
   };
 
+  type Usage = {
+    total_bytes : Nat64;
+    capacity_limit_bytes : Nat64;
+    accepting_uploads : Bool;
+  };
+
+  // Sharding: the app reads this to skip full stores and to show fullness in
+  // Placement Settings. Public query — reveals only byte totals.
+  public query func get_usage() : async Usage {
+    { total_bytes; capacity_limit_bytes; accepting_uploads = total_bytes < acceptThreshold() }
+  };
+
+  // Governor-only. Setting a limit at or below the current total closes the
+  // store to new uploads (read-only); raising it reopens it.
+  public shared ({ caller }) func set_capacity_limit(limit_bytes : Nat64) : async Result {
+    auth(caller);
+    if (not isGovernor<system>(caller)) return #Err("Governor required");
+    capacity_limit_bytes := limit_bytes;
+    #Ok
+  };
+
   public query func health() : async Health {
     {
       version = "1";
       blob_count = Nat.toNat64(blobs.size());
-      total_bytes = Nat.toNat64(
-        blobs.foldLeft(0, func(acc : Nat, record : BlobRecord) : Nat = acc + record.bytes.size())
-      );
+      total_bytes;
     }
   };
 };

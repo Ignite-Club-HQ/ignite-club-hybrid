@@ -4,7 +4,7 @@ import { onlineManager } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
-import { MEDIA_BLOB_STORE_KEY } from "@/live/mediaStorage";
+import { listBlobStoreCanisterIds } from "@/live/mediaStorage";
 
 /**
  * Global "reconnect epoch" that bumps whenever the browser reports it has
@@ -100,11 +100,14 @@ const AVATAR_FAILURE_RETRY_MS = 60_000;
 function isIcpBlobUrl(src: string): boolean {
   try {
     const target = getActiveIcpTarget();
-    const canisterId = target.canisterIds[MEDIA_BLOB_STORE_KEY];
-    if (!canisterId) return false;
+    const stores = listBlobStoreCanisterIds(target);
+    if (stores.length === 0) return false;
     const url = new URL(src);
-    if (url.hostname !== "icp0.io" && url.hostname !== "raw.icp0.io") return false;
-    return url.pathname.replace(/^\/+/, "").split("/")[0] === canisterId;
+    if (url.hostname === "icp0.io" || url.hostname === "raw.icp0.io") {
+      return stores.includes(url.pathname.replace(/^\/+/, "").split("/")[0]);
+    }
+    const sub = /^([a-z0-9-]+)\.(?:raw\.)?icp0\.io$/.exec(url.hostname)?.[1];
+    return !!sub && stores.includes(sub);
   } catch {
     return false;
   }
