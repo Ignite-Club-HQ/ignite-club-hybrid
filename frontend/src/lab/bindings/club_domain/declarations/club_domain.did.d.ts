@@ -228,6 +228,11 @@ export interface Main {
     { 'Ok' : TeamInvite } |
       { 'Err' : string }
   >,
+  'accept_team_invite_link' : ActorMethod<
+    [string],
+    { 'Ok' : TeamInviteLink } |
+      { 'Err' : string }
+  >,
   'add_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -434,6 +439,11 @@ export interface Main {
   'get_parent_invite' : ActorMethod<
     [string],
     { 'Ok' : ParentInvite } |
+      { 'Err' : string }
+  >,
+  'get_pending_invite' : ActorMethod<
+    [string],
+    { 'Ok' : PendingInvite } |
       { 'Err' : string }
   >,
   'get_shell_team_by_token' : ActorMethod<

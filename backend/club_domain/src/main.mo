@@ -8,6 +8,7 @@ import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
+import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
@@ -1338,8 +1339,27 @@ persistent actor class Main(governorInit : Principal) {
   // by anyone who holds it (role fixed at creation), distinct from the
   // per-email TeamInvite records above. ----
 
-  func genToken(prefix : Text, size : Nat) : Text {
-    prefix # "-" # Nat.toText(size) # "-" # Nat64.toText(nowNs())
+  transient let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+
+  // 128 bits of raw_rand entropy, hex-encoded. Bearer tokens (invite ids,
+  // share-link tokens) must be unguessable — never derive them from
+  // counters or timestamps. raw_rand is an async management-canister call,
+  // so this is only usable from update methods.
+  func randomHex(bytes : Nat) : async Text {
+    let blob = await Random.blob();
+    var out = "";
+    var i = 0;
+    label fill for (b in blob.values()) {
+      if (i >= bytes) break fill;
+      let n = Nat8.toNat(b);
+      out #= hexDigits[n / 16] # hexDigits[n % 16];
+      i += 1;
+    };
+    out
+  };
+
+  func genToken(prefix : Text) : async Text {
+    prefix # "-" # (await randomHex(16))
   };
 
   public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
@@ -1350,7 +1370,7 @@ persistent actor class Main(governorInit : Principal) {
     let link : Types.TeamInviteLink = {
       id = "tlink-" # team_id # "-" # Nat.toText(teamInviteLinks.size() + 1);
       club_id; team_id; role;
-      token = genToken("tok", teamInviteLinks.size());
+      token = await genToken("tok");
       created_by = caller;
       created_at_ms = now;
       rotated_at_ms = null;
@@ -1366,7 +1386,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Invite link not found") };
       case (?link) {
         if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
-        let updated : Types.TeamInviteLink = { link with token = genToken("tok", teamInviteLinks.size()); rotated_at_ms = ?nowMs() };
+        let updated : Types.TeamInviteLink = { link with token = await genToken("tok"); rotated_at_ms = ?nowMs() };
         teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
         #Ok(updated)
       };
@@ -1392,6 +1412,25 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Invite link not found") };
       case (?link) {
         if (link.revoked) return #Err("Invite link revoked");
+        #Ok(link)
+      };
+    }
+  };
+
+  // Redeem a shareable team-invite link: the token itself is the
+  // capability (unrevoked links only), and redemption is idempotent —
+  // accepting the same link twice changes nothing.
+  public shared ({ caller }) func accept_team_invite_link(token : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    auth(caller);
+    switch (teamInviteLinks.find(func(l) = l.token == token)) {
+      case null { #Err("Invite link not found") };
+      case (?link) {
+        if (link.revoked) return #Err("Invite link revoked");
+        if (isExcluded(caller, link.club_id)) return #Err("Forbidden");
+        if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == link.role and g.club == ?link.club_id and g.team == ?link.team_id)) {
+          let grant : Types.RoleGrant = { user = caller; role = link.role; club = ?link.club_id; team = ?link.team_id };
+          acl := { acl with roles = acl.roles.concat([grant]) };
+        };
         #Ok(link)
       };
     }
@@ -1424,7 +1463,7 @@ persistent actor class Main(governorInit : Principal) {
     };
     let now = nowMs();
     let invite : Types.PendingInvite = {
-      id = "pinv-" # club_id # "-" # Nat.toText(pendingInvites.size() + 1) # "-" # Nat64.toText(now);
+      id = "pinv-" # (await randomHex(16));
       kind; club_id; team_id; child_id; email; role;
       invited_by = caller;
       created_at_ms = now;
@@ -1440,6 +1479,20 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+  };
+
+  // Invite preview for the join page: the invite id itself is the bearer
+  // token (random 128-bit ids, sent only to the invited email address /
+  // share channel), so this is intentionally anonymous — the same trust
+  // model as accept_pending_invite, which redeems by id alone.
+  public query func get_pending_invite(id : Text) : async { #Ok : Types.PendingInvite; #Err : Text } {
+    switch (pendingInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.status == "revoked") return #Err("Invite revoked");
+        #Ok(invite)
+      };
+    }
   };
 
   public shared ({ caller }) func resend_pending_invite(id : Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {

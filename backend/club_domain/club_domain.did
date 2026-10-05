@@ -299,6 +299,11 @@ type Main =
                                         Err: text;
                                         Ok: TeamInvite;
                                       });
+   accept_team_invite_link: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -500,6 +505,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ParentInvite;
+     }) query;
+   get_pending_invite: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: PendingInvite;
      }) query;
    get_shell_team_by_token: (token: text) ->
     (variant {
