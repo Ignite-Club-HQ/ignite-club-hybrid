@@ -9,4 +9,4 @@
 - [ ] Idle prefetch of Schedule/Messages after Home
 - [ ] Call-count instrumentation — measure after mainnet deploy
 - [x] Fix Dingo U8 event create going to Supabase (II users stay on canisters)
-- [ ] Photo storage sharding — plan written, awaiting approval
+- [x] Photo storage sharding (needs mainnet deploy for fullness limits)
