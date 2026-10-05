@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -42,7 +43,6 @@ interface TreeNode {
 
 import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function ManageBackupsPage() {
   const useIcpLab = isFeatureRoutedToIcp("admin");
@@ -66,19 +66,7 @@ function SupabaseManageBackupsPage() {
   const [restoreMode, setRestoreMode] = useState<"files_only" | "full">("files_only");
 
   // Check if user is app admin
-  const { data: isAppAdmin, isLoading: isLoadingAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin, isLoading: isLoadingAdmin } = useIsAppAdmin();
 
   // Fetch backups list
   const { data: backups, isLoading: isLoadingBackups, refetch } = useQuery({

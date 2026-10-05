@@ -42,6 +42,7 @@ import { recordPointsHistory } from "@/lib/pointsHistory";
 import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { redeemLiveReward, fulfillLiveRedemption, subjectForChild, subjectForUser } from "@/live/features/points";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 interface ClubReward {
   id: string;
@@ -119,19 +120,7 @@ export default function RewardRedemptionCard() {
   const hasClubTheme = activeThemeData || hasClubThemeCached;
 
   // Check if app admin
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
+  const { isAppAdmin } = useIsAppAdmin();
 
   // Fetch clubs user belongs to (filtered by active club if set)
   const { data: userClubs = [], isLoading: isLoadingClubs } = useQuery({

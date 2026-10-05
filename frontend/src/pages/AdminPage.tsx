@@ -159,26 +159,7 @@ function SupabaseAdminPage() {
   const navigate = useNavigate();
 
   // Check if user is app admin
-  const { data: isAppAdmin, isLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      if (error) {
-        console.error("Error checking app_admin role:", error);
-        return false;
-      }
-      return !!data;
-    },
-    enabled: !!user?.id,
-    staleTime: 0,
-    refetchOnMount: true,
-  });
+  const { isAppAdmin, isLoading } = useIsAppAdmin();
 
   // Check if user is team admin or coach (for player stats access)
   const { data: teamAdminCoachTeamIds = [] } = useQuery({

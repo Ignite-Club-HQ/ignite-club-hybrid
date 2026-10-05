@@ -50,6 +50,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, isSameDay } from "date-fns";
 import { ChatDateSeparator } from "@/components/chat/ChatDateSeparator";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { shouldGroupWithPrev } from "@/lib/chatGrouping";
@@ -377,21 +378,7 @@ export default function ClubChatPage() {
 
   // Check if user is app admin (global override)
 
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const uid = user?.id;
-      if (!uid) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", uid)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: authReady && !!user?.id && !useIcpLab && resolveAuthBackend() !== "icp",
-  });
+  const { isAppAdmin } = useIsAppAdmin();
 
   // Check if user is club admin
   const { data: isClubAdmin } = useQuery({

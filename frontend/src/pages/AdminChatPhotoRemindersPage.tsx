@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { toast } from "sonner";
 
 const SETTING_KEY = "chat_photo_gallery_reminders";
@@ -44,20 +45,7 @@ function SupabaseAdminChatPhotoRemindersPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id && resolveAuthBackend() !== "icp",
-  });
+  const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
   const { data: settingRow, isLoading: settingsLoading } = useQuery({
     queryKey: ["app_setting", SETTING_KEY],
