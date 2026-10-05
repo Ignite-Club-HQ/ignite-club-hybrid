@@ -85,7 +85,7 @@ import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled } from "@/live/features/messaging";
+import { sendLiveMessage, updateLiveMessage, canLiveDmUser, isLiveDmAttachmentsDisabled, listLiveMessagesPage } from "@/live/features/messaging";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { Principal } from "@icp-sdk/core/principal";
 
@@ -531,7 +531,56 @@ export default function DirectMessagePage() {
     queryFn: async () => {
       markChatFetch();
       if (useIcpLab && conversationId && user?.id) {
-        return { messages: fixtureData.getLocalLabDirectMessages(conversationId, user.id), hasOlderMessages: false, reactions: [], fromCache: true };
+        return withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            // DM conversation id doubles as the messaging conversation id
+            // (same convention as the send path). Replies persist on the
+            // canister as reply_to_id; resolve the quoted snippet from
+            // messages in the same page (targets outside the loaded page
+            // render without a quote, same as a deleted target). Tolerate
+            // older canisters lacking reply_to_id.
+            const page = await listLiveMessagesPage(ctx, conversationId, null, MESSAGES_PER_PAGE + 1);
+            const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
+            const profilesMap = await fetchProfilesWithCache(authorIds);
+            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
+            const messages = page.messages
+              .slice()
+              .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+              .slice(0, MESSAGES_PER_PAGE)
+              .map((m: any) => {
+                const profile = profilesMap.get(m.sender.toText());
+                const attachment = m.attachment?.[0];
+                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                const replyTarget = replyToId ? rawById.get(replyToId) : null;
+                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
+                return {
+                  id: m.id,
+                  text: m.body,
+                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
+                  edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+                  author_id: m.sender.toText(),
+                  conversation_id: conversationId,
+                  reply_to_id: replyToId,
+                  deleted_at: null,
+                  forwarded_from_user_id: null,
+                  forwarded_at: null,
+                  forwarded_source_label: null,
+                  author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+                  reply_to: replyTarget
+                    ? { id: replyTarget.id, text: replyTarget.body, author_id: replyTarget.sender.toText(), author: replyProfile ? { display_name: replyProfile.display_name } : null }
+                    : null,
+                  reactions: [],
+                };
+              }) as unknown as DirectMessage[];
+            cacheDirectMessages(conversationId, messages);
+            return {
+              messages,
+              hasOlderMessages: Array.isArray(page.next_sequence) && page.next_sequence.length > 0,
+            };
+          },
+        });
       }
 
       const { data: rawMessages, error } = await supabase
@@ -1041,6 +1090,7 @@ export default function DirectMessagePage() {
             text,
             `${conversationId}:${user!.id}:${Date.now()}`,
             attachment,
+            replyToId || null,
           );
           try {
             await recordLiveMessageSent(ctx, conversationId!, user!.id);
@@ -1053,7 +1103,7 @@ export default function DirectMessagePage() {
             image_url: imageUrl || null,
             conversation_id: conversationId!,
             author_id: user!.id,
-            reply_to_id: null,
+            reply_to_id: replyToId || null,
             created_at: new Date().toISOString(),
           };
         },
