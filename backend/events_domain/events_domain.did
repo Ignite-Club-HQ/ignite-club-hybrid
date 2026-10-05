@@ -232,6 +232,8 @@ type Main =
        Err: text;
        Ok: TeamTrainingPause;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    deactivate_active_game: (team_id: opt text) -> (variant {
                                                      Err: text;
                                                      Ok;

@@ -412,6 +412,8 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_club_permanent: (id: text) -> (variant {
                                            Err: text;
                                            Ok;

@@ -129,6 +129,8 @@ type Main =
        Err: text;
        Ok: AdminAlert;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_ad: (id: text) -> (variant {
                                Err: text;
                                Ok;

@@ -24,6 +24,8 @@ type Main =
    begin: (domain: text, source: principal, destination: principal,
     schemaVersion: nat, checksum: text) -> (Migration);
    commit: (id: nat) -> (Migration);
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    markExported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
    markImported: (id: nat, recordCount: nat, checksum: text) -> (Migration);
    orchestrateExport: (id: nat) -> (Migration);
