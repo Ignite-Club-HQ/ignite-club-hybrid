@@ -53,7 +53,6 @@ import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { listLiveEvents } from "@/live/features/events";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
@@ -1011,7 +1010,7 @@ function SupabaseCreateEventPage() {
     // system message — would land in a dead chat thread.
     // ICP mode has no Supabase team rows; the club/team scope guard below
     // checks the team against the canister-loaded team list instead.
-    if (teamId && !isFeatureRoutedToIcp("events")) {
+    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }))) {
       const { data: teamRow, error: teamCheckError } = await supabase
         .from("teams")
         .select("id, deleted_at")
