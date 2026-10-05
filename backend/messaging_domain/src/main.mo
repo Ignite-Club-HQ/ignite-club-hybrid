@@ -550,6 +550,16 @@ persistent actor class Main(governorInit : Principal) {
         return #Ok(m);
       };
     };
+    switch (reply_to_id) {
+      case (?rid) {
+        var found = false;
+        for (m in messages.values()) {
+          if (m.conversation_id == conversation_id and m.id == rid) { found := true };
+        };
+        if (not found) return #Err("Reply target not found");
+      };
+      case null {};
+    };
     switch (findConversationIndex(conversation_id)) {
       case null { #Err("Conversation not found") };
       case (?i) {
