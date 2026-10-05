@@ -6,7 +6,7 @@ import {
   type LiveBlobRef,
   type LiveMediaSource,
 } from "../mediaStorage";
-import { toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
+import { candidOpt, toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
 
 /**
  * Media feature -> media_metadata canister.
@@ -57,7 +57,7 @@ export async function registerLiveAsset(
       input.checksum,
       input.storagePath,
       input.visibility,
-      FAR_FUTURE_EXPIRY_MS === 0 ? BigInt(input.contentLength) : BigInt(FAR_FUTURE_EXPIRY_MS),
+      BigInt(FAR_FUTURE_EXPIRY_MS),
     ),
     "Register asset",
   );
