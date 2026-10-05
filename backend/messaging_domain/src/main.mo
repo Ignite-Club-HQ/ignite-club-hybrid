@@ -518,7 +518,7 @@ persistent actor class Main(governorInit : Principal) {
     };
   };
 
-  public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : async { #Ok : Types.Message; #Err : Text } {
+  public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     // DM blocking: refuse to post when either party has blocked the other.
@@ -553,7 +553,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (findConversationIndex(conversation_id)) {
       case null { #Err("Conversation not found") };
       case (?i) {
-        let posted = postMessage(i, caller, body, idempotency_key, attachment);
+        let posted = postMessage(i, caller, body, idempotency_key, attachment, reply_to_id);
         ignore fanOutChatNotify(posted);
         ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
@@ -599,7 +599,7 @@ persistent actor class Main(governorInit : Principal) {
             if (m.conversation_id == conv.id and m.idempotency_key == key) { already := true };
           };
           if (not already) {
-            let posted = postMessage(i, caller, body, key, null);
+            let posted = postMessage(i, caller, body, key, null, null);
             ignore fanOutChatNotify(posted);
             ignore fanOutWsPokeForMessage(posted);
             delivered += 1;
@@ -1391,7 +1391,7 @@ persistent actor class Main(governorInit : Principal) {
             for (m in messages.values()) {
               if (m.conversation_id == to_conversation_id and m.idempotency_key == key) { return #Ok(m) };
             };
-            let posted = postMessage(ci, caller, orig.body, key, orig.attachment);
+            let posted = postMessage(ci, caller, orig.body, key, orig.attachment, null);
             ignore fanOutChatNotify(posted);
             ignore fanOutWsPokeForMessage(posted);
             forwardRecords := forwardRecords.concat([{ message_id = posted.id; to_conversation_id; from_conversation_id = orig.conversation_id; from_message_id = orig.id; original_sender = orig.sender }]);
@@ -1435,7 +1435,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (findConversationIndex(rec.conversation_id)) {
           case null { #Err("Conversation not found") };
           case (?ci) {
-            let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null);
+            let posted = postMessage(ci, rec.sender, rec.body, "sched-" # rec.id, null, null);
             ignore fanOutChatNotify(posted);
             ignore fanOutWsPokeForMessage(posted);
             let updated = { rec with replayed_at_ms = ?nowMs(); replayed_message_id = ?posted.id };
@@ -1886,7 +1886,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (findConversationIndex(switch (conv_id) { case (?id) id; case null return #Err("Conversation not found") })) {
       case null { #Err("Conversation not found") };
       case (?i) {
-        let posted = postMessage(i, caller, body, idempotency_key, null);
+        let posted = postMessage(i, caller, body, idempotency_key, null, null);
         ignore fanOutChatNotify(posted);
         ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
@@ -1930,7 +1930,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (findConversationIndex(switch (conv_id) { case (?id) id; case null return #Err("Conversation not found") })) {
       case null { #Err("Conversation not found") };
       case (?i) {
-        let posted = postMessage(i, governor, body, idempotency_key, null);
+        let posted = postMessage(i, governor, body, idempotency_key, null, null);
         ignore fanOutChatNotify(posted);
         ignore fanOutWsPokeForMessage(posted);
         #Ok(posted)
