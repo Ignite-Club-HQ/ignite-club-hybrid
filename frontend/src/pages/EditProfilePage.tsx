@@ -47,10 +47,6 @@ export default function EditProfilePage() {
 
   const handleNativeAvatarPick = async () => {
     if (!user) return;
-    if (useIcpLab) {
-      toast({ title: "Profile photo upload is disabled in ICP lab mode" });
-      return;
-    }
     // CRITICAL: Do NOT set uploading state before Camera.getPhoto —
     // the re-render breaks the iOS gesture chain and the picker flashes/fails.
     try {
@@ -66,15 +62,24 @@ export default function EditProfilePage() {
       }
 
       const ext = mimeToExtension(result.mimeType);
-      const fileName = `${user.id}-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
-      if (uploadError) throw uploadError;
+      if (useIcpLab) {
+        // ICP mode: encrypt + store on the blob-store canister, keep the
+        // on-chain URL as the avatar reference.
+        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+        const url = await uploadIcpAvatar({ file: result.blob, mime: result.mimeType, ext });
+        setAvatarUrl(url);
+        toast({ title: "Photo uploaded!" });
+      } else {
+        const fileName = `${user.id}-${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("avatars")
+          .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
+        if (uploadError) throw uploadError;
 
-      const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
-      setAvatarUrl(publicUrlData.publicUrl);
-      toast({ title: "Photo uploaded!" });
+        const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
+        setAvatarUrl(publicUrlData.publicUrl);
+        toast({ title: "Photo uploaded!" });
+      }
     } catch (error: any) {
       if (isCancelledSelectionError(error)) {
         // User cancelled picker - do nothing
@@ -88,10 +93,6 @@ export default function EditProfilePage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    if (useIcpLab) {
-      toast({ title: "Profile photo upload is disabled in ICP lab mode" });
-      return;
-    }
 
     if (!file.type.startsWith('image/')) {
       toast({
