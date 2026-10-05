@@ -3,6 +3,12 @@ import { Loader2, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  GIPHY_API_KEY_CONFIG_KEY,
+  decodeStoredConfigText,
+  readLiveAppConfig,
+} from "@/live/appConfig";
 
 export interface GiphyResult {
   id: string;
@@ -24,9 +30,48 @@ type GiphyApiItem = {
 };
 
 /** GIPHY API keys are client-side keys by design (GIPHY's own SDKs ship them
- * in apps). The published site is static hosting with no /api functions, so
- * search goes straight to GIPHY whenever a key is baked into the build. */
-async function searchGiphyDirect(apiKey: string, q: string, limit: number): Promise<GiphyResult[]> {
+ * in apps), so the picker searches GIPHY straight from the browser — the
+ * published site has no server route to proxy the search.
+ *
+ * Key resolution (user decision 2026-10-05: the key lives in the canister's
+ * app config, editable in Placement Settings): build-time env first, then
+ * club_domain.get_app_config("giphy_api_key") (anonymous public query, works
+ * pre-auth and for Internet Identity sessions), then the Supabase
+ * app_settings mirror for Supabase-mode admins. */
+let cachedGiphyKey: string | null = null;
+let giphyKeyResolved = false;
+
+async function resolveGiphyApiKey(): Promise<string | null> {
+  const envKey = String(import.meta.env.IGNITE_LIVE_GIPHY_API_KEY ?? "").trim();
+  if (envKey) return envKey;
+  if (giphyKeyResolved) return cachedGiphyKey;
+  giphyKeyResolved = true;
+  try {
+    const fromCanister = decodeStoredConfigText(await readLiveAppConfig(GIPHY_API_KEY_CONFIG_KEY));
+    if (fromCanister) {
+      cachedGiphyKey = fromCanister;
+      return cachedGiphyKey;
+    }
+  } catch {
+    // best-effort — fall through to the Supabase mirror
+  }
+  try {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", GIPHY_API_KEY_CONFIG_KEY)
+      .maybeSingle();
+    if (!error && data) {
+      const fromSupabase = decodeStoredConfigText(String((data as { value?: unknown }).value ?? ""));
+      if (fromSupabase) cachedGiphyKey = fromSupabase;
+    }
+  } catch {
+    // no Supabase session / table unreachable — stay keyless
+  }
+  return cachedGiphyKey;
+}
+
+interface GifGridProps {
   const endpoint = q ? "search" : "trending";
   const params = new URLSearchParams({ api_key: apiKey, limit: String(limit), rating: "pg-13" });
   if (q) params.set("q", q);
