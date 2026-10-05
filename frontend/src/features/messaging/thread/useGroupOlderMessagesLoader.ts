@@ -219,6 +219,8 @@ export const useGroupOlderMessagesLoader = ({
     reconcileScope,
     pageSize,
     supabaseClient,
+    icpOlderCursorRef,
     queueAnchoredPrepend,
   ]);
+
 };
