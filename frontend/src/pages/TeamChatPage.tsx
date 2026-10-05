@@ -1147,6 +1147,55 @@ export default function TeamChatPage() {
       setHasOlderMessages(false);
       return;
     }
+    // Live ICP: walk the canister's backward cursor. Each page returns the
+    // newest rows older than the cursor plus the next cursor (null = start of
+    // the chat).
+    if (isFeatureRoutedToIcp("messaging")) {
+      const cursor = icpOlderCursorRef.current;
+      if (cursor == null) {
+        setHasOlderMessages(false);
+        return;
+      }
+      setIsLoadingOlder(true);
+      try {
+        const result = await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            const page = await listLiveLatestMessagesPage(ctx, teamId!, cursor, MESSAGES_PER_PAGE);
+            const older = await mapLiveTeamRows(ctx, page.messages);
+            const nextCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            return { older, nextCursor };
+          },
+        });
+        icpOlderCursorRef.current = result.nextCursor;
+        setHasOlderMessages(result.nextCursor !== null);
+        const mergeOlder = (existing: Message[] | undefined): Message[] => {
+          const byId = new Map<string, Message>();
+          result.older.forEach((m) => byId.set(m.id, m));
+          (existing || []).forEach((m) => byId.set(m.id, m)); // current state wins on boundary duplicates
+          const sorted = sortChatMessagesChronologically([...byId.values()]);
+          // An UPDATE received while this page was in flight must survive.
+          return (reconcileMessages(reconcileScope, sorted) ?? []) as Message[];
+        };
+        queueAnchoredPrepend(() => {
+          queryClient.setQueryData(["team-messages", teamId], (old: any) => ({
+            ...(old || {}),
+            messages: mergeOlder(old?.messages as Message[] | undefined),
+            hasOlderMessages: result.nextCursor !== null,
+          }));
+          setLocalMessages((prev) => mergeOlder(prev));
+        });
+      } catch (err) {
+        console.error("Failed to load older messages:", err);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+      return;
+    }
+
 
     setIsLoadingOlder(true);
 
