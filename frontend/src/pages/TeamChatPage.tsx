@@ -492,8 +492,7 @@ export default function TeamChatPage() {
 
       // Live ICP: team id doubles as the conversation id on the messaging
       // canister (deterministic ids; club_domain provisions via
-      // ensure_club_conversations). Reactions, replies and forwarded
-      // metadata are Supabase-only for now.
+      // ensure_club_conversations). Forwarded metadata is Supabase-only.
       if (isFeatureRoutedToIcp("messaging") && teamId && user?.id) {
         return await withFeatureBackend("messaging", {
           supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
@@ -1599,7 +1598,7 @@ export default function TeamChatPage() {
         },
         icp: async (ctx) => {
           // Team id doubles as the conversation id (deterministic on the
-          // messaging canister). Reply threading is Supabase-only.
+          // messaging canister).
           if (team?.club_id) {
             try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
           }
@@ -1612,7 +1611,7 @@ export default function TeamChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment);
+          await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           try {
             await recordLiveMessageSent(ctx, teamId!, user!.id);
           } catch {
