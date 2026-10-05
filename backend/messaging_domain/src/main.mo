@@ -716,6 +716,50 @@ persistent actor class Main(governorInit : Principal) {
     #Ok({ messages = page_messages; next_sequence = next_seq; latest_sequence = latest })
   };
 
+  // Newest-first page read. `before = null` returns the newest `limit`
+  // messages; `before = ?seq` returns the `limit` messages just older than
+  // that sequence. `next_sequence` carries the backward cursor — pass it back
+  // as `before` to load the next-older page, null means nothing older remains.
+  // (list_messages_page pages forward from the OLDEST message, which is not
+  // what a chat screen wants when it first opens.)
+  public query ({ caller }) func list_latest_messages_page(conversation_id : Text, before : ?Nat64, limit : Nat16) : async { #Ok : Types.MessagePage; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let latest = conversationLatestSequence(conversation_id);
+    switch (before) {
+      case (?cursor) { if (cursor > latest) return #Err("Stale cursor") };
+      case null {};
+    };
+    let cap : Nat64 = switch (before) { case (?cursor) { cursor }; case null { latest + 1 } };
+    // Messages are appended in send order, so sequence ascends within a
+    // conversation: count the matching rows, then drop the surplus oldest.
+    var matching : Nat = 0;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id and m.sequence < cap) { matching += 1 };
+    };
+    let limit_n = Nat16.toNat(limit);
+    let skip = if (matching > limit_n) { matching - limit_n } else { 0 };
+    var page_messages : [Types.Message] = [];
+    var seen : Nat = 0;
+    var oldest_in_page : Nat64 = 0;
+    var oldest_set = false;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id and m.sequence < cap) {
+        if (seen >= skip) {
+          page_messages := page_messages.concat([m]);
+          if (not oldest_set or m.sequence < oldest_in_page) {
+            oldest_in_page := m.sequence;
+            oldest_set := true;
+          };
+        };
+        seen += 1;
+      };
+    };
+    let next_seq : ?Nat64 = if (skip > 0 and oldest_set) ?oldest_in_page else null;
+    #Ok({ messages = page_messages; next_sequence = next_seq; latest_sequence = latest })
+  };
+
+
   // Full reaction rows (user + emoji) for a conversation so clients can
   // render "who reacted" and restore reactions on refetch. list_messages_page
   // intentionally stays lightweight; reactions are fetched alongside it.
