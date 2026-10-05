@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2, Plus, Trash2, Globe2, Save, Globe, FlaskConical } from "lucide-react";
@@ -286,6 +286,7 @@ export default function PlacementAdminSettingsPage() {
     );
   }, [savedRouting, routingTouched]);
 
+  const icpRoutingSaveRef = useRef(false);
   const routingMutation = useMutation({
     mutationFn: async (config: {
       defaultBackend: BackendProvider;
@@ -294,6 +295,7 @@ export default function PlacementAdminSettingsPage() {
       countryTargets: Record<string, string>;
       clubBackendOverrides: Record<string, BackendProvider>;
     }) => {
+      icpRoutingSaveRef.current = false;
       const stamped = { ...config, savedAtMs: Date.now() };
       const { data: sessionData } = await supabase.auth.getSession();
       if (!sessionData.session) {
@@ -304,6 +306,7 @@ export default function PlacementAdminSettingsPage() {
           supabase: async () => { throw new Error("Sign in to save routing."); },
           icp: async (ctx) => { await setLiveAppSetting(ctx, BACKEND_ROUTING_CONFIG_KEY, stamped); },
         });
+        icpRoutingSaveRef.current = true;
         return config;
       }
       const { data: existing, error: readError } = await supabase
@@ -341,7 +344,12 @@ export default function PlacementAdminSettingsPage() {
       // website keeps its own resolver; this is a best-effort notification
       // and never blocks the routing save itself.
       const changes = diffClubBackendChanges(savedRouting ?? DEFAULT_BACKEND_ROUTING_CONFIG, config);
-      if (changes.length > 0 && !isIcpAdminSession) {
+      if (changes.length > 0 && icpRoutingSaveRef.current) {
+        toast({
+          title: "Club website not updated",
+          description: "Website sync needs a Supabase admin sign-in. The app routing change is saved and live.",
+        });
+      } else if (changes.length > 0) {
         const canisterId = tryActiveIcpTarget()?.canisterIds["club_domain"] ?? null;
         void syncClubBackendChanges(changes, canisterId).then(failures => {
           if (failures.length > 0) {
