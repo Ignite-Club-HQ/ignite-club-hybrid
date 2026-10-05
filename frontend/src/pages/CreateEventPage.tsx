@@ -650,15 +650,25 @@ function SupabaseCreateEventPage() {
   // (independent of the caller's team memberships).
   const { data: allClubTeams } = useQuery({
     queryKey: ["all-club-teams-for-target", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("club_id", clubId!)
-        .is("deleted_at", null)
-        .order("name");
-      return data ?? [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("club_id", clubId!)
+            .is("deleted_at", null)
+            .order("name");
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const allTeams = await listLiveTeams(ctx, clubId!);
+          return allTeams
+            .filter((t) => !t.deleted_at_ms?.[0])
+            .map((t) => ({ id: t.id, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
     enabled: !!clubId,
   });
 
@@ -687,17 +697,19 @@ function SupabaseCreateEventPage() {
 
   const { data: members } = useQuery({
     queryKey: ["event-members-for-duty", clubId, teamId],
-    queryFn: async () => {
-      // Get members from team if selected, otherwise from club
-      const targetId = teamId || clubId;
-      const idColumn = teamId ? "team_id" : "club_id";
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          // Get members from team if selected, otherwise from club
+          const targetId = teamId || clubId;
+          const idColumn = teamId ? "team_id" : "club_id";
 
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("user_id, profiles!inner(id, display_name, avatar_url)")
-        .eq(idColumn, targetId);
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("user_id, profiles!inner(id, display_name, avatar_url)")
+            .eq(idColumn, targetId);
 
-      if (!roles) return [];
+          if (!roles) return [];
 
       // Deduplicate by user_id
       const seen = new Set<string>();
