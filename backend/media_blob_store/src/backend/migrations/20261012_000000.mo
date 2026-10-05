@@ -26,7 +26,7 @@ module {
     for (record in old.blobs.values()) { sum += record.bytes.size() };
     {
       var blobs = old.blobs;
-      var total_bytes = Nat64.fromNat(sum);
+      var total_bytes = Nat.toNat64(sum);
       var capacity_limit_bytes = 42_949_672_960;
     }
   };
