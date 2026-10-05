@@ -409,7 +409,7 @@ function SupabaseCreateEventPage() {
   };
 
   const { data: clubs } = useQuery({
-    queryKey: ["user-admin-clubs", user?.id],
+    queryKey: ["user-admin-clubs", user?.id, resolveAuthBackend()],
     queryFn: async () =>
       withFeatureBackend("membership", {
         supabase: async () => {
@@ -461,7 +461,8 @@ function SupabaseCreateEventPage() {
           );
           // Deleted clubs return no profile on the canister — they drop out here.
           return profiles
-            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map((rows) => rows?.[0])
+            .filter((p): p is NonNullable<typeof p> => !!p && !p.deleted_at_ms.length)
             .map((p) => ({
               id: p.id,
               name: p.name,
@@ -628,13 +629,16 @@ function SupabaseCreateEventPage() {
             return teamsInClub;
           }
 
-          // If no team memberships, return empty (club admin without team membership can't create team events)
+           // If no team memberships, return empty (club admin without team membership can't create team events)
           return [];
         },
         icp: async (ctx) => {
           const allTeams = await listLiveTeams(ctx, clubId);
           const liveTeams = allTeams.filter((t) => !t.deleted_at_ms?.[0]);
-          if (userTeamIds && userTeamIds.length > 0) {
+           if (isClubAdminForSelectedClub) {
+             return liveTeams.map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
+           }
+           if (userTeamIds && userTeamIds.length > 0) {
             return liveTeams
               .filter((t) => userTeamIds.includes(t.id))
               .map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
