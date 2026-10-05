@@ -765,8 +765,11 @@ function SupabaseCreateEventPage() {
         if (uniqueLocations.length >= 10) break;
       }
 
-      return uniqueLocations;
-    },
+          return uniqueLocations;
+        },
+        // Location history lives in Supabase events only — nothing to offer in ICP mode.
+        icp: async () => [] as SavedLocation[],
+      }),
     enabled: !!clubId,
   });
 
@@ -774,14 +777,20 @@ function SupabaseCreateEventPage() {
   const queryClient = useQueryClient();
   const { data: favoriteTitles } = useQuery({
     queryKey: ["favorite-event-titles", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("favorite_event_titles")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("favorite_event_titles")
+            .select("*")
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false });
+          return data || [];
+        },
+        // Favourite titles are a Supabase table keyed by UUID — not available
+        // for II principals.
+        icp: async () => [] as any[],
+      }),
     enabled: !!user,
   });
 
