@@ -48,6 +48,7 @@ import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveClubSubscription, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
@@ -114,7 +115,10 @@ export default function ClubUpgradePage() {
   const queryClient = useQueryClient();
   const { activeClubFilter } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  const providerKey = useIcpLab ? "icp" : "supabase";
+  // Real ICP routing (live build): resolveLocalAuthMode is always false there,
+  // so canister reads key off the placement routing instead.
+  const isIcpRouted = isFeatureRoutedToIcp("membership");
+  const providerKey = useIcpLab || isIcpRouted ? "icp" : "supabase";
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeFootball, setPromoCodeFootball] = useState("");
   const [isValidating, setIsValidating] = useState(false);
@@ -198,6 +202,22 @@ export default function ClubUpgradePage() {
           class_mode_enabled: false,
         } : null;
       }
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubProfile(ctx, clubId!);
+            const p = row.length ? row[0] : null;
+            if (!p || p.deleted_at_ms.length) return null;
+            return {
+              id: p.id,
+              name: p.name,
+              sport: p.sport[0] ?? null,
+              class_mode_enabled: false,
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("*")
@@ -213,6 +233,15 @@ export default function ClubUpgradePage() {
     queryKey: ["club-team-count", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return getLocalLabTeamList().filter((team) => team.club_id === clubId).length;
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const teams = (await listLiveTeams(ctx, clubId!)) as unknown as { deleted_at_ms?: unknown[] }[];
+            return teams.filter((team) => !(team.deleted_at_ms ?? []).length).length;
+          },
+        });
+      }
       const { count, error } = await supabase
         .from("teams")
         .select("*", { count: "exact", head: true })
@@ -232,6 +261,21 @@ export default function ClubUpgradePage() {
           .filter((team) => team.club_id === clubId)
           .map((team) => ({ id: team.id, name: team.name, logo_url: null, level_age: null }));
       }
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const teams = (await listLiveTeams(ctx, clubId!)) as unknown as {
+              id: string;
+              name: string;
+              deleted_at_ms?: unknown[];
+            }[];
+            return teams
+              .filter((team) => !(team.deleted_at_ms ?? []).length)
+              .map((team) => ({ id: team.id, name: team.name, logo_url: null, level_age: null }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, logo_url, level_age")
@@ -247,6 +291,26 @@ export default function ClubUpgradePage() {
     queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return null;
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubSubscription(ctx, clubId!);
+            if (!row) return null;
+            // Map the canister subscription onto the club_subscriptions row
+            // shape this page renders (millisecond timestamps → ISO strings).
+            return {
+              is_pro: row.is_pro || row.admin_pro_override,
+              is_pro_football: row.is_pro_football || row.admin_pro_football_override,
+              expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
+              plan: row.plan || null,
+              team_limit: row.team_limit.length ? Number(row.team_limit[0]) : null,
+              is_trial: row.is_trial,
+              trial_ends_at: row.trial_ends_at_ms.length ? new Date(Number(row.trial_ends_at_ms[0])).toISOString() : null,
+            };
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -295,7 +359,7 @@ export default function ClubUpgradePage() {
 
   // Realtime listener for subscription changes (e.g. sponsor payment on website)
   useEffect(() => {
-    if (useIcpLab || !clubId) return;
+    if (useIcpLab || isIcpRouted || !clubId) return;
     const channel = supabase
       .channel(`club-sub-${clubId}`)
       .on(
@@ -315,7 +379,7 @@ export default function ClubUpgradePage() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [useIcpLab, clubId, queryClient]);
+  }, [useIcpLab, isIcpRouted, clubId, queryClient]);
 
   const handleGetSponsored = () => {
     const sponsorUrl = "https://reference.invalid";
@@ -563,6 +627,17 @@ export default function ClubUpgradePage() {
     if (isNativePlatform()) {
       // On native, use In-App Purchases
       handleNativeIAP(tier, withTrial);
+      return;
+    }
+    // NEEDS-CANISTER: card checkout runs through Supabase functions/Stripe,
+    // which Internet Identity sessions cannot call; only native IAP is
+    // supported for ICP-routed clubs.
+    if (isIcpRouted) {
+      toast({
+        title: "Checkout unavailable",
+        description: "Card checkout is not yet available for Internet Identity clubs. Please subscribe from the mobile app instead.",
+        variant: "destructive",
+      });
       return;
     }
     const plan = tier === "pro" ? selectedPlan : selectedPlanFootball;
