@@ -136,6 +136,12 @@ export default function FindOrCreateClubWizard({
           );
           // NEEDS-CANISTER: logo upload has no club_domain counterpart; skipped on this path.
           await addLiveRoleGrant(ctx, Principal.fromText(user.id), profile.id, "club_admin");
+          try {
+            const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+            await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
+          } catch (err) {
+            console.warn("[CreateClub] default chats failed", err);
+          }
           return profile.id;
         },
         supabase: async () => {

@@ -50,6 +50,11 @@ export default function ChatGroupsList({ clubId, teamId, canManage = false }: Ch
           return data as ChatGroup[];
         },
         icp: async (ctx) => {
+          if (!teamId && clubId) {
+            // Backfill default staff chats (and new staff) like the Supabase trigger.
+            const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+            await ensureLiveDefaultClubChats(ctx, clubId).catch(() => undefined);
+          }
           const summaries = teamId
             ? await listLiveGroupsByTeam(ctx, teamId)
             : clubId

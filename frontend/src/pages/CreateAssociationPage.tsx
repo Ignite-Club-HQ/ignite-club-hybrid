@@ -44,6 +44,12 @@ export default function CreateAssociationPage() {
             slugifyClubName(name.trim()) || `association-${Date.now()}`,
             description.trim() || "",
           );
+          try {
+            const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+            await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
+          } catch (err) {
+            console.warn("[CreateAssociation] default chats failed", err);
+          }
           return profile.id;
         },
         supabase: async () => {
