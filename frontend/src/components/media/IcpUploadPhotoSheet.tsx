@@ -118,15 +118,17 @@ export function IcpUploadPhotoSheet({
           throw new Error("unreachable");
         },
         icp: async (ctx) => {
-          const principal = ctx.identity.getPrincipal().toText();
           for (let i = 0; i < files.length; i++) {
             const raw = files[i];
             const isVideo = raw.type.startsWith("video/");
             const prepared = isVideo ? { file: raw } : await compressImage(raw);
             const mime = prepared.file.type || raw.type || "application/octet-stream";
             // The clubs/<clubId>/ prefix is what grantLiveClubPiiRead matches
-            // to give club members decrypt access.
-            const storagePath = `clubs/${clubId}/${principal}/${Date.now()}-${Math.random()
+            // to give club members decrypt access. Keep the path short: the
+            // media_metadata canister validates storage_path length, and an
+            // Internet Identity principal in the path pushes it over the
+            // limit (register_asset fails with "Invalid asset").
+            const storagePath = `clubs/${clubId}/${Date.now()}-${Math.random()
               .toString(36)
               .slice(2, 10)}.${mimeToExtension(mime)}`;
             const uploaded = await tryUploadMediaToBlobStore({

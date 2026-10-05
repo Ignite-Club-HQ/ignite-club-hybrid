@@ -44,7 +44,6 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLivePreferencesByClub } from "@/live/features/notifications";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
-import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function NotificationPreferencesPage() {
   if (isFeatureRoutedToIcp("notifications")) {

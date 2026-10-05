@@ -1,4 +1,4 @@
-import type { Principal } from "@icp-sdk/core/principal";
+import { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain, connectLiveMessagingDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
@@ -262,10 +262,11 @@ function toLiveGroupMetadata(raw: {
  */
 export async function ensureLiveBroadcastConversation(ctx: FeatureBackendContext): Promise<string> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const raw = await unwrapCandid(actor.ensure_broadcast_conversation());
-  const result = 'Err' in raw ? { Err: raw.Err! } : { Ok: raw.Ok! };
-  if ('Err' in result) throw new Error(String(result.Err));
-  return result.Ok.id;
+  const conversation = await unwrapCandid(
+    actor.ensure_broadcast_conversation(),
+    "Ensure broadcast conversation",
+  );
+  return conversation.id;
 }
 
 /**
@@ -288,12 +289,11 @@ export async function ensureLiveClubAdminThread(
   member: string,
 ): Promise<string> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const raw = await unwrapCandid(
+  const conversation = await unwrapCandid(
     actor.ensure_club_admin_thread(clubId, Principal.fromText(member)),
+    "Ensure club admin thread",
   );
-  const result = 'Err' in raw ? { Err: raw.Err! } : { Ok: raw.Ok! };
-  if ('Err' in result) throw new Error(String(result.Err));
-  return result.Ok.id;
+  return conversation.id;
 }
 
 /**
@@ -306,7 +306,8 @@ export async function listLiveClubAdminThreads(
   clubId: string,
 ): Promise<Array<{ id: string; member: string }>> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const raw = await unwrapCandid(actor.list_club_admin_threads(clubId));
+  // Returns a plain array (not a Result variant), so no unwrapCandid.
+  const raw = await actor.list_club_admin_threads(clubId);
   return raw.map((entry) => ({ id: entry.id, member: entry.member.toText() }));
 }
 

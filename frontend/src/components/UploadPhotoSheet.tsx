@@ -451,9 +451,15 @@ export function UploadPhotoSheet({
     // ICP blob store: when a media_blob_store canister is configured in
     // placement settings AND the member is signed in with Internet Identity,
     // bytes go on-chain and the photo row stores the on-chain URL. Otherwise
-    // the Supabase storage upload below runs unchanged.
+    // the Supabase storage upload below runs unchanged. The blob-store path
+    // is kept short on purpose: the media_metadata canister caps storage_path
+    // length, and the full club/team/member layout above exceeds it
+    // (register_asset fails with "Invalid asset"). The clubs/<clubId>/ prefix
+    // is preserved so grantLiveClubPiiRead still derives the club grant.
     const blobUpload = await tryUploadMediaToBlobStore({
-      storagePath,
+      storagePath: clubId
+        ? `clubs/${clubId}/${timestamp}-${randomSuffix}.${fileExt}`
+        : storagePath,
       file,
       mime: file.type || "application/octet-stream",
     });
