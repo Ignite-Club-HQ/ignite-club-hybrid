@@ -1186,7 +1186,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
       ? (snapshot?.items ?? []).filter(i => i.club_id === activeClubFilter)
       : (snapshot?.items ?? []),
   );
-  const displayItems = scopedItems.length > 0 ? scopedItems : snapshotItems;
+  const displayItems = scopedItems.length > 0 ? scopedItems : (hasSettledFetch ? [] : snapshotItems);
 
   // Empty state: onboarding with clear paths
   if (displayItems.length === 0) {
