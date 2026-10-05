@@ -98,6 +98,15 @@ interface LiveMediaFeed {
 // Loader
 // ---------------------------------------------------------------------------
 
+const UNAVAILABLE_PHOTO_URL =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">' +
+      '<rect width="600" height="600" fill="#e5e7eb"/>' +
+      '<text x="300" y="300" font-family="sans-serif" font-size="28" fill="#6b7280" text-anchor="middle">Photo could not be loaded</text>' +
+      "</svg>",
+  );
+
 async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
   const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
     id: string;
@@ -158,21 +167,24 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     }),
   );
 
-  // Resolve encrypted blob bytes to object URLs (never fall back to ciphertext).
+  // Resolve encrypted blob bytes to object URLs (never fall back to
+  // ciphertext). A photo that can't be unlocked shows a placeholder tile
+  // instead of vanishing, so a fresh upload never silently disappears.
   const assetViews = new Map<string, LiveAssetView>();
   await Promise.all(
     rawAssets.map(async (asset) => {
+      const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
       try {
         const source = liveAssetSource(asset as never);
-        if (source.kind !== "icp-blob") return;
+        if (source.kind !== "icp-blob") throw new Error("Asset has no photo-store reference");
         const url = await resolveIcpBlobObjectUrl(source.url);
-        if (!url) return;
-        const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
+        if (!url) throw new Error(`Photo store ${source.canisterId} is not in the canister configuration`);
         // blob: URLs carry no extension, so isVideoUrl can't detect video —
         // a fragment is ignored by media loading but matches the suffix check.
         assetViews.set(asset.id, { id: asset.id, url: isVideo ? `${url}#.mp4` : url, isVideo });
-      } catch {
-        // Decryption/key failure: hide the asset rather than show broken media.
+      } catch (err) {
+        console.warn("[icp-media-feed] could not load asset", asset.id, err);
+        assetViews.set(asset.id, { id: asset.id, url: UNAVAILABLE_PHOTO_URL, isVideo: false });
       }
     }),
   );
