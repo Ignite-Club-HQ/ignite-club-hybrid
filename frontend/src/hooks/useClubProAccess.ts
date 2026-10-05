@@ -78,9 +78,9 @@ export function useClubProAccess(
   // so callers never render a lock/upgrade state based on the old club.
   if (isIcp) {
     return {
-      hasPro: icp.isPro,
-      hasProFootball: icp.hasProFootball,
-      isLoading: icp.isLoading,
+      hasPro: icp.isPro || !!icpClubSub.data?.hasPro,
+      hasProFootball: icp.hasProFootball || !!icpClubSub.data?.hasProFootball,
+      isLoading: icp.isLoading || (enabled && icpClubSub.isLoading && !icpClubSub.data),
     };
   }
 
