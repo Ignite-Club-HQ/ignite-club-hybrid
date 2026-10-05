@@ -17,7 +17,7 @@ const STORE = "kv";
 const KEY = "cache-v1";
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SAVE_DEBOUNCE_MS = 1500;
-const SKIP_KEY = /signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
+const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
 
 interface Stored { owner: string; savedAt: number; state: ReturnType<typeof dehydrate> }
 
@@ -50,6 +50,8 @@ async function idb<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRe
 }
 
 function isPlain(value: unknown, depth = 0): boolean {
+  // Object URLs (decrypted photos) die with the page — never persist them.
+  if (typeof value === "string") return !value.startsWith("blob:");
   if (value == null || typeof value !== "object") return typeof value !== "function" && typeof value !== "symbol";
   if (depth > 12) return false;
   if (value instanceof Date || ArrayBuffer.isView(value)) return true;
