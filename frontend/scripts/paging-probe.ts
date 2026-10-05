@@ -17,18 +17,19 @@ const target: IcpTargetConfig = {
 const identity = Ed25519KeyIdentity.generate();
 const caller = identity.getPrincipal();
 const ctx = { target, identity: identity as any };
-const conversationId = `paging-probe-${Date.now()}`;
 
+let convId = "";
 try {
-  await createLiveConversation(ctx, conversationId, [caller], null);
-  console.log("conversation created");
+  const conv: any = await createLiveConversation(ctx, `probe-club-${Date.now()}`, [caller], null);
+  convId = String(conv?.id ?? conv?.conversation_id ?? conv);
+  console.log("conversation created:", convId);
 } catch (err) {
   console.log("create failed:", err instanceof Error ? err.message : JSON.stringify(err).slice(0, 200));
 }
 
 for (let i = 1; i <= 3; i++) {
   try {
-    await sendLiveMessage(ctx, conversationId, `probe ${i}`, `${conversationId}:${i}`);
+    await sendLiveMessage(ctx, convId, `probe ${i}`, `${convId}:${i}`);
     console.log("sent", i);
   } catch (err) {
     console.log("send failed", i, ":", err instanceof Error ? err.message : JSON.stringify(err).slice(0, 200));
@@ -37,9 +38,9 @@ for (let i = 1; i <= 3; i++) {
 }
 
 try {
-  const page = await listLiveLatestMessagesPage(ctx, conversationId, null, 10);
+  const page = await listLiveLatestMessagesPage(ctx, convId, null, 10);
   console.log("READ OK:", page.messages.length, "msgs; next:", JSON.stringify(page.next_sequence), "latest:", String((page as any).latest_sequence));
-  console.log("order:", page.messages.map((m: any) => String(m.sequence)).join(","));
+  console.log("order:", page.messages.map((m: any) => `${String(m.sequence)}:${m.body}`).join(","));
 } catch (err) {
   console.log("READ FAILED:", err instanceof Error ? err.message : JSON.stringify(err).slice(0, 200));
 }
