@@ -17,3 +17,10 @@
 ## Pending user actions (from earlier work)
 - Deploy `send-email` edge function (paste /mnt/documents/send-email-supabase-function.ts, Verify JWT OFF, RESEND_API_KEY)
 - Re-run "Deploy ICP mainnet" workflow (chat provisioning, invites, media tagging, news publishing, app settings) — CONFIRMED the cause of the team-chat send failure; nothing else will fix it
+
+## Chat image upload failure (ICP) — diagnosis
+- Canister path fully verified end-to-end against mainnet (vetkey fetch, IBE encrypt, begin/put/finalize on media_blob_store, register_pii, club grant) with a fresh authenticated identity — all pass.
+- Published bundle confirmed current (chat upload code + all canister IDs present).
+- Browser-side repro blocked: headless II sign-in handshake never completes; IndexedDB session injection deadlocks on version upgrade while the app holds the DB open.
+- Fix shipped: ChatImageInput's file-select catch now surfaces the real error (getReadableUploadError) instead of the generic "Failed to upload image" toast, and logs the full error — the next failure will be diagnosable from the toast/console.
+- OPEN: ask the user to retry the image upload and report the exact toast text (or console error) — that pinpoints the remaining browser-side step.

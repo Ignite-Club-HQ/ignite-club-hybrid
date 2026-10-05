@@ -611,8 +611,9 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       // preview is cleared when imageUrl resets (after send) or via remove.
       onImageUploaded(storageUrl);
     } catch (error) {
-      console.error("Upload error:", error);
-      toast.error(isVideo ? "Failed to upload video" : "Failed to upload image");
+      const errMsg = getReadableUploadError(error);
+      console.error("[ChatImageInput] Media upload failed:", errMsg, error);
+      toast.error(errMsg || (isVideo ? "Failed to upload video" : "Failed to upload image"));
       if (localUrl.startsWith("blob:")) URL.revokeObjectURL(localUrl);
       setLocalPreview(null);
     } finally {
