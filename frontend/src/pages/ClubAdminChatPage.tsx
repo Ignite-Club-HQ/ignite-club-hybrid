@@ -1448,9 +1448,9 @@ function SupabaseClubAdminChatPage() {
         ) : (
           <ChatMessagesScroller
             messages={filteredMessages || []}
-            hasOlderMessages={false}
-            isLoadingOlder={false}
-            onLoadOlder={() => {}}
+            hasOlderMessages={hasOlderMessages}
+            isLoadingOlder={isLoadingOlder}
+            onLoadOlder={loadOlderMessages}
             isPinned={isPinned}
             isKeyboardOpen={isKeyboardOpen}
             searchOpen={searchOpen}
