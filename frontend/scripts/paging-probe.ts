@@ -23,7 +23,7 @@ for (let i = 1; i <= 3; i++) {
     await sendLiveMessage(ctx, conversationId, `probe ${i}`, `${conversationId}:${i}`);
     console.log("sent", i);
   } catch (err) {
-    console.log("send failed", i, ":", err instanceof Error ? err.message : String(err));
+    console.log("send failed", i, ":", err instanceof Error ? err.message : JSON.stringify(err).slice(0, 300));
     break;
   }
 }
@@ -33,5 +33,5 @@ try {
   console.log("READ OK:", page.messages.length, "msgs; next:", JSON.stringify(page.next_sequence), "latest:", String((page as any).latest_sequence));
   console.log("order:", page.messages.map((m: any) => String(m.sequence)).join(","));
 } catch (err) {
-  console.log("READ FAILED:", err instanceof Error ? err.message : String(err));
+  console.log("READ FAILED:", err instanceof Error ? err.message : JSON.stringify(err).slice(0, 400));
 }
