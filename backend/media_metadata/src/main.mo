@@ -142,9 +142,54 @@ persistent actor class Main(governorInit : Principal) {
       retention_until_ms = expires_at_ms;
       deleted = false;
       expires_at_ms;
+      created_at_ms = nowMs();
+      team_id = null;
+      mini_league_id = null;
+      competition_id = null;
+      event_id = null;
+      caption = null;
+      album_id = null;
     };
     assets := assets.concat([asset]);
     #Ok(asset)
+  };
+
+  // Tags a registered asset with its audience scope (team / mini league /
+  // competition / event), caption and album grouping. Kept separate from
+  // register_asset so the registration signature stays stable; the frontend
+  // calls this immediately after registering. Owner or club staff may tag.
+  public shared ({ caller }) func set_asset_scope(
+    asset_id : Text,
+    team_id : ?Text,
+    mini_league_id : ?Text,
+    competition_id : ?Text,
+    event_id : ?Text,
+    caption : ?Text,
+    album_id : ?Text,
+  ) : async { #Ok : Types.Asset; #Err : Text } {
+    auth(caller);
+    func validOptLength(value : ?Text, max : Nat) : Bool {
+      switch (value) { case null { true }; case (?v) { v.size() <= max } };
+    };
+    if (not validOptLength(team_id, 128) or not validOptLength(mini_league_id, 128) or not validOptLength(competition_id, 128) or not validOptLength(event_id, 128) or not validOptLength(album_id, 128) or not validOptLength(caption, 2000)) return #Err("Invalid scope");
+    var found_idx : ?Nat = null;
+    var idx = 0;
+    for (a in assets.values()) {
+      if (a.id == asset_id and not a.deleted) { found_idx := ?idx };
+      idx += 1;
+    };
+    switch (found_idx) {
+      case null { #Err("Asset not found") };
+      case (?i) {
+        let asset = assets[i];
+        if (not asset.owner.equal(caller) and not isClubStaff(caller, asset.club_id)) return #Err("Asset owner or club staff required");
+        let updated : Types.Asset = { asset with team_id; mini_league_id; competition_id; event_id; caption; album_id };
+        assets := Array.tabulate<Types.Asset>(assets.size(), func(position) {
+          if (position == i) updated else assets[position]
+        });
+        #Ok(updated)
+      };
+    }
   };
 
   // Points an asset at bytes held by an ICP blob-store canister instead of
@@ -485,6 +530,6 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 3; governor; assets; capabilities; reactions; comments; roles; galleryChatCards })
+    #Ok({ schema = 4; governor; assets; capabilities; reactions; comments; roles; galleryChatCards })
   };
 };

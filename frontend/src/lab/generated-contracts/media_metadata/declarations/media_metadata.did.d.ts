@@ -26,6 +26,13 @@ export interface Asset {
   'visibility' : string,
   'club_id' : string,
   'expires_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'team_id' : [] | [string],
+  'mini_league_id' : [] | [string],
+  'competition_id' : [] | [string],
+  'event_id' : [] | [string],
+  'caption' : [] | [string],
+  'album_id' : [] | [string],
 }
 export interface BlobRef {
   'path' : string,
@@ -146,6 +153,11 @@ export interface Main {
       boolean,
     ],
     { 'Ok' : GalleryChatCard } |
+      { 'Err' : string }
+  >,
+  'set_asset_scope' : ActorMethod<
+    [string, [] | [string], [] | [string], [] | [string], [] | [string], [] | [string], [] | [string]],
+    { 'Ok' : Asset } |
       { 'Err' : string }
   >,
   'set_blob_ref' : ActorMethod<

@@ -6,7 +6,7 @@ import {
   type LiveBlobRef,
   type LiveMediaSource,
 } from "../mediaStorage";
-import { toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
+import { candidOpt, toNat64, unwrapCandid, unwrapCandidOpt } from "./candid";
 
 /**
  * Media feature -> media_metadata canister.
@@ -31,14 +31,25 @@ export interface LiveAssetRegistration {
   contentLength: number;
   /** Set when the bytes were uploaded to an ICP blob-store canister. */
   blobRef?: LiveBlobRef;
+  /** Optional audience scope/tags (schema 4). */
+  teamId?: string | null;
+  miniLeagueId?: string | null;
+  competitionId?: string | null;
+  eventId?: string | null;
+  caption?: string | null;
+  /** Shared id grouping a multi-photo upload into one album post. */
+  albumId?: string | null;
 }
+
+// Club media does not expire; the canister only requires a future timestamp.
+const FAR_FUTURE_EXPIRY_MS = 4_102_444_800_000; // 2100-01-01
 
 export async function registerLiveAsset(
   ctx: FeatureBackendContext,
   input: LiveAssetRegistration,
 ) {
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
-  const asset = await unwrapCandid(
+  let asset = await unwrapCandid(
     actor.register_asset(
       input.clubId,
       input.kind,
@@ -46,15 +57,65 @@ export async function registerLiveAsset(
       input.checksum,
       input.storagePath,
       input.visibility,
-      BigInt(input.contentLength),
+      BigInt(FAR_FUTURE_EXPIRY_MS),
     ),
     "Register asset",
   );
-  if (!input.blobRef) return asset;
+  if (input.blobRef) {
+    asset = await unwrapCandid(
+      actor.set_blob_ref(asset.id, [input.blobRef]),
+      "Set blob reference",
+    );
+  }
+  // Scope/tags are applied by the caller via setLiveAssetScope: the deployed
+  // canister only gains set_asset_scope after the media_metadata redeploy,
+  // and tag application must not fail the whole upload until then.
+  return asset;
+}
+
+type MediaMetadataActor = Awaited<ReturnType<typeof connectLiveMediaMetadata>>["actor"];
+
+async function setLiveAssetScopeWithActor(
+  actor: MediaMetadataActor,
+  assetId: string,
+  scope: {
+    teamId?: string | null;
+    miniLeagueId?: string | null;
+    competitionId?: string | null;
+    eventId?: string | null;
+    caption?: string | null;
+    albumId?: string | null;
+  },
+) {
   return unwrapCandid(
-    actor.set_blob_ref(asset.id, [input.blobRef]),
-    "Set blob reference",
+    actor.set_asset_scope(
+      assetId,
+      candidOpt(scope.teamId),
+      candidOpt(scope.miniLeagueId),
+      candidOpt(scope.competitionId),
+      candidOpt(scope.eventId),
+      candidOpt(scope.caption),
+      candidOpt(scope.albumId),
+    ),
+    "Set asset scope",
   );
+}
+
+/** Re-tag an existing asset (owner or club staff). */
+export async function setLiveAssetScope(
+  ctx: FeatureBackendContext,
+  assetId: string,
+  scope: {
+    teamId?: string | null;
+    miniLeagueId?: string | null;
+    competitionId?: string | null;
+    eventId?: string | null;
+    caption?: string | null;
+    albumId?: string | null;
+  },
+) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return setLiveAssetScopeWithActor(actor, assetId, scope);
 }
 
 /** Where an asset's bytes are served from (Supabase storage or ICP blob store). */
