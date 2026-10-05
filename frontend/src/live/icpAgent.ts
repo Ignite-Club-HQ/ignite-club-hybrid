@@ -1,7 +1,8 @@
 import { Actor, HttpAgent, type Identity } from "@icp-sdk/core/agent";
-import type { IDL } from "@icp-sdk/core/candid";
+import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
 import type { IcpTargetConfig } from "./targetRegistry";
+import { trackIcpUpdateCall } from "./pendingCalls";
 
 /**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/localActor.ts`.
@@ -83,7 +84,49 @@ export async function createLiveActor<T>(
 ): Promise<{ actor: T; canisterId: Principal }> {
   const canisterId = resolveLiveCanisterId(target, domainKey, domainLabel);
   const agent = await createLiveAgent(target, identity);
-  return { actor: Actor.createActor<T>(idlFactoryForDomain, { agent, canisterId }), canisterId };
+  const actor = wrapUpdateCallsForPendingIndicator(
+    Actor.createActor<T>(idlFactoryForDomain, { agent, canisterId }),
+    idlFactoryForDomain,
+  );
+  return { actor, canisterId };
+}
+
+/**
+ * Wraps an actor's UPDATE methods so each in-flight update registers with the
+ * global pending indicator (see pendingCalls.ts, rendered by IcpPendingBar).
+ * Query / composite-query methods are intentionally left bare so background
+ * polling never flashes the bar. Introspection failures degrade to the
+ * unwrapped actor — an indicator must never break a call path.
+ */
+function wrapUpdateCallsForPendingIndicator<T>(actor: T, idlFactory: IDL.InterfaceFactory): T {
+  let updateMethodNames: Set<string>;
+  try {
+    const service = idlFactory({ IDL }) as unknown as {
+      _fields?: Array<[string, { annotations?: unknown }]>;
+    };
+    updateMethodNames = new Set(
+      (service._fields ?? [])
+        .filter(([, type]) => {
+          const annotations = Array.isArray(type?.annotations) ? (type.annotations as string[]) : [];
+          return !annotations.includes("query") && !annotations.includes("composite_query");
+        })
+        .map(([name]) => name),
+    );
+  } catch {
+    return actor;
+  }
+  if (updateMethodNames.size === 0) return actor;
+  const source = actor as Record<string, unknown>;
+  const wrapped: Record<string, unknown> = {};
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    wrapped[key] =
+      typeof value === "function" && updateMethodNames.has(key)
+        ? (...args: unknown[]) =>
+            trackIcpUpdateCall((value as (...callArgs: unknown[]) => unknown)(...args))
+        : value;
+  }
+  return wrapped as T;
 }
 
 /**
