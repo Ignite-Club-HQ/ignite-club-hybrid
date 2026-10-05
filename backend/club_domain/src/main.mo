@@ -8,6 +8,7 @@ import Nat16 "mo:core/Nat16";
 import Nat32 "mo:core/Nat32";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
+import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
@@ -1338,8 +1339,27 @@ persistent actor class Main(governorInit : Principal) {
   // by anyone who holds it (role fixed at creation), distinct from the
   // per-email TeamInvite records above. ----
 
-  func genToken(prefix : Text, size : Nat) : Text {
-    prefix # "-" # Nat.toText(size) # "-" # Nat64.toText(nowNs())
+  let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+
+  // 128 bits of raw_rand entropy, hex-encoded. Bearer tokens (invite ids,
+  // share-link tokens) must be unguessable — never derive them from
+  // counters or timestamps. raw_rand is an async management-canister call,
+  // so this is only usable from update methods.
+  func randomHex(bytes : Nat) : async Text {
+    let blob = await Random.blob();
+    var out = "";
+    var i = 0;
+    label fill for (b in blob.vals()) {
+      if (i >= bytes) break fill;
+      let n = Nat8.toNat(b);
+      out #= hexDigits[n / 16] # hexDigits[n % 16];
+      i += 1;
+    };
+    out
+  };
+
+  func genToken(prefix : Text) : async Text {
+    prefix # "-" # (await randomHex(16))
   };
 
   public shared ({ caller }) func create_team_invite_link(club_id : Text, team_id : Text, role : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
