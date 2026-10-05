@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { deleteLiveMessage, toggleLiveReaction } from "@/live/features/messaging";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -182,7 +183,10 @@ function ChatMessageInner({
   const optimisticReactionsRef = useRef<Reaction[]>(reactions);
   const isReactionMutatingRef = useRef(false);
   const queryClient = useQueryClient();
-  const useIcpLab = isFeatureRoutedToIcp("messaging");
+  // Lab-fixture simulation only. In the live build this alias always resolves
+  // false, so real ICP users fall through to the isFeatureRoutedToIcp branches
+  // below (canister persistence) instead of the cache-only lab path.
+  const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   const { isBlocked } = useBlockedUsers();
   const {
     armDismissGuard,
@@ -505,8 +509,9 @@ function ChatMessageInner({
     mutationFn: async (reactionId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
         // Removing a reaction on the canister is toggling the same emoji.
-        const cached = queryClient.getQueryData<any[]>(queryKey);
-        const current = cached?.find((m: any) => m.id === id);
+        const cached = queryClient.getQueryData<any>(queryKey);
+        const cachedMessages: any[] = Array.isArray(cached) ? cached : cached?.messages || [];
+        const current = cachedMessages.find((m: any) => m.id === id);
         const existing = (current?.reactions || []).find((r: any) => r.id === reactionId);
         if (existing) {
           await withFeatureBackend("messaging", {
