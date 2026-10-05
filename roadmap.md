@@ -55,3 +55,9 @@
 - [ ] User: re-run "Deploy ICP mainnet" — that one deploy also ships reactions, replies, invites, media tagging, news publishing and app settings.
 - [ ] User (push notifications): set GitHub secrets `ICP_PUSH_WORKER_SEED` and `FCM_SERVICE_ACCOUNT_JSON`, then redeploy — the deploy script grants the delivery worker; delivery then runs on the 5-minute Actions poll.
 
+
+## Admin button vanishes for II app admin (Paul Cranwell)
+- [x] Root cause: ~20 pages declared their own useQuery on the shared ["is-app-admin", userId] key with Supabase-only queryFns / stricter enabled gates; first mounter owns the cache entry, so an ICP-disabled or Supabase-only copy left the flag false/undefined and the Admin button vanished.
+- [x] ProfilePage: now uses shared useIsAppAdmin hook; isTeamAdminOrCoach query now routes via withFeatureBackend (canister role grants in ICP mode).
+- [ ] In progress: two subagents converting the remaining ~18 files (admin pages + feature pages + useVaultAccessModel + useMessagesPageAccessData + bootstrap seed gating) to useIsAppAdmin.
+- [ ] After agents finish: typecheck + build-errors check.
