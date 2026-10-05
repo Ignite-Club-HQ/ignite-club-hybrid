@@ -114,8 +114,6 @@ module {
     var activeGames : [ActiveGame];
     var playHQConfig : ?PlayHQConfig;
     var notificationQueueCanister : ?Principal;
-    // Fail-closed until the deploy script wires club_domain.
-    var clubDomainCanister : ?Principal;
   };
   public func migration(old : OldActor) : NewActor {
     {
@@ -163,7 +161,6 @@ module {
       var activeGames = old.activeGames;
       var playHQConfig = old.playHQConfig;
       var notificationQueueCanister = old.notificationQueueCanister;
-      var clubDomainCanister = null;
     }
   };
 };

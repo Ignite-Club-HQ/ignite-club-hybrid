@@ -88,9 +88,6 @@ module {
     var clubSubscriptions : [ClubSubscription];
     var appConfig : [(Text, Text)];
     var teamFolders : [TeamFolder];
-    var eventsDomainCanister : ?Principal;
-    var messagingDomainCanister : ?Principal;
-    var piiCanister : ?Principal;
   };
   type NewActor = {
     var governor : Principal; var acl : Acl; var aclVersion : Nat64;
@@ -117,9 +114,6 @@ module {
     var clubSubscriptions : [ClubSubscription];
     var appConfig : [(Text, Text)];
     var teamFolders : [TeamFolder];
-    var eventsDomainCanister : ?Principal;
-    var messagingDomainCanister : ?Principal;
-    var piiCanister : ?Principal;
     var teamSubscriptions : [TeamSubscription];
   };
   public func migration(old : OldActor) : NewActor {
@@ -162,9 +156,6 @@ module {
       var clubSubscriptions = old.clubSubscriptions;
       var appConfig = old.appConfig;
       var teamFolders = old.teamFolders;
-      var eventsDomainCanister = old.eventsDomainCanister;
-      var messagingDomainCanister = old.messagingDomainCanister;
-      var piiCanister = old.piiCanister;
       var teamSubscriptions = [];
     }
   };
