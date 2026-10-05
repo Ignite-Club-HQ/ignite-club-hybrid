@@ -15,6 +15,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cacheTeams, getCachedClub } from "@/lib/clubTeamCache";
 import { getSignedPhotoUrls } from "@/hooks/useSignedPhotoUrl";
 import { setCachedCarousel, getCachedCarouselWithTs } from "@/lib/myTeamsCarouselCache";
+import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
+import { clearMyTeamsCarouselCache } from "@/lib/invalidateTeamLists";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
