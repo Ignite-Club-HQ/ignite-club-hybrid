@@ -93,6 +93,7 @@ module {
     var eventsDomainCanister : ?Principal;
     var messagingDomainCanister : ?Principal;
     var piiCanister : ?Principal;
+    var teamSubscriptions : [TeamSubscription];
   };
   type NewActor = {
     var governor : Principal; var acl : Acl; var aclVersion : Nat64;
