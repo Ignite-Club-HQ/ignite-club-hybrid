@@ -2,7 +2,7 @@ import { Actor, HttpAgent, type Identity } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
 import type { IcpTargetConfig } from "./targetRegistry";
-import { trackIcpUpdateCall } from "./pendingCalls";
+import { trackIcpQueryCall, trackIcpUpdateCall } from "./pendingCalls";
 
 /**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/localActor.ts`.
@@ -92,39 +92,44 @@ export async function createLiveActor<T>(
 }
 
 /**
- * Wraps an actor's UPDATE methods so each in-flight update registers with the
- * global pending indicator (see pendingCalls.ts, rendered by IcpPendingBar).
- * Query / composite-query methods are intentionally left bare so background
- * polling never flashes the bar. Introspection failures degrade to the
- * unwrapped actor — an indicator must never break a call path.
+ * Wraps an actor's methods so in-flight calls register with the global
+ * pending indicator (see pendingCalls.ts, rendered by IcpPendingBar):
+ *   - UPDATE methods are always tracked (writes are user-initiated).
+ *   - Query / composite-query methods are tracked only in the short window
+ *     after a navigation, so page-load reads show the bar while background
+ *     polling never flashes it.
+ * Introspection failures degrade to the unwrapped actor — an indicator must
+ * never break a call path.
  */
 function wrapUpdateCallsForPendingIndicator<T>(actor: T, idlFactory: IDL.InterfaceFactory): T {
-  let updateMethodNames: Set<string>;
+  let queryMethodNames: Set<string>;
   try {
     const service = idlFactory({ IDL }) as unknown as {
       _fields?: Array<[string, { annotations?: unknown }]>;
     };
-    updateMethodNames = new Set(
+    queryMethodNames = new Set(
       (service._fields ?? [])
         .filter(([, type]) => {
           const annotations = Array.isArray(type?.annotations) ? (type.annotations as string[]) : [];
-          return !annotations.includes("query") && !annotations.includes("composite_query");
+          return annotations.includes("query") || annotations.includes("composite_query");
         })
         .map(([name]) => name),
     );
   } catch {
     return actor;
   }
-  if (updateMethodNames.size === 0) return actor;
   const source = actor as Record<string, unknown>;
   const wrapped: Record<string, unknown> = {};
   for (const key of Object.keys(source)) {
     const value = source[key];
-    wrapped[key] =
-      typeof value === "function" && updateMethodNames.has(key)
-        ? (...args: unknown[]) =>
-            trackIcpUpdateCall((value as (...callArgs: unknown[]) => unknown)(...args))
-        : value;
+    if (typeof value !== "function") {
+      wrapped[key] = value;
+      continue;
+    }
+    const fn = value as (...callArgs: unknown[]) => unknown;
+    wrapped[key] = queryMethodNames.has(key)
+      ? (...args: unknown[]) => trackIcpQueryCall(fn(...args))
+      : (...args: unknown[]) => trackIcpUpdateCall(fn(...args));
   }
   return wrapped as T;
 }
