@@ -3,6 +3,7 @@ import { connectLiveClubDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
 import { registerLivePiiText } from "./vault";
+import { batched as batchedCall } from "./batching";
 
 /**
  * Club data -> club_domain canister. Shared by the membership and news
@@ -24,19 +25,7 @@ export type LiveClubSettings = Parameters<ClubDomainActor["save_club_settings"]>
 export type LiveClubTeam = Parameters<ClubDomainActor["save_team"]>[0];
 export type LiveClubSponsor = Parameters<ClubDomainActor["save_sponsor"]>[0];
 
-// ---- Request batching ----
-// Single-id reads made in the same tick (e.g. a page's Promise.all over its
-// clubs/teams) are coalesced into ONE batched canister query. Canisters
-// deployed before the batch methods existed fall back to per-id calls.
-const batchUnsupported = new Set<string>();
-type Pending<R> = { ids: Set<string>; waiters: Array<{ id: string; resolve: (v: R) => void; reject: (e: unknown) => void }> };
-const batchQueues = new WeakMap<object, Map<string, Pending<unknown>>>();
-
-function isMissingMethod(err: unknown): boolean {
-  const msg = String((err as { message?: unknown })?.message ?? err);
-  return /has no (query|update) method|method not found|IC0302|not a function/i.test(msg);
-}
-
+// Same-tick single-id reads coalesce into one batched query (see ./batching).
 function batched<R>(
   ctx: FeatureBackendContext,
   name: string,
@@ -44,44 +33,7 @@ function batched<R>(
   runBatch: (actor: ClubDomainActor, ids: string[]) => Promise<Map<string, R>>,
   runSingle: (actor: ClubDomainActor, id: string) => Promise<R>,
 ): Promise<R> {
-  if (batchUnsupported.has(name)) {
-    return connectLiveClubDomain(ctx.target, ctx.identity).then(({ actor }) => runSingle(actor, id));
-  }
-  let byName = batchQueues.get(ctx.identity as object);
-  if (!byName) { byName = new Map(); batchQueues.set(ctx.identity as object, byName); }
-  const key = `${name}|${JSON.stringify(Object.values(ctx.target.canisterIds ?? {}))}`;
-  let pending = byName.get(key) as Pending<R> | undefined;
-  if (!pending) {
-    const fresh: Pending<R> = { ids: new Set(), waiters: [] };
-    pending = fresh;
-    byName.set(key, fresh as Pending<unknown>);
-    const queues = byName;
-    queueMicrotask(async () => {
-      queues.delete(key);
-      const ids = [...fresh.ids];
-      try {
-        const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-        let results: Map<string, R>;
-        try {
-          results = ids.length === 1 ? new Map([[ids[0], await runSingle(actor, ids[0])]]) : await runBatch(actor, ids);
-        } catch (err) {
-          if (!isMissingMethod(err)) throw err;
-          batchUnsupported.add(name);
-          const singles = await Promise.allSettled(ids.map((i) => runSingle(actor, i)));
-          for (const w of fresh.waiters) {
-            const r = singles[ids.indexOf(w.id)];
-            if (r.status === "fulfilled") w.resolve(r.value); else w.reject(r.reason);
-          }
-          return;
-        }
-        for (const w of fresh.waiters) w.resolve(results.get(w.id) as R);
-      } catch (err) {
-        for (const w of fresh.waiters) w.reject(err);
-      }
-    });
-  }
-  pending.ids.add(id);
-  return new Promise<R>((resolve, reject) => pending!.waiters.push({ id, resolve, reject }));
+  return batchedCall(ctx, `club:${name}`, id, () => connectLiveClubDomain(ctx.target, ctx.identity), runBatch, runSingle);
 }
 
 export async function getLiveClubProfile(ctx: FeatureBackendContext, clubId: string) {
