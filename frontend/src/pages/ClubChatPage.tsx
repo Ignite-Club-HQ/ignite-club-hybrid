@@ -107,7 +107,6 @@ import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReacti
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 const MESSAGES_PER_PAGE = 30;
 
@@ -368,7 +367,8 @@ export default function ClubChatPage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const profile = await getLiveClubProfile(ctx, clubId!);
+            const profileOpt = await getLiveClubProfile(ctx, clubId!);
+            const profile = profileOpt.length ? profileOpt[0] : null;
             if (!profile) return null;
             return {
               id: profile.id,
