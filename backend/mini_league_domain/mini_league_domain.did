@@ -227,6 +227,11 @@ type Main =
                                      Err: text;
                                      Ok: MiniLeague;
                                    }) query;
+   get_mini_leagues: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     }) query;
    get_player_guardian_status: (player_id: text) ->
     (variant {
        Err: text;
@@ -278,6 +283,11 @@ type Main =
        Ok: vec MiniLeagueJoinLink;
      }) query;
    list_mini_leagues_by_club: (club_id: text) -> (vec MiniLeague) query;
+   list_mini_leagues_by_clubs: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec MiniLeague;
+     }) query;
    list_players: (mini_league_id: text) ->
     (variant {
        Err: text;
