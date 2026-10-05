@@ -24,7 +24,9 @@ module {
   type ClubTeam = { id : Text; name : Text; division : ?Text; gender : ?Text; is_active : Bool; club_id : Text; age_group : ?Text; description : ?Text; logo_url : ?Text; team_type : ?Text; deleted_at_ms : ?Nat64; is_shell : Bool; shell_claim_token : ?Text; shell_claimed_at_ms : ?Nat64; shell_claimed_by : ?Principal; shell_contact_email : ?Text; shell_contact_name : ?Text; shell_invited_by : ?Principal; archived : Bool; playhq_team_id : ?Text; playhq_competition_id : ?Text; playhq_auto_create_events : Bool; folder_id : ?Text };
   type TeamFolder = { id : Text; club_id : Text; name : Text; description : ?Text; color : Text; sort_order : Nat32; created_by : Principal; created_at_ms : Nat64 };
   type ClubTerm = { id : Text; club_id : Text; name : Text; start_date : Text; end_date : Text; is_active : Bool; status : Text; created_at_ms : Nat64 };
-  type NewsPost = { id : Text; club_id : Text; title : Text; body : Text; status : Text; created_by : Principal; created_at_ms : Nat64; updated_at_ms : Nat64; revision : Nat64 };
+  type OldNewsPost = { id : Text; club_id : Text; title : Text; body : Text; status : Text; created_by : Principal; created_at_ms : Nat64; updated_at_ms : Nat64; revision : Nat64 };
+  type NewsAttachment = { kind : Text; url : Text; name : Text; size : Nat64; mime_type : ?Text; anchor : ?Text };
+  type NewsPost = { id : Text; club_id : Text; title : Text; body : Text; status : Text; created_by : Principal; created_at_ms : Nat64; updated_at_ms : Nat64; revision : Nat64; target_team_ids : ?[Text]; is_important : Bool; image_url : ?Text; attachments : [NewsAttachment] };
   type ParentInvite = { id : Text; club_id : Text; team_id : ?Text; child_id : Text; invited_by : Principal; created_at_ms : Nat64; expires_at_ms : Nat64; accepted_by : ?Principal };
   type RoleRequest = { id : Text; account_id : Text; user : Principal; club : Text; role : Text; team : ?Text; status : Text; created_at_ms : Nat64; decided_at_ms : ?Nat64; decided_by : ?Principal };
   type TeamInvite = { id : Text; club_id : Text; team_id : Text; email : Text; role : Text; invited_by : Principal; created_at_ms : Nat64; expires_at_ms : Nat64; accepted_by : ?Principal; revoked : Bool };
@@ -69,7 +71,7 @@ module {
     var clubListings : [(Text, Listing)]; var frozenClubs : [(Text, Nat64)];
     var accounts : [Account]; var accountExclusions : [AccountExclusion]; var accountFamilies : [Family]; var accountChallenges : [Challenge]; var accountRoles : [AccountRole]; var nextChallengeId : Nat64;
     var mutationLog : [(Text, Text, Mutation)];
-    var newsPosts : [NewsPost]; var parentInvites : [ParentInvite]; var roleRequests : [RoleRequest]; var teamInvites : [TeamInvite];
+    var newsPosts : [OldNewsPost]; var parentInvites : [ParentInvite]; var roleRequests : [RoleRequest]; var teamInvites : [TeamInvite];
     var teamInviteLinks : [TeamInviteLink];
     var pendingInvites : [PendingInvite];
     var teamCreationRequests : [TeamCreationRequest];
@@ -140,7 +142,15 @@ module {
       var accountRoles = old.accountRoles;
       var nextChallengeId = old.nextChallengeId;
       var mutationLog = old.mutationLog;
-      var newsPosts = old.newsPosts;
+      var newsPosts = old.newsPosts.map(func(p : OldNewsPost) : NewsPost {
+        {
+          id = p.id; club_id = p.club_id; title = p.title; body = p.body;
+          status = p.status; created_by = p.created_by;
+          created_at_ms = p.created_at_ms; updated_at_ms = p.updated_at_ms;
+          revision = p.revision;
+          target_team_ids = null; is_important = false; image_url = null; attachments = [];
+        }
+      });
       var parentInvites = old.parentInvites;
       var roleRequests = old.roleRequests;
       var teamInvites = old.teamInvites;
