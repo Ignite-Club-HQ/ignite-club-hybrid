@@ -17,7 +17,14 @@ export function occurrenceStartMs(childDate: string, firstStartMs: number): numb
 }
 
 /** Optional canister text: blank becomes null, capped at the canister's 256-char limit. */
-function optText(value: unknown): string | null {
+export function canisterTitle(value: unknown): string {
+  return String(value ?? "").slice(0, 128);
+}
+/** Required canister text: blank descriptions go as a single space (renders empty). */
+export function canisterDescription(value: unknown): string {
+  return String(value ?? "").trim().slice(0, 128) || " ";
+}
+export function optText(value: unknown): string | null {
   const text = typeof value === "string" ? value.trim() : "";
   return text ? text.slice(0, 256) : null;
 }
@@ -62,8 +69,8 @@ export async function createEventTransaction(
         // The canister rejects empty or >128-char text fields ("Invalid
         // event"/"Invalid series"); an optional blank description is sent as
         // a single space, which renders as empty.
-        title: String(eventRecord.title ?? "").slice(0, 128),
-        description: String(eventRecord.description ?? "").trim().slice(0, 128) || " ",
+        title: canisterTitle(eventRecord.title),
+        description: canisterDescription(eventRecord.description),
         eventType: String(eventRecord.type ?? "training"),
         location: optText(eventRecord.location_name),
         opponent: optText(eventRecord.opponent),

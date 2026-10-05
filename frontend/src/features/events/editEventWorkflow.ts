@@ -1,3 +1,4 @@
+import { canisterDescription, canisterTitle, optText } from "./createEventWorkflow";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   createLiveOpenDuty,
@@ -92,10 +93,10 @@ export async function updateEventTransaction(
         const current = (snapshot.series as Array<{ id: string; title: string; description: string; event_type: string; location: [] | [string] }>)
           .find((s) => s.id === seriesId);
         await updateLiveEventSeries(ctx, seriesId, {
-          title: String(updates.title ?? current?.title ?? ""),
-          description: String(updates.description ?? current?.description ?? ""),
+          title: canisterTitle(updates.title ?? current?.title),
+          description: canisterDescription(updates.description ?? current?.description),
           eventType: String(updates.type ?? current?.event_type ?? "training"),
-          location: (updates.location_name as string | null | undefined) ?? current?.location?.[0] ?? null,
+          location: optText(updates.location_name ?? current?.location?.[0]),
           fromMs: new Date(input.selectedEventDate).getTime(),
         });
         return;
@@ -110,15 +111,16 @@ export async function updateEventTransaction(
       const startsAtMs = new Date(input.selectedStartTime ?? input.selectedEventDate).getTime();
       const endsAtMs = new Date(input.selectedEndTime ?? input.selectedEventDate).getTime();
       await updateLiveEvent(ctx, input.eventId, {
-        title: String(updates.title ?? ""),
-        description: String(updates.description ?? ""),
+        title: canisterTitle(updates.title),
+        description: canisterDescription(updates.description),
         eventType: String(updates.type ?? "training"),
-        location: (updates.location_name as string | null | undefined) ?? null,
-        opponent: (updates.opponent as string | null | undefined) ?? null,
-        address: (updates.address as string | null | undefined) ?? null,
+        location: optText(updates.location_name),
+        opponent: optText(updates.opponent),
+        address: optText(updates.address),
         miniLeagueId: (updates.mini_league_id as string | null | undefined) ?? null,
         startsAtMs,
-        endsAtMs,
+        // The canister requires end > start; no/invalid end -> one hour.
+        endsAtMs: endsAtMs > startsAtMs ? endsAtMs : startsAtMs + 3_600_000,
       });
       if ("reminder_hours_before" in updates) {
         const { setLiveEventAutoReminder } = await import("@/live/features/events");
@@ -220,14 +222,14 @@ export async function convertEventToRecurringSeries(
       const { events } = await createLiveRecurringEventSeries(ctx, {
         clubId: String(updates.club_id ?? ""),
         teamId: (updates.team_id as string | null | undefined) ?? null,
-        title: String(updates.title ?? ""),
-        description: String(updates.description ?? ""),
+        title: canisterTitle(updates.title),
+        description: canisterDescription(updates.description),
         eventType: String(updates.type ?? "training"),
-        location: (updates.location_name as string | null | undefined) ?? null,
+        location: optText(updates.location_name),
         // Canister vocabulary uses "fortnightly" instead of "biweekly".
         frequency: input.frequency === "biweekly" ? "fortnightly" : input.frequency,
         firstStartsAtMs,
-        firstEndsAtMs: durationMs === null ? firstStartsAtMs : firstStartsAtMs + durationMs,
+        firstEndsAtMs: firstStartsAtMs + (durationMs && durationMs > 0 ? durationMs : 3_600_000),
         untilMs,
       });
       return events.length;
