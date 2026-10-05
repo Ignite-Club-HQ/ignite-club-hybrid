@@ -635,6 +635,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(RosterEntry), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_event_rosters' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(RosterEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_event_view_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -728,6 +733,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Duty), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_duties_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Duty), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_event_groups' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(EventGroup), 'Err' : IDL.Text })],
@@ -741,6 +751,11 @@ export const idlFactory = ({ IDL }) => {
     'list_events' : IDL.Func(
         [IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Vec(Event)],
+        ['query'],
+      ),
+    'list_events_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text), IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Event), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_game_player_stats' : IDL.Func(
