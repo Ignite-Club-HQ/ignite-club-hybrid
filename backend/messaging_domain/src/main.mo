@@ -402,7 +402,7 @@ persistent actor class Main(governorInit : Principal) {
         if (not isMember and not isAdmin and not isGovernor(caller)) return #Err("Not permitted");
         // The member is always participants[0] — the admin inbox reads the
         // thread owner from there, so keep that order stable.
-        let participants = Array.append([member], admins);
+        let participants = Array.tabulate<Principal>(admins.size() + 1, func(i) { if (i == 0) { member } else { admins[i - 1] } });
         let conversationId = clubAdminThreadId(club_id, member);
         switch (findConversationIndex(conversationId)) {
           case (?i) {
