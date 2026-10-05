@@ -711,35 +711,41 @@ function SupabaseCreateEventPage() {
 
           if (!roles) return [];
 
-      // Deduplicate by user_id
-      const seen = new Set<string>();
-      return roles.filter(r => {
-        if (seen.has(r.user_id)) return false;
-        seen.add(r.user_id);
-        return true;
-      }).map(r => ({
-        id: r.user_id,
-        display_name: (r.profiles as any)?.display_name || "Unknown",
-        avatar_url: (r.profiles as any)?.avatar_url,
-      }));
-    },
+          // Deduplicate by user_id
+          const seen = new Set<string>();
+          return roles.filter(r => {
+            if (seen.has(r.user_id)) return false;
+            seen.add(r.user_id);
+            return true;
+          }).map(r => ({
+            id: r.user_id,
+            display_name: (r.profiles as any)?.display_name || "Unknown",
+            avatar_url: (r.profiles as any)?.avatar_url,
+          }));
+        },
+        // Duty assignment stays optional in ICP mode — the canister roster
+        // has no display-name directory to pick from yet.
+        icp: async () => [] as { id: string; display_name: string; avatar_url: string | null }[],
+      }),
     enabled: !!clubId,
   });
 
   // Fetch saved locations from previous events for the selected club
   const { data: savedLocations } = useQuery({
     queryKey: ["saved-locations", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("address, suburb, state, postcode")
-        .eq("club_id", clubId)
-        .not("address", "is", null)
-        .neq("address", "")
-        .order("event_date", { ascending: false })
-        .limit(50);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("events")
+            .select("address, suburb, state, postcode")
+            .eq("club_id", clubId)
+            .not("address", "is", null)
+            .neq("address", "")
+            .order("event_date", { ascending: false })
+            .limit(50);
 
-      if (!data) return [];
+          if (!data) return [];
 
       // Deduplicate by address
       const seen = new Set<string>();
