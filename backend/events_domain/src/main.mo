@@ -2,6 +2,7 @@ import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
+import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
@@ -1894,7 +1895,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (events.find(func(e) = e.id == r.event_id)) {
           case null {};
           case (?event) {
-            let dueAt : Nat64 = if (event.starts_at_ms > Nat64.fromNat(r.hours_before.toNat()) * 3_600_000) event.starts_at_ms - Nat64.fromNat(r.hours_before.toNat()) * 3_600_000 else 0;
+            let dueAt : Nat64 = if (event.starts_at_ms > Nat64.fromNat(Nat16.toNat(r.hours_before)) * 3_600_000) event.starts_at_ms - Nat64.fromNat(Nat16.toNat(r.hours_before)) * 3_600_000 else 0;
             if (event.deleted or event.cancelled or event.starts_at_ms <= now) {
               markReminderSent(r.event_id);
             } else if (now >= dueAt) {
