@@ -29,6 +29,10 @@ function loadRootEnvFile() {
 loadRootEnvFile();
 syncCanisterIds();
 
+// The live Vite config only exposes IGNITE_LIVE_* values. Map rendering uses
+// the connector's public browser key, never its server-side gateway key.
+process.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY ||= process.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || "";
+
 // Install (only if package-lock changed), serialized with the platform install
 // step so two `npm ci` runs can never overlap and corrupt node_modules.
 const viteBin = path.join(frontendDir, "node_modules", "vite", "bin", "vite.js");

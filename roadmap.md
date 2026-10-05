@@ -1,5 +1,8 @@
 # Roadmap
 
+## Event map is broken in ICP mode
+- [x] Replace invalid event map iframe URL with Google Maps Embed using the connected public browser key; forward the key through the guarded live preview/build configuration and offer a location link if the key is unavailable.
+
 ## Team & club chat replies don't persist (ICP mode)
 - [x] Root cause: canister `Message` had no `reply_to_id`; ICP fetch branches hardcoded `reply_to_id: null` / `reply_to: null`, so replies only showed via the optimistic update and vanished on refetch.
 - [x] Canister: `Message` gains `reply_to_id : ?Text`; `send_message` takes a 5th `reply_to_id` param (validated: target must exist in the same conversation; old 4-arg clients still decode); migration `20261010_000000.mo` maps existing messages with `reply_to_id = null`. Compiles clean under `--enhanced-migration`.
