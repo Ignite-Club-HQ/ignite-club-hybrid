@@ -1806,6 +1806,9 @@ export default function TeamChatPage() {
 
     onSuccess: (result, variables) => {
       if (isConfirmedDelivery(result)) syncSendToVault(variables);
+      if (isFeatureRoutedToIcp("messaging")) {
+        void queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
+      }
     },
 
     onSettled: (_, __, variables) => {
