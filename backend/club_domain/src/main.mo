@@ -1370,7 +1370,7 @@ persistent actor class Main(governorInit : Principal) {
     let link : Types.TeamInviteLink = {
       id = "tlink-" # team_id # "-" # Nat.toText(teamInviteLinks.size() + 1);
       club_id; team_id; role;
-      token = genToken("tok", teamInviteLinks.size());
+      token = await genToken("tok");
       created_by = caller;
       created_at_ms = now;
       rotated_at_ms = null;
@@ -1386,7 +1386,7 @@ persistent actor class Main(governorInit : Principal) {
       case null { #Err("Invite link not found") };
       case (?link) {
         if (not canManageTeam(caller, link.club_id, ?link.team_id)) return #Err("Team or club admin required");
-        let updated : Types.TeamInviteLink = { link with token = genToken("tok", teamInviteLinks.size()); rotated_at_ms = ?nowMs() };
+        let updated : Types.TeamInviteLink = { link with token = await genToken("tok"); rotated_at_ms = ?nowMs() };
         teamInviteLinks := teamInviteLinks.map(func(l) = if (l.id == id) updated else l);
         #Ok(updated)
       };
