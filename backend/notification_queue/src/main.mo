@@ -28,6 +28,10 @@ persistent actor class Main(governorInit : Principal) {
   // mute list accepted as-is); any other caller may only fan out their own
   // messages. Fail-closed while unset. See docs/icp-chat-notify-fanout-spec.md.
   var messagingDomainCanister : ?Principal;
+  // Device push tokens owned by principal text (see Types.DeviceToken).
+  // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
+  // methods below.
+  var device_tokens : [Types.DeviceToken];
 
   public shared ({ caller }) func set_messaging_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
     governorOnly(caller);
@@ -877,5 +881,57 @@ persistent actor class Main(governorInit : Principal) {
     let end = Nat.min(start + Nat32.toNat(boundedLimit), preferences.size());
     let page = Array.tabulate<Types.Preferences>(end - start, func(i) = preferences[start + i]);
     #Ok({ items = page; total = Nat.toNat32(preferences.size()) })
+  };
+
+  // ======================================================================
+  // Device push tokens
+  // Registration is caller-scoped: a token is always owned by the IC
+  // caller's principal text, so a device can only ever be registered to its
+  // actual owner (matching Notification.user, which carries the principal
+  // text in ICP mode). The push delivery worker (same authorization as
+  // claim/acknowledge/fail) reads tokens through list_device_tokens and
+  // prunes tokens the push service reports as dead via remove_device_tokens.
+  // ======================================================================
+
+  public shared ({ caller }) func register_device_token(platform : Text, token : Text, p256dh : ?Text, auth : ?Text) : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    if (not valid(platform) or not valid(token)) { return #Err("Invalid device token fields") };
+    let user = Principal.toText(caller);
+    let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    let entry : Types.DeviceToken = { user; platform; token; p256dh; auth; updated_at_ms = stamp };
+    var replaced = false;
+    device_tokens := device_tokens.map(func(existing : Types.DeviceToken) : Types.DeviceToken {
+      if (existing.user == user and existing.token == token) { replaced := true; entry } else { existing }
+    });
+    if (not replaced) { device_tokens := device_tokens.concat([entry]) };
+    #Ok
+  };
+
+  public shared ({ caller }) func unregister_device_token(token : Text) : async Types.DeviceTokenCountResult {
+    authenticated(caller);
+    let user = Principal.toText(caller);
+    var removed : Nat16 = 0;
+    device_tokens := device_tokens.filter(func(existing : Types.DeviceToken) : Bool {
+      if (existing.user == user and existing.token == token) { removed += 1; false } else { true }
+    });
+    #Ok(removed)
+  };
+
+  public query ({ caller }) func list_device_tokens(users : [Text]) : async Types.DeviceTokensResult {
+    worker(caller);
+    if (users.size() > 100) { return #Err("Too many users") };
+    #Ok(device_tokens.filter(func(entry : Types.DeviceToken) : Bool {
+      users.any(func(user : Text) : Bool = user == entry.user)
+    }))
+  };
+
+  public shared ({ caller }) func remove_device_tokens(user : Text, tokens : [Text]) : async Types.DeviceTokenCountResult {
+    worker(caller);
+    if (not valid(user)) { return #Err("Invalid user") };
+    var removed : Nat16 = 0;
+    device_tokens := device_tokens.filter(func(entry : Types.DeviceToken) : Bool {
+      if (entry.user == user and tokens.any(func(token : Text) : Bool = token == entry.token)) { removed += 1; false } else { true }
+    });
+    #Ok(removed)
   };
 };
