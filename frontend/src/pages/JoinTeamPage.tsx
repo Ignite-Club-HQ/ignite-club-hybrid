@@ -35,6 +35,7 @@ import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveTeamInvite, acceptLiveTeamInvite } from "@/live/features/membership";
 import { getLiveJoinLinkByToken, getLiveMiniLeague, claimLiveAdminJoinLink, joinLiveMiniLeagueByToken } from "@/live/features/miniLeagues";
+import { getLivePendingInvite, getLiveTeamInviteLinkByToken, acceptPendingLiveInvite, acceptLiveTeamInviteLink, getLiveClubProfile, getLiveTeam } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -181,12 +182,67 @@ function SupabaseJoinTeamPage() {
             throw err;
           }
         },
-        // ICP: /join/p/ tokens are mini-league join links minted on the
+        // ICP: /join/p/ tokens are either club_domain pending invites
+        // (prefix "pinv-": club/team/guardian email invites — the invite id
+        // IS the bearer token) or mini-league join links minted on the
         // mini_league_domain canister (role "admin" grants league-admin
-        // rights; role "player" adds a roster player). Resolve the token to
-        // the same row shape the Supabase RPC returns so the shared join UI
+        // rights; role "player" adds a roster player). Both resolve to the
+        // same row shape the Supabase RPC returns so the shared join UI
         // works unchanged.
         icp: async (ctx) => {
+          if (token!.startsWith("pinv-")) {
+            const pinv = await getLivePendingInvite(ctx, token!);
+            if (!pinv) return null;
+            // Display-only enrichment (club/team names + logos) reads public
+            // club data; failures here must not block the invite.
+            let clubName = "";
+            let clubLogoUrl: string | null = null;
+            let teamName = "";
+            let teamLogoUrl: string | null = null;
+            try {
+              if (pinv.club_id) {
+                const profile = await getLiveClubProfile(ctx, pinv.club_id);
+                const club = profile[0];
+                if (club) {
+                  clubName = club.name ?? "";
+                  clubLogoUrl = club.logo_url?.[0] ?? null;
+                }
+              }
+              const teamId = pinv.team_id[0] ?? null;
+              if (teamId) {
+                const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+                  name?: string;
+                  logo_url?: [] | [string];
+                }>;
+                const team = teamOpt?.[0];
+                if (team) {
+                  teamName = team.name ?? "";
+                  teamLogoUrl = team.logo_url?.[0] ?? null;
+                }
+              }
+            } catch (err) {
+              console.warn("[JoinTeam] invite display enrichment failed", err);
+            }
+            return {
+              id: pinv.id,
+              club_id: pinv.club_id,
+              team_id: pinv.team_id[0] ?? null,
+              team_name: teamName,
+              team_logo_url: teamLogoUrl,
+              club_name: clubName,
+              club_logo_url: clubLogoUrl,
+              role: pinv.role[0] ?? (pinv.kind === "guardian" ? "parent" : "player"),
+              invited_label: null,
+              invited_email: pinv.email || null,
+              invited_by_user_id: null,
+              status: pinv.status,
+              metadata: {
+                kind: pinv.kind,
+                child_id: pinv.child_id[0] ?? null,
+                icp_pending_invite: true,
+              },
+            };
+          }
           const link = await getLiveJoinLinkByToken(ctx, token!);
           if (!link || link.revoked) return null;
           const league = await getLiveMiniLeague(ctx, link.mini_league_id);
@@ -282,12 +338,42 @@ function SupabaseJoinTeamPage() {
           return null;
         },
         icp: async (ctx) => {
-          // Provisional mapping: the canister's `get_team_invite` candid
-          // record shape isn't finalised yet, so this defensively reads the
-          // fields it needs and falls back to sane defaults. The `token`
-          // route param is treated as the canister invite id — there is no
-          // separate short-token lookup on the canister side yet.
-          const raw = await getLiveTeamInvite(ctx, token!);
+          // Shareable team invite links (minted by the team's "invite via
+          // link" card) live in the TeamInviteLink store keyed by rotating
+          // token; legacy per-recipient invites live in the TeamInvite store
+          // keyed by id. Try the link store first, then fall back.
+          try {
+            const link = await getLiveTeamInviteLinkByToken(ctx, token!);
+            if (link && !link.revoked) {
+              return {
+                id: link.id,
+                team_id: link.team_id,
+                role: link.role,
+                token: token!,
+                uses_count: 0,
+                max_uses: null as number | null,
+                expires_at: null,
+                created_at: new Date(Number(link.created_at_ms)).toISOString(),
+                created_by: link.created_by?.toText?.() ?? null,
+                metadata: { icp_invite_link: true },
+                teams: {
+                  id: link.team_id,
+                  name: "",
+                  logo_url: null as string | null,
+                  club_id: link.club_id,
+                  clubs: {
+                    name: "",
+                    logo_url: undefined as string | undefined,
+                  },
+                },
+              };
+            }
+          } catch {
+            // Not a TeamInviteLink token — fall through to the TeamInvite store.
+          }
+          // Legacy TeamInvite record: the `token` route param is the canister
+          // invite id (there is no separate short-token lookup for these).
+          const raw = await getLiveTeamInvite(ctx, token!).catch(() => null);
           if (!raw) return null;
           return {
             id: raw.id ?? token!,
@@ -1049,6 +1135,12 @@ function SupabaseJoinTeamPage() {
             // required shape.
           },
           icp: async (ctx) => {
+            // TeamInviteLink tokens are redeemed by token (grants the link's
+            // role idempotently); legacy TeamInvite records are accepted by id.
+            if ((invite?.metadata as { icp_invite_link?: boolean } | null)?.icp_invite_link) {
+              await acceptLiveTeamInviteLink(ctx, token!);
+              return;
+            }
             // Confirm the invite is still resolvable, then accept it.
             await getLiveTeamInvite(ctx, invite.id);
             await acceptLiveTeamInvite(ctx, invite.id);
@@ -1375,11 +1467,12 @@ function SupabaseJoinTeamPage() {
         );
       }
 
-      // Named/pending invites (pending_invites table: name-restricted
-      // invites, child metadata provisioning) also have no canister shape
-      // yet — block them for II accounts as before. Regular shareable team
-      // invites are handled below via getLiveTeamInvite/acceptLiveTeamInvite,
-      // and admin-grant mini-league join links are claimed on the canister.
+      // Pending invites in ICP: mini-league admin join links are claimed on
+      // the canister; mini-league parent join links need no claim (the
+      // child-add step mints the roster player); club/team/guardian pending
+      // invites minted on club_domain are redeemed by id — the invite id IS
+      // the /join/p/ bearer token and accept_pending_invite is
+      // caller-scoped + idempotent.
       if (membershipIcpRouted && isPendingInvite) {
         if (isIcpAdminJoinLink) {
           return withFeatureBackend("membership", {
@@ -1394,6 +1487,15 @@ function SupabaseJoinTeamPage() {
           // Nothing to claim at join time: the token was validated during
           // invite resolution, and the child-add step mints the roster player.
           return ["parent" as AppRole];
+        }
+        if ((pendingInviteData?.metadata as { icp_pending_invite?: boolean } | null)?.icp_pending_invite) {
+          return withFeatureBackend("membership", {
+            supabase: async () => [] as AppRole[],
+            icp: async (ctx) => {
+              await acceptPendingLiveInvite(ctx, token!);
+              return [(pendingInviteData?.role ?? "player") as AppRole];
+            },
+          });
         }
         throw new Error("Accepting invites isn't available for Internet Identity accounts yet.");
       }

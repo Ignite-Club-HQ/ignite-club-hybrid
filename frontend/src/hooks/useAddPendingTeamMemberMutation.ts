@@ -74,10 +74,11 @@ export function useAddPendingTeamMemberMutation({
   /**
    * ICP path: composes what club_domain actually supports —
    * `bulk_add_team_members` (role grant) for an existing-user match, or
-   * `create_pending_invite` for a fresh invite. Second-parent linking and
-   * email delivery have no club_domain counterpart (second-parent invite
-   * creation, email sending) and in-app notifications stay Supabase-only
-   * (push/notifications table), so those stay skipped/omitted on this path.
+   * `create_pending_invite` for a fresh invite. Invite email delivery works
+   * here too (the send-email edge function is anon-key callable). Second-
+   * parent linking has no club_domain counterpart and in-app notifications
+   * stay Supabase-only (push/notifications table), so those stay
+   * skipped/omitted on this path.
    * NEEDS-CANISTER: second-parent invite composition + in-app notification
    * write for pending/bulk team-member adds.
    */
@@ -148,6 +149,40 @@ export function useAddPendingTeamMemberMutation({
       role: selectedRole,
     });
     const link = `${window.location.origin}/join/p/${invite.id}`;
+
+    // Email delivery routes through the send-email edge function, which is
+    // anon-key callable so Internet Identity sessions can send too. Failure
+    // degrades to manual link sharing — the link is returned either way.
+    if (inviteEmail) {
+      try {
+        const { data: emailResult, error: funcError } = await supabase.functions.invoke("send-email", {
+          body: {
+            to: inviteEmail,
+            subject: `${clubBranding?.name || "Your club"}: You're invited to join ${teamName || "the team"}`,
+            template: "team-invite",
+            senderName: clubBranding?.name || undefined,
+            replyTo: clubBranding?.contact_email || undefined,
+            templateData: {
+              recipientName: nameInput.trim(),
+              invitedEmail: inviteEmail,
+              teamName: teamName || "",
+              clubName: clubBranding?.name || "",
+              roleName: selectedRole,
+              inviteLink: link,
+              clubLogoUrl: clubBranding?.logo_url || undefined,
+            },
+          },
+        });
+        if (funcError || !(emailResult?.verified && emailResult?.success)) {
+          console.warn(
+            "[ICP invite] email send failed:",
+            funcError?.message || emailResult?.error || "not verified",
+          );
+        }
+      } catch (err) {
+        console.warn("[ICP invite] email send threw:", err);
+      }
+    }
     return {
       link,
       shareLink: link,
