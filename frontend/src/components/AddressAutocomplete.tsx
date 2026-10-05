@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { photonAutocomplete, photonReverse, type PhotonPlace } from "@/lib/photonGeocoder";
 
 export interface SavedLocation {
   id?: string;
@@ -73,6 +74,25 @@ export function AddressAutocomplete({
   // still trigger search normally.
   const skipNextSearchRef = useRef(!!value && value.length >= 3);
   const sessionTokenRef = useRef<string>(generateSessionToken());
+  const photonResultsRef = useRef<Map<string, PhotonPlace>>(new Map());
+  const biasRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // ICP: bias suggestions toward the user's area, but only when location
+  // permission was already granted (never prompt just for typing).
+  useEffect(() => {
+    if (!icpMode || typeof navigator === "undefined" || !navigator.permissions) return;
+    navigator.permissions
+      .query({ name: "geolocation" as PermissionName })
+      .then((status) => {
+        if (status.state !== "granted") return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => { biasRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }; },
+          () => undefined,
+          { maximumAge: 600000, timeout: 5000 },
+        );
+      })
+      .catch(() => undefined);
+  }, [icpMode]);
 
   // Fetch user's saved favorite locations
   useEffect(() => {
@@ -119,9 +139,25 @@ export function AddressAutocomplete({
     }
 
     if (icpMode) {
-      setSuggestions([]);
-      setSearchAttempted(false);
-      return;
+      debounceRef.current = setTimeout(async () => {
+        setLoading(true);
+        setSearchAttempted(true);
+        setShowSavedLocations(false);
+        try {
+          const results = await photonAutocomplete(value, biasRef.current ?? undefined);
+          photonResultsRef.current = new Map(results.map((r) => [r.place_id, r]));
+          setSuggestions(results);
+          setShowSuggestions(true);
+        } catch (error) {
+          console.error("Address search error:", error);
+          setSuggestions([]);
+        } finally {
+          setLoading(false);
+        }
+      }, 350);
+      return () => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+      };
     }
 
     debounceRef.current = setTimeout(async () => {
@@ -158,7 +194,22 @@ export function AddressAutocomplete({
   }, [value, icpMode]);
 
   const handleSelect = async (suggestion: Suggestion) => {
-    if (icpMode) return;
+    if (icpMode) {
+      const place = photonResultsRef.current.get(suggestion.place_id);
+      setShowSuggestions(false);
+      setShowSavedLocations(false);
+      if (!place) return;
+      const hasVenueName = !!place.name && place.name !== place.street;
+      const finalStreet = hasVenueName
+        ? (place.street ? `${place.name}, ${place.street}` : place.name)
+        : (place.street || place.main_text);
+      skipNextSearchRef.current = true;
+      onChange([finalStreet, place.suburb, place.state, place.postcode].filter(Boolean).join(", "));
+      const picked = { address: finalStreet, suburb: place.suburb, state: place.state, postcode: place.postcode };
+      onSelect?.(picked);
+      setCurrentAddress(picked);
+      return;
+    }
     skipNextSearchRef.current = true;
     // Optimistic display while details load
     onChange(suggestion.description);
@@ -278,7 +329,6 @@ export function AddressAutocomplete({
     favoriteLocations.some(loc => loc.address === currentAddress.address);
 
   const handleUseCurrentLocation = async () => {
-    if (icpMode) return;
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
       return;
@@ -292,17 +342,22 @@ export function AddressAutocomplete({
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
+          biasRef.current = { lat: latitude, lng: longitude };
 
-          const { data, error } = await supabase.functions.invoke('google-places-search', {
-            body: {
-              action: 'reverse',
-              lat: latitude,
-              lng: longitude,
-            },
-          });
-
-          if (error) throw error;
-          const place = data?.place;
+          let place: { street?: string; suburb?: string; state?: string; postcode?: string } | null = null;
+          if (icpMode) {
+            place = await photonReverse(latitude, longitude);
+          } else {
+            const { data, error } = await supabase.functions.invoke('google-places-search', {
+              body: {
+                action: 'reverse',
+                lat: latitude,
+                lng: longitude,
+              },
+            });
+            if (error) throw error;
+            place = data?.place ?? null;
+          }
 
           if (place) {
             const street = place.street || '';
@@ -462,7 +517,7 @@ export function AddressAutocomplete({
           {(loading || gpsLoading) && (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           )}
-          {!icpMode && !loading && !gpsLoading && (
+          {!loading && !gpsLoading && (
             <button
               type="button"
               className="h-6 w-6 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
