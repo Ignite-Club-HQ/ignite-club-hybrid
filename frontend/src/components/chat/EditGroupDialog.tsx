@@ -201,6 +201,11 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
         setAvatar(metadata.avatar ?? "");
         setAdminOnlyPosting(metadata.adminOnlyPosting);
       }
+      const policy = await withFeatureBackend("messaging", {
+        supabase: async () => null,
+        icp: async (ctx) => (await import("@/live/features/messaging")).getLiveGroupJoinPolicy(ctx, group.id),
+      }).catch(() => null);
+      if (policy) setJoinPolicy(normalizeJoinPolicy(policy.joinPolicy));
       return metadata;
     },
     enabled: isIcpMessaging && open,
