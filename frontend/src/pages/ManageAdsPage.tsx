@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { Plus, Trash2, ExternalLink, BarChart3, Eye, MousePointer, Settings, ArrowLeft, Pencil, Upload, Loader2 } from "lucide-react";
 import { subDays } from "date-fns";
@@ -267,24 +268,7 @@ function SupabaseManageAdsPage() {
   };
 
   // Check if user is app admin
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: () =>
-      withFeatureBackend("admin", {
-        supabase: async () => {
-          if (!user?.id) return false;
-          const { data } = await supabase
-            .from("user_roles")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("role", "app_admin")
-            .maybeSingle();
-          return !!data;
-        },
-        icp: async (ctx) => isLiveAppAdmin(ctx),
-      }),
-    enabled: !!user,
-  });
+  const { isAppAdmin } = useIsAppAdmin();
 
   const { data: ads, isLoading: adsLoading } = useQuery({
     queryKey: ["app-ads"],

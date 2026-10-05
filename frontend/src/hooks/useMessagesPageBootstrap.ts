@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /**
  * Phase 1 optimisation for MessagesPage cold load.
@@ -125,8 +126,14 @@ export function useMessagesPageBootstrap(userId: string | undefined, initialized
     if (!enabled || !userId || !query.data) return;
     const b = query.data;
 
-    // Shared key — also used by ~25 other pages. Seeding it warms their cache.
-    queryClient.setQueryData(["is-app-admin", userId], b.is_app_admin);
+    // Shared key — also used by ~25 other pages, and owned by the
+    // `useIsAppAdmin` hook's own Supabase/ICP-routed query. This bootstrap
+    // RPC is Supabase-only, so only seed the shared cache entry when the
+    // "admin" feature isn't routed to ICP — otherwise this would overwrite
+    // a correctly-resolved ICP admin flag with this Supabase-only result.
+    if (!isFeatureRoutedToIcp("admin")) {
+      queryClient.setQueryData(["is-app-admin", userId], b.is_app_admin);
+    }
 
     queryClient.setQueryData(["is-committee-member", userId], b.is_committee_member);
     queryClient.setQueryData(["admin-team-ids", userId], b.admin_team_ids);

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useQuery } from "@tanstack/react-query";
 import type { InboxClub } from "@/features/messaging/inbox/inboxPreviewSources";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 interface MessagesAccessClient {
   from: (table: string) => any;
@@ -28,23 +29,7 @@ export function useMessagesPageAccessData({
     [memberClubs],
   );
 
-  const { data: isAppAdmin, isFetching: isAppAdminFetching } = useQuery({
-    queryKey: ["is-app-admin", userId],
-    queryFn: async () => {
-      const { data, error } = await client
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", userId!)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      if (error) throw error;
-      return !!data;
-    },
-    enabled,
-    retry: 3,
-    staleTime: 5 * 60 * 1000,
-    placeholderData: (prev: boolean | undefined) => prev,
-  });
+  const { isAppAdmin, isLoading: isAppAdminFetching } = useIsAppAdmin();
 
   const { data: adminClubs } = useQuery({
     queryKey: ["admin-clubs", userId],

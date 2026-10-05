@@ -1,9 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import OnlineUsersTab from "@/components/admin/OnlineUsersTab";
 
@@ -46,7 +43,6 @@ function IcpLabOnlineUsersPage() {
 }
 
 function SupabaseOnlineUsersPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const { isAppAdmin, isLoading } = useIsAppAdmin();

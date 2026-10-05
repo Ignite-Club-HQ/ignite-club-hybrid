@@ -5,12 +5,12 @@ import type { VaultRoleRecord } from "./types";
 import {
   fetchVaultAccessibleClubs,
   fetchVaultAnyProAccess,
-  fetchVaultAppAdmin,
   fetchVaultClubHasPro,
   fetchVaultTeamHasPro,
   fetchVaultUserRoles,
   type VaultClubSummary,
 } from "./vaultAccessRepository";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import {
   canAccessVault as resolveCanAccessVault,
   getVaultAdminUpgradeInfo,
@@ -91,11 +91,11 @@ export function useVaultAccessModel({
   activeClubFilter,
   onAutoNavigateToClub,
 }: UseVaultAccessModelOptions): UseVaultAccessModelResult {
-  const { data: isAppAdmin, isLoading: isLoadingAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", userId],
-    queryFn: () => fetchVaultAppAdmin(userId!),
-    enabled: !!userId,
-  });
+  const { isAppAdmin: isAppAdminFromHook, isLoading: isLoadingAppAdminHook } = useIsAppAdmin();
+  // Mirror the old raw query's `undefined` while the lookup is in flight so
+  // every `isAppAdmin ?? false` / `!!isAppAdmin` call site keeps working.
+  const isAppAdmin = !userId || isLoadingAppAdminHook ? undefined : isAppAdminFromHook;
+  const isLoadingAppAdmin = !!userId && isLoadingAppAdminHook;
 
   const { data: userRoles, isLoading: isLoadingRoles } = useQuery({
     queryKey: ["user-admin-roles", userId],
