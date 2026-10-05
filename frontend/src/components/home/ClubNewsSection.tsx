@@ -87,7 +87,6 @@ export default function ClubNewsSection() {
           <SecureImage
             src={latest.image_url}
             alt=""
-            loading="lazy"
             className="h-12 w-12 shrink-0 rounded-md object-cover"
           />
         )}
