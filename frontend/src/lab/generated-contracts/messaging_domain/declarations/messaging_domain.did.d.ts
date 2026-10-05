@@ -309,6 +309,11 @@ export interface Main {
     { 'Ok' : Array<JoinRequest> } |
       { 'Err' : string }
   >,
+  'list_latest_messages_page' : ActorMethod<
+    [string, [] | [bigint], number],
+    { 'Ok' : MessagePage } |
+      { 'Err' : string }
+  >,
   'list_messages' : ActorMethod<[string, [] | [bigint]], Array<Message>>,
   'list_messages_page' : ActorMethod<
     [string, [] | [bigint], number],

@@ -517,6 +517,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(JoinRequest), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_latest_messages_page' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
+        [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_messages' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Vec(Message)],
