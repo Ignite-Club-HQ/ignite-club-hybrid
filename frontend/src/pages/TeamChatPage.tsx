@@ -117,7 +117,7 @@ import { startChatRealtimeChannel } from "@/features/messaging/thread/chatRealti
 import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { ensureLiveClubConversations, listLiveMessagesPage, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -504,6 +504,23 @@ export default function TeamChatPage() {
             const page = await listLiveMessagesPage(ctx, teamId, null, MESSAGES_PER_PAGE + 1);
             const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
             const profilesMap = await fetchProfilesWithCache(authorIds);
+            // Reactions persist on the canister; restore them on every
+            // refetch. Tolerate older canisters that lack list_reactions.
+            const reactionsByMessage = new Map<string, any[]>();
+            try {
+              const liveReactions = await listLiveReactions(ctx, teamId!);
+              for (const r of liveReactions) {
+                const uid = r.user.toText();
+                const list = reactionsByMessage.get(r.message_id) ?? [];
+                list.push({
+                  id: `${r.message_id}:${uid}:${r.emoji}`,
+                  user_id: uid,
+                  reaction_type: r.emoji,
+                  team_message_id: r.message_id,
+                });
+                reactionsByMessage.set(r.message_id, list);
+              }
+            } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
             const messages = page.messages
               .slice()
               .sort((a: any, b: any) => Number(b.sequence - a.sequence))
@@ -528,7 +545,7 @@ export default function TeamChatPage() {
                   forwarded_at: null,
                   forwarded_source_label: null,
                   profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-                  reactions: [],
+                  reactions: reactionsByMessage.get(m.id) ?? [],
                   reply_to: null,
                 };
               }) as unknown as Message[];
