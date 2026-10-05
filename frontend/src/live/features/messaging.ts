@@ -85,15 +85,29 @@ export async function listLiveLatestMessagesPage(
   limit: number,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
-    actor.list_latest_messages_page(
-      conversationId,
-      candidOpt(before === null ? undefined : BigInt(before)),
-      limit,
-    ),
-    "List latest messages",
-  );
+  try {
+    return await unwrapCandid(
+      actor.list_latest_messages_page(
+        conversationId,
+        candidOpt(before === null ? undefined : BigInt(before)),
+        limit,
+      ),
+      "List latest messages",
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Canisters deployed before this method existed answer IC0504 ("method
+    // does not exist"). Fall back to the forward read for the first page so
+    // chat still loads until the redeploy lands; scroll-back paging keeps its
+    // pre-fix behaviour on those canisters.
+    if (before !== null || !/IC0504|does not exist/i.test(message)) throw err;
+    return unwrapCandid(
+      actor.list_messages_page(conversationId, candidOpt(undefined), limit),
+      "List messages",
+    );
+  }
 }
+
 
 
 export interface LiveMessageAttachment {
