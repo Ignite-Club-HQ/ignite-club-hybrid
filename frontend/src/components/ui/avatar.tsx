@@ -3,6 +3,8 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import { onlineManager } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { MEDIA_BLOB_STORE_KEY } from "@/live/mediaStorage";
 
 /**
  * Global "reconnect epoch" that bumps whenever the browser reports it has

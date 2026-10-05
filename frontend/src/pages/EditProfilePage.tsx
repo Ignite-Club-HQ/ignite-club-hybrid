@@ -208,6 +208,10 @@ export default function EditProfilePage() {
           "display_name",
           displayName.trim(),
         );
+        // Re-sync avatar club grants — covers clubs joined after the photo
+        // was uploaded. Best-effort (never throws).
+        const { syncLiveAvatarClubGrants } = await import("@/live/avatarUpload");
+        await syncLiveAvatarClubGrants({ identity, target: getActiveIcpTarget() });
       } catch (error) {
         setSaving(false);
         toast({
