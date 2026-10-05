@@ -26,6 +26,7 @@
 ///   vetKeys client-side per session, so each (pii_id, field_id) costs one
 ///   derivation per reader session.
 
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Int "mo:core/Int";
@@ -40,6 +41,9 @@ import Time "mo:core/Time";
 import ManagementCanister "mo:ic-vetkeys/ManagementCanister";
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
 
   // ==================== Types ====================
 

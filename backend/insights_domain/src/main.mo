@@ -1,3 +1,4 @@
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Float "mo:core/Float";
 import Int "mo:core/Int";
@@ -11,6 +12,9 @@ import Time "mo:core/Time";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
   var governor : Principal;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {

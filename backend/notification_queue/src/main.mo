@@ -1,3 +1,4 @@
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Nat "mo:core/Nat";
 import Nat16 "mo:core/Nat16";
@@ -10,6 +11,9 @@ import Time "mo:core/Time";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
   var items : [Types.Notification];
   var leases : [Types.Lease];
   var governor : ?Principal;

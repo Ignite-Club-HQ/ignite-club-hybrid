@@ -60,6 +60,7 @@ type result_opt_domain_route = variant { Ok : opt domain_route; Err : text };
 type result_page = variant { Ok : page; Err : text };
 type result_nat64 = variant { Ok : nat64; Err : text };
 service : (init) -> {
+  cycles_balance : () -> (nat) query;
   abort_migration : (text, nat64) -> (result_nat64);
   abort_domain_migration : (text, text, nat64) -> (result_nat64);
   assign : (assign_request) -> (result_assign);

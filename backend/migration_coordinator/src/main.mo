@@ -1,3 +1,4 @@
+import Cycles "mo:core/Cycles";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Array "mo:core/Array";
@@ -12,6 +13,9 @@ import Types "types";
 // actor remains the only non-imported declaration in this program.
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
   var governor : ?Principal;
 
   if (governor == null and not governorInit.equal(Principal.anonymous())) {

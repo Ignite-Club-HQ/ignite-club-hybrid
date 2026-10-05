@@ -13,6 +13,7 @@ type result_nat16 = variant { Ok : nat16; Err : text };
 type result_snapshot = variant { Ok : snapshot; Err : text };
 type result_reconciliation = variant { Ok : reconciliation; Err : text };
 service : () -> {
+  cycles_balance : () -> (nat) query;
   arm : (nat64) -> (result_state);
   claim : (nat64, nat16) -> (result_jobs);
   claim_with_lease : (nat64, nat16, nat64) -> (result_jobs);

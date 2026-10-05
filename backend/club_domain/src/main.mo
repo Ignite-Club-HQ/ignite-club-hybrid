@@ -1,3 +1,4 @@
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Char "mo:core/Char";
 import Int "mo:core/Int";
@@ -16,6 +17,9 @@ import Timer "mo:core/Timer";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
   transient let challengeTtlNs : Nat64 = 600_000_000_000;
 
   // IC HTTP gateway request/response shapes for `http_request` (same contract
