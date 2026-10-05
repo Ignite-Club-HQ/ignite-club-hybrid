@@ -52,6 +52,17 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
   });
+  const TeamInviteLink = IDL.Record({
+    'id' : IDL.Text,
+    'token' : IDL.Text,
+    'revoked' : IDL.Bool,
+    'role' : IDL.Text,
+    'rotated_at_ms' : IDL.Opt(IDL.Nat64),
+    'team_id' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'club_id' : IDL.Text,
+  });
   const Child = IDL.Record({
     'id' : IDL.Text,
     'teams' : IDL.Vec(IDL.Text),
@@ -191,17 +202,6 @@ export const idlFactory = ({ IDL }) => {
     'to' : IDL.Text,
     'subject' : IDL.Text,
     'body' : IDL.Text,
-  });
-  const TeamInviteLink = IDL.Record({
-    'id' : IDL.Text,
-    'token' : IDL.Text,
-    'revoked' : IDL.Bool,
-    'role' : IDL.Text,
-    'rotated_at_ms' : IDL.Opt(IDL.Nat64),
-    'team_id' : IDL.Text,
-    'created_by' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'club_id' : IDL.Text,
   });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
@@ -473,6 +473,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamInvite, 'Err' : IDL.Text })],
         [],
       ),
+    'accept_team_invite_link' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : TeamInviteLink, 'Err' : IDL.Text })],
+        [],
+      ),
     'add_role_grant' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -706,6 +711,11 @@ export const idlFactory = ({ IDL }) => {
     'get_parent_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pending_invite' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_shell_team_by_token' : IDL.Func(
