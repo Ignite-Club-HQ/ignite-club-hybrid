@@ -636,7 +636,10 @@ export default function BroadcastChatPage() {
               icpOlderCursorRef.current,
               MESSAGES_PER_PAGE,
             );
-            icpOlderCursorRef.current = page.nextBefore ?? null;
+            icpOlderCursorRef.current =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
             return {
               rows: page.messages
                 .map((m) => ({
@@ -649,7 +652,7 @@ export default function BroadcastChatPage() {
                   created_at: new Date(Number(m.createdAtMs)).toISOString(),
                   reactions: [],
                 })) as unknown as Message[],
-              hasOlder: page.hasMore,
+              hasOlder: icpOlderCursorRef.current !== null,
             };
           },
         });
