@@ -16,6 +16,12 @@ export function occurrenceStartMs(childDate: string, firstStartMs: number): numb
   return new Date(y, m - 1, d, first.getHours(), first.getMinutes(), first.getSeconds()).getTime();
 }
 
+/** Optional canister text: blank becomes null, capped at the canister's 256-char limit. */
+function optText(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text ? text.slice(0, 256) : null;
+}
+
 export type CreateEventTransactionInput = {
   event: Record<string, unknown>;
   eventDate: string;
@@ -59,9 +65,9 @@ export async function createEventTransaction(
         title: String(eventRecord.title ?? "").slice(0, 128),
         description: String(eventRecord.description ?? "").trim().slice(0, 128) || " ",
         eventType: String(eventRecord.type ?? "training"),
-        location: (eventRecord.location_name as string | null | undefined) ?? null,
-        opponent: (eventRecord.opponent as string | null | undefined) ?? null,
-        address: (eventRecord.address as string | null | undefined) ?? null,
+        location: optText(eventRecord.location_name),
+        opponent: optText(eventRecord.opponent),
+        address: optText(eventRecord.address),
         miniLeagueId: (eventRecord.mini_league_id as string | null | undefined) ?? null,
       };
 
@@ -107,7 +113,9 @@ export async function createEventTransaction(
         return first.id;
       }
 
-      const created = await createLiveEvent(ctx, { ...base, startsAtMs, endsAtMs });
+      // No end time (or one before the start) is allowed in the form, but
+      // the canister requires end > start — default to a one-hour event.
+      const created = await createLiveEvent(ctx, { ...base, startsAtMs, endsAtMs: startsAtMs + durationMs });
 
       // Best-effort duty sync: the canister has no equivalent of the atomic
       // create_event_with_duties RPC, so duties are written as a separate
