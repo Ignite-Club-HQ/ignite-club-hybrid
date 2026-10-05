@@ -653,7 +653,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    send_message(conversation_id: string, body: string, idempotency_key: string, attachment: Attachment | null): Promise<{
+    send_message(conversation_id: string, body: string, idempotency_key: string, attachment: Attachment | null, reply_to_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: Message;
     } | {
@@ -938,6 +938,7 @@ export interface Message {
     id: string;
     conversation_id: string;
     body: string;
+    reply_to_id?: string;
     sender: Principal;
     created_at_ms: bigint;
     edited_at_ms?: bigint;
@@ -1564,14 +1565,14 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.restore_group(arg0);
         return from_candid_variant_n1(result);
     }
-    async send_message(arg0: string, arg1: string, arg2: string, arg3: Attachment | null): Promise<{
+    async send_message(arg0: string, arg1: string, arg2: string, arg3: Attachment | null, arg4: string | null): Promise<{
         __kind__: "Ok";
         Ok: Message;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n80(arg3));
+        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n80(arg3), to_candid_opt_n12(arg4));
         return from_candid_variant_n17(result);
     }
     async send_system_message(arg0: Principal, arg1: string, arg2: string): Promise<{
@@ -1978,6 +1979,7 @@ function from_candid_record_n19(value: {
     id: string;
     conversation_id: string;
     body: string;
+    reply_to_id: [] | [string];
     sender: Principal;
     created_at_ms: bigint;
     edited_at_ms: [] | [bigint];
@@ -1988,6 +1990,7 @@ function from_candid_record_n19(value: {
     id: string;
     conversation_id: string;
     body: string;
+    reply_to_id?: string;
     sender: Principal;
     created_at_ms: bigint;
     edited_at_ms?: bigint;
@@ -1999,6 +2002,7 @@ function from_candid_record_n19(value: {
         id: value.id,
         conversation_id: value.conversation_id,
         body: value.body,
+        reply_to_id: record_opt_to_undefined(from_candid_opt_n5(value.reply_to_id)),
         sender: value.sender,
         created_at_ms: value.created_at_ms,
         edited_at_ms: record_opt_to_undefined(from_candid_opt_n7(value.edited_at_ms)),

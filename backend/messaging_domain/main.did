@@ -471,10 +471,11 @@ type Main =
                                                 Ok;
                                               });
    send_message: (conversation_id: text, body: text, idempotency_key: 
-    text, attachment: opt Attachment, reply_to_id: opt text) -> (variant {
-                                            Err: text;
-                                            Ok: Message;
-                                          });
+    text, attachment: opt Attachment, reply_to_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: Message;
+     });
    send_system_message: (to_user: principal, body: text, idempotency_key:
     text) -> (variant {
                 Err: text;

@@ -54,13 +54,13 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'conversation_id' : IDL.Text,
     'body' : IDL.Text,
+    'reply_to_id' : IDL.Opt(IDL.Text),
     'sender' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
     'edited_at_ms' : IDL.Opt(IDL.Nat64),
     'attachment' : IDL.Opt(Attachment),
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
-    'reply_to_id' : IDL.Opt(IDL.Text),
   });
   const ForwardRecord = IDL.Record({
     'to_conversation_id' : IDL.Text,
