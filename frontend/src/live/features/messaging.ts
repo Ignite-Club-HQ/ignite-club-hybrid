@@ -1148,3 +1148,39 @@ export async function listLiveAllClubDmSettings(ctx: FeatureBackendContext): Pro
     aiCatchUpEnabled: s.ai_catch_up_enabled,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Open-group discovery (join policy + category per club group)
+// ---------------------------------------------------------------------------
+
+export async function setLiveGroupJoinPolicy(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  joinPolicy: "invite_only" | "request_to_join" | "open_to_club",
+  category: string | null,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_group_join_policy(conversationId, joinPolicy, candidOpt(category)), "Set join policy");
+}
+
+export async function getLiveGroupJoinPolicy(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const r = await actor.get_group_join_policy(conversationId);
+  return { joinPolicy: r.join_policy, category: r.category[0] ?? null };
+}
+
+export async function listLiveOpenGroups(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(actor.list_open_groups(clubId), "List open groups");
+  return rows.map((r) => ({
+    ...toLiveGroupSummary(r.summary),
+    joinPolicy: r.join_policy,
+    category: r.category[0] ?? null,
+    requested: r.requested,
+  }));
+}
+
+export async function joinLiveOpenGroup(ctx: FeatureBackendContext, conversationId: string) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.join_open_group(conversationId), "Join group");
+}

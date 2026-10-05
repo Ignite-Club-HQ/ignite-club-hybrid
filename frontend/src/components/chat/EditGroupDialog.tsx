@@ -19,7 +19,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { updateLiveGroup, getLiveGroupMetadata } from "@/live/features/messaging";
+import { updateLiveGroup, getLiveGroupMetadata, setLiveGroupJoinPolicy } from "@/live/features/messaging";
 import { myLiveRoleGrants } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
@@ -84,7 +84,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
   const qualifiesForOpenJoin =
     isManual &&
     isClubScopedGroup &&
-    (group.category === "Operations" || group.category === "Volunteers");
+    (isFeatureRoutedToIcp("messaging") || group.category === "Operations" || group.category === "Volunteers");
   const [internalOpen, setInternalOpen] = useState(false);
   const [name, setName] = useState(group.name);
   const [selectedRoles, setSelectedRoles] = useState<AppRole[]>(group.allowed_roles);
@@ -201,6 +201,11 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
         setAvatar(metadata.avatar ?? "");
         setAdminOnlyPosting(metadata.adminOnlyPosting);
       }
+      const policy = await withFeatureBackend("messaging", {
+        supabase: async () => null,
+        icp: async (ctx) => (await import("@/live/features/messaging")).getLiveGroupJoinPolicy(ctx, group.id),
+      }).catch(() => null);
+      if (policy) setJoinPolicy(normalizeJoinPolicy(policy.joinPolicy));
       return metadata;
     },
     enabled: isIcpMessaging && open,
@@ -239,6 +244,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
             avatar.trim() ? avatar : null,
             adminOnlyPosting,
           );
+          await setLiveGroupJoinPolicy(ctx, group.id, joinPolicy, (group as { category?: string | null }).category ?? null);
         },
       });
     },
