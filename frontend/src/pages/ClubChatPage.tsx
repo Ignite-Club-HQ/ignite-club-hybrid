@@ -1570,6 +1570,11 @@ export default function ClubChatPage() {
 
     onSuccess: (result, variables) => {
       if (isConfirmedDelivery(result)) syncSendToVault(variables);
+      // ICP has no realtime push: refetch now so the optimistic row is
+      // swapped for the canister row (real id) before the user reacts to it.
+      if (isFeatureRoutedToIcp("messaging")) {
+        void queryClient.invalidateQueries({ queryKey: ["club-messages", clubId] });
+      }
     },
 
     onSettled: (_, __, variables) => {

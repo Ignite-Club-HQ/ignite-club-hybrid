@@ -1713,7 +1713,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (messages.find(func(m) = m.id == message_id)) {
       case null return #Err("Message not found");
       case (?m) {
-        if (not canReadTeamMessages(caller, m.conversation_id)) return #Err("Conversation access forbidden");
+        if (not canReadTeamMessages(caller, m.conversation_id) and not canAccessConversation(caller, m.conversation_id)) return #Err("Conversation access forbidden");
       };
     };
     if (reactions.any(func(r) = r.message_id == message_id and r.user.equal(caller) and r.emoji == emoji)) {
