@@ -386,6 +386,11 @@ persistent actor class Main(governorInit : Principal) {
   // Read stance matches list_sponsors: sponsor strips render for every
   // member, so the read is unauthenticated; writes are club-admin gated via
   // the sponsor's owning club.
+  public query func list_sponsors_multi(club_ids : [Text]) : async { #Ok : [Types.ClubSponsor]; #Err : Text } {
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    #Ok(sponsors.filter(func(s) = club_ids.any(func(c) = c == s.club_id)))
+  };
+
   public query func list_team_sponsor_allocations(club_id : Text) : async { #Ok : [Types.TeamSponsorAllocation]; #Err : Text } {
     var res : [Types.TeamSponsorAllocation] = [];
     for (a in teamSponsorAllocations.values()) {
