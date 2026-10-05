@@ -1,8 +1,10 @@
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
+import Nat8 "mo:core/Nat8";
 import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
+import Random "mo:core/Random";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
@@ -110,6 +112,24 @@ persistent actor class Main(governorInit : Principal) {
   func findPlayer(id : Text) : ?Types.MiniLeaguePlayer { players.find(func(item) = item.id == id) };
   func findChild(id : Text) : ?Types.MiniLeagueChild { children.find(func(item) = item.id == id) };
   func nextId(prefix : Text, size : Nat) : Text { prefix # "-" # Nat.toText(size) };
+
+  let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+
+  // 128 bits of raw_rand entropy, hex-encoded, for bearer tokens (join
+  // links, claim invites) — those must be unguessable, unlike the
+  // sequential entity ids nextId produces. Update methods only.
+  func randomToken(prefix : Text) : async Text {
+    let blob = await Random.blob();
+    var out = prefix # "-";
+    var i = 0;
+    label fill for (b in blob.vals()) {
+      if (i >= 16) break fill;
+      let n = Nat8.toNat(b);
+      out #= hexDigits[n / 16] # hexDigits[n % 16];
+      i += 1;
+    };
+    out
+  };
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
