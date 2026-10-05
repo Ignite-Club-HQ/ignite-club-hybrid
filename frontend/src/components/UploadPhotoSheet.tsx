@@ -23,6 +23,9 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { registerLiveAsset } from "@/live/features/media";
 import { recordLivePhotoUpload } from "@/live/features/insights";
+import { getLiveClubProfile, getLiveClubSubscription, getLiveTeam, listLiveTeams } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { sha256Hex } from "@/live/blobStoreProtocol";
@@ -118,8 +121,14 @@ export function UploadPhotoSheet({
 
   // Get user roles
   const { data: userRoles } = useQuery({
-    queryKey: ["user-roles-upload", user?.id],
+    queryKey: ["user-roles-upload", user?.id, isFeatureRoutedToIcp("membership")],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).map((g) => ({ role: g.role, club_id: g.club[0] ?? null, team_id: g.team[0] ?? null })),
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("role, club_id, team_id")
@@ -139,6 +148,24 @@ export function UploadPhotoSheet({
     queryKey: ["user-clubs-upload-sheet", user?.id, isAppAdmin, JSON.stringify(userRoles), activeClubFilter ?? ""],
     queryFn: async () => {
       let clubs: Club[] = [];
+
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as Club[],
+          icp: async (ctx) => {
+            const ids = [...new Set((userRoles ?? []).map((r) => r.club_id).filter((id): id is string => !!id))];
+            const rows = await Promise.all(ids.map(async (id) => {
+              const [profile, sub] = await Promise.all([getLiveClubProfile(ctx, id), getLiveClubSubscription(ctx, id)]);
+              const club = profile[0];
+              return club && !club.deleted_at_ms.length ? {
+                id: club.id, name: club.name, is_pro: Boolean(sub?.is_pro),
+                has_pro_access: Boolean(sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override),
+              } : null;
+            }));
+            return rows.filter((row): row is Club => row !== null);
+          },
+        });
+      }
 
       if (isAppAdmin) {
         const { data, error } = await supabase
@@ -247,6 +274,18 @@ export function UploadPhotoSheet({
     queryKey: ["user-teams-upload-sheet", user?.id, selectedClubId, isAppAdmin, JSON.stringify(userRoles)],
     queryFn: async () => {
       if (!selectedClubId) return [];
+      if (isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as Team[],
+          icp: async (ctx) => {
+            const canManageClub = isAppAdmin || userRoles?.some((r) => r.club_id === selectedClubId && r.role === "club_admin");
+            const ids = new Set(userRoles?.filter((r) => r.club_id === selectedClubId).map((r) => r.team_id));
+            return (await listLiveTeams(ctx, selectedClubId))
+              .filter((t) => !t.deleted_at_ms.length && (canManageClub || ids.has(t.id)))
+              .map((t) => ({ id: t.id, name: t.name, is_pro: true }));
+          },
+        });
+      }
       
       // Get user's team IDs from their roles
       const userTeamIds = userRoles?.filter(r => r.team_id).map(r => r.team_id) || [];
@@ -308,6 +347,12 @@ export function UploadPhotoSheet({
     queryKey: ["user-mini-leagues-upload-sheet", user?.id, selectedClubId, isAppAdmin, JSON.stringify(userRoles)],
     queryFn: async () => {
       if (!selectedClubId) return [];
+      if (isFeatureRoutedToIcp("mini_leagues")) {
+        return withFeatureBackend("mini_leagues", {
+          supabase: async () => [] as MiniLeague[],
+          icp: async (ctx) => (await listLiveMiniLeaguesByClub(ctx, selectedClubId)).map((l) => ({ id: l.id, name: l.name })),
+        });
+      }
       
       const isClubAdmin = userRoles?.some(r => r.role === "club_admin" && r.club_id === selectedClubId);
       const isLeagueAdmin = userRoles?.some(r => r.role === "league_admin" && r.club_id === selectedClubId);
@@ -397,6 +442,14 @@ export function UploadPhotoSheet({
     if (defaultTeamId && !defaultClubId) {
       let cancelled = false;
       (async () => {
+        if (isFeatureRoutedToIcp("membership")) {
+          const clubId = await withFeatureBackend("membership", {
+            supabase: async () => null as string | null,
+            icp: async (ctx) => (await getLiveTeam(ctx, defaultTeamId))[0]?.club_id ?? null,
+          });
+          if (!cancelled && clubId) setSelectedClubId((prev) => prev || clubId);
+          return;
+        }
         const { data } = await supabase
           .from("teams")
           .select("club_id")
@@ -405,7 +458,7 @@ export function UploadPhotoSheet({
         if (!cancelled && data?.club_id) {
           setSelectedClubId((prev) => prev || (data.club_id as string));
         }
-      })();
+      })().catch((error) => console.warn("Could not resolve photo team club", error));
       return () => { cancelled = true; };
     }
   }, [open, defaultClubId, defaultTeamId, defaultEventId]);
