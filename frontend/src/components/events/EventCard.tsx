@@ -568,7 +568,7 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
     onSuccess: invalidateRsvpQueries,
     onError: (e: Error) => toast({ title: "Failed to RSVP", description: e.message, variant: "destructive" }),
     onSettled: async () => {
-      await queryClient.refetchQueries({ queryKey: ["my-rsvp"], type: "active" }).catch(() => undefined);
+      await queryClient.refetchQueries({ queryKey: ["card-rsvp", event.id], type: "active" }).catch(() => undefined);
       setOptimisticRsvp(null);
     },
   });
