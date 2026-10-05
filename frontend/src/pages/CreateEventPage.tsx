@@ -476,19 +476,21 @@ function SupabaseCreateEventPage() {
   });
 
   // Auto-select filtered club when active
-  const filteredClubs = activeClubFilter
+  const validActiveClubFilter = activeClubFilter && clubs?.some((c) => c.id === activeClubFilter)
+    ? activeClubFilter : null;
+  const filteredClubs = validActiveClubFilter
     ? clubs?.filter(c => c.id === activeClubFilter)
     : clubs;
 
   // Auto-select club: prefer activeClubFilter, fallback to single club
   useEffect(() => {
     if (clubId) return; // Already selected
-    if (activeClubFilter && clubs?.some(c => c.id === activeClubFilter)) {
-      setClubId(activeClubFilter);
+    if (validActiveClubFilter) {
+      setClubId(validActiveClubFilter);
     } else if (filteredClubs?.length === 1) {
       setClubId(filteredClubs[0].id);
     }
-  }, [activeClubFilter, clubs, filteredClubs, clubId]);
+  }, [validActiveClubFilter, filteredClubs, clubId]);
 
   // Apply club guest defaults when club is selected
   useEffect(() => {
@@ -1421,7 +1423,7 @@ function SupabaseCreateEventPage() {
                   placeholder="Select club"
                   label="Club"
                   required
-                  disabled={!!activeClubFilter}
+                  disabled={!!validActiveClubFilter}
                 />
                 )}
 

@@ -411,7 +411,7 @@ export function UploadPhotoSheet({
   // Show all clubs; free ones are visually locked so users know they need Pro
   const availableClubs = (() => {
     let clubs = userClubs;
-    if (activeClubFilter && clubs) {
+    if (activeClubFilter && clubs?.some((club) => club.id === activeClubFilter)) {
       clubs = clubs.filter(club => club.id === activeClubFilter);
     }
     return clubs;
