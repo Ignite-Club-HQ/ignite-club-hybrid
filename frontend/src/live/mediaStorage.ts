@@ -15,6 +15,54 @@
 
 export const MEDIA_BLOB_STORE_KEY = "media_blob_store";
 
+/**
+ * Photo-store sharding: extra stores are registered as canister keys
+ * media_blob_store_2, media_blob_store_3, … next to the original
+ * media_blob_store. Stores are append-only; photos are never moved — each
+ * photo's blob_ref/URL names the store that holds it. A full store refuses
+ * new uploads ("StoreFull") and stays readable.
+ */
+const EXTRA_STORE_KEY = /^media_blob_store_(\d+)$/;
+
+type CanisterIdMap = { canisterIds: Record<string, string> } | null | undefined;
+
+/** Configured photo-store keys, original first then by number. */
+export function listBlobStoreKeys(target: CanisterIdMap): string[] {
+  if (!target) return [];
+  const ok = (k: string) => typeof target.canisterIds[k] === "string" && target.canisterIds[k].trim() !== "";
+  const extras = Object.keys(target.canisterIds)
+    .filter((k) => EXTRA_STORE_KEY.test(k) && ok(k))
+    .sort((a, b) => Number(EXTRA_STORE_KEY.exec(a)![1]) - Number(EXTRA_STORE_KEY.exec(b)![1]));
+  return ok(MEDIA_BLOB_STORE_KEY) ? [MEDIA_BLOB_STORE_KEY, ...extras] : extras;
+}
+
+/** Canister ids of every configured photo store (read-side allow list). */
+export function listBlobStoreCanisterIds(target: CanisterIdMap): string[] {
+  return listBlobStoreKeys(target).map((k) => target!.canisterIds[k].trim());
+}
+
+function hash32(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Upload order for a path: rendezvous hashing on the club id (from a
+ * clubs/<clubId>/ prefix, else the whole path) so a club's photos stay on
+ * one store, and adding a store only moves new uploads for a few clubs.
+ */
+export function orderBlobStoresForPath(target: CanisterIdMap, path: string): string[] {
+  const groupKey = /^clubs\/([^/]+)\//.exec(path)?.[1] ?? path;
+  return listBlobStoreKeys(target)
+    .map((key) => ({ key, score: hash32(`${groupKey}|${target!.canisterIds[key]}`) }))
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.key);
+}
+
 /** Matches the Candid BlobRef record on the media_metadata canister. */
 export interface LiveBlobRef {
   canister: string;

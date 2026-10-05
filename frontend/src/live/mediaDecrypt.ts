@@ -1,6 +1,6 @@
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
-import { blobAssetUrl, MEDIA_BLOB_STORE_KEY } from "./mediaStorage";
+import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
 import { decryptPiiValue } from "./piiVetKeys";
 import type { IcpTargetConfig } from "./targetRegistry";
 
@@ -29,8 +29,9 @@ export function parseIcpBlobUrl(
   target: IcpTargetConfig | null,
 ): { path: string; canisterId: string } | null {
   if (!target) return null;
-  const canisterId = target.canisterIds[MEDIA_BLOB_STORE_KEY];
-  if (!canisterId) return null;
+  // Any configured photo store (sharding) — unknown canisters are rejected.
+  const stores = listBlobStoreCanisterIds(target);
+  if (stores.length === 0) return null;
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -39,17 +40,17 @@ export function parseIcpBlobUrl(
   }
   const segments = parsed.pathname.replace(/^\/+/, "").split("/");
   let path: string;
+  let canisterId: string;
   if (ICP_GATEWAY_HOSTS.includes(parsed.hostname)) {
     // Legacy path-style URLs stored before the subdomain fix.
-    if (segments[0] !== canisterId) return null;
+    if (!stores.includes(segments[0])) return null;
+    canisterId = segments[0];
     path = segments.slice(1).join("/");
-  } else if (
-    parsed.hostname === `${canisterId}.raw.icp0.io` ||
-    parsed.hostname === `${canisterId}.icp0.io`
-  ) {
-    path = segments.join("/");
   } else {
-    return null;
+    const sub = /^([a-z0-9-]+)\.(?:raw\.)?icp0\.io$/.exec(parsed.hostname)?.[1];
+    if (!sub || !stores.includes(sub)) return null;
+    canisterId = sub;
+    path = segments.join("/");
   }
   return path ? { path, canisterId } : null;
 }
