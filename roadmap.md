@@ -55,3 +55,9 @@ PIVOT: the planned Supabase edge function worker was rejected by the platform (n
 - [x] Deploy wiring: deploy-mainnet.sh grants the seed-derived worker principal (grant_worker) when ICP_PUSH_WORKER_SEED is set; deploy-icp-mainnet.yml passes the secret; scripts/grant-push-worker.sh for local granting; AGENTS.md rule recorded
 - [ ] BLOCKED ON USER: GitHub repo secrets ICP_PUSH_WORKER_SEED (64 hex chars) + FCM_SERVICE_ACCOUNT_JSON (Firebase service account) — worker no-ops until both exist
 - [ ] BLOCKED ON USER: re-run deploy-icp-mainnet (ships the device-token store + grant_worker), then push works end to end
+
+## Invite flows audit in ICP mode (club, team, competition, mini-league; email + share links) — IN PROGRESS
+- [ ] Map every invite flow: creation, email send, share link, landing/claim, acceptance, membership write
+- [ ] Fix email invite sending in ICP mode (or document blocker)
+- [ ] Fix share-link landing/claim in ICP mode
+- [ ] Verify competition + mini-league invite paths
