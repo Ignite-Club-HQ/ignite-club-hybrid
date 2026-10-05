@@ -1,0 +1,12 @@
+{
+  "name": "ignite-club-hq-hybrid",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Root shim: the real app lives in frontend/. Publishing runs a root install before the build, so this file must exist; it has no dependencies on purpose.",
+  "scripts": {
+    "install-frontend": "node scripts/ensure-frontend-deps.mjs",
+    "dev": "node scripts/dev-preview.mjs",
+    "build": "node scripts/ensure-frontend-deps.mjs && node scripts/build-preview.mjs",
+    "build:dev": "node scripts/ensure-frontend-deps.mjs && node scripts/build-preview.mjs"
+  }
+}
