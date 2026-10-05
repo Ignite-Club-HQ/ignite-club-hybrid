@@ -256,9 +256,6 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   ) => {
     const { skipCompression = false, isVideo = false } = options ?? {};
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
-
     const originalMimeType = blob.type || (isVideo ? "video/mp4" : "image/jpeg");
     let fileToUpload: Blob | File = blob;
     let contentType = originalMimeType;
