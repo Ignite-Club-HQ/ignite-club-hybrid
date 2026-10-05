@@ -281,13 +281,20 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       : mimeToExtension(contentType);
 
     const timestamp = Date.now();
-    let fileName: string;
+    // ICP blob-store path: keep it SHORT. An Internet Identity principal is
+    // ~63 chars and would push the path past the blob store's path limit
+    // (the gallery upload hit exactly that "Invalid asset" rejection), and
+    // ownership is already recorded on the pii_access_control record — the
+    // path only needs the `clubs/<clubId>/` prefix that drives the club
+    // read grant.
+    const rand = Math.random().toString(36).slice(2, 8);
+    let icpPath: string;
     if (teamId && clubId) {
-      fileName = `clubs/${clubId}/teams/${teamId}/${user.id}/${timestamp}.${extension}`;
+      icpPath = `clubs/${clubId}/teams/${teamId}/chat/${timestamp}-${rand}.${extension}`;
     } else if (clubId) {
-      fileName = `clubs/${clubId}/${user.id}/${timestamp}.${extension}`;
+      icpPath = `clubs/${clubId}/chat/${timestamp}-${rand}.${extension}`;
     } else {
-      fileName = `general/${user.id}/${timestamp}.${extension}`;
+      icpPath = `general/chat/${timestamp}-${rand}.${extension}`;
     }
 
     // ICP blob store: when a media_blob_store canister is configured and the
@@ -297,7 +304,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     // silently diverting bytes to Supabase.
     // NEEDS-CANISTER: remove the isIcp throw once the blob store is deployed.
     const blobUpload = await tryUploadMediaToBlobStore({
-      storagePath: fileName,
+      storagePath: icpPath,
       file: fileToUpload,
       mime: contentType,
     });
@@ -306,6 +313,19 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       publicUrl = blobUpload.url;
     } else {
       if (isIcp) throw new Error("Media uploads are not available yet for Internet Identity accounts");
+      // Supabase auth is only required on the Supabase fallback path — an
+      // Internet Identity session has no Supabase user, so this check must
+      // not run before the blob-store attempt above.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      let fileName: string;
+      if (teamId && clubId) {
+        fileName = `clubs/${clubId}/teams/${teamId}/${user.id}/${timestamp}.${extension}`;
+      } else if (clubId) {
+        fileName = `clubs/${clubId}/${user.id}/${timestamp}.${extension}`;
+      } else {
+        fileName = `general/${user.id}/${timestamp}.${extension}`;
+      }
       const { error: uploadError } = await supabase.storage
         .from("chat-attachments")
         .upload(fileName, fileToUpload, { contentType, upsert: false, cacheControl: "31536000" });
