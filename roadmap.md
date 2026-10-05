@@ -62,3 +62,9 @@
 - [x] All 18 remaining files converted to useIsAppAdmin (AdminPage, AdminChatPhotoReminders, AdminActiveGames, AdminTempPassword, SponsorAnalytics, AppStripeSettings, SendUpdateReminder, ManageBackups, RealtimeHealth, ClubRewardsReport, ClubRewards, NotificationPreferences, OnlineUsers, RewardRedemptionCard, ClubChatPage, EventDetailPage, ManageAdsPage, useMessagesPageAccessData, useVaultAccessModel). useMessagesPageBootstrap's Supabase-only RPC seed of the shared key is now gated on `!isFeatureRoutedToIcp("admin")`.
 - [x] Vault access-model tests updated to mock useIsAppAdmin (all 18 pass); typecheck exit 0; preview build OK; build-errors.log "build OK". rg confirms only comments + the gated seed + the hook itself still mention the key.
 - Frontend-only fix; no canister redeploy required for this item.
+
+## No click feedback on buttons in ICP mode
+- [x] Root cause: canister UPDATE calls take ~2–5s and most ICP-mode buttons have no per-button pending state, so taps look dead.
+- [x] Fix: live/pendingCalls.ts (pure store) + icpAgent.createLiveActor wraps every actor UPDATE method (query/composite-query methods left bare so polling never flashes it) + IcpPendingBar — a 3px indeterminate top bar (200ms show delay, 500ms min visible, pointer-events none, reduced-motion aware) mounted in App.tsx.
+- [x] Verified: candid introspection against real club_domain bindings detects 97 update methods; typecheck exit 0; ICP guard + topology checks pass; preview build OK.
+- Frontend-only; no canister redeploy required.
