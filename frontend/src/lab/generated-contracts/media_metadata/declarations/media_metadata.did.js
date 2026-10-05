@@ -44,6 +44,13 @@ export const idlFactory = ({ IDL }) => {
     'visibility' : IDL.Text,
     'club_id' : IDL.Text,
     'expires_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'team_id' : IDL.Opt(IDL.Text),
+    'mini_league_id' : IDL.Opt(IDL.Text),
+    'competition_id' : IDL.Opt(IDL.Text),
+    'event_id' : IDL.Opt(IDL.Text),
+    'caption' : IDL.Opt(IDL.Text),
+    'album_id' : IDL.Opt(IDL.Text),
   });
   const Capability = IDL.Record({
     'action' : IDL.Text,
@@ -180,6 +187,19 @@ export const idlFactory = ({ IDL }) => {
           IDL.Bool,
         ],
         [IDL.Variant({ 'Ok' : GalleryChatCard, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_asset_scope' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],
         [],
       ),
     'set_blob_ref' : IDL.Func(
