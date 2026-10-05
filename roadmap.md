@@ -77,3 +77,9 @@
 - [x] Verified: candid introspection against real club_domain bindings detects 97 update methods; typecheck exit 0; ICP guard + topology checks pass; preview build OK.
 - Frontend-only; no canister redeploy required.
 - [x] Extended: navigation + page-load reads also drive the bar. pendingCalls tracks UPDATE calls always + QUERY calls only within 4s after a route change (noteIcpNavigation via IcpNavActivityTracker inside BrowserRouter); icpAgent now wraps query/composite-query methods with trackIcpQueryCall so background polling stays silent. Logic unit-tested with bun (background query silent, nav-window query + update counted, settles to 0, one-way passthrough); typecheck 0; preview build OK.
+
+## GIPHY key stored in the canister (user decision 2026-10-05)
+- [x] Reverses the earlier keep-the-key-server-side note in GifGrid: GIPHY keys are client-side by design, so the key now lives in club_domain app_config ("giphy_api_key") — no canister redeploy needed (set/get_app_config already exist).
+- [x] GifGrid resolves the key: build-time env → canister get_app_config → Supabase app_settings mirror; dead /api/giphy-search fallback removed, clear toast when no key is set.
+- [x] Placement Settings gains an Integrations card: GIPHY key field, saved via setLiveAppSetting (ICP mode) or app_settings row (Supabase mode); typecheck clean.
+- [ ] User: paste the GIPHY key into Placement Settings → Integrations and save (II app admin), then reopen the GIF picker.
