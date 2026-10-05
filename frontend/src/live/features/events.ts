@@ -1860,3 +1860,36 @@ export async function listLivePlayHQFixtures(
     "List PlayHQ fixtures",
   );
 }
+
+/** Cancel/reinstate every remaining occurrence of a series in one call. */
+export async function setLiveSeriesCancelled(
+  ctx: FeatureBackendContext,
+  seriesId: string,
+  cancelled: boolean,
+  fromMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_series_cancelled(seriesId, cancelled, toNat64(fromMs)),
+    cancelled ? "Cancel series" : "Reinstate series",
+  );
+}
+
+/** Scheduled RSVP reminder: hours before start, or null to turn it off. */
+export async function setLiveEventAutoReminder(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  hoursBefore: number | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_auto_reminder(eventId, hoursBefore == null ? [] : [Math.round(hoursBefore)]),
+    "Set auto reminder",
+  );
+}
+
+export async function getLiveEventAutoReminder(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const result = await actor.get_event_auto_reminder(eventId);
+  return result[0] ?? null;
+}
