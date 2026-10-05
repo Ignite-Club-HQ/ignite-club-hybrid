@@ -13,6 +13,7 @@ persistent actor class Main(governorInit : Principal) {
   var folders : [Types.VaultFolder];
   var files : [Types.VaultFile];
   var roles : [Types.RoleGrant];
+  var club_domain_canister : ?Principal;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -54,6 +55,27 @@ persistent actor class Main(governorInit : Principal) {
       grant.user.equal(caller) and
       grant.club_id == ?club and
       (team == null or grant.team_id == team or grant.team_id == null))
+  };
+
+  // Write access: governor, a local vault role grant, or any role in the
+  // club on club_domain (same check pii_access_control uses). Fail-closed
+  // while club_domain is unwired.
+  func canWrite(caller : Principal, club : Text, team : ?Text) : async Bool {
+    if (isGovernor(caller) or hasRole(caller, club, team)) return true;
+    switch (club_domain_canister) {
+      case null { false };
+      case (?cid) {
+        let cd : actor { has_club_staff_role : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+        try { await cd.has_club_staff_role(caller, club) } catch (_) { false }
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_club_domain_canister(canister : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Only governor can set club_domain canister");
+    club_domain_canister := ?canister;
+    #Ok
   };
 
   // NOTE: access control is club-scoped via role grants assigned by the
@@ -125,7 +147,7 @@ persistent actor class Main(governorInit : Principal) {
     color : ?Text,
   ) : async { #Ok : Types.VaultFolder; #Err : Text } {
     auth(caller);
-    if (not isGovernor(caller) and not hasRole(caller, club, team)) return #Err("Club role required");
+    if (not (await canWrite(caller, club, team))) return #Err("Club role required");
     if (not valid(id) or not valid(club) or not validLong(name, 160)) return #Err("Invalid folder fields");
     if (not validRoles(restricted_roles)) return #Err("Invalid restricted roles");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
@@ -176,7 +198,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
       case (?folder) {
-        if (not isGovernor(caller) and not hasRole(caller, folder.club, folder.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, folder.club, folder.team))) return #Err("Club role required");
         let updated : Types.VaultFolder = { folder with name; restricted_roles; sort_order; description; color };
         folders := folders.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -191,7 +213,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (folders.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("Folder not found") };
       case (?folder) {
-        if (not isGovernor(caller) and not hasRole(caller, folder.club, folder.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, folder.club, folder.team))) return #Err("Club role required");
         if (folders.any(func(item) = item.parent_id == ?id and item.deleted_at_ms == null)) return #Err("Folder has subfolders");
         if (files.any(func(item) = item.folder_id == id and item.deleted_at_ms == null)) return #Err("Folder has files");
         let updated : Types.VaultFolder = { folder with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
@@ -241,7 +263,7 @@ persistent actor class Main(governorInit : Principal) {
     mini_league_id : ?Text,
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
     auth(caller);
-    if (not isGovernor(caller) and not hasRole(caller, club, team)) return #Err("Club role required");
+    if (not (await canWrite(caller, club, team))) return #Err("Club role required");
     if (not valid(id) or not valid(folder_id) or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
@@ -336,7 +358,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
         let updated : Types.VaultFile = { file with deleted_at_ms = ?nowMs(); deleted_by = ?caller };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -349,7 +371,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms != null)) {
       case null { #Err("Trashed file not found") };
       case (?file) {
-        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
         let updated : Types.VaultFile = { file with deleted_at_ms = null; deleted_by = null };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -363,7 +385,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
         let updated : Types.VaultFile = { file with name = name };
         files := files.map(func(item) = if (item.id == id) { updated } else { item });
         #Ok(updated)
@@ -380,7 +402,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id and item.deleted_at_ms == null)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
         if (folder_id == "") {
           let updated : Types.VaultFile = { file with folder_id = "" };
           files := files.map(func(item) = if (item.id == id) { updated } else { item });
@@ -408,7 +430,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (files.find(func(item) = item.id == id)) {
       case null { #Err("File not found") };
       case (?file) {
-        if (not isGovernor(caller) and not hasRole(caller, file.club, file.team)) return #Err("Club role required");
+        if (not (await canWrite(caller, file.club, file.team))) return #Err("Club role required");
         files := files.filter(func(item) = item.id != id);
         #Ok
       };
