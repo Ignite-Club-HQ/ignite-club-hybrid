@@ -359,7 +359,7 @@ export default function ClubUpgradePage() {
 
   // Realtime listener for subscription changes (e.g. sponsor payment on website)
   useEffect(() => {
-    if (useIcpLab || !clubId) return;
+    if (useIcpLab || isIcpRouted || !clubId) return;
     const channel = supabase
       .channel(`club-sub-${clubId}`)
       .on(
