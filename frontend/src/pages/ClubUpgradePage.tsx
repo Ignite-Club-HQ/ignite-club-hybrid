@@ -233,6 +233,15 @@ export default function ClubUpgradePage() {
     queryKey: ["club-team-count", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return getLocalLabTeamList().filter((team) => team.club_id === clubId).length;
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const teams = (await listLiveTeams(ctx, clubId!)) as unknown as { deleted_at_ms?: unknown[] }[];
+            return teams.filter((team) => !(team.deleted_at_ms ?? []).length).length;
+          },
+        });
+      }
       const { count, error } = await supabase
         .from("teams")
         .select("*", { count: "exact", head: true })
@@ -251,6 +260,21 @@ export default function ClubUpgradePage() {
         return getLocalLabTeamList()
           .filter((team) => team.club_id === clubId)
           .map((team) => ({ id: team.id, name: team.name, logo_url: null, level_age: null }));
+      }
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const teams = (await listLiveTeams(ctx, clubId!)) as unknown as {
+              id: string;
+              name: string;
+              deleted_at_ms?: unknown[];
+            }[];
+            return teams
+              .filter((team) => !(team.deleted_at_ms ?? []).length)
+              .map((team) => ({ id: team.id, name: team.name, logo_url: null, level_age: null }));
+          },
+        });
       }
       const { data, error } = await supabase
         .from("teams")
