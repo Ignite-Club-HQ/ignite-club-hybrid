@@ -252,6 +252,17 @@ module {
   // Rich news posts replace the single announcement string on ClubSettings
   // for the news feed. status is "draft" or "published"; members only ever
   // see published posts.
+  // A file or image attached to a news post. kind is "image" or "file";
+  // url is a blob-store (ciphertext) or public URL; anchor is the inline
+  // placement token id when the author placed it inside the body.
+  public type NewsAttachment = {
+    kind : Text;
+    url : Text;
+    name : Text;
+    size : Nat64;
+    mime_type : ?Text;
+    anchor : ?Text;
+  };
   public type NewsPost = {
     id : Text;
     club_id : Text;
@@ -262,6 +273,11 @@ module {
     created_at_ms : Nat64;
     updated_at_ms : Nat64;
     revision : Nat64;
+    // null = whole club; otherwise the post targets only these teams.
+    target_team_ids : ?[Text];
+    is_important : Bool;
+    image_url : ?Text;
+    attachments : [NewsAttachment];
   };
   // A parent invite links a second parent/guardian to a child (and
   // optionally a team) in one atomic accept — the canister equivalent of
