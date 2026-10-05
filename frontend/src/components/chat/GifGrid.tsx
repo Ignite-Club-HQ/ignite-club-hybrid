@@ -71,7 +71,7 @@ async function resolveGiphyApiKey(): Promise<string | null> {
   return cachedGiphyKey;
 }
 
-interface GifGridProps {
+async function searchGiphyDirect(apiKey: string, q: string, limit: number): Promise<GiphyResult[]> {
   const endpoint = q ? "search" : "trending";
   const params = new URLSearchParams({ api_key: apiKey, limit: String(limit), rating: "pg-13" });
   if (q) params.set("q", q);
