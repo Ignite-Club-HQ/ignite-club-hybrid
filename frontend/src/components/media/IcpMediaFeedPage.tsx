@@ -320,11 +320,11 @@ export function IcpMediaFeedPage() {
 
   const commentMutation = useMutation({
     mutationFn: async ({ post, text }: { post: LiveMediaPost; text: string }) =>
-      withMediaBackend({
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
-        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text),
+        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
       }),
     onSuccess: () => setCommentInput(""),
     onError: (err) => toast.error(err instanceof Error ? err.message : "Comment failed"),
@@ -333,7 +333,7 @@ export function IcpMediaFeedPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (post: LiveMediaPost) =>
-      withMediaBackend({
+      withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
@@ -487,7 +487,7 @@ export function IcpMediaFeedPage() {
                     onReact={(type) => reactionMutation.mutate({ post, emoji: type })}
                     onRemove={() => {
                       const mine = post.reactions.find((r) => r.user_id === principal);
-                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type });
+                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type, remove: true });
                     }}
                   />
                   <button

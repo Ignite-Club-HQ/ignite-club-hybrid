@@ -4,10 +4,11 @@ import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { compressImage } from "@/lib/imageUtils";
-import { withMediaBackend } from "@/live/featureBackend";
+import { compressImage } from "@/lib/imageCompression";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
-import { tryUploadMediaToBlobStore } from "@/live/features/mediaUpload";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { mimeToExtension } from "@/lib/binaryUtils";
 
 export interface IcpUploadClubOption {
   id: string;
