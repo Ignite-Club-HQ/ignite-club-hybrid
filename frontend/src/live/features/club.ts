@@ -263,8 +263,16 @@ export async function setLiveTeamFolder(
 }
 
 export async function listLiveSponsors(ctx: FeatureBackendContext, clubId: string) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_sponsors(clubId), "List sponsors");
+  return batched<LiveClubSponsor[]>(
+    ctx, "sponsors", clubId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.list_sponsors_multi(ids), "List sponsors");
+      const m = new Map<string, LiveClubSponsor[]>(ids.map((i) => [i, []]));
+      for (const r of rows) m.get(r.club_id)?.push(r);
+      return m;
+    },
+    (actor, id) => unwrapCandid(actor.list_sponsors(id), "List sponsors"),
+  );
 }
 
 export async function saveLiveSponsor(ctx: FeatureBackendContext, sponsor: LiveClubSponsor) {

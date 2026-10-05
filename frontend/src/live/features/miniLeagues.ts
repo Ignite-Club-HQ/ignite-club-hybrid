@@ -2,6 +2,9 @@ import type { Principal } from "@icp-sdk/core/principal";
 import { connectLiveMiniLeagueDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
+import { batched, groupBy } from "./batching";
+
+type MiniLeagueActor = Awaited<ReturnType<typeof connectLiveMiniLeagueDomain>>["actor"];
 
 /**
  * Mini-leagues feature -> mini_league_domain canister.
@@ -35,8 +38,12 @@ import { candidOpt, unwrapCandid } from "./candid";
 // ---------------------------------------------------------------------------
 
 export async function listLiveMiniLeaguesByClub(ctx: FeatureBackendContext, clubId: string) {
-  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return actor.list_mini_leagues_by_club(clubId);
+  return batched(
+    ctx, "mini:by_club", clubId, () => connectLiveMiniLeagueDomain(ctx.target, ctx.identity),
+    async (actor: MiniLeagueActor, ids) =>
+      groupBy(ids, await unwrapCandid(actor.list_mini_leagues_by_clubs(ids), "List mini leagues"), (r) => r.club_id),
+    (actor: MiniLeagueActor, id) => actor.list_mini_leagues_by_club(id),
+  );
 }
 
 export async function listMyLiveMiniLeagues(ctx: FeatureBackendContext) {
@@ -45,8 +52,19 @@ export async function listMyLiveMiniLeagues(ctx: FeatureBackendContext) {
 }
 
 export async function getLiveMiniLeague(ctx: FeatureBackendContext, id: string) {
-  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_mini_league(id), "Get mini league");
+  type League = Awaited<ReturnType<MiniLeagueActor["list_mini_leagues_by_club"]>>[number];
+  const row = await batched<MiniLeagueActor, League | null>(
+    ctx, "mini:get", id, () => connectLiveMiniLeagueDomain(ctx.target, ctx.identity),
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_mini_leagues(ids), "Get mini league");
+      const m = new Map<string, League | null>(ids.map((i) => [i, null]));
+      for (const r of rows) m.set(r.id, r);
+      return m;
+    },
+    (actor, one) => unwrapCandid(actor.get_mini_league(one), "Get mini league"),
+  );
+  if (!row) throw new Error("Get mini league failed: Mini-league not found");
+  return row;
 }
 
 export interface LiveMiniLeagueInput {
