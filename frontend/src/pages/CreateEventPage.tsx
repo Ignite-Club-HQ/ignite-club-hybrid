@@ -800,12 +800,16 @@ function SupabaseCreateEventPage() {
     const error = await withFeatureBackend("membership", {
       supabase: async () => {
         const { error } = await supabase
-      .from("favorite_event_titles")
-      .insert({
-        user_id: user.id,
-        title: title.trim(),
-        event_type: type,
-      });
+          .from("favorite_event_titles")
+          .insert({
+            user_id: user.id,
+            title: title.trim(),
+            event_type: type,
+          });
+        return error;
+      },
+      icp: async () => null,
+    });
 
     if (error) {
       if (error.code === "23505") {
@@ -820,10 +824,16 @@ function SupabaseCreateEventPage() {
   };
 
   const deleteFavoriteTitle = async (id: string) => {
-    const { error } = await supabase
-      .from("favorite_event_titles")
-      .delete()
-      .eq("id", id);
+    const error = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
+          .from("favorite_event_titles")
+          .delete()
+          .eq("id", id);
+        return error;
+      },
+      icp: async () => null,
+    });
 
     if (!error) {
       queryClient.invalidateQueries({ queryKey: ["favorite-event-titles"] });
