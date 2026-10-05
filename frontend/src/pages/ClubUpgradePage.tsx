@@ -202,6 +202,22 @@ export default function ClubUpgradePage() {
           class_mode_enabled: false,
         } : null;
       }
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubProfile(ctx, clubId!);
+            const p = row.length ? row[0] : null;
+            if (!p || p.deleted_at_ms.length) return null;
+            return {
+              id: p.id,
+              name: p.name,
+              sport: p.sport[0] ?? null,
+              class_mode_enabled: false,
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("*")
