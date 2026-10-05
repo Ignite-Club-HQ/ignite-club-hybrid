@@ -1043,7 +1043,7 @@ export default function ClubDetailPage() {
         await withFeatureBackend("membership", {
           supabase: () => softDeleteLiveClub({} as any, id!, true), // unreachable: gated above
           icp: async (ctx) => {
-            await softDeleteLiveClub(ctx, id!, true);
+            const deleted = await softDeleteLiveClub(ctx, id!, true);
             // Cascade explicitly: older deployed canisters may predate the
             // canister-side team cascade, so soft-delete each team ourselves
             // (best-effort per team) and tombstone them locally so no stale
@@ -1051,13 +1051,14 @@ export default function ClubDetailPage() {
             try {
               const teams = (await listLiveTeams(ctx, id!)) as unknown as { id: string; deleted_at_ms?: unknown }[];
               for (const team of teams || []) {
-                if (!team?.id || Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length) continue;
+                if (!team?.id || (Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length)) continue;
                 try {
                   await softDeleteLiveTeam(ctx, team.id);
                 } catch { /* already gone or not permitted — tombstone anyway */ }
                 markTeamDeleted(team.id);
               }
             } catch { /* listing failed — club delete still committed */ }
+            return deleted;
           },
         });
         setShowDeleteDialog(false);
@@ -1276,7 +1277,7 @@ export default function ClubDetailPage() {
         await withFeatureBackend("membership", {
           supabase: () => restoreLiveClub({} as any, id!, true), // unreachable: gated above
           icp: async (ctx) => {
-            await restoreLiveClub(ctx, id!, true);
+            const restored = await restoreLiveClub(ctx, id!, true);
             // Mirror the delete branch: restore each team explicitly (older
             // canisters lack the cascade) and lift the local tombstones.
             try {
@@ -1289,6 +1290,7 @@ export default function ClubDetailPage() {
                 unmarkTeamDeleted(team.id);
               }
             } catch { /* listing failed — club restore still committed */ }
+            return restored;
           },
         });
         queryClient.invalidateQueries({ queryKey: ["club", id] });
