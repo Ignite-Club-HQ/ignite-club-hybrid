@@ -173,6 +173,7 @@ export default function ClubChatPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const isIcpRouted = isFeatureRoutedToIcp("membership");
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();
   const navigate = useNavigate();
