@@ -379,7 +379,7 @@ export default function ClubUpgradePage() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [useIcpLab, clubId, queryClient]);
+  }, [useIcpLab, isIcpRouted, clubId, queryClient]);
 
   const handleGetSponsored = () => {
     const sponsorUrl = "https://reference.invalid";
