@@ -51,7 +51,24 @@ import {
 
 type CanisterRow = { key: string; id: string };
 type CountryRuleRow = { country: string; eligibility: BackendEligibility; targetId: string };
-type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean };
+type TargetRow = { backend: BackendProvider; kind: BackendTargetKind; alias: string; version: string; region: string; enabled: boolean; host: string; canisterIdsText: string };
+
+/** Accepts the deploy script's ID table as JSON ({"name":"id"}) or "name id" / "name: id" lines. */
+function parseCanisterIdsText(text: string): Record<string, string> {
+  const trimmed = text.trim();
+  if (!trimmed) return {};
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, typeof v === "object" && v && "ic" in v ? String((v as { ic: unknown }).ic) : String(v)]));
+  }
+  const out: Record<string, string> = {};
+  for (const line of trimmed.split(/\n+/)) {
+    const m = line.trim().match(/^([A-Za-z0-9_]+)[\s:=|]+([a-z0-9-]{27})\b/);
+    if (m) out[m[1]] = m[2];
+    else if (line.trim()) throw new Error(`Could not read canister line: "${line.trim()}"`);
+  }
+  return out;
+}
 type ClubOverrideRow = { clubId: string; backend: BackendProvider };
 
 const TARGET_KIND_LABELS: Record<BackendTargetKind, string> = {
@@ -279,6 +296,8 @@ export default function PlacementAdminSettingsPage() {
         version: t.version,
         region: t.region ?? "",
         enabled: t.enabled,
+        host: t.host ?? "",
+        canisterIdsText: t.canisterIds ? JSON.stringify(t.canisterIds, null, 2) : "",
       })),
     );
     setClubOverrideRows(
@@ -412,7 +431,7 @@ export default function PlacementAdminSettingsPage() {
     setRoutingTouched(true);
     setTargetRows(current => [
       ...current,
-      { backend: "supabase", kind: "supabase-region", alias: "", version: "v1", region: "", enabled: true },
+      { backend: "supabase", kind: "supabase-region", alias: "", version: "v1", region: "", enabled: true, host: "", canisterIdsText: "" },
     ]);
   };
 
@@ -444,7 +463,27 @@ export default function PlacementAdminSettingsPage() {
     try {
       const targets = targetRows
         .filter(row => row.alias.trim() || row.version.trim())
-        .map(row => normalizeApprovedTarget({ ...row }));
+        .map(row => {
+          const isEngine = row.kind === "icp-cloud-engine";
+          let canisterIds: Record<string, string> | undefined;
+          if (isEngine) {
+            try {
+              canisterIds = parseCanisterIdsText(row.canisterIdsText);
+            } catch (e) {
+              throw new Error(`Canister IDs for "${row.alias}": ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+          return normalizeApprovedTarget({
+            backend: row.backend,
+            kind: row.kind,
+            alias: row.alias,
+            version: row.version,
+            region: row.region,
+            enabled: row.enabled,
+            host: isEngine ? row.host : undefined,
+            canisterIds,
+          });
+        });
       const seen = new Set<string>();
       for (const target of targets) {
         if (seen.has(target.id)) {
@@ -453,6 +492,7 @@ export default function PlacementAdminSettingsPage() {
         seen.add(target.id);
       }
       const countryTargets: Record<string, string> = {};
+      const engineWarnings: string[] = [];
       for (const row of countryRows) {
         if (row.targetId === NO_TARGET_PIN) continue;
         const target = targets.find(t => t.id === row.targetId);
@@ -466,6 +506,9 @@ export default function PlacementAdminSettingsPage() {
           );
         }
         countryTargets[row.country] = target.id;
+        if (target.kind === "icp-cloud-engine" && !isCloudEngineUsable(target)) {
+          engineWarnings.push(`${countryName(row.country)} → "${target.alias}"`);
+        }
       }
       const clubBackendOverrides: Record<string, BackendProvider> = {};
       for (const row of clubOverrideRows) {
@@ -477,6 +520,21 @@ export default function PlacementAdminSettingsPage() {
         }
         clubBackendOverrides[row.clubId] = row.backend;
       }
+      if (engineWarnings.length > 0) {
+        toast({
+          title: "Cloud Engine not ready",
+          description: `${engineWarnings.join(", ")}: the engine is disabled or missing its address/canister IDs, so these countries will use Supabase (never mainnet) until it's ready.`,
+        });
+      }
+      const previousEngines = savedRouting?.countryTargets ?? {};
+      const moved = Object.keys({ ...previousEngines, ...countryTargets }).filter(c => {
+        const before = savedRouting?.targets.find(t => t.id === previousEngines[c]);
+        const after = targets.find(t => t.id === countryTargets[c]);
+        return (before?.kind === "icp-cloud-engine" || after?.kind === "icp-cloud-engine") && before?.id !== after?.id;
+      });
+      if (moved.length > 0 && !window.confirm(
+        `Changing the ICP deployment for ${moved.map(countryName).join(", ")} does not move existing data. Members there will see a fresh deployment until data is migrated. Save anyway?`,
+      )) return;
       routingMutation.mutate({ defaultBackend, countryRules, targets, countryTargets, clubBackendOverrides });
     } catch (error) {
       toast({ title: "Cannot save", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
@@ -808,6 +866,33 @@ export default function PlacementAdminSettingsPage() {
                     />
                   </div>
                 </div>
+                {row.kind === "icp-cloud-engine" && (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`target-host-${index}`}>Engine address</Label>
+                      <Input
+                        id={`target-host-${index}`}
+                        value={row.host}
+                        onChange={(e) => updateTargetRow(index, { host: e.target.value })}
+                        placeholder="https://eu-engine.example.com"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`target-canisters-${index}`}>Canister IDs on this engine</Label>
+                      <Textarea
+                        id={`target-canisters-${index}`}
+                        value={row.canisterIdsText}
+                        onChange={(e) => updateTargetRow(index, { canisterIdsText: e.target.value })}
+                        placeholder={'Paste the deploy ID table, e.g.\nclub_domain abcde-aaaaa-aaaaa-aaaaa-cai'}
+                        rows={5}
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Assign countries to this engine below. If it's disabled or incomplete, those countries use Supabase — never public mainnet.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             <Button variant="outline" onClick={addTargetRow}>
