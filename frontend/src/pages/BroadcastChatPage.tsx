@@ -293,20 +293,25 @@ export default function BroadcastChatPage() {
               } as unknown as NonNullable<Message["reactions"]>[number]);
               byMessage.set(r.message_id, list);
             }
-            const textById = new Map(rows.map((m) => [m.id, m.text]));
+            const textById = new Map(rows.map((m) => [m.id, m.body]));
             const messages = rows
-              .map((m) => ({
-                id: m.id,
-                author_id: m.authorId,
-                text: m.text,
-                image_url: m.imageUrl ?? null,
-                reply_to_id: m.replyToId ?? null,
-                reply_to: m.replyToId
-                  ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" }
-                  : null,
-                created_at: new Date(Number(m.createdAtMs)).toISOString(),
-                reactions: byMessage.get(m.id) ?? [],
-              })) as unknown as Message[];
+              .map((m) => {
+                // Raw candid message: snake_case fields, opt values as [] | [v].
+                const attachment = m.attachment?.[0];
+                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                return {
+                  id: m.id,
+                  author_id: m.sender.toText(),
+                  text: m.body,
+                  image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+                  reply_to_id: replyToId,
+                  reply_to: replyToId
+                    ? { id: replyToId, text: textById.get(replyToId) ?? "" }
+                    : null,
+                  created_at: new Date(Number(m.created_at_ms)).toISOString(),
+                  reactions: byMessage.get(m.id) ?? [],
+                };
+              }) as unknown as Message[];
             return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
         });
@@ -642,16 +647,21 @@ export default function BroadcastChatPage() {
                 : null;
             return {
               rows: page.messages
-                .map((m) => ({
-                  id: m.id,
-                  author_id: m.authorId,
-                  text: m.text,
-                  image_url: m.imageUrl ?? null,
-                  reply_to_id: m.replyToId ?? null,
-                  reply_to: null,
-                  created_at: new Date(Number(m.createdAtMs)).toISOString(),
-                  reactions: [],
-                })) as unknown as Message[],
+                .map((m) => {
+                  // Raw candid message: snake_case fields, opt values as [] | [v].
+                  const attachment = m.attachment?.[0];
+                  const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                  return {
+                    id: m.id,
+                    author_id: m.sender.toText(),
+                    text: m.body,
+                    image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+                    reply_to_id: replyToId,
+                    reply_to: null,
+                    created_at: new Date(Number(m.created_at_ms)).toISOString(),
+                    reactions: [],
+                  };
+                }) as unknown as Message[],
               hasOlder: icpOlderCursorRef.current !== null,
             };
           },

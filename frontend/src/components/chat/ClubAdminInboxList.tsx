@@ -7,6 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { deriveLiveMemberships } from "@/live/features/homeFeed";
+import { getLiveClubProfile } from "@/live/features/club";
+import { listLiveClubAdminThreads, listLiveLatestMessagesPage } from "@/live/features/messaging";
 
 interface ClubAdminInboxListProps {
   /** Optional: limit to a single active club. */
@@ -38,6 +44,10 @@ export const clubAdminInboxQueryKey = (userId?: string | null, clubFilter?: stri
 ] as const;
 
 export async function fetchClubAdminConversations(userId: string, clubFilter?: string | null): Promise<ClubAdminConversationRow[]> {
+  // ICP mode: grants, threads, and previews all come from the canisters.
+  if (isFeatureRoutedToIcp("messaging")) {
+    return fetchLiveClubAdminConversations(clubFilter);
+  }
   // Clubs where this user is a club_admin
   const { data: adminRoles } = await supabase
     .from("user_roles")
@@ -112,6 +122,104 @@ export async function fetchClubAdminConversations(userId: string, clubFilter?: s
     return tb - ta;
   });
   return rows;
+}
+
+/**
+ * ICP counterpart of fetchClubAdminConversations: the caller's club_admin
+ * grants from club_domain, their member admin threads from messaging_domain,
+ * and each thread's latest message for the preview. Mirrors the Supabase
+ * branch's rules — deleted/inactive clubs are dropped and threads with no
+ * messages are hidden. Per-club failures skip that club instead of blanking
+ * the whole inbox.
+ */
+async function fetchLiveClubAdminConversations(clubFilter?: string | null): Promise<ClubAdminConversationRow[]> {
+  return withFeatureBackend("messaging", {
+    supabase: async () => {
+      throw new Error("unreachable: messaging routed to ICP");
+    },
+    icp: async (ctx) => {
+      const grants = await getLiveMyRoleGrants(ctx);
+      const adminClubIds = deriveLiveMemberships(grants).clubAdminClubIds;
+      const clubIds = clubFilter ? adminClubIds.filter((id) => id === clubFilter) : adminClubIds;
+      if (clubIds.length === 0) return [];
+
+      // Club names/logos; drop soft-deleted or inactive clubs (grants survive
+      // the tombstone, same as Supabase's orphan user_roles rows).
+      const clubById = new Map<string, { name: string; logo: string | null }>();
+      await Promise.all(
+        clubIds.map(async (clubId) => {
+          try {
+            const raw: any = await getLiveClubProfile(ctx, clubId);
+            const profile = Array.isArray(raw) ? raw[0] : raw;
+            if (!profile || profile.is_active === false) return;
+            if (Array.isArray(profile.deleted_at_ms) && profile.deleted_at_ms.length > 0) return;
+            const logo = Array.isArray(profile.logo_url) ? (profile.logo_url[0] ?? null) : null;
+            clubById.set(clubId, { name: profile.name ?? "Club", logo });
+          } catch {
+            // Unknown or inaccessible club — skip.
+          }
+        }),
+      );
+      if (clubById.size === 0) return [];
+
+      // Every member thread per club, with its newest message. Raw candid
+      // message: snake_case fields, opt values as [] | [v].
+      const threads: Array<{ id: string; clubId: string; member: string; last: any | null }> = [];
+      await Promise.all(
+        [...clubById.keys()].map(async (clubId) => {
+          try {
+            const clubThreads = await listLiveClubAdminThreads(ctx, clubId);
+            await Promise.all(
+              clubThreads.map(async (thread) => {
+                let last: any | null = null;
+                try {
+                  const page = await listLiveLatestMessagesPage(ctx, thread.id, null, 1);
+                  last = page.messages[0] ?? null;
+                } catch {
+                  // Preview unavailable — treat as empty (hidden below).
+                }
+                threads.push({ id: thread.id, clubId, member: thread.member, last });
+              }),
+            );
+          } catch {
+            // Inaccessible club — skip.
+          }
+        }),
+      );
+
+      // Hide empty threads (same rule as the Supabase branch).
+      const active = threads.filter((t) => t.last);
+      if (active.length === 0) return [];
+
+      const profilesMap = await fetchProfilesWithCache(active.map((t) => t.member));
+
+      const rows = active.map((t) => {
+        const club = clubById.get(t.clubId)!;
+        const profile = profilesMap.get(t.member);
+        const attachment = t.last.attachment?.[0];
+        const createdAt = new Date(Number(t.last.created_at_ms)).toISOString();
+        return {
+          id: t.id,
+          club_id: t.clubId,
+          member_user_id: t.member,
+          updated_at: createdAt,
+          club_name: club.name,
+          club_logo: club.logo,
+          member_name: profile?.display_name || "Member",
+          member_avatar: profile?.avatar_url || null,
+          last_text: t.last.body ?? null,
+          last_image:
+            attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+          last_created_at: createdAt,
+          last_author_id: t.last.sender?.toText?.() ?? null,
+        };
+      });
+
+      // Most recent activity first (admin replies bump the thread to top).
+      rows.sort((a, b) => new Date(b.last_created_at).getTime() - new Date(a.last_created_at).getTime());
+      return rows;
+    },
+  });
 }
 
 /**
