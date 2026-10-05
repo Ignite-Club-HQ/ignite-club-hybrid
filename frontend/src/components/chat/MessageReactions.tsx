@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { cacheProfiles, fetchProfilesWithCache, getProfileFromCache, selectCachedProfilesByIds } from "@/lib/profileCache";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { armReactionInteractionGuard } from "@/lib/reactionInteractionGuard";
 import { hapticSelectionTick } from "@/lib/haptics";
 
@@ -457,6 +459,23 @@ const AllReactionsContent = memo(function AllReactionsContent({
     queryKey: ["all-reaction-users", allUserIds],
     queryFn: async () => {
       if (allUserIds.length === 0) return [];
+      // ICP mode: reactor ids are II principals; names live on identity_access.
+      const icpNames = await withFeatureBackend("membership", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const rows = (await listLiveProfilesByIds(ctx, allUserIds)) as unknown as {
+            account_id: string;
+            display_name: string;
+          }[];
+          return new Map(rows.map((r) => [r.account_id, r.display_name]));
+        },
+      }).catch(() => null);
+      if (icpNames) {
+        return allUserIds.map((id) => ({
+          id,
+          display_name: normalizeDisplayName(icpNames.get(id)) ?? null,
+        }));
+      }
       const map = await fetchProfilesWithCache(allUserIds);
       const unresolvedIds = allUserIds.filter((id) => !normalizeDisplayName(map.get(id)?.display_name));
 
