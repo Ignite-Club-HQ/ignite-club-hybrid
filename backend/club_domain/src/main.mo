@@ -415,13 +415,62 @@ persistent actor class Main(governorInit : Principal) {
 
   func validNewsStatus(status : Text) : Bool { status == "draft" or status == "published" };
 
-  public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text) : async { #Ok : Types.NewsPost; #Err : Text } {
+  // Caller belongs to (or parents a child on) the given team.
+  func isOnTeam(caller : Principal, teamId : Text) : Bool {
+    acl.roles.any(func(grant) = grant.user.equal(caller) and grant.team == ?teamId)
+    or acl.children.any(func(c) {
+      let isParent = switch (c.parent) { case (?p) p.equal(caller); case null false };
+      let isGuardian = acl.guardians.any(func(g) = g.child == c.id and g.user.equal(caller));
+      (isParent or isGuardian) and c.teams.any(func(t) = t == teamId)
+    })
+  };
+
+  // Club admins see every post; members see published posts, and
+  // team-targeted posts only when they belong to one of the target teams.
+  func canSeeNewsPost(caller : Principal, post : Types.NewsPost) : Bool {
+    if (isAdmin(caller, post.club_id)) return true;
+    if (not isMember(caller, post.club_id)) return false;
+    if (post.status != "published") return false;
+    switch (post.target_team_ids) {
+      case null { true };
+      case (?teamIds) { teamIds.any(func(teamId) = isOnTeam(caller, teamId)) };
+    }
+  };
+
+  func validateNewsExtras(club_id : Text, target_team_ids : ?[Text], image_url : ?Text, attachments : [Types.NewsAttachment]) : ?Text {
+    switch (target_team_ids) {
+      case null {};
+      case (?teamIds) {
+        if (teamIds.size() > 100) return ?"Too many target teams";
+        for (teamId in teamIds.values()) {
+          if (not acl.teams.any(func(t) = t.id == teamId and t.club == club_id)) return ?"Target team not in club";
+        };
+      };
+    };
+    switch (image_url) {
+      case null {};
+      case (?url) { if (url.size() > 2048) return ?"Invalid image" };
+    };
+    if (attachments.size() > 12) return ?"Too many attachments";
+    for (a in attachments.values()) {
+      if (a.kind != "image" and a.kind != "file") return ?"Invalid attachment kind";
+      if (a.url == "" or a.url.size() > 2048) return ?"Invalid attachment";
+      if (a.name.size() > 256) return ?"Invalid attachment name";
+    };
+    null
+  };
+
+  public shared ({ caller }) func create_news_post(club_id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment]) : async { #Ok : Types.NewsPost; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     if (club_id == "" or club_id.size() > 128) return #Err("Invalid club");
     if (title == "" or title.size() > 200) return #Err("Invalid title");
     if (body.size() > 8000) return #Err("Invalid body");
     if (not validNewsStatus(status)) return #Err("Invalid status");
+    switch (validateNewsExtras(club_id, target_team_ids, image_url, attachments)) {
+      case (?err) return #Err(err);
+      case null {};
+    };
     let now = nowMs();
     let post : Types.NewsPost = {
       id = "news-" # club_id # "-" # Nat.toText(newsPosts.size() + 1);
@@ -430,12 +479,13 @@ persistent actor class Main(governorInit : Principal) {
       created_at_ms = now;
       updated_at_ms = now;
       revision = 1;
+      target_team_ids; is_important; image_url; attachments;
     };
     newsPosts := newsPosts.concat([post]);
     #Ok(post)
   };
 
-  public shared ({ caller }) func update_news_post(id : Text, title : Text, body : Text, status : Text, expected_revision : Nat64) : async { #Ok : Types.NewsPost; #Err : Text } {
+  public shared ({ caller }) func update_news_post(id : Text, title : Text, body : Text, status : Text, target_team_ids : ?[Text], is_important : Bool, image_url : ?Text, attachments : [Types.NewsAttachment], expected_revision : Nat64) : async { #Ok : Types.NewsPost; #Err : Text } {
     auth(caller);
     if (title == "" or title.size() > 200) return #Err("Invalid title");
     if (body.size() > 8000) return #Err("Invalid body");
@@ -445,7 +495,11 @@ persistent actor class Main(governorInit : Principal) {
       case (?current) {
         if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
         if (current.revision != expected_revision) return #Err("News post revision conflict");
-        let updated : Types.NewsPost = { current with title; body; status; updated_at_ms = nowMs(); revision = current.revision + 1 };
+        switch (validateNewsExtras(current.club_id, target_team_ids, image_url, attachments)) {
+          case (?err) return #Err(err);
+          case null {};
+        };
+        let updated : Types.NewsPost = { current with title; body; status; target_team_ids; is_important; image_url; attachments; updated_at_ms = nowMs(); revision = current.revision + 1 };
         newsPosts := newsPosts.map(func(p) = if (p.id == id) updated else p);
         #Ok(updated)
       };
@@ -464,25 +518,21 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  // Admins see every post (including drafts); members see published only.
+  // Admins see every post (including drafts); members see published posts
+  // visible to them (whole-club, or team-targeted to a team they belong to).
   public query ({ caller }) func list_news(club_id : Text) : async { #Ok : [Types.NewsPost]; #Err : Text } {
-    if (isAdmin(caller, club_id)) {
-      #Ok(newsPosts.filter(func(p) = p.club_id == club_id))
-    } else {
-      if (not isMember(caller, club_id)) return #Err("Forbidden");
-      #Ok(newsPosts.filter(func(p) = p.club_id == club_id and p.status == "published"))
-    }
+    if (not isMember(caller, club_id) and not isAdmin(caller, club_id)) return #Err("Forbidden");
+    #Ok(newsPosts.filter(func(p) = p.club_id == club_id and canSeeNewsPost(caller, p)))
   };
 
-  // Cross-club feed: published posts from the clubs the caller belongs to.
+  // Cross-club feed: visible posts from the clubs the caller belongs to.
   // Clubs the caller is not a member of are silently skipped.
   public query ({ caller }) func list_news_multi(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
     auth(caller);
     if (club_ids.size() > 50) return #Err("Too many clubs");
     let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
     #Ok(newsPosts.filter(func(p) =
-      visible.any(func(club) = club == p.club_id) and
-      (p.status == "published" or isAdmin(caller, p.club_id))))
+      visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p)))
   };
 
   // Parent invites: a club/team admin mints a token for a child; the

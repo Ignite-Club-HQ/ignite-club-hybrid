@@ -248,6 +248,37 @@ export async function setLiveTeamSponsorAllocation(
   );
 }
 
+/** Everything on a news post beyond title/body/status. */
+export interface LiveNewsPostExtras {
+  /** null = whole club; otherwise the post targets only these teams. */
+  targetTeamIds: string[] | null;
+  isImportant: boolean;
+  imageUrl: string | null;
+  attachments: Array<{
+    kind: string;
+    url: string;
+    name: string;
+    size: number;
+    mimeType: string | null;
+    anchor: string | null;
+  }>;
+}
+
+const toCandidNewsExtras = (extras: LiveNewsPostExtras) =>
+  [
+    candidOpt(extras.targetTeamIds),
+    extras.isImportant,
+    candidOpt(extras.imageUrl),
+    extras.attachments.map((a) => ({
+      kind: a.kind,
+      url: a.url,
+      name: a.name,
+      size: BigInt(a.size),
+      mime_type: candidOpt(a.mimeType),
+      anchor: candidOpt(a.anchor),
+    })),
+  ] as const;
+
 /**
  * Rich news posts (the news feed) — the counterpart of the Supabase
  * club_news posts. The single announcement string on club settings stays
@@ -259,10 +290,11 @@ export async function createLiveNewsPost(
   title: string,
   body: string,
   status: string,
+  extras: LiveNewsPostExtras,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.create_news_post(clubId, title, body, status),
+    actor.create_news_post(clubId, title, body, status, ...toCandidNewsExtras(extras)),
     "Create news post",
   );
 }
@@ -273,11 +305,12 @@ export async function updateLiveNewsPost(
   title: string,
   body: string,
   status: string,
+  extras: LiveNewsPostExtras,
   expectedRevision: number,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.update_news_post(postId, title, body, status, BigInt(expectedRevision)),
+    actor.update_news_post(postId, title, body, status, ...toCandidNewsExtras(extras), BigInt(expectedRevision)),
     "Update news post",
   );
 }

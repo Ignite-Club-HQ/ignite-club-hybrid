@@ -304,7 +304,16 @@ export interface Main {
       { 'Err' : string }
   >,
   'create_news_post' : ActorMethod<
-    [string, string, string, string],
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [Array<string>],
+      boolean,
+      [] | [string],
+      Array<NewsAttachment>,
+    ],
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
@@ -929,7 +938,17 @@ export interface Main {
       { 'Err' : string }
   >,
   'update_news_post' : ActorMethod<
-    [string, string, string, string, bigint],
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [Array<string>],
+      boolean,
+      [] | [string],
+      Array<NewsAttachment>,
+      bigint,
+    ],
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
@@ -948,16 +967,28 @@ export interface MemberPayment {
   'club_id' : string,
 }
 export interface Mutation { 'link' : [] | [Link], 'revision' : bigint }
+export interface NewsAttachment {
+  'url' : string,
+  'kind' : string,
+  'name' : string,
+  'size' : bigint,
+  'mime_type' : [] | [string],
+  'anchor' : [] | [string],
+}
 export interface NewsPost {
   'id' : string,
   'status' : string,
   'title' : string,
+  'target_team_ids' : [] | [Array<string>],
+  'image_url' : [] | [string],
   'body' : string,
   'updated_at_ms' : bigint,
   'created_by' : Principal,
   'created_at_ms' : bigint,
+  'is_important' : boolean,
   'revision' : bigint,
   'club_id' : string,
+  'attachments' : Array<NewsAttachment>,
 }
 export type Operation = {
     'SetActive' : { 'id' : string, 'active' : boolean }

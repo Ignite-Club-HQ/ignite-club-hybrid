@@ -8,10 +8,13 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveNews, listLiveNewsMulti, listLiveTeams, getLiveTeam } from "@/live/features/club";
 import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 
+const opt = <T,>(v: [] | [T] | null | undefined): T | null =>
+  v && v.length ? v[0] : null;
+
 /**
  * Map a club_domain NewsPost onto the club_news row shape the UI consumes.
- * Provisional: the canister has no image/target-team/important fields, and
- * author_id is an ICP principal rendered as text — verify post-deploy.
+ * The newer canister fields are optional so a pre-upgrade canister (old
+ * shape) still maps cleanly — they simply read as unset.
  */
 function liveNewsPostToRow(post: {
   id: string;
@@ -21,17 +24,36 @@ function liveNewsPostToRow(post: {
   status: string;
   created_by: { toText?: () => string };
   created_at_ms: bigint;
+  target_team_ids?: [] | [string[]];
+  is_important?: boolean;
+  image_url?: [] | [string];
+  attachments?: Array<{
+    kind: string;
+    url: string;
+    name: string;
+    size: bigint;
+    mime_type: [] | [string];
+    anchor: [] | [string];
+  }>;
 }): ClubNewsRow {
   return {
     id: post.id,
     club_id: post.club_id,
     title: post.title,
     content: post.body,
-    image_url: null,
+    image_url: opt(post.image_url),
     author_id: post.created_by?.toText?.() ?? String(post.created_by),
-    target_team_ids: null,
-    is_important: false,
+    target_team_ids: opt(post.target_team_ids),
+    is_important: post.is_important ?? false,
     published_at: new Date(Number(post.created_at_ms)).toISOString(),
+    attachments: (post.attachments ?? []).map((a) => ({
+      kind: a.kind === "image" ? "image" : "file",
+      url: a.url,
+      name: a.name,
+      size: Number(a.size),
+      mimeType: opt(a.mime_type),
+      anchor: opt(a.anchor),
+    })),
   };
 }
 

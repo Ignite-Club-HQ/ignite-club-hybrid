@@ -164,16 +164,28 @@ export const idlFactory = ({ IDL }) => {
     'primary_color' : IDL.Opt(IDL.Text),
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
   });
+  const NewsAttachment = IDL.Record({
+    'url' : IDL.Text,
+    'kind' : IDL.Text,
+    'name' : IDL.Text,
+    'size' : IDL.Nat64,
+    'mime_type' : IDL.Opt(IDL.Text),
+    'anchor' : IDL.Opt(IDL.Text),
+  });
   const NewsPost = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
     'title' : IDL.Text,
+    'target_team_ids' : IDL.Opt(IDL.Vec(IDL.Text)),
+    'image_url' : IDL.Opt(IDL.Text),
     'body' : IDL.Text,
     'updated_at_ms' : IDL.Nat64,
     'created_by' : IDL.Principal,
     'created_at_ms' : IDL.Nat64,
+    'is_important' : IDL.Bool,
     'revision' : IDL.Nat64,
     'club_id' : IDL.Text,
+    'attachments' : IDL.Vec(NewsAttachment),
   });
   const InvitePayload = IDL.Record({
     'to' : IDL.Text,
@@ -537,7 +549,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'create_news_post' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(NewsAttachment),
+        ],
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),
@@ -1232,7 +1253,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'update_news_post' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Vec(IDL.Text)),
+          IDL.Bool,
+          IDL.Opt(IDL.Text),
+          IDL.Vec(NewsAttachment),
+          IDL.Nat64,
+        ],
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),

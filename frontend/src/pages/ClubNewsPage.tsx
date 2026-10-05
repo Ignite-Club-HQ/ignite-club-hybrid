@@ -14,6 +14,7 @@ import {
   useTeamNamesByIds,
 } from "@/features/news/useClubNews";
 import ClubNewsComposer from "@/components/news/ClubNewsComposer";
+import { SecureImage } from "@/components/SecureImage";
 
 /** Club News archive — newest first. */
 export default function ClubNewsPage() {
@@ -83,10 +84,9 @@ export default function ClubNewsPage() {
               className="flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-accent/50 active:bg-accent"
             >
               {post.image_url && (
-                <img
+                <SecureImage
                   src={post.image_url}
                   alt=""
-                  loading="lazy"
                   className="h-14 w-14 shrink-0 rounded-md object-cover"
                 />
               )}

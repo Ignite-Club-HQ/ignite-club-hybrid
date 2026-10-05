@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClubNewsPost, useClubTeamsForNews, useTeamNamesByIds } from "@/features/news/useClubNews";
 import { parseNewsAttachments } from "@/features/news/newsAttachments";
 import NewsArticleBody from "@/components/news/NewsArticleBody";
+import { SecureImage } from "@/components/SecureImage";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
@@ -87,7 +88,7 @@ export default function ClubNewsPostPage() {
       ) : (
         <article className="space-y-3">
           {post.image_url && (
-            <img
+            <SecureImage
               src={post.image_url}
               alt=""
               className="max-h-64 w-full rounded-lg object-cover"
