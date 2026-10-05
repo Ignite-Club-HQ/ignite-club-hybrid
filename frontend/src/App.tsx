@@ -228,6 +228,15 @@ const queryClient = new QueryClient({
 });
 
 
+// ICP mode: paint the last-seen data for every page instantly while
+// canister reads refresh it (only when an Internet Identity session exists).
+export const appCacheReady: Promise<void> = import("@/lib/icpQueryCachePersist")
+  .then(async (m) => {
+    await m.restoreIcpQueryCache(queryClient, true);
+    m.startIcpQueryCachePersist(queryClient, true);
+  })
+  .catch(() => undefined);
+
 // Configure React Query to refetch on reconnect/resume in native apps
 setupReactQueryNativeAdapter(queryClient);
 // Wire the Realtime channel registry to the QueryClient so revoked channels
