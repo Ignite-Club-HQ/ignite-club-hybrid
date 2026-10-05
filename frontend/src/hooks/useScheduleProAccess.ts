@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
 import type { ScheduleTarget } from "@/hooks/useScheduledMessages";
@@ -35,13 +36,25 @@ export function useScheduleProAccess(target: ScheduleTarget | null | undefined) 
   // did not already provide a trusted club_id.
   const teamLookupEnabled = hasTeam && !hasExplicitClub;
   const teamLookup = useQuery({
-    queryKey: ["team-club-id", teamId],
+    queryKey: ["team-club-id", teamId, resolveAuthBackend()],
     enabled: teamLookupEnabled,
     staleTime: 5 * 60_000,
     // Propagate errors so callers can distinguish "no club" from "lookup
     // failed" — both fail closed, but we must not swallow the error into a
     // silently-null clubId.
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // ICP users have no Supabase session — resolve the team's club from
+        // the club_domain canister instead.
+        const [{ withFeatureBackend }, { getLiveTeam }] = await Promise.all([
+          import("@/live/featureRouter"),
+          import("@/live/features/club"),
+        ]);
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => (await getLiveTeam(ctx, teamId!))[0]?.club_id ?? null,
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("club_id")
