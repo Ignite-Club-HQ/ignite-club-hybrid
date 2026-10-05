@@ -106,6 +106,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
+import { getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 
 const MESSAGES_PER_PAGE = 30;
 
@@ -171,6 +172,8 @@ export default function ClubChatPage() {
   const { clubId } = useParams<{ clubId: string }>();
   const { user, profile, refreshUnreadCount, decrementUnreadCount, initialized } = useAuth();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
+  const isIcpRouted = isFeatureRoutedToIcp("membership");
+  const providerKey = useIcpLab || isIcpRouted ? "icp" : "supabase";
   const notificationNudge = useNotificationNudge(user?.id, "chat");
   const swipeBack = useSwipeBack();
   const navigate = useNavigate();
@@ -356,9 +359,26 @@ export default function ClubChatPage() {
 
   // Get club info
   const { data: club } = useQuery({
-    queryKey: ["club", clubId],
+    queryKey: ["club", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab && clubId) return fixtureData.getLocalLabChatClub(clubId);
+
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const profileOpt = await getLiveClubProfile(ctx, clubId!);
+            const profile = profileOpt.length ? profileOpt[0] : null;
+            if (!profile) return null;
+            return {
+              id: profile.id,
+              name: profile.name,
+              logo_url: profile.logo_url.length ? profile.logo_url[0] : null,
+              is_pro: false,
+            };
+          },
+        });
+      }
 
       const { data, error } = await supabase
         .from("clubs")
@@ -368,7 +388,7 @@ export default function ClubChatPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!clubId && resolveAuthBackend() !== "icp",
+    enabled: !!clubId,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -401,9 +421,26 @@ export default function ClubChatPage() {
 
   // Check for club-level subscription (Club Chat requires CLUB-level Pro, not team-level Pro)
   const { data: clubSubscription, isLoading: isLoadingClubSubscription } = useQuery({
-    queryKey: ["club-subscription", clubId],
+    queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return { is_pro: false, is_pro_football: false, admin_pro_override: false, admin_pro_football_override: false, expires_at: null };
+
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubSubscription(ctx, clubId!);
+            if (!row) return null;
+            return {
+              is_pro: row.is_pro,
+              is_pro_football: row.is_pro_football,
+              admin_pro_override: row.admin_pro_override,
+              admin_pro_football_override: row.admin_pro_football_override,
+              expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
+            };
+          },
+        });
+      }
 
       const { data } = await supabase
         .from("club_subscriptions")
@@ -412,7 +449,7 @@ export default function ClubChatPage() {
         .maybeSingle();
       return data;
     },
-    enabled: !!clubId && resolveAuthBackend() !== "icp",
+    enabled: !!clubId,
     staleTime: 5 * 60 * 1000,
   });
 
