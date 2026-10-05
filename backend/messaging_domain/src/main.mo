@@ -306,7 +306,7 @@ persistent actor class Main(governorInit : Principal) {
     null
   };
 
-  func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text, attachment : ?Types.Attachment) : Types.Message {
+  func postMessage(convIndex : Nat, sender : Principal, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : Types.Message {
     let conv = conversations[convIndex];
     let seq = conv.next_sequence;
     let msg : Types.Message = {
@@ -319,6 +319,7 @@ persistent actor class Main(governorInit : Principal) {
       edited_at_ms = null;
       attachment;
       created_at_ms = nowMs();
+      reply_to_id;
     };
     let updated_conv : Types.Conversation = { conv with next_sequence = seq + 1 };
     conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(position) {
