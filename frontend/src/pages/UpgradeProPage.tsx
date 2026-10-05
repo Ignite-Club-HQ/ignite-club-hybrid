@@ -197,8 +197,8 @@ function SupabaseUpgradeProPage() {
     enabled: !!user && !!teamId,
   });
 
-  const isTeamAdmin = adminStatus?.isTeamAdmin ?? false;
-  const isClubAdminForTeam = adminStatus?.isClubAdmin ?? false;
+  const isTeamAdmin = (adminStatus?.isTeamAdmin ?? false) || isAppAdmin;
+  const isClubAdminForTeam = (adminStatus?.isClubAdmin ?? false) || isAppAdmin;
 
   const { data: team, isLoading: teamLoading, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team", teamId, isIcp ? "icp" : "supabase"],
@@ -541,8 +541,11 @@ function SupabaseUpgradeProPage() {
 
   // Check if Stripe is configured
   const { data: hasStripeConfig } = useQuery({
-    queryKey: ["stripe-config-check", team?.club_id],
+    queryKey: ["stripe-config-check", team?.club_id, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      // Card checkout runs through Supabase functions/Stripe, which Internet
+      // Identity sessions cannot call — native IAP is the ICP purchase path.
+      if (isIcp) return false;
       // Check club config
       const { data: clubConfig } = await supabase
         .from("club_stripe_configs")
