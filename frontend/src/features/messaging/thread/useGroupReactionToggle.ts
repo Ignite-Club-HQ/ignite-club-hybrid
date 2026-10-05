@@ -286,7 +286,8 @@ export const useGroupReactionToggle = ({
         delete lastReactionIntentRef.current[messageId];
       }
 
-      toast.error("Couldn't update reaction. Please try again.");
+      const reason = err instanceof Error && err.message ? ` (${err.message})` : "";
+      toast.error(`Couldn't update reaction.${reason}`);
     },
 
     onSuccess: (result) => {
