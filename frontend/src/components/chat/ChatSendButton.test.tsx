@@ -70,6 +70,16 @@ describe("ChatSendButton visibility and send contract", () => {
     expect(disabledSend).not.toHaveBeenCalled();
   });
 
+  it("restores the send icon once the sent message leaves the composer, even while delivery is pending", () => {
+    const { rerender } = render(<ChatSendButton onSend={vi.fn()} loading canSend />);
+    const send = screen.getByRole("button", { name: "Send message" });
+    expect(send.querySelector(".animate-spin")).not.toBeNull();
+
+    rerender(<ChatSendButton onSend={vi.fn()} loading canSend={false} disabled />);
+    expect(send.querySelector(".animate-spin")).toBeNull();
+    expect(send).toBeDisabled();
+  });
+
   it("rejects a swipe that ends on the button instead of treating it as send", () => {
     const onSend = vi.fn();
     render(<ChatSendButton onSend={onSend} canSend />);
