@@ -285,6 +285,10 @@ export default function CreateClubPage() {
       navigate(`/clubs/${clubId}/setup`);
     } catch (error: any) {
       setSaving(false);
+      // Log the real failure — the toast falls back to a generic message when
+      // the canister/agent throws something without one, which otherwise
+      // leaves club-creation failures undiagnosable.
+      console.error("[CreateClub] failed", error);
       toast({
         title: "Error",
         description: error?.message || "Failed to create club. Please try again.",

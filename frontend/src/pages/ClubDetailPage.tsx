@@ -1508,8 +1508,15 @@ export default function ClubDetailPage() {
 
   if (!club) {
     return (
-      <div className="py-6 text-center">
+      <div className="py-6 text-center space-y-3">
         <p className="text-muted-foreground">Club not found</p>
+        <button
+          type="button"
+          onClick={() => navigate("/clubs", { replace: true })}
+          className="text-sm font-medium text-primary underline underline-offset-4"
+        >
+          Back to Clubs &amp; Teams
+        </button>
       </div>
     );
   }
