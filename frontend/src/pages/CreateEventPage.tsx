@@ -54,6 +54,9 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
+import { resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import { DEFAULT_MATCH_ARRIVAL_MINUTES } from "@/lib/matchArrivalTime";
 import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
 import {
@@ -407,34 +410,66 @@ function SupabaseCreateEventPage() {
 
   const { data: clubs } = useQuery({
     queryKey: ["user-admin-clubs", user?.id],
-    queryFn: async () => {
-      const { data: clubRoles } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .in("role", ["club_admin", "committee_member"])
-        .not("club_id", "is", null);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubRoles } = await supabase
+            .from("user_roles")
+            .select("club_id")
+            .eq("user_id", user!.id)
+            .in("role", ["club_admin", "committee_member"])
+            .not("club_id", "is", null);
 
-      const { data: teamRoles } = await supabase
-        .from("user_roles")
-        .select("team_id, teams!inner(club_id)")
-        .eq("user_id", user!.id)
-        .in("role", ["team_admin", "coach"])
-        .not("team_id", "is", null);
+          const { data: teamRoles } = await supabase
+            .from("user_roles")
+            .select("team_id, teams!inner(club_id)")
+            .eq("user_id", user!.id)
+            .in("role", ["team_admin", "coach"])
+            .not("team_id", "is", null);
 
-      const clubIdsFromClubs = clubRoles?.map((r) => r.club_id).filter(Boolean) || [];
-      const clubIdsFromTeams = teamRoles?.map((r) => (r.teams as any)?.club_id).filter(Boolean) || [];
-      const clubIds = [...new Set([...clubIdsFromClubs, ...clubIdsFromTeams])];
+          const clubIdsFromClubs = clubRoles?.map((r) => r.club_id).filter(Boolean) || [];
+          const clubIdsFromTeams = teamRoles?.map((r) => (r.teams as any)?.club_id).filter(Boolean) || [];
+          const clubIds = [...new Set([...clubIdsFromClubs, ...clubIdsFromTeams])];
 
-      if (clubIds.length === 0) return [];
+          if (clubIds.length === 0) return [];
 
-      const { data } = await supabase
-        .from("clubs")
-        .select("id, name, allow_guests_default, max_guests_per_member_default")
-        .in("id", clubIds);
+          const { data } = await supabase
+            .from("clubs")
+            .select("id, name, allow_guests_default, max_guests_per_member_default")
+            .in("id", clubIds);
 
-      return data || [];
-    },
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // II principals have no Supabase user_roles rows — read the caller's
+          // canister role grants instead. Club-wide admin/committee grants and
+          // team-scoped admin/coach grants both unlock event creation.
+          const grants = await getLiveMyRoleGrants(ctx);
+          const clubIds = new Set<string>();
+          for (const g of grants) {
+            const grantClubId = g.club?.[0];
+            if (!grantClubId) continue;
+            if (g.role === "club_admin" || g.role === "committee_member" || g.role === "app_admin") {
+              clubIds.add(grantClubId);
+            } else if (g.team?.[0] && (g.role === "team_admin" || g.role === "coach")) {
+              clubIds.add(grantClubId);
+            }
+          }
+          if (clubIds.size === 0) return [];
+          const profiles = await Promise.all(
+            [...clubIds].map((id) => getLiveClubProfile(ctx, id).catch(() => null)),
+          );
+          // Deleted clubs return no profile on the canister — they drop out here.
+          return profiles
+            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              allow_guests_default: false,
+              max_guests_per_member_default: 2,
+            }));
+        },
+      }),
     enabled: !!user,
   });
 
