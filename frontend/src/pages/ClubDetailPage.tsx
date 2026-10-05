@@ -107,7 +107,8 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription } from "@/live/features/club";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
+import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
   softDeleteLiveClub,
@@ -1041,7 +1042,24 @@ export default function ClubDetailPage() {
       try {
         await withFeatureBackend("membership", {
           supabase: () => softDeleteLiveClub({} as any, id!, true), // unreachable: gated above
-          icp: (ctx) => softDeleteLiveClub(ctx, id!, true),
+          icp: async (ctx) => {
+            const deleted = await softDeleteLiveClub(ctx, id!, true);
+            // Cascade explicitly: older deployed canisters may predate the
+            // canister-side team cascade, so soft-delete each team ourselves
+            // (best-effort per team) and tombstone them locally so no stale
+            // cache can render them again.
+            try {
+              const teams = (await listLiveTeams(ctx, id!)) as unknown as { id: string; deleted_at_ms?: unknown }[];
+              for (const team of teams || []) {
+                if (!team?.id || (Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length)) continue;
+                try {
+                  await softDeleteLiveTeam(ctx, team.id);
+                } catch { /* already gone or not permitted — tombstone anyway */ }
+                markTeamDeleted(team.id);
+              }
+            } catch { /* listing failed — club delete still committed */ }
+            return deleted;
+          },
         });
         setShowDeleteDialog(false);
         clearClubSetupLocalState(id!);
@@ -1258,7 +1276,22 @@ export default function ClubDetailPage() {
       try {
         await withFeatureBackend("membership", {
           supabase: () => restoreLiveClub({} as any, id!, true), // unreachable: gated above
-          icp: (ctx) => restoreLiveClub(ctx, id!, true),
+          icp: async (ctx) => {
+            const restored = await restoreLiveClub(ctx, id!, true);
+            // Mirror the delete branch: restore each team explicitly (older
+            // canisters lack the cascade) and lift the local tombstones.
+            try {
+              const teams = (await listLiveTeams(ctx, id!)) as unknown as { id: string; deleted_at_ms?: unknown }[];
+              for (const team of teams || []) {
+                if (!team?.id) continue;
+                if (Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length) {
+                  try { await restoreLiveTeam(ctx, team.id); } catch { /* best-effort */ }
+                }
+                unmarkTeamDeleted(team.id);
+              }
+            } catch { /* listing failed — club restore still committed */ }
+            return restored;
+          },
         });
         queryClient.invalidateQueries({ queryKey: ["club", id] });
         await invalidateTeamLists(queryClient, user?.id);

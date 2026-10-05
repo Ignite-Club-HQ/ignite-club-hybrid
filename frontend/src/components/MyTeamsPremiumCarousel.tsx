@@ -15,6 +15,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { cacheTeams, getCachedClub } from "@/lib/clubTeamCache";
 import { getSignedPhotoUrls } from "@/hooks/useSignedPhotoUrl";
 import { setCachedCarousel, getCachedCarouselWithTs } from "@/lib/myTeamsCarouselCache";
+import { filterDeletedTeams } from "@/lib/deletedTeamTombstones";
+import { clearMyTeamsCarouselCache } from "@/lib/invalidateTeamLists";
 import { format, isToday, isTomorrow, parseISO, differenceInDays } from "date-fns";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
@@ -592,7 +594,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   }, []);
 
   // Fetch teams & leagues
-  const { data: items = snapshot?.items ?? [], isLoading, isFetching } = useQuery({
+  const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
     queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
     retry: 3,
     initialData: snapshot?.items,
@@ -755,6 +757,16 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+
+  // Tombstoned teams (deleted via team or club delete) must never render,
+  // no matter which cache produced the row.
+  const items = useMemo(() => filterDeletedTeams(rawItems), [rawItems]);
+
+  // A failed refetch would otherwise keep a stale localStorage snapshot on
+  // screen forever — drop it so the next mount re-fetches instead.
+  useEffect(() => {
+    if (isError) clearMyTeamsCarouselCache(user?.id);
+  }, [isError, user?.id]);
 
   // Fetch next events
   const teamIds = items.filter(i => i.type === "team").map(i => i.id);
@@ -1116,6 +1128,16 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     [items, activeClubFilter]
   );
 
+  // Trust a successfully refetched (possibly empty) list over the localStorage
+  // snapshot: only fall back to the snapshot until the first fetch settles.
+  // Without this, a genuinely deleted team keeps re-appearing from the
+  // last-known-good snapshot forever.
+  const [hasSettledFetch, setHasSettledFetch] = useState(false);
+  useEffect(() => setHasSettledFetch(false), [user?.id, activeClubFilter]);
+  useEffect(() => {
+    if (!isLoading && !isFetching && !isError) setHasSettledFetch(true);
+  }, [isLoading, isFetching, isError]);
+
   // Persist snapshot for instant cold-start on next visit
   useEffect(() => {
     if (!user?.id || scopedItems.length === 0) return;
@@ -1159,10 +1181,12 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   // write effect already refuses to overwrite the cache with an empty list,
   // so this only ever shows genuinely stale-but-real data during the blip.
   // Snapshot rows are scoped to the same club filter key, but re-filter anyway.
-  const snapshotItems = activeClubFilter
-    ? (snapshot?.items ?? []).filter(i => i.club_id === activeClubFilter)
-    : (snapshot?.items ?? []);
-  const displayItems = scopedItems.length > 0 ? scopedItems : snapshotItems;
+  const snapshotItems = filterDeletedTeams(
+    activeClubFilter
+      ? (snapshot?.items ?? []).filter(i => i.club_id === activeClubFilter)
+      : (snapshot?.items ?? []),
+  );
+  const displayItems = scopedItems.length > 0 ? scopedItems : (hasSettledFetch ? [] : snapshotItems);
 
   // Empty state: onboarding with clear paths
   if (displayItems.length === 0) {
