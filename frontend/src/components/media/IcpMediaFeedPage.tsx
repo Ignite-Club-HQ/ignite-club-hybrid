@@ -1,350 +1,618 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Image as ImageIcon, Flag, MessageCircle, RefreshCw, Loader2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Images, Loader2, MessageCircle, SlidersHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { useClubTheme } from "@/hooks/useClubTheme";
-import { CreateActionButton } from "@/components/CreateActionButton";
-import { compressImage } from "@/lib/imageCompression";
-import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { useIcpSession } from "@/live/useIcpSession";
+import { withMediaBackend } from "@/live/featureBackend";
+import type { FeatureBackendContext } from "@/live/featureRouter";
 import {
-  listLiveAssets,
-  listLiveReactions,
-  addLiveReaction,
-  removeLiveReaction,
-  listLiveComments,
   addLiveComment,
+  deleteLiveAsset,
+  listLiveAssets,
+  listLiveComments,
+  listLiveReactions,
   liveAssetSource,
-  registerLiveAsset,
+  filterLiveDeletedAssets,
+  toggleLiveReaction,
 } from "@/live/features/media";
-import { isIcpMediaUploadUnavailable, tryUploadMediaToBlobStore } from "@/live/mediaUpload";
-import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
+import { resolveIcpBlobObjectUrl } from "@/live/features/mediaDecrypt";
+import { listLiveTeams } from "@/live/features/club";
+import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { listLiveCompetitions } from "@/live/features/competitions";
+import { listLiveMembershipClubs } from "@/live/features/membership";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ClubTeamFilter } from "@/components/ClubTeamFilter";
+import { AlbumCarousel } from "@/components/AlbumCarousel";
+import { EmojiReactions } from "@/components/EmojiReactions";
+import { MediaCommentSheet } from "@/components/MediaCommentSheet";
+import { PhotoLightbox } from "@/components/PhotoLightbox";
+import { CreateActionButton } from "@/components/CreateActionButton";
+import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
+import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
+import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { formatTimeShort } from "@/lib/formatTimeShort";
 
-interface LiveAsset {
+// ---------------------------------------------------------------------------
+// Data model
+// ---------------------------------------------------------------------------
+
+interface LiveAssetView {
   id: string;
-  club_id: string;
-  kind: string;
-  mime: string;
-  storage_path: string;
-  visibility: string;
-  deleted: boolean;
-  blob_ref?: [] | [{ canister: string; path: string; content_hash: string }];
+  url: string;
+  isVideo: boolean;
 }
 
-interface LiveReaction {
-  asset_id: string;
-  kind: string;
-  user: { toText(): string };
+interface LiveReactionView {
+  user_id: string;
+  reaction_type: string;
+  profiles?: { display_name: string | null; avatar_url: string | null } | null;
 }
 
-interface LiveComment {
+interface LiveCommentView {
   id: string;
-  asset_id: string;
-  author: { toText(): string };
-  body: string;
-  deleted: boolean;
+  text: string;
+  user_id: string;
+  created_at: string;
+  profiles?: { display_name?: string | null; avatar_url?: string | null } | null;
 }
 
-export function PhotoSkeleton() {
-  return (
-    <Card className="overflow-hidden">
-      <Skeleton className="aspect-square w-full" />
-      <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-8 rounded-full" />
-          <div className="space-y-1.5 flex-1">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-2.5 w-16" />
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <Skeleton className="h-5 w-20" />
-          <Skeleton className="h-5 w-5 ml-auto rounded-full" />
-        </div>
-      </div>
-    </Card>
+/** One feed post: a single photo/video or a multi-photo album (shared album_id). */
+interface LiveMediaPost {
+  id: string;
+  assets: LiveAssetView[];
+  /** Representative asset id used for reactions/comments (first in the album). */
+  representativeAssetId: string;
+  ownerId: string;
+  ownerName: string;
+  clubId: string;
+  clubName: string;
+  teamId: string | null;
+  teamName: string | null;
+  miniLeagueId: string | null;
+  miniLeagueName: string | null;
+  competitionId: string | null;
+  competitionName: string | null;
+  caption: string | null;
+  createdAtMs: number;
+  reactions: LiveReactionView[];
+  comments: LiveCommentView[];
+}
+
+interface LiveFilterOptions {
+  clubs: { id: string; name: string; sport: string | null }[];
+  teams: { id: string; name: string; club_id: string }[];
+  miniLeagues: { id: string; name: string; club_id: string }[];
+  competitions: { id: string; name: string; club_id: string }[];
+}
+
+interface LiveMediaFeed {
+  posts: LiveMediaPost[];
+  options: LiveFilterOptions;
+}
+
+// ---------------------------------------------------------------------------
+// Loader
+// ---------------------------------------------------------------------------
+
+async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
+  const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
+    id: string;
+    name: string;
+    sport: [] | [string];
+  }[];
+
+  const options: LiveFilterOptions = { clubs: [], teams: [], miniLeagues: [], competitions: [] };
+  const rawAssets: {
+    id: string;
+    club_id: string;
+    owner: { toText(): string };
+    kind: string;
+    mime: string;
+    created_at_ms: bigint;
+    team_id: [] | [string];
+    mini_league_id: [] | [string];
+    competition_id: [] | [string];
+    caption: [] | [string];
+    album_id: [] | [string];
+    blob_ref: [] | [unknown];
+    deleted: boolean;
+  }[] = [];
+
+  await Promise.all(
+    clubsRaw.map(async (club) => {
+      options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
+      const [assets, teams, miniLeagues, competitions] = await Promise.all([
+        listLiveAssets(ctx, club.id).catch(() => []),
+        listLiveTeams(ctx, club.id).catch(() => []),
+        listLiveMiniLeaguesByClub(ctx, club.id).catch(() => []),
+        listLiveCompetitions(ctx, club.id).catch(() => []),
+      ]);
+      for (const team of teams as unknown as {
+        id: string;
+        name: string;
+        club_id: string;
+        deleted_at_ms: [] | [bigint];
+      }[]) {
+        if (team.deleted_at_ms.length === 0) {
+          options.teams.push({ id: team.id, name: team.name, club_id: team.club_id });
+        }
+      }
+      for (const ml of miniLeagues as unknown as { id: string; name: string; club_id: string }[]) {
+        options.miniLeagues.push({ id: ml.id, name: ml.name, club_id: ml.club_id });
+      }
+      for (const comp of competitions as unknown as { id: string; name: string; club_id: string }[]) {
+        options.competitions.push({ id: comp.id, name: comp.name, club_id: comp.club_id });
+      }
+      for (const asset of filterLiveDeletedAssets(assets) as unknown as (typeof rawAssets)[number][]) {
+        if (asset.kind === "photo" || asset.kind === "video") rawAssets.push(asset);
+      }
+    }),
   );
-}
 
-/** Renders an asset's bytes. Blob-store bytes are IBE ciphertext, so they are
- * decrypted into an object URL first; Supabase-storage bytes are not
- * reachable without a Supabase session and render as a placeholder tile. */
-function LiveAssetImage({ asset }: { asset: LiveAsset }) {
-  const [objectUrl, setObjectUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    let createdUrl: string | null = null;
-    const source = liveAssetSource(asset);
-    if (source.kind === "icp-blob") {
-      resolveIcpBlobObjectUrl(source.url)
-        .then((url) => {
-          if (active && url) {
-            createdUrl = url;
-            setObjectUrl(url);
-          }
-        })
-        .catch(() => {
-          /* leave the placeholder tile — never fall back to the raw URL */
+  // Resolve encrypted blob bytes to object URLs (never fall back to ciphertext).
+  const assetViews = new Map<string, LiveAssetView>();
+  await Promise.all(
+    rawAssets.map(async (asset) => {
+      try {
+        const url = await resolveIcpBlobObjectUrl(liveAssetSource(asset as never), {
+          ownerAccountId: asset.owner.toText(),
         });
-    }
-    return () => {
-      active = false;
-      if (createdUrl) URL.revokeObjectURL(createdUrl);
-    };
-  }, [asset]);
-
-  if (objectUrl) {
-    return <img src={objectUrl} alt="" className="aspect-square w-full object-cover" loading="lazy" />;
-  }
-  return (
-    <div className="flex aspect-square w-full items-center justify-center bg-muted">
-      <ImageIcon className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-    </div>
+        if (!url) return;
+        const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
+        // blob: URLs carry no extension, so isVideoUrl can't detect video —
+        // a fragment is ignored by media loading but matches the suffix check.
+        assetViews.set(asset.id, { id: asset.id, url: isVideo ? `${url}#.mp4` : url, isVideo });
+      } catch {
+        // Decryption/key failure: hide the asset rather than show broken media.
+      }
+    }),
   );
+
+  // Uploader + commenter display names (account ids match principal text until
+  // principals are bound post-deploy).
+  const ownerIds = [...new Set(rawAssets.map((a) => a.owner.toText()))];
+  const profileNameById = new Map<string, string>();
+  try {
+    const profiles = (await listLiveProfilesByIds(ctx, ownerIds)) as unknown as {
+      account_id: string;
+      display_name: string;
+    }[];
+    for (const p of profiles) profileNameById.set(p.account_id, p.display_name);
+  } catch {
+    // Names fall back to "Member".
+  }
+
+  const teamNameById = new Map(options.teams.map((t) => [t.id, t.name]));
+  const mlNameById = new Map(options.miniLeagues.map((m) => [m.id, m.name]));
+  const compNameById = new Map(options.competitions.map((c) => [c.id, c.name]));
+  const clubNameById = new Map(options.clubs.map((c) => [c.id, c.name]));
+
+  // Group into posts by album_id (multi-photo uploads share one).
+  const groups = new Map<string, typeof rawAssets>();
+  for (const asset of rawAssets) {
+    if (!assetViews.has(asset.id)) continue;
+    const key = asset.album_id[0] ?? asset.id;
+    const group = groups.get(key) ?? [];
+    group.push(asset);
+    groups.set(key, group);
+  }
+
+  const posts: LiveMediaPost[] = await Promise.all(
+    [...groups.entries()].map(async ([key, group]) => {
+      const sorted = [...group].sort((a, b) => Number(a.created_at_ms - b.created_at_ms));
+      const first = sorted[0];
+      const ownerId = first.owner.toText();
+      const [reactionsRaw, commentsRaw] = await Promise.all([
+        listLiveReactions(ctx, first.id).catch(() => []),
+        listLiveComments(ctx, first.id).catch(() => []),
+      ]);
+      const reactions = (reactionsRaw as unknown as {
+        kind: string;
+        user: { toText(): string };
+      }[]).map((r) => ({
+        user_id: r.user.toText(),
+        reaction_type: r.kind,
+        profiles: { display_name: profileNameById.get(r.user.toText()) ?? null, avatar_url: null },
+      }));
+      const comments = (commentsRaw as unknown as {
+        id: string;
+        body: string;
+        author: { toText(): string };
+        created_at_ms: bigint;
+        deleted: boolean;
+      }[])
+        .filter((c) => !c.deleted)
+        .map((c) => ({
+          id: c.id,
+          text: c.body,
+          user_id: c.author.toText(),
+          created_at: new Date(Number(c.created_at_ms)).toISOString(),
+          profiles: { display_name: profileNameById.get(c.author.toText()) ?? null, avatar_url: null },
+        }));
+      const teamId = first.team_id[0] ?? null;
+      const miniLeagueId = first.mini_league_id[0] ?? null;
+      const competitionId = first.competition_id[0] ?? null;
+      return {
+        id: key,
+        assets: sorted.map((a) => assetViews.get(a.id)!),
+        representativeAssetId: first.id,
+        ownerId,
+        ownerName: profileNameById.get(ownerId) ?? "Member",
+        clubId: first.club_id,
+        clubName: clubNameById.get(first.club_id) ?? "Club",
+        teamId,
+        teamName: teamId ? teamNameById.get(teamId) ?? null : null,
+        miniLeagueId,
+        miniLeagueName: miniLeagueId ? mlNameById.get(miniLeagueId) ?? null : null,
+        competitionId,
+        competitionName: competitionId ? compNameById.get(competitionId) ?? null : null,
+        caption: first.caption[0] ?? null,
+        createdAtMs: Number(first.created_at_ms),
+        reactions,
+        comments,
+      } satisfies LiveMediaPost;
+    }),
+  );
+
+  posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
+  options.clubs.sort((a, b) => a.name.localeCompare(b.name));
+  return { posts, options };
 }
 
-async function withMediaBackend<T>(fn: (ctx: FeatureBackendContext) => Promise<T>): Promise<T> {
-  return withFeatureBackend("media", {
-    // This page only renders when the media feature is routed to ICP, so the
-    // Supabase branch is unreachable in practice.
-    supabase: () => {
-      throw new Error("Media is not routed to the Internet Computer backend.");
-    },
-    icp: fn,
-  });
-}
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export function IcpMediaFeedPage() {
-  const { activeClubFilter } = useClubTheme();
-  const clubId = activeClubFilter ?? null;
+  const { identity } = useIcpSession();
+  const principal = identity?.getPrincipal().toText();
+  const queryClient = useQueryClient();
 
-  const [principal, setPrincipal] = useState<string | null>(null);
-  const [assets, setAssets] = useState<LiveAsset[]>([]);
-  const [reactionsByAsset, setReactionsByAsset] = useState<Record<string, LiveReaction[]>>({});
-  const [commentsByAsset, setCommentsByAsset] = useState<Record<string, LiveComment[]>>({});
-  const [activeCommentAssetId, setActiveCommentAssetId] = useState<string | null>(null);
-  const [commentDraft, setCommentDraft] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Uploads fail closed for ICP sessions until the media_blob_store canister
-  // is configured — the button stays hidden in that case (same gate as the
-  // Supabase media page's upload controls).
-  const uploadAvailable = !isIcpMediaUploadUnavailable();
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [selectedClubId, setSelectedClubId] = useState("all");
+  const [selectedTeamId, setSelectedTeamId] = useState("all");
+  const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [actionPost, setActionPost] = useState<LiveMediaPost | null>(null);
+  const pressTimerRef = useRef<number | null>(null);
 
-  const loadFeed = useCallback(async () => {
-    if (!clubId) {
-      setAssets([]);
-      setIsLoading(false);
-      return;
+  const feedQuery = useQuery({
+    queryKey: ["icp-media-feed", principal],
+    enabled: !!identity,
+    queryFn: () =>
+      withMediaBackend({
+        supabase: async () => {
+          throw new Error("unreachable");
+        },
+        icp: (ctx) => loadLiveMediaFeed(ctx),
+      }),
+  });
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["icp-media-feed"] });
+
+  const reactionMutation = useMutation({
+    mutationFn: async ({ post, emoji }: { post: LiveMediaPost; emoji: string }) =>
+      withMediaBackend({
+        supabase: async () => {
+          throw new Error("unreachable");
+        },
+        icp: (ctx) => toggleLiveReaction(ctx, post.representativeAssetId, emoji),
+      }),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Reaction failed"),
+    onSettled: invalidate,
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async ({ post, text }: { post: LiveMediaPost; text: string }) =>
+      withMediaBackend({
+        supabase: async () => {
+          throw new Error("unreachable");
+        },
+        icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text),
+      }),
+    onSuccess: () => setCommentInput(""),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Comment failed"),
+    onSettled: invalidate,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (post: LiveMediaPost) =>
+      withMediaBackend({
+        supabase: async () => {
+          throw new Error("unreachable");
+        },
+        icp: async (ctx) => {
+          for (const asset of post.assets) {
+            await deleteLiveAsset(ctx, asset.id);
+          }
+        },
+      }),
+    onSuccess: () => toast.success("Deleted"),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Delete failed"),
+    onSettled: invalidate,
+  });
+
+  const posts = useMemo(() => {
+    const all = feedQuery.data?.posts ?? [];
+    return all.filter((post) => {
+      if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
+      if (selectedTeamId === "all") return true;
+      if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
+      return post.teamId === selectedTeamId;
+    });
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId]);
+
+  const options = feedQuery.data?.options;
+  const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
+
+  // Feed-level lightbox: one flat photo list across visible posts.
+  const flatPhotos = useMemo(
+    () =>
+      posts.flatMap((post) =>
+        post.assets.map((asset) => ({
+          id: asset.id,
+          file_url: asset.url,
+          club_id: post.clubId,
+          team_id: post.teamId,
+          post,
+        })),
+      ),
+    [posts],
+  );
+
+  const startLongPress = (post: LiveMediaPost) => {
+    pressTimerRef.current = window.setTimeout(() => setActionPost(post), 500);
+  };
+  const cancelLongPress = () => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
     }
-    setIsLoading(true);
-    setLoadError(false);
-    try {
-      const { assets: fetched, principalText, reactions, comments } = await withMediaBackend(async (ctx) => {
-        const fetched = (await listLiveAssets(ctx, clubId)) as unknown as LiveAsset[];
-        const visible = fetched.filter((asset) => !asset.deleted);
-        const reactionEntries = await Promise.all(
-          visible.map(async (asset) => [asset.id, (await listLiveReactions(ctx, asset.id)) as unknown as LiveReaction[]] as const),
-        );
-        const commentEntries = await Promise.all(
-          visible.map(async (asset) => [
-            asset.id,
-            ((await listLiveComments(ctx, asset.id)) as unknown as LiveComment[]).filter((comment) => !comment.deleted),
-          ] as const),
-        );
-        return {
-          assets: visible,
-          principalText: ctx.identity.getPrincipal().toText(),
-          reactions: Object.fromEntries(reactionEntries),
-          comments: Object.fromEntries(commentEntries),
-        };
-      });
-      setPrincipal(principalText);
-      setAssets(fetched);
-      setReactionsByAsset(reactions);
-      setCommentsByAsset(comments);
-    } catch {
-      setLoadError(true);
-      setAssets([]);
-      setReactionsByAsset({});
-      setCommentsByAsset({});
-    } finally {
-      setIsLoading(false);
-    }
-  }, [clubId]);
+  };
 
-  useEffect(() => { void loadFeed(); }, [loadFeed]);
+  const subtitleFor = (post: LiveMediaPost) =>
+    post.teamName
+      ? `${post.clubName} · ${post.teamName}`
+      : post.miniLeagueName
+        ? `${post.clubName} · ${post.miniLeagueName}`
+        : post.competitionName
+          ? `${post.clubName} · ${post.competitionName}`
+          : post.clubName;
 
-  const handleFilesSelected = useCallback(async (fileList: FileList | null) => {
-    if (!clubId || !fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
-    setIsUploading(true);
-    let uploaded = 0;
-    try {
-      for (const original of files) {
-        const { file } = await compressImage(original);
-        const ext = original.name.split(".").pop() || "jpg";
-        const path = `clubs/${clubId}/${principal ?? "member"}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        // Fail closed: bytes must go to the blob store in ICP mode, never to
-        // plaintext Supabase storage. A configured-but-failed upload throws.
-        const blobUpload = await tryUploadMediaToBlobStore({
-          storagePath: path,
-          file,
-          mime: file.type || "application/octet-stream",
-        });
-        if (!blobUpload) {
-          throw new Error("Media blob store is not configured");
-        }
-        await withMediaBackend(async (ctx) => {
-          await registerLiveAsset(ctx, {
-            clubId,
-            kind: "photo",
-            mime: file.type || "application/octet-stream",
-            checksum: blobUpload.blobRef.content_hash,
-            storagePath: blobUpload.blobRef.path,
-            visibility: "club",
-            contentLength: file.size,
-            blobRef: blobUpload.blobRef,
-          });
-        });
-        uploaded += 1;
-      }
-      if (uploaded > 0) {
-        toast.success(uploaded === 1 ? "Photo added" : `${uploaded} photos added`);
-      }
-    } catch {
-      toast.error("The upload didn't finish — please try again");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (uploaded > 0) void loadFeed();
-    }
-  }, [clubId, principal, loadFeed]);
-
-  const handleReact = useCallback(async (assetId: string) => {
-    const current = reactionsByAsset[assetId] ?? [];
-    const hasReacted = principal !== null && current.some((reaction) => reaction.user.toText() === principal);
-    try {
-      await withMediaBackend(async (ctx) => {
-        if (hasReacted) {
-          await removeLiveReaction(ctx, assetId);
-        } else {
-          await addLiveReaction(ctx, assetId, "like", Date.now());
-        }
-        const updated = (await listLiveReactions(ctx, assetId)) as unknown as LiveReaction[];
-        setReactionsByAsset((prev) => ({ ...prev, [assetId]: updated }));
-      });
-    } catch {
-      /* leave the previous count on screen */
-    }
-  }, [principal, reactionsByAsset]);
-
-  const handleAddComment = useCallback(async (assetId: string) => {
-    const body = commentDraft.trim();
-    if (!body) return;
-    try {
-      await withMediaBackend(async (ctx) => {
-        await addLiveComment(ctx, assetId, body, Date.now());
-        const updated = ((await listLiveComments(ctx, assetId)) as unknown as LiveComment[]).filter((comment) => !comment.deleted);
-        setCommentsByAsset((prev) => ({ ...prev, [assetId]: updated }));
-      });
-      setCommentDraft("");
-    } catch {
-      /* keep the draft so nothing is lost */
-    }
-  }, [commentDraft]);
+  const openPostLightbox = (post: LiveMediaPost, assetIndex: number) => {
+    const targetId = post.assets[assetIndex]?.id;
+    const flat = flatPhotos.findIndex((p) => p.id === targetId);
+    if (flat >= 0) setLightboxIndex(flat);
+  };
 
   return (
-    <div className="py-6 pb-32 space-y-6 soft-reveal">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Media</h1>
-        {clubId && uploadAvailable && (
-          isUploading ? (
-            <div className="inline-flex h-11 w-11 items-center justify-center" aria-label="Uploading">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
-          ) : (
-            <CreateActionButton ariaLabel="Add photo" onClick={() => fileInputRef.current?.click()} />
-          )
-        )}
-      </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        aria-hidden="true"
-        onChange={(e) => void handleFilesSelected(e.target.files)}
-      />
-      {loadError ? (
-        <Card className="flex flex-col items-center gap-3 p-8 text-center">
-          <p className="text-sm font-medium">Photos couldn't load right now</p>
-          <p className="text-xs text-muted-foreground">Check your connection and try again.</p>
-          <Button size="sm" variant="outline" onClick={() => void loadFeed()}>
-            <RefreshCw className="mr-2 h-4 w-4" />Try again
-          </Button>
-        </Card>
-      ) : !clubId ? (
-        <Card className="flex flex-col items-center gap-2 p-8 text-center">
-          <ImageIcon className="h-6 w-6 text-muted-foreground" />
-          <p className="text-sm font-medium">Choose a club to see its photos</p>
-        </Card>
-      ) : isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{[0, 1].map(i => <PhotoSkeleton key={i} />)}</div>
-      ) : assets.length === 0 ? (
-        <Card className="flex flex-col items-center gap-2 p-8 text-center">
-          <ImageIcon className="h-6 w-6 text-muted-foreground" />
-          <p className="text-sm font-medium">No media yet</p>
-          {uploadAvailable && (
-            <Button size="sm" className="mt-2" disabled={isUploading} onClick={() => fileInputRef.current?.click()}>
-              {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Add photos
-            </Button>
-          )}
-        </Card>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {assets.map(asset => {
-            const reactions = reactionsByAsset[asset.id] ?? [];
-            const hasReacted = principal !== null && reactions.some(reaction => reaction.user.toText() === principal);
-            const comments = commentsByAsset[asset.id] ?? [];
-            return (
-              <Card key={asset.id} className="overflow-hidden">
-                <LiveAssetImage asset={asset} />
-                <CardContent className="space-y-2 p-3">
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <button type="button" onClick={() => void handleReact(asset.id)} aria-pressed={hasReacted} className={cn("flex items-center gap-1", hasReacted && "text-primary")}><Flag className="h-3.5 w-3.5" aria-hidden="true" />{reactions.length}</button>
-                    <button type="button" onClick={() => setActiveCommentAssetId(asset.id)} className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />{comments.length}</button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 py-3">
+          <h1 className="text-lg font-semibold">Media</h1>
+          <div className="flex items-center gap-2">
+            {hasFilters && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Filter media"
+                onClick={() => setFilterOpen(true)}
+              >
+                <SlidersHorizontal className="h-5 w-5" />
+              </Button>
+            )}
+            <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
+          </div>
         </div>
-      )}
-      <Sheet open={activeCommentAssetId !== null} onOpenChange={open => !open && setActiveCommentAssetId(null)}>
-        <SheetContent side="bottom" className="max-h-[70vh]">
-          <SheetHeader><SheetTitle>Comments</SheetTitle></SheetHeader>
-          {activeCommentAssetId && (
-            <div className="flex h-full flex-col gap-3 py-2">
-              <ScrollArea className="flex-1"><div className="space-y-2">
-                {(commentsByAsset[activeCommentAssetId] ?? []).map(comment => <div key={comment.id} className="text-sm"><span className="font-medium">{principal !== null && comment.author.toText() === principal ? "You" : "Member"}</span>{": "}{comment.body}</div>)}
-                {(commentsByAsset[activeCommentAssetId] ?? []).length === 0 && <p className="text-sm text-muted-foreground">No comments yet.</p>}
-              </div></ScrollArea>
-              <div className="flex items-center gap-2">
-                <input value={commentDraft} onChange={e => setCommentDraft(e.target.value)} placeholder="Add a comment" className="flex-1 rounded-md border px-3 py-2 text-sm" onKeyDown={e => { if (e.key === "Enter" && activeCommentAssetId) void handleAddComment(activeCommentAssetId); }} />
-                <Button size="sm" disabled={!commentDraft.trim()} onClick={() => activeCommentAssetId && void handleAddComment(activeCommentAssetId)}>Post</Button>
-              </div>
+        <MediaHeaderSponsorStrip clubId={selectedClubId !== "all" ? selectedClubId : undefined} />
+      </header>
+
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4">
+        {feedQuery.isLoading && (
+          <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <p className="text-sm">Loading media…</p>
+          </div>
+        )}
+
+        {feedQuery.isError && (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-sm text-muted-foreground">
+              {feedQuery.error instanceof Error ? feedQuery.error.message : "Media could not be loaded."}
+            </p>
+            <Button variant="outline" onClick={() => feedQuery.refetch()}>
+              Try again
+            </Button>
+          </div>
+        )}
+
+        {feedQuery.isSuccess && posts.length === 0 && (
+          <div className="flex flex-col items-center gap-4 py-16 text-center">
+            <Images className="h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No media yet</p>
+            <Button onClick={() => setUploadOpen(true)}>Add photos</Button>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {posts.map((post, index) => (
+            <div key={post.id}>
+              <article className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <Avatar className="h-9 w-9">
+                    <AvatarFallback>{post.ownerName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{post.ownerName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{subtitleFor(post)}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {post.createdAtMs > 0 ? formatTimeShort(new Date(post.createdAtMs)) : ""}
+                  </span>
+                </div>
+
+                <div
+                  onTouchStart={() => startLongPress(post)}
+                  onTouchMove={cancelLongPress}
+                  onTouchEnd={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                >
+                  <AlbumCarousel
+                    photos={post.assets.map((asset) => ({ id: asset.id, file_url: asset.url }))}
+                    onTap={(i) => openPostLightbox(post, i)}
+                    priority={index < 2}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <EmojiReactions
+                    reactions={post.reactions}
+                    currentUserId={principal}
+                    onReact={(type) => reactionMutation.mutate({ post, emoji: type })}
+                    onRemove={() => {
+                      const mine = post.reactions.find((r) => r.user_id === principal);
+                      if (mine) reactionMutation.mutate({ post, emoji: mine.reaction_type });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-muted-foreground"
+                    onClick={() => setCommentPost(post)}
+                    aria-label="Comments"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    {post.comments.length > 0 && (
+                      <span className="text-xs">{post.comments.length}</span>
+                    )}
+                  </button>
+                </div>
+
+                {post.caption && (
+                  <p className="px-3 pb-3 text-sm">{post.caption}</p>
+                )}
+              </article>
+              {(index + 1) % 8 === 0 && (
+                <div className="mt-6">
+                  <MediaSponsorTile seed={index} clubId={post.clubId} />
+                </div>
+              )}
             </div>
-          )}
+          ))}
+        </div>
+      </main>
+
+      <Drawer open={filterOpen} onOpenChange={setFilterOpen}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle>Filter media</DrawerTitle>
+          </DrawerHeader>
+          <div className="overflow-y-auto px-4 pb-6">
+            {options && (
+              <ClubTeamFilter
+                expanded
+                clubs={options.clubs}
+                teams={options.teams}
+                miniLeagues={options.miniLeagues}
+                selectedClubId={selectedClubId}
+                selectedTeamId={selectedTeamId}
+                onClubChange={(id) => {
+                  setSelectedClubId(id);
+                  setSelectedTeamId("all");
+                }}
+                onTeamChange={setSelectedTeamId}
+              />
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      {options && (
+        <IcpUploadPhotoSheet
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          onUploaded={invalidate}
+          clubs={options.clubs}
+          teams={options.teams}
+          miniLeagues={options.miniLeagues}
+          competitions={options.competitions}
+          defaultClubId={selectedClubId !== "all" ? selectedClubId : undefined}
+        />
+      )}
+
+      <MediaCommentSheet
+        open={commentPost !== null}
+        onOpenChange={(open) => {
+          if (!open) setCommentPost(null);
+        }}
+        photoUrl={commentPost?.assets[0]?.url ?? ""}
+        uploaderName={commentPost?.ownerName ?? null}
+        teamName={commentPost ? subtitleFor(commentPost) : null}
+        teamId={commentPost?.teamId}
+        clubId={commentPost?.clubId}
+        miniLeagueId={commentPost?.miniLeagueId}
+        comments={commentPost?.comments ?? []}
+        commentInput={commentInput}
+        onCommentInputChange={setCommentInput}
+        onSubmitComment={() => {
+          const text = commentInput.trim();
+          if (commentPost && text) commentMutation.mutate({ post: commentPost, text });
+        }}
+        isPending={commentMutation.isPending}
+        replyingTo={null}
+        onSetReplyingTo={() => undefined}
+        currentUserId={principal}
+      />
+
+      <PhotoLightbox
+        isOpen={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        photos={flatPhotos}
+        currentIndex={lightboxIndex ?? 0}
+        onNavigate={(i) => setLightboxIndex(i)}
+        canDelete={
+          lightboxIndex !== null && flatPhotos[lightboxIndex]?.post.ownerId === principal
+        }
+        onDelete={(photoId) => {
+          const entry = flatPhotos.find((p) => p.id === photoId);
+          if (entry) {
+            deleteMutation.mutate(entry.post);
+            setLightboxIndex(null);
+          }
+        }}
+      />
+
+      <Sheet open={actionPost !== null} onOpenChange={(open) => !open && setActionPost(null)}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>Photo options</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 space-y-2">
+            {actionPost && actionPost.ownerId === principal ? (
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  deleteMutation.mutate(actionPost);
+                  setActionPost(null);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Only the person who shared this can delete it.
+              </p>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
     </div>
