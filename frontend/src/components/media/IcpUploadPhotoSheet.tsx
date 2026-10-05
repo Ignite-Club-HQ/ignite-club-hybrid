@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import { Check, ImagePlus, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { compressImage } from "@/lib/imageCompression";
+import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
@@ -246,88 +248,161 @@ export function IcpUploadPhotoSheet({
             placeholder="Caption (optional)"
           />
 
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground">Club</p>
-            <div className="flex flex-wrap gap-2">
+          {/* Club Selection — same row style as the Supabase upload sheet */}
+          <div className="space-y-3">
+            <Label className="text-sm font-medium flex items-center gap-2">
+              Select Club <span className="text-destructive">*</span>
+            </Label>
+            <div className="grid gap-2">
               {clubs.map((club) => (
-                <Button
+                <button
                   key={club.id}
                   type="button"
-                  size="sm"
-                  variant={clubId === club.id ? "default" : "outline"}
+                  disabled={uploading}
                   onClick={() => {
                     setClubId(club.id);
                     setTeamId("");
                     setMiniLeagueId("");
                     setCompetitionId("");
                   }}
+                  className={cn(
+                    "flex items-center justify-between p-4 rounded-xl border-2 transition-all text-left w-full",
+                    clubId === club.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-muted-foreground/50",
+                    uploading && "opacity-50 cursor-not-allowed",
+                  )}
                 >
-                  {club.name}
-                </Button>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "h-10 w-10 rounded-full flex items-center justify-center text-lg font-semibold",
+                        clubId === club.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {club.name.charAt(0).toUpperCase()}
+                    </div>
+                    <p className="font-medium">{club.name}</p>
+                  </div>
+                  {clubId === club.id && (
+                    <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center">
+                      <Check className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
               ))}
             </div>
           </div>
 
-          {clubTeams.length > 0 && miniLeagueId === "" && competitionId === "" && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Team (optional)</p>
-              <div className="flex flex-wrap gap-2">
-                <Button
+          {/* Team Selection */}
+          {clubId && clubTeams.length > 0 && miniLeagueId === "" && competitionId === "" && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Team (optional)</Label>
+              <div className="grid gap-2">
+                <button
                   type="button"
-                  size="sm"
-                  variant={teamId === "" ? "default" : "outline"}
+                  disabled={uploading}
                   onClick={() => setTeamId("")}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left w-full",
+                    teamId === ""
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-muted-foreground/50",
+                    uploading && "opacity-50 cursor-not-allowed",
+                  )}
                 >
-                  All of club
-                </Button>
+                  <span className="text-muted-foreground">All of club</span>
+                  {teamId === "" && (
+                    <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                      <Check className="h-3 w-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
                 {clubTeams.map((team) => (
-                  <Button
+                  <button
                     key={team.id}
                     type="button"
-                    size="sm"
-                    variant={teamId === team.id ? "default" : "outline"}
+                    disabled={uploading}
                     onClick={() => setTeamId(team.id)}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left w-full",
+                      teamId === team.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-muted-foreground/50",
+                      uploading && "opacity-50 cursor-not-allowed",
+                    )}
                   >
-                    {team.name}
-                  </Button>
+                    <span>{team.name}</span>
+                    {teamId === team.id && (
+                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {clubMiniLeagues.length > 0 && teamId === "" && competitionId === "" && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Mini league (optional)</p>
-              <div className="flex flex-wrap gap-2">
-                {clubMiniLeagues.map((ml) => (
-                  <Button
-                    key={ml.id}
+          {/* Mini-League Selection */}
+          {clubId && clubMiniLeagues.length > 0 && teamId === "" && competitionId === "" && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Mini League (optional)</Label>
+              <div className="grid gap-2">
+                {clubMiniLeagues.map((league) => (
+                  <button
+                    key={league.id}
                     type="button"
-                    size="sm"
-                    variant={miniLeagueId === ml.id ? "default" : "outline"}
-                    onClick={() => setMiniLeagueId(miniLeagueId === ml.id ? "" : ml.id)}
+                    disabled={uploading}
+                    onClick={() => setMiniLeagueId(miniLeagueId === league.id ? "" : league.id)}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left w-full",
+                      miniLeagueId === league.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-muted-foreground/50",
+                      uploading && "opacity-50 cursor-not-allowed",
+                    )}
                   >
-                    {ml.name}
-                  </Button>
+                    <span>{league.name}</span>
+                    {miniLeagueId === league.id && (
+                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {clubCompetitions.length > 0 && teamId === "" && miniLeagueId === "" && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">Competition (optional)</p>
-              <div className="flex flex-wrap gap-2">
+          {/* Competition Selection */}
+          {clubId && clubCompetitions.length > 0 && teamId === "" && miniLeagueId === "" && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Competition (optional)</Label>
+              <div className="grid gap-2">
                 {clubCompetitions.map((comp) => (
-                  <Button
+                  <button
                     key={comp.id}
                     type="button"
-                    size="sm"
-                    variant={competitionId === comp.id ? "default" : "outline"}
+                    disabled={uploading}
                     onClick={() => setCompetitionId(competitionId === comp.id ? "" : comp.id)}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-xl border-2 transition-all text-left w-full",
+                      competitionId === comp.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:border-muted-foreground/50",
+                      uploading && "opacity-50 cursor-not-allowed",
+                    )}
                   >
-                    {comp.name}
-                  </Button>
+                    <span>{comp.name}</span>
+                    {competitionId === comp.id && (
+                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>
