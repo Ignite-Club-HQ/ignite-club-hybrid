@@ -113,7 +113,7 @@ persistent actor class Main(governorInit : Principal) {
   func findChild(id : Text) : ?Types.MiniLeagueChild { children.find(func(item) = item.id == id) };
   func nextId(prefix : Text, size : Nat) : Text { prefix # "-" # Nat.toText(size) };
 
-  let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+  transient let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
 
   // 128 bits of raw_rand entropy, hex-encoded, for bearer tokens (join
   // links, claim invites) — those must be unguessable, unlike the
@@ -122,7 +122,7 @@ persistent actor class Main(governorInit : Principal) {
     let blob = await Random.blob();
     var out = prefix # "-";
     var i = 0;
-    label fill for (b in blob.vals()) {
+    label fill for (b in blob.values()) {
       if (i >= 16) break fill;
       let n = Nat8.toNat(b);
       out #= hexDigits[n / 16] # hexDigits[n % 16];

@@ -1339,7 +1339,7 @@ persistent actor class Main(governorInit : Principal) {
   // by anyone who holds it (role fixed at creation), distinct from the
   // per-email TeamInvite records above. ----
 
-  let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+  transient let hexDigits : [Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
 
   // 128 bits of raw_rand entropy, hex-encoded. Bearer tokens (invite ids,
   // share-link tokens) must be unguessable — never derive them from
@@ -1349,7 +1349,7 @@ persistent actor class Main(governorInit : Principal) {
     let blob = await Random.blob();
     var out = "";
     var i = 0;
-    label fill for (b in blob.vals()) {
+    label fill for (b in blob.values()) {
       if (i >= bytes) break fill;
       let n = Nat8.toNat(b);
       out #= hexDigits[n / 16] # hexDigits[n % 16];
