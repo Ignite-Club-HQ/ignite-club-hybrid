@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Filter, Images, Loader2, MessageCircle, Trash2 } from "lucide-react";
@@ -311,6 +312,15 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("upload") !== "1") return;
+    setUploadOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("upload");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [selectedClubId, setSelectedClubId] = useState("all");
   const [selectedTeamId, setSelectedTeamId] = useState("all");
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
