@@ -369,6 +369,7 @@ export function IcpMediaFeedPage() {
 
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
+  const hasActiveFilters = selectedClubId !== "all" || selectedTeamId !== "all";
 
   // Feed-level lightbox: one flat photo list across visible posts.
   const flatPhotos = useMemo(
