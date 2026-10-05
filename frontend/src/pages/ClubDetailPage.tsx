@@ -115,7 +115,9 @@ import {
   restoreLiveClub,
   deleteLiveClubPermanent,
   requestLiveRole,
+  getLiveMyRoleGrants,
 } from "@/live/features/membership";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 
 
@@ -762,6 +764,20 @@ export default function ClubDetailPage() {
   const { data: userRole } = useQuery({
     queryKey: ["user-club-role", id, user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        // Live ICP: own role grants from club_domain (no Supabase user_roles
+        // rows exist for II accounts). Mirror of TeamDetailPage's check.
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const roles = grants
+              .filter((g) => (g.club?.[0] ?? null) === id!)
+              .map((g) => g.role);
+            return roles.includes("club_admin") ? "club_admin" : roles[0] ?? null;
+          },
+        });
+      }
       // Check for club_admin role - can have team_id null OR be associated with a team in this club
       const { data } = await supabase
         .from("user_roles")
@@ -789,19 +805,10 @@ export default function ClubDetailPage() {
     enabled: !!id && !!user && !useIcpLab,
   });
 
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user!.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user && !useIcpLab,
-  });
+  // Shared hook: Supabase user_roles in Supabase mode, insights_domain's
+  // is_app_admin in ICP mode (the inline Supabase-only query used to own this
+  // cache key and always resolved false for II accounts).
+  const { isAppAdmin } = useIsAppAdmin();
 
   const { data: canImportFixtures } = useQuery({
     queryKey: ["can-import-fixtures", id, user?.id],
