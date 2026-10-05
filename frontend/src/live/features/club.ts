@@ -439,6 +439,20 @@ export async function getLiveShellTeamByToken(ctx: FeatureBackendContext, token:
   return unwrapCandid(actor.get_shell_team_by_token(token), "Load shell team invite");
 }
 
+/**
+ * Best-effort avatar access sync after the caller joins or creates a club:
+ * re-grants their encrypted profile-photo blob to every club they belong to
+ * so clubmates can decrypt it (covers photos uploaded before the join).
+ * Fire-and-forget — never blocks or fails the join itself.
+ */
+function syncAvatarClubGrantsBestEffort(ctx: FeatureBackendContext) {
+  import("../avatarUpload")
+    .then((m) => m.syncLiveAvatarClubGrants(ctx))
+    .catch(() => {
+      /* best effort */
+    });
+}
+
 export async function claimLiveShellTeam(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const claimed = await unwrapCandid(actor.claim_shell_team(token), "Claim shell team");
