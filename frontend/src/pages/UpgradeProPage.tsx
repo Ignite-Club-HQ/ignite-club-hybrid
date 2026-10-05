@@ -32,6 +32,21 @@ import {
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveClubProfile,
+  getLiveClubSubscription,
+  getLiveTeam,
+  getLiveTeamSubscription,
+} from "@/live/features/club";
+import {
+  mapLiveClubSubscriptionToRow,
+  mapLiveTeamSubscriptionToRow,
+} from "@/live/features/proAccess";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 
 
 const PRO_FEATURES = [
@@ -78,27 +93,9 @@ const isSoccerClub = (sport: string | null | undefined): boolean => {
 };
 
 export default function UpgradeProPage() {
-  const navigate = useNavigate();
-  const useIcpLab = resolveAuthBackend() === "icp";
-  if (useIcpLab) {
-    return (
-      <div className="container max-w-lg mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-4 text-center">
-            <Crown className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Pro upgrades are unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Subscriptions, promo codes, trials, purchases, and billing changes remain external provider boundaries.
-            </p>
-            <Button variant="outline" onClick={() => navigate(-1)}>
-              <ArrowLeft className="mr-2 h-4 w-4" /> Go back
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+  // ICP-routed members use the same page: data reads resolve against the
+  // canisters, native purchases verify through the session-free ICP receipt
+  // function, and desktop web shows the "use the mobile app" dialog.
   return <SupabaseUpgradeProPage />;
 }
 
@@ -117,6 +114,9 @@ function SupabaseUpgradeProPage() {
   const [isAnnualProFootball, setIsAnnualProFootball] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const { showIfDesktop, dialog: desktopUpgradeDialog } = useDesktopUpgradeGate();
+  const isIcp = resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("membership");
+  const { isAppAdmin } = useIsAppAdmin();
+  const { purchaseProduct } = useInAppPurchase();
 
 
   // Handle payment success/cancelled from URL params
@@ -142,6 +142,20 @@ function SupabaseUpgradeProPage() {
   const { data: adminStatus, isLoading: loadingAdminCheck } = useQuery({
     queryKey: ["is-team-admin", user?.id, teamId],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => ({ isTeamAdmin: false, isClubAdmin: false }),
+          icp: async (ctx) => {
+            const teamRow = await getLiveTeam(ctx, teamId!);
+            const clubId = teamRow.length ? teamRow[0].club_id : null;
+            const grants = await getLiveMyRoleGrants(ctx);
+            const isClubAdmin = !!clubId && grants.some(g => g.role === "club_admin" && (g.club[0] ?? null) === clubId);
+            const isTeamAdmin = isClubAdmin || grants.some(g =>
+              (g.role === "team_admin" || g.role === "coach") && (g.team[0] ?? null) === teamId);
+            return { isTeamAdmin, isClubAdmin };
+          },
+        });
+      }
       // First get user roles
       const { data: roles } = await supabase
         .from("user_roles")
@@ -183,12 +197,36 @@ function SupabaseUpgradeProPage() {
     enabled: !!user && !!teamId,
   });
 
-  const isTeamAdmin = adminStatus?.isTeamAdmin ?? false;
-  const isClubAdminForTeam = adminStatus?.isClubAdmin ?? false;
+  const isTeamAdmin = (adminStatus?.isTeamAdmin ?? false) || isAppAdmin;
+  const isClubAdminForTeam = (adminStatus?.isClubAdmin ?? false) || isAppAdmin;
 
   const { data: team, isLoading: teamLoading, fetchStatus: teamFetchStatus } = useQuery({
-    queryKey: ["team", teamId],
+    queryKey: ["team", teamId, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveTeam(ctx, teamId!);
+            const t = row.length ? row[0] : null;
+            if (!t || t.deleted_at_ms.length) return null;
+            const profile = await getLiveClubProfile(ctx, t.club_id);
+            const p = profile.length ? profile[0] : null;
+            const clubSub = await getLiveClubSubscription(ctx, t.club_id);
+            return {
+              id: t.id,
+              name: t.name,
+              club_id: t.club_id,
+              clubs: {
+                id: t.club_id,
+                name: p?.name ?? "Club",
+                is_pro: !!(clubSub?.is_pro || clubSub?.admin_pro_override),
+                sport: p?.sport[0] ?? null,
+              },
+            };
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, clubs!club_id (id, name, is_pro, sport)")
@@ -201,8 +239,17 @@ function SupabaseUpgradeProPage() {
   });
 
   const { data: subscription } = useQuery({
-    queryKey: ["team-subscription", teamId],
+    queryKey: ["team-subscription", teamId, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveTeamSubscription(ctx, teamId!);
+            return sub ? { ...mapLiveTeamSubscriptionToRow(sub), expires_at: null } : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("*")
@@ -215,8 +262,17 @@ function SupabaseUpgradeProPage() {
 
   // Check for club-level subscription
   const { data: clubSubscription } = useQuery({
-    queryKey: ["club-subscription-for-team", team?.club_id],
+    queryKey: ["club-subscription-for-team", team?.club_id, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const sub = await getLiveClubSubscription(ctx, team!.club_id);
+            return sub ? mapLiveClubSubscriptionToRow(sub) : null;
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
@@ -242,6 +298,8 @@ function SupabaseUpgradeProPage() {
 
   const applyPromoMutation = useMutation({
     mutationFn: async ({ code, tier, isAnnual }: { code: string; tier: "pro" | "pro_football"; isAnnual: boolean }) => {
+      // NEEDS-CANISTER: promo codes live in Supabase only.
+      if (isIcp) throw new Error("Promo codes are not available yet for Internet Identity teams.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -323,6 +381,8 @@ function SupabaseUpgradeProPage() {
 
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: cancellation runs through a Supabase function.
+      if (isIcp) throw new Error("Subscription changes are not available yet for Internet Identity teams.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'team', entity_id: teamId },
       });
@@ -341,6 +401,8 @@ function SupabaseUpgradeProPage() {
 
   const downgradeMutation = useMutation({
     mutationFn: async (targetTier: "free" | "pro") => {
+      // NEEDS-CANISTER: plan downgrades write the Supabase team_subscriptions row.
+      if (isIcp) throw new Error("Plan changes are not available yet for Internet Identity teams.");
       if (targetTier === "free") {
         // Downgrade to free - remove all pro features and trial
         const { error } = await supabase
@@ -405,6 +467,12 @@ function SupabaseUpgradeProPage() {
       handleNativeIAP(tier);
       return;
     }
+    if (isIcp) {
+      // Card checkout runs through Supabase functions/Stripe, which Internet
+      // Identity sessions cannot call — point web users at the mobile app.
+      showIfDesktop();
+      return;
+    }
     const isAnnual = tier === "pro" ? isAnnualPro : isAnnualProFootball;
     setIsCheckingOut(true);
 
@@ -447,6 +515,17 @@ function SupabaseUpgradeProPage() {
 
     setIsCheckingOut(true);
     try {
+      if (isIcp) {
+        // Session-free path: verify-iap-receipt-icp mints an attestation and
+        // the entitlement is redeemed on the identity_access canister.
+        const ok = await purchaseProduct(productId, teamId!, "team");
+        if (ok) {
+          queryClient.invalidateQueries({ queryKey: ["team-subscription", teamId] });
+          invalidateProAccessQueries(queryClient);
+          toast({ title: "Upgrade Successful!", description: "Your team subscription is now active." });
+        }
+        return;
+      }
       const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
       const purchaseResult = await NativePurchases.purchaseProduct({
         productIdentifier: productId,
@@ -485,8 +564,11 @@ function SupabaseUpgradeProPage() {
 
   // Check if Stripe is configured
   const { data: hasStripeConfig } = useQuery({
-    queryKey: ["stripe-config-check", team?.club_id],
+    queryKey: ["stripe-config-check", team?.club_id, isIcp ? "icp" : "supabase"],
     queryFn: async () => {
+      // Card checkout runs through Supabase functions/Stripe, which Internet
+      // Identity sessions cannot call — native IAP is the ICP purchase path.
+      if (isIcp) return false;
       // Check club config
       const { data: clubConfig } = await supabase
         .from("club_stripe_configs")

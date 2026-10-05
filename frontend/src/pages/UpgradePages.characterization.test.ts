@@ -51,9 +51,13 @@ describe("Club and team upgrade page characterization", () => {
     expect(clubUpgradeSource).toContain("getLocalLabTeamList");
     expect(clubUpgradeSource).toContain("const useIcpLab = resolveLocalAuthMode(window.location.search, true)");
 
-    expect(teamUpgradeSource).toContain('const useIcpLab = resolveAuthBackend() === "icp"');
-    expect(teamUpgradeSource).toContain("Pro upgrades are unavailable in ICP lab mode");
+    // ICP-routed members use the same upgrade page: canister reads, native
+    // IAP via the session-free receipt function, desktop web gets the
+    // "use the mobile app" dialog instead of a hard ICP block.
+    expect(teamUpgradeSource).not.toContain("Pro upgrades are unavailable in ICP lab mode");
     expect(teamUpgradeSource).toContain("return <SupabaseUpgradeProPage />;");
+    expect(teamUpgradeSource).toContain('isFeatureRoutedToIcp("membership")');
+    expect(teamUpgradeSource).toContain("purchaseProduct(productId, teamId!");
   });
 
   it("keeps equivalent presentation states present in both variants", () => {
