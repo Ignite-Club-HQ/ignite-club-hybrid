@@ -103,6 +103,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     id: string;
     name: string;
     sport: [] | [string];
+    deleted_at_ms: [] | [bigint];
   }[];
 
   const options: LiveFilterOptions = { clubs: [], teams: [], miniLeagues: [], competitions: [] };
@@ -124,6 +125,9 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
 
   await Promise.all(
     clubsRaw.map(async (club) => {
+      // Soft-deleted clubs keep their canister records (and assets) — never
+      // surface them in the feed, the filter drawer, or the upload sheet.
+      if (club.deleted_at_ms.length > 0) return;
       options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
       const [assets, teams, miniLeagues, competitions] = await Promise.all([
         listLiveAssets(ctx, club.id).catch(() => []),
