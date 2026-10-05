@@ -54,6 +54,7 @@ persistent actor class Main(governorInit : Principal) {
   var blockedUsers : [Types.BlockedUser];
   var typingPings : [Types.TypingPing];
   var pinnedMessages : [Types.PinnedMessage];
+  var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
@@ -1470,6 +1471,80 @@ persistent actor class Main(governorInit : Principal) {
       case (_, _) {};
     };
     #Ok
+  };
+
+  // ===================== Open-group discovery =====================
+  func joinPolicyOf(conversation_id : Text) : { join_policy : Text; category : ?Text } {
+    switch (groupJoinPolicies.find(func(p) = p.conversation_id == conversation_id)) {
+      case (?p) { { join_policy = p.join_policy; category = p.category } };
+      case null { { join_policy = "invite_only"; category = null } };
+    }
+  };
+
+  func canManageGroupPolicy(caller : Principal, conversation_id : Text) : Bool {
+    if (isGroupAdmin(caller, conversation_id)) return true;
+    switch (getGroupMetadataFor(conversation_id)) {
+      case (?m) { switch (m.club_id) { case (?c) { hasRole(caller, "club_admin", ?c, null) }; case null { false } } };
+      case null { false };
+    }
+  };
+
+  public shared ({ caller }) func set_group_join_policy(conversation_id : Text, join_policy : Text, category : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (join_policy != "invite_only" and join_policy != "request_to_join" and join_policy != "open_to_club") return #Err("Invalid join policy");
+    switch (category) { case (?c) { if (not valid(c)) return #Err("Invalid category") }; case null {} };
+    if (findGroupMetadataIndex(conversation_id) == null) return #Err("Group metadata not found");
+    if (not canManageGroupPolicy(caller, conversation_id)) return #Err("Group admin required");
+    groupJoinPolicies := groupJoinPolicies.filter(func(p) = p.conversation_id != conversation_id);
+    groupJoinPolicies := groupJoinPolicies.concat([{ conversation_id; join_policy; category }]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_group_join_policy(conversation_id : Text) : async { join_policy : Text; category : ?Text } {
+    joinPolicyOf(conversation_id)
+  };
+
+  // Club-level groups (no team) a club member may discover: open_to_club or
+  // request_to_join, not deleted.
+  public query ({ caller }) func list_open_groups(club_id : Text) : async { #Ok : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }]; #Err : Text } {
+    if (not valid(club_id)) return #Err("Invalid club id");
+    if (not canBrowseClubGroups(caller, club_id)) return #Err("Club access forbidden");
+    var out : [{ summary : Types.GroupSummary; join_policy : Text; category : ?Text; requested : Bool }] = [];
+    for (m in groupMetadata.values()) {
+      if (m.club_id == ?club_id and m.team_id == null and not m.deleted) {
+        let p = joinPolicyOf(m.conversation_id);
+        if (p.join_policy != "invite_only") {
+          let requested = joinRequests.any(func(r) = r.conversation_id == m.conversation_id and r.user.equal(caller) and r.status == "pending");
+          out := out.concat([{ summary = toGroupSummary(caller, m); join_policy = p.join_policy; category = p.category; requested }]);
+        };
+      };
+    };
+    #Ok(out)
+  };
+
+  public shared ({ caller }) func join_open_group(conversation_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (joinPolicyOf(conversation_id).join_policy != "open_to_club") return #Err("Group is not open");
+    switch (getGroupMetadataFor(conversation_id), findConversationIndex(conversation_id)) {
+      case (?meta, ?ci) {
+        if (meta.deleted) return #Err("Group deleted");
+        let club = switch (meta.club_id) { case (?c) c; case null { return #Err("Not a club group") } };
+        if (not canBrowseClubGroups(caller, club)) return #Err("Club access forbidden");
+        if (not meta.members.any(func(p) = p.equal(caller))) {
+          if (meta.members.size() >= GROUP_MEMBER_LIMIT) return #Err("Group is full");
+          let updated : Types.GroupMetadata = { meta with members = meta.members.concat([caller]) };
+          groupMetadata := groupMetadata.filter(func(m) = m.conversation_id != conversation_id);
+          groupMetadata := groupMetadata.concat([updated]);
+          groupRoles := groupRoles.concat([{ conversation_id; user = caller; role = "member" }]);
+        };
+        let conv = conversations[ci];
+        if (not conv.participants.any(func(p) = p.equal(caller))) {
+          conversations := Array.tabulate<Types.Conversation>(conversations.size(), func(pos) = if (pos == ci) { { conv with participants = conv.participants.concat([caller]) } } else { conversations[pos] });
+        };
+        #Ok
+      };
+      case (_, _) { #Err("Group not found") };
+    }
   };
 
   public shared ({ caller }) func reject_join_request(conversation_id : Text, user : Principal) : async { #Ok; #Err : Text } {
