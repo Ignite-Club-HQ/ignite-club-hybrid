@@ -38,15 +38,15 @@ describe("resolveMediaSource", () => {
       canisterId: "aaaaa-aa",
       path: "/c1/photo.jpg",
       contentHash: "abc123",
-      url: "https://icp0.io/aaaaa-aa/c1/photo.jpg",
+      url: "https://aaaaa-aa.raw.icp0.io/c1/photo.jpg",
     });
   });
 });
 
 describe("blobAssetUrl", () => {
-  it("normalizes slashes and supports a custom gateway host", () => {
-    expect(blobAssetUrl("aaaaa-aa", "c1/photo.jpg", "https://icp-api.io/")).toBe(
-      "https://icp-api.io/aaaaa-aa/c1/photo.jpg",
+  it("uses the routable raw canister subdomain", () => {
+    expect(blobAssetUrl("aaaaa-aa", "c1/photo.jpg")).toBe(
+      "https://aaaaa-aa.raw.icp0.io/c1/photo.jpg",
     );
   });
 });
