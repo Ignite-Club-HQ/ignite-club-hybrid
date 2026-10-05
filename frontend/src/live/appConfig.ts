@@ -31,3 +31,25 @@ export async function readLiveAppConfig(key: string): Promise<string | null> {
     return null;
   }
 }
+
+/** app_config key holding the GIPHY API key used by the chat GIF picker.
+ * GIPHY keys are client-side keys by design (GIPHY's own SDKs ship them in
+ * apps), so replica visibility in canister state is acceptable — the key
+ * ends up in the browser either way (user decision 2026-10-05, reversing
+ * the earlier keep-it-server-side call). */
+export const GIPHY_API_KEY_CONFIG_KEY = "giphy_api_key";
+
+/** app_config / app_settings values may be JSON-encoded (setLiveAppSetting
+ * stringifies) or plain text (jsonb mirror). Decode either shape. */
+export function decodeStoredConfigText(raw: string | null): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    const text = typeof parsed === "string" ? parsed : parsed == null ? "" : String(parsed);
+    return text.trim() || null;
+  } catch {
+    return trimmed;
+  }
+}
