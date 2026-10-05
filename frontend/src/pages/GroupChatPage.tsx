@@ -1073,9 +1073,9 @@ export default function GroupChatPage() {
           if (error) throw error;
         },
         icp: async (ctx) => {
-          // Provisional mapping: group id doubles as the conversation id (same
-          // convention as the read path). Attachments map onto the canister's
-          // typed attachment; reply threading stays Supabase-only.
+          // Group id doubles as the conversation id (same convention as the
+          // read path). Attachments map onto the canister's typed attachment;
+          // replies persist via the canister's reply_to_id.
           const attachment = image_url
             ? { kind: "image", refId: image_url, url: image_url }
             : (() => {
@@ -1085,7 +1085,7 @@ export default function GroupChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment);
+          await sendLiveMessage(ctx, groupId, text, `${groupId}:${user.id}:${Date.now()}`, attachment, reply_to_id);
           try {
             await recordLiveMessageSent(ctx, groupId, user.id);
           } catch {
