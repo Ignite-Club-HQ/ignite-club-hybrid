@@ -758,6 +758,16 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     placeholderData: (prev) => prev,
   });
 
+  // Tombstoned teams (deleted via team or club delete) must never render,
+  // no matter which cache produced the row.
+  const items = useMemo(() => filterDeletedTeams(rawItems), [rawItems]);
+
+  // A failed refetch would otherwise keep a stale localStorage snapshot on
+  // screen forever — drop it so the next mount re-fetches instead.
+  useEffect(() => {
+    if (isError) clearMyTeamsCarouselCache(user?.id);
+  }, [isError, user?.id]);
+
   // Fetch next events
   const teamIds = items.filter(i => i.type === "team").map(i => i.id);
   const leagueItemIds = items.filter(i => i.type === "league").map(i => i.id);
