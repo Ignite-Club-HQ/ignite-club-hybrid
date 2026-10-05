@@ -377,6 +377,11 @@ type Main =
        Err: text;
        Ok: vec PinnedMessage;
      }) query;
+   list_reactions: (conversation_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Reaction;
+     }) query;
    list_read_receipts: (conversation_id: text) ->
     (variant {
        Err: text;

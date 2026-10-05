@@ -531,6 +531,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(PinnedMessage), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_reactions' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Reaction), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_read_receipts' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Receipt), 'Err' : IDL.Text })],

@@ -1,5 +1,11 @@
 # Roadmap
 
+## Team chat reactions don't persist (ICP mode)
+- [x] Root cause: canister `list_messages_page` returns no reactions, so the ICP fetch branch hardcoded `reactions: []` — every refetch wiped them (they only "appeared" via the optimistic update).
+- [x] Canister: new `list_reactions(conversation_id)` query (full user+emoji rows, caller access-checked); `toggle_reaction` now verifies the caller can read the message's conversation (was unauthenticated-by-conversation).
+- [x] Frontend: `listLiveReactions` in live/features/messaging.ts; TeamChatPage ICP branch fetches and maps reactions (try/catch tolerates pre-redeploy canisters). did + both binding sets regenerated, drift check passes, typecheck clean.
+- [ ] User: re-run "Deploy ICP mainnet" workflow — reactions persist only after `list_reactions` is live.
+
 ## Club creation / "Club not found" (ICP mode)
 - [x] Verified user's club "Dingo" (ee23c110-6332-4913-a54e-df704956dcc3) exists on club_domain canister — creation succeeded
 - [x] "Club not found" dead-end now has a "Back to Clubs & Teams" link (ClubDetailPage)
@@ -9,14 +15,9 @@
 - [ ] Stale activeClubTheme (deleted Test club id) is the likely cause of the user's "Club not found" — consider auto-clearing the filter when the club can't be loaded
 - [ ] ICP-mode Supabase leaks (PostgREST 400s, principal-as-UUID): InviteAutoAccept, profileCache batch, club-backend enforcement
 
-## Team chat send fails in ICP mode ("Failed to send message")
-- [x] Root-caused: live canisters predate the chat-provisioning code. Probed mainnet: messaging_domain has no `ensure_conversation`, club_domain has no `ensure_club_conversations` (also missing: `get_pending_invite`, `accept_team_invite_link`). Frontend sends with conversation id = team id, old canister has no such conversation -> `send_message` returns "Conversation access forbidden" -> generic toast.
-- [x] Verified no code fix needed: frontend already self-heals (ensure-before-send), deploy script wires club_domain<->messaging_domain both ways, isMember passes for the club creator, `icp deploy` upgrades in place (Dingo club + messages survive).
-- [ ] User: re-run "Deploy ICP mainnet" workflow — ships the chat provisioning (fixes this), plus invites/media-tagging/news methods.
-
 ## Pending user actions (from earlier work)
 - Deploy `send-email` edge function (paste /mnt/documents/send-email-supabase-function.ts, Verify JWT OFF, RESEND_API_KEY)
-- Re-run "Deploy ICP mainnet" workflow (chat provisioning, invites, media tagging, news publishing, app settings) — CONFIRMED the cause of the team-chat send failure; nothing else will fix it
+- Re-run "Deploy ICP mainnet" workflow — now also ships reaction persistence (`list_reactions`), on top of invites/media-tagging/news/app-settings
 
 ## Chat image upload failure (ICP) — diagnosis
 - Canister path fully verified end-to-end against mainnet (vetkey fetch, IBE encrypt, begin/put/finalize on media_blob_store, register_pii, club grant) with a fresh authenticated identity — all pass.

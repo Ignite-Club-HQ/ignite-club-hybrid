@@ -641,6 +641,26 @@ export async function toggleLiveReaction(ctx: FeatureBackendContext, messageId: 
   return unwrapCandid(actor.toggle_reaction(messageId, emoji), "Toggle reaction");
 }
 
+export interface LiveReaction {
+  message_id: string;
+  user: Principal;
+  emoji: string;
+}
+
+/**
+ * Full reaction rows for a conversation (who reacted with which emoji), so
+ * chat pages can restore reactions after a refetch. Requires the canister
+ * version that ships `list_reactions`; callers should tolerate the method
+ * being absent on an older deploy.
+ */
+export async function listLiveReactions(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+): Promise<LiveReaction[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_reactions(conversationId), "List reactions");
+}
+
 // ---------------------------------------------------------------------------
 // Messages since / unread-by-club / recent conversations.
 // ---------------------------------------------------------------------------

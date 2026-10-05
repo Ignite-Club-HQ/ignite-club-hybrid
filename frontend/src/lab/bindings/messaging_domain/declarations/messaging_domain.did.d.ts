@@ -320,6 +320,11 @@ export interface Main {
     { 'Ok' : Array<PinnedMessage> } |
       { 'Err' : string }
   >,
+  'list_reactions' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Reaction> } |
+      { 'Err' : string }
+  >,
   'list_read_receipts' : ActorMethod<
     [string],
     { 'Ok' : Array<Receipt> } |
