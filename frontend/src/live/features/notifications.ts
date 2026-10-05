@@ -717,3 +717,42 @@ export async function listLivePreferencesByClub(
     "List preferences by club",
   );
 }
+
+// ---------------------------------------------------------------------------
+// Device push tokens (register_device_token / unregister_device_token).
+//
+// Registration is caller-scoped canister-side: the canister keys each token
+// by the IC caller's principal text, never a browser-supplied user id, so a
+// device can only ever be registered to its actual owner. The delivery
+// worker (supabase/functions/icp-push-deliver) reads tokens through the
+// worker-gated list_device_tokens query and prunes dead ones through
+// remove_device_tokens — both intentionally NOT exposed here.
+// ---------------------------------------------------------------------------
+
+export interface LiveDeviceTokenInput {
+  platform: string;
+  token: string;
+  p256dh?: string | null;
+  auth?: string | null;
+}
+
+export async function registerLiveDeviceToken(
+  ctx: FeatureBackendContext,
+  input: LiveDeviceTokenInput,
+) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.register_device_token(
+      input.platform,
+      input.token,
+      input.p256dh ? [input.p256dh] : [],
+      input.auth ? [input.auth] : [],
+    ),
+    "Register device token",
+  );
+}
+
+export async function unregisterLiveDeviceToken(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveNotificationQueue(ctx.target, ctx.identity);
+  return unwrapCandid(actor.unregister_device_token(token), "Unregister device token");
+}

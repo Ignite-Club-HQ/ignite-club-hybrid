@@ -13,6 +13,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { isNotificationPrefetchEnabled } from './notificationPrefetchFlag';
 import { prefetchChatChunkForUrl } from './chatChunkPrefetch';
 import { resolveAuthBackend } from '@/live/authBackendMode';
+import { getCurrentInternetIdentity } from '@/live/internetIdentityAuth';
+import { getActiveIcpTarget } from '@/live/targetRegistry';
+import {
+  registerLiveDeviceToken,
+  unregisterLiveDeviceToken,
+} from '@/live/features/notifications';
 
 // Lazy load Capacitor core to prevent crashes if not available
 let Capacitor: any = null;
@@ -183,12 +189,29 @@ async function getAppVersion(): Promise<{ version: string; build: string } | nul
   }
 }
 
-// Store FCM token in database
+// Store FCM token in the active backend. ICP mode registers on the
+// notification_queue canister (caller-scoped, keyed by the II principal);
+// Supabase mode upserts into the fcm_tokens table.
 async function saveFCMToken(userId: string, token: string): Promise<boolean> {
   console.log('[NativePush] Saving FCM token for user:', userId);
-  
+
   try {
     const platform = getPlatform();
+
+    if (resolveAuthBackend() === 'icp') {
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) {
+        console.warn('[NativePush] No Internet Identity session — cannot register device token');
+        return false;
+      }
+      await registerLiveDeviceToken(
+        { identity, target: getActiveIcpTarget() },
+        { platform, token },
+      );
+      console.log('[NativePush] Token registered on notification canister');
+      return true;
+    }
+
     const versionInfo = await getAppVersion();
     
     // IMPORTANT: Use security definer RPC to remove this token from other users.
@@ -226,9 +249,15 @@ async function saveFCMToken(userId: string, token: string): Promise<boolean> {
   }
 }
 
-// Remove FCM token from database
+// Remove FCM token from the active backend
 async function removeFCMToken(userId: string, token: string): Promise<void> {
   try {
+    if (resolveAuthBackend() === 'icp') {
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return;
+      await unregisterLiveDeviceToken({ identity, target: getActiveIcpTarget() }, token);
+      return;
+    }
     await supabase
       .from('fcm_tokens' as any)
       .delete()
@@ -316,16 +345,10 @@ export async function initializeNativePush(userId: string): Promise<{ success: b
     return { success: false, error: 'Not a native platform' };
   }
 
-  // Push is Supabase-only by design: `saveFCMToken` upserts into the
-  // Supabase `fcm_tokens` table via an RLS policy keyed on the Supabase
-  // auth uid, and delivery is driven by Supabase Edge Functions. Internet
-  // Identity accounts have no Supabase session/uid, so explicitly skip
-  // registration rather than letting the upsert fail against RLS.
-  if (resolveAuthBackend() === 'icp') {
-    console.log('[NativePush] Internet Identity session — push registration is Supabase-only, skipping');
-    return { success: false, error: 'Push notifications are not available for Internet Identity accounts yet' };
-  }
-
+  // Both backends are supported: Supabase mode registers the token in the
+  // fcm_tokens table; ICP mode registers it on the notification_queue
+  // canister (see saveFCMToken). Delivery for ICP mode runs through the
+  // icp-push-deliver edge function worker.
   console.log('[NativePush] Initializing for user:', userId);
 
   try {

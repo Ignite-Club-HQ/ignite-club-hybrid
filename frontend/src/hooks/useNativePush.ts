@@ -17,6 +17,10 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { queueChatInvalidation } from '@/lib/chatInvalidationQueue';
 import { notificationKeys } from '@/lab/notificationQueryKeys';
+import { resolveAuthBackend } from '@/live/authBackendMode';
+import { getCurrentInternetIdentity } from '@/live/internetIdentityAuth';
+import { getActiveIcpTarget } from '@/live/targetRegistry';
+import { registerLiveDeviceToken } from '@/live/features/notifications';
 
 import { mark as coldMark } from '@/lib/coldStartMarks';
 import { useNavigate } from 'react-router-dom';
@@ -182,17 +186,29 @@ export function useNativePush(userId: string | undefined, options: UseNativePush
 
 
 
-  // Save refreshed token to database
-  // icp-guard: allow push delivery stays Supabase-only by design
+  // Save refreshed token to the active backend (Supabase fcm_tokens table,
+  // or the notification_queue canister in ICP mode).
   const handleTokenRefresh = useCallback(async (token: string) => {
     if (!userId) return;
-    
+
     console.log('[useNativePush] Token refreshed, saving...');
     try {
       const mod = await loadNativePushModule();
       if (!mod) return;
-      
+
       const platform = mod.getPlatform();
+
+      if (resolveAuthBackend() === 'icp') {
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        await registerLiveDeviceToken(
+          { identity, target: getActiveIcpTarget() },
+          { platform, token },
+        );
+        console.log('[useNativePush] Refreshed token registered on notification canister');
+        return;
+      }
+
       // Remove this token from any other users first using security definer function
       // (RLS prevents deleting other users' rows directly)
       await supabase.rpc('cleanup_fcm_token_for_user', {
