@@ -107,7 +107,8 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription } from "@/live/features/club";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
+import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
   softDeleteLiveClub,
@@ -1041,7 +1042,23 @@ export default function ClubDetailPage() {
       try {
         await withFeatureBackend("membership", {
           supabase: () => softDeleteLiveClub({} as any, id!, true), // unreachable: gated above
-          icp: (ctx) => softDeleteLiveClub(ctx, id!, true),
+          icp: async (ctx) => {
+            await softDeleteLiveClub(ctx, id!, true);
+            // Cascade explicitly: older deployed canisters may predate the
+            // canister-side team cascade, so soft-delete each team ourselves
+            // (best-effort per team) and tombstone them locally so no stale
+            // cache can render them again.
+            try {
+              const teams = (await listLiveTeams(ctx, id!)) as unknown as { id: string; deleted_at_ms?: unknown }[];
+              for (const team of teams || []) {
+                if (!team?.id || Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length) continue;
+                try {
+                  await softDeleteLiveTeam(ctx, team.id);
+                } catch { /* already gone or not permitted — tombstone anyway */ }
+                markTeamDeleted(team.id);
+              }
+            } catch { /* listing failed — club delete still committed */ }
+          },
         });
         setShowDeleteDialog(false);
         clearClubSetupLocalState(id!);
