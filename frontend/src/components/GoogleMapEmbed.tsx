@@ -15,7 +15,7 @@ export function GoogleMapEmbed({
   // unrelated custom domains. Keep the location usable there without showing
   // Google's "not authorized" error inside the iframe.
   const isAuthorizedHost = typeof window !== "undefined" &&
-    /(^|\.)lovable(app|project)\.com$/.test(window.location.hostname);
+    /(^|\.)lovable(?:\.app|project\.com)$/.test(window.location.hostname);
   if (!place) {
     return null;
   }

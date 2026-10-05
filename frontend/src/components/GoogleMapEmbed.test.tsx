@@ -1,21 +1,13 @@
+// @vitest-environment-options {"url":"https://ignite-canister-connect.lovable.app/"}
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GoogleMapEmbed } from "./GoogleMapEmbed";
 
 describe("GoogleMapEmbed", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    window.history.replaceState({}, "", "http://localhost:3000/");
-  });
+  afterEach(() => vi.unstubAllEnvs());
 
   it("embeds the event address using the public browser key", () => {
     vi.stubEnv("IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY", "public-test-key");
-    // jsdom permits reconfiguring its URL through the test environment hook.
-    // For the embed assertion, use the project's supported Lovable hostname.
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { hostname: "ignite-canister-connect.lovable.app" },
-    });
     render(<GoogleMapEmbed address="35 Driffield, Adelaide SA" />);
     const frame = screen.getByTitle("Event location map");
     expect(frame).toHaveAttribute(
