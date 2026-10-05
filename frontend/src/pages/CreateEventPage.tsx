@@ -53,6 +53,7 @@ import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveEvents } from "@/live/features/events";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
@@ -903,6 +904,42 @@ function SupabaseCreateEventPage() {
     const parsedDateTime = new Date(eventDateTime);
     const eventDateStr = parsedDateTime.toISOString().split("T")[0];
 
+    // ICP mode: events live on the events canister (every repeat is its own
+    // event there, so there are no separate recurring parents to check).
+    const icpRows = await withFeatureBackend("events", {
+      supabase: async () => null,
+      icp: async (ctx) => {
+        const raw: any = await listLiveEvents(ctx, clubId, null);
+        const list: any[] = Array.isArray(raw) ? raw : raw?.Ok ?? [];
+        return list
+          .filter((e) => !e.cancelled && !e.deleted)
+          .map((e) => {
+            const date = new Date(Number(e.starts_at_ms));
+            const teamIdValue: string | null = e.team_id?.[0] ?? null;
+            return {
+              id: e.id,
+              title: e.title,
+              event_date: date.toISOString(),
+              address: e.address?.[0] ?? e.location?.[0] ?? null,
+              team_id: teamIdValue,
+              teams: teamIdValue ? { name: teams?.find((t: any) => t.id === teamIdValue)?.name ?? "" } : null,
+            };
+          })
+          .filter((e) => e.event_date.split("T")[0] === eventDateStr);
+      },
+    }).catch(() => undefined);
+    if (icpRows === undefined) return { status: "error" };
+    if (icpRows !== null) {
+      const result = evaluateTrainingConflicts({
+        targetDateTime: parsedDateTime,
+        address,
+        directDateQuery: { data: icpRows, error: null } as any,
+        recurringParentQuery: { data: [], error: null } as any,
+      });
+      if (result.status === "conflict") setConflictingEvents(result.conflicts);
+      return result;
+    }
+
     // Query all events for the same club on the same date (includes recurring child events)
     const directDateQuery = await supabase
       .from("events")
@@ -937,7 +974,7 @@ function SupabaseCreateEventPage() {
 
     if (result.status === "conflict") setConflictingEvents(result.conflicts);
     return result;
-  }, [type, clubId, eventDateTime, address]);
+  }, [type, clubId, eventDateTime, address, teams]);
 
 
   const handleSubmit = async (skipConflictCheck = false) => {
@@ -971,7 +1008,9 @@ function SupabaseCreateEventPage() {
     // Guard against a stale team selection: if the team was soft-deleted
     // (possibly from another device) the event — and its auto "event created"
     // system message — would land in a dead chat thread.
-    if (teamId) {
+    // ICP mode has no Supabase team rows; the club/team scope guard below
+    // checks the team against the canister-loaded team list instead.
+    if (teamId && !(await withFeatureBackend("events", { supabase: async () => false, icp: async () => true }))) {
       const { data: teamRow, error: teamCheckError } = await supabase
         .from("teams")
         .select("id, deleted_at")
