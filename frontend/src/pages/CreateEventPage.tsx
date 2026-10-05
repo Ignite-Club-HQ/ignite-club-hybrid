@@ -503,33 +503,50 @@ function SupabaseCreateEventPage() {
 
   const { data: isClubAdminForSelectedClub } = useQuery({
     queryKey: ["is-club-admin-for-event", clubId, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("club_id", clubId)
-        .eq("role", "club_admin")
-        .maybeSingle();
-      return !!data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("id")
+            .eq("user_id", user!.id)
+            .eq("club_id", clubId)
+            .eq("role", "club_admin")
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(
+            (g) =>
+              (g.role === "club_admin" || g.role === "app_admin") &&
+              (g.club?.[0] ?? null) === clubId,
+          );
+        },
+      }),
     enabled: !!clubId && !!user,
   });
 
   // Check if club has Pro Football access - use placeholderData to prevent flash
   const { data: hasProFootball, isLoading: isLoadingProFootball } = useQuery({
     queryKey: ["club-pro-football", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro_football, admin_pro_football_override, expires_at")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      if (!data) return false;
-      const hasAccess = data.is_pro_football || data.admin_pro_football_override;
-      const notExpired = !data.expires_at || new Date(data.expires_at) > new Date();
-      return hasAccess && notExpired;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro_football, admin_pro_football_override, expires_at")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (!data) return false;
+          const hasAccess = data.is_pro_football || data.admin_pro_football_override;
+          const notExpired = !data.expires_at || new Date(data.expires_at) > new Date();
+          return hasAccess && notExpired;
+        },
+        // Canister Pro flags: team grant -> club grant -> caller IAP, same as
+        // the event detail and attendance pages.
+        icp: async (ctx) => resolveLiveProFootballAccess(ctx, { teamId: null, clubId }),
+      }),
     enabled: !!clubId,
     placeholderData: false, // Prevent undefined state causing delayed render
   });
