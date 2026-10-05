@@ -385,6 +385,17 @@ export function IcpMediaFeedPage() {
     });
   }, [feedQuery.data?.posts, selectedClubId, selectedTeamId]);
 
+  // Read comments from the freshest feed copy, not the snapshot taken when
+  // the sheet opened, and keep just-sent comments until the canister has them.
+  const activeComments = useMemo<LiveCommentView[]>(() => {
+    if (!commentPost) return [];
+    const live = feedQuery.data?.posts.find((p) => p.id === commentPost.id) ?? commentPost;
+    const pending = (pendingComments[commentPost.id] ?? []).filter(
+      (pc) => !live.comments.some((c) => c.text === pc.text),
+    );
+    return [...live.comments, ...pending];
+  }, [commentPost, feedQuery.data?.posts, pendingComments]);
+
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
   const hasActiveFilters = selectedClubId !== "all" || selectedTeamId !== "all";
