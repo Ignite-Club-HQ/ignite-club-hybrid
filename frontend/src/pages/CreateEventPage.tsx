@@ -53,6 +53,7 @@ import { DutyMemberSelect } from "@/components/DutyMemberSelect";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
@@ -409,7 +410,7 @@ function SupabaseCreateEventPage() {
   };
 
   const { data: clubs } = useQuery({
-    queryKey: ["user-admin-clubs", user?.id],
+    queryKey: ["user-admin-clubs", user?.id, resolveAuthBackend()],
     queryFn: async () =>
       withFeatureBackend("membership", {
         supabase: async () => {
@@ -461,7 +462,8 @@ function SupabaseCreateEventPage() {
           );
           // Deleted clubs return no profile on the canister — they drop out here.
           return profiles
-            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map((rows) => rows?.[0])
+            .filter((p): p is NonNullable<typeof p> => !!p && !p.deleted_at_ms.length)
             .map((p) => ({
               id: p.id,
               name: p.name,
@@ -474,19 +476,21 @@ function SupabaseCreateEventPage() {
   });
 
   // Auto-select filtered club when active
-  const filteredClubs = activeClubFilter
+  const validActiveClubFilter = activeClubFilter && clubs?.some((c) => c.id === activeClubFilter)
+    ? activeClubFilter : null;
+  const filteredClubs = validActiveClubFilter
     ? clubs?.filter(c => c.id === activeClubFilter)
     : clubs;
 
   // Auto-select club: prefer activeClubFilter, fallback to single club
   useEffect(() => {
     if (clubId) return; // Already selected
-    if (activeClubFilter && clubs?.some(c => c.id === activeClubFilter)) {
-      setClubId(activeClubFilter);
+    if (validActiveClubFilter) {
+      setClubId(validActiveClubFilter);
     } else if (filteredClubs?.length === 1) {
       setClubId(filteredClubs[0].id);
     }
-  }, [activeClubFilter, clubs, filteredClubs, clubId]);
+  }, [validActiveClubFilter, filteredClubs, clubId]);
 
   // Apply club guest defaults when club is selected
   useEffect(() => {
@@ -628,13 +632,16 @@ function SupabaseCreateEventPage() {
             return teamsInClub;
           }
 
-          // If no team memberships, return empty (club admin without team membership can't create team events)
+           // If no team memberships, return empty (club admin without team membership can't create team events)
           return [];
         },
         icp: async (ctx) => {
           const allTeams = await listLiveTeams(ctx, clubId);
           const liveTeams = allTeams.filter((t) => !t.deleted_at_ms?.[0]);
-          if (userTeamIds && userTeamIds.length > 0) {
+           if (isClubAdminForSelectedClub) {
+             return liveTeams.map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
+           }
+           if (userTeamIds && userTeamIds.length > 0) {
             return liveTeams
               .filter((t) => userTeamIds.includes(t.id))
               .map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
@@ -1416,7 +1423,7 @@ function SupabaseCreateEventPage() {
                   placeholder="Select club"
                   label="Club"
                   required
-                  disabled={!!activeClubFilter}
+                  disabled={!!validActiveClubFilter}
                 />
                 )}
 

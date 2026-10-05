@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { createLocalCompetition } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { createLiveCompetition } from "@/live/features/competitions";
+import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 const PERSONAL_ORGANISER = "__personal__";
@@ -167,9 +169,17 @@ function SupabaseCreateCompetitionPage() {
   const [saving, setSaving] = useState(false);
 
   const { data: organisers = [], isLoading: loadingClubs } = useQuery({
-    queryKey: ["my-organiser-clubs", user?.id],
+    queryKey: ["my-organiser-clubs", user?.id, isIcp],
     enabled: !!user,
     queryFn: async () => {
+      if (isIcp) return withFeatureBackend("membership", {
+        supabase: async () => [] as { id: string; name: string }[],
+        icp: async (ctx) => {
+          const ids = [...new Set((await getLiveMyRoleGrants(ctx)).filter((g) => ["club_admin", "association_admin", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
+          const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
+          return profiles.flatMap((rows) => rows.filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
+        },
+      });
       const { data } = await supabase
         .from("user_roles")
         .select("club_id, role, clubs:club_id(id, name, kind)")

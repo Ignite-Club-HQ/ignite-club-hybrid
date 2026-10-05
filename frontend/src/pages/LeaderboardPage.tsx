@@ -17,6 +17,8 @@ import { getLocalLabClubList, getLocalLabLeaderboard, getLocalLabTeamList } from
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveLeaderboard, subjectForUser } from "@/live/features/points";
+import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 
 type WindowKey = "week" | "month" | "all";
 type Scope = "club" | "team" | "teams";
@@ -72,7 +74,14 @@ export default function LeaderboardPage() {
     queryFn: async () => {
       if (!user?.id) return [];
       if (useIcpLab) return getLocalLabClubList().map(({ id, name }) => ({ id, name }));
-      if (isIcpPoints) return []; // NEEDS-CANISTER: no cross-club membership lookup on the canister
+      if (isIcpPoints) return withFeatureBackend("membership", {
+        supabase: async () => [],
+        icp: async (ctx) => {
+          const ids = [...new Set((await getLiveMyRoleGrants(ctx)).map((g) => g.club[0]).filter((id): id is string => !!id))];
+          const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
+          return profiles.flatMap((rows) => rows.filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
+        },
+      });
       const { data, error } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, deleted_at)")
@@ -110,7 +119,10 @@ export default function LeaderboardPage() {
           .filter((team) => team.club_id === clubId)
           .map(({ id, name }) => ({ id, name }));
       }
-      if (isIcpPoints) return []; // NEEDS-CANISTER: team leaderboards have no canister equivalent
+      if (isIcpPoints) return withFeatureBackend("membership", {
+        supabase: async () => [],
+        icp: async (ctx) => (await listLiveTeams(ctx, clubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name })),
+      });
       const { data, error } = await supabase.rpc("list_leaderboard_teams", { _club_id: clubId });
       if (error) throw error;
       return (data ?? []) as { id: string; name: string }[];
