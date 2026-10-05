@@ -52,6 +52,9 @@ export const useGroupReactionToggle = ({
       // toggle_reaction implements add/swap/remove in one call. Refresh the
       // thread from the canister after toggling.
       if (isFeatureRoutedToIcp("messaging")) {
+        if (messageId.startsWith("temp-") || messageId.startsWith("queued-")) {
+          throw new Error("This message is still sending — try again in a moment.");
+        }
         await withFeatureBackend("messaging", {
           supabase: async () => {},
           icp: async (ctx) => { await toggleLiveReaction(ctx, messageId, normalizedReactionType); },
