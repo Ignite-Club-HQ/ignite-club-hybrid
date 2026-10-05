@@ -197,6 +197,12 @@ export default function CreateClubPage() {
             description.trim() || "",
             sport || null,
           );
+          try {
+            const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+            await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });
+          } catch (err) {
+            console.warn("[CreateClub] default chats failed", err);
+          }
           return profile.id;
         },
         supabase: async () => {
