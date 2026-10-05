@@ -594,7 +594,7 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   }, []);
 
   // Fetch teams & leagues
-  const { data: items = snapshot?.items ?? [], isLoading, isFetching } = useQuery({
+  const { data: rawItems = snapshot?.items ?? [], isLoading, isFetching, isError } = useQuery({
     queryKey: ["my-teams-premium-v2", user?.id, activeClubFilter],
     retry: 3,
     initialData: snapshot?.items,
