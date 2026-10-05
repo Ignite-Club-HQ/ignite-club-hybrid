@@ -1463,7 +1463,7 @@ persistent actor class Main(governorInit : Principal) {
     };
     let now = nowMs();
     let invite : Types.PendingInvite = {
-      id = "pinv-" # club_id # "-" # Nat.toText(pendingInvites.size() + 1) # "-" # Nat64.toText(now);
+      id = "pinv-" # (await randomHex(16));
       kind; club_id; team_id; child_id; email; role;
       invited_by = caller;
       created_at_ms = now;
@@ -1479,6 +1479,20 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+  };
+
+  // Invite preview for the join page: the invite id itself is the bearer
+  // token (random 128-bit ids, sent only to the invited email address /
+  // share channel), so this is intentionally anonymous — the same trust
+  // model as accept_pending_invite, which redeems by id alone.
+  public query func get_pending_invite(id : Text) : async { #Ok : Types.PendingInvite; #Err : Text } {
+    switch (pendingInvites.find(func(i) = i.id == id)) {
+      case null { #Err("Invite not found") };
+      case (?invite) {
+        if (invite.status == "revoked") return #Err("Invite revoked");
+        #Ok(invite)
+      };
+    }
   };
 
   public shared ({ caller }) func resend_pending_invite(id : Text) : async { #Ok : { invite : Types.PendingInvite; payload : Types.InvitePayload }; #Err : Text } {
