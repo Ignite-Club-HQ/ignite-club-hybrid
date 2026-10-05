@@ -693,6 +693,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    is_app_admin(user: Principal): Promise<boolean>;
     is_member_removed(club: string, user: Principal): Promise<boolean>;
     link_guardian(child_id: string, user: Principal): Promise<{
         __kind__: "Ok";
@@ -722,6 +723,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_club_admins(club_id: string): Promise<Array<Principal>>;
     list_club_join_requests(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<ClubJoinRequest>;
@@ -2163,6 +2165,10 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.invite_stats(arg0, arg1, arg2);
         return from_candid_variant_n126(result);
     }
+    async is_app_admin(arg0: Principal): Promise<boolean> {
+        const result = await this.actor.is_app_admin(arg0);
+        return result;
+    }
     async is_member_removed(arg0: string, arg1: Principal): Promise<boolean> {
         const result = await this.actor.is_member_removed(arg0, arg1);
         return result;
@@ -2206,6 +2212,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.list_children();
         return from_candid_variant_n130(result);
+    }
+    async list_club_admins(arg0: string): Promise<Array<Principal>> {
+        const result = await this.actor.list_club_admins(arg0);
+        return result;
     }
     async list_club_join_requests(arg0: string): Promise<{
         __kind__: "Ok";

@@ -774,6 +774,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : InviteStats, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'is_app_admin' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
     'is_member_removed' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Bool],
@@ -797,6 +798,11 @@ export const idlFactory = ({ IDL }) => {
     'list_children' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_club_admins' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Principal)],
         ['query'],
       ),
     'list_club_join_requests' : IDL.Func(

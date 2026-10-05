@@ -207,6 +207,16 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'ensure_broadcast_conversation' : ActorMethod<
+    [],
+    { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
+  'ensure_club_admin_conversation' : ActorMethod<
+    [string],
+    { 'Ok' : Conversation } |
+      { 'Err' : string }
+  >,
   'ensure_conversation' : ActorMethod<
     [string, [] | [string], Array<Principal>],
     { 'Ok' : Conversation } |

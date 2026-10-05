@@ -361,6 +361,20 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    ensure_broadcast_conversation(): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    ensure_club_admin_conversation(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     ensure_conversation(club_id: string, team_id: string | null, participants: Array<Principal>): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
@@ -1132,6 +1146,26 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.enable_ai_catch_up_for_all_members(arg0);
         return from_candid_variant_n16(result);
+    }
+    async ensure_broadcast_conversation(): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ensure_broadcast_conversation();
+        return from_candid_variant_n13(result);
+    }
+    async ensure_club_admin_conversation(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Conversation;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.ensure_club_admin_conversation(arg0);
+        return from_candid_variant_n13(result);
     }
     async ensure_conversation(arg0: string, arg1: string | null, arg2: Array<Principal>): Promise<{
         __kind__: "Ok";

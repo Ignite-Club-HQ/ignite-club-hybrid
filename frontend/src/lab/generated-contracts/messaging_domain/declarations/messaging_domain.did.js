@@ -402,6 +402,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'ensure_broadcast_conversation' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
+    'ensure_club_admin_conversation' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
+        [],
+      ),
     'ensure_conversation' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Vec(IDL.Principal)],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
