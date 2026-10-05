@@ -1171,9 +1171,11 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
   // write effect already refuses to overwrite the cache with an empty list,
   // so this only ever shows genuinely stale-but-real data during the blip.
   // Snapshot rows are scoped to the same club filter key, but re-filter anyway.
-  const snapshotItems = activeClubFilter
-    ? (snapshot?.items ?? []).filter(i => i.club_id === activeClubFilter)
-    : (snapshot?.items ?? []);
+  const snapshotItems = filterDeletedTeams(
+    activeClubFilter
+      ? (snapshot?.items ?? []).filter(i => i.club_id === activeClubFilter)
+      : (snapshot?.items ?? []),
+  );
   const displayItems = scopedItems.length > 0 ? scopedItems : snapshotItems;
 
   // Empty state: onboarding with clear paths
