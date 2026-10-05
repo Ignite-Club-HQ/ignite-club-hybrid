@@ -106,6 +106,8 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
+import { getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 const MESSAGES_PER_PAGE = 30;
 
