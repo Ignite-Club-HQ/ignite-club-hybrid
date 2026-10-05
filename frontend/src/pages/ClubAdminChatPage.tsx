@@ -284,7 +284,7 @@ function SupabaseClubAdminChatPage() {
       if (resolveAuthBackend() === "icp") {
         const icpClubId = conversation?.club_id;
         if (!icpClubId) return null;
-        return await withFeatureBackend("clubs", {
+        return await withFeatureBackend("membership", {
           supabase: async () => null,
           icp: async (ctx) => {
             const profile: any = await getLiveClubProfile(ctx, icpClubId);
