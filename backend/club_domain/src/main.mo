@@ -282,6 +282,23 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(res)
   };
 
+  // ---- Batched reads (one round trip per page instead of one per id) ----
+  // Same visibility as the single-id queries above; capped to keep replies small.
+  public query func get_club_profiles(ids : [Text]) : async { #Ok : [Types.ClubProfile]; #Err : Text } {
+    if (ids.size() > 200) return #Err("Too many ids");
+    #Ok(profiles.filter(func(p) = ids.any(func(i) = i == p.id)))
+  };
+
+  public query func get_teams(ids : [Text]) : async { #Ok : [Types.ClubTeam]; #Err : Text } {
+    if (ids.size() > 500) return #Err("Too many ids");
+    #Ok(teams.filter(func(t) = ids.any(func(i) = i == t.id)))
+  };
+
+  public query func list_teams_multi(club_ids : [Text]) : async { #Ok : [Types.ClubTeam]; #Err : Text } {
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    #Ok(teams.filter(func(t) = club_ids.any(func(i) = i == t.club_id)))
+  };
+
   // Team folders (Supabase team_folders counterpart): club-admin-managed
   // groupings for the club's teams list. Folder metadata is website-safe
   // (name/description/color only), so the read is unauthenticated like
@@ -2702,6 +2719,16 @@ persistent actor class Main(governorInit : Principal) {
       if (s.team_id == team_id) return #Ok(?s);
     };
     #Ok(null)
+  };
+
+  public query func get_club_subscriptions(club_ids : [Text]) : async { #Ok : [Types.ClubSubscription]; #Err : Text } {
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    #Ok(clubSubscriptions.filter(func(s) = club_ids.any(func(i) = i == s.club_id)))
+  };
+
+  public query func get_team_subscriptions(team_ids : [Text]) : async { #Ok : [Types.TeamSubscription]; #Err : Text } {
+    if (team_ids.size() > 500) return #Err("Too many ids");
+    #Ok(teamSubscriptions.filter(func(s) = team_ids.any(func(i) = i == s.team_id)))
   };
 
   public shared ({ caller }) func save_team_subscription(item : Types.TeamSubscription) : async { #Ok : Types.TeamSubscription; #Err : Text } {
