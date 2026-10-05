@@ -102,7 +102,7 @@ import { shouldSkipChatMountInvalidate } from "@/lib/chatMountInvalidate";
 import { useChatStuckWatchdog } from "@/lib/chatStuckWatchdog";
 import { isChatEagerInvalidateEnabled, ensureSessionApplied } from "@/lib/chatEagerInvalidate";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { ensureLiveClubConversations, listLiveMessagesPage, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
+import { ensureLiveClubConversations, listLiveLatestMessagesPage, listLiveReactions, sendLiveMessage, updateLiveMessage } from "@/live/features/messaging";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { recordLiveMessageSent } from "@/live/features/insights";
 
@@ -207,6 +207,9 @@ export default function ClubChatPage() {
     if (!highlightedMessageId && highlightQuery) setHighlightQuery("");
   }, [highlightedMessageId, highlightQuery]);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
+  // Backward cursor for ICP scroll-back paging (null = nothing older remains).
+  const icpOlderCursorRef = useRef<number | null>(null);
+
   const [jumpRenderNonce, setJumpRenderNonce] = useState<number | string | null>(null);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [pinVaultSheetOpen, setPinVaultSheetOpen] = useState(false);
@@ -456,7 +459,64 @@ export default function ClubChatPage() {
     return () => { cancelled = true; };
   }, [clubId, invalidateGateClub, queryClient, eagerInvalidateClub]);
 
+  // Canister rows → the app's club-message shape. Shared by the first page
+  // load and by scroll-back paging so both render identically.
+  const mapLiveClubRows = async (ctx: any, rows: any[]): Promise<Message[]> => {
+    const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
+    const profilesMap = await fetchProfilesWithCache(authorIds);
+    // Reactions persist on the canister; restore them on every refetch.
+    // Tolerate older canisters that lack list_reactions.
+    const reactionsByMessage = new Map<string, any[]>();
+    try {
+      const liveReactions = await listLiveReactions(ctx, clubId!);
+      for (const r of liveReactions) {
+        const uid = r.user.toText();
+        const list = reactionsByMessage.get(r.message_id) ?? [];
+        list.push({
+          id: `${r.message_id}:${uid}:${r.emoji}`,
+          user_id: uid,
+          reaction_type: r.emoji,
+          club_message_id: r.message_id,
+        });
+        reactionsByMessage.set(r.message_id, list);
+      }
+    } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+    // Reply quotes persist on the canister as reply_to_id; resolve the quoted
+    // snippet from messages in the same page (reply targets outside the loaded
+    // page render without a quote, same as a deleted target).
+    const rawById = new Map<string, any>(rows.map((m: any) => [m.id, m]));
+    return rows
+      .slice()
+      .sort((a: any, b: any) => Number(b.sequence - a.sequence))
+      .map((m: any) => {
+        const profile = profilesMap.get(m.sender.toText());
+        const attachment = m.attachment?.[0];
+        const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+        const replyTarget = replyToId ? rawById.get(replyToId) : null;
+        const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
+        return {
+          id: m.id,
+          text: m.body,
+          image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+          created_at: new Date(Number(m.created_at_ms)).toISOString(),
+          edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
+          author_id: m.sender.toText(),
+          club_id: clubId,
+          reply_to_id: replyToId,
+          forwarded_from_user_id: null,
+          forwarded_at: null,
+          forwarded_source_label: null,
+          profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+          reactions: reactionsByMessage.get(m.id) ?? [],
+          reply_to: replyTarget
+            ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
+            : null,
+        };
+      }) as unknown as Message[];
+  };
+
   const { data: messagesData, isLoading } = useQuery({
+
     queryKey: ["club-messages", clubId],
     queryFn: async () => {
       markChatFetch();
