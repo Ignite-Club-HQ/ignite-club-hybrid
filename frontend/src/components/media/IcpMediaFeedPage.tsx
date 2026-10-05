@@ -349,7 +349,7 @@ export function IcpMediaFeedPage() {
             text,
             user_id: principal ?? "",
             created_at: new Date().toISOString(),
-            profiles: { display_name: myName ?? "You", avatar_url: null },
+            profiles: { display_name: "You", avatar_url: null },
           },
         ],
       }));
