@@ -414,16 +414,20 @@ export function IcpMediaFeedPage() {
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 py-3">
-          <h1 className="text-lg font-semibold">Media</h1>
+          <h1 className="text-2xl font-bold">Media</h1>
           <div className="flex items-center gap-2">
             {hasFilters && (
               <Button
-                variant="ghost"
+                variant={hasActiveFilters ? "default" : "outline"}
                 size="icon"
-                aria-label="Filter media"
+                aria-label="Filter"
                 onClick={() => setFilterOpen(true)}
+                className="relative"
               >
-                <SlidersHorizontal className="h-5 w-5" />
+                <Filter className="h-4 w-4" />
+                {hasActiveFilters && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
+                )}
               </Button>
             )}
             <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
