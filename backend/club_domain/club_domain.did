@@ -238,15 +238,28 @@ type Operation =
  };
 type NewsPost = 
  record {
+   attachments: vec NewsAttachment;
    body: text;
    club_id: text;
    created_at_ms: nat64;
    created_by: principal;
    id: text;
+   image_url: opt text;
+   is_important: bool;
    revision: nat64;
    status: text;
+   target_team_ids: opt vec text;
    title: text;
    updated_at_ms: nat64;
+ };
+type NewsAttachment = 
+ record {
+   anchor: opt text;
+   kind: text;
+   mime_type: opt text;
+   name: text;
+   size: nat64;
+   url: text;
  };
 type Mutation = 
  record {
@@ -358,11 +371,13 @@ type Main =
                            Err: text;
                            Ok: ClubProfile;
                          });
-   create_news_post: (club_id: text, title: text, body: text, status:
-    text) -> (variant {
-                Err: text;
-                Ok: NewsPost;
-              });
+   create_news_post: (club_id: text, title: text, body: text, status: 
+    text, target_team_ids: opt vec text, is_important: bool, image_url:
+    opt text, attachments: vec NewsAttachment) ->
+    (variant {
+       Err: text;
+       Ok: NewsPost;
+     });
    create_parent_invite: (club_id: text, team_id: opt text, child_id:
     text) -> (variant {
                 Err: text;
@@ -959,10 +974,12 @@ type Main =
                                         Ok;
                                       });
    update_news_post: (id: text, title: text, body: text, status: text,
-    expected_revision: nat64) -> (variant {
-                                    Err: text;
-                                    Ok: NewsPost;
-                                  });
+    target_team_ids: opt vec text, is_important: bool, image_url: opt text,
+    attachments: vec NewsAttachment, expected_revision: nat64) ->
+    (variant {
+       Err: text;
+       Ok: NewsPost;
+     });
    whoami: () -> (variant {
                     Err: text;
                     Ok: Account;
