@@ -101,11 +101,18 @@ type Main =
        Err: text;
        Ok: GalleryChatCard;
      });
-   set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
-    (variant {
-       Err: text;
-       Ok: Asset;
-     });
+    set_asset_scope: (asset_id: text, team_id: opt text,
+     mini_league_id: opt text, competition_id: opt text, event_id: opt text,
+     caption: opt text, album_id: opt text) ->
+     (variant {
+        Err: text;
+        Ok: Asset;
+      });
+    set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
+     (variant {
+        Err: text;
+        Ok: Asset;
+      });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
@@ -167,8 +174,15 @@ type Asset =
    kind: text;
    mime: text;
    owner: principal;
-   retention_until_ms: nat64;
-   storage_path: text;
-   visibility: text;
- };
+    retention_until_ms: nat64;
+    storage_path: text;
+    visibility: text;
+    created_at_ms: nat64;
+    team_id: opt text;
+    mini_league_id: opt text;
+    competition_id: opt text;
+    event_id: opt text;
+    caption: opt text;
+    album_id: opt text;
+  };
 service : (governorInit: principal) -> Main
