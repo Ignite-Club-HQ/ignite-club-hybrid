@@ -57,7 +57,7 @@ describe("Club and team upgrade page characterization", () => {
     expect(teamUpgradeSource).not.toContain("Pro upgrades are unavailable in ICP lab mode");
     expect(teamUpgradeSource).toContain("return <SupabaseUpgradeProPage />;");
     expect(teamUpgradeSource).toContain('isFeatureRoutedToIcp("membership")');
-    expect(teamUpgradeSource).toContain("verify-iap-receipt-icp");
+    expect(teamUpgradeSource).toContain("purchaseProduct(productId, teamId!");
   });
 
   it("keeps equivalent presentation states present in both variants", () => {
