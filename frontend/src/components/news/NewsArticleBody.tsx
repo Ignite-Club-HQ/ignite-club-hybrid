@@ -5,6 +5,18 @@ import {
   type NewsAttachment,
 } from "@/features/news/newsAttachments";
 import NewsAttachments from "@/components/news/NewsAttachments";
+import { SecureImage } from "@/components/SecureImage";
+import { resolveSignedUrl } from "@/hooks/useSignedPhotoUrl";
+import { toast } from "@/hooks/use-toast";
+
+/** Opens an attachment, decrypting ICP blob-store ciphertext in-browser. */
+async function openAttachment(url: string) {
+  try {
+    window.open(await resolveSignedUrl(url), "_blank", "noreferrer");
+  } catch {
+    toast({ title: "Couldn't open file", description: "Please try again.", variant: "destructive" });
+  }
+}
 
 /**
  * Article body with attachments rendered exactly where the author placed them.
