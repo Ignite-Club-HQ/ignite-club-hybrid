@@ -583,15 +583,22 @@ function SupabaseCreateEventPage() {
   // Get teams user has direct membership in (team_admin, coach, or any team role)
   const { data: userTeamIds } = useQuery({
     queryKey: ["user-team-memberships", clubId, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("team_id")
-        .eq("user_id", user!.id)
-        .not("team_id", "is", null);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("team_id")
+            .eq("user_id", user!.id)
+            .not("team_id", "is", null);
 
-      return data?.map(r => r.team_id).filter(Boolean) || [];
-    },
+          return data?.map(r => r.team_id).filter(Boolean) || [];
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return [...new Set(grants.map((g) => g.team?.[0]).filter((t): t is string => !!t))];
+        },
+      }),
     enabled: !!clubId && !!user,
   });
 
@@ -602,25 +609,39 @@ function SupabaseCreateEventPage() {
       // only show teams they have direct membership in
       // If user is team admin/coach, they already have the team in userTeamIds
 
-      // Get all teams in the club first
-      const { data: allTeams } = await supabase
-        .from("teams")
-        .select("id, name, club_id")
-        .eq("club_id", clubId)
-        .is("deleted_at", null);
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          // Get all teams in the club first
+          const { data: allTeams } = await supabase
+            .from("teams")
+            .select("id, name, club_id")
+            .eq("club_id", clubId)
+            .is("deleted_at", null);
 
-      if (!allTeams) return [];
+          if (!allTeams) return [];
 
-      // Filter to only teams the user is a member of
-      if (userTeamIds && userTeamIds.length > 0) {
-        const teamsInClub = allTeams.filter(t =>
-          userTeamIds.includes(t.id)
-        );
-        return teamsInClub;
-      }
+          // Filter to only teams the user is a member of
+          if (userTeamIds && userTeamIds.length > 0) {
+            const teamsInClub = allTeams.filter(t =>
+              userTeamIds.includes(t.id)
+            );
+            return teamsInClub;
+          }
 
-      // If no team memberships, return empty (club admin without team membership can't create team events)
-      return [];
+          // If no team memberships, return empty (club admin without team membership can't create team events)
+          return [];
+        },
+        icp: async (ctx) => {
+          const allTeams = await listLiveTeams(ctx, clubId);
+          const liveTeams = allTeams.filter((t) => !t.deleted_at_ms?.[0]);
+          if (userTeamIds && userTeamIds.length > 0) {
+            return liveTeams
+              .filter((t) => userTeamIds.includes(t.id))
+              .map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
+          }
+          return [];
+        },
+      });
     },
     enabled: !!clubId && userTeamIds !== undefined,
   });
