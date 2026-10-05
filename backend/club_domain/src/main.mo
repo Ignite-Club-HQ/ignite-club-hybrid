@@ -518,25 +518,21 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
-  // Admins see every post (including drafts); members see published only.
+  // Admins see every post (including drafts); members see published posts
+  // visible to them (whole-club, or team-targeted to a team they belong to).
   public query ({ caller }) func list_news(club_id : Text) : async { #Ok : [Types.NewsPost]; #Err : Text } {
-    if (isAdmin(caller, club_id)) {
-      #Ok(newsPosts.filter(func(p) = p.club_id == club_id))
-    } else {
-      if (not isMember(caller, club_id)) return #Err("Forbidden");
-      #Ok(newsPosts.filter(func(p) = p.club_id == club_id and p.status == "published"))
-    }
+    if (not isMember(caller, club_id) and not isAdmin(caller, club_id)) return #Err("Forbidden");
+    #Ok(newsPosts.filter(func(p) = p.club_id == club_id and canSeeNewsPost(caller, p)))
   };
 
-  // Cross-club feed: published posts from the clubs the caller belongs to.
+  // Cross-club feed: visible posts from the clubs the caller belongs to.
   // Clubs the caller is not a member of are silently skipped.
   public query ({ caller }) func list_news_multi(club_ids : [Text]) : async { #Ok : [Types.NewsPost]; #Err : Text } {
     auth(caller);
     if (club_ids.size() > 50) return #Err("Too many clubs");
     let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
     #Ok(newsPosts.filter(func(p) =
-      visible.any(func(club) = club == p.club_id) and
-      (p.status == "published" or isAdmin(caller, p.club_id))))
+      visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p)))
   };
 
   // Parent invites: a club/team admin mints a token for a child; the
