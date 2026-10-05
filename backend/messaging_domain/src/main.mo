@@ -383,7 +383,9 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func ensure_club_admin_conversation(club_id : Text) : async { #Ok : Types.Conversation; #Err : Text } {
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
-    switch (await clubDomainRef()) {
+    let clubDomain = await clubDomainRef();
+    switch (clubDomain) {
+
       case null { return #Err("club_domain canister not configured") };
       case (?cd) {
         let admins = await cd.list_club_admins(club_id);
@@ -656,11 +658,16 @@ persistent actor class Main(governorInit : Principal) {
     // every signed-in member; only platform admins (club_domain's app_admin
     // grant) may post to it.
     if (conversation_id == BROADCAST_CONVERSATION_ID and not isGovernor(caller)) {
-      switch (await clubDomainRef()) {
+      let clubDomain = await clubDomainRef();
+      switch (clubDomain) {
         case null { return #Err("club_domain canister not configured") };
-        case (?cd) { if (not await cd.is_app_admin(caller)) return #Err("App admin required") };
+        case (?cd) {
+          let admin = await cd.is_app_admin(caller);
+          if (not admin) return #Err("App admin required");
+        };
       };
     };
+
 
     // DM blocking: refuse to post when either party has blocked the other.
     for (c in conversations.values()) {
