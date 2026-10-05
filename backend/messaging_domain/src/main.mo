@@ -1660,6 +1660,39 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  // ---- Batched reads (same visibility as the single-id queries; capped) ----
+  public query ({ caller }) func get_mute_preferences(conversation_ids : [Text]) : async { #Ok : [(Text, Bool)]; #Err : Text } {
+    if (conversation_ids.size() > 300) return #Err("Too many ids");
+    if (caller.equal(Principal.anonymous())) return #Ok(Array.map<Text, (Text, Bool)>(conversation_ids, func(id) = (id, false)));
+    #Ok(Array.map<Text, (Text, Bool)>(conversation_ids, func(id) {
+      var muted = false;
+      for (m in mutePreferences.values()) {
+        if (m.user.equal(caller) and m.conversation_id == id) { muted := m.muted };
+      };
+      (id, muted)
+    }))
+  };
+
+  public query ({ caller }) func get_group_metadata_multi(conversation_ids : [Text]) : async { #Ok : [Types.GroupMetadata]; #Err : Text } {
+    if (conversation_ids.size() > 300) return #Err("Too many ids");
+    var out : [Types.GroupMetadata] = [];
+    for (id in conversation_ids.values()) {
+      if (canReadTeamMessages(caller, id) or canAccessConversation(caller, id)) {
+        switch (getGroupMetadataFor(id)) { case (?meta) { out := out.concat([meta]) }; case null {} };
+      };
+    };
+    #Ok(out)
+  };
+
+  public query ({ caller }) func list_groups_by_clubs(club_ids : [Text]) : async { #Ok : [Types.GroupSummary]; #Err : Text } {
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    let allowed = club_ids.filter(func(c) = valid(c) and canBrowseClubGroups(caller, c));
+    let matches = groupMetadata.filter(func(m) =
+      m.team_id == null and not m.deleted and (switch (m.club_id) { case (?c) allowed.any(func(a) = a == c); case null false })
+    );
+    #Ok(Array.map<Types.GroupMetadata, Types.GroupSummary>(matches, func(m) = toGroupSummary(caller, m)))
+  };
+
   public query ({ caller }) func get_mute_preference(conversation_id : Text) : async Bool {
     if (caller.equal(Principal.anonymous())) return false;
     for (m in mutePreferences.values()) {

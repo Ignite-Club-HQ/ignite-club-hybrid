@@ -248,12 +248,22 @@ export interface Main {
     { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
+  'get_group_metadata_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<GroupMetadata> } |
+      { 'Err' : string }
+  >,
   'get_minimum_app_versions' : ActorMethod<
     [],
     { 'Ok' : Array<[string, string]> } |
       { 'Err' : string }
   >,
   'get_mute_preference' : ActorMethod<[string], boolean>,
+  'get_mute_preferences' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, boolean]> } |
+      { 'Err' : string }
+  >,
   'get_or_create_dm' : ActorMethod<
     [Principal],
     { 'Ok' : Conversation } |
@@ -319,6 +329,11 @@ export interface Main {
   >,
   'list_groups_by_club' : ActorMethod<
     [string],
+    { 'Ok' : Array<GroupSummary> } |
+      { 'Err' : string }
+  >,
+  'list_groups_by_clubs' : ActorMethod<
+    [Array<string>],
     { 'Ok' : Array<GroupSummary> } |
       { 'Err' : string }
   >,
