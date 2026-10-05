@@ -1275,7 +1275,21 @@ export default function ClubDetailPage() {
       try {
         await withFeatureBackend("membership", {
           supabase: () => restoreLiveClub({} as any, id!, true), // unreachable: gated above
-          icp: (ctx) => restoreLiveClub(ctx, id!, true),
+          icp: async (ctx) => {
+            await restoreLiveClub(ctx, id!, true);
+            // Mirror the delete branch: restore each team explicitly (older
+            // canisters lack the cascade) and lift the local tombstones.
+            try {
+              const teams = (await listLiveTeams(ctx, id!)) as unknown as { id: string; deleted_at_ms?: unknown }[];
+              for (const team of teams || []) {
+                if (!team?.id) continue;
+                if (Array.isArray(team.deleted_at_ms) && team.deleted_at_ms.length) {
+                  try { await restoreLiveTeam(ctx, team.id); } catch { /* best-effort */ }
+                }
+                unmarkTeamDeleted(team.id);
+              }
+            } catch { /* listing failed — club restore still committed */ }
+          },
         });
         queryClient.invalidateQueries({ queryKey: ["club", id] });
         await invalidateTeamLists(queryClient, user?.id);
