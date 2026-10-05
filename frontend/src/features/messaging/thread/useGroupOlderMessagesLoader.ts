@@ -3,7 +3,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { splitPageWindow } from "@/lib/chatPageWindow";
 import { reconcileMessages } from "@/lib/chatMessageReconciliation";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
+import { mapLiveGroupRows } from "@/features/messaging/thread/useGroupMessagesQuery";
 import type { GroupChatSupabaseClient, GroupMessage, MessageReaction } from "@/features/messaging/thread/groupChatData";
+
 
 interface UseGroupOlderMessagesLoaderOptions {
   groupId?: string;
@@ -16,7 +21,10 @@ interface UseGroupOlderMessagesLoaderOptions {
   reconcileScope: string;
   pageSize: number;
   supabaseClient: GroupChatSupabaseClient;
+  /** Backward cursor for live ICP scroll-back paging (set by the messages query). */
+  icpOlderCursorRef?: RefObject<number | null>;
 }
+
 
 export const useGroupOlderMessagesLoader = ({
   groupId,
@@ -29,7 +37,9 @@ export const useGroupOlderMessagesLoader = ({
   reconcileScope,
   pageSize,
   supabaseClient,
+  icpOlderCursorRef,
 }: UseGroupOlderMessagesLoaderOptions) => {
+
   // Virtuoso owns scroll-anchoring on prepend natively (firstItemIndex +
   // followOutput). No DOM scrollTop math required — just commit the cache
   // mutation and let Virtuoso preserve the visible window.
@@ -39,6 +49,55 @@ export const useGroupOlderMessagesLoader = ({
   return useCallback(async () => {
     const currentMessages = localMessagesRef.current;
     if (!currentMessages?.length || isLoadingOlder || !hasOlderMessages) return;
+    // Live ICP: walk the canister's backward cursor. Each page returns the
+    // newest rows older than the cursor plus the next cursor (null = start of
+    // the chat).
+    if (isFeatureRoutedToIcp("messaging")) {
+      const cursor = icpOlderCursorRef?.current ?? null;
+      if (cursor == null) {
+        setHasOlderMessages(false);
+        return;
+      }
+      setIsLoadingOlder(true);
+      try {
+        const result = await withFeatureBackend("messaging", {
+          supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
+          icp: async (ctx) => {
+            const page = await listLiveLatestMessagesPage(ctx, groupId!, cursor, pageSize);
+            const older = await mapLiveGroupRows(ctx, groupId!, page.messages);
+            const nextCursor =
+              Array.isArray(page.next_sequence) && page.next_sequence.length > 0
+                ? Number(page.next_sequence[0])
+                : null;
+            return { older, nextCursor };
+          },
+        });
+        if (icpOlderCursorRef) icpOlderCursorRef.current = result.nextCursor;
+        setHasOlderMessages(result.nextCursor !== null);
+        queueAnchoredPrepend(() => {
+          queryClient.setQueryData(["group-messages", groupId], (old: any) => {
+            if (!old) {
+              return { messages: result.older, reactions: [] as MessageReaction[], hasOlderMessages: result.nextCursor !== null };
+            }
+            const existingIds = new Set((old.messages || []).map((m: GroupMessage) => m.id));
+            return {
+              ...old,
+              messages: [
+                ...result.older.filter((m) => !existingIds.has(m.id)),
+                ...old.messages,
+              ],
+              hasOlderMessages: result.nextCursor !== null,
+            };
+          });
+        });
+      } catch (err) {
+        console.error("Failed to load older messages:", err);
+      } finally {
+        setIsLoadingOlder(false);
+      }
+      return;
+    }
+
 
     setIsLoadingOlder(true);
 
