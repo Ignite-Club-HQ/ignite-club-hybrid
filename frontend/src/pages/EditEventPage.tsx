@@ -59,6 +59,9 @@ import { SeriesEndDateEditor } from "@/components/event/SeriesEndDateEditor";
 import { EventEditScheduleSection } from "@/components/event/EventEditScheduleSection";
 import { eventKeys } from "@/lab/eventQueryKeys";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { getLiveMiniLeague, listLiveAdmins } from "@/live/features/miniLeagues";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalEvent, setLocalEventRecurrence, updateLocalEvent } from "@/lab/localEventsService";
@@ -602,8 +605,19 @@ function SupabaseEditEventPage() {
 
   // Fetch user's clubs and teams for selection
   const { data: userClubs } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ["user-clubs-for-edit", user?.id],
+    queryKey: ["user-clubs-for-edit", user?.id, resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const ids = [...new Set(grants.filter((g) => ["club_admin", "team_admin", "coach", "committee_member", "app_admin"].includes(g.role)).map((g) => g.club[0]).filter((id): id is string => !!id))];
+            const profiles = await Promise.all(ids.map((id) => getLiveClubProfile(ctx, id)));
+            return profiles.flatMap((rows) => rows.filter((p) => !p.deleted_at_ms.length).map((p) => ({ id: p.id, name: p.name })));
+          },
+        });
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("club_id, clubs!club_id(id, name)")
@@ -621,6 +635,17 @@ function SupabaseEditEventPage() {
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-edit", user?.id, selectedClubId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const ids = new Set(grants.filter((g) => g.club[0] === selectedClubId && ["team_admin", "coach"].includes(g.role)).map((g) => g.team[0]));
+            const teams = await listLiveTeams(ctx, selectedClubId);
+            return teams.filter((t) => ids.has(t.id) && !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null }));
+          },
+        });
+      }
       const query = supabase
         .from("user_roles")
         .select("team_id, teams(id, name, club_id, default_match_arrival_minutes)")
@@ -648,6 +673,12 @@ function SupabaseEditEventPage() {
   const { data: allClubTeams } = useQuery({
     queryKey: ["all-club-teams-for-edit-target", selectedClubId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => (await listLiveTeams(ctx, selectedClubId)).filter((t) => !t.deleted_at_ms.length).map((t) => ({ id: t.id, name: t.name, club_id: t.club_id, default_match_arrival_minutes: null })),
+        });
+      }
       const { data } = await supabase
         .from("teams")
         .select("id, name, club_id, default_match_arrival_minutes")
@@ -665,6 +696,12 @@ function SupabaseEditEventPage() {
   const { data: isClubLevelAdmin } = useQuery({
     queryKey: ["edit-event-club-level-admin", user?.id, selectedClubId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => false,
+          icp: async (ctx) => (await getLiveMyRoleGrants(ctx)).some((g) => g.club[0] === selectedClubId && ["club_admin", "committee_member", "league_admin", "app_admin"].includes(g.role)),
+        });
+      }
       const { data: appAdmin } = await supabase
         .from("user_roles")
         .select("id")
