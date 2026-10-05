@@ -12,14 +12,59 @@ import { connectLiveIdentityAccessClientWithIdentity } from "../identityAccess";
  * simply absent from the result, mirroring the Rust canister's own
  * "skip unknown ids" contract.
  */
+/**
+ * Mirror of identity_access `account_id(principal)`: the first 16 bytes of
+ * SHA-256(principal bytes) formatted as a UUID. Canister records (media
+ * owners, reactions, comment authors…) store principals, but profiles are
+ * keyed by account id — so a principal must be translated before lookup.
+ */
+export async function accountIdForPrincipal(principalText: string): Promise<string | null> {
+  try {
+    const { Principal } = await import("@icp-sdk/core/principal");
+    const bytes = Principal.fromText(principalText).toUint8Array();
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const hex = Array.from(digest.slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  } catch {
+    return null;
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Accepts account ids and/or principal texts. Principals are translated to
+ * their account id for the lookup, and each returned profile's account_id is
+ * rewritten back to the id the caller asked for, so callers can keep keying
+ * maps by whatever id they hold.
+ */
 export async function listLiveProfilesByIds(
   ctx: FeatureBackendContext,
   ids: readonly string[],
 ) {
   if (ids.length === 0) return [];
+  const requestedByAccount = new Map<string, string[]>();
+  await Promise.all(
+    Array.from(new Set(ids)).map(async (id) => {
+      const accountId = UUID_RE.test(id) ? id : (await accountIdForPrincipal(id)) ?? id;
+      requestedByAccount.set(accountId, [...(requestedByAccount.get(accountId) ?? []), id]);
+      // Keep the raw id too (legacy rows keyed by principal text).
+      if (accountId !== id) requestedByAccount.set(id, [...(requestedByAccount.get(id) ?? []), id]);
+    }),
+  );
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
-    return await client.getProfilesByIds(Array.from(ids));
+    const profiles = await client.getProfilesByIds(Array.from(requestedByAccount.keys()));
+    const seen = new Set<string>();
+    const out: typeof profiles = [];
+    for (const profile of profiles) {
+      for (const requested of requestedByAccount.get(profile.account_id) ?? [profile.account_id]) {
+        if (seen.has(requested)) continue;
+        seen.add(requested);
+        out.push({ ...profile, account_id: requested });
+      }
+    }
+    return out;
   } finally {
     client.dispose();
   }
