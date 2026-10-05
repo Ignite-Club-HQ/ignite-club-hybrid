@@ -208,7 +208,10 @@ export default function MessagesPage() {
 
   const { data: clubAdminConversations = [] } = useQuery({
     queryKey: clubAdminInboxQueryKey(user?.id, effectiveClubFilter),
-    enabled: !!user && initialized && !useIcpLab,
+    // Enabled in ICP mode too — fetchClubAdminConversations routes to the
+    // canisters there (club_admin grants from club_domain, threads and
+    // previews from messaging_domain).
+    enabled: !!user && initialized,
     staleTime: 30 * 1000,
     refetchInterval: 30 * 1000,
     refetchOnMount: "always",

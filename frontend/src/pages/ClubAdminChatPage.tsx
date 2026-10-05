@@ -410,18 +410,23 @@ function SupabaseClubAdminChatPage() {
               } as unknown as NonNullable<ClubAdminMessage["reactions"]>[number]);
               byMessage.set(r.message_id, list);
             }
-            const textById = new Map(page.messages.map((m) => [m.id, m.text]));
-            const messages = page.messages.map((m) => ({
-              id: m.id,
-              conversation_id: conversationId,
-              author_id: m.authorId,
-              text: m.text,
-              image_url: m.imageUrl ?? null,
-              reply_to_id: m.replyToId ?? null,
-              reply_to: m.replyToId ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" } : null,
-              created_at: new Date(Number(m.createdAtMs)).toISOString(),
-              reactions: byMessage.get(m.id) ?? [],
-            })) as unknown as ClubAdminMessage[];
+            const textById = new Map(page.messages.map((m) => [m.id, m.body]));
+            const messages = page.messages.map((m) => {
+              // Raw candid message: snake_case fields, opt values as [] | [v].
+              const attachment = m.attachment?.[0];
+              const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+              return {
+                id: m.id,
+                conversation_id: conversationId,
+                author_id: m.sender.toText(),
+                text: m.body,
+                image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+                reply_to_id: replyToId,
+                reply_to: replyToId ? { id: replyToId, text: textById.get(replyToId) ?? "" } : null,
+                created_at: new Date(Number(m.created_at_ms)).toISOString(),
+                reactions: byMessage.get(m.id) ?? [],
+              };
+            }) as unknown as ClubAdminMessage[];
             return { messages, hasOlderMessages: icpOlderCursorRef.current !== null };
           },
         });
@@ -1064,18 +1069,23 @@ function SupabaseClubAdminChatPage() {
             } as unknown as NonNullable<ClubAdminMessage["reactions"]>[number]);
             byMessage.set(r.message_id, list);
           }
-          const textById = new Map(page.messages.map((m) => [m.id, m.text]));
-          const older = page.messages.map((m) => ({
-            id: m.id,
-            conversation_id: conversationId,
-            author_id: m.authorId,
-            text: m.text,
-            image_url: m.imageUrl ?? null,
-            reply_to_id: m.replyToId ?? null,
-            reply_to: m.replyToId ? { id: m.replyToId, text: textById.get(m.replyToId) ?? "" } : null,
-            created_at: new Date(Number(m.createdAtMs)).toISOString(),
-            reactions: byMessage.get(m.id) ?? [],
-          })) as unknown as ClubAdminMessage[];
+          const textById = new Map(page.messages.map((m) => [m.id, m.body]));
+          const older = page.messages.map((m) => {
+            // Raw candid message: snake_case fields, opt values as [] | [v].
+            const attachment = m.attachment?.[0];
+            const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+            return {
+              id: m.id,
+              conversation_id: conversationId,
+              author_id: m.sender.toText(),
+              text: m.body,
+              image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+              reply_to_id: replyToId,
+              reply_to: replyToId ? { id: replyToId, text: textById.get(replyToId) ?? "" } : null,
+              created_at: new Date(Number(m.created_at_ms)).toISOString(),
+              reactions: byMessage.get(m.id) ?? [],
+            };
+          }) as unknown as ClubAdminMessage[];
           return { older, nextCursor };
         },
       });
