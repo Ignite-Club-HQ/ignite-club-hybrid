@@ -439,9 +439,25 @@ export async function getLiveShellTeamByToken(ctx: FeatureBackendContext, token:
   return unwrapCandid(actor.get_shell_team_by_token(token), "Load shell team invite");
 }
 
+/**
+ * Best-effort avatar access sync after the caller joins or creates a club:
+ * re-grants their encrypted profile-photo blob to every club they belong to
+ * so clubmates can decrypt it (covers photos uploaded before the join).
+ * Fire-and-forget — never blocks or fails the join itself.
+ */
+function syncAvatarClubGrantsBestEffort(ctx: FeatureBackendContext) {
+  import("../avatarUpload")
+    .then((m) => m.syncLiveAvatarClubGrants(ctx))
+    .catch(() => {
+      /* best effort */
+    });
+}
+
 export async function claimLiveShellTeam(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.claim_shell_team(token), "Claim shell team");
+  const claimed = await unwrapCandid(actor.claim_shell_team(token), "Claim shell team");
+  syncAvatarClubGrantsBestEffort(ctx);
+  return claimed;
 }
 
 /**
@@ -739,10 +755,12 @@ export async function createLiveClub(
   sport?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(
+  const created = await unwrapCandid(
     actor.create_club(id, name, slug, candidOpt(description || null), candidOpt(sport || null)),
     "Create club",
   );
+  syncAvatarClubGrantsBestEffort(ctx);
+  return created;
 }
 
 export async function listLiveClubJoinRequests(ctx: FeatureBackendContext, clubId: string) {
@@ -895,7 +913,9 @@ export async function myLiveRoleGrants(ctx: FeatureBackendContext) {
 /** Auto-accept a pending email invite under the ICP backend (PendingInviteWelcomeDialog). */
 export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+  const accepted = await unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
+  syncAvatarClubGrantsBestEffort(ctx);
+  return accepted;
 }
 
 /**
@@ -916,7 +936,9 @@ export async function getLivePendingInvite(ctx: FeatureBackendContext, inviteId:
 /** Redeem a shareable team-invite link token (grants the link's role, idempotent). */
 export async function acceptLiveTeamInviteLink(ctx: FeatureBackendContext, token: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.accept_team_invite_link(token), "Accept team invite link");
+  const accepted = await unwrapCandid(actor.accept_team_invite_link(token), "Accept team invite link");
+  syncAvatarClubGrantsBestEffort(ctx);
+  return accepted;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,8 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import { onlineManager } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
+import { MEDIA_BLOB_STORE_KEY } from "@/live/mediaStorage";
 
 /**
  * Global "reconnect epoch" that bumps whenever the browser reports it has
@@ -77,19 +79,93 @@ const Avatar = React.forwardRef<
 ));
 Avatar.displayName = AvatarPrimitive.Root.displayName;
 
+/**
+ * ICP profile photos live on the media_blob_store canister as IBE
+ * ciphertext, so their URLs cannot be handed to <img> directly. When `src`
+ * points at the configured blob store, resolve it to a decrypted object URL
+ * (the same path useSignedPhotoUrl/resolveIcpBlobObjectUrl uses for chat
+ * and media). Everything else passes through untouched, so Supabase-mode
+ * avatars render exactly as before — including the synchronous first render
+ * (no fallback flash).
+ *
+ * Resolved object URLs are cached for the session (they die with it
+ * anyway). Failures (no decrypt grant yet, offline) show the initials
+ * fallback and are retried after a cooldown instead of on every remount, so
+ * member lists don't hammer the canister.
+ */
+const decryptedAvatarCache = new Map<string, string>();
+const failedAvatarCache = new Map<string, number>();
+const AVATAR_FAILURE_RETRY_MS = 60_000;
+
+function isIcpBlobUrl(src: string): boolean {
+  try {
+    const target = getActiveIcpTarget();
+    const canisterId = target.canisterIds[MEDIA_BLOB_STORE_KEY];
+    if (!canisterId) return false;
+    const url = new URL(src);
+    if (url.hostname !== "icp0.io" && url.hostname !== "raw.icp0.io") return false;
+    return url.pathname.replace(/^\/+/, "").split("/")[0] === canisterId;
+  } catch {
+    return false;
+  }
+}
+
+function useResolvedAvatarSrc(src: string | undefined): string | undefined {
+  const [resolved, setResolved] = React.useState<string | undefined>(() => {
+    if (!src || !isIcpBlobUrl(src)) return src;
+    return decryptedAvatarCache.get(src);
+  });
+
+  React.useEffect(() => {
+    if (!src || !isIcpBlobUrl(src)) {
+      setResolved(src);
+      return;
+    }
+    const cached = decryptedAvatarCache.get(src);
+    if (cached) {
+      setResolved(cached);
+      return;
+    }
+    const failedAt = failedAvatarCache.get(src);
+    if (failedAt && Date.now() - failedAt < AVATAR_FAILURE_RETRY_MS) {
+      setResolved(undefined);
+      return;
+    }
+    let cancelled = false;
+    // Dynamic import: the decrypt path pulls in the vetKeys SDK, which must
+    // stay out of the initial bundle for Supabase sessions.
+    import("@/live/mediaDecrypt")
+      .then((m) => m.resolveIcpBlobObjectUrl(src))
+      .then((url) => {
+        if (url) decryptedAvatarCache.set(src, url);
+        if (!cancelled) setResolved(url ?? undefined);
+      })
+      .catch(() => {
+        failedAvatarCache.set(src, Date.now());
+        if (!cancelled) setResolved(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  return resolved;
+}
+
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
 >(({ className, alt = "", src, ...props }, ref) => {
   const epoch = useReconnectEpoch();
+  const resolvedSrc = useResolvedAvatarSrc(typeof src === "string" ? src : undefined);
   // Keying by src + epoch forces Radix to remount its internal <img> when
   // the network comes back, so images that failed to load during an offline
   // window (e.g. club logo, profile avatar) retry automatically.
   return (
     <AvatarPrimitive.Image
-      key={`${src ?? ""}::${epoch}`}
+      key={`${resolvedSrc ?? ""}::${epoch}`}
       ref={ref}
-      src={src}
+      src={resolvedSrc}
       alt={alt}
       decoding="async"
       className={cn("aspect-square h-full w-full", className)}
