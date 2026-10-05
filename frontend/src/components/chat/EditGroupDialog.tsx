@@ -84,7 +84,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
   const qualifiesForOpenJoin =
     isManual &&
     isClubScopedGroup &&
-    (group.category === "Operations" || group.category === "Volunteers");
+    (isFeatureRoutedToIcp("messaging") || group.category === "Operations" || group.category === "Volunteers");
   const [internalOpen, setInternalOpen] = useState(false);
   const [name, setName] = useState(group.name);
   const [selectedRoles, setSelectedRoles] = useState<AppRole[]>(group.allowed_roles);
