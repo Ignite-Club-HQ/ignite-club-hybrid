@@ -1,6 +1,10 @@
 import { connectLiveEventsDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
+import { batched, groupBy } from "./batching";
+
+type EventsActor = Awaited<ReturnType<typeof connectLiveEventsDomain>>["actor"];
+const eventsConn = (ctx: FeatureBackendContext) => () => connectLiveEventsDomain(ctx.target, ctx.identity);
 import { grantLiveClubPiiRead, registerLivePiiText, resolveLivePiiTextBatch } from "./vault";
 
 // Team ids are canister-generated as "team-<club_id>-<n>-<ns>", so the club
@@ -90,6 +94,27 @@ export async function listLiveEvents(
   clubId?: string | null,
   teamId?: string | null,
 ) {
+  // Exactly one scope -> coalesce with sibling calls into list_events_multi.
+  if (!!clubId !== !!teamId) {
+    const key = clubId ? `c:${clubId}` : `t:${teamId}`;
+    return batched(
+      ctx, "events:list", key, eventsConn(ctx),
+      async (actor: EventsActor, keys) => {
+        const clubs = keys.filter((k) => k.startsWith("c:")).map((k) => k.slice(2));
+        const teams = keys.filter((k) => k.startsWith("t:")).map((k) => k.slice(2));
+        const rows = await unwrapCandid(actor.list_events_multi(clubs, teams), "List events");
+        const m = new Map(keys.map((k) => [k, [] as typeof rows]));
+        for (const e of rows) {
+          m.get(`c:${e.club_id}`)?.push(e);
+          const t = e.team_id[0];
+          if (t !== undefined) m.get(`t:${t}`)?.push(e);
+        }
+        return m;
+      },
+      (actor: EventsActor, k) =>
+        k.startsWith("c:") ? actor.list_events([k.slice(2)], []) : actor.list_events([], [k.slice(2)]),
+    );
+  }
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return actor.list_events(candidOpt(clubId), candidOpt(teamId));
 }
@@ -258,8 +283,12 @@ export async function setLiveEventAttendance(
  * UUID) callers — this is the ICP-mode substitute.
  */
 export async function getLiveEventRoster(ctx: FeatureBackendContext, eventId: string) {
-  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_event_roster(eventId), "Get event roster");
+  return batched(
+    ctx, "events:roster", eventId, eventsConn(ctx),
+    async (actor: EventsActor, ids) =>
+      groupBy(ids, await unwrapCandid(actor.get_event_rosters(ids), "Get event rosters"), (r) => r.event_id),
+    (actor: EventsActor, id) => unwrapCandid(actor.get_event_roster(id), "Get event roster"),
+  );
 }
 
 export async function setLiveEventRoster(
@@ -1304,8 +1333,12 @@ export async function replaceLiveEventGroups(
 
 /** Flat duties list for an event (distinct from per-group duties above). */
 export async function listLiveDuties(ctx: FeatureBackendContext, eventId: string) {
-  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_duties(eventId), "List duties");
+  return batched(
+    ctx, "events:duties", eventId, eventsConn(ctx),
+    async (actor: EventsActor, ids) =>
+      groupBy(ids, await unwrapCandid(actor.list_duties_multi(ids), "List duties"), (r) => r.event_id),
+    (actor: EventsActor, id) => unwrapCandid(actor.list_duties(id), "List duties"),
+  );
 }
 
 /** The caller's own linked children (events-domain self-service roster). */
