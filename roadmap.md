@@ -30,6 +30,15 @@ Goal: give Internet Identity app admins the same admin tools as Supabase mode, m
 - [x] club-themes query returns [] early in ICP mode (canisters store no theme-HSL columns) and unwraps candid opt club fields with [0]
 - Verified: typecheck 0 diagnostics, club-switching tests 24/24, preview build OK. Frontend-only — works on publish, no canister redeploy
 
+## Invite flows (club/team/competition/mini-league, email + links) ICP audit — DONE
+- [x] Canister tokens randomized: club_domain pending invites + team invite links and mini_league_domain invite/join-link tokens now use 128-bit Random.blob() hex (was enumerable counter/timestamp ids) — closes role-grant enumeration incl. admin roles
+- [x] club_domain: new anonymous get_pending_invite(id) preview query + accept_team_invite_link(token) (auth, not-revoked, exclusion-checked, idempotent role grant) — shareable team-invite links (TeamJoinLinkCard) previously had NO accept method
+- [x] JoinTeamPage: /join/p/<pinv-id> resolves club/team/guardian pending invites (was treated as mini-league links only) with club/team display enrichment; accept via accept_pending_invite (was hard throw "not available for II accounts"); /join/<token> tries TeamInviteLink store then TeamInvite store; accept branches to accept_team_invite_link for link tokens
+- [x] Email sends enabled in ICP: AddClubAdminSheet + useAddPendingTeamMemberMutation now call send-email in both modes (function is anon-key callable); MiniLeagueDetailPage inline pending_invites query gated off in ICP (PostgREST 400)
+- [x] send-email edge function written paste-ready at /mnt/documents/send-email-supabase-function.ts (Resend, verify_jwt off, strict template allowlist, rate limits) — platform blocks creating it from here; USER ACTION: create function in Supabase dashboard, paste, disable Verify JWT, add RESEND_API_KEY secret
+- Verified: both canisters compile clean (moc 1.16.1 + --enhanced-migration), .did + bindings regenerated, drift check 17/17, typecheck 0 diagnostics, build-preview OK
+- [ ] Needs deploy-icp-mainnet re-run to ship get_pending_invite + accept_team_invite_link + randomized tokens (same deploy as pending media-tagging/news/app-config changes)
+
 ## Open
 - [ ] Duplicate teams reported after publish — root cause identified (wizard re-saves draft teams with fresh IDs); user declined the fix for now, do not pick up
 - [x] Club created in ICP mode not visible on Home — homeFeed ICP branch read memberships from identity_access `my_roles` (governor-managed only; create_club never writes there) while every membership write (create_club, invite acceptance, add_role_grant) targets club_domain. Fixed: fetchLiveHomeFeed now derives memberships from club_domain `my_role_grants` (getLiveMyRoleGrants), matching EventsPage/useAuthorizedScopes. Frontend-only fix — works on publish, no canister redeploy needed. Typecheck 0, homeFeed tests 8/8, preview build OK

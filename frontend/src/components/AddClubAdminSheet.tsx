@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/sheet";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+// (ICP routing import removed: email sends now work in both modes — the
+// send-email edge function is anon-key callable.)
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubBranding, createLivePendingInvite } from "@/live/features/club";
 import {
@@ -77,9 +78,9 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
 
   // In ICP mode all three lookups run against the canisters: club-wide role
   // grants + branding from club_domain, fuzzy name search from
-  // identity_access. membershipIsIcp remains only to skip the Supabase-only
-  // email send on the pending-invite path.
-  const membershipIsIcp = isFeatureRoutedToIcp("membership");
+  // identity_access. Email delivery works in both modes — the send-email
+  // edge function is anon-key callable, so Internet Identity sessions can
+  // send invite emails too.
 
   // Fetch existing club admins
   const { data: existingMembers } = useQuery({
@@ -292,10 +293,11 @@ export default function AddClubAdminSheet({ clubId, clubName }: AddClubAdminShee
       setInviteLink(link);
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
 
-      // Auto-send email notification if email was provided. The send runs
-      // through Supabase, which an Internet Identity session can't call, so
-      // in ICP mode the invite link is shown for manual sharing instead.
-      if (email && !membershipIsIcp) {
+      // Auto-send email notification if email was provided. The send-email
+      // edge function is anon-key callable, so this works for Internet
+      // Identity sessions too; if it fails the invite link is still shown
+      // for manual sharing.
+      if (email) {
         setIsSendingNotification(true);
         let emailSent = false;
         let emailId: string | null = null;

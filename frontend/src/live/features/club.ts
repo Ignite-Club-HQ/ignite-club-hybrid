@@ -898,6 +898,27 @@ export async function acceptPendingLiveInvite(ctx: FeatureBackendContext, invite
   return unwrapCandid(actor.accept_pending_invite(inviteId), "Accept pending invite");
 }
 
+/**
+ * Bearer-token invite preview for the join page. The invite id doubles as
+ * the /join/p/<id> token and the canister exposes this as an anonymous
+ * query (the id itself is the secret). Returns null when the id doesn't
+ * resolve (not found or revoked) instead of throwing.
+ */
+export async function getLivePendingInvite(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  try {
+    return await unwrapCandid(actor.get_pending_invite(inviteId), "Get pending invite");
+  } catch {
+    return null;
+  }
+}
+
+/** Redeem a shareable team-invite link token (grants the link's role, idempotent). */
+export async function acceptLiveTeamInviteLink(ctx: FeatureBackendContext, token: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.accept_team_invite_link(token), "Accept team invite link");
+}
+
 // ---------------------------------------------------------------------------
 // Member soft-delete (round 4): removal keeps records, hidden, reversible.
 // ---------------------------------------------------------------------------
