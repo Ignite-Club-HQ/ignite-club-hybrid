@@ -889,7 +889,7 @@ function SupabaseClubAdminChatPage() {
         },
         icp: async (ctx) => {
           // Provisional mapping: conversation id doubles as the ICP
-          // conversation id. Reply threading is Supabase-only.
+          // conversation id. Replies persist via the canister's reply_to_id.
           const attachment = imageUrl
             ? { kind: "image", refId: imageUrl, url: imageUrl }
             : (() => {
@@ -899,7 +899,7 @@ function SupabaseClubAdminChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment);
+          inserted = await sendLiveMessage(ctx, conversationId!, text, `${conversationId}:${user!.id}:${Date.now()}`, attachment, replyToId ?? null);
           try {
             await recordLiveMessageSent(ctx, conversationId!, user!.id);
           } catch {

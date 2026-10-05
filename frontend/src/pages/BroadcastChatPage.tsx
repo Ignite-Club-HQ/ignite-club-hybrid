@@ -969,8 +969,8 @@ export default function BroadcastChatPage() {
         },
         icp: async (ctx) => {
           // Fixed "broadcast" conversation id, matching the ["broadcast-messages"]
-          // query key / queueMessage targetId convention. Reply threading and
-          // club targeting are Supabase-only.
+          // query key / queueMessage targetId convention. Replies persist via
+          // the canister's reply_to_id; club targeting stays Supabase-only.
           const attachment = image_url
             ? { kind: "image", refId: image_url, url: image_url }
             : (() => {
@@ -980,7 +980,7 @@ export default function BroadcastChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment);
+          await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           try {
             await recordLiveMessageSent(ctx, "broadcast", user!.id);
           } catch {
