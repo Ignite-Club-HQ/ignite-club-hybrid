@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
+import { resolveIcpBlobObjectUrl, parseIcpBlobUrl } from "@/live/mediaDecrypt";
+import { getActiveIcpTarget } from "@/live/targetRegistry";
 
 // In-memory cache for signed URLs (hydrated from localStorage on load)
 const urlCache = new Map<string, { url: string; expiresAt: number }>();
@@ -185,6 +186,10 @@ function readCachedSignedUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const cached = urlCache.get(url);
   if (cached && cached.expiresAt > Date.now()) return cached.url;
+  // ICP blob-store URLs serve IBE ciphertext — they are never directly
+  // loadable, so they must always fall through to the decrypt path in
+  // resolveSignedUrl rather than being treated as "needs no signing".
+  if (parseIcpBlobUrl(url, getActiveIcpTarget())) return null;
   // If the URL doesn't need signing, treat it as immediately resolvable so
   // virtualised chat rows don't flash a skeleton on remount.
   if (!extractPrivateStoragePath(url)) return url;
