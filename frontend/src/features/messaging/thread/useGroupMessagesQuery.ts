@@ -181,28 +181,38 @@ const fetchGroupMessages = async ({
   return withFeatureBackend("messaging", {
     supabase: fetchFromSupabase,
     icp: async (ctx): Promise<GroupMessagesQueryData> => {
-      // Provisional mapping until verified against a deployed canister:
-      // canister Message carries a sequence number but no timestamp, no
-      // reactions/replies/images. Group id doubles as the conversation id.
+      // Group id doubles as the conversation id. Replies persist on the
+      // canister as reply_to_id; resolve the quoted snippet from messages in
+      // the same page (targets outside the loaded page render without a
+      // quote, same as a deleted target). Tolerate older canisters lacking
+      // reply_to_id. Reactions have no group-scoped canister query yet.
       const page = await listLiveMessagesPage(ctx, groupId, null, pageSize + 1);
       const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
       const profilesMap = await fetchProfilesWithCache(authorIds);
+      const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
       const messages = page.messages
         .slice()
         .sort((a: any, b: any) => Number(b.sequence - a.sequence))
         .slice(0, pageSize)
         .map((m: any) => {
           const profile = profilesMap.get(m.sender.toText());
+          const attachment = m.attachment?.[0];
+          const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+          const replyTarget = replyToId ? rawById.get(replyToId) : null;
+          const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
           return {
             id: m.id,
             text: m.body,
-            image_url: null,
-            created_at: "",
+            image_url: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+            created_at: new Date(Number(m.created_at_ms)).toISOString(),
+            edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
             author_id: m.sender.toText(),
             group_id: m.conversation_id,
-            reply_to_id: null,
+            reply_to_id: replyToId,
             author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
-            reply_to: null,
+            reply_to: replyTarget
+              ? { id: replyTarget.id, text: replyTarget.body, author_id: replyTarget.sender.toText(), author: replyProfile ? { display_name: replyProfile.display_name } : null }
+              : null,
           };
         }) as GroupMessage[];
       return {
