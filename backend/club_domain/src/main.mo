@@ -1417,6 +1417,25 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // Redeem a shareable team-invite link: the token itself is the
+  // capability (unrevoked links only), and redemption is idempotent —
+  // accepting the same link twice changes nothing.
+  public shared ({ caller }) func accept_team_invite_link(token : Text) : async { #Ok : Types.TeamInviteLink; #Err : Text } {
+    auth(caller);
+    switch (teamInviteLinks.find(func(l) = l.token == token)) {
+      case null { #Err("Invite link not found") };
+      case (?link) {
+        if (link.revoked) return #Err("Invite link revoked");
+        if (isExcluded(caller, link.club_id)) return #Err("Forbidden");
+        if (not acl.roles.any(func(g) = g.user.equal(caller) and g.role == link.role and g.club == ?link.club_id and g.team == ?link.team_id)) {
+          let grant : Types.RoleGrant = { user = caller; role = link.role; club = ?link.club_id; team = ?link.team_id };
+          acl := { acl with roles = acl.roles.concat([grant]) };
+        };
+        #Ok(link)
+      };
+    }
+  };
+
   // ---- Pending invites: generalized team/club/guardian invite flow.
   // Email delivery stays with a server job; create/resend return the
   // payload that job would send instead of sending it. ----
