@@ -71,6 +71,31 @@ export async function listLiveMessagesPage(
   );
 }
 
+/**
+ * Newest-first page read. `before = null` returns the newest `limit` messages;
+ * `before = <cursor>` returns the page just older than that cursor. The
+ * returned `next_sequence` is the backward cursor for the next-older page —
+ * null means nothing older remains. This is what a chat screen wants on open;
+ * `listLiveMessagesPage` pages forward from the OLDEST message instead.
+ */
+export async function listLiveLatestMessagesPage(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  before: number | null,
+  limit: number,
+) {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_latest_messages_page(
+      conversationId,
+      candidOpt(before === null ? undefined : BigInt(before)),
+      limit,
+    ),
+    "List latest messages",
+  );
+}
+
+
 export interface LiveMessageAttachment {
   /** "poll" | "news" | "image" — matches the group chat composer payloads. */
   kind: string;
