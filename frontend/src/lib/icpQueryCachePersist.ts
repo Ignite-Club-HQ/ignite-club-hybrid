@@ -14,7 +14,7 @@ import { dehydrate, hydrate, type QueryClient, type Query } from "@tanstack/reac
 
 const DB = "ignite-icp-query-cache";
 const STORE = "kv";
-const KEY = "cache-v1";
+const KEY = "cache-v2"; // v1 copies could hold dead photo links
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SAVE_DEBOUNCE_MS = 1500;
 const SKIP_KEY = /media-feed|photos|signed|photo-url|blob|media-url|vetkey|secret|token|decrypt/i;
