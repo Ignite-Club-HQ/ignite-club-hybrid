@@ -43,6 +43,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'audit_access' : IDL.Func([AuditFilter], [IDL.Vec(AuditRecord)], ['query']),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_pii' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : PiiDeleteResult, 'Err' : IDL.Text })],

@@ -50,6 +50,7 @@ export const idlFactory = ({ IDL }) => {
         [ResultUploadId],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_blob' : IDL.Func([IDL.Text], [Result], []),
     'finalize_upload' : IDL.Func([IDL.Text], [ResultFinalized], []),
     'get_content_hash' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),

@@ -291,6 +291,7 @@ export interface identity_accessInterface {
     begin_link(arg0: Principal): Promise<Result_3>;
     bind_external_site(arg0: string, arg1: string, arg2: string): Promise<Result_4>;
     check_field_access(arg0: string, arg1: string): Promise<Result_5>;
+    cycles_balance(): Promise<bigint>;
     erase_account(arg0: string): Promise<Result_2>;
     export_state(): Promise<Result_6>;
     get_external_bindings(arg0: string): Promise<Result_7>;
@@ -349,6 +350,10 @@ export class Identity_access implements identity_accessInterface {
     async check_field_access(arg0: string, arg1: string): Promise<Result_5> {
         const result = await this.actor.check_field_access(arg0, arg1);
         return from_candid_Result_5_n12(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async erase_account(arg0: string): Promise<Result_2> {
         const result = await this.actor.erase_account(arg0);

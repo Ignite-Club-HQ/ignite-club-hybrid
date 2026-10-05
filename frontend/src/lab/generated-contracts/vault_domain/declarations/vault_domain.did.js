@@ -69,6 +69,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_file_permanent' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

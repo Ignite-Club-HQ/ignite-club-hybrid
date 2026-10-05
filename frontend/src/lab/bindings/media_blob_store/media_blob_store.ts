@@ -102,6 +102,10 @@ export interface FinalizedBlob {
 export interface media_blob_storeInterface {
     abort_upload(upload_id: string): Promise<Result>;
     begin_upload(path: string, mime: string, total_size: bigint, chunk_count: number): Promise<ResultUploadId>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_blob(path: string): Promise<Result>;
     finalize_upload(upload_id: string): Promise<ResultFinalized>;
     get_content_hash(path: string): Promise<string | null>;
@@ -122,6 +126,10 @@ export class Media_blob_store implements media_blob_storeInterface {
     async begin_upload(arg0: string, arg1: string, arg2: bigint, arg3: number): Promise<ResultUploadId> {
         const result = await this.actor.begin_upload(arg0, arg1, arg2, arg3);
         return from_candid_ResultUploadId_n3(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_blob(arg0: string): Promise<Result> {
         const result = await this.actor.delete_blob(arg0);

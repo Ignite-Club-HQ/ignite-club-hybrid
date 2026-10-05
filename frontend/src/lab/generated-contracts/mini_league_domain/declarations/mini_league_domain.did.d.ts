@@ -112,6 +112,10 @@ export interface Main {
     { 'Ok' : MiniLeagueSession } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_mini_league' : ActorMethod<
     [string],
     { 'Ok' : null } |

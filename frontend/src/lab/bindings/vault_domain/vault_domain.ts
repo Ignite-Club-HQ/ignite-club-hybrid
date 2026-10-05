@@ -92,6 +92,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_file_permanent(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -257,6 +261,10 @@ export class Vault_domain implements vault_domainInterface {
     }> {
         const result = await this.actor.create_folder(arg0, arg1, to_candid_opt_n1(arg2), to_candid_opt_n1(arg3), arg4, arg5, to_candid_opt_n1(arg6), arg7, to_candid_opt_n1(arg8), to_candid_opt_n1(arg9));
         return from_candid_variant_n2(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_file_permanent(arg0: string): Promise<{
         __kind__: "Ok";

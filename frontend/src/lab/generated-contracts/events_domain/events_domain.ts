@@ -385,6 +385,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     deactivate_active_game(team_id: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1435,6 +1439,10 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.create_team_training_pause(arg0, arg1, arg2, arg3, arg4);
         return from_candid_variant_n39(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async deactivate_active_game(arg0: string | null): Promise<{
         __kind__: "Ok";

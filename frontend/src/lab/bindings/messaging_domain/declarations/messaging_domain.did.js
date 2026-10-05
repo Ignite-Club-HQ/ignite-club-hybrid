@@ -372,6 +372,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Poll, 'Err' : IDL.Text })],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_club_data' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],

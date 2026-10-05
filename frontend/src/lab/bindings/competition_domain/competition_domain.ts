@@ -160,6 +160,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     decline_competition_invite(invite_id: string): Promise<{
         __kind__: "Ok";
         Ok: CompetitionInvite;
@@ -800,6 +804,10 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.create_season(arg0, arg1);
         return from_candid_variant_n26(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async decline_competition_invite(arg0: string): Promise<{
         __kind__: "Ok";

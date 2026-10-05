@@ -35,6 +35,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'commit' : IDL.Func([IDL.Nat], [Migration], []),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'markExported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'markImported' : IDL.Func([IDL.Nat, IDL.Nat, IDL.Text], [Migration], []),
     'orchestrateExport' : IDL.Func([IDL.Nat], [Migration], []),

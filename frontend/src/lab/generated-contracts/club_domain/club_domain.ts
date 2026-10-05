@@ -466,6 +466,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_club_permanent(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1874,6 +1878,10 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.create_team_invite_link(arg0, arg1, arg2);
         return from_candid_variant_n14(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_club_permanent(arg0: string): Promise<{
         __kind__: "Ok";

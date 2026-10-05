@@ -105,6 +105,10 @@ export interface Main {
     { 'Ok' : ClubReward } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_reward' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'export_state' : ActorMethod<
     [],

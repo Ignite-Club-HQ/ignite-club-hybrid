@@ -79,6 +79,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_asset(asset_id: string): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -162,6 +166,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    set_asset_scope(asset_id: string, team_id: string | null, mini_league_id: string | null, competition_id: string | null, event_id: string | null, caption: string | null, album_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_blob_ref(asset_id: string, blob_ref: BlobRef | null): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -205,16 +216,23 @@ export interface Asset {
     id: string;
     storage_path: string;
     retention_until_ms: bigint;
+    album_id?: string;
     deleted: boolean;
+    mini_league_id?: string;
     owner: Principal;
     kind: string;
     mime: string;
+    team_id?: string;
     encrypted: boolean;
+    created_at_ms: bigint;
     blob_ref?: BlobRef;
     content_length: bigint;
+    caption?: string;
     checksum: string;
     child_sensitive: boolean;
+    event_id?: string;
     visibility: string;
+    competition_id?: string;
     club_id: string;
     expires_at_ms: bigint;
 }
@@ -282,6 +300,10 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.add_reaction(arg0, arg1, arg2);
         return from_candid_variant_n3(result);
     }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
+    }
     async delete_asset(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -320,7 +342,7 @@ export class Media_metadata implements media_metadataInterface {
         Err: string;
     }> {
         const result = await this.actor.export_state();
-        return from_candid_variant_n8(result);
+        return from_candid_variant_n9(result);
     }
     async get_asset(arg0: string): Promise<Asset | null> {
         const result = await this.actor.get_asset(arg0);
@@ -362,7 +384,7 @@ export class Media_metadata implements media_metadataInterface {
     }
     async list_assets(arg0: string): Promise<Array<Asset>> {
         const result = await this.actor.list_assets(arg0);
-        return from_candid_vec_n11(result);
+        return from_candid_vec_n12(result);
     }
     async list_comments(arg0: string): Promise<Array<Comment>> {
         const result = await this.actor.list_comments(arg0);
@@ -370,7 +392,7 @@ export class Media_metadata implements media_metadataInterface {
     }
     async list_gallery_chat_cards(arg0: string, arg1: string): Promise<Array<GalleryChatCard>> {
         const result = await this.actor.list_gallery_chat_cards(arg0, arg1);
-        return from_candid_vec_n12(result);
+        return from_candid_vec_n13(result);
     }
     async list_reactions(arg0: string): Promise<Array<Reaction>> {
         const result = await this.actor.list_reactions(arg0);
@@ -416,6 +438,16 @@ export class Media_metadata implements media_metadataInterface {
         const result = await this.actor.save_gallery_chat_card(to_candid_opt_n21(arg0), arg1, arg2, to_candid_opt_n21(arg3), arg4, to_candid_opt_n21(arg5), to_candid_opt_n21(arg6), arg7, arg8, arg9, arg10);
         return from_candid_variant_n24(result);
     }
+    async set_asset_scope(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: Asset;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_asset_scope(arg0, to_candid_opt_n21(arg1), to_candid_opt_n21(arg2), to_candid_opt_n21(arg3), to_candid_opt_n21(arg4), to_candid_opt_n21(arg5), to_candid_opt_n21(arg6));
+        return from_candid_variant_n4(result);
+    }
     async set_blob_ref(arg0: string, arg1: BlobRef | null): Promise<{
         __kind__: "Ok";
         Ok: Asset;
@@ -440,28 +472,28 @@ export class Media_metadata implements media_metadataInterface {
 function from_candid_Asset_n5(value: _Asset): Asset {
     return from_candid_record_n6(value);
 }
-function from_candid_GalleryChatCard_n13(value: _GalleryChatCard): GalleryChatCard {
-    return from_candid_record_n14(value);
+function from_candid_GalleryChatCard_n14(value: _GalleryChatCard): GalleryChatCard {
+    return from_candid_record_n15(value);
 }
 function from_candid_RoleGrant_n17(value: _RoleGrant): RoleGrant {
     return from_candid_record_n18(value);
 }
-function from_candid_State_n9(value: _State): State {
-    return from_candid_record_n10(value);
-}
-function from_candid_opt_n15(value: [] | [string]): string | null {
-    return value.length === 0 ? null : value[0];
+function from_candid_State_n10(value: _State): State {
+    return from_candid_record_n11(value);
 }
 function from_candid_opt_n19(value: [] | [_Asset]): Asset | null {
     return value.length === 0 ? null : from_candid_Asset_n5(value[0]);
 }
 function from_candid_opt_n20(value: [] | [_GalleryChatCard]): GalleryChatCard | null {
-    return value.length === 0 ? null : from_candid_GalleryChatCard_n13(value[0]);
+    return value.length === 0 ? null : from_candid_GalleryChatCard_n14(value[0]);
 }
-function from_candid_opt_n7(value: [] | [_BlobRef]): BlobRef | null {
+function from_candid_opt_n7(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n10(value: {
+function from_candid_opt_n8(value: [] | [_BlobRef]): BlobRef | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_record_n11(value: {
     capabilities: Array<_Capability>;
     schema: number;
     assets: Array<_Asset>;
@@ -483,15 +515,15 @@ function from_candid_record_n10(value: {
     return {
         capabilities: value.capabilities,
         schema: value.schema,
-        assets: from_candid_vec_n11(value.assets),
+        assets: from_candid_vec_n12(value.assets),
         governor: value.governor,
         comments: value.comments,
-        galleryChatCards: from_candid_vec_n12(value.galleryChatCards),
+        galleryChatCards: from_candid_vec_n13(value.galleryChatCards),
         reactions: value.reactions,
         roles: from_candid_vec_n16(value.roles)
     };
 }
-function from_candid_record_n14(value: {
+function from_candid_record_n15(value: {
     id: string;
     uploader_id: Principal;
     photo_ids: Array<string>;
@@ -527,14 +559,14 @@ function from_candid_record_n14(value: {
         uploader_id: value.uploader_id,
         photo_ids: value.photo_ids,
         photo_count: value.photo_count,
-        hero_image_url: record_opt_to_undefined(from_candid_opt_n15(value.hero_image_url)),
+        hero_image_url: record_opt_to_undefined(from_candid_opt_n7(value.hero_image_url)),
         is_prompt: value.is_prompt,
         team_id: value.team_id,
         updated_at_ms: value.updated_at_ms,
         created_at_ms: value.created_at_ms,
         push_sent: value.push_sent,
-        hero_photo_id: record_opt_to_undefined(from_candid_opt_n15(value.hero_photo_id)),
-        event_id: record_opt_to_undefined(from_candid_opt_n15(value.event_id)),
+        hero_photo_id: record_opt_to_undefined(from_candid_opt_n7(value.hero_photo_id)),
+        event_id: record_opt_to_undefined(from_candid_opt_n7(value.event_id)),
         message_id: value.message_id,
         club_id: value.club_id
     };
@@ -553,40 +585,54 @@ function from_candid_record_n18(value: {
     return {
         role: value.role,
         user: value.user,
-        team_id: record_opt_to_undefined(from_candid_opt_n15(value.team_id)),
-        club_id: record_opt_to_undefined(from_candid_opt_n15(value.club_id))
+        team_id: record_opt_to_undefined(from_candid_opt_n7(value.team_id)),
+        club_id: record_opt_to_undefined(from_candid_opt_n7(value.club_id))
     };
 }
 function from_candid_record_n6(value: {
     id: string;
     storage_path: string;
     retention_until_ms: bigint;
+    album_id: [] | [string];
     deleted: boolean;
+    mini_league_id: [] | [string];
     owner: Principal;
     kind: string;
     mime: string;
+    team_id: [] | [string];
     encrypted: boolean;
+    created_at_ms: bigint;
     blob_ref: [] | [_BlobRef];
     content_length: bigint;
+    caption: [] | [string];
     checksum: string;
     child_sensitive: boolean;
+    event_id: [] | [string];
     visibility: string;
+    competition_id: [] | [string];
     club_id: string;
     expires_at_ms: bigint;
 }): {
     id: string;
     storage_path: string;
     retention_until_ms: bigint;
+    album_id?: string;
     deleted: boolean;
+    mini_league_id?: string;
     owner: Principal;
     kind: string;
     mime: string;
+    team_id?: string;
     encrypted: boolean;
+    created_at_ms: bigint;
     blob_ref?: BlobRef;
     content_length: bigint;
+    caption?: string;
     checksum: string;
     child_sensitive: boolean;
+    event_id?: string;
     visibility: string;
+    competition_id?: string;
     club_id: string;
     expires_at_ms: bigint;
 } {
@@ -594,16 +640,23 @@ function from_candid_record_n6(value: {
         id: value.id,
         storage_path: value.storage_path,
         retention_until_ms: value.retention_until_ms,
+        album_id: record_opt_to_undefined(from_candid_opt_n7(value.album_id)),
         deleted: value.deleted,
+        mini_league_id: record_opt_to_undefined(from_candid_opt_n7(value.mini_league_id)),
         owner: value.owner,
         kind: value.kind,
         mime: value.mime,
+        team_id: record_opt_to_undefined(from_candid_opt_n7(value.team_id)),
         encrypted: value.encrypted,
-        blob_ref: record_opt_to_undefined(from_candid_opt_n7(value.blob_ref)),
+        created_at_ms: value.created_at_ms,
+        blob_ref: record_opt_to_undefined(from_candid_opt_n8(value.blob_ref)),
         content_length: value.content_length,
+        caption: record_opt_to_undefined(from_candid_opt_n7(value.caption)),
         checksum: value.checksum,
         child_sensitive: value.child_sensitive,
+        event_id: record_opt_to_undefined(from_candid_opt_n7(value.event_id)),
         visibility: value.visibility,
+        competition_id: record_opt_to_undefined(from_candid_opt_n7(value.competition_id)),
         club_id: value.club_id,
         expires_at_ms: value.expires_at_ms
     };
@@ -697,7 +750,7 @@ function from_candid_variant_n24(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_GalleryChatCard_n13(value.Ok)
+        Ok: from_candid_GalleryChatCard_n14(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -741,7 +794,7 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n8(value: {
+function from_candid_variant_n9(value: {
     Ok: _State;
 } | {
     Err: string;
@@ -754,17 +807,17 @@ function from_candid_variant_n8(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_State_n9(value.Ok)
+        Ok: from_candid_State_n10(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_vec_n11(value: Array<_Asset>): Array<Asset> {
+function from_candid_vec_n12(value: Array<_Asset>): Array<Asset> {
     return value.map((x)=>from_candid_Asset_n5(x));
 }
-function from_candid_vec_n12(value: Array<_GalleryChatCard>): Array<GalleryChatCard> {
-    return value.map((x)=>from_candid_GalleryChatCard_n13(x));
+function from_candid_vec_n13(value: Array<_GalleryChatCard>): Array<GalleryChatCard> {
+    return value.map((x)=>from_candid_GalleryChatCard_n14(x));
 }
 function from_candid_vec_n16(value: Array<_RoleGrant>): Array<RoleGrant> {
     return value.map((x)=>from_candid_RoleGrant_n17(x));

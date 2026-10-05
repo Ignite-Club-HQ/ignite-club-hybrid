@@ -61,6 +61,10 @@ export interface WorkloadIdentity {
 }
 export interface MainInterface {
     audit_secret_access(filter: WorkloadIdentityFilter): Promise<Array<SecretAccessAudit>>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     get_audit_summary(): Promise<AuditSummary>;
     get_workload(workload_principal: Principal): Promise<{
         __kind__: "Ok";
@@ -143,6 +147,10 @@ export class Secret_workload_identity implements secret_workload_identityInterfa
     async audit_secret_access(arg0: WorkloadIdentityFilter): Promise<Array<SecretAccessAudit>> {
         const result = await this.actor.audit_secret_access(to_candid_WorkloadIdentityFilter_n1(arg0));
         return from_candid_vec_n3(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async get_audit_summary(): Promise<AuditSummary> {
         const result = await this.actor.get_audit_summary();

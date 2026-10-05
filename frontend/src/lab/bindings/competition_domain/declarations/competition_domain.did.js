@@ -262,6 +262,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'decline_competition_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : CompetitionInvite, 'Err' : IDL.Text })],

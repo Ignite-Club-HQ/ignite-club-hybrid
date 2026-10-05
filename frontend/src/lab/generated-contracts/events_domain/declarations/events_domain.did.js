@@ -518,6 +518,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamTrainingPause, 'Err' : IDL.Text })],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'deactivate_active_game' : IDL.Func(
         [IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

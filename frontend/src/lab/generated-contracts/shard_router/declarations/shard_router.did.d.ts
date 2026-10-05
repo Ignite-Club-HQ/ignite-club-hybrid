@@ -99,6 +99,7 @@ export interface _SERVICE {
     result_assign_domain
   >,
   'commit_migration' : ActorMethod<[string, bigint], result_assign>,
+  'cycles_balance' : ActorMethod<[], bigint>,
   'get_domain_migration' : ActorMethod<
     [string, string],
     result_opt_domain_migration

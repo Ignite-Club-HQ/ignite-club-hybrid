@@ -325,6 +325,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_club_data(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: number;
@@ -1147,6 +1151,10 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.create_poll(arg0, to_candid_opt_n12(arg1), arg2, arg3);
         return from_candid_variant_n9(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_club_data(arg0: string): Promise<{
         __kind__: "Ok";

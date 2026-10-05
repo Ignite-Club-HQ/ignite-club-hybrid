@@ -201,6 +201,10 @@ export interface Main {
     { 'Ok' : AdminAlert } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_ad' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<

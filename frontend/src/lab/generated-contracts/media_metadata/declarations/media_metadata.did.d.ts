@@ -14,25 +14,25 @@ export interface Asset {
   'id' : string,
   'storage_path' : string,
   'retention_until_ms' : bigint,
+  'album_id' : [] | [string],
   'deleted' : boolean,
+  'mini_league_id' : [] | [string],
   'owner' : Principal,
   'kind' : string,
   'mime' : string,
+  'team_id' : [] | [string],
   'encrypted' : boolean,
+  'created_at_ms' : bigint,
   'blob_ref' : [] | [BlobRef],
   'content_length' : bigint,
+  'caption' : [] | [string],
   'checksum' : string,
   'child_sensitive' : boolean,
+  'event_id' : [] | [string],
   'visibility' : string,
+  'competition_id' : [] | [string],
   'club_id' : string,
   'expires_at_ms' : bigint,
-  'created_at_ms' : bigint,
-  'team_id' : [] | [string],
-  'mini_league_id' : [] | [string],
-  'competition_id' : [] | [string],
-  'event_id' : [] | [string],
-  'caption' : [] | [string],
-  'album_id' : [] | [string],
 }
 export interface BlobRef {
   'path' : string,
@@ -87,6 +87,10 @@ export interface Main {
     { 'Ok' : Reaction } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_asset' : ActorMethod<[string], { 'Ok' : Asset } | { 'Err' : string }>,
   'delete_comment' : ActorMethod<
     [string],
@@ -156,7 +160,15 @@ export interface Main {
       { 'Err' : string }
   >,
   'set_asset_scope' : ActorMethod<
-    [string, [] | [string], [] | [string], [] | [string], [] | [string], [] | [string], [] | [string]],
+    [
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+    ],
     { 'Ok' : Asset } |
       { 'Err' : string }
   >,

@@ -149,6 +149,7 @@ export const idlFactory = ({ IDL }) => {
   const result_target = IDL.Variant({ 'Ok' : target, 'Err' : IDL.Text });
   
   return IDL.Service({
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_availability' : IDL.Func([], [availability], ['query']),
     'get_decision' : IDL.Func([IDL.Text], [result_decision], ['query']),
     'get_operator' : IDL.Func([IDL.Principal], [result_operator], ['query']),

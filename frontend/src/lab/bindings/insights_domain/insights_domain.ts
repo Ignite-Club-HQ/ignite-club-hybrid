@@ -146,6 +146,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_ad(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -716,6 +720,10 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.create_admin_alert(arg0, arg1);
         return from_candid_variant_n17(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_ad(arg0: string): Promise<{
         __kind__: "Ok";

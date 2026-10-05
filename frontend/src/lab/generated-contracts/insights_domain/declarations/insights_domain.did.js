@@ -256,6 +256,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
         [],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_ad' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

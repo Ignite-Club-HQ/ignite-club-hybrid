@@ -201,6 +201,10 @@ export interface Main {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'decline_competition_invite' : ActorMethod<
     [string],
     { 'Ok' : CompetitionInvite } |

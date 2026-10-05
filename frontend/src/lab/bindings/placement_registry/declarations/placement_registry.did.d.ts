@@ -130,6 +130,7 @@ export interface target {
   'backend' : backend,
 }
 export interface _SERVICE {
+  'cycles_balance' : ActorMethod<[], bigint>,
   'get_availability' : ActorMethod<[], availability>,
   'get_decision' : ActorMethod<[string], result_decision>,
   'get_operator' : ActorMethod<[Principal], result_operator>,

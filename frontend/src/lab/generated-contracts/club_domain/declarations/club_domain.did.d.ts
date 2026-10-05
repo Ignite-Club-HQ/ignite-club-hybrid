@@ -347,6 +347,10 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_club_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |

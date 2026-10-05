@@ -49,6 +49,10 @@ export interface _SERVICE {
     [string, string, bigint, number],
     ResultUploadId
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_blob' : ActorMethod<[string], Result>,
   'finalize_upload' : ActorMethod<[string], ResultFinalized>,
   'get_content_hash' : ActorMethod<[string], [] | [string]>,

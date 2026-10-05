@@ -67,6 +67,10 @@ export interface MainInterface {
         Err: string;
     }>;
     audit_access(filter: AuditFilter): Promise<Array<AuditRecord>>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_pii(pii_id: string, field_id: string): Promise<{
         __kind__: "Ok";
         Ok: PiiDeleteResult;
@@ -227,6 +231,10 @@ export class Pii_access_control implements pii_access_controlInterface {
     }
     async audit_access(arg0: AuditFilter): Promise<Array<AuditRecord>> {
         const result = await this.actor.audit_access(to_candid_AuditFilter_n2(arg0));
+        return result;
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
         return result;
     }
     async delete_pii(arg0: string, arg1: string): Promise<{
