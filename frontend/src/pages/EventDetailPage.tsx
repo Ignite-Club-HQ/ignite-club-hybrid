@@ -11,6 +11,7 @@ import { useParentLeaguePlayerRsvpMutation } from "@/hooks/useParentLeaguePlayer
 import { useEventAttendanceViewModel } from "@/hooks/useEventAttendanceViewModel";
 import { resolveEventCapabilities } from "@/features/events/eventCapabilities";
 import { fetchEventDetail } from "@/features/events/eventDetailRepository";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
 import { Share } from "@capacitor/share";
@@ -562,25 +563,7 @@ export default function EventDetailPage() {
   });
 
   // Check if user is app admin (global override)
-  const { data: isAppAdmin } = useQuery({
-    queryKey: ["is-app-admin", user?.id],
-    queryFn: async () => withFeatureBackend("membership", {
-      supabase: async () => {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("role", "app_admin")
-          .maybeSingle();
-        return !!data;
-      },
-      icp: async (ctx) => {
-        const grants = await getLiveMyRoleGrants(ctx);
-        return (grants ?? []).some((g: any) => g.role === "app_admin");
-      },
-    }),
-    enabled: !!user,
-  });
+  const { isAppAdmin } = useIsAppAdmin();
 
   // Check if user is admin for this event
   const { data: isAdmin } = useQuery({

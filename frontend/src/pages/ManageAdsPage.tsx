@@ -40,7 +40,6 @@ import {
   createLiveAd,
   deleteLiveAd,
   getLiveAdEventSummary,
-  isLiveAppAdmin,
   listLiveAds,
   listLiveAdSettings,
   setLiveAdActive,
