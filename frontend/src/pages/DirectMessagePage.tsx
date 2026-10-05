@@ -889,6 +889,7 @@ export default function DirectMessagePage() {
   const loadOlderMessages = useCallback(async () => {
     const currentMessages = localMessagesRef.current;
     if (!currentMessages?.length || isLoadingOlder || !hasOlderMessages || !conversationId) return;
+    if (useIcpLab) { setHasOlderMessages(false); return; } // paging beyond the first page is Supabase-only for now
 
     setIsLoadingOlder(true);
     const controller = new AbortController();
