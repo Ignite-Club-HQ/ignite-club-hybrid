@@ -415,6 +415,11 @@ export interface Main {
     { 'Ok' : [] | [ClubProfile] } |
       { 'Err' : string }
   >,
+  'get_club_profiles' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'get_club_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSettings] } |
@@ -423,6 +428,11 @@ export interface Main {
   'get_club_subscription' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSubscription] } |
+      { 'Err' : string }
+  >,
+  'get_club_subscriptions' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<ClubSubscription> } |
       { 'Err' : string }
   >,
   'get_current_season' : ActorMethod<
@@ -479,6 +489,16 @@ export interface Main {
   'get_team_subscription' : ActorMethod<
     [string],
     { 'Ok' : [] | [TeamSubscription] } |
+      { 'Err' : string }
+  >,
+  'get_team_subscriptions' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<TeamSubscription> } |
+      { 'Err' : string }
+  >,
+  'get_teams' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
   'has_club_staff_role' : ActorMethod<[Principal, string], boolean>,
@@ -628,6 +648,11 @@ export interface Main {
   >,
   'list_teams' : ActorMethod<
     [string],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'list_teams_multi' : ActorMethod<
+    [Array<string>],
     { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
