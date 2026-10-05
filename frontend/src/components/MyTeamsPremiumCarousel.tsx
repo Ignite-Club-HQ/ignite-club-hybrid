@@ -1128,6 +1128,16 @@ export function MyTeamsPremiumCarousel({ onReadyChange }: MyTeamsPremiumCarousel
     [items, activeClubFilter]
   );
 
+  // Trust a successfully refetched (possibly empty) list over the localStorage
+  // snapshot: only fall back to the snapshot until the first fetch settles.
+  // Without this, a genuinely deleted team keeps re-appearing from the
+  // last-known-good snapshot forever.
+  const [hasSettledFetch, setHasSettledFetch] = useState(false);
+  useEffect(() => setHasSettledFetch(false), [user?.id, activeClubFilter]);
+  useEffect(() => {
+    if (!isLoading && !isFetching && !isError) setHasSettledFetch(true);
+  }, [isLoading, isFetching, isError]);
+
   // Persist snapshot for instant cold-start on next visit
   useEffect(() => {
     if (!user?.id || scopedItems.length === 0) return;
