@@ -84,6 +84,7 @@ export async function sendLiveMessage(
   body: string,
   idempotencyKey: string,
   attachment?: LiveMessageAttachment | null,
+  replyToId?: string | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(
@@ -96,6 +97,7 @@ export async function sendLiveMessage(
           ? { kind: attachment.kind, ref_id: attachment.refId, url: candidOpt(attachment.url) }
           : null,
       ),
+      candidOpt(replyToId ?? null),
     ),
     "Send message",
   );

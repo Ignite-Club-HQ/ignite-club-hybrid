@@ -467,7 +467,7 @@ export default function ClubChatPage() {
       // Live ICP: club id doubles as the conversation id on the messaging
       // canister (deterministic ids; club_domain provisions via
       // ensure_club_conversations). Reactions, replies and forwarded
-      // metadata are Supabase-only for now.
+      // metadata are Supabase-only for now; reply threading is canister-backed.
       if (isFeatureRoutedToIcp("messaging") && clubId && user?.id) {
         return await withFeatureBackend("messaging", {
           supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
@@ -476,6 +476,10 @@ export default function ClubChatPage() {
             const page = await listLiveMessagesPage(ctx, clubId, null, MESSAGES_PER_PAGE + 1);
             const authorIds = [...new Set(page.messages.map((m: any) => m.sender.toText() as string))];
             const profilesMap = await fetchProfilesWithCache(authorIds);
+            // Reply quotes persist on the canister as reply_to_id; resolve
+            // the quoted snippet from messages in the same page (older
+            // canisters without reply_to_id fall back to no quote).
+            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
             const messages = page.messages
               .slice()
               .sort((a: any, b: any) => Number(b.sequence - a.sequence))
@@ -483,6 +487,9 @@ export default function ClubChatPage() {
               .map((m: any) => {
                 const profile = profilesMap.get(m.sender.toText());
                 const attachment = m.attachment?.[0];
+                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                const replyTarget = replyToId ? rawById.get(replyToId) : null;
+                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
                 return {
                   id: m.id,
                   text: m.body,
@@ -491,13 +498,15 @@ export default function ClubChatPage() {
                   edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
                   author_id: m.sender.toText(),
                   club_id: clubId,
-                  reply_to_id: null,
+                  reply_to_id: replyToId,
                   forwarded_from_user_id: null,
                   forwarded_at: null,
                   forwarded_source_label: null,
                   profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
                   reactions: [],
-                  reply_to: null,
+                  reply_to: replyTarget
+                    ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
+                    : null,
                 };
               }) as unknown as Message[];
             return {
@@ -1381,7 +1390,7 @@ export default function ClubChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment);
+          await sendLiveMessage(ctx, clubId!, text, `${clubId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           try {
             await recordLiveMessageSent(ctx, clubId!, user!.id);
           } catch {

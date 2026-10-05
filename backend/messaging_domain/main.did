@@ -182,6 +182,7 @@ type Message =
    edited_at_ms: opt nat64;
    id: text;
    idempotency_key: text;
+   reply_to_id: opt text;
    sender: principal;
    sequence: nat64;
  };
@@ -470,7 +471,7 @@ type Main =
                                                 Ok;
                                               });
    send_message: (conversation_id: text, body: text, idempotency_key: 
-    text, attachment: opt Attachment) -> (variant {
+    text, attachment: opt Attachment, reply_to_id: opt text) -> (variant {
                                             Err: text;
                                             Ok: Message;
                                           });

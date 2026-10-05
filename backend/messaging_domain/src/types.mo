@@ -8,7 +8,9 @@ module {
   // ("poll", "news", "image"), ref_id points at the referenced record, and
   // url carries externally-hosted media (Supabase storage today).
   public type Attachment = { kind : Text; ref_id : Text; url : ?Text };
-  public type Message = { conversation_id : Text; id : Text; sender : Principal; body : Text; sequence : Nat64; idempotency_key : Text; edited_at_ms : ?Nat64; attachment : ?Attachment; created_at_ms : Nat64 };
+  // reply_to_id points at another message in the same conversation when the
+  // sender used swipe-to-reply; null for ordinary messages.
+  public type Message = { conversation_id : Text; id : Text; sender : Principal; body : Text; sequence : Nat64; idempotency_key : Text; edited_at_ms : ?Nat64; attachment : ?Attachment; created_at_ms : Nat64; reply_to_id : ?Text };
   public type Receipt = { conversation_id : Text; user : Principal; message_id : Text; read : Bool };
   public type Unread = { conversation_id : Text; user : Principal; count : Nat64; last_read_sequence : Nat64 };
   public type MessagePage = { messages : [Message]; next_sequence : ?Nat64; latest_sequence : Nat64 };

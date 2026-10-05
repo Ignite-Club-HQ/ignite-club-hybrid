@@ -492,8 +492,7 @@ export default function TeamChatPage() {
 
       // Live ICP: team id doubles as the conversation id on the messaging
       // canister (deterministic ids; club_domain provisions via
-      // ensure_club_conversations). Reactions, replies and forwarded
-      // metadata are Supabase-only for now.
+      // ensure_club_conversations). Forwarded metadata is Supabase-only.
       if (isFeatureRoutedToIcp("messaging") && teamId && user?.id) {
         return await withFeatureBackend("messaging", {
           supabase: async () => { throw new Error("unreachable: messaging routed to ICP"); },
@@ -521,6 +520,11 @@ export default function TeamChatPage() {
                 reactionsByMessage.set(r.message_id, list);
               }
             } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
+            // Replies persist on the canister as reply_to_id; resolve the
+            // quoted snippet from messages in the same page (reply targets
+            // outside the loaded page render without a quote, same as a
+            // deleted target). Tolerate older canisters lacking reply_to_id.
+            const rawById = new Map<string, any>(page.messages.map((m: any) => [m.id, m]));
             const messages = page.messages
               .slice()
               .sort((a: any, b: any) => Number(b.sequence - a.sequence))
@@ -528,6 +532,9 @@ export default function TeamChatPage() {
               .map((m: any) => {
                 const profile = profilesMap.get(m.sender.toText());
                 const attachment = m.attachment?.[0];
+                const replyToId: string | null = m.reply_to_id?.[0] ?? null;
+                const replyTarget = replyToId ? rawById.get(replyToId) : null;
+                const replyProfile = replyTarget ? profilesMap.get(replyTarget.sender.toText()) : null;
                 return {
                   id: m.id,
                   text: m.body,
@@ -536,7 +543,7 @@ export default function TeamChatPage() {
                   edited_at: m.edited_at_ms?.[0] ? new Date(Number(m.edited_at_ms[0])).toISOString() : null,
                   author_id: m.sender.toText(),
                   team_id: teamId,
-                  reply_to_id: null,
+                  reply_to_id: replyToId,
                   deleted_at: null,
                   is_club_announcement: false,
                   club_announcement_name: null,
@@ -546,7 +553,9 @@ export default function TeamChatPage() {
                   forwarded_source_label: null,
                   profiles: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
                   reactions: reactionsByMessage.get(m.id) ?? [],
-                  reply_to: null,
+                  reply_to: replyTarget
+                    ? { text: replyTarget.body, profiles: { display_name: replyProfile?.display_name ?? null } }
+                    : null,
                 };
               }) as unknown as Message[];
             return {
@@ -1599,7 +1608,7 @@ export default function TeamChatPage() {
         },
         icp: async (ctx) => {
           // Team id doubles as the conversation id (deterministic on the
-          // messaging canister). Reply threading is Supabase-only.
+          // messaging canister).
           if (team?.club_id) {
             try { await ensureLiveClubConversations(ctx, team.club_id); } catch { /* best-effort self-heal */ }
           }
@@ -1612,7 +1621,7 @@ export default function TeamChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment);
+          await sendLiveMessage(ctx, teamId!, text, `${teamId}:${user!.id}:${Date.now()}`, attachment, reply_to_id);
           try {
             await recordLiveMessageSent(ctx, teamId!, user!.id);
           } catch {

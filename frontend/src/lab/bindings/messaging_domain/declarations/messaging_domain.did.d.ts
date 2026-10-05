@@ -563,6 +563,7 @@ export interface Message {
   'attachment' : [] | [Attachment],
   'sequence' : bigint,
   'idempotency_key' : string,
+  'reply_to_id' : [] | [string],
 }
 export interface MessagePage {
   'messages' : Array<Message>,

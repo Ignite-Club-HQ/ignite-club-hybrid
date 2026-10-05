@@ -60,6 +60,7 @@ export const idlFactory = ({ IDL }) => {
     'attachment' : IDL.Opt(Attachment),
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
+    'reply_to_id' : IDL.Opt(IDL.Text),
   });
   const ForwardRecord = IDL.Record({
     'to_conversation_id' : IDL.Text,
@@ -645,7 +646,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'send_message' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment)],
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
         [],
       ),
