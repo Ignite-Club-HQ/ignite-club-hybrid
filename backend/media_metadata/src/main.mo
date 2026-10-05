@@ -49,6 +49,8 @@ persistent actor class Main(governorInit : Principal) {
 
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
 
+  func validLong(value : Text, max : Nat) : Bool { value != "" and value.size() <= max };
+
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
   };
