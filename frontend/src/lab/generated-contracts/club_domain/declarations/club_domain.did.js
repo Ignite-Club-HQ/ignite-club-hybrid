@@ -683,6 +683,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubProfile), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_profiles' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_club_settings' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSettings), 'Err' : IDL.Text })],
@@ -691,6 +696,11 @@ export const idlFactory = ({ IDL }) => {
     'get_club_subscription' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_subscriptions' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubSubscription), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_current_season' : IDL.Func(
@@ -751,6 +761,16 @@ export const idlFactory = ({ IDL }) => {
     'get_team_subscription' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(TeamSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_subscriptions' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(TeamSubscription), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_teams' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
         ['query'],
       ),
     'has_club_staff_role' : IDL.Func(
@@ -922,6 +942,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_teams' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_teams_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
         ['query'],
       ),

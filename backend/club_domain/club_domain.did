@@ -478,6 +478,11 @@ type Main =
        Err: text;
        Ok: opt ClubProfile;
      }) query;
+   get_club_profiles: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     }) query;
    get_club_settings: (club_id: text) ->
     (variant {
        Err: text;
@@ -487,6 +492,11 @@ type Main =
     (variant {
        Err: text;
        Ok: opt ClubSubscription;
+     }) query;
+   get_club_subscriptions: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubSubscription;
      }) query;
    get_current_season: (club_id: text) ->
     (variant {
@@ -543,6 +553,16 @@ type Main =
     (variant {
        Err: text;
        Ok: opt TeamSubscription;
+     }) query;
+   get_team_subscriptions: (team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamSubscription;
+     }) query;
+   get_teams: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
      }) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
@@ -687,6 +707,11 @@ type Main =
        Ok: vec TeamSponsorAllocation;
      }) query;
    list_teams: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     }) query;
+   list_teams_multi: (club_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec ClubTeam;

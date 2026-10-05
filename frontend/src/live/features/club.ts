@@ -24,9 +24,77 @@ export type LiveClubSettings = Parameters<ClubDomainActor["save_club_settings"]>
 export type LiveClubTeam = Parameters<ClubDomainActor["save_team"]>[0];
 export type LiveClubSponsor = Parameters<ClubDomainActor["save_sponsor"]>[0];
 
+// ---- Request batching ----
+// Single-id reads made in the same tick (e.g. a page's Promise.all over its
+// clubs/teams) are coalesced into ONE batched canister query. Canisters
+// deployed before the batch methods existed fall back to per-id calls.
+const batchUnsupported = new Set<string>();
+type Pending<R> = { ids: Set<string>; waiters: Array<{ id: string; resolve: (v: R) => void; reject: (e: unknown) => void }> };
+const batchQueues = new WeakMap<object, Map<string, Pending<unknown>>>();
+
+function isMissingMethod(err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message ?? err);
+  return /has no (query|update) method|method not found|IC0302|not a function/i.test(msg);
+}
+
+function batched<R>(
+  ctx: FeatureBackendContext,
+  name: string,
+  id: string,
+  runBatch: (actor: ClubDomainActor, ids: string[]) => Promise<Map<string, R>>,
+  runSingle: (actor: ClubDomainActor, id: string) => Promise<R>,
+): Promise<R> {
+  if (batchUnsupported.has(name)) {
+    return connectLiveClubDomain(ctx.target, ctx.identity).then(({ actor }) => runSingle(actor, id));
+  }
+  let byName = batchQueues.get(ctx.identity as object);
+  if (!byName) { byName = new Map(); batchQueues.set(ctx.identity as object, byName); }
+  const key = `${name}|${JSON.stringify(Object.values(ctx.target.canisterIds ?? {}))}`;
+  let pending = byName.get(key) as Pending<R> | undefined;
+  if (!pending) {
+    const fresh: Pending<R> = { ids: new Set(), waiters: [] };
+    pending = fresh;
+    byName.set(key, fresh as Pending<unknown>);
+    const queues = byName;
+    queueMicrotask(async () => {
+      queues.delete(key);
+      const ids = [...fresh.ids];
+      try {
+        const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+        let results: Map<string, R>;
+        try {
+          results = ids.length === 1 ? new Map([[ids[0], await runSingle(actor, ids[0])]]) : await runBatch(actor, ids);
+        } catch (err) {
+          if (!isMissingMethod(err)) throw err;
+          batchUnsupported.add(name);
+          const singles = await Promise.allSettled(ids.map((i) => runSingle(actor, i)));
+          for (const w of fresh.waiters) {
+            const r = singles[ids.indexOf(w.id)];
+            if (r.status === "fulfilled") w.resolve(r.value); else w.reject(r.reason);
+          }
+          return;
+        }
+        for (const w of fresh.waiters) w.resolve(results.get(w.id) as R);
+      } catch (err) {
+        for (const w of fresh.waiters) w.reject(err);
+      }
+    });
+  }
+  pending.ids.add(id);
+  return new Promise<R>((resolve, reject) => pending!.waiters.push({ id, resolve, reject }));
+}
+
 export async function getLiveClubProfile(ctx: FeatureBackendContext, clubId: string) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_club_profile(clubId), "Get club profile");
+  return batched<[] | [LiveClubProfile]>(
+    ctx, "club_profile", clubId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_club_profiles(ids), "Get club profiles");
+      const m = new Map<string, [] | [LiveClubProfile]>(ids.map((i) => [i, []]));
+      for (const r of rows) m.set(r.id, [r]);
+      return m;
+    },
+    (actor, id) => unwrapCandid(actor.get_club_profile(id), "Get club profile"),
+  );
 }
 
 export async function saveLiveClubProfile(ctx: FeatureBackendContext, profile: LiveClubProfile) {
@@ -46,9 +114,19 @@ export async function getLiveClubSubscription(
   ctx: FeatureBackendContext,
   clubId: string,
 ): Promise<LiveClubSubscription | null> {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const row = await unwrapCandid(actor.get_club_subscription(clubId), "Get club subscription");
-  return row.length ? row[0] : null;
+  return batched<LiveClubSubscription | null>(
+    ctx, "club_subscription", clubId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_club_subscriptions(ids), "Get club subscriptions");
+      const m = new Map<string, LiveClubSubscription | null>(ids.map((i) => [i, null]));
+      for (const r of rows) m.set(r.club_id, r);
+      return m;
+    },
+    async (actor, id) => {
+      const row = await unwrapCandid(actor.get_club_subscription(id), "Get club subscription");
+      return row.length ? row[0] : null;
+    },
+  );
 }
 
 /** Governor/app-admin only canister-side; club admins cannot self-upgrade. */
@@ -67,9 +145,19 @@ export async function getLiveTeamSubscription(
   ctx: FeatureBackendContext,
   teamId: string,
 ): Promise<LiveTeamSubscription | null> {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const row = await unwrapCandid(actor.get_team_subscription(teamId), "Get team subscription");
-  return row.length ? row[0] : null;
+  return batched<LiveTeamSubscription | null>(
+    ctx, "team_subscription", teamId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_team_subscriptions(ids), "Get team subscriptions");
+      const m = new Map<string, LiveTeamSubscription | null>(ids.map((i) => [i, null]));
+      for (const r of rows) m.set(r.team_id, r);
+      return m;
+    },
+    async (actor, id) => {
+      const row = await unwrapCandid(actor.get_team_subscription(id), "Get team subscription");
+      return row.length ? row[0] : null;
+    },
+  );
 }
 
 /** Governor/app-admin only canister-side (Pro flags); a team cannot grant itself Pro. */
@@ -163,13 +251,29 @@ export async function listLiveClubs(
 }
 
 export async function listLiveTeams(ctx: FeatureBackendContext, clubId: string) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.list_teams(clubId), "List teams");
+  return batched<LiveClubTeam[]>(
+    ctx, "list_teams", clubId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.list_teams_multi(ids), "List teams");
+      const m = new Map<string, LiveClubTeam[]>(ids.map((i) => [i, []]));
+      for (const r of rows) m.get(r.club_id)?.push(r);
+      return m;
+    },
+    (actor, id) => unwrapCandid(actor.list_teams(id), "List teams"),
+  );
 }
 
 export async function getLiveTeam(ctx: FeatureBackendContext, teamId: string) {
-  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_team(teamId), "Get team");
+  return batched<[] | [LiveClubTeam]>(
+    ctx, "team", teamId,
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_teams(ids), "Get teams");
+      const m = new Map<string, [] | [LiveClubTeam]>(ids.map((i) => [i, []]));
+      for (const r of rows) m.set(r.id, [r]);
+      return m;
+    },
+    (actor, id) => unwrapCandid(actor.get_team(id), "Get team"),
+  );
 }
 
 export async function saveLiveTeam(ctx: FeatureBackendContext, team: LiveClubTeam) {
