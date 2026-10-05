@@ -322,7 +322,7 @@ function SupabaseJoinTeamPage() {
               expires_at: row.expires_at,
               created_at: row.created_at,
               created_by: row.created_by,
-              metadata: row.metadata as { child_name?: string; child_year_of_birth?: number } | null,
+              metadata: row.metadata as { child_name?: string; child_year_of_birth?: number; icp_invite_link?: boolean } | null,
               teams: {
                 id: row.team_id,
                 name: row.team_name,
@@ -355,7 +355,7 @@ function SupabaseJoinTeamPage() {
                 expires_at: null,
                 created_at: new Date(Number(link.created_at_ms)).toISOString(),
                 created_by: link.created_by?.toText?.() ?? null,
-                metadata: { icp_invite_link: true },
+                metadata: { icp_invite_link: true } as { child_name?: string; child_year_of_birth?: number; icp_invite_link?: boolean },
                 teams: {
                   id: link.team_id,
                   name: "",
@@ -1137,7 +1137,7 @@ function SupabaseJoinTeamPage() {
           icp: async (ctx) => {
             // TeamInviteLink tokens are redeemed by token (grants the link's
             // role idempotently); legacy TeamInvite records are accepted by id.
-            if ((invite?.metadata as { icp_invite_link?: boolean } | null)?.icp_invite_link) {
+            if ((invite as { metadata?: { icp_invite_link?: boolean } | null } | null)?.metadata?.icp_invite_link) {
               await acceptLiveTeamInviteLink(ctx, token!);
               return;
             }
