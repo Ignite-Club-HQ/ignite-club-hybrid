@@ -24,3 +24,9 @@
 - Browser-side repro blocked: headless II sign-in handshake never completes; IndexedDB session injection deadlocks on version upgrade while the app holds the DB open.
 - Fix shipped: ChatImageInput's file-select catch now surfaces the real error (getReadableUploadError) instead of the generic "Failed to upload image" toast, and logs the full error — the next failure will be diagnosable from the toast/console.
 - OPEN: ask the user to retry the image upload and report the exact toast text (or console error) — that pinpoints the remaining browser-side step.
+
+## Club admin rights missing in ICP mode (Dingo club)
+- [x] Verified on-chain: live club_domain create_club grants club_admin to the creator (probe club + my_role_grants) — the Dingo grant exists.
+- [x] Root cause: ClubDetailPage's userRole + isAppAdmin queries were Supabase-only (II principal sent as UUID → no rows → not admin). Fixed: ICP branch reads my_role_grants (mirrors TeamDetailPage); isAppAdmin now uses the shared useIsAppAdmin hook.
+- [x] Checked siblings: useNewsPublishableClubs already has an ICP branch; build OK + typecheck clean.
+- NOTE: leftover probe club "Probe" (id probe-1791172353502) on mainnet — undeletable without the discarded probe identity or the governor; invisible to members (membership-scoped lists).
