@@ -1,5 +1,10 @@
 # Roadmap
 
+## Club and team selectors in ICP mode
+- [x] Unwrap optional club profiles in event creation; allow club admins to choose club teams and ignore stale active-club filters.
+- [x] Read ICP clubs and teams for event editing, photo uploads, competition organisers, mini leagues, and leaderboard selectors rather than querying Supabase roles with an Internet Identity principal.
+- [ ] Verify the picker interactions in a signed-in Internet Identity browser session (requires a working II session in the preview).
+
 ## Event map is broken in ICP mode
 - [x] Replace invalid event map iframe URL with Google Maps Embed using the connected public browser key; forward the key through the guarded live preview/build configuration and offer a location link if the key is unavailable.
 
