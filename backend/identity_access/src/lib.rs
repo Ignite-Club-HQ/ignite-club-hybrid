@@ -2069,4 +2069,10 @@ mod tests {
 pub fn candid_interface() -> String {
     __export_service()
 }
+/// Public: remaining cycles (shown in admin settings).
+#[ic_cdk::query]
+fn cycles_balance() -> candid::Nat {
+    candid::Nat::from(ic_cdk::api::canister_cycle_balance())
+}
+
 ic_cdk::export_candid!();

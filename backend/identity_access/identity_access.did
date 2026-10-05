@@ -127,6 +127,7 @@ type TermsAcceptance = record {
   accepted_at_ms : nat64;
 };
 service : (Init) -> {
+  cycles_balance : () -> (nat) query;
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;

@@ -20,6 +20,10 @@ export interface Main {
     [WorkloadIdentityFilter],
     Array<SecretAccessAudit>
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'get_audit_summary' : ActorMethod<[], AuditSummary>,
   'get_workload' : ActorMethod<
     [Principal],

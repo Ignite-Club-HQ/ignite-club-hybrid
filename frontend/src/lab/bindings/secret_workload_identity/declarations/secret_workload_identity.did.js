@@ -52,6 +52,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(SecretAccessAudit)],
         ['query'],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_audit_summary' : IDL.Func([], [AuditSummary], ['query']),
     'get_workload' : IDL.Func(
         [IDL.Principal],

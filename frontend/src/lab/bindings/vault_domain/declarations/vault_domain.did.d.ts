@@ -32,6 +32,10 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_file_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |

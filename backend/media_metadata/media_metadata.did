@@ -40,6 +40,8 @@ type Main =
        Err: text;
        Ok: Reaction;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_asset: (asset_id: text) -> (variant {
                                         Err: text;
                                         Ok: Asset;
@@ -101,18 +103,17 @@ type Main =
        Err: text;
        Ok: GalleryChatCard;
      });
-    set_asset_scope: (asset_id: text, team_id: opt text,
-     mini_league_id: opt text, competition_id: opt text, event_id: opt text,
-     caption: opt text, album_id: opt text) ->
-     (variant {
-        Err: text;
-        Ok: Asset;
-      });
-    set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
-     (variant {
-        Err: text;
-        Ok: Asset;
-      });
+   set_asset_scope: (asset_id: text, team_id: opt text, mini_league_id:
+    opt text, competition_id: opt text, event_id: opt text, caption:
+    opt text, album_id: opt text) -> (variant {
+                                        Err: text;
+                                        Ok: Asset;
+                                      });
+   set_blob_ref: (asset_id: text, blob_ref: opt BlobRef) ->
+    (variant {
+       Err: text;
+       Ok: Asset;
+     });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
@@ -162,27 +163,27 @@ type BlobRef =
  };
 type Asset = 
  record {
+   album_id: opt text;
    blob_ref: opt BlobRef;
+   caption: opt text;
    checksum: text;
    child_sensitive: bool;
    club_id: text;
+   competition_id: opt text;
    content_length: nat64;
+   created_at_ms: nat64;
    deleted: bool;
    encrypted: bool;
+   event_id: opt text;
    expires_at_ms: nat64;
    id: text;
    kind: text;
    mime: text;
+   mini_league_id: opt text;
    owner: principal;
-    retention_until_ms: nat64;
-    storage_path: text;
-    visibility: text;
-    created_at_ms: nat64;
-    team_id: opt text;
-    mini_league_id: opt text;
-    competition_id: opt text;
-    event_id: opt text;
-    caption: opt text;
-    album_id: opt text;
-  };
+   retention_until_ms: nat64;
+   storage_path: text;
+   team_id: opt text;
+   visibility: text;
+ };
 service : (governorInit: principal) -> Main

@@ -237,6 +237,8 @@ type Main =
                                    Err: text;
                                    Ok: Poll;
                                  });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_club_data: (club_id: text) -> (variant {
                                            Err: text;
                                            Ok: nat32;

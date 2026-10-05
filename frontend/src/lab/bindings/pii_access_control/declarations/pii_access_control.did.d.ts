@@ -40,6 +40,10 @@ export interface Main {
       { 'Err' : string }
   >,
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'delete_pii' : ActorMethod<
     [string, string],
     { 'Ok' : PiiDeleteResult } |

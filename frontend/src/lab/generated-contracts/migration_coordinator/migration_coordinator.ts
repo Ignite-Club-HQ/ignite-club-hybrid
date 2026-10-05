@@ -55,6 +55,10 @@ export interface MainInterface {
     abort(id: bigint): Promise<Migration>;
     begin(domain: string, source: Principal, destination: Principal, schemaVersion: bigint, checksum: string): Promise<Migration>;
     commit(id: bigint): Promise<Migration>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     markExported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
     markImported(id: bigint, recordCount: bigint, checksum: string): Promise<Migration>;
     orchestrateExport(id: bigint): Promise<Migration>;
@@ -97,6 +101,10 @@ export class Migration_coordinator implements migration_coordinatorInterface {
     async commit(arg0: bigint): Promise<Migration> {
         const result = await this.actor.commit(arg0);
         return from_candid_Migration_n1(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async markExported(arg0: bigint, arg1: bigint, arg2: string): Promise<Migration> {
         const result = await this.actor.markExported(arg0, arg1, arg2);

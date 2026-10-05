@@ -159,6 +159,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_mini_league(mini_league_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -655,6 +659,10 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.create_session(arg0, arg1, arg2, to_candid_opt_n5(arg3), to_candid_opt_n5(arg4), to_candid_opt_n5(arg5), to_candid_opt_n5(arg6), to_candid_opt_n6(arg7));
         return from_candid_variant_n15(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_mini_league(arg0: string): Promise<{
         __kind__: "Ok";

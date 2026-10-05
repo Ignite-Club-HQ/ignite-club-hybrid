@@ -204,6 +204,8 @@ type Main =
        Err: text;
        Ok: MiniLeagueSession;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_mini_league: (mini_league_id: text) -> (variant {
                                                     Err: text;
                                                     Ok;

@@ -48,6 +48,8 @@ type Main =
        Err: text;
        Ok: VaultFolder;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_file_permanent: (id: text) -> (variant {
                                            Err: text;
                                            Ok;

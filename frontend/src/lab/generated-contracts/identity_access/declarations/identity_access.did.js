@@ -166,6 +166,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_5],
         ['query'],
       ),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'erase_account' : IDL.Func([IDL.Text], [Result_2], []),
     'export_state' : IDL.Func([], [Result_6], ['query']),
     'get_external_bindings' : IDL.Func([IDL.Text], [Result_7], ['query']),

@@ -57,6 +57,7 @@ export interface _SERVICE {
   'claim' : ActorMethod<[bigint, number], result_jobs>,
   'claim_with_lease' : ActorMethod<[bigint, number, bigint], result_jobs>,
   'complete' : ActorMethod<[string, string], result_job>,
+  'cycles_balance' : ActorMethod<[], bigint>,
   'export_state' : ActorMethod<[], result_snapshot>,
   'fail' : ActorMethod<[string, string, [] | [bigint]], result_job>,
   'get_job' : ActorMethod<[string], [] | [job]>,

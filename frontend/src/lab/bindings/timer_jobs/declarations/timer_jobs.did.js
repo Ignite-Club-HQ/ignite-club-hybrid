@@ -61,6 +61,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'complete' : IDL.Func([IDL.Text, IDL.Text], [result_job], []),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'export_state' : IDL.Func([], [result_snapshot], ['query']),
     'fail' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Nat64)],

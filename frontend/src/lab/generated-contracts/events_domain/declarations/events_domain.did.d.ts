@@ -392,6 +392,10 @@ export interface Main {
     { 'Ok' : TeamTrainingPause } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'deactivate_active_game' : ActorMethod<
     [[] | [string]],
     { 'Ok' : null } |

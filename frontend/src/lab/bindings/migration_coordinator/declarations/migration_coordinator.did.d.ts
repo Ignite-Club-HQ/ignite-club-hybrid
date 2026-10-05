@@ -17,6 +17,10 @@ export interface Main {
     Migration
   >,
   'commit' : ActorMethod<[bigint], Migration>,
+  /**
+   * / Public: remaining cycles (shown in admin settings).
+   */
+  'cycles_balance' : ActorMethod<[], bigint>,
   'markExported' : ActorMethod<[bigint, bigint, string], Migration>,
   'markImported' : ActorMethod<[bigint, bigint, string], Migration>,
   'orchestrateExport' : ActorMethod<[bigint], Migration>,

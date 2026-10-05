@@ -104,6 +104,10 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: remaining cycles (shown in admin settings).
+     */
+    cycles_balance(): Promise<bigint>;
     delete_reward(id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -414,6 +418,10 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.create_reward(arg0, arg1, to_candid_opt_n10(arg2), arg3, arg4, arg5, to_candid_opt_n10(arg6), arg7, to_candid_opt_n10(arg8), to_candid_opt_n10(arg9));
         return from_candid_variant_n15(result);
+    }
+    async cycles_balance(): Promise<bigint> {
+        const result = await this.actor.cycles_balance();
+        return result;
     }
     async delete_reward(arg0: string): Promise<{
         __kind__: "Ok";

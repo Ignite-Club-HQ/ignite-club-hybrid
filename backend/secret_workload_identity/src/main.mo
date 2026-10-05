@@ -2,6 +2,7 @@
 /// Manages workload identity registration and vault secret access control
 /// Enforces least-privilege access to vault secrets by canister principal
 
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
@@ -13,6 +14,9 @@ import Text "mo:core/Text";
 import Time "mo:core/Time";
 
 persistent actor class Main(governorInit : Principal) {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
 
   // ==================== Types ====================
 

@@ -44,6 +44,7 @@ import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
 import { PhotoStoresCard } from "@/components/admin/PhotoStoresCard";
+import { CanisterBalancesCard } from "@/components/admin/CanisterBalancesCard";
 import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
 import {
   ICP_CANISTER_CONFIG_KEY,
@@ -868,6 +869,7 @@ export default function PlacementAdminSettingsPage() {
         </Card>
 
         <PhotoStoresCard />
+        <CanisterBalancesCard />
 
 
         <Card>

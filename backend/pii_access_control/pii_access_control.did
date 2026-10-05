@@ -11,6 +11,8 @@ type Main =
        Ok;
      });
    audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_pii: (pii_id: text, field_id: text) ->
     (variant {
        Err: text;

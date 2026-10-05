@@ -136,6 +136,8 @@ type Main =
        Err: text;
        Ok: Season;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    decline_competition_invite: (invite_id: text) ->
     (variant {
        Err: text;

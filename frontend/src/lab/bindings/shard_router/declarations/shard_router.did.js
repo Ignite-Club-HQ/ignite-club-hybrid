@@ -115,6 +115,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'commit_migration' : IDL.Func([IDL.Text, IDL.Nat64], [result_assign], []),
+    'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'get_domain_migration' : IDL.Func(
         [IDL.Text, IDL.Text],
         [result_opt_domain_migration],

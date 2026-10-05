@@ -1,3 +1,4 @@
+import Cycles "mo:core/Cycles";
 import Array "mo:core/Array";
 import Blob "mo:core/Blob";
 import Nat "mo:core/Nat";
@@ -30,6 +31,9 @@ import Text "mo:core/Text";
 // MUST set it (deployer principal) before first use.
 
 persistent actor MediaBlobStore {
+  /// Public: remaining cycles (shown in admin settings).
+  public query func cycles_balance() : async Nat { Cycles.balance() };
+
 
   // ==================== Types (mirror media_blob_store.did) ====================
 

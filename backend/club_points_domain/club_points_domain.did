@@ -96,6 +96,8 @@ type Main =
        Err: text;
        Ok: ClubReward;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_reward: (id: text) -> (variant {
                                    Err: text;
                                    Ok;

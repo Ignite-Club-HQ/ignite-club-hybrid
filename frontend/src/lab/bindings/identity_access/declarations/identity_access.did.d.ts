@@ -187,6 +187,7 @@ export interface _SERVICE {
   'begin_link' : ActorMethod<[Principal], Result_3>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_4>,
   'check_field_access' : ActorMethod<[string, string], Result_5>,
+  'cycles_balance' : ActorMethod<[], bigint>,
   'erase_account' : ActorMethod<[string], Result_2>,
   'export_state' : ActorMethod<[], Result_6>,
   'get_external_bindings' : ActorMethod<[string], Result_7>,

@@ -32,6 +32,7 @@ type result_residency_policy = variant { Ok : residency_policy; Err : text };
 type result_operator = variant { Ok : operator_record; Err : text };
 type result_unit = variant { Ok; Err : text };
 service : (init) -> {
+  cycles_balance : () -> (nat) query;
   get_availability : () -> (availability) query;
   get_site_availability : (text) -> (result_bool) query;
   get_decision : (text) -> (result_decision) query;

@@ -53,6 +53,8 @@ service : {
   abort_upload: (upload_id: text) -> (Result);
   begin_upload: (path: text, mime: text, total_size: nat64, chunk_count:
    nat32) -> (ResultUploadId);
+  /// Public: remaining cycles (shown in admin settings).
+  cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
   get_content_hash: (path: text) -> (opt text) query;

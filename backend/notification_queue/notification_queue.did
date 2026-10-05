@@ -164,6 +164,8 @@ type Main =
    cancel_scheduled: (id: text, author: text) -> (ScheduledResult);
    claim: (now_ms: nat64, limit: nat16) -> (Results);
    clear_inbox: (user: text, club: opt text) -> (ResultNat16);
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_notification: (id: text) -> (variant {
                                          Err: text;
                                          Ok;
