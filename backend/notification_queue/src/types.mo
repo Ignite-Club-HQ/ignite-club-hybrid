@@ -208,4 +208,23 @@ module {
   // paginates the full preferences set.
   public type PreferencesPage = { items : [Preferences]; total : Nat32 };
   public type PreferencesPageResult = { #Ok : PreferencesPage; #Err : Text };
+
+  // ---- Device push tokens (per-principal, caller-scoped) ----
+  // FCM registration tokens (native app) and web-push subscriptions, owned
+  // by the registering IC caller. Registration is keyed by the caller's
+  // principal text — never a browser-supplied user id — so a device can only
+  // ever be registered to its actual owner. The delivery worker reads tokens
+  // through the worker-gated list_device_tokens query and prunes dead ones
+  // through remove_device_tokens.
+  public type DeviceToken = {
+    user : Text;
+    platform : Text; // "android" | "ios" | "web"
+    token : Text; // FCM registration token; the endpoint URL for "web"
+    p256dh : ?Text; // web-push key (null for native tokens)
+    auth : ?Text; // web-push auth secret (null for native tokens)
+    updated_at_ms : Nat64;
+  };
+
+  public type DeviceTokensResult = { #Ok : [DeviceToken]; #Err : Text };
+  public type DeviceTokenCountResult = { #Ok : Nat16; #Err : Text };
 }

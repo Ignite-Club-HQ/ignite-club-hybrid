@@ -183,6 +183,7 @@ type Main =
                                                 Err: text;
                                                 Ok;
                                               });
+   list_device_tokens: (users: vec text) -> (DeviceTokensResult) query;
    list_inbox: (user: text, club: opt text, limit: nat16) -> (Results) query;
    list_preferences_by_club: (club_id: text, limit: nat32, offset: nat32) ->
     (PreferencesPageResult) query;
@@ -200,6 +201,13 @@ type Main =
     classification: DigestClassification, summary: text, topic: opt text,
     mentions: vec text, provider: opt text) -> (DigestResult);
    recover: () -> (ResultNat16);
+   register_device_token: (platform: text, token: text, p256dh: opt text,
+    auth: opt text) -> (variant {
+                          Err: text;
+                          Ok;
+                        });
+   remove_device_tokens: (user: text, tokens: vec text) ->
+    (DeviceTokenCountResult);
    schedule_message: (id: text, author: text, chat_type: ChatType, team_id:
     opt text, club_id: opt text, group_id: opt text, conversation_id:
     opt text, body: text, image_url: opt text, reply_to_id: opt text,
@@ -215,6 +223,7 @@ type Main =
        Err: text;
        Ok;
      });
+   unregister_device_token: (token: text) -> (DeviceTokenCountResult);
    update_scheduled_message: (id: text, author: text, body: opt text,
     image_url: opt text, scheduled_for_ms: opt nat64, recurrence:
     opt Recurrence, recurrence_until_ms: opt nat64) -> (ScheduledResult);
@@ -260,6 +269,25 @@ type DigestClassification =
    Info;
    Question;
    Social;
+ };
+type DeviceTokensResult = 
+ variant {
+   Err: text;
+   Ok: vec DeviceToken;
+ };
+type DeviceTokenCountResult = 
+ variant {
+   Err: text;
+   Ok: nat16;
+ };
+type DeviceToken = 
+ record {
+   auth: opt text;
+   p256dh: opt text;
+   platform: text;
+   token: text;
+   updated_at_ms: nat64;
+   user: text;
  };
 type ChatType = 
  variant {
