@@ -629,6 +629,17 @@ export default function ClubUpgradePage() {
       handleNativeIAP(tier, withTrial);
       return;
     }
+    // NEEDS-CANISTER: card checkout runs through Supabase functions/Stripe,
+    // which Internet Identity sessions cannot call; only native IAP is
+    // supported for ICP-routed clubs.
+    if (isIcpRouted) {
+      toast({
+        title: "Checkout unavailable",
+        description: "Card checkout is not yet available for Internet Identity clubs. Please subscribe from the mobile app instead.",
+        variant: "destructive",
+      });
+      return;
+    }
     const plan = tier === "pro" ? selectedPlan : selectedPlanFootball;
     const annualDisabledCheckout = tier === "pro_football" || (tier === "pro" && plan === "unlimited");
     const isAnnual = annualDisabledCheckout ? false : (tier === "pro" ? isAnnualPro : isAnnualProFootball);
