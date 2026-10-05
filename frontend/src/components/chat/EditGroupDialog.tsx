@@ -19,7 +19,7 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { updateLiveGroup, getLiveGroupMetadata } from "@/live/features/messaging";
+import { updateLiveGroup, getLiveGroupMetadata, setLiveGroupJoinPolicy } from "@/live/features/messaging";
 import { myLiveRoleGrants } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
@@ -239,6 +239,7 @@ export default function EditGroupDialog({ group, open: controlledOpen, onOpenCha
             avatar.trim() ? avatar : null,
             adminOnlyPosting,
           );
+          await setLiveGroupJoinPolicy(ctx, group.id, joinPolicy, (group as { category?: string | null }).category ?? null);
         },
       });
     },

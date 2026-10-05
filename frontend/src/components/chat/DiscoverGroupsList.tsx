@@ -27,6 +27,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -113,6 +115,27 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
     enabled: !!user?.id && (!activeClubFilter || hasPro),
     staleTime: 60_000,
     queryFn: async (): Promise<OpenGroup[]> => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        if (!activeClubFilter) return [];
+        const { listLiveOpenGroups } = await import("@/live/features/messaging");
+        return withFeatureBackend("messaging", {
+          supabase: async () => [] as OpenGroup[],
+          icp: async (ctx) =>
+            (await listLiveOpenGroups(ctx, activeClubFilter)).map((g) => ({
+              id: g.conversationId,
+              name: g.name,
+              category: g.category,
+              club_id: g.clubId ?? activeClubFilter,
+              club_name: null,
+              join_policy: g.joinPolicy,
+              member_count: g.memberCount,
+              joined: g.isMember,
+              requested: g.requested,
+              last_text: null,
+              last_at: null,
+            })),
+        });
+      }
       let q = supabase
         .from("chat_groups")
         .select("id, name, category, club_id, join_policy, clubs:club_id(name)")
@@ -183,6 +206,11 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
 
   const requestMutation = useMutation({
     mutationFn: async (groupId: string) => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        const { requestLiveJoinGroup } = await import("@/live/features/messaging");
+        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => requestLiveJoinGroup(ctx, groupId) });
+        return groupId;
+      }
       const { data, error } = await (supabase as any).rpc("request_join_chat_group", {
         _group_id: groupId,
       });
@@ -201,6 +229,11 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
 
   const joinMutation = useMutation({
     mutationFn: async (groupId: string) => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        const { joinLiveOpenGroup } = await import("@/live/features/messaging");
+        await withFeatureBackend("messaging", { supabase: async () => {}, icp: (ctx) => joinLiveOpenGroup(ctx, groupId) });
+        return groupId;
+      }
       const { data, error } = await (supabase as any).rpc("join_open_chat_group", {
         _group_id: groupId,
       });
