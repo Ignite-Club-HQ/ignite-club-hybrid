@@ -48,6 +48,7 @@ import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, getLiveClubSubscription, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
 
@@ -114,7 +115,10 @@ export default function ClubUpgradePage() {
   const queryClient = useQueryClient();
   const { activeClubFilter } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
-  const providerKey = useIcpLab ? "icp" : "supabase";
+  // Real ICP routing (live build): resolveLocalAuthMode is always false there,
+  // so canister reads key off the placement routing instead.
+  const isIcpRouted = isFeatureRoutedToIcp("membership");
+  const providerKey = useIcpLab || isIcpRouted ? "icp" : "supabase";
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeFootball, setPromoCodeFootball] = useState("");
   const [isValidating, setIsValidating] = useState(false);
