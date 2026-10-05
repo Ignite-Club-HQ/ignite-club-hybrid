@@ -114,6 +114,29 @@ export default function EditProfilePage() {
 
     setUploadingAvatar(true);
 
+    if (useIcpLab) {
+      // ICP mode: encrypt + store on the blob-store canister, keep the
+      // on-chain URL as the avatar reference.
+      try {
+        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+        const url = await uploadIcpAvatar({
+          file,
+          mime: file.type || "image/jpeg",
+          ext: file.name.split('.').pop() || "jpg",
+        });
+        setAvatarUrl(url);
+        toast({ title: "Photo uploaded!" });
+      } catch (error) {
+        toast({
+          title: "Upload failed",
+          description: error instanceof Error ? error.message : "Could not upload photo",
+          variant: "destructive",
+        });
+      }
+      setUploadingAvatar(false);
+      return;
+    }
+
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
