@@ -1,9 +1,10 @@
 # Roadmap — ICP speed-up part 2
-- [ ] Shared batching helper (live/features/batching.ts)
-- [ ] Events batched reads
-- [ ] Messaging batched reads
-- [ ] Names / child names batching
-- [ ] Mini-league / competition / media / vault / points batching
-- [ ] Optimistic taps + query hygiene
-- [ ] Idle prefetch
-- [ ] Call-count instrumentation
+- [x] Shared batching helper (live/features/batching.ts)
+- [x] Events batched reads (list_events_multi, get_event_rosters, list_duties_multi)
+- [x] Messaging batched reads (mute prefs, group metadata, groups by clubs)
+- [x] Names / child names — already batched + cached, no change needed
+- [x] Mini-league + sponsor batching (competitions/media/vault/points had no per-item fan-out)
+- [x] Optimistic RSVP on event cards (chat send/reactions already optimistic)
+- [ ] Chat-open bundle (messages+reactions+pins) — low gain: those calls already run in parallel
+- [ ] Idle prefetch of Schedule/Messages after Home
+- [ ] Call-count instrumentation — measure after mainnet deploy
