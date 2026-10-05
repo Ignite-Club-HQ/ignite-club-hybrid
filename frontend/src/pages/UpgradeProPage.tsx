@@ -114,6 +114,9 @@ function SupabaseUpgradeProPage() {
   const [isAnnualProFootball, setIsAnnualProFootball] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const { showIfDesktop, dialog: desktopUpgradeDialog } = useDesktopUpgradeGate();
+  const isIcp = resolveAuthBackend() === "icp" || isFeatureRoutedToIcp("membership");
+  const { isAppAdmin } = useIsAppAdmin();
+  const { purchaseProduct } = useInAppPurchase();
 
 
   // Handle payment success/cancelled from URL params
