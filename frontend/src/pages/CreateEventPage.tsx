@@ -54,6 +54,9 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { getLiveClubProfile, listLiveTeams } from "@/live/features/club";
+import { resolveLiveProFootballAccess } from "@/live/features/proAccess";
 import { DEFAULT_MATCH_ARRIVAL_MINUTES } from "@/lib/matchArrivalTime";
 import { validateEventTeamClubScope } from "@/lib/eventScopeValidation";
 import {
@@ -407,34 +410,66 @@ function SupabaseCreateEventPage() {
 
   const { data: clubs } = useQuery({
     queryKey: ["user-admin-clubs", user?.id],
-    queryFn: async () => {
-      const { data: clubRoles } = await supabase
-        .from("user_roles")
-        .select("club_id")
-        .eq("user_id", user!.id)
-        .in("role", ["club_admin", "committee_member"])
-        .not("club_id", "is", null);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: clubRoles } = await supabase
+            .from("user_roles")
+            .select("club_id")
+            .eq("user_id", user!.id)
+            .in("role", ["club_admin", "committee_member"])
+            .not("club_id", "is", null);
 
-      const { data: teamRoles } = await supabase
-        .from("user_roles")
-        .select("team_id, teams!inner(club_id)")
-        .eq("user_id", user!.id)
-        .in("role", ["team_admin", "coach"])
-        .not("team_id", "is", null);
+          const { data: teamRoles } = await supabase
+            .from("user_roles")
+            .select("team_id, teams!inner(club_id)")
+            .eq("user_id", user!.id)
+            .in("role", ["team_admin", "coach"])
+            .not("team_id", "is", null);
 
-      const clubIdsFromClubs = clubRoles?.map((r) => r.club_id).filter(Boolean) || [];
-      const clubIdsFromTeams = teamRoles?.map((r) => (r.teams as any)?.club_id).filter(Boolean) || [];
-      const clubIds = [...new Set([...clubIdsFromClubs, ...clubIdsFromTeams])];
+          const clubIdsFromClubs = clubRoles?.map((r) => r.club_id).filter(Boolean) || [];
+          const clubIdsFromTeams = teamRoles?.map((r) => (r.teams as any)?.club_id).filter(Boolean) || [];
+          const clubIds = [...new Set([...clubIdsFromClubs, ...clubIdsFromTeams])];
 
-      if (clubIds.length === 0) return [];
+          if (clubIds.length === 0) return [];
 
-      const { data } = await supabase
-        .from("clubs")
-        .select("id, name, allow_guests_default, max_guests_per_member_default")
-        .in("id", clubIds);
+          const { data } = await supabase
+            .from("clubs")
+            .select("id, name, allow_guests_default, max_guests_per_member_default")
+            .in("id", clubIds);
 
-      return data || [];
-    },
+          return data || [];
+        },
+        icp: async (ctx) => {
+          // II principals have no Supabase user_roles rows — read the caller's
+          // canister role grants instead. Club-wide admin/committee grants and
+          // team-scoped admin/coach grants both unlock event creation.
+          const grants = await getLiveMyRoleGrants(ctx);
+          const clubIds = new Set<string>();
+          for (const g of grants) {
+            const grantClubId = g.club?.[0];
+            if (!grantClubId) continue;
+            if (g.role === "club_admin" || g.role === "committee_member" || g.role === "app_admin") {
+              clubIds.add(grantClubId);
+            } else if (g.team?.[0] && (g.role === "team_admin" || g.role === "coach")) {
+              clubIds.add(grantClubId);
+            }
+          }
+          if (clubIds.size === 0) return [];
+          const profiles = await Promise.all(
+            [...clubIds].map((id) => getLiveClubProfile(ctx, id).catch(() => null)),
+          );
+          // Deleted clubs return no profile on the canister — they drop out here.
+          return profiles
+            .filter((p): p is NonNullable<typeof p> => !!p)
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              allow_guests_default: false,
+              max_guests_per_member_default: 2,
+            }));
+        },
+      }),
     enabled: !!user,
   });
 
@@ -468,33 +503,50 @@ function SupabaseCreateEventPage() {
 
   const { data: isClubAdminForSelectedClub } = useQuery({
     queryKey: ["is-club-admin-for-event", clubId, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", user!.id)
-        .eq("club_id", clubId)
-        .eq("role", "club_admin")
-        .maybeSingle();
-      return !!data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("id")
+            .eq("user_id", user!.id)
+            .eq("club_id", clubId)
+            .eq("role", "club_admin")
+            .maybeSingle();
+          return !!data;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return grants.some(
+            (g) =>
+              (g.role === "club_admin" || g.role === "app_admin") &&
+              (g.club?.[0] ?? null) === clubId,
+          );
+        },
+      }),
     enabled: !!clubId && !!user,
   });
 
   // Check if club has Pro Football access - use placeholderData to prevent flash
   const { data: hasProFootball, isLoading: isLoadingProFootball } = useQuery({
     queryKey: ["club-pro-football", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro_football, admin_pro_football_override, expires_at")
-        .eq("club_id", clubId)
-        .maybeSingle();
-      if (!data) return false;
-      const hasAccess = data.is_pro_football || data.admin_pro_football_override;
-      const notExpired = !data.expires_at || new Date(data.expires_at) > new Date();
-      return hasAccess && notExpired;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro_football, admin_pro_football_override, expires_at")
+            .eq("club_id", clubId)
+            .maybeSingle();
+          if (!data) return false;
+          const hasAccess = data.is_pro_football || data.admin_pro_football_override;
+          const notExpired = !data.expires_at || new Date(data.expires_at) > new Date();
+          return hasAccess && notExpired;
+        },
+        // Canister Pro flags: team grant -> club grant -> caller IAP, same as
+        // the event detail and attendance pages.
+        icp: async (ctx) => resolveLiveProFootballAccess(ctx, { teamId: null, clubId }),
+      }),
     enabled: !!clubId,
     placeholderData: false, // Prevent undefined state causing delayed render
   });
@@ -531,15 +583,22 @@ function SupabaseCreateEventPage() {
   // Get teams user has direct membership in (team_admin, coach, or any team role)
   const { data: userTeamIds } = useQuery({
     queryKey: ["user-team-memberships", clubId, user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("team_id")
-        .eq("user_id", user!.id)
-        .not("team_id", "is", null);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("user_roles")
+            .select("team_id")
+            .eq("user_id", user!.id)
+            .not("team_id", "is", null);
 
-      return data?.map(r => r.team_id).filter(Boolean) || [];
-    },
+          return data?.map(r => r.team_id).filter(Boolean) || [];
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          return [...new Set(grants.map((g) => g.team?.[0]).filter((t): t is string => !!t))];
+        },
+      }),
     enabled: !!clubId && !!user,
   });
 
@@ -550,25 +609,39 @@ function SupabaseCreateEventPage() {
       // only show teams they have direct membership in
       // If user is team admin/coach, they already have the team in userTeamIds
 
-      // Get all teams in the club first
-      const { data: allTeams } = await supabase
-        .from("teams")
-        .select("id, name, club_id")
-        .eq("club_id", clubId)
-        .is("deleted_at", null);
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          // Get all teams in the club first
+          const { data: allTeams } = await supabase
+            .from("teams")
+            .select("id, name, club_id")
+            .eq("club_id", clubId)
+            .is("deleted_at", null);
 
-      if (!allTeams) return [];
+          if (!allTeams) return [];
 
-      // Filter to only teams the user is a member of
-      if (userTeamIds && userTeamIds.length > 0) {
-        const teamsInClub = allTeams.filter(t =>
-          userTeamIds.includes(t.id)
-        );
-        return teamsInClub;
-      }
+          // Filter to only teams the user is a member of
+          if (userTeamIds && userTeamIds.length > 0) {
+            const teamsInClub = allTeams.filter(t =>
+              userTeamIds.includes(t.id)
+            );
+            return teamsInClub;
+          }
 
-      // If no team memberships, return empty (club admin without team membership can't create team events)
-      return [];
+          // If no team memberships, return empty (club admin without team membership can't create team events)
+          return [];
+        },
+        icp: async (ctx) => {
+          const allTeams = await listLiveTeams(ctx, clubId);
+          const liveTeams = allTeams.filter((t) => !t.deleted_at_ms?.[0]);
+          if (userTeamIds && userTeamIds.length > 0) {
+            return liveTeams
+              .filter((t) => userTeamIds.includes(t.id))
+              .map((t) => ({ id: t.id, name: t.name, club_id: clubId }));
+          }
+          return [];
+        },
+      });
     },
     enabled: !!clubId && userTeamIds !== undefined,
   });
@@ -577,15 +650,25 @@ function SupabaseCreateEventPage() {
   // (independent of the caller's team memberships).
   const { data: allClubTeams } = useQuery({
     queryKey: ["all-club-teams-for-target", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("club_id", clubId!)
-        .is("deleted_at", null)
-        .order("name");
-      return data ?? [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("club_id", clubId!)
+            .is("deleted_at", null)
+            .order("name");
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const allTeams = await listLiveTeams(ctx, clubId!);
+          return allTeams
+            .filter((t) => !t.deleted_at_ms?.[0])
+            .map((t) => ({ id: t.id, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
     enabled: !!clubId,
   });
 
@@ -614,47 +697,55 @@ function SupabaseCreateEventPage() {
 
   const { data: members } = useQuery({
     queryKey: ["event-members-for-duty", clubId, teamId],
-    queryFn: async () => {
-      // Get members from team if selected, otherwise from club
-      const targetId = teamId || clubId;
-      const idColumn = teamId ? "team_id" : "club_id";
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          // Get members from team if selected, otherwise from club
+          const targetId = teamId || clubId;
+          const idColumn = teamId ? "team_id" : "club_id";
 
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("user_id, profiles!inner(id, display_name, avatar_url)")
-        .eq(idColumn, targetId);
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("user_id, profiles!inner(id, display_name, avatar_url)")
+            .eq(idColumn, targetId);
 
-      if (!roles) return [];
+          if (!roles) return [];
 
-      // Deduplicate by user_id
-      const seen = new Set<string>();
-      return roles.filter(r => {
-        if (seen.has(r.user_id)) return false;
-        seen.add(r.user_id);
-        return true;
-      }).map(r => ({
-        id: r.user_id,
-        display_name: (r.profiles as any)?.display_name || "Unknown",
-        avatar_url: (r.profiles as any)?.avatar_url,
-      }));
-    },
+          // Deduplicate by user_id
+          const seen = new Set<string>();
+          return roles.filter(r => {
+            if (seen.has(r.user_id)) return false;
+            seen.add(r.user_id);
+            return true;
+          }).map(r => ({
+            id: r.user_id,
+            display_name: (r.profiles as any)?.display_name || "Unknown",
+            avatar_url: (r.profiles as any)?.avatar_url,
+          }));
+        },
+        // Duty assignment stays optional in ICP mode — the canister roster
+        // has no display-name directory to pick from yet.
+        icp: async () => [] as { id: string; display_name: string; avatar_url: string | null }[],
+      }),
     enabled: !!clubId,
   });
 
   // Fetch saved locations from previous events for the selected club
   const { data: savedLocations } = useQuery({
     queryKey: ["saved-locations", clubId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("events")
-        .select("address, suburb, state, postcode")
-        .eq("club_id", clubId)
-        .not("address", "is", null)
-        .neq("address", "")
-        .order("event_date", { ascending: false })
-        .limit(50);
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("events")
+            .select("address, suburb, state, postcode")
+            .eq("club_id", clubId)
+            .not("address", "is", null)
+            .neq("address", "")
+            .order("event_date", { ascending: false })
+            .limit(50);
 
-      if (!data) return [];
+          if (!data) return [];
 
       // Deduplicate by address
       const seen = new Set<string>();
@@ -674,8 +765,11 @@ function SupabaseCreateEventPage() {
         if (uniqueLocations.length >= 10) break;
       }
 
-      return uniqueLocations;
-    },
+          return uniqueLocations;
+        },
+        // Location history lives in Supabase events only — nothing to offer in ICP mode.
+        icp: async () => [] as SavedLocation[],
+      }),
     enabled: !!clubId,
   });
 
@@ -683,29 +777,45 @@ function SupabaseCreateEventPage() {
   const queryClient = useQueryClient();
   const { data: favoriteTitles } = useQuery({
     queryKey: ["favorite-event-titles", user?.id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("favorite_event_titles")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      return data || [];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("favorite_event_titles")
+            .select("*")
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false });
+          return data || [];
+        },
+        // Favourite titles are a Supabase table keyed by UUID — not available
+        // for II principals.
+        icp: async () => [] as any[],
+      }),
     enabled: !!user,
   });
 
   const saveFavoriteTitle = async () => {
     if (!user || !title.trim()) return;
 
-    const { error } = await supabase
-      .from("favorite_event_titles")
-      .insert({
-        user_id: user.id,
-        title: title.trim(),
-        event_type: type,
-      });
+    const error = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
+          .from("favorite_event_titles")
+          .insert({
+            user_id: user.id,
+            title: title.trim(),
+            event_type: type,
+          });
+        return error;
+      },
+      icp: async () => ({ code: "icp_skip" } as any),
+    });
 
     if (error) {
+      if (error.code === "icp_skip") {
+        toast({ title: "Not available", description: "Favourite titles aren't available in ICP mode yet." });
+        return;
+      }
       if (error.code === "23505") {
         toast({ title: "Already saved", description: "This title is already in your favorites" });
       } else {
@@ -718,10 +828,16 @@ function SupabaseCreateEventPage() {
   };
 
   const deleteFavoriteTitle = async (id: string) => {
-    const { error } = await supabase
-      .from("favorite_event_titles")
-      .delete()
-      .eq("id", id);
+    const error = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
+          .from("favorite_event_titles")
+          .delete()
+          .eq("id", id);
+        return error;
+      },
+      icp: async () => null,
+    });
 
     if (!error) {
       queryClient.invalidateQueries({ queryKey: ["favorite-event-titles"] });
