@@ -14,6 +14,7 @@ import {
   useTeamNamesByIds,
 } from "@/features/news/useClubNews";
 import ClubNewsComposer from "@/components/news/ClubNewsComposer";
+import { SecureImage } from "@/components/SecureImage";
 
 /** Club News archive — newest first. */
 export default function ClubNewsPage() {

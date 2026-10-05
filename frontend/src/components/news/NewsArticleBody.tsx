@@ -50,11 +50,14 @@ export default function NewsArticleBody({
             target="_blank"
             rel="noreferrer"
             className="block"
+            onClick={(e) => {
+              e.preventDefault();
+              void openAttachment(segment.attachment.url);
+            }}
           >
-            <img
+            <SecureImage
               src={segment.attachment.url}
               alt={segment.attachment.name}
-              loading="lazy"
               className="w-full rounded-lg border object-cover"
             />
           </a>
@@ -65,6 +68,10 @@ export default function NewsArticleBody({
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors hover:bg-muted/40"
+            onClick={(e) => {
+              e.preventDefault();
+              void openAttachment(segment.attachment.url);
+            }}
           >
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
