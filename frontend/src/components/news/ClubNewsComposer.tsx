@@ -258,16 +258,28 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
         },
         icp: async (ctx) => {
           isIcpBackend = true;
-          // Provisional mapping: the canister news post carries
-          // title/body/status only — image, team targeting, importance and
-          // attachments are dropped on this branch; push notifications and
-          // the chat share below stay Supabase-only. Verify post-deploy.
+          // The canister news post carries the full Supabase shape —
+          // header image, team targeting, importance and attachments.
+          // Push notifications and the chat share below stay Supabase-only.
           const post = await createLiveNewsPost(
             ctx,
             effectiveClubId,
             title.trim().slice(0, TITLE_MAX),
             content.trim(),
             "published",
+            {
+              targetTeamIds: audience === "teams" ? teamIds : null,
+              isImportant: important,
+              imageUrl,
+              attachments: attachments.map((a) => ({
+                kind: a.kind,
+                url: a.url,
+                name: a.name,
+                size: a.size ?? 0,
+                mimeType: a.mimeType ?? null,
+                anchor: a.anchor ?? null,
+              })),
+            },
           );
           return { id: post.id };
         },
