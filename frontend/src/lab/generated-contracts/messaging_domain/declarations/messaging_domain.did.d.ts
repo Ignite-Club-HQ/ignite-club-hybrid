@@ -239,6 +239,10 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_club_dm_settings' : ActorMethod<[string], ClubDmSettings>,
+  'get_group_join_policy' : ActorMethod<
+    [string],
+    { 'join_policy' : string, 'category' : [] | [string] }
+  >,
   'get_group_metadata' : ActorMethod<
     [string],
     { 'Ok' : GroupMetadata } |
@@ -273,6 +277,11 @@ export interface Main {
   >,
   'has_blocked' : ActorMethod<[Principal], boolean>,
   'is_competition_admin' : ActorMethod<[string], boolean>,
+  'join_open_group' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'leave_group' : ActorMethod<
     [string],
     { 'Ok' : GroupMetadata } |
@@ -332,6 +341,20 @@ export interface Main {
   'list_messages_page' : ActorMethod<
     [string, [] | [bigint], number],
     { 'Ok' : MessagePage } |
+      { 'Err' : string }
+  >,
+  'list_open_groups' : ActorMethod<
+    [string],
+    {
+        'Ok' : Array<
+          {
+            'requested' : boolean,
+            'join_policy' : string,
+            'summary' : GroupSummary,
+            'category' : [] | [string],
+          }
+        >
+      } |
       { 'Err' : string }
   >,
   'list_pinned_messages' : ActorMethod<
@@ -468,6 +491,11 @@ export interface Main {
   >,
   'set_dm_attachments_disabled' : ActorMethod<
     [Principal, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_group_join_policy' : ActorMethod<
+    [string, string, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

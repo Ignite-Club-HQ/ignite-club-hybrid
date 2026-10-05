@@ -293,6 +293,11 @@ type Main =
        Ok: text;
      });
    get_club_dm_settings: (club_id: text) -> (ClubDmSettings) query;
+   get_group_join_policy: (conversation_id: text) ->
+    (record {
+       category: opt text;
+       join_policy: text;
+     }) query;
    get_group_metadata: (conversation_id: text) ->
     (variant {
        Err: text;
@@ -330,6 +335,10 @@ type Main =
                            });
    has_blocked: (user: principal) -> (bool) query;
    is_competition_admin: (conversation_id: text) -> (bool) query;
+   join_open_group: (conversation_id: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
    leave_group: (conversation_id: text) ->
     (variant {
        Err: text;
@@ -393,6 +402,18 @@ type Main =
                  Err: text;
                  Ok: MessagePage;
                }) query;
+   list_open_groups: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        vec
+         record {
+           category: opt text;
+           join_policy: text;
+           requested: bool;
+           summary: GroupSummary;
+         };
+     }) query;
    list_pinned_messages: (conversation_id: text) ->
     (variant {
        Err: text;
@@ -534,6 +555,11 @@ type Main =
        Err: text;
        Ok;
      });
+   set_group_join_policy: (conversation_id: text, join_policy: text,
+    category: opt text) -> (variant {
+                              Err: text;
+                              Ok;
+                            });
    set_minimum_app_versions: (versions: vec record {
                                               text;
                                               text;

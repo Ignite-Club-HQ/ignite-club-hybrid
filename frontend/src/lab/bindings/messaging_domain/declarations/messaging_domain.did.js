@@ -438,6 +438,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'get_club_dm_settings' : IDL.Func([IDL.Text], [ClubDmSettings], ['query']),
+    'get_group_join_policy' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'join_policy' : IDL.Text,
+            'category' : IDL.Opt(IDL.Text),
+          }),
+        ],
+        ['query'],
+      ),
     'get_group_metadata' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
@@ -481,6 +491,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'has_blocked' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
     'is_competition_admin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'join_open_group' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'leave_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
@@ -545,6 +560,23 @@ export const idlFactory = ({ IDL }) => {
     'list_messages_page' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Nat64), IDL.Nat16],
         [IDL.Variant({ 'Ok' : MessagePage, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_open_groups' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(
+              IDL.Record({
+                'requested' : IDL.Bool,
+                'join_policy' : IDL.Text,
+                'summary' : GroupSummary,
+                'category' : IDL.Opt(IDL.Text),
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'list_pinned_messages' : IDL.Func(
@@ -707,6 +739,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_dm_attachments_disabled' : IDL.Func(
         [IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_group_join_policy' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
