@@ -1880,7 +1880,8 @@ persistent actor class Main(governorInit : Principal) {
     events := events.map(func(e) {
       if (e.series_id == ?series_id and not e.deleted and e.starts_at_ms >= from_ms and e.cancelled != cancelled) {
         count += 1;
-        { e with cancelled; revision = e.revision + 1; updated_at_ms = now }
+        let u : Types.Event = { e with cancelled; revision = e.revision + 1; updated_at_ms = now };
+        u
       } else e
     });
     #Ok(count)
@@ -1909,7 +1910,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   func markReminderSent(event_id : Text) {
-    autoReminders := autoReminders.map(func(r) = if (r.event_id == event_id) { r with sent = true } else r);
+    autoReminders := autoReminders.map(func(r) { if (r.event_id == event_id) { { r with sent = true } } else r });
   };
 
   transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders() });
