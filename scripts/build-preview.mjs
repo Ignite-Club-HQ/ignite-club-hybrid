@@ -41,7 +41,11 @@ syncCanisterIds();
 
 // The live Vite config only exposes IGNITE_LIVE_* values. Map rendering uses
 // the connector's public browser key, never its server-side gateway key.
-process.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY ||= process.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || "";
+// Last-resort fallback: the connector's public, referrer-restricted browser
+// key (it ships in the client bundle anyway). Publishing does not always
+// provide the connector variables or .env, which left live maps blank.
+const FALLBACK_GOOGLE_MAPS_BROWSER_KEY = "AIzaSyBmvJph4LmrbtW7skeczzpBIyb9WWzFKo4";
+process.env.IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY ||= process.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY || FALLBACK_GOOGLE_MAPS_BROWSER_KEY;
 process.env.IGNITE_LIVE_GIPHY_API_KEY ||= process.env.GIPHY_API_KEY || "";
 
 // Last-resort fallback: the connected project's public URL and anon key.
