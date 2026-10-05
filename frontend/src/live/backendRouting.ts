@@ -36,6 +36,10 @@ export type ApprovedBackendTarget = {
   version: string;
   region?: string;
   enabled: boolean;
+  /** ICP Cloud Engine only: boundary/API host for this engine (https URL). */
+  host?: string;
+  /** ICP Cloud Engine only: domain key -> canister id deployed on this engine. */
+  canisterIds?: Record<string, string>;
 };
 
 export type BackendRoutingConfig = {
@@ -88,6 +92,42 @@ export function validateApprovedTarget(target: Omit<ApprovedBackendTarget, "id">
   if (!/^[a-z0-9][a-z0-9._-]{0,31}$/i.test(version)) {
     throw new Error(`Target version for "${alias}" must be 1-32 URL-safe characters.`);
   }
+  if (target.kind === "icp-cloud-engine") {
+    const host = target.host?.trim() ?? "";
+    if (host && !/^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(host)) {
+      throw new Error(`Cloud Engine "${alias}" address must be an https:// URL with no path.`);
+    }
+    for (const [key, id] of Object.entries(target.canisterIds ?? {})) {
+      if (!/^[a-z0-9_]{1,64}$/i.test(key)) throw new Error(`Canister name "${key}" on "${alias}" is not valid.`);
+      if (!CANISTER_ID_RE.test(id)) throw new Error(`"${id}" is not a valid canister ID (${key} on "${alias}").`);
+    }
+  } else if (target.host || (target.canisterIds && Object.keys(target.canisterIds).length > 0)) {
+    throw new Error(`Only ICP Cloud Engine targets carry their own address and canister IDs.`);
+  }
+}
+
+const CANISTER_ID_RE = /^[a-z0-9]{5}(-[a-z0-9]{5}){3}-[a-z0-9]{3}$/;
+
+/** True when a Cloud Engine target is enabled and has an address plus at least one canister. */
+export function isCloudEngineUsable(target: ApprovedBackendTarget): boolean {
+  return target.kind === "icp-cloud-engine" && target.enabled && !!target.host
+    && Object.keys(target.canisterIds ?? {}).length > 0;
+}
+
+/**
+ * Pure resolver: the ICP Cloud Engine target a country is assigned to, or null
+ * when the country uses public mainnet. Callers must NOT fall back to mainnet
+ * when this returns an unusable engine — that country then goes to Supabase.
+ */
+export function resolveIcpEngineForCountry(
+  config: BackendRoutingConfig,
+  country: string | null,
+): ApprovedBackendTarget | null {
+  const code = country?.trim().toUpperCase();
+  const pinnedId = code ? config.countryTargets[code] : undefined;
+  if (!pinnedId) return null;
+  const target = config.targets.find(t => t.id === pinnedId);
+  return target && target.kind === "icp-cloud-engine" ? target : null;
 }
 
 export function normalizeApprovedTarget(
@@ -100,6 +140,10 @@ export function normalizeApprovedTarget(
     version: raw.version.trim(),
     region: raw.region?.trim() || undefined,
     enabled: raw.enabled,
+    host: raw.host?.trim().replace(/\/$/, "") || undefined,
+    canisterIds: raw.canisterIds && Object.keys(raw.canisterIds).length > 0
+      ? Object.fromEntries(Object.entries(raw.canisterIds).map(([k, v]) => [k.trim(), String(v).trim()]))
+      : undefined,
   };
   validateApprovedTarget(target);
   return { id: targetId(target.backend, target.alias, target.version), ...target };
@@ -171,6 +215,13 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
           version: entry.version,
           region: typeof entry.region === "string" ? entry.region : undefined,
           enabled: entry.enabled,
+          host: typeof entry.host === "string" ? entry.host : undefined,
+          canisterIds: entry.canisterIds && typeof entry.canisterIds === "object" && !Array.isArray(entry.canisterIds)
+            ? Object.fromEntries(Object.entries(entry.canisterIds as Record<string, unknown>).map(([k, v]) => {
+                if (typeof v !== "string") throw new Error(`Canister ID for ${k} must be a string.`);
+                return [k, v];
+              }))
+            : undefined,
         }),
       );
     }
@@ -257,7 +308,7 @@ function copyConfig(config: BackendRoutingConfig): BackendRoutingConfig {
   return {
     defaultBackend: config.defaultBackend,
     countryRules: { ...config.countryRules },
-    targets: config.targets.map(t => ({ ...t })),
+    targets: config.targets.map(t => ({ ...t, ...(t.canisterIds ? { canisterIds: { ...t.canisterIds } } : {}) })),
     countryTargets: { ...config.countryTargets },
     clubBackendOverrides: { ...config.clubBackendOverrides },
   };

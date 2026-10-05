@@ -202,7 +202,47 @@ export function getActiveSupabaseTarget(): SupabaseTargetConfig {
   return registry.supabaseTargets.find(target => target.alias === registry.activeSupabaseAlias)!;
 }
 
+/** Cloud Engine assignment for the current user, as resolved by the routing layer. */
+export type IcpEngineAssignment = {
+  alias: string;
+  host?: string;
+  canisterIds?: Record<string, string>;
+  region?: string;
+  usable: boolean;
+};
+
+let icpEngineResolver: (() => IcpEngineAssignment | null) | null = null;
+
+/**
+ * Registered by loadBackendRouting.ts (which may import Supabase; this module
+ * must not — see icpAdminOverrides.ts). Returns the user's country-assigned
+ * Cloud Engine, or null for public mainnet.
+ */
+export function registerIcpEngineResolver(resolver: (() => IcpEngineAssignment | null) | null): void {
+  icpEngineResolver = resolver;
+}
+
 export function getActiveIcpTarget(): IcpTargetConfig {
+  let engine: IcpEngineAssignment | null = null;
+  try {
+    engine = icpEngineResolver?.() ?? null;
+  } catch {
+    engine = null;
+  }
+  if (engine) {
+    // Never fall back to mainnet for an engine-assigned country: an unusable
+    // engine yields no canister IDs, so ICP reports unavailable -> Supabase.
+    return {
+      provider: "icp",
+      alias: `engine:${engine.alias}`,
+      networkKind: "cloud_engine",
+      host: engine.usable && engine.host ? engine.host : DEFAULT_ICP_HOST,
+      canisterIds: engine.usable ? { ...(engine.canisterIds ?? {}) } : {},
+      residencyProfile: engine.region,
+      deploymentClass: "cloud_engine",
+      status: engine.usable ? "active" : "disabled",
+    };
+  }
   const registry = getLiveBackendTargetRegistry();
   const target = registry.icpTargets.find(candidate => candidate.alias === registry.activeIcpAlias)!;
   // App-admin canister overrides (stored in the `icp_canister_config` app_settings
