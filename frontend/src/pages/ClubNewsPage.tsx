@@ -14,13 +14,10 @@ import {
   useTeamNamesByIds,
 } from "@/features/news/useClubNews";
 import ClubNewsComposer from "@/components/news/ClubNewsComposer";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 
 /** Club News archive — newest first. */
 export default function ClubNewsPage() {
   const navigate = useNavigate();
-  const useIcpLab = isFeatureRoutedToIcp("news");
   const { activeClubFilter } = useClubTheme();
   const { data: posts = [], isLoading } = useClubNewsFeed(activeClubFilter);
   const { data: publishableClubs = [] } = useNewsPublishableClubs();
@@ -54,14 +51,6 @@ export default function ClubNewsPage() {
           </Button>
         )}
       </div>
-
-      {useIcpLab && (
-        <Alert>
-          <AlertDescription>
-            Club news is read-only in the ICP lab. Publishing remains unavailable until its backend service is ported.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {isLoading ? (
         <div className="space-y-3">
@@ -134,13 +123,11 @@ export default function ClubNewsPage() {
         </div>
       )}
 
-      {!useIcpLab && (
-        <ClubNewsComposer
-          open={composerOpen}
-          onOpenChange={setComposerOpen}
-          defaultClubId={activeClubFilter}
-        />
-      )}
+      <ClubNewsComposer
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        defaultClubId={activeClubFilter}
+      />
     </div>
   );
 }
