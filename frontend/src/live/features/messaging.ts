@@ -123,6 +123,12 @@ export interface LiveMessageAttachment {
   url?: string | null;
 }
 
+async function shortCanisterRefId(refId: string): Promise<string> {
+  if (refId.length > 0 && refId.length <= 128) return refId;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(refId));
+  return "sha256:" + [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function sendLiveMessage(
   ctx: FeatureBackendContext,
   conversationId: string,
@@ -132,14 +138,19 @@ export async function sendLiveMessage(
   replyToId?: string | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  // The canister rejects an empty body and ids over 128 chars. Photo-only
+  // messages send a single space; long photo addresses get a short digest id
+  // (the full address still travels in `url`, which allows 2048 chars).
+  const safeBody = body.trim() === "" && attachment ? " " : body;
+  const refId = attachment ? await shortCanisterRefId(attachment.refId) : "";
   return unwrapCandid(
     actor.send_message(
       conversationId,
-      body,
+      safeBody,
       idempotencyKey,
       candidOpt(
         attachment
-          ? { kind: attachment.kind, ref_id: attachment.refId, url: candidOpt(attachment.url) }
+          ? { kind: attachment.kind, ref_id: refId, url: candidOpt(attachment.url) }
           : null,
       ),
       candidOpt(replyToId ?? null),
