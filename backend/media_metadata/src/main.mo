@@ -123,7 +123,7 @@ persistent actor class Main(governorInit : Principal) {
     expires_at_ms : Nat64,
   ) : async { #Ok : Types.Asset; #Err : Text } {
     auth(caller);
-    if (not valid(club_id) or not valid(kind) or not validMime(mime) or not valid(checksum) or not valid(storage_path) or not valid(visibility)) return #Err("Invalid asset");
+    if (not valid(club_id) or not valid(kind) or not validMime(mime) or not valid(checksum) or not validLong(storage_path, 512) or not valid(visibility)) return #Err("Invalid asset");
     if (assets.size() >= MAX_ASSETS) return #Err("Asset limit reached");
     let encrypted = kind == "child_photo" or kind == "minor_media";
     if (encrypted and visibility == "public") return #Err("Child-sensitive media cannot be public");
