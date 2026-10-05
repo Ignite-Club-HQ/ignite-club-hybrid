@@ -298,6 +298,8 @@ function SupabaseUpgradeProPage() {
 
   const applyPromoMutation = useMutation({
     mutationFn: async ({ code, tier, isAnnual }: { code: string; tier: "pro" | "pro_football"; isAnnual: boolean }) => {
+      // NEEDS-CANISTER: promo codes live in Supabase only.
+      if (isIcp) throw new Error("Promo codes are not available yet for Internet Identity teams.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -379,6 +381,8 @@ function SupabaseUpgradeProPage() {
 
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
+      // NEEDS-CANISTER: cancellation runs through a Supabase function.
+      if (isIcp) throw new Error("Subscription changes are not available yet for Internet Identity teams.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'team', entity_id: teamId },
       });
@@ -397,6 +401,8 @@ function SupabaseUpgradeProPage() {
 
   const downgradeMutation = useMutation({
     mutationFn: async (targetTier: "free" | "pro") => {
+      // NEEDS-CANISTER: plan downgrades write the Supabase team_subscriptions row.
+      if (isIcp) throw new Error("Plan changes are not available yet for Internet Identity teams.");
       if (targetTier === "free") {
         // Downgrade to free - remove all pro features and trial
         const { error } = await supabase
