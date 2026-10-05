@@ -212,8 +212,8 @@ export interface Main {
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
-  'ensure_club_admin_conversation' : ActorMethod<
-    [string],
+  'ensure_club_admin_thread' : ActorMethod<
+    [string, Principal],
     { 'Ok' : Conversation } |
       { 'Err' : string }
   >,
@@ -289,6 +289,10 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_blocked_users' : ActorMethod<[], Array<Principal>>,
+  'list_club_admin_threads' : ActorMethod<
+    [string],
+    Array<{ 'id' : string, 'member' : Principal }>
+  >,
   'list_club_dm_settings' : ActorMethod<
     [],
     { 'Ok' : Array<ClubDmSettings> } |

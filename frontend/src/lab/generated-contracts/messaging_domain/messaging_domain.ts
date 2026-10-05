@@ -368,7 +368,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    ensure_club_admin_conversation(club_id: string): Promise<{
+    ensure_club_admin_thread(club_id: string, member: Principal): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
     } | {
@@ -479,6 +479,10 @@ export interface MainInterface {
         Err: string;
     }>;
     list_blocked_users(): Promise<Array<Principal>>;
+    list_club_admin_threads(club_id: string): Promise<Array<{
+        id: string;
+        member: Principal;
+    }>>;
     list_club_dm_settings(): Promise<{
         __kind__: "Ok";
         Ok: Array<ClubDmSettings>;
@@ -1157,14 +1161,14 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.ensure_broadcast_conversation();
         return from_candid_variant_n13(result);
     }
-    async ensure_club_admin_conversation(arg0: string): Promise<{
+    async ensure_club_admin_thread(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
         Ok: Conversation;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.ensure_club_admin_conversation(arg0);
+        const result = await this.actor.ensure_club_admin_thread(arg0, arg1);
         return from_candid_variant_n13(result);
     }
     async ensure_conversation(arg0: string, arg1: string | null, arg2: Array<Principal>): Promise<{
@@ -1329,6 +1333,13 @@ export class Messaging_domain implements messaging_domainInterface {
     }
     async list_blocked_users(): Promise<Array<Principal>> {
         const result = await this.actor.list_blocked_users();
+        return result;
+    }
+    async list_club_admin_threads(arg0: string): Promise<Array<{
+        id: string;
+        member: Principal;
+    }>> {
+        const result = await this.actor.list_club_admin_threads(arg0);
         return result;
     }
     async list_club_dm_settings(): Promise<{

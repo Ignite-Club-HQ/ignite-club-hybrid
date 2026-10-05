@@ -264,7 +264,7 @@ type Main =
        Err: text;
        Ok: Conversation;
      });
-   ensure_club_admin_conversation: (club_id: text) ->
+   ensure_club_admin_thread: (club_id: text, member: principal) ->
     (variant {
        Err: text;
        Ok: Conversation;
@@ -346,6 +346,11 @@ type Main =
        Ok: vec OnlineUser;
      }) query;
    list_blocked_users: () -> (vec principal) query;
+   list_club_admin_threads: (club_id: text) ->
+    (vec record {
+           id: text;
+           member: principal;
+         });
    list_club_dm_settings: () ->
     (variant {
        Err: text;
