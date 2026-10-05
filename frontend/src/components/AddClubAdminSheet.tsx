@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/sheet";
 import { MobileCardSelect } from "@/components/MobileCardSelect";
 import { supabase } from "@/integrations/supabase/client";
-import { isFeatureRoutedToIcp as _unused_isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+// (ICP routing import removed: email sends now work in both modes — the
+// send-email edge function is anon-key callable.)
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubBranding, createLivePendingInvite } from "@/live/features/club";
 import {
