@@ -441,7 +441,7 @@ persistent actor class Main(governorInit : Principal) {
         };
         if (not validOpt(label_text, 256)) return #Err("Invalid invite");
         let created : Types.MiniLeagueInvite = {
-          token = nextId("mli-" # mini_league_id, invites.size()); mini_league_id; player_id; label_text;
+          token = await randomToken("mli"); mini_league_id; player_id; label_text;
           status = "pending"; claimed_by = null; created_by = caller; created_at_ms = nowMs(); claimed_at_ms = null;
         };
         invites := invites.concat([created]);
@@ -802,7 +802,7 @@ persistent actor class Main(governorInit : Principal) {
         if (joinLinks.any(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) return #Err("Active join link already exists");
         let link : Types.MiniLeagueJoinLink = {
           mini_league_id;
-          token = nextId("mljl-" # mini_league_id, joinLinks.size());
+          token = await randomToken("mljl");
           role;
           revoked = false;
           created_by = caller;
@@ -824,7 +824,7 @@ persistent actor class Main(governorInit : Principal) {
         switch (joinLinks.find(func(item) = item.mini_league_id == mini_league_id and item.role == role and not item.revoked)) {
           case null #Err("No active join link");
           case (?current) {
-            let rotated : Types.MiniLeagueJoinLink = { current with token = nextId("mljl-" # mini_league_id, joinLinks.size()); revision = current.revision + 1 };
+            let rotated : Types.MiniLeagueJoinLink = { current with token = await randomToken("mljl"); revision = current.revision + 1 };
             joinLinks := joinLinks.map(func(item) = if (item.mini_league_id == mini_league_id and item.role == role and not item.revoked) rotated else item);
             #Ok(rotated)
           };
