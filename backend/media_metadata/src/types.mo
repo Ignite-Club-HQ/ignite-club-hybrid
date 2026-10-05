@@ -23,6 +23,17 @@ module {
     retention_until_ms : Nat64;
     deleted : Bool;
     expires_at_ms : Nat64;
+    // Feed scoping/tags (schema 4): which audience the asset belongs to and
+    // how posts group. All optional so pre-schema-4 assets decode with null
+    // (club-wide, uncaptioned, single-photo post). created_at_ms is 0 for
+    // pre-schema-4 assets; feed ordering treats 0 as "unknown, sort last".
+    created_at_ms : Nat64;
+    team_id : ?Text;
+    mini_league_id : ?Text;
+    competition_id : ?Text;
+    event_id : ?Text;
+    caption : ?Text;
+    album_id : ?Text;
   };
   public type Capability = {
     asset_id : Text;
