@@ -15,6 +15,42 @@ export interface GiphyResult {
   height: number;
 }
 
+const GIPHY_BASE = "https://api.giphy.com/v1/gifs";
+
+type GiphyApiItem = {
+  id: string;
+  title?: string;
+  images?: Record<string, { url?: string; width?: string; height?: string } | undefined>;
+};
+
+/** GIPHY API keys are client-side keys by design (GIPHY's own SDKs ship them
+ * in apps). The published site is static hosting with no /api functions, so
+ * search goes straight to GIPHY whenever a key is baked into the build. */
+async function searchGiphyDirect(apiKey: string, q: string, limit: number): Promise<GiphyResult[]> {
+  const endpoint = q ? "search" : "trending";
+  const params = new URLSearchParams({ api_key: apiKey, limit: String(limit), rating: "pg-13" });
+  if (q) params.set("q", q);
+  const res = await fetch(`${GIPHY_BASE}/${endpoint}?${params}`);
+  if (!res.ok) throw new Error(`GIPHY request failed (${res.status})`);
+  const data = (await res.json()) as { data?: GiphyApiItem[] };
+  return (data.data ?? [])
+    .map((g) => {
+      const preview = g.images?.fixed_width_small ?? g.images?.fixed_width ?? {};
+      const full = g.images?.original ?? {};
+      return {
+        id: g.id,
+        title: g.title ?? "",
+        preview: preview.url ?? "",
+        previewWidth: Number(preview.width) || 0,
+        previewHeight: Number(preview.height) || 0,
+        url: full.url ?? "",
+        width: Number(full.width) || 0,
+        height: Number(full.height) || 0,
+      };
+    })
+    .filter((g) => g.preview && g.url);
+}
+
 interface GifGridProps {
   active: boolean;
   onSelect: (gifUrl: string) => void;
@@ -51,6 +87,11 @@ export function GifGrid({
     // server-side and cannot live in canister state.
     setLoading(true);
     try {
+      const directKey = String(import.meta.env.IGNITE_LIVE_GIPHY_API_KEY ?? "").trim();
+      if (directKey) {
+        setGifs(await searchGiphyDirect(directKey, q.trim(), 24));
+        return;
+      }
       const res = await fetch("/api/giphy-search", {
         method: "POST",
         headers: { "content-type": "application/json" },
