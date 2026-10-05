@@ -2,7 +2,7 @@ import { Actor, HttpAgent, type Identity } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
 import type { IcpTargetConfig } from "./targetRegistry";
-import { trackIcpUpdateCall } from "./pendingCalls";
+import { trackIcpQueryCall, trackIcpUpdateCall } from "./pendingCalls";
 
 /**
  * Live (mainnet / Cloud Engine) counterpart of `frontend/src/lab/localActor.ts`.

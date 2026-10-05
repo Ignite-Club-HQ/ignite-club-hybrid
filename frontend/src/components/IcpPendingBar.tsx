@@ -8,11 +8,10 @@ const MIN_VISIBLE_MS = 500;
 
 /**
  * Slim indeterminate progress bar pinned to the very top of the viewport,
- * visible while any ICP canister UPDATE call is in flight. Canister writes
- * take ~2–5s on mainnet and most ICP-mode buttons have no per-button pending
- * state, so this is the universal "your tap registered — saving" signal.
- * Query calls (chat polling etc.) never trigger it. pointer-events:none, so
- * it never blocks interaction.
+ * visible while any ICP canister call the user is waiting on is in flight:
+ * every write (saves take ~2–5s on mainnet) plus the reads that load a page
+ * right after navigation. Background polling never triggers it.
+ * pointer-events:none, so it never blocks interaction.
  */
 export function IcpPendingBar() {
   const [visible, setVisible] = useState(false);

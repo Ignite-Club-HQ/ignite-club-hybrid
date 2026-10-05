@@ -440,6 +440,7 @@ const App = () => {
           <NotifDebugOverlay />
           <BrowserRouter>
             <AppNavigatorBridge />
+            <IcpNavActivityTracker />
             <ScrollToTop />
             <PWAPendingInviteHandler />
 
