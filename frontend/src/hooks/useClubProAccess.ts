@@ -29,6 +29,31 @@ export function useClubProAccess(
   // See useIcpProAccess.ts for the club→product simplification note:
   // ICP has no per-club product mapping, so any active entitlement counts.
   const icp = useIcpEntitlements({ enabled: enabled && isIcp });
+  // Club-scoped Pro can also come from the club_domain canister's
+  // club subscription row (e.g. a club upgraded by an admin), which the
+  // identity-entitlement lookup above does not cover.
+  const icpClubSub = useQuery({
+    queryKey: ["icp-club-pro-access", clubId],
+    enabled: enabled && isIcp,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const [{ withFeatureBackend }, { getLiveClubSubscription }] = await Promise.all([
+        import("@/live/featureRouter"),
+        import("@/live/features/club"),
+      ]);
+      return withFeatureBackend("membership", {
+        supabase: async () => ({ hasPro: false, hasProFootball: false }),
+        icp: async (ctx) => {
+          const sub = await getLiveClubSubscription(ctx, clubId!);
+          return {
+            hasPro: Boolean(sub?.is_pro || sub?.admin_pro_override),
+            hasProFootball: Boolean(sub?.is_pro_football || sub?.admin_pro_football_override),
+          };
+        },
+      });
+    },
+  });
   const { data, isLoading, isFetched } = useQuery({
     queryKey: ["club-pro-access", clubId],
     enabled: enabled && !isIcp,
