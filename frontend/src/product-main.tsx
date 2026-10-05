@@ -3,7 +3,7 @@
 import "./lib/prodConsoleSilencer";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import App from "./App";
+import App, { appCacheReady } from "./App";
 import { initWebVitalsTelemetry } from "./lib/observability/webVitals";
 import { installSupabaseAuthRetry } from "./lib/supabaseAuthRetry";
 import "./index.css";
@@ -16,8 +16,9 @@ if (!root) {
   throw new Error("Product root element is missing");
 }
 
-createRoot(root).render(
+// Bounded (≤ ~400ms) wait so cached ICP pages are in place for first paint.
+void appCacheReady.finally(() => createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,
-);
+));

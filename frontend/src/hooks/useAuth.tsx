@@ -1559,6 +1559,8 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       localStorage.removeItem("ignite_icp_internet_identity_session");
       const { clearIcpIdentityProfileCache } = await import("@/live/identityProfileCache");
       clearIcpIdentityProfileCache();
+      const { clearPersistedIcpQueryCache } = await import("@/lib/icpQueryCachePersist");
+      await clearPersistedIcpQueryCache();
       const { clearIcpEntitlementsCache } = await import("@/live/identityEntitlementsCache");
       clearIcpEntitlementsCache(principal ?? undefined);
       const { disconnectChatRealtime } = await import("@/live/wsRealtime");
