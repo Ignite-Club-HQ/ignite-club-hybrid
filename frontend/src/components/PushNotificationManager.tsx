@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { usePushSubscriptionHealth } from "@/hooks/usePushSubscriptionHealth";
 import { useMissedNotificationSync } from "@/hooks/useMissedNotificationSync";
 import { clearStalePushLocks } from "@/lib/pushNotifications";
@@ -33,7 +33,7 @@ function getNativeStoreUrl() {
  */
 export function PushNotificationManager() {
   // Safely get auth context - component must be inside AuthProvider
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
