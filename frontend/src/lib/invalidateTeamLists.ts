@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { clearHomeSectionSnapshots } from "./homeSectionSnapshot";
 
 const CAROUSEL_PREFIX = "ignite_my_teams_carousel_v2_";
 
@@ -18,6 +19,9 @@ const TEAM_LIST_KEY_PREFIXES = [
   "my-teams",
   "club-teams",
   "teams",
+  "club-news",
+  "club-news-post",
+  "news-publishable-clubs",
 ];
 
 /** Drop the localStorage carousel snapshots for a user (all club filters). */
@@ -50,6 +54,9 @@ export async function invalidateTeamLists(
   userId?: string | null,
 ): Promise<void> {
   clearMyTeamsCarouselCache(userId);
+  // Home side-sections (Club News, Club Links) snapshot to localStorage too;
+  // a deleted club's content must not repaint from the last-known snapshot.
+  clearHomeSectionSnapshots();
   await Promise.all(
     TEAM_LIST_KEY_PREFIXES.map(prefix =>
       queryClient.invalidateQueries({ queryKey: [prefix], refetchType: "all" }),

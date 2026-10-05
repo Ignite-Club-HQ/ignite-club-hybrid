@@ -43,3 +43,22 @@ export function writeHomeSectionSnapshot<T>(
     /* quota or unavailable — ignore */
   }
 }
+
+/**
+ * Drop every home-section snapshot (all sections/scopes). Called after
+ * club/team create/delete/restore so a tombstoned club's news or links can't
+ * repaint from the last-known-good snapshot on the next cold open.
+ */
+export function clearHomeSectionSnapshots(): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(PREFIX)) doomed.push(k);
+    }
+    doomed.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // storage unavailable — ignore
+  }
+}
