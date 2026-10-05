@@ -808,10 +808,14 @@ function SupabaseCreateEventPage() {
           });
         return error;
       },
-      icp: async () => null,
+      icp: async () => ({ code: "icp_skip" } as any),
     });
 
     if (error) {
+      if (error.code === "icp_skip") {
+        toast({ title: "Not available", description: "Favourite titles aren't available in ICP mode yet." });
+        return;
+      }
       if (error.code === "23505") {
         toast({ title: "Already saved", description: "This title is already in your favorites" });
       } else {
