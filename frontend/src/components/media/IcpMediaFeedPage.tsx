@@ -268,6 +268,11 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
 // Page
 // ---------------------------------------------------------------------------
 
+/** Grid placeholder used by the Supabase media page's loading states. */
+export function PhotoSkeleton() {
+  return <div className="aspect-square w-full animate-pulse rounded-xl bg-muted" />;
+}
+
 export function IcpMediaFeedPage() {
   const principalQuery = useQuery({
     queryKey: ["icp-principal"],
