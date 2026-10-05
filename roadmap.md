@@ -59,5 +59,6 @@
 ## Admin button vanishes for II app admin (Paul Cranwell)
 - [x] Root cause: ~20 pages declared their own useQuery on the shared ["is-app-admin", userId] key with Supabase-only queryFns / stricter enabled gates; first mounter owns the cache entry, so an ICP-disabled or Supabase-only copy left the flag false/undefined and the Admin button vanished.
 - [x] ProfilePage: now uses shared useIsAppAdmin hook; isTeamAdminOrCoach query now routes via withFeatureBackend (canister role grants in ICP mode).
-- [ ] In progress: two subagents converting the remaining ~18 files (admin pages + feature pages + useVaultAccessModel + useMessagesPageAccessData + bootstrap seed gating) to useIsAppAdmin.
-- [ ] After agents finish: typecheck + build-errors check.
+- [x] All 18 remaining files converted to useIsAppAdmin (AdminPage, AdminChatPhotoReminders, AdminActiveGames, AdminTempPassword, SponsorAnalytics, AppStripeSettings, SendUpdateReminder, ManageBackups, RealtimeHealth, ClubRewardsReport, ClubRewards, NotificationPreferences, OnlineUsers, RewardRedemptionCard, ClubChatPage, EventDetailPage, ManageAdsPage, useMessagesPageAccessData, useVaultAccessModel). useMessagesPageBootstrap's Supabase-only RPC seed of the shared key is now gated on `!isFeatureRoutedToIcp("admin")`.
+- [x] Vault access-model tests updated to mock useIsAppAdmin (all 18 pass); typecheck exit 0; preview build OK; build-errors.log "build OK". rg confirms only comments + the gated seed + the hook itself still mention the key.
+- Frontend-only fix; no canister redeploy required for this item.
