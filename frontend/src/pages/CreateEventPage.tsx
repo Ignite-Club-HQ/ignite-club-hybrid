@@ -797,7 +797,9 @@ function SupabaseCreateEventPage() {
   const saveFavoriteTitle = async () => {
     if (!user || !title.trim()) return;
 
-    const { error } = await supabase
+    const error = await withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
       .from("favorite_event_titles")
       .insert({
         user_id: user.id,
