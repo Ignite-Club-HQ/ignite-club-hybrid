@@ -291,6 +291,26 @@ export default function ClubUpgradePage() {
     queryKey: ["club-subscription", clubId, providerKey],
     queryFn: async () => {
       if (useIcpLab) return null;
+      if (isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveClubSubscription(ctx, clubId!);
+            if (!row) return null;
+            // Map the canister subscription onto the club_subscriptions row
+            // shape this page renders (millisecond timestamps → ISO strings).
+            return {
+              is_pro: row.is_pro || row.admin_pro_override,
+              is_pro_football: row.is_pro_football || row.admin_pro_football_override,
+              expires_at: row.expires_at_ms.length ? new Date(Number(row.expires_at_ms[0])).toISOString() : null,
+              plan: row.plan || null,
+              team_limit: row.team_limit.length ? Number(row.team_limit[0]) : null,
+              is_trial: row.is_trial,
+              trial_ends_at: row.trial_ends_at_ms.length ? new Date(Number(row.trial_ends_at_ms[0])).toISOString() : null,
+            };
+          },
+        });
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("*")
