@@ -1,5 +1,5 @@
 import type { FeatureBackendContext } from "../featureRouter";
-import { getLiveClubProfile } from "./club";
+import { getLiveClubProfile, getLiveTeam } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
 import { getLiveMyRoleGrants, listLiveChildren } from "./membership";
 import { resolveLivePiiTextBatch } from "./vault";
@@ -24,9 +24,10 @@ import { resolveLivePiiTextBatch } from "./vault";
  *   false and the recurring-series cap is a no-op on this branch;
  * - account ids are matched against principal text until account ids are
  *   bound to principals post-deploy;
- * - soft-deleted clubs are not filtered (the Supabase branch cross-checks the
- *   clubs table; the canister role store is assumed to only hold active
- *   clubs).
+ * - soft-deleted clubs/teams are filtered out of memberships before use:
+ *   the canister keeps role grants across the tombstone, so without the
+ *   filter a deleted club still grants admin powers (ghost Club Files card,
+ *   ghost news) — mirrors the Supabase branch's clubs.deleted_at filter.
  */
 
 /** Minimal shape of an identity_access role grant used here. */
@@ -149,7 +150,52 @@ const MERGED_EVENTS_CAP = 100;
 export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
 ): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
-  const memberships = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
+  const raw = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
+
+  // Drop soft-deleted clubs/teams. Grants survive the tombstone (mirroring
+  // Supabase's orphan user_roles rows), so cross-check every club/team
+  // against its canister record's deleted_at_ms before trusting the grant —
+  // same protection as the Supabase branch's active-clubs filter. Failures
+  // throw so React Query keeps the last good snapshot.
+  const candidateClubIds = [...new Set([
+    ...raw.clubIds,
+    ...raw.clubAdminClubIds,
+    ...raw.leagueAdminClubIds,
+    ...raw.roles.map((r) => r.club_id).filter((id): id is string => !!id),
+  ])];
+  const activeClubIds = new Set<string>();
+  await Promise.all(
+    candidateClubIds.map(async (clubId) => {
+      const profile = await getLiveClubProfile(ctx, clubId);
+      const club = profile[0];
+      if (club && club.deleted_at_ms.length === 0) activeClubIds.add(clubId);
+    }),
+  );
+  const activeTeamIds = new Set<string>();
+  await Promise.all(
+    raw.teamIds.map(async (teamId) => {
+      const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+        club_id: string;
+        deleted_at_ms: [] | [bigint];
+      }>;
+      const team = teamOpt[0];
+      if (team && team.deleted_at_ms.length === 0 && activeClubIds.has(team.club_id)) {
+        activeTeamIds.add(teamId);
+      }
+    }),
+  );
+  const memberships: LiveHomeMemberships = {
+    teamIds: raw.teamIds.filter((id) => activeTeamIds.has(id)),
+    clubIds: raw.clubIds.filter((id) => activeClubIds.has(id)),
+    clubAdminClubIds: raw.clubAdminClubIds.filter((id) => activeClubIds.has(id)),
+    leagueAdminClubIds: raw.leagueAdminClubIds.filter((id) => activeClubIds.has(id)),
+    miniLeagueIds: raw.miniLeagueIds,
+    roles: raw.roles.filter(
+      (r) =>
+        (!r.club_id || activeClubIds.has(r.club_id)) &&
+        (!r.team_id || activeTeamIds.has(r.team_id)),
+    ),
+  };
 
   const eventResults = await Promise.all([
     ...memberships.clubIds.map((clubId) => listLiveEvents(ctx, clubId, null)),
