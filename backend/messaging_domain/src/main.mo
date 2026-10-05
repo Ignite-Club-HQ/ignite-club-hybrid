@@ -62,6 +62,34 @@ persistent actor class Main(governorInit : Principal) {
   // Fail-closed while unset: delete_club_data/delete_team_data reject every
   // caller until the deploy script wires this.
   var clubDomainCanister : ?Principal;
+
+  // Global broadcast conversation id. Mirrors the Supabase broadcast_messages
+  // feed: one platform-wide stream that every signed-in member can read, with
+  // posting restricted to platform admins. The frontend reads and posts by
+  // this fixed id, like it does for team/club chats.
+  transient let BROADCAST_CONVERSATION_ID = "broadcast";
+
+  // Club-admin room id is derived from the club id, so the frontend can read
+  // and send by an id it already knows.
+  func clubAdminConversationId(club_id : Text) : Text { "club-admin-" # club_id };
+
+  // Typed view of the club_domain queries this canister needs. Fail-closed
+  // while the club_domain canister id is unset (set_club_domain_canister).
+  type ClubDomainRef = actor {
+    is_app_admin : shared query (Principal) -> async Bool;
+    list_club_admins : shared query (Text) -> async [Principal];
+  };
+
+  func clubDomainRef() : async ?ClubDomainRef {
+    switch (clubDomainCanister) {
+      case null { null };
+      case (?cd) {
+        let ref : ClubDomainRef = actor (Principal.toText(cd));
+        ?ref
+      };
+    };
+  };
+
   // Platform -> minimum required version/build, set by the governor. Read by
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).
