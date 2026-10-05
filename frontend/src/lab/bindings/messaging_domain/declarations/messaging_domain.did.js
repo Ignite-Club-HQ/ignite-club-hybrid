@@ -453,6 +453,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_group_metadata_multi' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_minimum_app_versions' : IDL.Func(
         [],
         [
@@ -464,6 +469,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_mute_preference' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    'get_mute_preferences' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Bool)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_or_create_dm' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : Conversation, 'Err' : IDL.Text })],
@@ -534,6 +549,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'list_groups_by_club' : IDL.Func(
         [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_groups_by_clubs' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupSummary), 'Err' : IDL.Text })],
         ['query'],
       ),

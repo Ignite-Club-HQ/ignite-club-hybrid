@@ -2,6 +2,10 @@ import { Principal } from "@icp-sdk/core/principal";
 import { connectLiveClubDomain, connectLiveMessagingDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, unwrapCandid } from "./candid";
+import { batched, groupBy } from "./batching";
+
+type MessagingActor = Awaited<ReturnType<typeof connectLiveMessagingDomain>>["actor"];
+const msgConn = (ctx: FeatureBackendContext) => () => connectLiveMessagingDomain(ctx.target, ctx.identity);
 
 /**
  * Messaging feature -> messaging_domain canister.
@@ -348,8 +352,19 @@ export async function upsertLiveGroupMetadata(
 }
 
 export async function getLiveGroupMetadata(ctx: FeatureBackendContext, conversationId: string) {
-  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const raw = await unwrapCandid(actor.get_group_metadata(conversationId), "Get group metadata");
+  type Raw = Awaited<ReturnType<MessagingActor["get_group_metadata"]>> extends infer R
+    ? R extends { Ok: infer O } ? O : never : never;
+  const raw = await batched<MessagingActor, Raw | null>(
+    ctx, "messaging:group_meta", conversationId, msgConn(ctx),
+    async (actor, ids) => {
+      const rows = await unwrapCandid(actor.get_group_metadata_multi(ids), "Get group metadata");
+      const m = new Map<string, Raw | null>(ids.map((i) => [i, null]));
+      for (const r of rows) m.set((r as { conversation_id: string }).conversation_id, r as Raw);
+      return m;
+    },
+    (actor, id) => unwrapCandid(actor.get_group_metadata(id), "Get group metadata") as Promise<Raw>,
+  );
+  if (!raw) throw new Error("Get group metadata failed: Group metadata not found");
   return toLiveGroupMetadata(raw);
 }
 
@@ -680,8 +695,11 @@ export async function setLiveMutePreference(
 }
 
 export async function getLiveMutePreference(ctx: FeatureBackendContext, conversationId: string) {
-  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  return actor.get_mute_preference(conversationId);
+  return batched<MessagingActor, boolean>(
+    ctx, "messaging:mute", conversationId, msgConn(ctx),
+    async (actor, ids) => new Map(await unwrapCandid(actor.get_mute_preferences(ids), "Get mute preferences")),
+    (actor, id) => actor.get_mute_preference(id),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1042,8 +1060,17 @@ function toLiveGroupSummary(raw: {
 
 /** Groups (team/club/competition chats) scoped to a club — the canister counterpart of the `chat_groups` by-club read. */
 export async function listLiveGroupsByClub(ctx: FeatureBackendContext, clubId: string) {
-  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const raw = await unwrapCandid(actor.list_groups_by_club(clubId), "List groups by club");
+  const raw = await batched(
+    ctx, "messaging:groups_by_club", clubId, msgConn(ctx),
+    async (actor: MessagingActor, ids) => {
+      const rows = await unwrapCandid(actor.list_groups_by_clubs(ids), "List groups by club");
+      return groupBy(ids, rows, (r) => {
+        const c = (r as { club_id?: unknown }).club_id;
+        return Array.isArray(c) ? String(c[0] ?? "") : String(c ?? "");
+      });
+    },
+    (actor: MessagingActor, id) => unwrapCandid(actor.list_groups_by_club(id), "List groups by club"),
+  );
   return raw.map(toLiveGroupSummary);
 }
 

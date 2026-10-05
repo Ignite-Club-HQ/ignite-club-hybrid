@@ -497,6 +497,11 @@ export interface Main {
     { 'Ok' : Array<RosterEntry> } |
       { 'Err' : string }
   >,
+  'get_event_rosters' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<RosterEntry> } |
+      { 'Err' : string }
+  >,
   'get_event_view_count' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -569,6 +574,11 @@ export interface Main {
     { 'Ok' : Array<Duty> } |
       { 'Err' : string }
   >,
+  'list_duties_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<Duty> } |
+      { 'Err' : string }
+  >,
   'list_event_groups' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroup> } |
@@ -580,6 +590,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_events' : ActorMethod<[[] | [string], [] | [string]], Array<Event>>,
+  'list_events_multi' : ActorMethod<
+    [Array<string>, Array<string>],
+    { 'Ok' : Array<Event> } |
+      { 'Err' : string }
+  >,
   'list_game_player_stats' : ActorMethod<
     [string],
     { 'Ok' : Array<GamePlayerStat> } |

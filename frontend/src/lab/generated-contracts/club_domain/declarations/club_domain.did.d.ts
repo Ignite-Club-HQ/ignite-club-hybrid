@@ -616,6 +616,11 @@ export interface Main {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_sponsors_multi' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<ClubSponsor> } |
+      { 'Err' : string }
+  >,
   'list_team_captains' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamCaptain> } |

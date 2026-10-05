@@ -334,6 +334,11 @@ type Main =
        Err: text;
        Ok: vec RosterEntry;
      }) query;
+   get_event_rosters: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec RosterEntry;
+     }) query;
    get_event_view_count: (event_id: text) ->
     (variant {
        Err: text;
@@ -408,6 +413,11 @@ type Main =
                                        Err: text;
                                        Ok: vec Duty;
                                      }) query;
+   list_duties_multi: (event_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Duty;
+     }) query;
    list_event_groups: (event_id: text) ->
     (variant {
        Err: text;
@@ -419,6 +429,11 @@ type Main =
        Ok: vec EventView;
      }) query;
    list_events: (club_id: opt text, team_id: opt text) -> (vec Event) query;
+   list_events_multi: (club_ids: vec text, team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec Event;
+     }) query;
    list_game_player_stats: (event_id: text) ->
     (variant {
        Err: text;

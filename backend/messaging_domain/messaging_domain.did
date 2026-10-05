@@ -303,6 +303,11 @@ type Main =
        Err: text;
        Ok: GroupMetadata;
      }) query;
+   get_group_metadata_multi: (conversation_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec GroupMetadata;
+     }) query;
    get_minimum_app_versions: () ->
     (variant {
        Err: text;
@@ -312,6 +317,14 @@ type Main =
                };
      }) query;
    get_mute_preference: (conversation_id: text) -> (bool) query;
+   get_mute_preferences: (conversation_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 bool;
+               };
+     }) query;
    get_or_create_dm: (other: principal) ->
     (variant {
        Err: text;
@@ -376,6 +389,11 @@ type Main =
        Ok: vec principal;
      }) query;
    list_groups_by_club: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GroupSummary;
+     }) query;
+   list_groups_by_clubs: (club_ids: vec text) ->
     (variant {
        Err: text;
        Ok: vec GroupSummary;

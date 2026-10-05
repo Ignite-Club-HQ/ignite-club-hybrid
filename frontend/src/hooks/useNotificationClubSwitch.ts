@@ -17,7 +17,7 @@
 import { useEffect, useRef } from "react";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import {
   clearNotificationClubSwitchInFlight,
@@ -125,7 +125,9 @@ const MAX_VERIFY_ATTEMPTS = 3;
 const VERIFY_RETRY_MS = 1500;
 
 export function useNotificationClubSwitch() {
-  const { user } = useAuth();
+  // Optional: this runs app-wide, and a missing provider (e.g. during a live
+  // reload of the auth module) must not blank the whole app.
+  const user = useOptionalAuth()?.user ?? null;
   const { activeClubTheme, setActiveClubTheme } = useClubTheme();
   const drainingRef = useRef(false);
   const drainRequestedRef = useRef(false);

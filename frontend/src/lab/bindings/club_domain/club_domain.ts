@@ -857,6 +857,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_sponsors_multi(club_ids: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubSponsor>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_team_captains(team_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<TeamCaptain>;
@@ -2440,6 +2447,16 @@ export class Club_domain implements club_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_sponsors(arg0);
+        return from_candid_variant_n136(result);
+    }
+    async list_sponsors_multi(arg0: Array<string>): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubSponsor>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_sponsors_multi(arg0);
         return from_candid_variant_n136(result);
     }
     async list_team_captains(arg0: string): Promise<{

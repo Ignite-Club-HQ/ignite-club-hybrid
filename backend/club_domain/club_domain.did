@@ -676,6 +676,11 @@ type Main =
        Err: text;
        Ok: vec ClubSponsor;
      }) query;
+   list_sponsors_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubSponsor;
+     }) query;
    list_team_captains: (team_id: text) ->
     (variant {
        Err: text;

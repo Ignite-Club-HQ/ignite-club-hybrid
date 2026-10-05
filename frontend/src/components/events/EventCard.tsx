@@ -497,7 +497,10 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
     staleTime: 60 * 1000,
   });
 
-  const currentRsvpStatus = (myRsvp?.status as RsvpStatus) ?? null;
+  // Optimistic: show the tapped status straight away (ICP writes take 2–5s);
+  // cleared on settle, so a failure reverts to the stored status.
+  const [optimisticRsvp, setOptimisticRsvp] = useState<RsvpStatus | null>(null);
+  const currentRsvpStatus = optimisticRsvp ?? (myRsvp?.status as RsvpStatus) ?? null;
   // ICP-routed clubs can always send reminders via send_event_reminders
   // (no Pro-subscription concept on-chain); Supabase clubs still require
   // the Pro tier since that fan-out has no canister equivalent.
@@ -561,8 +564,13 @@ export function EventCard({ event, isAdmin, hasViewed = true, stackIndex = 0 }: 
         }).catch(console.error);
       }
     },
+    onMutate: (status: RsvpStatus) => setOptimisticRsvp(status),
     onSuccess: invalidateRsvpQueries,
     onError: (e: Error) => toast({ title: "Failed to RSVP", description: e.message, variant: "destructive" }),
+    onSettled: async () => {
+      await queryClient.refetchQueries({ queryKey: ["card-rsvp", event.id], type: "active" }).catch(() => undefined);
+      setOptimisticRsvp(null);
+    },
   });
 
   // Per-child RSVP

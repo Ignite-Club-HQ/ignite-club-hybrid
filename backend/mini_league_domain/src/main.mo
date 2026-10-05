@@ -201,6 +201,17 @@ persistent actor class Main(governorInit : Principal) {
     leagues.filter(func(item) = item.club_id == club_id and canViewLeague(caller, item))
   };
 
+  // ---- Batched reads (same canViewLeague visibility; capped) ----
+  public query ({ caller }) func get_mini_leagues(ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    if (ids.size() > 300) return #Err("Too many ids");
+    #Ok(leagues.filter(func(item) = ids.any(func(i) = i == item.id) and canViewLeague(caller, item)))
+  };
+
+  public query ({ caller }) func list_mini_leagues_by_clubs(club_ids : [Text]) : async { #Ok : [Types.MiniLeague]; #Err : Text } {
+    if (club_ids.size() > 200) return #Err("Too many ids");
+    #Ok(leagues.filter(func(item) = club_ids.any(func(c) = c == item.club_id) and canViewLeague(caller, item)))
+  };
+
   // Caller-scoped: leagues the caller administers, belongs to via a club
   // role grant, or has a claimed player in.
   public query ({ caller }) func my_leagues() : async [Types.MiniLeague] {

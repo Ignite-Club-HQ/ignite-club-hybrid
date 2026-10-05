@@ -552,6 +552,41 @@ persistent actor class Main(governorInit : Principal) {
         and (team_id == null or team_id == item.team_id)
     )
   };
+  // ---- Batched reads (one round trip per page instead of one per id) ----
+  // Same per-event visibility (canView) as the single-id queries; capped.
+  public query ({ caller }) func list_events_multi(club_ids : [Text], team_ids : [Text]) : async { #Ok : [Types.Event]; #Err : Text } {
+    if (club_ids.size() + team_ids.size() > 300) return #Err("Too many ids");
+    #Ok(events.filter(func(item) =
+      not item.deleted
+        and canView(caller, item)
+        and (
+          club_ids.any(func(c) = c == item.club_id)
+            or (switch (item.team_id) { case (?t) team_ids.any(func(x) = x == t); case null false })
+        )
+    ))
+  };
+
+  func visibleEventIds(caller : Principal, event_ids : [Text]) : [Text] {
+    event_ids.filter(func(id) =
+      switch (events.find(func(item) = item.id == id)) {
+        case (?e) canView(caller, e);
+        case null false;
+      }
+    )
+  };
+
+  public query ({ caller }) func get_event_rosters(event_ids : [Text]) : async { #Ok : [Types.RosterEntry]; #Err : Text } {
+    if (event_ids.size() > 300) return #Err("Too many ids");
+    let ok = visibleEventIds(caller, event_ids);
+    #Ok(roster.filter(func(item) = ok.any(func(i) = i == item.event_id)))
+  };
+
+  public query ({ caller }) func list_duties_multi(event_ids : [Text]) : async { #Ok : [Types.Duty]; #Err : Text } {
+    if (event_ids.size() > 300) return #Err("Too many ids");
+    let ok = visibleEventIds(caller, event_ids);
+    #Ok(duties.filter(func(item) = ok.any(func(i) = i == item.event_id)))
+  };
+
   public shared ({ caller }) func addBulkAccessPrincipal(principal : Principal) : async { #Ok; #Err : Text } {
     if (not isGovernor(caller)) return #Err("Governor required");
     if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");

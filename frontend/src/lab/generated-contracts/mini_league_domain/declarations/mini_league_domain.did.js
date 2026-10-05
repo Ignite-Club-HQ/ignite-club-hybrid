@@ -271,6 +271,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MiniLeague, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_mini_leagues' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_player_guardian_status' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : PlayerGuardianStatus, 'Err' : IDL.Text })],
@@ -334,6 +339,11 @@ export const idlFactory = ({ IDL }) => {
     'list_mini_leagues_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(MiniLeague)],
+        ['query'],
+      ),
+    'list_mini_leagues_by_clubs' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeague), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_players' : IDL.Func(

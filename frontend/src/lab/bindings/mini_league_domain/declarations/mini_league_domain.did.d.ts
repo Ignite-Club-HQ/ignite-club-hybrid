@@ -137,6 +137,11 @@ export interface Main {
     { 'Ok' : MiniLeague } |
       { 'Err' : string }
   >,
+  'get_mini_leagues' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<MiniLeague> } |
+      { 'Err' : string }
+  >,
   'get_player_guardian_status' : ActorMethod<
     [string],
     { 'Ok' : PlayerGuardianStatus } |
@@ -188,6 +193,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_mini_leagues_by_club' : ActorMethod<[string], Array<MiniLeague>>,
+  'list_mini_leagues_by_clubs' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<MiniLeague> } |
+      { 'Err' : string }
+  >,
   'list_players' : ActorMethod<
     [string],
     { 'Ok' : Array<MiniLeaguePlayer> } |
