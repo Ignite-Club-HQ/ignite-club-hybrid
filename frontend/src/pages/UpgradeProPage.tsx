@@ -32,6 +32,21 @@ import {
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
 import { useDesktopUpgradeGate } from "@/hooks/useDesktopUpgradeGate";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveClubProfile,
+  getLiveClubSubscription,
+  getLiveTeam,
+  getLiveTeamSubscription,
+} from "@/live/features/club";
+import {
+  mapLiveClubSubscriptionToRow,
+  mapLiveTeamSubscriptionToRow,
+} from "@/live/features/proAccess";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 
 
 const PRO_FEATURES = [
