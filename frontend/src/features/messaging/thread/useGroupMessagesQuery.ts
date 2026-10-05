@@ -7,7 +7,7 @@ import { fetchProfilesWithCache } from "@/lib/profileCache";
 import { isUsableCachedThread } from "@/lib/chatThreadLoadState";
 import * as fixtureData from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveLatestMessagesPage } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage, listLiveReactions } from "@/live/features/messaging";
 import {
   attachReactionsToMessages,
   getCachedGroupMessages,
@@ -48,6 +48,23 @@ export const mapLiveGroupRows = async (
 ): Promise<GroupMessage[]> => {
   const authorIds = [...new Set(rows.map((m: any) => m.sender.toText() as string))];
   const profilesMap = await fetchProfilesWithCache(authorIds);
+  // Reactions persist on the canister; restore them on every refetch.
+  // Tolerate older canisters that lack list_reactions.
+  const reactionsByMessage = new Map<string, any[]>();
+  try {
+    const liveReactions = await listLiveReactions(ctx, groupId);
+    for (const r of liveReactions) {
+      const uid = r.user.toText();
+      const list = reactionsByMessage.get(r.message_id) ?? [];
+      list.push({
+        id: `${r.message_id}:${uid}:${r.emoji}`,
+        user_id: uid,
+        reaction_type: r.emoji,
+        group_message_id: r.message_id,
+      });
+      reactionsByMessage.set(r.message_id, list);
+    }
+  } catch { /* canister without list_reactions — reactions stay empty until redeploy */ }
   // Replies persist on the canister as reply_to_id; resolve the quoted snippet
   // from messages in the same page (targets outside the loaded page render
   // without a quote, same as a deleted target).
@@ -71,6 +88,7 @@ export const mapLiveGroupRows = async (
         group_id: m.conversation_id,
         reply_to_id: replyToId,
         author: profile ? { display_name: profile.display_name, avatar_url: profile.avatar_url } : null,
+        reactions: reactionsByMessage.get(m.id) ?? [],
         reply_to: replyTarget
           ? { id: replyTarget.id, text: replyTarget.body, author_id: replyTarget.sender.toText(), author: replyProfile ? { display_name: replyProfile.display_name } : null }
           : null,
@@ -234,11 +252,16 @@ const fetchGroupMessages = async ({
         Array.isArray(page.next_sequence) && page.next_sequence.length > 0
           ? Number(page.next_sequence[0])
           : null;
+      // mapLiveGroupRows embeds canister reactions per message; flatten the
+      // same rows for consumers that read the flat reactions list.
+      const reactions = messages.flatMap((m: any) =>
+        ((m.reactions || []) as any[]).map((r) => ({ ...r, group_message_id: m.id })),
+      ) as MessageReaction[];
       return {
-        messages,
+        messages: attachReactionsToMessages(messages, reactions),
         hasOlderMessages: olderCursor !== null,
         olderCursor,
-        reactions: [] as MessageReaction[],
+        reactions,
       };
     },
 
