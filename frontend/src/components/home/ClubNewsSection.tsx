@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { SecureImage } from "@/components/SecureImage";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, Newspaper } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -83,10 +84,9 @@ export default function ClubNewsSection() {
         className="flex cursor-pointer items-center gap-3 bg-card p-3 transition-colors hover:bg-accent/50 active:bg-accent"
       >
         {latest.image_url && (
-          <img
+          <SecureImage
             src={latest.image_url}
             alt=""
-            loading="lazy"
             className="h-12 w-12 shrink-0 rounded-md object-cover"
           />
         )}
