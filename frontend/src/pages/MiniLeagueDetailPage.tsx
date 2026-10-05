@@ -19,6 +19,7 @@ import {
   Mail,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -353,7 +354,9 @@ export default function MiniLeagueDetailPage() {
           r.metadata.kind !== "mini_league_parent_join_link",
       );
     },
-    enabled: !!league?.club_id && !!id && !!canManageLeague,
+    // Supabase-only table: in ICP mode pending invites live on the
+    // club_domain canister, and this unguarded read PostgREST-400s.
+    enabled: !!league?.club_id && !!id && !!canManageLeague && !isFeatureRoutedToIcp("membership"),
   });
 
   const nonCancelledEvents = events?.filter(e => !e.is_cancelled) || [];
