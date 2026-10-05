@@ -162,7 +162,7 @@ export function UploadPhotoSheet({
                 has_pro_access: Boolean(sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override),
               } : null;
             }));
-            return rows.filter((row): row is Club => row !== null);
+            return rows.flatMap((row) => (row ? [row as Club] : []));
           },
         });
       }
