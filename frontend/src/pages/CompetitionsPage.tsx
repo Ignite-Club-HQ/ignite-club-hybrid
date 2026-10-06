@@ -115,9 +115,15 @@ function SupabaseCompetitionsPage() {
 
   // Clubs I admin (eligible to organise competitions)
   const { data: adminClubs = [] } = useQuery({
-    queryKey: ["competitions-admin-clubs", user?.id],
-    enabled: !isIcp && !!user,
+    queryKey: ["competitions-admin-clubs", user?.id, isIcp],
+    enabled: !!user,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: role grants live on club_domain (my_role_grants), keyed
+        // by the II principal — Supabase user_roles has no rows for them.
+        const { icpListMyAdminClubs } = await import("@/lib/icpClubTeamLookup");
+        return icpListMyAdminClubs();
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, kind)")
