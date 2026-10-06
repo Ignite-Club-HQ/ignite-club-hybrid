@@ -2,6 +2,7 @@ import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
 import { clubIdFromMediaPath, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
+import { readCachedPhoto, writeCachedPhoto } from "./deviceMediaCache";
 import type { IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -69,6 +70,10 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   if (!identity) {
     throw new Error("Internet Identity sign-in required to decrypt blob-store media");
   }
+  // Photos seen before on this device open straight from the local cache.
+  const principal = identity.getPrincipal().toText();
+  const cached = await readCachedPhoto(principal, match.canisterId, match.path);
+  if (cached) return URL.createObjectURL(cached);
   // Always fetch via the routable raw subdomain, whatever form was stored.
   const response = await fetch(blobAssetUrl(match.canisterId, match.path));
   if (!response.ok) {
@@ -87,6 +92,8 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   // Uint8Array<ArrayBufferLike>.
   const buffer = new ArrayBuffer(plaintext.byteLength);
   new Uint8Array(buffer).set(plaintext);
+  void writeCachedPhoto(principal, match.canisterId, match.path, buffer);
   return URL.createObjectURL(new Blob([buffer]));
+
 
 }
