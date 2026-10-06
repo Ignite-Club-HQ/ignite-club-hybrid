@@ -524,7 +524,7 @@ function SupabaseCompetitionDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-lg sm:text-xl font-bold break-words flex-1 min-w-0 leading-tight">{competition.name}</h1>
-          {canManage && !isIcp && !(competition.source === "playhq" && competition.clubs?.kind !== "association") && (
+          {canManage && !(competition.source === "playhq" && competition.clubs?.kind !== "association") && (
             <Sheet>
               <SheetTrigger asChild>
                 <Button
@@ -1103,10 +1103,53 @@ function TeamsByDivision({
     </div>
   );
 }
+// ICP broadcast: logs on competition_domain, then fans out an in-app/push
+// notification to every member of the accepted (optionally division-limited)
+// teams through notification_queue. Recipient ids are principal text.
+async function sendIcpCompetitionBroadcast(competitionId: string, competitionName: string, message: string, divisionIds: Set<string>): Promise<number> {
+  const [{ icpCtx }, comps, { listLiveTeamRoleGrants }, { fanOutLiveNotifications }] = await Promise.all([
+    import("@/lib/icpClubTeamLookup"),
+    import("@/live/features/competitions"),
+    import("@/live/features/membership"),
+    import("@/live/features/notifications"),
+  ]);
+  const ctx = await icpCtx();
+  const entries = await comps.listLiveCompetitionEntries(ctx, competitionId);
+  const teams = entries.filter((e: any) => {
+    if (e.status !== "accepted" && e.status !== "registered") return false;
+    if (divisionIds.size === 0) return true;
+    const div = Array.isArray(e.division_id) ? e.division_id[0] : e.division_id;
+    return !!div && divisionIds.has(div);
+  });
+  const sent = await comps.sendLiveCompetitionBroadcast(ctx, competitionId, JSON.stringify({ teams: teams.length }), message);
+  const recipients = new Set<string>();
+  for (const t of teams) {
+    try {
+      const grants = await listLiveTeamRoleGrants(ctx, t.team_id);
+      grants.forEach((g: any) => recipients.add(g.user.toText()));
+    } catch (e) { console.warn("[broadcast] roster read failed", t.team_id, e); }
+  }
+  if (recipients.size > 0) {
+    await fanOutLiveNotifications(ctx, {
+      userIds: Array.from(recipients),
+      clubId: teams[0]?.club_id ?? "",
+      kind: "competition_broadcast",
+      body: `${competitionName}: ${message}`.slice(0, 1000),
+      idempotencyKeyPrefix: sent.id,
+      relatedId: competitionId,
+    });
+  }
+  return teams.length;
+}
+
 function BroadcastsHeaderBadge({ competitionId }: { competitionId: string }) {
   const { data } = useQuery({
     queryKey: ["competition-broadcasts-count", competitionId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const [{ icpCtx }, { listLiveCompetitionBroadcasts }] = await Promise.all([import("@/lib/icpClubTeamLookup"), import("@/live/features/competitions")]);
+        return (await listLiveCompetitionBroadcasts(await icpCtx(), competitionId)).length;
+      }
       const { count } = await supabase
         .from("competition_broadcasts")
         .select("id", { count: "exact", head: true })
@@ -1152,6 +1195,14 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
   const { data: history = [] } = useQuery({
     queryKey: ["competition-broadcasts", competitionId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const [{ icpCtx }, { listLiveCompetitionBroadcasts }] = await Promise.all([import("@/lib/icpClubTeamLookup"), import("@/live/features/competitions")]);
+        const rows = await listLiveCompetitionBroadcasts(await icpCtx(), competitionId);
+        return rows.slice(0, 20).map((b: any) => {
+          const meta = (() => { try { return JSON.parse(b.title); } catch { return {}; } })();
+          return { id: b.id, message: b.body, created_at: new Date(Number(b.created_at_ms)).toISOString(), recipient_team_count: Number(meta.teams ?? 0) };
+        });
+      }
       const { data } = await supabase
         .from("competition_broadcasts")
         .select("*")
@@ -1184,6 +1235,23 @@ function BroadcastsPanel({ competitionId, competitionName, divisions, acceptedTe
   const send = async () => {
     if (!message.trim()) return;
     setSending(true);
+    if (resolveAuthBackend() === "icp") {
+      try {
+        const count = await sendIcpCompetitionBroadcast(competitionId, competitionName, message.trim(), selectedDivisionIds);
+        try { (navigator as any).vibrate?.(15); } catch {}
+        toast({ title: `Broadcast sent to ${count} team${count === 1 ? "" : "s"}` });
+        setMessage("");
+        setActiveTemplate(null);
+        setSelectedDivisionIds(new Set());
+        qc.invalidateQueries({ queryKey: ["competition-broadcasts", competitionId] });
+        qc.invalidateQueries({ queryKey: ["competition-broadcasts-count", competitionId] });
+      } catch (e) {
+        toast({ title: "Could not send broadcast", description: e instanceof Error ? e.message : "Send failed", variant: "destructive" });
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     const { data, error } = await supabase.functions.invoke("send-competition-broadcast", {
       body: {
         competition_id: competitionId,
