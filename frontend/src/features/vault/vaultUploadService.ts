@@ -127,6 +127,7 @@ export async function uploadVaultItem(
           storagePath,
           file: options.file,
           mime: options.file.type || "application/octet-stream",
+          lock: "own",
         })
       : null;
     if (!blobUpload) {
@@ -169,6 +170,7 @@ export async function uploadVaultItem(
         storagePath,
         file: options.file,
         mime: options.file.type || "application/octet-stream",
+        lock: "own",
       })
     : null;
 

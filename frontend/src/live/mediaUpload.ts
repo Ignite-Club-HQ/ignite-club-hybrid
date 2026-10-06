@@ -53,6 +53,9 @@ export async function tryUploadMediaToBlobStore(args: {
   storagePath: string;
   file: File | Blob;
   mime: string;
+  /** "own" keeps the per-file lock even under clubs/ (e.g. vault files,
+   * which only club staff may open — the club lock admits every member). */
+  lock?: "club" | "own";
 }): Promise<BlobMediaUpload | null> {
   const target = getActiveIcpTarget();
   if (!isBlobStoreConfigured(target)) return null;
@@ -64,7 +67,7 @@ export async function tryUploadMediaToBlobStore(args: {
   // deployed canister supports it: no per-photo record, and readers need one
   // key per club per session. Others keep the per-photo lock.
   const clubId = clubIdFromMediaPath(args.storagePath);
-  if (clubId && (await isClubMediaLockSupported(ctx))) {
+  if (clubId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
     const ciphertext = await encryptClubMedia(ctx, clubId, bytes);
     return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   }
