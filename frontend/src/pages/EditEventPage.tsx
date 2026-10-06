@@ -392,8 +392,22 @@ function SupabaseEditEventPage() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event-edit", id],
-    queryFn: () =>
-      withFeatureBackend("mini_leagues", {
+    queryFn: async () => {
+      // Internet Identity accounts: the event lives on the events canister,
+      // not Supabase — load it in the same shape the detail page uses.
+      if (resolveAuthBackend() === "icp") {
+        const { fetchEventDetail } = await import("@/features/events/eventDetailRepository");
+        const detail: any = await fetchEventDetail(supabase, id!);
+        if (!detail) return null;
+        const miniLeagueId = detail.mini_league_id as string | null | undefined;
+        if (!miniLeagueId) return { ...detail, mini_leagues: null };
+        const league = await withFeatureBackend("mini_leagues", {
+          supabase: async () => null,
+          icp: async (ctx) => getLiveMiniLeague(ctx, miniLeagueId).catch(() => null),
+        }) as any;
+        return { ...detail, mini_leagues: league ? { id: league.id, name: league.name } : null };
+      }
+      return withFeatureBackend("mini_leagues", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("events")
@@ -418,7 +432,8 @@ function SupabaseEditEventPage() {
           const league = await getLiveMiniLeague(ctx, miniLeagueId) as any;
           return { ...data, mini_leagues: league ? { id: league.id, name: league.name } : null };
         },
-      }),
+      });
+    },
     enabled: !!id,
   });
 
@@ -430,6 +445,8 @@ function SupabaseEditEventPage() {
     queryKey: ["can-edit-event", id, user?.id, event?.club_id, event?.team_id],
     queryFn: async () => {
       if (!event) return false;
+      // ICP: the events canister re-checks club/team admin roles on save.
+      if (resolveAuthBackend() === "icp") return true;
 
       // Check for app_admin
       const { data: appAdmin } = await supabase
