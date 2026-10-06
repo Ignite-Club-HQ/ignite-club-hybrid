@@ -430,9 +430,28 @@ function SupabaseCompetitionDetailPage() {
 
   // Teams the current user can manage (for accept/decline)
   const { data: myAdminTeamIds = [] } = useQuery<string[]>({
-    queryKey: ["my-admin-team-ids", user?.id],
+    queryKey: ["my-admin-team-ids", user?.id, isIcp],
     enabled: !!user,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: role grants live on club_domain (my_role_grants).
+        const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const grants = (await getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        return Array.from(
+          new Set(
+            grants
+              .filter((g) => ["team_admin", "coach", "club_admin"].includes(g.role))
+              .map((g) => opt(g.team))
+              .filter((t): t is string => typeof t === "string"),
+          ),
+        );
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("team_id")
