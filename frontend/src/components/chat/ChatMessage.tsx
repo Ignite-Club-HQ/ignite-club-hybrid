@@ -250,6 +250,9 @@ function ChatMessageInner({
   const canDelete = isOwn || isAdmin;
   const isPendingMessage = id.startsWith("temp-") || id.startsWith("queued-");
   const canReply = !!onReply && !isPendingMessage;
+  // Not yet confirmed by the server: show "Sending…" instead of "Sent" and
+  // keep reactions closed so members can't react to a row that doesn't exist yet.
+  const isUnconfirmed = isPending || isPendingMessage;
 
   const updateReactionMessages = useCallback((updater: (messages: any[]) => any[]) => {
     queryClient.setQueryData(queryKey, (old: any) => {
@@ -742,6 +745,7 @@ function ChatMessageInner({
     // (e.g. avatar) after the picker closes is suppressed by preventIfGuarded.
     armDismissGuard();
     setShowReactionPicker(false);
+    if (isPendingMessage) return;
     setShowMenu(false);
     setShowActionSheet(false);
 
@@ -1077,7 +1081,7 @@ function ChatMessageInner({
                   removeReactionMutation.mutate(reactionId);
                 }}
                 isMutating={false}
-                isOpen={showReactionPicker}
+                isOpen={showReactionPicker && !isPendingMessage}
                 preventIfGuarded={preventIfGuarded}
                 onOpenChange={(open) => {
                   if (open) {
@@ -1248,11 +1252,14 @@ function ChatMessageInner({
                 <Clock className="h-3 w-3" />
               </span>
             )}
+            {!isPending && isPendingMessage && isOwn && (
+              <span className="opacity-80">Sending…</span>
+            )}
             {timestamp}
             {isEdited && (!isOwn || isClubAnnouncement || isPending || (isOwn && isLastOwnMessage && readFrontierReaders.length > 0)) && (
               <span className="opacity-70">· Edited</span>
             )}
-            {!isPending && isOwn && !isClubAnnouncement && (
+            {!isUnconfirmed && isOwn && !isClubAnnouncement && (
               // Unified inline metadata for own messages — keeps the metadata
               // strip a single line across every chat type (DM, Team, Club,
               // Committee, Competition, Group). The standalone reader-avatar
@@ -1272,7 +1279,7 @@ function ChatMessageInner({
             )}
           </p>
         )}
-        {!isPending && isLastOwnMessage && isOwn && !isClubAnnouncement && readFrontierReaders.length > 0 && (
+        {!isUnconfirmed && isLastOwnMessage && isOwn && !isClubAnnouncement && readFrontierReaders.length > 0 && (
           messageType === "dm"
             ? <MessageReadAvatars readers={readFrontierReaders} isOwn={isOwn} />
             : <div className="cursor-pointer" onClick={() => setShowReadReceipts(true)}>
