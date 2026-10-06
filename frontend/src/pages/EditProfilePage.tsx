@@ -77,14 +77,14 @@ export default function EditProfilePage() {
         // ICP mode: encrypt + store on the blob-store canister, keep the
         // on-chain URL as the avatar reference.
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({ file: result.blob, mime: result.mimeType, ext });
+        const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
         setAvatarUrl(url);
         toast({ title: "Photo uploaded!" });
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("avatars")
-          .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
+          .upload(fileName, uploadBlob, { upsert: true, contentType: uploadBlob.type || result.mimeType });
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
@@ -114,10 +114,19 @@ export default function EditProfilePage() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
+    // Resize on-device so any photo (even a 5MB camera shot) fits the budget.
+    let uploadFile: File = file;
+    try {
+      const compressed = await compressImage(file);
+      if (compressed.file.size < uploadFile.size) uploadFile = compressed.file;
+    } catch {
+      // keep original if compression fails
+    }
+
+    if (uploadFile.size > 2 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Please select an image under 2MB",
+        description: "Please select a smaller image",
         variant: "destructive",
       });
       return;
@@ -131,9 +140,9 @@ export default function EditProfilePage() {
       try {
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
         const url = await uploadIcpAvatar({
-          file,
-          mime: file.type || "image/jpeg",
-          ext: file.name.split('.').pop() || "jpg",
+          file: uploadFile,
+          mime: uploadFile.type || "image/jpeg",
+          ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
         });
         setAvatarUrl(url);
         toast({ title: "Photo uploaded!" });
