@@ -47,6 +47,102 @@ const vetKeyCache = new Map<string, VetKey>();
 export function clearPiiVetKeyCache(): void {
   verificationKeyCache = null;
   vetKeyCache.clear();
+  clubMediaKeyCache.clear();
+  clubMediaLockSupported = null;
+}
+
+// ==================== Per-club photo key ====================
+
+/** Field id of media blobs — must equal MEDIA_BLOB_PII_FIELD. */
+const CLUB_MEDIA_FIELD = "blob";
+const clubMediaKeyCache = new Map<string, Promise<VetKey>>();
+let clubMediaLockSupported: Promise<boolean> | null = null;
+
+/** pii id whose IBE identity locks every photo of a club. Mirrors main.mo. */
+export function clubMediaPiiId(clubId: string): string {
+  return `clubmedia:${clubId}`;
+}
+
+/** Club id from a `clubs/<clubId>/...` storage path, else null. */
+export function clubIdFromMediaPath(path: string): string | null {
+  return /^clubs\/([^/]+)\//.exec(path)?.[1] ?? null;
+}
+
+/**
+ * True when the deployed pii_access_control supports the per-club photo key
+ * (older canisters lack club_media_lock_version). Checked once per session.
+ */
+export function isClubMediaLockSupported(ctx: FeatureBackendContext): Promise<boolean> {
+  if (!clubMediaLockSupported) {
+    clubMediaLockSupported = (async () => {
+      try {
+        const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+        await (actor as unknown as { club_media_lock_version: () => Promise<bigint> }).club_media_lock_version();
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+  }
+  return clubMediaLockSupported;
+}
+
+/** Encrypts photo bytes to the club's shared photo identity. */
+export function encryptClubMedia(ctx: FeatureBackendContext, clubId: string, bytes: Uint8Array): Promise<Uint8Array> {
+  return encryptPiiValue(ctx, clubMediaPiiId(clubId), CLUB_MEDIA_FIELD, bytes);
+}
+
+/**
+ * The caller's club photo key — one paid derivation per club per session,
+ * concurrent callers share the in-flight request. Failures are not cached.
+ */
+export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string): Promise<VetKey> {
+  let pending = clubMediaKeyCache.get(clubId);
+  if (!pending) {
+    pending = (async () => {
+      const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+      const { key: verificationKey } = await getPiiVerificationKey(ctx);
+      const transport = TransportSecretKey.random();
+      const encrypted = await unwrapCandid(
+        (actor as unknown as {
+          get_club_media_vetkey: (c: string, t: Uint8Array) => Promise<{ Ok: Uint8Array | number[] } | { Err: string }>;
+        }).get_club_media_vetkey(clubId, transport.publicKeyBytes()),
+        "Fetch club photo key",
+      );
+      return EncryptedVetKey.deserialize(Uint8Array.from(encrypted)).decryptAndVerify(
+        transport,
+        verificationKey,
+        piiIbeIdentity(clubMediaPiiId(clubId), CLUB_MEDIA_FIELD),
+      );
+    })();
+    clubMediaKeyCache.set(clubId, pending);
+    pending.catch(() => clubMediaKeyCache.delete(clubId));
+  }
+  return pending;
+}
+
+/**
+ * Decrypts a club photo with the shared club key; returns null when the
+ * bytes were not locked to the club (older per-photo lock) so the caller
+ * can fall back to decryptPiiValue.
+ */
+export async function tryDecryptClubMedia(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  ciphertext: Uint8Array,
+): Promise<Uint8Array | null> {
+  if (!(await isClubMediaLockSupported(ctx))) return null;
+  let key: VetKey;
+  try {
+    key = await fetchClubMediaVetKey(ctx, clubId);
+  } catch {
+    return null;
+  }
+  try {
+    return IbeCiphertext.deserialize(ciphertext).decrypt(key);
+  } catch {
+    return null;
+  }
 }
 
 async function getPiiVerificationKey(

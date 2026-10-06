@@ -1,7 +1,7 @@
 import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
-import { decryptPiiValue } from "./piiVetKeys";
+import { clubIdFromMediaPath, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
 import type { IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -75,7 +75,13 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
     throw new Error(`Blob store fetch failed (${response.status})`);
   }
   const ciphertext = new Uint8Array(await response.arrayBuffer());
-  const plaintext = await decryptPiiValue({ identity, target }, match.path, MEDIA_BLOB_PII_FIELD, ciphertext);
+  const ctx = { identity, target };
+  // Club photos: try the shared per-club key first (one derivation per club
+  // per session); photos locked before the change fall back to their own key.
+  const clubId = clubIdFromMediaPath(match.path);
+  const plaintext =
+    (clubId ? await tryDecryptClubMedia(ctx, clubId, ciphertext) : null) ??
+    (await decryptPiiValue(ctx, match.path, MEDIA_BLOB_PII_FIELD, ciphertext));
   // Copy into a plain ArrayBuffer — BlobPart rejects views over a
   // SharedArrayBuffer-backed buffer, and the decrypted bytes come back as a
   // Uint8Array<ArrayBufferLike>.
