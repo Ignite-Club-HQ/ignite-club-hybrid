@@ -824,6 +824,19 @@ export default function TeamDetailPage() {
     refetchOnWindowFocus: false,
   });
 
+  // Fill in the signed-in member's own name at render time too — the cached
+  // member list may have been fetched before their profile finished loading.
+  const rawMembers = useMemo(() => {
+    const myName = myProfile?.display_name;
+    if (!myName || !user?.id) return rawMembersData;
+    const selfIds = new Set<string>([user.id, `principal:${user.id}`, (myProfile as any)?.id].filter(Boolean) as string[]);
+    return (rawMembersData as any[]).map((m) =>
+      selfIds.has(m.user_id) && !m.profiles?.display_name
+        ? { ...m, profiles: { id: m.user_id, display_name: myName, avatar_url: m.profiles?.avatar_url ?? (myProfile as any)?.avatar_url ?? null } }
+        : m,
+    );
+  }, [rawMembersData, myProfile, user?.id]);
+
   // Group roles by user - use user_id directly since it's always present
   // Memoize to prevent recalculation on every render
   const members = useMemo(() => {
