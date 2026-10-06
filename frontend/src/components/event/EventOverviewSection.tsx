@@ -90,7 +90,7 @@ export function EventOverviewSection({
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center gap-3">
             <Clock className="h-5 w-5 text-primary" />
-            <span className="flex-1">{format(parseISO(event.event_date), "EEEE, MMMM d 'at' h:mm a")}</span>
+            <span className="flex-1">{event.event_date ? format(parseISO(event.event_date), "EEEE, MMMM d 'at' h:mm a") : ""}</span>
             <Button
               variant="ghost"
               size="icon"
@@ -227,7 +227,7 @@ export function EventOverviewSection({
             </Button>
           )}
           {!isPitchBoardAccessLoading && canAccessPitchBoard && teamMembers && (() => {
-            const eventTime = parseISO(event.event_date);
+            const eventTime = event.event_date ? parseISO(event.event_date) : new Date(NaN);
             const now = new Date();
             const minutesUntilKickoff = (eventTime.getTime() - now.getTime()) / (1000 * 60);
             const isWithin120Min = minutesUntilKickoff <= 120 && minutesUntilKickoff > 0;
