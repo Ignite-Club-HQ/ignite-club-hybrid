@@ -34,6 +34,8 @@ export type CreateEventTransactionInput = {
   eventDate: string;
   childDates: string[] | null;
   duties: Array<{ name: string; assigned_to: string | null }>;
+  /** ICP only: called once background follow-up writes finish. */
+  onBackgroundDone?: (failed: number) => void;
 };
 
 /**
