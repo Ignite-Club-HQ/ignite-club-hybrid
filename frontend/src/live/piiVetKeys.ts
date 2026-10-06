@@ -5,11 +5,12 @@ import {
   IbeIdentity,
   IbeSeed,
   TransportSecretKey,
-  type VetKey,
+  VetKey,
 } from "@icp-sdk/vetkeys";
 import { connectLivePiiAccessControl } from "./domains";
 import type { FeatureBackendContext } from "./featureRouter";
 import { unwrapCandid } from "./features/candid";
+import { clearDeviceMediaCaches, forgetStoredClubKey, loadStoredClubKey, storeClubKey } from "./deviceMediaCache";
 
 /**
  * Client-side vetKeys (IBE) cryptography for pii_access_control.
@@ -49,6 +50,7 @@ export function clearPiiVetKeyCache(): void {
   vetKeyCache.clear();
   clubMediaKeyCache.clear();
   clubMediaLockSupported = null;
+  void clearDeviceMediaCaches();
 }
 
 // ==================== Per-club photo key ====================
@@ -100,7 +102,18 @@ export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string)
   let pending = clubMediaKeyCache.get(clubId);
   if (!pending) {
     pending = (async () => {
-      const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+      const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+      const cid = canisterId.toText();
+      const principal = ctx.identity.getPrincipal().toText();
+      // Device-stored key (7 days) skips the slow, paid derivation.
+      const stored = loadStoredClubKey(cid, principal, clubId);
+      if (stored) {
+        try {
+          return VetKey.deserialize(stored);
+        } catch {
+          forgetStoredClubKey(cid, principal, clubId);
+        }
+      }
       const { key: verificationKey } = await getPiiVerificationKey(ctx);
       const transport = TransportSecretKey.random();
       const encrypted = await unwrapCandid(
@@ -109,11 +122,13 @@ export function fetchClubMediaVetKey(ctx: FeatureBackendContext, clubId: string)
         }).get_club_media_vetkey(clubId, transport.publicKeyBytes()),
         "Fetch club photo key",
       );
-      return EncryptedVetKey.deserialize(Uint8Array.from(encrypted)).decryptAndVerify(
+      const key = EncryptedVetKey.deserialize(Uint8Array.from(encrypted)).decryptAndVerify(
         transport,
         verificationKey,
         piiIbeIdentity(clubMediaPiiId(clubId), CLUB_MEDIA_FIELD),
       );
+      storeClubKey(cid, principal, clubId, key.serialize());
+      return key;
     })();
     clubMediaKeyCache.set(clubId, pending);
     pending.catch(() => clubMediaKeyCache.delete(clubId));
