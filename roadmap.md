@@ -1,4 +1,6 @@
 # Roadmap — ICP speed-up part 2
+- [x] Simplify ICP login presentation without changing authentication; 49 regression checks passed; browser layouts, popup opening and cancellation verified
+- [ ] Confirm real Internet Identity account sign-in on physical Android/iOS, installed apps/PWA and Facebook/Messenger — requires device access and user approval for an account sign-in
 - [x] Shared batching helper (live/features/batching.ts)
 - [x] Events batched reads (list_events_multi, get_event_rosters, list_duties_multi)
 - [x] Messaging batched reads (mute prefs, group metadata, groups by clubs)
