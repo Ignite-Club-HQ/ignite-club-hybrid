@@ -96,7 +96,7 @@ export async function updateEventTransaction(
           title: canisterTitle(updates.title ?? current?.title),
           description: canisterDescription(updates.description ?? current?.description),
           eventType: String(updates.type ?? current?.event_type ?? "training"),
-          location: optText(updates.location_name ?? current?.location?.[0]),
+          location: optText(updates.address ?? updates.location_name ?? current?.location?.[0]),
           fromMs: new Date(input.selectedEventDate).getTime(),
         });
         return;
