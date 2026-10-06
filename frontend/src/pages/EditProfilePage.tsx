@@ -97,6 +97,7 @@ export default function EditProfilePage() {
       if (isCancelledSelectionError(error)) {
         // User cancelled picker - do nothing
       } else {
+        setAvatarPreview("");
         toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Could not upload photo", variant: "destructive" });
       }
     }
@@ -150,6 +151,7 @@ export default function EditProfilePage() {
         setAvatarUrl(url);
         toast({ title: "Photo uploaded!" });
       } catch (error) {
+        setAvatarPreview("");
         toast({
           title: "Upload failed",
           description: error instanceof Error ? error.message : "Could not upload photo",
@@ -178,6 +180,7 @@ export default function EditProfilePage() {
       setAvatarUrl(storageUrl);
       toast({ title: "Photo uploaded!" });
     } catch (error) {
+      setAvatarPreview("");
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "Could not upload photo",
