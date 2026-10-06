@@ -35,6 +35,7 @@ import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
 import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 
 // ---------------------------------------------------------------------------
@@ -134,14 +135,18 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
         const asset = queue.shift()!;
         doneRef.current.add(asset.id);
         let url = UNAVAILABLE_PHOTO_URL;
+        const local = asset.sourceUrl ? localUploadPreviews.get(asset.sourceUrl) : undefined;
+        if (local) {
+          setUrls((prev) => ({ ...prev, [asset.id]: asset.isVideo ? `${local}#.mp4` : local }));
+          continue;
+        }
         try {
           const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
           if (resolved) url = asset.isVideo ? `${resolved}#.mp4` : resolved;
         } catch (err) {
           console.warn("[icp-media-feed] could not load asset", asset.id, err);
         }
-        if (!cancelled) setUrls((prev) => ({ ...prev, [asset.id]: url }));
-        else doneRef.current.delete(asset.id);
+        setUrls((prev) => ({ ...prev, [asset.id]: url }));
       }
     };
     void Promise.all(Array.from({ length: 6 }, worker));
