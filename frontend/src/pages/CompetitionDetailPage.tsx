@@ -264,9 +264,35 @@ function SupabaseCompetitionDetailPage() {
 
 
   const { data: competition, isLoading } = useQuery({
-    queryKey: ["competition", id],
+    queryKey: ["competition", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: competitions live on competition_domain; there is no
+        // get-by-id, so scan the caller's visible clubs and find the match.
+        const { listLiveCompetitionsMulti } = await import("@/live/features/competitions");
+        const { listLiveMembershipClubs } = await import("@/live/features/membership");
+        const { icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return null;
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const clubs = await listLiveMembershipClubs(ctx);
+        const comps = (await listLiveCompetitionsMulti(ctx, clubs.map((c: any) => c.id))) as any[];
+        const found = comps.find((c) => c.id === id);
+        if (!found) return null;
+        const clubName = await icpGetClubName(found.club_id).catch(() => null);
+        return {
+          id: found.id,
+          name: found.name,
+          season: found.season,
+          status: found.status,
+          organizer_club_id: found.club_id,
+          source: null,
+          clubs: { id: found.club_id, name: clubName, kind: null },
+        };
+      }
       const { data, error } = await supabase
         .from("competitions")
         .select("*, clubs:organizer_club_id(id, name, kind)")
