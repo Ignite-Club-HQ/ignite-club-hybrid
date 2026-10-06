@@ -14,8 +14,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
-// NEEDS-CANISTER: competition settings admin has no canister shape yet — in
-// ICP mode every query on this page is disabled so no II principal reaches Supabase.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/lib/utils";
@@ -45,7 +43,7 @@ export default function CompetitionSettingsPage() {
 
 // Live ICP settings: same form as the Supabase page, backed by
 // competition_domain. Division ladder visibility, per-competition admins
-// and the competition chat toggle stay Supabase-only (no canister shape).
+// and the competition chat toggle are canister-backed too.
 function LiveIcpCompetitionSettingsPage() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -74,11 +72,14 @@ function LiveIcpCompetitionSettingsPage() {
     queryKey: ["icp-live-competition-isadmin", id, competition?.club_id],
     enabled: !!competition,
     queryFn: async () => {
-      const [{ icpCtx }, { getLiveMyRoleGrants }] = await Promise.all([
+      const [{ icpCtx }, { getLiveMyRoleGrants }, { syncLiveCompetitionAccess }] = await Promise.all([
         import("@/lib/icpClubTeamLookup"),
         import("@/live/features/membership"),
+        import("@/live/features/competitions"),
       ]);
       const ctx = await icpCtx();
+      const canister = await syncLiveCompetitionAccess(ctx, id!).catch(() => false);
+      if (canister) return true;
       const grants = await getLiveMyRoleGrants(ctx);
       return grants.some((g: any) =>
         (g.role === "club_admin" || g.role === "app_admin") && g.club?.[0] === competition!.club_id
@@ -276,6 +277,16 @@ function LiveIcpCompetitionSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <DivisionLadderVisibility competitionId={id!} />
+
+      <CompetitionAdminsCard
+        competitionId={id!}
+        competitionName={competition.name}
+        organizerClubId={competition.club_id ?? null}
+      />
+
+      <CompetitionMemberChatCard competitionId={id!} />
 
       <div
         className={cn(
@@ -670,8 +681,21 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: divisions = [], isLoading } = useQuery({
-    queryKey: ["competition-divisions", competitionId],
+    queryKey: ["competition-divisions", competitionId, isIcpPageMode()],
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        const [{ icpCtx }, { listLiveCompetitionSeasons, listLiveDivisionSettings }] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/competitions"),
+        ]);
+        const ctx = await icpCtx();
+        const [seasons, settings] = await Promise.all([
+          listLiveCompetitionSeasons(ctx, competitionId),
+          listLiveDivisionSettings(ctx, competitionId),
+        ]);
+        const names = Array.from(new Set(seasons.flatMap((x: any) => x.divisions ?? []))) as string[];
+        return names.map((name) => ({ id: name, name, hide_ladder: settings.some((x: any) => x.division === name && x.hide_ladder) }));
+      }
       const { data } = await supabase
         .from("competition_divisions")
         .select("*")
@@ -682,6 +706,21 @@ function DivisionLadderVisibility({ competitionId }: { competitionId: string }) 
   });
 
   const toggle = async (divisionId: string, hide: boolean) => {
+    if (isIcpPageMode()) {
+      try {
+        const [{ icpCtx }, { setLiveDivisionHideLadder }] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/competitions"),
+        ]);
+        await setLiveDivisionHideLadder(await icpCtx(), competitionId, divisionId, hide);
+      } catch (e) {
+        toast({ title: "Could not update", description: e instanceof Error ? e.message : "Update failed", variant: "destructive" });
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["competition-divisions", competitionId] });
+      qc.invalidateQueries({ queryKey: ["competition-ladder", competitionId] });
+      return;
+    }
     const { error } = await supabase
       .from("competition_divisions")
       .update({ hide_ladder: hide })
