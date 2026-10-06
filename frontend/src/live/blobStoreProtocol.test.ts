@@ -66,12 +66,15 @@ describe("media_blob_store contract", () => {
     expect([...fields.keys()].sort()).toEqual([
       "abort_upload",
       "begin_upload",
+      "cycles_balance",
       "delete_blob",
       "finalize_upload",
       "get_content_hash",
+      "get_usage",
       "health",
       "http_request",
       "put_chunk",
+      "set_capacity_limit",
       "set_club_domain_canister",
     ]);
   });

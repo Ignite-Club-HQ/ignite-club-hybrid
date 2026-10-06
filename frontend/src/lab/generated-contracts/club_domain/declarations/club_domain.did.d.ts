@@ -523,6 +523,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'is_app_admin' : ActorMethod<[Principal], boolean>,
+  'is_club_member' : ActorMethod<[Principal, string], boolean>,
   'is_member_removed' : ActorMethod<[string, Principal], boolean>,
   'link_guardian' : ActorMethod<
     [string, Principal],

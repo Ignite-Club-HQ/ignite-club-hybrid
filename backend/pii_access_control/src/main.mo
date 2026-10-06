@@ -324,6 +324,42 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(out)
   };
 
+  // ==================== Per-club photo key ====================
+
+  // Club photos are IBE-encrypted to ONE identity per club
+  // (`clubmedia:<club_id>` U+001F `blob`), so a member derives a single key
+  // per club per session instead of one paid derivation per photo. No record
+  // is stored: access is decided live by club_domain.is_club_member (or the
+  // governor). Fails closed while club_domain_canister is unset or the call
+  // errors.
+  public query func club_media_lock_version() : async Nat { 1 };
+
+  public shared ({ caller }) func get_club_media_vetkey(
+    club_id : Text,
+    transport_public_key : Blob
+  ) : async { #Ok : Blob; #Err : Text } {
+    auth(caller);
+    if (club_id.size() == 0 or club_id.size() > 64 or Text.contains(club_id, #char '\u{1F}')) return #Err("Invalid club");
+    if (transport_public_key.size() == 0) return #Err("Invalid transport key");
+    var allowed = isGovernor(caller);
+    if (not allowed) {
+      switch (club_domain_canister) {
+        case null {};
+        case (?cid) {
+          let clubDomain : actor { is_club_member : shared query (Principal, Text) -> async Bool } = actor (Principal.toText(cid));
+          try { allowed := await clubDomain.is_club_member(caller, club_id) } catch (_) {};
+        };
+      };
+    };
+    let pii_id = "clubmedia:" # club_id;
+    log_audit(caller, pii_id, "blob", "vetkey_derive", allowed, "Club media vetKey derivation");
+    if (not allowed) return #Err("Not a member of this club");
+    let encryptedKey = await ManagementCanister.vetKdDeriveKey(
+      ibeIdentity(pii_id, "blob"), vetkdContext(), vetkdKeyId<system>(), transport_public_key
+    );
+    #Ok(encryptedKey)
+  };
+
   // ==================== Public Methods ====================
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {

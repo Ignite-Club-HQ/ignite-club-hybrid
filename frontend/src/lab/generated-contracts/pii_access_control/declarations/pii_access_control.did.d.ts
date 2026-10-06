@@ -40,6 +40,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'audit_access' : ActorMethod<[AuditFilter], Array<AuditRecord>>,
+  'club_media_lock_version' : ActorMethod<[], bigint>,
   /**
    * / Public: remaining cycles (shown in admin settings).
    */
@@ -50,6 +51,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'emergency_shutdown' : ActorMethod<[], { 'Ok' : null } | { 'Err' : string }>,
+  'get_club_media_vetkey' : ActorMethod<
+    [string, Uint8Array],
+    { 'Ok' : Uint8Array } |
+      { 'Err' : string }
+  >,
   'get_encrypted_pii_batch' : ActorMethod<
     [Array<string>, string, string, string],
     { 'Ok' : Array<EncryptedPii> } |

@@ -2,7 +2,7 @@ import { getCurrentInternetIdentity } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { isBlobStoreConfigured, uploadBytesToBlobStore } from "./blobStoreUpload";
 import { resolveAuthBackend } from "./authBackendMode";
-import { encryptPiiValue } from "./piiVetKeys";
+import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLockSupported } from "./piiVetKeys";
 import { grantLiveClubPiiRead, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
@@ -53,6 +53,9 @@ export async function tryUploadMediaToBlobStore(args: {
   storagePath: string;
   file: File | Blob;
   mime: string;
+  /** "own" keeps the per-file lock even under clubs/ (e.g. vault files,
+   * which only club staff may open — the club lock admits every member). */
+  lock?: "club" | "own";
 }): Promise<BlobMediaUpload | null> {
   const target = getActiveIcpTarget();
   if (!isBlobStoreConfigured(target)) return null;
@@ -60,6 +63,14 @@ export async function tryUploadMediaToBlobStore(args: {
   if (!identity) return null;
   const ctx = { target, identity };
   const bytes = new Uint8Array(await args.file.arrayBuffer());
+  // Club photos (clubs/<clubId>/...) share one per-club lock when the
+  // deployed canister supports it: no per-photo record, and readers need one
+  // key per club per session. Others keep the per-photo lock.
+  const clubId = clubIdFromMediaPath(args.storagePath);
+  if (clubId && args.lock !== "own" && (await isClubMediaLockSupported(ctx))) {
+    const ciphertext = await encryptClubMedia(ctx, clubId, bytes);
+    return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
+  }
   const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
   const result = await uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   // The stored record's ciphertext is only a content-hash marker — the real
@@ -72,9 +83,8 @@ export async function tryUploadMediaToBlobStore(args: {
     new TextEncoder().encode(result.blobRef.content_hash),
     identity.getPrincipal(),
   );
-  const clubMatch = /^clubs\/([^/]+)\//.exec(args.storagePath);
-  if (clubMatch) {
-    await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubMatch[1]);
+  if (clubId) {
+    await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
   }
   return result;
 }

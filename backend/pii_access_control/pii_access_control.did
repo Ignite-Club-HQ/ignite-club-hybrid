@@ -11,6 +11,7 @@ type Main =
        Ok;
      });
    audit_access: (filter: AuditFilter) -> (vec AuditRecord) query;
+   club_media_lock_version: () -> (nat) query;
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
    delete_pii: (pii_id: text, field_id: text) ->
@@ -22,6 +23,11 @@ type Main =
                                 Err: text;
                                 Ok;
                               });
+   get_club_media_vetkey: (club_id: text, transport_public_key: blob) ->
+    (variant {
+       Err: text;
+       Ok: blob;
+     });
    get_encrypted_pii_batch: (pii_ids: vec text, field_id: text, operation:
     text, purpose: text) -> (variant {
                                Err: text;

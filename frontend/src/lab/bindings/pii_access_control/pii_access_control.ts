@@ -67,6 +67,7 @@ export interface MainInterface {
         Err: string;
     }>;
     audit_access(filter: AuditFilter): Promise<Array<AuditRecord>>;
+    club_media_lock_version(): Promise<bigint>;
     /**
      * / Public: remaining cycles (shown in admin settings).
      */
@@ -81,6 +82,13 @@ export interface MainInterface {
     emergency_shutdown(): Promise<{
         __kind__: "Ok";
         Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    get_club_media_vetkey(club_id: string, transport_public_key: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
     } | {
         __kind__: "Err";
         Err: string;
@@ -233,6 +241,10 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.audit_access(to_candid_AuditFilter_n2(arg0));
         return result;
     }
+    async club_media_lock_version(): Promise<bigint> {
+        const result = await this.actor.club_media_lock_version();
+        return result;
+    }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
         return result;
@@ -257,6 +269,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.emergency_shutdown();
         return from_candid_variant_n1(result);
     }
+    async get_club_media_vetkey(arg0: string, arg1: Uint8Array): Promise<{
+        __kind__: "Ok";
+        Ok: Uint8Array;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_club_media_vetkey(arg0, arg1);
+        return from_candid_variant_n5(result);
+    }
     async get_encrypted_pii_batch(arg0: Array<string>, arg1: string, arg2: string, arg3: string): Promise<{
         __kind__: "Ok";
         Ok: Array<EncryptedPii>;
@@ -265,7 +287,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.get_encrypted_pii_batch(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n5(result);
+        return from_candid_variant_n6(result);
     }
     async get_encrypted_pii_vetkeys_batch(arg0: Array<string>, arg1: string, arg2: Uint8Array): Promise<{
         __kind__: "Ok";
@@ -275,7 +297,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.get_encrypted_pii_vetkeys_batch(arg0, arg1, arg2);
-        return from_candid_variant_n6(result);
+        return from_candid_variant_n7(result);
     }
     async grant_pii_read(arg0: string, arg1: string, arg2: Principal): Promise<{
         __kind__: "Ok";
@@ -313,7 +335,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_grants(arg0);
-        return from_candid_variant_n9(result);
+        return from_candid_variant_n10(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -323,7 +345,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n10(result);
+        return from_candid_variant_n11(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -376,7 +398,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         return from_candid_variant_n1(result);
     }
 }
-function from_candid_opt_n8(value: [] | [Uint8Array]): Uint8Array | null {
+function from_candid_opt_n9(value: [] | [Uint8Array]): Uint8Array | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_variant_n1(value: {
@@ -399,6 +421,25 @@ function from_candid_variant_n1(value: {
     } : value;
 }
 function from_candid_variant_n10(value: {
+    Ok: number;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n11(value: {
     Ok: _EncryptedPii;
 } | {
     Err: string;
@@ -437,6 +478,25 @@ function from_candid_variant_n4(value: {
     } : value;
 }
 function from_candid_variant_n5(value: {
+    Ok: Uint8Array;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Uint8Array;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n6(value: {
     Ok: Array<_EncryptedPii>;
 } | {
     Err: string;
@@ -455,7 +515,7 @@ function from_candid_variant_n5(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n6(value: {
+function from_candid_variant_n7(value: {
     Ok: Array<[] | [Uint8Array]>;
 } | {
     Err: string;
@@ -468,33 +528,14 @@ function from_candid_variant_n6(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n7(value.Ok)
+        Ok: from_candid_vec_n8(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n9(value: {
-    Ok: number;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: number;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_vec_n7(value: Array<[] | [Uint8Array]>): Array<Uint8Array | null> {
-    return value.map((x)=>from_candid_opt_n8(x));
+function from_candid_vec_n8(value: Array<[] | [Uint8Array]>): Array<Uint8Array | null> {
+    return value.map((x)=>from_candid_opt_n9(x));
 }
 function to_candid_AuditFilter_n2(value: AuditFilter): _AuditFilter {
     return to_candid_record_n3(value);

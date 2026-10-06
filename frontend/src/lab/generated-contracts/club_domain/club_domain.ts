@@ -726,6 +726,7 @@ export interface MainInterface {
         Err: string;
     }>;
     is_app_admin(user: Principal): Promise<boolean>;
+    is_club_member(user: Principal, club_id: string): Promise<boolean>;
     is_member_removed(club: string, user: Principal): Promise<boolean>;
     link_guardian(child_id: string, user: Principal): Promise<{
         __kind__: "Ok";
@@ -2257,6 +2258,10 @@ export class Club_domain implements club_domainInterface {
     }
     async is_app_admin(arg0: Principal): Promise<boolean> {
         const result = await this.actor.is_app_admin(arg0);
+        return result;
+    }
+    async is_club_member(arg0: Principal, arg1: string): Promise<boolean> {
+        const result = await this.actor.is_club_member(arg0, arg1);
         return result;
     }
     async is_member_removed(arg0: string, arg1: Principal): Promise<boolean> {

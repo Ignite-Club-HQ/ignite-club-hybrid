@@ -796,6 +796,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'is_app_admin' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
+    'is_club_member' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'is_member_removed' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Bool],
