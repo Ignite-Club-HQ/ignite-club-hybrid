@@ -904,6 +904,14 @@ persistent actor class Main(governorInit : Principal) {
     acl.roles.any(func(grant) = grant.user.equal(user) and grant.club == ?club_id)
   };
 
+  // True when `user` belongs to `club_id` (any role in the club, an app-wide
+  // role, or parent/guardian of a child on one of its teams; removed members
+  // excluded). pii_access_control gates the per-club photo key on this.
+  public query func is_club_member(user : Principal, club_id : Text) : async Bool {
+    if (user.equal(Principal.anonymous())) return false;
+    isMember(user, club_id)
+  };
+
   // Platform (app) admin check exposed for sibling canisters — mirrors the
   // private isAppAdmin. messaging_domain gates posting to the global broadcast
   // chat on this (every signed-in member may read the feed).
