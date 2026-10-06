@@ -13,10 +13,11 @@
  */
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 const useAuthMock = vi.fn();
+vi.mock("@/live/authBackendMode", () => ({ isIcpAuthAvailable: () => true, useIcpAuthScreen: () => true }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => useAuthMock() }));
 vi.mock("@/hooks/usePasskey", () => ({
   usePasskey: () => ({
@@ -150,5 +151,28 @@ describe("AuthPage post-auth redirect", () => {
     });
     renderAuthPage();
     await waitFor(() => expect(screen.getByText("complete-profile-page")).toBeInTheDocument());
+  });
+
+  it("invokes the existing provider from the click and allows retry after cancelled login", async () => {
+    let resolveLogin: ((value: { error: { message: string } }) => void) | undefined;
+    const provider = vi.fn(() => new Promise<{ error: { message: string } }>((resolve) => { resolveLogin = resolve; }));
+    useAuthMock.mockReturnValue({ user: null, initialized: true, profileResolved: true, signInWithGoogle: provider, signInReady: true, loading: false });
+    sessionStorage.setItem("redirectAfterAuth", "/events?invite=club-token");
+    renderAuthPage();
+    fireEvent.click(screen.getByRole("button", { name: "Continue securely" }));
+    expect(provider).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Signing you in…" })).toBeDisabled();
+    resolveLogin?.({ error: { message: "Channel was closed before a response was received" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue securely" })).toBeEnabled());
+    expect(screen.getByRole("alert")).toHaveTextContent("Continue securely");
+    expect(sessionStorage.getItem("redirectAfterAuth")).toBe("/events?invite=club-token");
+  });
+
+  it("returns to the invite even for a new user without a display name", async () => {
+    sessionStorage.setItem("redirectAfterAuth", "/events?invite=club-token");
+    useAuthMock.mockReturnValue({ user: authedUser, profile: { display_name: null }, initialized: true, profileResolved: true, profileLoading: false, profileError: false, loading: false });
+    renderAuthPage();
+    await waitFor(() => expect(screen.getByText("events-page")).toBeInTheDocument());
+    expect(sessionStorage.getItem("redirectAfterAuth")).toBeNull();
   });
 });
