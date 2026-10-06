@@ -707,6 +707,18 @@ function DraftSetupProgress({
   const { data: matchesCount = 0 } = useQuery({
     queryKey: ["competition-matches-count", competitionId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return 0;
+        const matches = (await listLiveCompetitionMatches(
+          { identity, target: getActiveIcpTarget() } as any,
+          competitionId,
+        ).catch(() => [])) as any[];
+        return matches.length;
+      }
       const { count } = await supabase
         .from("competition_matches")
         .select("id", { count: "exact", head: true })
