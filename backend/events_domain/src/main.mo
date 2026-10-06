@@ -164,7 +164,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_event(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
-    auth(caller); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
+    auth(caller); await syncRolesFromClubDomain(caller, club_id); if (not valid(club_id) or not valid(title) or not valid(description) or not validEventType(event_type) or not validLocation(location) or not validLocation(opponent) or not validLocation(address) or not validOptId(mini_league_id) or starts_at_ms >= ends_at_ms) return #Err("Invalid event");
     let teamAllowed = switch (team_id) { case (?team) { hasRole(caller, "team_admin", club_id, ?team) or hasRole(caller, "coach", club_id, ?team) }; case null { false } };
     let allowed = isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or teamAllowed;
     if (not allowed) return #Err("Club or team admin required");
@@ -261,7 +261,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, until_ms : Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncRolesFromClubDomain(caller, club_id);
     createSeriesInternal(caller, club_id, team_id, title, description, event_type, location, frequency, first_starts_at_ms, first_ends_at_ms, until_ms)
   };
 
@@ -271,7 +271,7 @@ persistent actor class Main(governorInit : Principal) {
   // points per the roadmap; daily/monthly remain accepted since
   // createSeriesInternal already validates them.
   public shared ({ caller }) func create_recurring_series(club_id : Text, team_id : ?Text, title : Text, description : Text, event_type : Text, location : ?Text, frequency : Text, first_starts_at_ms : Nat64, first_ends_at_ms : Nat64, occurrences : ?Nat32, until_ms : ?Nat64) : async { #Ok : { series : Types.EventSeries; events : [Types.Event] }; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncRolesFromClubDomain(caller, club_id);
     if (not validFrequency(frequency)) return #Err("Invalid series");
     let step = frequencyStepMs(frequency);
     let resolvedUntil : Nat64 = switch (until_ms) {
@@ -381,6 +381,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func update_event(id : Text, title : Text, description : Text, event_type : Text, location : ?Text, opponent : ?Text, address : ?Text, mini_league_id : ?Text, starts_at_ms : Nat64, ends_at_ms : Nat64) : async { #Ok : Types.Event; #Err : Text } {
     auth(caller);
+    switch (events.find(func(e) = e.id == id)) { case (?e) { await syncRolesFromClubDomain(caller, e.club_id) }; case null {} };
     switch (requireManage(caller, id)) {
       case (#Err(e)) return #Err(e);
       case (#Ok(current)) {
@@ -1092,12 +1093,31 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // ---- (6) Team training pauses ----
+  // Refreshes the caller's mirrored roles for one club from club_domain (the
+  // source of truth for club/team admin and coach grants). Replaces the
+  // caller's previous mirror for that club so removed roles drop out.
+  // Errors or an unwired club_domain leave the local list untouched.
+  func syncRolesFromClubDomain(caller : Principal, club_id : Text) : async () {
+    switch (clubDomainCanister) {
+      case null {};
+      case (?cid) {
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        try {
+          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let mirrored = fresh.filter(func((role, _)) = role == "club_admin" or role == "team_admin" or role == "coach");
+          roles := roles.filter(func(item) = not (item.user.equal(caller) and item.club_id == club_id))
+            .concat(mirrored.map(func((role, team)) = { user = caller; role; club_id; team_id = team }));
+        } catch (_) {};
+      };
+    };
+  };
+
   func managesTeam(caller : Principal, club_id : Text, team_id : Text) : Bool {
     isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or hasRole(caller, "team_admin", club_id, ?team_id) or hasRole(caller, "coach", club_id, ?team_id)
   };
 
   public shared ({ caller }) func create_team_training_pause(club_id : Text, team_id : Text, starts_at_ms : Nat64, ends_at_ms : Nat64, reason : Text) : async { #Ok : Types.TeamTrainingPause; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncRolesFromClubDomain(caller, club_id);
     if (not valid(club_id) or not valid(team_id) or starts_at_ms >= ends_at_ms or reason.size() > 2000) return #Err("Invalid pause");
     if (not managesTeam(caller, club_id, team_id)) return #Err("Club or team admin required");
     let value : Types.TeamTrainingPause = { id = "pause-" # club_id # "-" # team_id # "-" # Nat.toText(teamTrainingPauses.size()); club_id; team_id; starts_at_ms; ends_at_ms; reason; created_by = caller; created_at_ms = nowMs() };

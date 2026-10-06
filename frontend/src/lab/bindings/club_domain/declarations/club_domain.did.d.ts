@@ -666,6 +666,10 @@ export interface Main {
     { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
+  'list_user_club_roles' : ActorMethod<
+    [Principal, string],
+    Array<[string, [] | [string]]>
+  >,
   'mark_member_paid' : ActorMethod<
     [string, string, [] | [string], string, string, number, [] | [string]],
     { 'Ok' : MemberPayment } |

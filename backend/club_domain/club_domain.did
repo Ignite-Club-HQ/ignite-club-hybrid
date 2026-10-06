@@ -724,6 +724,11 @@ type Main =
        Err: text;
        Ok: vec ClubTeam;
      }) query;
+   list_user_club_roles: (user: principal, club_id: text) ->
+    (vec record {
+           text;
+           opt text;
+         }) query;
    mark_member_paid: (club_id: text, user_id: text, child_id: opt text,
     payment_period: text, payment_type: text, amount: float64, notes:
     opt text) -> (variant {
