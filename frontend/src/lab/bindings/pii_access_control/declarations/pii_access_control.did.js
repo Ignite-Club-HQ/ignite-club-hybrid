@@ -43,6 +43,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'audit_access' : IDL.Func([AuditFilter], [IDL.Vec(AuditRecord)], ['query']),
+    'club_media_lock_version' : IDL.Func([], [IDL.Nat], ['query']),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
     'delete_pii' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -52,6 +53,11 @@ export const idlFactory = ({ IDL }) => {
     'emergency_shutdown' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'get_club_media_vetkey' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text })],
         [],
       ),
     'get_encrypted_pii_batch' : IDL.Func(
