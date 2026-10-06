@@ -1746,6 +1746,109 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(child)
   };
 
+  // ---- Parent self-service children (Children page) ----
+  // Parents manage their own children without a club admin. Names are never
+  // stored here — they live encrypted on pii_access_control (pii_id = child id).
+
+  func isChildGuardian(caller : Principal, child : Types.Child) : Bool {
+    (switch (child.parent) { case (?p) p.equal(caller); case null false })
+    or acl.guardians.any(func(g) = g.child == child.id and g.user.equal(caller))
+  };
+
+  func isChildPrimary(caller : Principal, child : Types.Child) : Bool {
+    switch (child.parent) { case (?p) p.equal(caller); case null false }
+  };
+
+  public query ({ caller }) func list_my_children() : async [Types.Child] {
+    auth(caller);
+    acl.children.filter(func(c) = isChildGuardian(caller, c))
+  };
+
+  public query ({ caller }) func list_child_guardians(child_id : Text) : async { #Ok : [Principal]; #Err : Text } {
+    auth(caller);
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null { #Err("Child not found") };
+      case (?child) {
+        if (not (isChildGuardian(caller, child) or canManageChild(caller, child_id))) return #Err("Forbidden");
+        #Ok(acl.guardians.filter(func(g) = g.child == child_id).map(func(g) = g.user))
+      };
+    }
+  };
+
+  public shared ({ caller }) func create_own_child() : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    if (acl.children.filter(func(c) = isChildPrimary(caller, c)).size() >= 20) return #Err("Too many children");
+    let child : Types.Child = {
+      id = "child-own-" # Nat.toText(acl.children.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000_000);
+      teams = [];
+      parent = ?caller;
+      club_id = null;
+    };
+    acl := { acl with children = acl.children.concat([child]) };
+    acl := { acl with guardians = acl.guardians.concat([{ child = child.id; user = caller }]) };
+    switch (accountFor(caller)) {
+      case (?account) { accountFamilies := accountFamilies.concat([{ account_id = account.id; child_id = child.id }]) };
+      case null {};
+    };
+    #Ok(child)
+  };
+
+  public shared ({ caller }) func delete_own_child(child_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null { #Err("Child not found") };
+      case (?child) {
+        if (not isChildPrimary(caller, child)) return #Err("Only the primary parent can remove this child");
+        acl := { acl with
+          children = acl.children.filter(func(c) = c.id != child_id);
+          guardians = acl.guardians.filter(func(g) = g.child != child_id);
+        };
+        accountFamilies := accountFamilies.filter(func(f) = f.child_id != child_id);
+        #Ok
+      };
+    }
+  };
+
+  // A guardian may place their child on any team in a club they belong to.
+  public shared ({ caller }) func set_own_child_team(child_id : Text, team_id : Text, assigned : Bool) : async { #Ok : Types.Child; #Err : Text } {
+    auth(caller);
+    switch (acl.children.find(func(c) = c.id == child_id), acl.teams.find(func(t) = t.id == team_id)) {
+      case (null, _) { #Err("Child not found") };
+      case (_, null) { #Err("Team not found") };
+      case (?child, ?team) {
+        if (not isChildGuardian(caller, child)) return #Err("Forbidden");
+        if (assigned and not isMember(caller, team.club)) return #Err("Club membership required");
+        let teams = if (assigned) {
+          if (child.teams.any(func(t) = t == team_id)) child.teams else child.teams.concat([team_id])
+        } else child.teams.filter(func(t) = t != team_id);
+        let updated : Types.Child = { child with teams };
+        acl := { acl with children = acl.children.map(func(c) = if (c.id == child_id) updated else c) };
+        #Ok(updated)
+      };
+    }
+  };
+
+  // Primary parent adds/removes another guardian; a guardian may remove themselves.
+  public shared ({ caller }) func set_own_child_guardian(child_id : Text, user : Principal, linked : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (acl.children.find(func(c) = c.id == child_id)) {
+      case null { #Err("Child not found") };
+      case (?child) {
+        let selfRemoval = (not linked) and caller.equal(user) and not isChildPrimary(caller, child);
+        if (not (isChildPrimary(caller, child) or selfRemoval)) return #Err("Only the primary parent can change guardians");
+        if (isChildPrimary(user, child) and not linked) return #Err("Cannot remove the primary parent");
+        if (linked) {
+          if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) {
+            acl := { acl with guardians = acl.guardians.concat([{ child = child_id; user }]) };
+          };
+        } else {
+          acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
+        };
+        #Ok
+      };
+    }
+  };
+
   // ---- Move member / child between teams ----
 
   public shared ({ caller }) func move_member_to_team(club_id : Text, user : Principal, from_team : ?Text, to_team : Text) : async { #Ok; #Err : Text } {
