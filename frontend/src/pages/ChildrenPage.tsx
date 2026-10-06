@@ -74,24 +74,12 @@ export default function ChildrenPage() {
   return <SupabaseChildrenPage />;
 }
 
+const IcpChildrenPageLazy = lazyWithRetry(() => import("@/pages/IcpChildrenPage"));
 function IcpChildrenPage() {
-  const navigate = useNavigate();
   return (
-    <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-lg font-bold">Children</h1>
-      </div>
-      <Card>
-        <CardHeader><CardTitle>Child and guardian management is unavailable in ICP lab mode</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>No child profile or guardian mutation is performed in ICP mode.</p>
-          <p>This requires an approved child-safety identity contract with encrypted PII, guardian consent, team assignment, revocation, and erasure semantics.</p>
-        </CardContent>
-      </Card>
-    </div>
+    <Suspense fallback={<div className="py-10 flex justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}>
+      <IcpChildrenPageLazy />
+    </Suspense>
   );
 }
 
