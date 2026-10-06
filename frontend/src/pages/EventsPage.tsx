@@ -66,6 +66,13 @@ async function getLiveEventMemberships(
   ctx: import("@/live/featureRouter").FeatureBackendContext,
   accountId: string,
 ) {
+  // Independent lookups run together instead of one after another.
+  const scopePromise = getLiveAccountRosterScope(ctx, accountId).catch(() => ({
+    teamIds: [] as string[],
+    clubIds: [] as string[],
+    childIds: [] as string[],
+  }));
+  const miniLeaguesPromise = listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
   const grants = await getLiveMyRoleGrants(ctx);
   const roles = grants.map((g) => ({
     club_id: (g.club[0] ?? null) as string | null,
@@ -562,8 +569,11 @@ export default function EventsPage() {
             if (!m) return [] as { id: string; name: string; club_id: string }[];
             const scopeClubIds = clubFilter ? [clubFilter] : m.clubIds;
             const out: { id: string; name: string; club_id: string }[] = [];
-            for (const clubId of scopeClubIds) {
-              const teams = await listLiveTeams(ctx, clubId).catch(() => [] as any[]);
+            const teamsByClub = await Promise.all(
+              scopeClubIds.map((clubId) => listLiveTeams(ctx, clubId).catch(() => [] as any[])),
+            );
+            for (const [clubIndex, clubId] of scopeClubIds.entries()) {
+              const teams = teamsByClub[clubIndex];
               for (const team of teams as any[]) {
                 if (team.deleted_at_ms?.length || team.archived) continue;
                 const canSee =
@@ -701,9 +711,29 @@ export default function EventsPage() {
               return teamNameCache.get(teamId) ?? null;
             };
 
+            // Fetch every club's events at once, then resolve all team/club
+            // names in parallel so the loop below only reads from cache.
+            const rowsByClub = await Promise.all(
+              scopeClubIds.map((clubId) => listLiveEvents(ctx, clubId, selectedTeamId)),
+            );
+            const neededTeamIds = new Set<string>();
+            const neededClubIds = new Set<string>();
+            for (const rows of rowsByClub) {
+              for (const ev of rows as any[]) {
+                if (ev.deleted) continue;
+                const tId = ev.team_id?.[0];
+                if (tId) neededTeamIds.add(tId);
+                neededClubIds.add(ev.club_id);
+              }
+            }
+            await Promise.all([
+              ...[...neededTeamIds].map(getTeamName),
+              ...[...neededClubIds].map(getClubInfo),
+            ]);
+
             const all: Event[] = [];
-            for (const clubId of scopeClubIds) {
-              const rows = await listLiveEvents(ctx, clubId, selectedTeamId);
+            for (const [clubIndex, clubId] of scopeClubIds.entries()) {
+              const rows = rowsByClub[clubIndex];
               for (const ev of rows as any[]) {
                 if (ev.deleted) continue;
                 const start = new Date(Number(ev.starts_at_ms));
