@@ -369,6 +369,41 @@ export default function ClubDetailPage() {
   const { data: rawClubMembers = [], isLoading: isMembersLoading, isFetching: isMembersFetching, isError: isMembersError, error: membersError, refetch: refetchClubMembers } = useQuery({
     queryKey: ["club-members-roles", id],
     queryFn: async () => {
+      // ICP: build the list from each team's canister role grants plus
+      // identity-access profiles (same source as the member count).
+      if (isIcpAccount) {
+        const { icpCtx, icpListTeams } = await import("@/lib/icpClubTeamLookup");
+        const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+        const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+        const ctx = await icpCtx();
+        const teamList = await icpListTeams(id!);
+        const grantLists = await Promise.all(
+          teamList.map(async (t: any) => ({
+            team: t,
+            grants: (await listLiveTeamRoleGrants(ctx, t.id).catch(() => [])) as any[],
+          })),
+        );
+        const userOf = (g: any): string =>
+          g.account_id ?? (g.user?.toText ? g.user.toText() : String(g.user ?? ""));
+        const ids = Array.from(new Set(grantLists.flatMap((l) => l.grants.map(userOf)).filter(Boolean)));
+        const profiles = (await listLiveProfilesByIds(ctx, ids).catch(() => [])) as any[];
+        const byId = new Map(profiles.map((p) => [p.account_id, p]));
+        return grantLists.flatMap(({ team, grants }) =>
+          grants.map((g) => {
+            const uid = userOf(g);
+            const p = byId.get(uid);
+            return {
+              id: `${team.id}:${uid}:${g.role}`,
+              user_id: uid,
+              role: g.role,
+              team_id: team.id,
+              club_id: id!,
+              profiles: { id: uid, display_name: p?.display_name ?? null, avatar_url: p?.avatar_ref?.[0] ?? p?.avatar_url ?? null, ignite_points: 0 },
+              teams: { id: team.id, name: team.name },
+            };
+          }),
+        ) as any[];
+      }
       // First get team IDs for this club
       const { data: teamsData } = await supabase
         .from("teams")
