@@ -29,6 +29,9 @@ persistent actor class Main(governorInit : Principal) {
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var eoiSubmissions : [Types.EoiSubmission];
+  var divisionSettings : [Types.DivisionSetting];
+  var broadcasts : [Types.Broadcast];
+  var clubDomainCanister : ?Principal;
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -59,7 +62,7 @@ persistent actor class Main(governorInit : Principal) {
       if (item.id == competition_id) { competition_club := item.club_id };
     };
     let competition_admin = roles.any(func(role) {
-      role.user.equal(caller) and role.role == "competition_admin" and role.competition_id == competition_id
+      role.user.equal(caller) and (role.role == "competition_admin" or role.role == "admin" or role.role == "owner") and role.competition_id == competition_id
     });
     let club_admin = competition_club != "" and roles.any(func(role) {
       role.user.equal(caller) and role.role == "club_admin" and role.competition_id == competition_club
@@ -78,7 +81,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func create_competition(club_id : Text, name : Text, season : Text) : async { #Ok : Types.Competition; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncClubAdmin(caller, club_id);
     if (not valid(club_id) or not valid(name) or not valid(season)) return #Err("Invalid competition");
     let club_ok = isGovernor(caller) or roles.any(func(role) = role.user.equal(caller) and role.role == "club_admin" and role.competition_id == club_id);
     if (not club_ok) return #Err("Club admin required");
@@ -92,7 +95,7 @@ persistent actor class Main(governorInit : Principal) {
   // scoring). Season stays create-only. Mirrors the Supabase
   // CompetitionSettingsPage update.
   public shared ({ caller }) func update_competition_settings(competition_id : Text, name : Text, description : ?Text, status : Text, visibility : Text, points_win : Nat16, points_draw : Nat16, points_loss : Nat16) : async { #Ok : Types.Competition; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (not valid(name)) return #Err("Invalid name");
     if (not valid(status) or not valid(visibility)) return #Err("Invalid settings");
@@ -441,7 +444,7 @@ persistent actor class Main(governorInit : Principal) {
   // ---------------- Competition roles (admin-managed, not governor-only) ----------------
 
   public shared ({ caller }) func add_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok : Types.RoleGrant; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     if (principal.equal(Principal.anonymous()) or not valid(role)) return #Err("Invalid role assignment");
     let grant : Types.RoleGrant = { user = principal; role; competition_id; team_id };
@@ -452,7 +455,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func remove_competition_role(competition_id : Text, principal : Principal, role : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == role and item.competition_id == competition_id and item.team_id == team_id));
     #Ok
@@ -479,7 +482,7 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   public shared ({ caller }) func set_chat_settings(competition_id : Text, chat_enabled : Bool, admins_only : Bool, expected_revision : Nat64) : async { #Ok : Types.ChatSettings; #Err : Text } {
-    auth(caller);
+    auth(caller); await syncForCompetition(caller, competition_id);
     if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
     let current_revision : Nat64 = switch (findChatSettings(competition_id)) { case (?s) s.revision; case null 0 };
     if (current_revision != expected_revision) return #Err("Chat settings revision conflict");
@@ -955,4 +958,77 @@ persistent actor class Main(governorInit : Principal) {
     }))
   };
 
+
+  // ---------------- club_domain role mirror ----------------
+  // Mirrors the caller's live club_admin grant for one club from club_domain
+  // (source of truth). Errors or an unwired club_domain leave roles untouched.
+  func syncClubAdmin(caller : Principal, club_id : Text) : async () {
+    switch (clubDomainCanister) {
+      case null {};
+      case (?cid) {
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        try {
+          let fresh = await cd.list_user_club_roles(caller, club_id);
+          let isAdmin = fresh.any(func((role, _)) = role == "club_admin");
+          roles := roles.filter(func(item) = not (item.user.equal(caller) and item.role == "club_admin" and item.competition_id == club_id));
+          if (isAdmin) roles := roles.concat([{ user = caller; role = "club_admin"; competition_id = club_id; team_id = null }]);
+        } catch (_) {};
+      };
+    };
+  };
+
+  func syncForCompetition(caller : Principal, competition_id : Text) : async () {
+    switch (competitions.find(func(item) = item.id == competition_id)) {
+      case (?c) await syncClubAdmin(caller, c.club_id);
+      case null {};
+    };
+  };
+
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Governor only");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister id");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  /// Refreshes the caller's mirrored club-admin role for a competition's
+  /// organiser club so later management queries see it.
+  public shared ({ caller }) func sync_my_competition_access(competition_id : Text) : async { #Ok : Bool; #Err : Text } {
+    auth(caller);
+    await syncForCompetition(caller, competition_id);
+    #Ok(canManageCompetition(caller, competition_id))
+  };
+
+  // ---------------- Division ladder visibility ----------------
+  public query ({ caller }) func list_division_settings(competition_id : Text) : async { #Ok : [Types.DivisionSetting]; #Err : Text } {
+    ignore caller;
+    #Ok(divisionSettings.filter(func(item) = item.competition_id == competition_id))
+  };
+
+  public shared ({ caller }) func set_division_hide_ladder(competition_id : Text, division : Text, hide_ladder : Bool) : async { #Ok : Types.DivisionSetting; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not valid(division)) return #Err("Invalid division");
+    let value : Types.DivisionSetting = { competition_id; division; hide_ladder };
+    divisionSettings := divisionSettings.filter(func(item) = not (item.competition_id == competition_id and item.division == division)).concat([value]);
+    #Ok(value)
+  };
+
+  // ---------------- Competition broadcasts ----------------
+  // Stored log only; push delivery is fanned out by the sender's client
+  // through notification_queue (same path as announcement broadcasts).
+  public shared ({ caller }) func send_competition_broadcast(competition_id : Text, title : Text, body : Text) : async { #Ok : Types.Broadcast; #Err : Text } {
+    auth(caller); await syncForCompetition(caller, competition_id);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (title.size() == 0 or title.size() > 200 or body.size() == 0 or body.size() > 4000) return #Err("Invalid broadcast");
+    let value : Types.Broadcast = { id = "bc-" # competition_id # "-" # Nat.toText(broadcasts.size() + 1); competition_id; sender = caller; title; body; created_at_ms = Nat64.fromIntWrap(Time.now() / 1_000_000) };
+    broadcasts := broadcasts.concat([value]);
+    #Ok(value)
+  };
+
+  public query ({ caller }) func list_competition_broadcasts(competition_id : Text) : async { #Ok : [Types.Broadcast]; #Err : Text } {
+    auth(caller);
+    #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
+  };
 };

@@ -10,6 +10,14 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Broadcast {
+  'id' : string,
+  'title' : string,
+  'body' : string,
+  'sender' : Principal,
+  'created_at_ms' : bigint,
+  'competition_id' : string,
+}
 export interface ChatSettings {
   'admins_only' : boolean,
   'revision' : bigint,
@@ -56,6 +64,11 @@ export interface CompetitionJoinLink {
   'created_at_ms' : bigint,
   'revision' : bigint,
   'competition_id' : string,
+}
+export interface DivisionSetting {
+  'division' : string,
+  'competition_id' : string,
+  'hide_ladder' : boolean,
 }
 export interface EoiStats {
   'conversion_rate' : number,
@@ -278,6 +291,11 @@ export interface Main {
     { 'Ok' : Array<Principal> } |
       { 'Err' : string }
   >,
+  'list_competition_broadcasts' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Broadcast> } |
+      { 'Err' : string }
+  >,
   'list_competition_invites' : ActorMethod<
     [string],
     { 'Ok' : Array<CompetitionInvite> } |
@@ -301,6 +319,11 @@ export interface Main {
   'list_competitions_multi' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<Competition> } |
+      { 'Err' : string }
+  >,
+  'list_division_settings' : ActorMethod<
+    [string],
+    { 'Ok' : Array<DivisionSetting> } |
       { 'Err' : string }
   >,
   'list_entries' : ActorMethod<
@@ -373,9 +396,24 @@ export interface Main {
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
+  'send_competition_broadcast' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : Broadcast } |
+      { 'Err' : string }
+  >,
   'set_chat_settings' : ActorMethod<
     [string, boolean, boolean, bigint],
     { 'Ok' : ChatSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_division_hide_ladder' : ActorMethod<
+    [string, string, boolean],
+    { 'Ok' : DivisionSetting } |
       { 'Err' : string }
   >,
   'set_match_result' : ActorMethod<
@@ -396,6 +434,15 @@ export interface Main {
   'suggest_eoi_teams' : ActorMethod<
     [string],
     { 'Ok' : Array<EoiTeamSuggestion> } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Refreshes the caller's mirrored club-admin role for a competition's
+   * / organiser club so later management queries see it.
+   */
+  'sync_my_competition_access' : ActorMethod<
+    [string],
+    { 'Ok' : boolean } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

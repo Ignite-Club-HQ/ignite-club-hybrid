@@ -101,6 +101,7 @@ icp canister call club_domain set_events_domain_canister "(principal \"$EVENTS_D
 icp canister call club_domain set_messaging_domain_canister "(principal \"$MESSAGING_DOMAIN\")" -e "$ICP_ENV"
 icp canister call club_domain set_pii_canister "(principal \"$PII_ACCESS_CONTROL\")" -e "$ICP_ENV"
 icp canister call events_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+icp canister call competition_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 icp canister call messaging_domain set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
 
 echo ""

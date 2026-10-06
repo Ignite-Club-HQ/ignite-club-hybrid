@@ -653,3 +653,28 @@ export function mapLiveEoiSubmission(s: any) {
     withdrawn_at: ms(s.withdrawn_at_ms),
   };
 }
+
+export async function syncLiveCompetitionAccess(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.sync_my_competition_access(competitionId), "Check competition access");
+}
+
+export async function listLiveDivisionSettings(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_division_settings(competitionId), "List division settings");
+}
+
+export async function setLiveDivisionHideLadder(ctx: FeatureBackendContext, competitionId: string, division: string, hide: boolean) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_division_hide_ladder(competitionId, division, hide), "Update ladder visibility");
+}
+
+export async function sendLiveCompetitionBroadcast(ctx: FeatureBackendContext, competitionId: string, title: string, body: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.send_competition_broadcast(competitionId, title, body), "Send broadcast");
+}
+
+export async function listLiveCompetitionBroadcasts(ctx: FeatureBackendContext, competitionId: string) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_competition_broadcasts(competitionId), "List broadcasts");
+}
