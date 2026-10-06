@@ -47,7 +47,7 @@ export async function icpListTeams(clubId: string): Promise<Array<{ id: string; 
 export async function icpListMyAdminClubs(): Promise<Array<{ id: string; name: string }>> {
   const { ctx } = await icpCtx();
   const membership = await import("@/live/features/membership");
-  const grants = (await membership.listLiveMyRoleGrants(ctx).catch(() => [])) as any[];
+  const grants = (await membership.getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
   const clubIds = Array.from(
     new Set(
       grants
