@@ -215,6 +215,11 @@ type Main =
        Err: text;
        Ok: vec principal;
      }) query;
+   list_competition_broadcasts: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec Broadcast;
+     }) query;
    list_competition_invites: (competition_id: text) ->
     (variant {
        Err: text;
@@ -239,6 +244,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec Competition;
+     }) query;
+   list_division_settings: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec DivisionSetting;
      }) query;
    list_entries: (competition_id: text) ->
     (variant {
@@ -309,12 +319,26 @@ type Main =
        Err: text;
        Ok: CompetitionJoinLink;
      });
+   send_competition_broadcast: (competition_id: text, title: text, body:
+    text) -> (variant {
+                Err: text;
+                Ok: Broadcast;
+              });
    set_chat_settings: (competition_id: text, chat_enabled: bool, admins_only:
     bool, expected_revision: nat64) ->
     (variant {
        Err: text;
        Ok: ChatSettings;
      });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
+   set_division_hide_ladder: (competition_id: text, division: text,
+    hide_ladder: bool) -> (variant {
+                             Err: text;
+                             Ok: DivisionSetting;
+                           });
    set_match_result: (match_id: text, home_score: nat16, away_score: 
     nat16, expected_revision: nat64) -> (variant {
                                            Err: text;
@@ -335,6 +359,13 @@ type Main =
        Err: text;
        Ok: vec EoiTeamSuggestion;
      }) query;
+   /// Refreshes the caller's mirrored club-admin role for a competition's
+   /// organiser club so later management queries see it.
+   sync_my_competition_access: (competition_id: text) ->
+    (variant {
+       Err: text;
+       Ok: bool;
+     });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;
@@ -450,6 +481,12 @@ type EoiStats =
    views: nat;
    withdrawn: nat;
  };
+type DivisionSetting = 
+ record {
+   competition_id: text;
+   division: text;
+   hide_ladder: bool;
+ };
 type CompetitionJoinLink = 
  record {
    competition_id: text;
@@ -501,5 +538,14 @@ type ChatSettings =
    chat_enabled: bool;
    competition_id: text;
    revision: nat64;
+ };
+type Broadcast = 
+ record {
+   body: text;
+   competition_id: text;
+   created_at_ms: nat64;
+   id: text;
+   sender: principal;
+   title: text;
  };
 service : (governorInit: principal) -> Main
