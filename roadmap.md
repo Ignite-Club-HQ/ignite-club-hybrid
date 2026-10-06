@@ -1,4 +1,5 @@
 # Roadmap — ICP speed-up part 2
+- [ ] Refine login with platform-neutral embedded-browser and error guidance; retain text-only provider attribution and verify presentation/redirect checks
 - [x] Simplify ICP login presentation without changing authentication; 49 regression checks passed; browser layouts, popup opening and cancellation verified
 - [ ] Confirm real Internet Identity account sign-in on physical Android/iOS, installed apps/PWA and Facebook/Messenger — requires device access and user approval for an account sign-in
 - [x] Shared batching helper (live/features/batching.ts)

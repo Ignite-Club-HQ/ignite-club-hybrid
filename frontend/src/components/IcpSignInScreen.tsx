@@ -55,7 +55,7 @@ export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, nativ
           {embedded && (
             <aside className="mt-8 border-t border-border pt-5 text-left text-sm" aria-label="Browser sign-in guidance">
               <h2 className="font-medium text-foreground">Open Ignite in your browser</h2>
-              <p className="mt-2 leading-relaxed text-muted-foreground">Secure sign-in may not work inside this app. Open this page in Chrome or Safari to continue.</p>
+              <p className="mt-2 leading-relaxed text-muted-foreground">Secure sign-in may not work inside this app. Open this page in your device's browser to continue.</p>
               {browserHref && <Button asChild variant="link" className="mt-2 h-auto px-0"><a href={browserHref}><ExternalLink aria-hidden="true" />Open in browser</a></Button>}
             </aside>
           )}
