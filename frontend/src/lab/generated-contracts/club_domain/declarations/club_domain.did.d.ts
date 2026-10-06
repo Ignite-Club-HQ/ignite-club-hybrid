@@ -322,6 +322,7 @@ export interface Main {
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
+  'create_own_child' : ActorMethod<[], { 'Ok' : Child } | { 'Err' : string }>,
   'create_parent_invite' : ActorMethod<
     [string, [] | [string], string],
     { 'Ok' : ParentInvite } |
@@ -362,6 +363,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'delete_news_post' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_own_child' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -540,6 +546,11 @@ export interface Main {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_child_guardians' : ActorMethod<
+    [string],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_children' : ActorMethod<
     [],
     { 'Ok' : Array<Child> } |
@@ -571,6 +582,7 @@ export interface Main {
     { 'Ok' : Array<MemberPayment> } |
       { 'Err' : string }
   >,
+  'list_my_children' : ActorMethod<[], Array<Child>>,
   'list_news' : ActorMethod<
     [string],
     { 'Ok' : Array<NewsPost> } |
@@ -926,6 +938,16 @@ export interface Main {
   'set_notification_queue_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_own_child_guardian' : ActorMethod<
+    [string, Principal, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_own_child_team' : ActorMethod<
+    [string, string, boolean],
+    { 'Ok' : Child } |
       { 'Err' : string }
   >,
   'set_pii_canister' : ActorMethod<

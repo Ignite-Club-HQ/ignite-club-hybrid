@@ -383,6 +383,10 @@ type Main =
        Err: text;
        Ok: NewsPost;
      });
+   create_own_child: () -> (variant {
+                              Err: text;
+                              Ok: Child;
+                            });
    create_parent_invite: (club_id: text, team_id: opt text, child_id:
     text) -> (variant {
                 Err: text;
@@ -426,6 +430,10 @@ type Main =
                                       Err: text;
                                       Ok;
                                     });
+   delete_own_child: (child_id: text) -> (variant {
+                                            Err: text;
+                                            Ok;
+                                          });
    delete_sponsor: (id: text) -> (variant {
                                     Err: text;
                                     Ok;
@@ -599,6 +607,11 @@ type Main =
                                Err: text;
                                Ok: vec ClubSponsor;
                              }) query;
+   list_child_guardians: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
    list_children: () -> (variant {
                            Err: text;
                            Ok: vec Child;
@@ -629,6 +642,7 @@ type Main =
                 Err: text;
                 Ok: vec MemberPayment;
               }) query;
+   list_my_children: () -> (vec Child) query;
    list_news: (club_id: text) ->
     (variant {
        Err: text;
@@ -968,6 +982,16 @@ type Main =
     (variant {
        Err: text;
        Ok;
+     });
+   set_own_child_guardian: (child_id: text, user: principal, linked: 
+    bool) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_own_child_team: (child_id: text, team_id: text, assigned: bool) ->
+    (variant {
+       Err: text;
+       Ok: Child;
      });
    set_pii_canister: (id: principal) -> (variant {
                                            Err: text;

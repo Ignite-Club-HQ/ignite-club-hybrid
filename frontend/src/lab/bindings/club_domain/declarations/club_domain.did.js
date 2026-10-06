@@ -567,6 +567,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),
+    'create_own_child' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_parent_invite' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : ParentInvite, 'Err' : IDL.Text })],
@@ -619,6 +624,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'delete_news_post' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_own_child' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
@@ -821,6 +831,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_child_guardians' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_children' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text })],
@@ -856,6 +871,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(MemberPayment), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_my_children' : IDL.Func([], [IDL.Vec(Child)], ['query']),
     'list_news' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
@@ -1247,6 +1263,16 @@ export const idlFactory = ({ IDL }) => {
     'set_notification_queue_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_own_child_guardian' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_own_child_team' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),
     'set_pii_canister' : IDL.Func(
