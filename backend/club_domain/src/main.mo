@@ -912,6 +912,15 @@ persistent actor class Main(governorInit : Principal) {
     isMember(user, club_id)
   };
 
+  // The user's role grants in one club as (role, team) pairs. events_domain
+  // mirrors these on create/update so club and team admins set up here can
+  // schedule events without a separate grant there. Public query, same
+  // visibility rationale as has_club_staff_role.
+  public query func list_user_club_roles(user : Principal, club_id : Text) : async [(Text, ?Text)] {
+    if (user.equal(Principal.anonymous())) return [];
+    acl.roles.filter(func(grant) = grant.user.equal(user) and grant.club == ?club_id).map(func(grant) = (grant.role, grant.team))
+  };
+
   // Platform (app) admin check exposed for sibling canisters — mirrors the
   // private isAppAdmin. messaging_domain gates posting to the global broadcast
   // chat on this (every signed-in member may read the feed).
