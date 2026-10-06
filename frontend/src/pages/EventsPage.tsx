@@ -66,6 +66,13 @@ async function getLiveEventMemberships(
   ctx: import("@/live/featureRouter").FeatureBackendContext,
   accountId: string,
 ) {
+  // Independent lookups run together instead of one after another.
+  const scopePromise = getLiveAccountRosterScope(ctx, accountId).catch(() => ({
+    teamIds: [] as string[],
+    clubIds: [] as string[],
+    childIds: [] as string[],
+  }));
+  const miniLeaguesPromise = listMyLiveMiniLeagues(ctx).catch(() => [] as { id: string }[]);
   const grants = await getLiveMyRoleGrants(ctx);
   const roles = grants.map((g) => ({
     club_id: (g.club[0] ?? null) as string | null,
