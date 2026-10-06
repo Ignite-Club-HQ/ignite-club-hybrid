@@ -23,10 +23,16 @@ interface ResolvedTarget {
 
 async function resolveTarget(record: PinnedVaultRecord): Promise<ResolvedTarget | null> {
   if (resolveAuthBackend() === "icp") {
-    // NEEDS-CANISTER: no routed lookup exists that returns folder/team/club
-    // name + file count in the shape this banner needs. Hide the banner for
-    // II users rather than firing Supabase.
-    return null;
+    // Whole team/club vault pins resolve their name from club_domain; single
+    // file/folder pins still have no routed lookup, so they stay hidden.
+    if (!record.root_scope || !record.root_id) return null;
+    const { icpGetTeam, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+    if (record.root_scope === "team") {
+      const t = await icpGetTeam(record.root_id);
+      return t ? { label: `${t.name || "Team"} vault`, href: `/vault?team=${t.id}`, count: 0 } : null;
+    }
+    const name = await icpGetClubName(record.root_id);
+    return { label: `${name || "Club"} vault`, href: `/vault?club=${record.root_id}`, count: 0 };
   }
   if (record.vault_file_id) {
     const { data } = await supabase
