@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { X, Smartphone, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import igniteIcon from "@/assets/ignite-icon.png";
@@ -15,6 +16,7 @@ function detectPlatform(): "ios" | "android" | "unknown" {
 }
 
 export function IOSInstallPrompt() {
+  const { pathname } = useLocation();
   const [showPrompt, setShowPrompt] = useState(false);
   const platform = detectPlatform();
 
@@ -57,7 +59,8 @@ export function IOSInstallPrompt() {
     setShowPrompt(false);
   };
 
-  if (!showPrompt) return null;
+  // Sign-in must have one obvious action, not an app-store overlay.
+  if (!showPrompt || pathname === "/auth") return null;
 
   return (
     <>
