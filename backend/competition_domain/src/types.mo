@@ -1,6 +1,6 @@
 module {
   public type RoleGrant = { user : Principal; role : Text; competition_id : Text; team_id : ?Text };
-  public type Competition = { id : Text; club_id : Text; name : Text; season : Text; status : Text; revision : Nat64 };
+  public type Competition = { id : Text; club_id : Text; name : Text; season : Text; status : Text; description : ?Text; visibility : Text; points_win : Nat16; points_draw : Nat16; points_loss : Nat16; revision : Nat64 };
   public type TeamEntry = { competition_id : Text; team_id : Text; club_id : Text; status : Text; division_id : ?Text };
   public type JoinToken = { id : Text; competition_id : Text; team_id : Text; issued_by : Principal; expires_at_ms : Nat64; used : Bool };
   public type Season = { competition_id : Text; name : Text; status : Text; divisions : [Text]; revision : Nat64 };
