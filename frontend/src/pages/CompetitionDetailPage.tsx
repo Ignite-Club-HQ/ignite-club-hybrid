@@ -569,7 +569,7 @@ function SupabaseCompetitionDetailPage() {
           if (matchCount) parts.push(`${matchCount} ${matchCount === 1 ? "Match" : "Matches"}`);
           if (start) parts.push(`Starts ${start.toLocaleDateString(undefined, { day: "numeric", month: "short" })}`);
           if (competition.status === "draft") parts.push("Draft");
-          else if (competition.visibility !== "public") parts.push("Private");
+          else if ((competition as any).visibility !== "public") parts.push("Private");
           return parts.length ? (
             <p className="text-[13px] text-muted-foreground tabular-nums leading-snug pl-1">{parts.join(" • ")}</p>
           ) : null;
@@ -632,7 +632,7 @@ function SupabaseCompetitionDetailPage() {
 
         {competition.source === "playhq" && (
           <TabsContent value="stats" className="space-y-2 mt-2">
-            <CompetitionPlayerStatsPanel competitionId={id!} sport={competition.sport} />
+            <CompetitionPlayerStatsPanel competitionId={id!} sport={(competition as any).sport} />
           </TabsContent>
         )}
 
