@@ -485,15 +485,23 @@ export function IcpMediaFeedPage() {
     onSettled: invalidate,
   });
 
+  const resolvedUrls = useResolvedAssetUrls(feedQuery.data?.posts);
   const posts = useMemo(() => {
     const all = feedQuery.data?.posts ?? [];
-    return all.filter((post) => {
-      if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
-      if (selectedTeamId === "all") return true;
-      if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
-      return post.teamId === selectedTeamId;
-    });
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId]);
+    return all
+      .filter((post) => {
+        if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
+        if (selectedTeamId === "all") return true;
+        if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
+        return post.teamId === selectedTeamId;
+      })
+      .map((post) => ({
+        ...post,
+        assets: post.assets.map((a) =>
+          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
+        ),
+      }));
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
