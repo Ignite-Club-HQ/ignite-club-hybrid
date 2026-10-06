@@ -13,3 +13,5 @@
 - [ ] Call-count instrumentation — measure after mainnet deploy
 - [x] Fix Dingo U8 event create going to Supabase (II users stay on canisters)
 - [x] Photo storage sharding (needs mainnet deploy for fullness limits)
+- [x] ICP Children page: add/remove children, team assignment, guardians (club_domain parent self-service methods; needs mainnet redeploy)
+- [x] My Roles (ICP): real club/team names, hide deleted clubs
