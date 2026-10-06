@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, Info } from "lucide-react";
@@ -74,6 +75,7 @@ export default function CreateAssociationPage() {
       });
       setSaving(false);
       toast({ title: "Association created" });
+      void queryClient.invalidateQueries();
       navigate(`/associations/${clubId}`);
     } catch (error: any) {
       setSaving(false);

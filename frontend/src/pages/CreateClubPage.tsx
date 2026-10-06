@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, Loader2, Building2, Sparkles, Lock, ChevronDown, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -288,6 +288,7 @@ export default function CreateClubPage() {
       });
 
       setSaving(false);
+      void queryClient.invalidateQueries();
       navigate(`/clubs/${clubId}/setup`);
     } catch (error: any) {
       setSaving(false);
