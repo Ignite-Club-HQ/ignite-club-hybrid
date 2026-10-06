@@ -48,7 +48,7 @@ export async function uploadIcpAvatar(args: {
   }
   // Best-effort: let current clubs decrypt the new photo. Never fails the
   // upload — the sync re-runs on the next profile save or club join.
-  await syncLiveAvatarClubGrants({ target, identity }, storagePath);
+  void Promise.resolve(syncLiveAvatarClubGrants({ target, identity }, storagePath)).catch(() => {});
   return result.url;
 }
 
