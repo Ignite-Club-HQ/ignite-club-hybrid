@@ -44,24 +44,26 @@ async function fetchIcpLatestMessagesByScope(
   );
   if (relevant.length === 0) return {};
 
-  const latestByScope = new Map<string, { body: string; createdAtMs: number; sender: any }>();
+  const latestByScope = new Map<string, { body: string; createdAtMs: number; sender: any; imageUrl: string | null }>();
   await Promise.all(
     relevant.map(async (conversation: any) => {
-      const lastSequence = Number(conversation.last_message_sequence ?? 0);
-      if (lastSequence <= 0) return;
-      const page = await listLiveMessagesPage(
-        ctx,
-        conversation.conversation_id,
-        lastSequence - 1,
-        1,
-      );
-      const message = page.messages?.[0];
-      if (!message) return;
-      latestByScope.set(conversation.conversation_id, {
-        body: message.body,
-        createdAtMs: Number(message.created_at_ms),
-        sender: message.sender,
-      });
+      try {
+        // Newest-first read: the newest message is page[0]. (The old forward
+        // read cursored on the sequence number, which the canister treats as
+        // a different cursor, so it returned nothing and previews vanished.)
+        const page: any = await listLiveLatestMessagesPage(ctx, conversation.conversation_id, null, 1);
+        const message = page.messages?.[0];
+        if (!message) return;
+        const attachment = message.attachment?.[0] ?? null;
+        latestByScope.set(conversation.conversation_id, {
+          body: (message.body ?? "").trim(),
+          createdAtMs: Number(message.created_at_ms),
+          sender: message.sender,
+          imageUrl: attachment?.kind === "image" ? (attachment.url?.[0] ?? attachment.ref_id ?? null) : null,
+        });
+      } catch {
+        // One unreadable chat must not blank every other preview.
+      }
     }),
   );
 
