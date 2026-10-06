@@ -398,9 +398,28 @@ function SupabaseCompetitionDetailPage() {
 
   // Summary metrics for header
   const { data: summary } = useQuery({
-    queryKey: ["competition-summary", id],
+    queryKey: ["competition-summary", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return { matchCount: 0, firstScheduledAt: null };
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const matches = (await listLiveCompetitionMatches(ctx, id!).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        const scheduled = matches
+          .map((m) => opt(m.scheduled_at_ms))
+          .filter((v): v is bigint | number => v != null)
+          .map((v) => Number(v))
+          .sort((a, b) => a - b);
+        return {
+          matchCount: matches.length,
+          firstScheduledAt: scheduled.length ? new Date(scheduled[0]).toISOString() : null,
+        };
+      }
       const [{ count: matchCount }, { data: firstMatch }] = await Promise.all([
         supabase.from("competition_matches").select("id", { count: "exact", head: true }).eq("competition_id", id!),
         supabase.from("competition_matches").select("scheduled_at").eq("competition_id", id!).not("scheduled_at", "is", null).order("scheduled_at", { ascending: true }).limit(1).maybeSingle(),
