@@ -121,6 +121,7 @@ import { ProLockedAccordionSection } from "@/components/team/ProLockedAccordionS
 import { TeamLeaveDialog } from "@/components/team/TeamLeaveDialog";
 import { TeamQuickActionsSection } from "@/components/team/TeamQuickActionsSection";
 import { TeamDetailAccordionSections } from "@/components/team/TeamDetailAccordionSections";
+import { getCachedTeam, getCachedClub, cacheTeam, cacheClub } from "@/lib/clubTeamCache";
 
 
 type TeamRole = TeamJoinRole;
@@ -234,7 +235,27 @@ export default function TeamDetailPage() {
       return data;
     },
     enabled: !!id,
+    // Open instantly from the saved team/club name while the full record loads.
+    placeholderData: () => {
+      const t = id ? getCachedTeam(id) : null;
+      if (!t) return undefined;
+      const c = getCachedClub(t.club_id);
+      return {
+        id: t.id, club_id: t.club_id, name: t.name, logo_url: t.logo_url, team_type: t.team_type ?? null,
+        division: null, gender: null, age_group: t.level_age, description: null, is_active: true,
+        is_archived: false, is_shell: false, folder_id: null, is_pro: c?.is_pro ?? false,
+        class_day: null, sponsor_id: null, deleted_at: null,
+        clubs: c ? { id: c.id, name: c.name, is_pro: c.is_pro, sport: c.sport, class_mode_enabled: false, bot_user_id: null } : null,
+      } as any;
+    },
   });
+  useEffect(() => {
+    if (team?.id && team.name && team.club_id) {
+      cacheTeam({ id: team.id, name: team.name, logo_url: team.logo_url ?? null, club_id: team.club_id, level_age: (team as any).age_group ?? null, team_type: (team as any).team_type ?? undefined });
+      const c = (team as any).clubs;
+      if (c?.id) cacheClub({ id: c.id, name: c.name, logo_url: getCachedClub(c.id)?.logo_url ?? null, sport: c.sport ?? null, is_pro: !!c.is_pro });
+    }
+  }, [team?.id, team?.name, team?.club_id]);
   const teamQueryPaused = teamFetchStatus === "paused";
 
   const isSoccerClub = team?.clubs?.sport && SOCCER_SPORTS.some(keyword => 

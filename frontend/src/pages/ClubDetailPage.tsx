@@ -119,6 +119,7 @@ import {
 } from "@/live/features/membership";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import * as fixtureData from "@/lab/fixtureDataLayer";
+import { getCachedClub, cacheClub } from "@/lib/clubTeamCache";
 
 
 type ClubRole = "club_admin";
@@ -249,7 +250,17 @@ export default function ClubDetailPage() {
       return data;
     },
     enabled: !!id,
+    // Open instantly from the saved club name/logo while the full record loads.
+    placeholderData: () => {
+      const c = id ? getCachedClub(id) : null;
+      return c
+        ? ({ id: c.id, name: c.name, logo_url: c.logo_url, sport: c.sport, description: null, is_active: true, deleted_at: null, class_mode_enabled: false, primary_sponsor_id: null, show_logo_in_header: false } as any)
+        : undefined;
+    },
   });
+  useEffect(() => {
+    if (club?.id && club.name) cacheClub({ id: club.id, name: club.name, logo_url: club.logo_url ?? null, sport: club.sport ?? null, is_pro: !!(club as any).is_pro });
+  }, [club?.id, club?.name, club?.logo_url]);
 
 
   // Fast count-only query for the badge - returns adults, juniors, total, and growth
