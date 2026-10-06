@@ -9,7 +9,7 @@ export function isIcpSession(): boolean {
   return resolveAuthBackend() === "icp";
 }
 
-async function icpCtx() {
+async function icpCtxWithClub() {
   const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, club] = await Promise.all([
     import("@/live/internetIdentityAuth"),
     import("@/live/targetRegistry"),
@@ -23,19 +23,19 @@ async function icpCtx() {
 const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
 
 export async function icpGetTeam(teamId: string): Promise<{ id: string; name: string; club_id: string } | null> {
-  const { ctx, club } = await icpCtx();
+  const { ctx, club } = await icpCtxWithClub();
   const [t] = ((await club.getLiveTeam(ctx, teamId)) ?? []) as any[];
   return t ? { id: t.id, name: t.name, club_id: t.club_id } : null;
 }
 
 export async function icpGetClubName(clubId: string): Promise<string | null> {
-  const { ctx, club } = await icpCtx();
+  const { ctx, club } = await icpCtxWithClub();
   const [p] = ((await club.getLiveClubProfile(ctx, clubId).catch(() => [])) ?? []) as any[];
   return p?.name ?? null;
 }
 
 export async function icpListTeams(clubId: string): Promise<Array<{ id: string; name: string; folder_id: string | null }>> {
-  const { ctx, club } = await icpCtx();
+  const { ctx, club } = await icpCtxWithClub();
   const rows = ((await club.listLiveTeams(ctx, clubId)) ?? []) as any[];
   return rows
     .filter((t) => !opt(t.deleted_at))
@@ -45,7 +45,7 @@ export async function icpListTeams(clubId: string): Promise<Array<{ id: string; 
 
 /** Clubs where the caller holds a club_admin (or app_admin) role grant on club_domain. */
 export async function icpListMyAdminClubs(): Promise<Array<{ id: string; name: string }>> {
-  const { ctx } = await icpCtx();
+  const { ctx } = await icpCtxWithClub();
   const membership = await import("@/live/features/membership");
   const grants = (await membership.getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
   const clubIds = Array.from(
@@ -63,7 +63,7 @@ export async function icpListMyAdminClubs(): Promise<Array<{ id: string; name: s
 }
 
 export async function icpListClubs(): Promise<Array<{ id: string; name: string }>> {
-  const { ctx, club } = await icpCtx();
+  const { ctx, club } = await icpCtxWithClub();
   const out: Array<{ id: string; name: string }> = [];
   let cursor: string | null = null;
   for (let i = 0; i < 20; i++) {
@@ -74,4 +74,9 @@ export async function icpListClubs(): Promise<Array<{ id: string; name: string }
     if (!cursor || items.length === 0) break;
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Feature-backend context ({ identity, target }) for the current II session. */
+export async function icpCtx() {
+  return (await icpCtxWithClub()).ctx;
 }
