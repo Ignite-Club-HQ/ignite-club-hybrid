@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { Search, Building2, Plus, MapPin, Loader2, Check, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export default function FindOrCreateClubWizard({
   onJoinRequestSent,
   defaultSport,
 }: FindOrCreateClubWizardProps) {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -208,6 +210,7 @@ export default function FindOrCreateClubWizard({
       });
 
       setSaving(false);
+      void queryClient.invalidateQueries();
       onClubCreated(clubId);
     } catch (e) {
       setSaving(false);
