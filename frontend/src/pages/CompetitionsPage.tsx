@@ -115,9 +115,15 @@ function SupabaseCompetitionsPage() {
 
   // Clubs I admin (eligible to organise competitions)
   const { data: adminClubs = [] } = useQuery({
-    queryKey: ["competitions-admin-clubs", user?.id],
-    enabled: !isIcp && !!user,
+    queryKey: ["competitions-admin-clubs", user?.id, isIcp],
+    enabled: !!user,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: role grants live on club_domain (my_role_grants), keyed
+        // by the II principal — Supabase user_roles has no rows for them.
+        const { icpListMyAdminClubs } = await import("@/lib/icpClubTeamLookup");
+        return icpListMyAdminClubs();
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("club_id, clubs:club_id(id, name, kind)")
@@ -199,9 +205,41 @@ function SupabaseCompetitionsPage() {
 
   // Pending invitations on teams I admin
   const { data: pendingInvites = [] } = useQuery({
-    queryKey: ["competition-pending-invites", user?.id, activeClubFilter ?? "all"],
+    queryKey: ["competition-pending-invites", user?.id, activeClubFilter ?? "all", isIcp],
     enabled: !!user,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: entry invites live on competition_domain; find them via
+        // the teams of every club the caller admins.
+        const { icpListMyAdminClubs, icpListTeams, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+        const { listLiveEntriesByTeam } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const clubs = await icpListMyAdminClubs();
+        const rows: any[] = [];
+        for (const club of clubs) {
+          if (activeClubFilter && club.id !== activeClubFilter) continue;
+          const teams = await icpListTeams(club.id);
+          for (const team of teams) {
+            const entries = (await listLiveEntriesByTeam(ctx, team.id).catch(() => [])) as any[];
+            for (const e of entries) {
+              if (e?.status !== "invited") continue;
+              rows.push({
+                id: `${e.competition_id}:${e.team_id}`,
+                status: e.status,
+                team_id: e.team_id,
+                competition_id: e.competition_id,
+                teams: { name: team.name, club_id: club.id },
+                competitions: { name: null, sport: null },
+              });
+            }
+          }
+        }
+        return rows;
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("team_id")

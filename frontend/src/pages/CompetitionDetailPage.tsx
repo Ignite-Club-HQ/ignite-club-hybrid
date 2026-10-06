@@ -264,9 +264,35 @@ function SupabaseCompetitionDetailPage() {
 
 
   const { data: competition, isLoading } = useQuery({
-    queryKey: ["competition", id],
+    queryKey: ["competition", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: competitions live on competition_domain; there is no
+        // get-by-id, so scan the caller's visible clubs and find the match.
+        const { listLiveCompetitionsMulti } = await import("@/live/features/competitions");
+        const { listLiveMembershipClubs } = await import("@/live/features/membership");
+        const { icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return null;
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const clubs = await listLiveMembershipClubs(ctx);
+        const comps = (await listLiveCompetitionsMulti(ctx, clubs.map((c: any) => c.id))) as any[];
+        const found = comps.find((c) => c.id === id);
+        if (!found) return null;
+        const clubName = await icpGetClubName(found.club_id).catch(() => null);
+        return {
+          id: found.id,
+          name: found.name,
+          season: found.season,
+          status: found.status,
+          organizer_club_id: found.club_id,
+          source: null,
+          clubs: { id: found.club_id, name: clubName, kind: null },
+        };
+      }
       const { data, error } = await supabase
         .from("competitions")
         .select("*, clubs:organizer_club_id(id, name, kind)")
@@ -298,9 +324,21 @@ function SupabaseCompetitionDetailPage() {
   const canManage = isAdmin && organizerHasPro;
 
   const { data: divisions = [], isLoading: divisionsLoading } = useQuery({
-    queryKey: ["competition-divisions", id],
+    queryKey: ["competition-divisions", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: divisions are name lists on the canister's seasons.
+        const { listLiveCompetitionSeasons } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const seasons = (await listLiveCompetitionSeasons(ctx, id!).catch(() => [])) as any[];
+        const names = Array.from(new Set(seasons.flatMap((s) => (s.divisions ?? []) as string[])));
+        return names.map((name, i) => ({ id: name, name, sort_order: i }));
+      }
       const { data } = await supabase
         .from("competition_divisions")
         .select("*")
@@ -311,9 +349,40 @@ function SupabaseCompetitionDetailPage() {
   });
 
   const { data: entries = [] } = useQuery({
-    queryKey: ["competition-entries", id],
+    queryKey: ["competition-entries", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: entries live on competition_domain; team/club names are
+        // resolved from club_domain.
+        const { listLiveCompetitionEntries } = await import("@/live/features/competitions");
+        const { icpGetTeam, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const rows = (await listLiveCompetitionEntries(ctx, id!).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        return Promise.all(
+          rows.map(async (e) => {
+            const team = await icpGetTeam(e.team_id).catch(() => null);
+            const clubName = team ? await icpGetClubName(team.club_id).catch(() => null) : null;
+            const divisionId = opt(e.division_id);
+            return {
+              id: `${e.competition_id}:${e.team_id}`,
+              competition_id: e.competition_id,
+              team_id: e.team_id,
+              division_id: divisionId,
+              status: e.status,
+              teams: team
+                ? { id: team.id, name: team.name, club_id: team.club_id, is_shell: false, deleted_at: null, clubs: { name: clubName } }
+                : { id: e.team_id, name: "Team", club_id: e.club_id, is_shell: false, deleted_at: null, clubs: { name: null } },
+              competition_divisions: divisionId ? { name: divisionId } : null,
+            };
+          }),
+        );
+      }
       // Soft-deleted teams are no longer participants and must not appear in the
       // entries list, counts or division allocation.
       const { data } = await supabase
@@ -329,9 +398,28 @@ function SupabaseCompetitionDetailPage() {
 
   // Summary metrics for header
   const { data: summary } = useQuery({
-    queryKey: ["competition-summary", id],
+    queryKey: ["competition-summary", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return { matchCount: 0, firstScheduledAt: null };
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const matches = (await listLiveCompetitionMatches(ctx, id!).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        const scheduled = matches
+          .map((m) => opt(m.scheduled_at_ms))
+          .filter((v): v is bigint | number => v != null)
+          .map((v) => Number(v))
+          .sort((a, b) => a - b);
+        return {
+          matchCount: matches.length,
+          firstScheduledAt: scheduled.length ? new Date(scheduled[0]).toISOString() : null,
+        };
+      }
       const [{ count: matchCount }, { data: firstMatch }] = await Promise.all([
         supabase.from("competition_matches").select("id", { count: "exact", head: true }).eq("competition_id", id!),
         supabase.from("competition_matches").select("scheduled_at").eq("competition_id", id!).not("scheduled_at", "is", null).order("scheduled_at", { ascending: true }).limit(1).maybeSingle(),
@@ -342,9 +430,28 @@ function SupabaseCompetitionDetailPage() {
 
   // Teams the current user can manage (for accept/decline)
   const { data: myAdminTeamIds = [] } = useQuery<string[]>({
-    queryKey: ["my-admin-team-ids", user?.id],
+    queryKey: ["my-admin-team-ids", user?.id, isIcp],
     enabled: !!user,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: role grants live on club_domain (my_role_grants).
+        const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const grants = (await getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        return Array.from(
+          new Set(
+            grants
+              .filter((g) => ["team_admin", "coach", "club_admin"].includes(g.role))
+              .map((g) => opt(g.team))
+              .filter((t): t is string => typeof t === "string"),
+          ),
+        );
+      }
       const { data } = await supabase
         .from("user_roles")
         .select("team_id")
@@ -357,6 +464,26 @@ function SupabaseCompetitionDetailPage() {
   });
 
   const respondToInvite = async (entryId: string, status: "accepted" | "declined") => {
+    if (isIcp) {
+      // ICP entry ids are "competitionId:teamId" composites (see the entries
+      // query above); the canister transitions the invite status itself.
+      const [competitionId, teamId] = entryId.split(":");
+      try {
+        const { respondLiveEntryInvite } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("Internet Identity session required");
+        await respondLiveEntryInvite({ identity, target: getActiveIcpTarget() } as any, competitionId, teamId, status === "accepted");
+      } catch (error: any) {
+        toast({ title: "Failed to update", description: error?.message ?? "Unknown error", variant: "destructive" });
+        return;
+      }
+      toast({ title: status === "accepted" ? "Invite accepted" : "Invite declined" });
+      qc.invalidateQueries({ queryKey: ["competition-entries", id] });
+      qc.invalidateQueries({ queryKey: ["competition-pending-invites"] });
+      return;
+    }
     const { error } = await supabase
       .from("competition_entries")
       .update({ status, responded_by: user!.id, responded_at: new Date().toISOString() })
@@ -397,7 +524,7 @@ function SupabaseCompetitionDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-lg sm:text-xl font-bold break-words flex-1 min-w-0 leading-tight">{competition.name}</h1>
-          {canManage && !(competition.source === "playhq" && competition.clubs?.kind !== "association") && (
+          {canManage && !isIcp && !(competition.source === "playhq" && competition.clubs?.kind !== "association") && (
             <Sheet>
               <SheetTrigger asChild>
                 <Button
@@ -580,6 +707,18 @@ function DraftSetupProgress({
   const { data: matchesCount = 0 } = useQuery({
     queryKey: ["competition-matches-count", competitionId],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveCompetitionMatches } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return 0;
+        const matches = (await listLiveCompetitionMatches(
+          { identity, target: getActiveIcpTarget() } as any,
+          competitionId,
+        ).catch(() => [])) as any[];
+        return matches.length;
+      }
       const { count } = await supabase
         .from("competition_matches")
         .select("id", { count: "exact", head: true })
@@ -1285,9 +1424,15 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
   const [icpClaimLink, setIcpClaimLink] = useState<string | null>(null);
 
   const { data: clubs = [] } = useQuery({
-    queryKey: ["clubs-for-team-invite", clubSearch],
+    queryKey: ["clubs-for-team-invite", clubSearch, isIcp],
     enabled: open && mode === "existing",
     queryFn: async () => {
+      if (isIcp) {
+        const { icpListClubs } = await import("@/lib/icpClubTeamLookup");
+        const all = await icpListClubs();
+        const term = clubSearch.trim().toLowerCase();
+        return (term ? all.filter((c) => c.name.toLowerCase().includes(term)) : all).slice(0, 50);
+      }
       let q = supabase.from("clubs").select("id, name").order("name").limit(50);
       if (clubSearch.trim()) q = q.ilike("name", `%${clubSearch.trim()}%`);
       const { data } = await q;
@@ -1298,9 +1443,24 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
   const selectedClub = clubs.find((c: any) => c.id === clubFilterId);
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["all-teams-for-invite", search, clubFilterId],
+    queryKey: ["all-teams-for-invite", search, clubFilterId, isIcp],
     enabled: open && mode === "existing",
     queryFn: async () => {
+      if (isIcp) {
+        const { icpListClubs, icpListTeams } = await import("@/lib/icpClubTeamLookup");
+        const clubList = clubFilterId ? clubs.filter((c: any) => c.id === clubFilterId) : await icpListClubs();
+        const term = search.trim().toLowerCase();
+        const out: any[] = [];
+        for (const club of clubList) {
+          const rows = await icpListTeams(club.id).catch(() => []);
+          for (const t of rows) {
+            if (term && !t.name.toLowerCase().includes(term)) continue;
+            out.push({ id: t.id, name: t.name, club_id: club.id, clubs: { name: club.name } });
+          }
+          if (out.length >= 50) break;
+        }
+        return out.slice(0, 50);
+      }
       let q = supabase.from("teams").select("id, name, club_id, clubs:club_id(name)").order("name").limit(50);
       if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
       if (clubFilterId) q = q.eq("club_id", clubFilterId);
@@ -1633,9 +1793,34 @@ function AddDivisionForm({ competitionId, onDone }: { competitionId: string; onD
       toast({ title: "Day window invalid", description: "Latest kickoff must be after earliest.", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no canister shape for competition_divisions yet.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Adding divisions isn't available for Internet Identity accounts yet", variant: "destructive" });
+      // ICP mode: divisions are name lists on the canister's seasons — append
+      // the new name to every season's division list.
+      setSaving(true);
+      try {
+        const { listLiveCompetitionSeasons, setLiveSeasonDivisions } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("Internet Identity session required");
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const seasons = (await listLiveCompetitionSeasons(ctx, competitionId)) as any[];
+        if (seasons.length === 0) throw new Error("Create a season before adding divisions.");
+        for (const season of seasons) {
+          const existing = (season.divisions ?? []) as string[];
+          if (existing.includes(name.trim())) continue;
+          await setLiveSeasonDivisions(ctx, competitionId, season.name, [...existing, name.trim()]);
+        }
+      } catch (error: any) {
+        setSaving(false);
+        toast({ title: "Could not add division", description: error?.message ?? "Unknown error", variant: "destructive" });
+        return;
+      }
+      setSaving(false);
+      toast({ title: "Division added" });
+      setName(""); setAgeGroup(""); setGender("");
+      setPlayWeekdays([]); setDayStart("09:00"); setDayEnd("16:00");
+      setOpen(false); onDone();
       return;
     }
     setSaving(true);

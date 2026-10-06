@@ -43,6 +43,25 @@ export async function icpListTeams(clubId: string): Promise<Array<{ id: string; 
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Clubs where the caller holds a club_admin (or app_admin) role grant on club_domain. */
+export async function icpListMyAdminClubs(): Promise<Array<{ id: string; name: string }>> {
+  const { ctx } = await icpCtx();
+  const membership = await import("@/live/features/membership");
+  const grants = (await membership.getLiveMyRoleGrants(ctx).catch(() => [])) as any[];
+  const clubIds = Array.from(
+    new Set(
+      grants
+        .filter((g) => (g.role === "club_admin" || g.role === "app_admin") && opt(g.club))
+        .map((g) => opt(g.club) as string),
+    ),
+  );
+  const out: Array<{ id: string; name: string }> = [];
+  for (const id of clubIds) {
+    out.push({ id, name: (await icpGetClubName(id).catch(() => null)) ?? "Club" });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function icpListClubs(): Promise<Array<{ id: string; name: string }>> {
   const { ctx, club } = await icpCtx();
   const out: Array<{ id: string; name: string }> = [];
