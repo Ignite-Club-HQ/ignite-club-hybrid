@@ -515,10 +515,11 @@ export async function registerLiveVaultFile(
       folderId,
       clubId,
       candidOpt(teamId),
-      name,
+      // Canister limits: name 160, mime 128 chars, both non-empty.
+      (name.trim() || "Untitled").slice(0, 160),
       fileUrl,
       toNat64(size),
-      mime,
+      (mime || "application/octet-stream").slice(0, 128),
       isExternalLink,
       candidOpt(blobRef),
       candidOpt(miniLeagueId),
