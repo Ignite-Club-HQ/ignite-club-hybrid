@@ -18,7 +18,8 @@ import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
 import { isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
-import { describeIcpSignInError, isLikelyInAppBrowser, II_SIGN_IN_HINT } from "@/lib/internetIdentitySignInHelp";
+import { describeIcpSignInError } from "@/lib/internetIdentitySignInHelp";
+import { IcpSignInScreen } from "@/components/IcpSignInScreen";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -564,7 +565,7 @@ export default function AuthPage() {
     return (
       <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">Checking authentication...</p>
+        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Checking authentication..."}</p>
       </div>
     );
   }
@@ -575,7 +576,7 @@ export default function AuthPage() {
     return (
       <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">Finishing sign in...</p>
+        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Finishing sign in..."}</p>
       </div>
     );
   }
@@ -592,7 +593,7 @@ export default function AuthPage() {
     return (
       <div className="flex flex-col items-center justify-center bg-background gap-3" style={authShellStyle}>
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">Finishing sign in...</p>
+        <p className="text-muted-foreground">{useIcpLab ? "Signing you in…" : "Finishing sign in..."}</p>
       </div>
     );
   }
@@ -768,6 +769,24 @@ export default function AuthPage() {
     }
   };
 
+  const handleSecureSignIn = async () => {
+    if (authInFlightRef.current) return;
+    authInFlightRef.current = true;
+    setAuthError(null);
+    setGoogleLoading(true);
+    try {
+      // No await before the existing provider call: keep the browser's
+      // permission to open the Internet Identity window from this tap.
+      const { error } = await signInWithGoogle();
+      if (error) setAuthError(describeIcpSignInError(error.message).replaceAll("Continue with Internet Identity", "Continue securely"));
+    } catch (error) {
+      setAuthError(describeIcpSignInError(error instanceof Error ? error.message : "Unable to sign in. Please try again.").replaceAll("Continue with Internet Identity", "Continue securely"));
+    } finally {
+      authInFlightRef.current = false;
+      setGoogleLoading(false);
+    }
+  };
+
   const switchToSignUp = () => {
     setAuthMode("signup");
     // Clear password fields when switching
@@ -806,95 +825,16 @@ export default function AuthPage() {
     : 'border-border/50 bg-card/50 backdrop-blur-sm';
 
   if (useIcpLab) {
-    // Same branding shell as the Supabase screen below (logo, "Ignite"
-    // heading, offline banner, card container) — the only difference is
-    // that the card offers Internet Identity passkey sign-in instead of
-    // email/password + Google, since ICP mode has no username/password
-    // concept.
     return (
-      <div
-        className="flex flex-col bg-background overflow-hidden"
-        style={authShellStyle}
-      >
-        <div className="flex-1 flex flex-col items-center justify-center overflow-y-auto px-4 py-8">
-          <div className="w-full max-w-md space-y-8 py-6">
-            <div className="flex flex-col items-center gap-3 mt-4">
-              <div className="rounded-2xl bg-primary glow-emerald p-4">
-                <Flame className="h-10 w-10 text-primary-foreground" />
-              </div>
-              <h1 className="text-3xl font-bold text-gradient-emerald">Ignite</h1>
-            </div>
-
-            {!isOnline && (
-              <div
-                role="alert"
-                aria-live="polite"
-                className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-foreground"
-              >
-                <WifiOff className="h-5 w-5 shrink-0 mt-0.5 text-destructive" aria-hidden="true" />
-                <div className="space-y-1">
-                  <p className="font-medium">You're offline</p>
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Signing in needs an internet connection. Reconnect to Wi-Fi or mobile data and try again. Once you've signed in on this device, you'll stay signed in even when offline.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <Card className={authCardClassName}>
-              <CardHeader className="pb-2 gap-1">
-                <h2 className="font-semibold text-center text-xl">Sign In</h2>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <CardDescription className="text-center">
-                  Sign in with your Internet Identity passkey. First time here? Your account is
-                  created automatically — there's nothing to sign up for.
-                </CardDescription>
-                {authError && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
-                    {authError}
-                  </div>
-                )}
-                {resumingSignIn ? (
-                  <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground" role="status" aria-live="polite">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Signing you in…
-                  </div>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      className="w-full gap-2"
-                      onClick={handleGoogleSignIn}
-                      disabled={googleLoading || authLoading || iiPreparing}
-                    >
-                      {googleLoading || iiPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Fingerprint className="h-4 w-4" />}
-                      {iiPreparing ? "Getting sign-in ready…" : "Continue with Internet Identity"}
-                    </Button>
-                    <p className="text-xs text-muted-foreground text-center leading-relaxed">
-                      {II_SIGN_IN_HINT}
-                    </p>
-                    <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
-                      <p className="font-medium">New to Ignite?</p>
-                      <p className="mt-1">
-                        You don't need a separate sign-up. Tap “Continue with Internet Identity”, follow the steps
-                        to create your passkey, then choose your display name. To join a club, open the invite
-                        link your club sent you (by email, text or QR code) after signing in.
-                      </p>
-                    </div>
-                  </>
-                )}
-                {isLikelyInAppBrowser() && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
-                    You're viewing this inside another app's built-in browser, where sign-in often can't finish.
-                    Tap the menu (⋮) and choose “Open in Chrome” (or “Open in Safari”), then sign in there.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      <IcpSignInScreen
+        shellStyle={authShellStyle}
+        onContinue={handleSecureSignIn}
+        busy={googleLoading || !!resumingSignIn}
+        preparing={iiPreparing}
+        native={isNativePlatform}
+        online={isOnline}
+        error={authError}
+      />
     );
   }
 

@@ -28,7 +28,7 @@ export function isLikelyInAppBrowser(): boolean {
   const ua = navigator.userAgent;
   // "; wv)" is the standard Android WebView marker.
   if (/; wv\)/.test(ua)) return true;
-  return /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Twitter for|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp/i.test(
+   return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|MicroMessenger|Twitter for|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp/i.test(
     ua,
   );
 }
