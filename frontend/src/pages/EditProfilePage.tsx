@@ -31,6 +31,7 @@ export default function EditProfilePage() {
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState("");
   const [saving, setSaving] = useState(false);
   const [leaderboardOptOut, setLeaderboardOptOut] = useState(false);
   const [country, setCountry] = useState<string>("");
@@ -72,6 +73,7 @@ export default function EditProfilePage() {
         return;
       }
 
+      setAvatarPreview(URL.createObjectURL(uploadBlob));
       const ext = mimeToExtension(uploadBlob.type || result.mimeType) || "jpg";
       if (useIcpLab) {
         // ICP mode: encrypt + store on the blob-store canister, keep the
@@ -130,6 +132,7 @@ export default function EditProfilePage() {
         variant: "destructive",
       });
       return;
+    setAvatarPreview(URL.createObjectURL(uploadFile));
     }
 
     setUploadingAvatar(true);
@@ -302,7 +305,7 @@ export default function EditProfilePage() {
           {/* Avatar Preview */}
           <div className="flex flex-col items-center gap-4">
             <Avatar className="h-24 w-24 border-4 border-primary/20">
-              <AvatarImage src={avatarUrl || undefined} />
+              <AvatarImage src={avatarPreview || avatarUrl || undefined} />
               <AvatarFallback className="bg-primary/20 text-primary text-3xl">
                 {displayName.charAt(0)?.toUpperCase() || "?"}
               </AvatarFallback>
