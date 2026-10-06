@@ -331,6 +331,7 @@ export async function signOutInternetIdentity(): Promise<void> {
   ]);
   clearLiveAgentCache();
   clearPiiVetKeyCache();
+  try { localStorage.removeItem("ignite_query_cache_v1"); } catch { /* ignore */ }
   await client?.signOut();
   client?.dispose?.();
 }
