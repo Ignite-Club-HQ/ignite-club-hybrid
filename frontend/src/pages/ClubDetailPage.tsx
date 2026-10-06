@@ -259,11 +259,20 @@ export default function ClubDetailPage() {
       if (useIcpLab && id) {
         return { total: 1, adults: 1, juniors: 0, growth: 0, monthChange: 0 };
       }
-      // PROVISIONAL: no club_domain canister shape for member-count reads yet;
-      // return a zero fallback for Internet Identity accounts instead of
-      // querying Supabase user_roles/child_team_assignments by principal id.
+      // ICP: count unique principals across every team's role grants (team
+      // grants are readable by any club member), fetched in parallel. Grants
+      // carry no timestamp, so growth is not tracked in ICP mode.
       if (isIcpAccount) {
-        return { total: 0, adults: 0, juniors: 0, growth: 0, monthChange: 0 };
+        const { icpCtx, icpListTeams } = await import("@/lib/icpClubTeamLookup");
+        const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+        const ctx = await icpCtx();
+        const teamList = await icpListTeams(id!);
+        const grantLists = await Promise.all(
+          teamList.map((t) => listLiveTeamRoleGrants(ctx, t.id).catch(() => [] as any[])),
+        );
+        const users = new Set<string>();
+        for (const list of grantLists) for (const g of list as any[]) users.add(g.user.toText());
+        return { total: users.size, adults: users.size, juniors: 0, growth: 0, monthChange: 0 };
       }
 
       // Get team IDs for this club (exclude deleted teams)
