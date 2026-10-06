@@ -205,8 +205,20 @@ export default function ClubDetailPage() {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
-            const row = await getLiveClubProfile(ctx, id);
-            const p = row.length ? row[0] : null;
+            // A just-created club can briefly be missing (or error) on the
+            // replica answering the read — retry a few times before giving up
+            // so the page doesn't flash "Club not found" after creation.
+            let p: Awaited<ReturnType<typeof getLiveClubProfile>>[number] | null = null;
+            for (let attempt = 0; attempt < 5; attempt++) {
+              try {
+                const row = await getLiveClubProfile(ctx, id);
+                p = row.length ? row[0] : null;
+              } catch (err) {
+                if (attempt === 4) throw err;
+              }
+              if (p) break;
+              await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+            }
             if (!p) return null;
             // Map the canister profile onto the Supabase clubs row shape this
             // page renders; the canister has no theme-HSL/sponsor columns.
