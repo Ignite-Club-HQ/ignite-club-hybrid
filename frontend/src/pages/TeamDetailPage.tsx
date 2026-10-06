@@ -750,7 +750,7 @@ export default function TeamDetailPage() {
   });
 
   // Fetch roles data with profiles - with caching for faster loads
-  const { data: rawMembers = [], isLoading: isMembersLoading, isFetching: isMembersFetching, isError: isMembersError, error: membersError, refetch: refetchMembers } = useQuery({
+  const { data: rawMembersData = [], isLoading: isMembersLoading, isFetching: isMembersFetching, isError: isMembersError, error: membersError, refetch: refetchMembers } = useQuery({
     queryKey: membershipKeys.teamRoles(id),
     queryFn: async () => {
       if (isFeatureRoutedToIcp("membership")) {
@@ -776,7 +776,7 @@ export default function TeamDetailPage() {
             const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
             // The signed-in member's own name is always known locally — use it
             // when identity_access has no (named) profile row for their id.
-            const selfIds = new Set<string>([user?.id, (myProfile as any)?.id].filter(Boolean) as string[]);
+            const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);
             if (user?.id) { const a = await accountIdForPrincipal(user.id); if (a) selfIds.add(a); }
             return grants.map((g) => {
               let p: any = profileMap.get(g.account_id);

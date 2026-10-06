@@ -46,10 +46,14 @@ export async function listLiveProfilesByIds(
   const requestedByAccount = new Map<string, string[]>();
   await Promise.all(
     Array.from(new Set(ids)).map(async (id) => {
-      const accountId = UUID_RE.test(id) ? id : (await accountIdForPrincipal(id)) ?? id;
+      // club_domain keys accounts without a linked identity_access row as
+      // "principal:<text>" — resolve those through the principal too.
+      const principalText = id.startsWith("principal:") ? id.slice("principal:".length) : id;
+      const accountId = UUID_RE.test(id) ? id : (await accountIdForPrincipal(principalText)) ?? id;
       requestedByAccount.set(accountId, [...(requestedByAccount.get(accountId) ?? []), id]);
       // Keep the raw id too (legacy rows keyed by principal text).
       if (accountId !== id) requestedByAccount.set(id, [...(requestedByAccount.get(id) ?? []), id]);
+      if (principalText !== id && principalText !== accountId) requestedByAccount.set(principalText, [...(requestedByAccount.get(principalText) ?? []), id]);
     }),
   );
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
