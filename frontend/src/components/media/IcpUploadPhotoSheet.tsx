@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { compressImage } from "@/lib/imageCompression";
+import { localUploadPreviews } from "./localUploadPreviews";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
@@ -108,6 +109,8 @@ export function IcpUploadPhotoSheet({
     }
     setUploading(true);
     setProgress({ done: 0, total: files.length });
+    const toastId = toast.loading(files.length > 1 ? `Sharing ${files.length} photos…` : "Sharing photo…");
+    onOpenChange(false);
     // Multi-photo uploads form one album post, like the Supabase gallery.
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
     const trimmedCaption = caption.trim() || null;
@@ -139,6 +142,9 @@ export function IcpUploadPhotoSheet({
             if (!uploaded) {
               throw new Error("Media upload canisters are not configured");
             }
+            // Show the photo from the phone straight away instead of
+            // downloading and unlocking what we just sent.
+            localUploadPreviews.set(uploaded.url, URL.createObjectURL(prepared.file));
             const asset = await registerLiveAsset(ctx, {
               clubId,
               kind: isVideo ? "video" : "photo",
@@ -173,16 +179,16 @@ export function IcpUploadPhotoSheet({
       });
       toast.success(
         files.length > 1 ? `${files.length} photos shared` : "Photo shared",
+        { id: toastId },
       );
       if (scopePending) {
         toast.info(
           "Tags and captions will appear after the media backend update is deployed.",
         );
       }
-      onOpenChange(false);
       onUploaded();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : "Upload failed", { id: toastId });
     } finally {
       setUploading(false);
     }
