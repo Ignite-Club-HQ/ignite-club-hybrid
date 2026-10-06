@@ -10,6 +10,7 @@ import {
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
 
 interface MoveFileDialogProps {
   open: boolean;
@@ -60,6 +61,7 @@ export function MoveFileDialog({
   const { data: teams, isLoading: isLoadingTeams } = useQuery({
     queryKey: ["vault-teams-for-move", clubId],
     queryFn: async () => {
+      if (isIcpSession()) return await icpListTeams(clubId!);
       const { data } = await supabase
         .from("teams")
         .select("id, name")
