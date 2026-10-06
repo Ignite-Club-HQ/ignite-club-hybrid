@@ -12,7 +12,7 @@ import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { getLiveMyRoleGrants, listLiveMembershipClubs, listLiveMembershipTeams } from "@/live/features/membership";
-import { listLiveMessagesPage, recentLiveConversations } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage, recentLiveConversations } from "@/live/features/messaging";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
 
 async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
