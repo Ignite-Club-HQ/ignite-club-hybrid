@@ -28,6 +28,7 @@ export async function connectLiveBlobStore(target: IcpTargetConfig, identity: Id
 /** Per-store usage, cached briefly so uploads skip stores known to be full. */
 const fullStores = new Map<string, number>();
 const FULL_CACHE_MS = 10 * 60_000;
+const CHUNK_CONCURRENCY = 4;
 
 function knownFull(canisterId: string): boolean {
   const at = fullStores.get(canisterId);
@@ -95,10 +96,17 @@ async function uploadToStore(
     "Begin blob upload",
   );
   try {
+    // Chunks are independent, index-addressed writes, so send several at once
+    // instead of waiting ~2s per chunk round trip.
     const chunks = chunkBytes(bytes, BLOB_CHUNK_SIZE);
-    for (let index = 0; index < chunks.length; index++) {
-      await unwrapCandid(actor.put_chunk(uploadId, index, chunks[index]), `Upload blob chunk ${index}`);
-    }
+    let next = 0;
+    const worker = async () => {
+      while (next < chunks.length) {
+        const index = next++;
+        await unwrapCandid(actor.put_chunk(uploadId, index, chunks[index]), `Upload blob chunk ${index}`);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
     const finalized = await unwrapCandid(actor.finalize_upload(uploadId), "Finalize blob upload");
     if (finalized.content_hash !== expectedHash) {
       throw new Error(

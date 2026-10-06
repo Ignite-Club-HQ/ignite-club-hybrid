@@ -6,6 +6,7 @@ import { clubIdFromMediaPath, encryptClubMedia, encryptPiiValue, isClubMediaLock
 import { grantLiveClubPiiRead, registerLivePii } from "./features/vault";
 import { MEDIA_BLOB_PII_FIELD } from "./mediaDecrypt";
 import type { LiveBlobRef } from "./mediaStorage";
+import { sha256Hex } from "./blobStoreProtocol";
 
 /**
  * Upload-side routing for media bytes: the mirror of resolveMediaSource on
@@ -72,19 +73,25 @@ export async function tryUploadMediaToBlobStore(args: {
     return uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
   }
   const ciphertext = await encryptPiiValue(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, bytes);
-  const result = await uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime);
-  // The stored record's ciphertext is only a content-hash marker — the real
-  // bytes are served by the blob store. What matters is that the record
-  // exists so the vetKey relay can authorize readers against it.
-  await registerLivePii(
-    ctx,
-    args.storagePath,
-    MEDIA_BLOB_PII_FIELD,
-    new TextEncoder().encode(result.blobRef.content_hash),
-    identity.getPrincipal(),
-  );
-  if (clubId) {
-    await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
-  }
+  // The access record's ciphertext is only a content-hash marker (the store
+  // re-verifies the same hash on finalize), so register it IN PARALLEL with
+  // the byte upload instead of after it — saves two sequential round trips.
+  const localHash = await sha256Hex(ciphertext);
+  const registration = (async () => {
+    await registerLivePii(
+      ctx,
+      args.storagePath,
+      MEDIA_BLOB_PII_FIELD,
+      new TextEncoder().encode(localHash),
+      identity.getPrincipal(),
+    );
+    if (clubId) {
+      await grantLiveClubPiiRead(ctx, args.storagePath, MEDIA_BLOB_PII_FIELD, clubId);
+    }
+  })();
+  const [result] = await Promise.all([
+    uploadBytesToBlobStore(target, identity, args.storagePath, ciphertext, args.mime),
+    registration,
+  ]);
   return result;
 }
