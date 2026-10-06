@@ -464,6 +464,26 @@ function SupabaseCompetitionDetailPage() {
   });
 
   const respondToInvite = async (entryId: string, status: "accepted" | "declined") => {
+    if (isIcp) {
+      // ICP entry ids are "competitionId:teamId" composites (see the entries
+      // query above); the canister transitions the invite status itself.
+      const [competitionId, teamId] = entryId.split(":");
+      try {
+        const { respondLiveEntryInvite } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("Internet Identity session required");
+        await respondLiveEntryInvite({ identity, target: getActiveIcpTarget() } as any, competitionId, teamId, status === "accepted");
+      } catch (error: any) {
+        toast({ title: "Failed to update", description: error?.message ?? "Unknown error", variant: "destructive" });
+        return;
+      }
+      toast({ title: status === "accepted" ? "Invite accepted" : "Invite declined" });
+      qc.invalidateQueries({ queryKey: ["competition-entries", id] });
+      qc.invalidateQueries({ queryKey: ["competition-pending-invites"] });
+      return;
+    }
     const { error } = await supabase
       .from("competition_entries")
       .update({ status, responded_by: user!.id, responded_at: new Date().toISOString() })
