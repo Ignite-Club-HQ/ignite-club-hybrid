@@ -337,7 +337,9 @@ function SupabaseCompetitionDetailPage() {
         const ctx = { identity, target: getActiveIcpTarget() } as any;
         const seasons = (await listLiveCompetitionSeasons(ctx, id!).catch(() => [])) as any[];
         const names = Array.from(new Set(seasons.flatMap((s) => (s.divisions ?? []) as string[])));
-        return names.map((name, i) => ({ id: name, name, sort_order: i }));
+        const { listLiveDivisionSettings } = await import("@/live/features/competitions");
+        const settings = (await listLiveDivisionSettings(ctx, id!).catch(() => [])) as any[];
+        return names.map((name, i) => ({ id: name, name, sort_order: i, hide_ladder: settings.some((x) => x.division === name && x.hide_ladder) }));
       }
       const { data } = await supabase
         .from("competition_divisions")
