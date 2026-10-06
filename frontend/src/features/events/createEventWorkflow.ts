@@ -90,6 +90,9 @@ export async function createEventTransaction(
       if (input.childDates && input.childDates.length > 0) {
         const { events } = await createLiveEventSeries(ctx, {
           ...base,
+          // Series records have no address field — carry the address in
+          // location so every occurrence shows it (and its map).
+          location: base.address ?? base.location,
           // The canister only accepts daily/weekly/fortnightly/monthly. With
           // untilMs = first start it creates just the first event; the exact
           // dates are appended below, so the frequency value is cosmetic.
