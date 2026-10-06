@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useClubTheme } from "@/hooks/useClubTheme";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { SPORT_EMOJIS, getSportEmoji, isClassModeSport } from "@/lib/sportEmojis";
@@ -35,6 +36,7 @@ export default function CreateClubPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   const useIcpLab = isFeatureRoutedToIcp("membership");
   
   const [name, setName] = useState("");
@@ -290,6 +292,9 @@ export default function CreateClubPage() {
 
       setSaving(false);
       void queryClient.invalidateQueries();
+      // A selected club theme filters lists to that one club — clear it so
+      // the new club is visible under Clubs & Teams straight away.
+      if (activeClubFilter && activeClubFilter !== clubId) setActiveClubTheme(null);
       navigate(`/clubs/${clubId}/setup`);
     } catch (error: any) {
       setSaving(false);

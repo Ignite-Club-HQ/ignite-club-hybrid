@@ -59,7 +59,7 @@ interface Sponsor {
 
 export default function ClubsPage() {
   const { user } = useAuth();
-  const { activeClubFilter } = useClubTheme();
+  const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   const useIcpLab = isFeatureRoutedToIcp("membership");
   const location = useLocation();
   const { toast } = useToast();
@@ -424,6 +424,18 @@ export default function ClubsPage() {
       {/* My Clubs */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">My Clubs</h2>
+        {activeClubFilter && (clubs?.filter((c) => userRoles?.some((r) => r.club_id === c.id)).length ?? 0) > (myClubs?.length ?? 0) && (
+          <p className="text-sm text-muted-foreground">
+            Showing only your selected club.{" "}
+            <button
+              type="button"
+              onClick={() => setActiveClubTheme(null)}
+              className="font-medium text-primary underline underline-offset-4"
+            >
+              Show all my clubs
+            </button>
+          </p>
+        )}
         {myClubs?.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="p-6 text-center">
