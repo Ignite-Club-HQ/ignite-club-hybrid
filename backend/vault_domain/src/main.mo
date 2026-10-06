@@ -268,15 +268,18 @@ persistent actor class Main(governorInit : Principal) {
   ) : async { #Ok : Types.VaultFile; #Err : Text } {
     auth(caller);
     if (not (await canWrite(caller, club, team))) return #Err("Club role required");
-    if (not valid(id) or not valid(folder_id) or not valid(club)) return #Err("Invalid file fields");
+    // folder_id "" = vault root (same convention as move_file).
+    if (not valid(id) or folder_id.size() > 128 or not valid(club)) return #Err("Invalid file fields");
     if (not validLong(name, 160) or not validLong(file_url, 2048) or not validLong(mime, 128)) return #Err("Invalid file fields");
     switch (team) { case (?t) { if (not valid(t)) return #Err("Invalid team") }; case null {} };
     switch (mini_league_id) { case (?m) { if (not valid(m)) return #Err("Invalid mini league") }; case null {} };
     switch (blob_ref) { case (?ref) { if (not validBlobRef(ref)) return #Err("Invalid blob ref") }; case null {} };
-    switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
-      case null { return #Err("Folder not found") };
-      case (?folder) {
-        if (folder.club != club) return #Err("Folder belongs to another club");
+    if (folder_id != "") {
+      switch (folders.find(func(item) = item.id == folder_id and item.deleted_at_ms == null)) {
+        case null { return #Err("Folder not found") };
+        case (?folder) {
+          if (folder.club != club) return #Err("Folder belongs to another club");
+        };
       };
     };
     if (files.any(func(item) = item.id == id)) return #Err("File id already exists");
