@@ -47,6 +47,32 @@ export function useTeamChatTeamData({
         return getLocalLabChatTeam(teamId);
       }
 
+      if (resolveAuthBackend() === "icp") {
+        // Internet Identity sign-ins: the team lives on the club canister.
+        const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, club] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/targetRegistry"),
+          import("@/live/features/club"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("Internet Identity session required");
+        const ctx = { identity, target: getActiveIcpTarget() };
+        const [liveTeam] = (await club.getLiveTeam(ctx as any, teamId!)) as any[];
+        if (!liveTeam) return null;
+        const [profile] = ((await club.getLiveClubProfile(ctx as any, liveTeam.club_id).catch(() => [])) ?? []) as any[];
+        return {
+          id: liveTeam.id,
+          name: liveTeam.name,
+          logo_url: liveTeam.logo_url?.[0] ?? null,
+          club_id: liveTeam.club_id,
+          clubs: {
+            id: liveTeam.club_id,
+            name: profile?.name ?? "",
+            logo_url: profile?.logo_url?.[0] ?? null,
+          },
+        };
+      }
+
       const { data, error } = await supabaseClient
         .from("teams")
         .select("*, clubs!club_id (name, id, logo_url)")
@@ -55,7 +81,7 @@ export function useTeamChatTeamData({
       if (error) throw error;
       return data ?? null;
     },
-    enabled: !!teamId && resolveAuthBackend() !== "icp",
+    enabled: !!teamId,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
