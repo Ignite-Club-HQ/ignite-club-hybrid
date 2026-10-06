@@ -876,7 +876,7 @@ export default function ClubDetailPage() {
 
       return clubLevelRole?.role ?? null;
     },
-    enabled: !!id && !!user && !useIcpLab,
+    enabled: !!id && !!user,
   });
 
   // Shared hook: Supabase user_roles in Supabase mode, insights_domain's
