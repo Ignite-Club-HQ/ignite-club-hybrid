@@ -46,6 +46,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { PhotoStoresCard } from "@/components/admin/PhotoStoresCard";
 import { FreePlanLimitsCard } from "@/components/admin/FreePlanLimitsCard";
 import { CanisterBalancesCard } from "@/components/admin/CanisterBalancesCard";
+import { SeedTestDataCard } from "@/components/admin/SeedTestDataCard";
 import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
 import {
   ICP_CANISTER_CONFIG_KEY,
@@ -872,6 +873,7 @@ export default function PlacementAdminSettingsPage() {
         <FreePlanLimitsCard />
         <PhotoStoresCard />
         <CanisterBalancesCard />
+        <SeedTestDataCard />
 
 
         <Card>
