@@ -158,12 +158,12 @@ export default function EditProfilePage() {
     }
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg");
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, uploadFile, { upsert: true, contentType: uploadFile.type || undefined });
 
       if (uploadError) throw uploadError;
 
@@ -369,7 +369,7 @@ export default function EditProfilePage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Max 2MB. JPG, PNG, or GIF.
+              JPG, PNG, or GIF. Large photos are resized automatically.
             </p>
           </div>
 
