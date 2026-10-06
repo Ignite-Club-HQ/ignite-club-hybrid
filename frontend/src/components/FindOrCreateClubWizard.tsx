@@ -208,6 +208,7 @@ export default function FindOrCreateClubWizard({
       });
 
       setSaving(false);
+      void queryClient.invalidateQueries();
       onClubCreated(clubId);
     } catch (e) {
       setSaving(false);

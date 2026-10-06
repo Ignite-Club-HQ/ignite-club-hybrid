@@ -34,6 +34,7 @@ export default function CreateClubPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const useIcpLab = isFeatureRoutedToIcp("membership");
   
   const [name, setName] = useState("");

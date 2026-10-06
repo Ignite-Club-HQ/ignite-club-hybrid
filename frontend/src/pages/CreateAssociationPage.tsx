@@ -16,6 +16,7 @@ import { slugifyClubName } from "@/lib/eoiUtils";
 
 export default function CreateAssociationPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   usePageTitle("New association");
   const { toast } = useToast();
   const { user } = useAuth();
