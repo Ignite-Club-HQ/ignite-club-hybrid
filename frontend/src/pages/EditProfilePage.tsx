@@ -20,6 +20,7 @@ import { Capacitor } from "@capacitor/core";
 import { pickNativePhoto, shouldUseNativePicker } from "@/lib/nativePhotoPicker";
 import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
+import { compressImage } from "@/lib/imageCompression";
 
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -55,13 +56,23 @@ export default function EditProfilePage() {
       // NOW safe to set state — native picker has closed
       setUploadingAvatar(true);
 
-      if (result.blob.size > 2 * 1024 * 1024) {
-        toast({ title: "File too large", description: "Please select an image under 2MB", variant: "destructive" });
+      // Resize on-device so any camera photo fits the upload budget.
+      let uploadBlob: Blob = result.blob;
+      try {
+        const asFile = new File([result.blob], `avatar.${mimeToExtension(result.mimeType) || "jpg"}`, { type: result.mimeType });
+        const compressed = await compressImage(asFile);
+        if (compressed.file.size < uploadBlob.size) uploadBlob = compressed.file;
+      } catch {
+        // keep original if compression fails
+      }
+
+      if (uploadBlob.size > 2 * 1024 * 1024) {
+        toast({ title: "File too large", description: "Please select a smaller image", variant: "destructive" });
         setUploadingAvatar(false);
         return;
       }
 
-      const ext = mimeToExtension(result.mimeType);
+      const ext = mimeToExtension(uploadBlob.type || result.mimeType) || "jpg";
       if (useIcpLab) {
         // ICP mode: encrypt + store on the blob-store canister, keep the
         // on-chain URL as the avatar reference.
