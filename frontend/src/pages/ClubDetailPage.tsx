@@ -401,7 +401,7 @@ export default function ClubDetailPage() {
         const profiles = (await listLiveProfilesByIds(ctx, ids).catch(() => [])) as any[];
         const byId = new Map(profiles.map((p) => [p.account_id, p]));
         const { accountIdForPrincipal } = await import("@/live/features/identityAccessClient");
-        const selfIds = new Set<string>([user?.id, (myProfile as any)?.id].filter(Boolean) as string[]);
+        const selfIds = new Set<string>([user?.id, user?.id ? `principal:${user.id}` : null, (myProfile as any)?.id].filter(Boolean) as string[]);
         if (user?.id) { const a = await accountIdForPrincipal(user.id); if (a) selfIds.add(a); }
         for (const sid of selfIds) {
           const cur = byId.get(sid);
