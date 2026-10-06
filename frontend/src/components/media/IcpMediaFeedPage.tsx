@@ -45,6 +45,8 @@ interface LiveAssetView {
   id: string;
   url: string;
   isVideo: boolean;
+  /** Encrypted photo-store address; unlocked in the background. */
+  sourceUrl?: string | null;
 }
 
 interface LiveReactionView {
@@ -108,6 +110,49 @@ const UNAVAILABLE_PHOTO_URL =
       "</svg>",
   );
 
+const LOADING_PHOTO_URL =
+  "data:image/svg+xml;charset=utf-8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">' +
+      '<rect width="600" height="600" fill="#f3f4f6"/>' +
+      '<text x="300" y="300" font-family="sans-serif" font-size="28" fill="#9ca3af" text-anchor="middle">Loading photo…</text>' +
+      "</svg>",
+  );
+
+/** Unlocks photos a few at a time (newest first) and reports each as it lands. */
+function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const doneRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!posts) return;
+    let cancelled = false;
+    const queue = posts
+      .flatMap((p) => p.assets)
+      .filter((a) => a.sourceUrl && !doneRef.current.has(a.id));
+    const worker = async () => {
+      while (!cancelled && queue.length) {
+        const asset = queue.shift()!;
+        doneRef.current.add(asset.id);
+        let url = UNAVAILABLE_PHOTO_URL;
+        try {
+          const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
+          if (resolved) url = asset.isVideo ? `${resolved}#.mp4` : resolved;
+        } catch (err) {
+          console.warn("[icp-media-feed] could not load asset", asset.id, err);
+        }
+        if (!cancelled) setUrls((prev) => ({ ...prev, [asset.id]: url }));
+        else doneRef.current.delete(asset.id);
+      }
+    };
+    void Promise.all(Array.from({ length: 6 }, worker));
+    return () => {
+      cancelled = true;
+    };
+  }, [posts]);
+  return urls;
+}
+
+
 async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
   const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
     id: string;
@@ -168,27 +213,26 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     }),
   );
 
-  // Resolve encrypted blob bytes to object URLs (never fall back to
-  // ciphertext). A photo that can't be unlocked shows a placeholder tile
-  // instead of vanishing, so a fresh upload never silently disappears.
+  // Photos are unlocked in the background by the page (see useResolvedAssetUrls)
+  // so the feed paints as soon as the post list is known instead of waiting
+  // for every encrypted photo to download and decrypt.
   const assetViews = new Map<string, LiveAssetView>();
-  await Promise.all(
-    rawAssets.map(async (asset) => {
-      const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
-      try {
-        const source = liveAssetSource(asset as never);
-        if (source.kind !== "icp-blob") throw new Error("Asset has no photo-store reference");
-        const url = await resolveIcpBlobObjectUrl(source.url);
-        if (!url) throw new Error(`Photo store ${source.canisterId} is not in the canister configuration`);
-        // blob: URLs carry no extension, so isVideoUrl can't detect video —
-        // a fragment is ignored by media loading but matches the suffix check.
-        assetViews.set(asset.id, { id: asset.id, url: isVideo ? `${url}#.mp4` : url, isVideo });
-      } catch (err) {
-        console.warn("[icp-media-feed] could not load asset", asset.id, err);
-        assetViews.set(asset.id, { id: asset.id, url: UNAVAILABLE_PHOTO_URL, isVideo: false });
-      }
-    }),
-  );
+  for (const asset of rawAssets) {
+    const isVideo = asset.kind === "video" || asset.mime.startsWith("video/");
+    let sourceUrl: string | null = null;
+    try {
+      const source = liveAssetSource(asset as never);
+      if (source.kind === "icp-blob") sourceUrl = source.url;
+    } catch {
+      sourceUrl = null;
+    }
+    assetViews.set(asset.id, {
+      id: asset.id,
+      url: sourceUrl ? LOADING_PHOTO_URL : UNAVAILABLE_PHOTO_URL,
+      isVideo,
+      sourceUrl,
+    });
+  }
 
   const teamNameById = new Map(options.teams.map((t) => [t.id, t.name]));
   const mlNameById = new Map(options.miniLeagues.map((m) => [m.id, m.name]));
@@ -441,15 +485,23 @@ export function IcpMediaFeedPage() {
     onSettled: invalidate,
   });
 
+  const resolvedUrls = useResolvedAssetUrls(feedQuery.data?.posts);
   const posts = useMemo(() => {
     const all = feedQuery.data?.posts ?? [];
-    return all.filter((post) => {
-      if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
-      if (selectedTeamId === "all") return true;
-      if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
-      return post.teamId === selectedTeamId;
-    });
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId]);
+    return all
+      .filter((post) => {
+        if (selectedClubId !== "all" && post.clubId !== selectedClubId) return false;
+        if (selectedTeamId === "all") return true;
+        if (selectedTeamId.startsWith("ml:")) return post.miniLeagueId === selectedTeamId.slice(3);
+        return post.teamId === selectedTeamId;
+      })
+      .map((post) => ({
+        ...post,
+        assets: post.assets.map((a) =>
+          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
+        ),
+      }));
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
