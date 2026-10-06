@@ -1248,3 +1248,29 @@ export async function sendLiveFeeReminders(
     "Send fee reminders",
   );
 }
+
+/** Parent self-service children (Children page, ICP mode). */
+export async function listMyLiveOwnChildren(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.list_my_children();
+}
+export async function createMyLiveChild(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_own_child(), "Add child");
+}
+export async function deleteMyLiveChild(ctx: FeatureBackendContext, childId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_own_child(childId), "Remove child");
+}
+export async function setMyLiveChildTeam(ctx: FeatureBackendContext, childId: string, teamId: string, assigned: boolean) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_own_child_team(childId, teamId, assigned), "Update child team");
+}
+export async function listLiveChildGuardians(ctx: FeatureBackendContext, childId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_child_guardians(childId), "List guardians");
+}
+export async function setMyLiveChildGuardian(ctx: FeatureBackendContext, childId: string, user: Principal, linked: boolean) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian");
+}
