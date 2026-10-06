@@ -324,9 +324,21 @@ function SupabaseCompetitionDetailPage() {
   const canManage = isAdmin && organizerHasPro;
 
   const { data: divisions = [], isLoading: divisionsLoading } = useQuery({
-    queryKey: ["competition-divisions", id],
+    queryKey: ["competition-divisions", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: divisions are name lists on the canister's seasons.
+        const { listLiveCompetitionSeasons } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const seasons = (await listLiveCompetitionSeasons(ctx, id!).catch(() => [])) as any[];
+        const names = Array.from(new Set(seasons.flatMap((s) => (s.divisions ?? []) as string[])));
+        return names.map((name, i) => ({ id: name, name, sort_order: i }));
+      }
       const { data } = await supabase
         .from("competition_divisions")
         .select("*")
@@ -337,9 +349,40 @@ function SupabaseCompetitionDetailPage() {
   });
 
   const { data: entries = [] } = useQuery({
-    queryKey: ["competition-entries", id],
+    queryKey: ["competition-entries", id, isIcp],
     enabled: !!id,
     queryFn: async () => {
+      if (isIcp) {
+        // ICP mode: entries live on competition_domain; team/club names are
+        // resolved from club_domain.
+        const { listLiveCompetitionEntries } = await import("@/live/features/competitions");
+        const { icpGetTeam, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return [];
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const rows = (await listLiveCompetitionEntries(ctx, id!).catch(() => [])) as any[];
+        const opt = (v: any) => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+        return Promise.all(
+          rows.map(async (e) => {
+            const team = await icpGetTeam(e.team_id).catch(() => null);
+            const clubName = team ? await icpGetClubName(team.club_id).catch(() => null) : null;
+            const divisionId = opt(e.division_id);
+            return {
+              id: `${e.competition_id}:${e.team_id}`,
+              competition_id: e.competition_id,
+              team_id: e.team_id,
+              division_id: divisionId,
+              status: e.status,
+              teams: team
+                ? { id: team.id, name: team.name, club_id: team.club_id, is_shell: false, deleted_at: null, clubs: { name: clubName } }
+                : { id: e.team_id, name: "Team", club_id: e.club_id, is_shell: false, deleted_at: null, clubs: { name: null } },
+              competition_divisions: divisionId ? { name: divisionId } : null,
+            };
+          }),
+        );
+      }
       // Soft-deleted teams are no longer participants and must not appear in the
       // entries list, counts or division allocation.
       const { data } = await supabase
