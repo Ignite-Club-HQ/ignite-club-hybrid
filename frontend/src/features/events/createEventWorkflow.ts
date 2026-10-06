@@ -34,6 +34,8 @@ export type CreateEventTransactionInput = {
   eventDate: string;
   childDates: string[] | null;
   duties: Array<{ name: string; assigned_to: string | null }>;
+  /** ICP only: called once background follow-up writes finish. */
+  onBackgroundDone?: (failed: number) => void;
 };
 
 /**
@@ -100,23 +102,25 @@ export async function createEventTransaction(
         if (!first) throw new Error("Event series could not be created.");
         const seriesId = first.series_id?.[0];
         if (!seriesId) throw new Error("Event series could not be created.");
-        const occurrenceIds = [first.id];
-        for (const childDate of input.childDates) {
-          const childStart = occurrenceStartMs(childDate, startsAtMs);
-          if (childStart === startsAtMs) continue;
-          const occ = await addLiveSeriesOccurrence(ctx, seriesId, childStart, childStart + durationMs);
-          occurrenceIds.push(occ.id);
-        }
-        for (const duty of input.duties) {
-          if (duty.assigned_to) {
-            await setLiveEventDuty(ctx, first.id, duty.assigned_to, duty.name);
-          } else {
-            await createLiveOpenDuty(ctx, first.id, duty.name);
-          }
-        }
-        if (reminderHours) {
-          for (const occId of occurrenceIds) await setLiveEventAutoReminder(ctx, occId, reminderHours);
-        }
+        // Everything after the first occurrence runs in the background with
+        // bounded concurrency: each canister update costs ~2s, so awaiting a
+        // season of dates + reminders serially kept the button spinning for
+        // over a minute. The event page opens as soon as the first exists.
+        const dutiesFor = (eventId: string) => input.duties.map((duty) => () =>
+          duty.assigned_to
+            ? setLiveEventDuty(ctx, eventId, duty.assigned_to, duty.name)
+            : createLiveOpenDuty(ctx, eventId, duty.name));
+        const childStarts = input.childDates
+          .map((d) => occurrenceStartMs(d, startsAtMs))
+          .filter((ms) => ms !== startsAtMs);
+        runInBackground([
+          ...dutiesFor(first.id),
+          ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, first.id, reminderHours)] : []),
+          ...childStarts.map((childStart) => async () => {
+            const occ = await addLiveSeriesOccurrence(ctx, seriesId, childStart, childStart + durationMs);
+            if (reminderHours) await setLiveEventAutoReminder(ctx, occ.id, reminderHours);
+          }),
+        ], input.onBackgroundDone);
         return first.id;
       }
 
@@ -130,17 +134,32 @@ export async function createEventTransaction(
       // create is not guaranteed on ICP. Unassigned duties become open-duty
       // board entries (create_open_duty) rather than being set-duty'd onto an
       // empty account id.
-      for (const duty of input.duties) {
-        if (duty.assigned_to) {
-          await setLiveEventDuty(ctx, created.id, duty.assigned_to, duty.name);
-        } else {
-          await createLiveOpenDuty(ctx, created.id, duty.name);
-        }
-      }
-
-      if (reminderHours) await setLiveEventAutoReminder(ctx, created.id, reminderHours);
+      runInBackground([
+        ...input.duties.map((duty) => () =>
+          duty.assigned_to
+            ? setLiveEventDuty(ctx, created.id, duty.assigned_to, duty.name)
+            : createLiveOpenDuty(ctx, created.id, duty.name)),
+        ...(reminderHours ? [() => setLiveEventAutoReminder(ctx, created.id, reminderHours)] : []),
+      ], input.onBackgroundDone);
 
       return created.id;
     },
   });
+}
+
+/** Runs follow-up canister writes 6 at a time without blocking the caller. */
+function runInBackground(
+  tasks: Array<() => Promise<unknown>>,
+  onDone?: (failed: number) => void,
+) {
+  if (tasks.length === 0) return;
+  let next = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const task = tasks[next++];
+      try { await task(); } catch (e) { failed++; console.error("Event follow-up write failed:", e); }
+    }
+  };
+  void Promise.all(Array.from({ length: Math.min(6, tasks.length) }, worker)).then(() => onDone?.(failed));
 }

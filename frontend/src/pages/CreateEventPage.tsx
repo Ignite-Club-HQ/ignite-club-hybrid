@@ -1181,11 +1181,15 @@ function SupabaseCreateEventPage() {
         eventDate: parsedDateTime.toISOString(),
         childDates,
         duties: dutyPayload,
+        onBackgroundDone: (failed) => {
+          refreshEventCaches(queryClient, user!.id);
+          if (failed > 0) toast({ title: "Some event details didn't save", description: `${failed} follow-up item(s) (dates, duties or reminders) failed. Please check the event.`, variant: "destructive" });
+        },
       });
       if (!newEventId) throw new Error("Event could not be created.");
 
       try {
-        await queryClient.invalidateQueries({
+        void queryClient.invalidateQueries({
           queryKey: eventKeys.home(user!.id),
         });
         // Also refresh every other event-derived surface (Schedule list, team
