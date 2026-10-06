@@ -1424,9 +1424,15 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
   const [icpClaimLink, setIcpClaimLink] = useState<string | null>(null);
 
   const { data: clubs = [] } = useQuery({
-    queryKey: ["clubs-for-team-invite", clubSearch],
+    queryKey: ["clubs-for-team-invite", clubSearch, isIcp],
     enabled: open && mode === "existing",
     queryFn: async () => {
+      if (isIcp) {
+        const { icpListClubs } = await import("@/lib/icpClubTeamLookup");
+        const all = await icpListClubs();
+        const term = clubSearch.trim().toLowerCase();
+        return (term ? all.filter((c) => c.name.toLowerCase().includes(term)) : all).slice(0, 50);
+      }
       let q = supabase.from("clubs").select("id, name").order("name").limit(50);
       if (clubSearch.trim()) q = q.ilike("name", `%${clubSearch.trim()}%`);
       const { data } = await q;
@@ -1437,9 +1443,24 @@ function InviteTeamForm({ competitionId, organizerClubId, divisions, defaultOpen
   const selectedClub = clubs.find((c: any) => c.id === clubFilterId);
 
   const { data: teams = [] } = useQuery({
-    queryKey: ["all-teams-for-invite", search, clubFilterId],
+    queryKey: ["all-teams-for-invite", search, clubFilterId, isIcp],
     enabled: open && mode === "existing",
     queryFn: async () => {
+      if (isIcp) {
+        const { icpListClubs, icpListTeams } = await import("@/lib/icpClubTeamLookup");
+        const clubList = clubFilterId ? clubs.filter((c: any) => c.id === clubFilterId) : await icpListClubs();
+        const term = search.trim().toLowerCase();
+        const out: any[] = [];
+        for (const club of clubList) {
+          const rows = await icpListTeams(club.id).catch(() => []);
+          for (const t of rows) {
+            if (term && !t.name.toLowerCase().includes(term)) continue;
+            out.push({ id: t.id, name: t.name, club_id: club.id, clubs: { name: club.name } });
+          }
+          if (out.length >= 50) break;
+        }
+        return out.slice(0, 50);
+      }
       let q = supabase.from("teams").select("id, name, club_id, clubs:club_id(name)").order("name").limit(50);
       if (search.trim()) q = q.ilike("name", `%${search.trim()}%`);
       if (clubFilterId) q = q.eq("club_id", clubFilterId);
@@ -1772,9 +1793,34 @@ function AddDivisionForm({ competitionId, onDone }: { competitionId: string; onD
       toast({ title: "Day window invalid", description: "Latest kickoff must be after earliest.", variant: "destructive" });
       return;
     }
-    // PROVISIONAL: no canister shape for competition_divisions yet.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Adding divisions isn't available for Internet Identity accounts yet", variant: "destructive" });
+      // ICP mode: divisions are name lists on the canister's seasons — append
+      // the new name to every season's division list.
+      setSaving(true);
+      try {
+        const { listLiveCompetitionSeasons, setLiveSeasonDivisions } = await import("@/live/features/competitions");
+        const { getCurrentInternetIdentity } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("Internet Identity session required");
+        const ctx = { identity, target: getActiveIcpTarget() } as any;
+        const seasons = (await listLiveCompetitionSeasons(ctx, competitionId)) as any[];
+        if (seasons.length === 0) throw new Error("Create a season before adding divisions.");
+        for (const season of seasons) {
+          const existing = (season.divisions ?? []) as string[];
+          if (existing.includes(name.trim())) continue;
+          await setLiveSeasonDivisions(ctx, competitionId, season.name, [...existing, name.trim()]);
+        }
+      } catch (error: any) {
+        setSaving(false);
+        toast({ title: "Could not add division", description: error?.message ?? "Unknown error", variant: "destructive" });
+        return;
+      }
+      setSaving(false);
+      toast({ title: "Division added" });
+      setName(""); setAgeGroup(""); setGender("");
+      setPlayWeekdays([]); setDayStart("09:00"); setDayEnd("16:00");
+      setOpen(false); onDone();
       return;
     }
     setSaving(true);
