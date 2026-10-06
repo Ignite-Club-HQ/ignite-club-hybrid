@@ -125,4 +125,6 @@ module {
     competitionJoinLinks : [CompetitionJoinLink];
     eoiSubmissions : [EoiSubmission];
   };
+  public type DivisionSetting = { competition_id : Text; division : Text; hide_ladder : Bool };
+  public type Broadcast = { id : Text; competition_id : Text; sender : Principal; title : Text; body : Text; created_at_ms : Nat64 };
 }
