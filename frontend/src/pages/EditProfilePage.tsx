@@ -20,6 +20,7 @@ import { Capacitor } from "@capacitor/core";
 import { pickNativePhoto, shouldUseNativePicker } from "@/lib/nativePhotoPicker";
 import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
+import { compressImage } from "@/lib/imageCompression";
 
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -55,25 +56,35 @@ export default function EditProfilePage() {
       // NOW safe to set state — native picker has closed
       setUploadingAvatar(true);
 
-      if (result.blob.size > 2 * 1024 * 1024) {
-        toast({ title: "File too large", description: "Please select an image under 2MB", variant: "destructive" });
+      // Resize on-device so any camera photo fits the upload budget.
+      let uploadBlob: Blob = result.blob;
+      try {
+        const asFile = new File([result.blob], `avatar.${mimeToExtension(result.mimeType) || "jpg"}`, { type: result.mimeType });
+        const compressed = await compressImage(asFile);
+        if (compressed.file.size < uploadBlob.size) uploadBlob = compressed.file;
+      } catch {
+        // keep original if compression fails
+      }
+
+      if (uploadBlob.size > 2 * 1024 * 1024) {
+        toast({ title: "File too large", description: "Please select a smaller image", variant: "destructive" });
         setUploadingAvatar(false);
         return;
       }
 
-      const ext = mimeToExtension(result.mimeType);
+      const ext = mimeToExtension(uploadBlob.type || result.mimeType) || "jpg";
       if (useIcpLab) {
         // ICP mode: encrypt + store on the blob-store canister, keep the
         // on-chain URL as the avatar reference.
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({ file: result.blob, mime: result.mimeType, ext });
+        const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
         setAvatarUrl(url);
         toast({ title: "Photo uploaded!" });
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from("avatars")
-          .upload(fileName, result.blob, { upsert: true, contentType: result.mimeType });
+          .upload(fileName, uploadBlob, { upsert: true, contentType: uploadBlob.type || result.mimeType });
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
@@ -103,10 +114,19 @@ export default function EditProfilePage() {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
+    // Resize on-device so any photo (even a 5MB camera shot) fits the budget.
+    let uploadFile: File = file;
+    try {
+      const compressed = await compressImage(file);
+      if (compressed.file.size < uploadFile.size) uploadFile = compressed.file;
+    } catch {
+      // keep original if compression fails
+    }
+
+    if (uploadFile.size > 2 * 1024 * 1024) {
       toast({
         title: "File too large",
-        description: "Please select an image under 2MB",
+        description: "Please select a smaller image",
         variant: "destructive",
       });
       return;
@@ -120,9 +140,9 @@ export default function EditProfilePage() {
       try {
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
         const url = await uploadIcpAvatar({
-          file,
-          mime: file.type || "image/jpeg",
-          ext: file.name.split('.').pop() || "jpg",
+          file: uploadFile,
+          mime: uploadFile.type || "image/jpeg",
+          ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
         });
         setAvatarUrl(url);
         toast({ title: "Photo uploaded!" });
@@ -138,12 +158,12 @@ export default function EditProfilePage() {
     }
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg");
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, uploadFile, { upsert: true, contentType: uploadFile.type || undefined });
 
       if (uploadError) throw uploadError;
 
@@ -349,7 +369,7 @@ export default function EditProfilePage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Max 2MB. JPG, PNG, or GIF.
+              JPG, PNG, or GIF. Large photos are resized automatically.
             </p>
           </div>
 
