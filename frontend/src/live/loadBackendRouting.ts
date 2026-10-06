@@ -230,5 +230,22 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
  * channel.
  */
 export function isFeatureRoutedToIcp(feature: FeatureArea): boolean {
-  return getEffectiveBackendForFeature(feature) === "icp";
+  if (getEffectiveBackendForFeature(feature) === "icp") return true;
+  // Mirror withFeatureBackend's fallback: an Internet Identity user has no
+  // Supabase data, so when routing momentarily resolves to Supabase (e.g. a
+  // just-created, unpinned club tips the club-pin check) keep pages on the
+  // canister instead of querying Supabase and showing "not found".
+  if (!hasStoredInternetIdentitySession()) return false;
+  const target = tryGetActiveIcpTarget();
+  return !!target && isFeatureCanisterConfigured(target, feature);
+}
+
+function hasStoredInternetIdentitySession(): boolean {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem("ignite_icp_internet_identity_session") : null;
+    const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
+    return typeof parsed?.principal === "string" && parsed.principal.length > 0;
+  } catch {
+    return false;
+  }
 }
