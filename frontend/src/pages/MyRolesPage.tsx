@@ -161,16 +161,36 @@ function HybridMyRolesPage() {
       },
       icp: async (ctx) => {
         const grants = await myLiveRoleGrants(ctx);
-        return grants.map(g => ({
-          id: `${g.club[0] ?? "global"}-${g.role}-${g.team[0] || 'global'}`,
-          role: g.role,
-          club_id: g.club[0] ?? null,
-          team_id: g.team[0] || null,
-          // ICP roles don't carry club/team names in the grant record yet.
-          // Fallback to placeholders; richer name hydration belongs in a hook.
-          clubs: { id: g.club[0] ?? "", name: "Club", logo_url: null },
-          teams: g.team[0] ? { id: g.team[0], name: "Team", club_id: g.club[0] ?? null, clubs: { name: "Club" } } : null
-        }));
+        const { icpListClubs, icpGetTeam } = await import("@/lib/icpClubTeamLookup");
+        // Live (non-deleted) clubs only — grants on deleted clubs are hidden.
+        const clubs = await icpListClubs().catch(() => [] as Array<{ id: string; name: string }>);
+        const clubName = new Map(clubs.map((c) => [c.id, c.name]));
+        const teamIds = Array.from(new Set(grants.map((g) => g.team[0]).filter(Boolean))) as string[];
+        const teams = new Map(
+          (await Promise.all(teamIds.map((id) => icpGetTeam(id).catch(() => null))))
+            .filter(Boolean)
+            .map((t) => [t!.id, t!]),
+        );
+        return grants
+          .filter((g) => {
+            const club = g.club[0];
+            if (!club) return true;
+            if (!clubName.has(club)) return false;
+            const team = g.team[0];
+            return !team || teams.has(team);
+          })
+          .map(g => {
+            const club = g.club[0] ?? null;
+            const team = g.team[0] ? teams.get(g.team[0]) : null;
+            return {
+              id: `${club ?? "global"}-${g.role}-${g.team[0] || 'global'}`,
+              role: g.role,
+              club_id: club,
+              team_id: g.team[0] || null,
+              clubs: { id: club ?? "", name: (club && clubName.get(club)) || "Club", logo_url: null },
+              teams: team ? { id: team.id, name: team.name, club_id: team.club_id, clubs: { name: clubName.get(team.club_id) ?? "Club" } } : null,
+            };
+          });
       }
     }),
     enabled: !!user,
