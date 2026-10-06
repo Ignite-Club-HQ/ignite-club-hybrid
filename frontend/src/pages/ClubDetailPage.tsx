@@ -132,7 +132,7 @@ const MEMBERS_PER_PAGE = 10;
 
 export default function ClubDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("membership");
   // Club deletion/restore and role-request flows have no club_domain canister
   // shape yet, so they are gated off entirely for Internet Identity accounts.
@@ -388,6 +388,13 @@ export default function ClubDetailPage() {
         const ids = Array.from(new Set(grantLists.flatMap((l) => l.grants.map(userOf)).filter(Boolean)));
         const profiles = (await listLiveProfilesByIds(ctx, ids).catch(() => [])) as any[];
         const byId = new Map(profiles.map((p) => [p.account_id, p]));
+        const { accountIdForPrincipal } = await import("@/live/features/identityAccessClient");
+        const selfIds = new Set<string>([user?.id, (myProfile as any)?.id].filter(Boolean) as string[]);
+        if (user?.id) { const a = await accountIdForPrincipal(user.id); if (a) selfIds.add(a); }
+        for (const sid of selfIds) {
+          const cur = byId.get(sid);
+          if ((!cur || !cur.display_name) && myProfile?.display_name) byId.set(sid, { ...(cur ?? {}), account_id: sid, display_name: myProfile.display_name, avatar_url: (myProfile as any).avatar_url ?? null });
+        }
         return grantLists.flatMap(({ team, grants }) =>
           grants.map((g) => {
             const uid = userOf(g);

@@ -96,7 +96,7 @@ import {
   listLiveTeamRoleGrants,
 } from "@/live/features/membership";
 import { getLiveTeam, getLiveClubProfile, getLiveClubSubscription, getLiveTeamSubscription, saveLiveTeamSubscription, saveLiveTeamPitchSettings } from "@/live/features/club";
-import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
+import { listLiveProfilesByIds, accountIdForPrincipal } from "@/live/features/identityAccessClient";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { Principal } from "@icp-sdk/core/principal";
 import * as fixtureData from "@/lab/fixtureDataLayer";
@@ -131,7 +131,7 @@ const normalizeDutyName = (name: string | null | undefined) => name?.trim().toLo
 
 export default function TeamDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Team lifecycle management (delete/restore/permanent-delete/role-removal/join-request)
   // has no club_domain canister shape yet, so these actions are gated off entirely
@@ -774,8 +774,15 @@ export default function TeamDetailPage() {
               ? await listLiveProfilesByIds(ctx, accountIds).catch(() => [])
               : [];
             const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
+            // The signed-in member's own name is always known locally — use it
+            // when identity_access has no (named) profile row for their id.
+            const selfIds = new Set<string>([user?.id, (myProfile as any)?.id].filter(Boolean) as string[]);
+            if (user?.id) { const a = await accountIdForPrincipal(user.id); if (a) selfIds.add(a); }
             return grants.map((g) => {
-              const p = profileMap.get(g.account_id);
+              let p: any = profileMap.get(g.account_id);
+              if ((!p || !p.display_name) && selfIds.has(g.account_id) && myProfile?.display_name) {
+                p = { ...(p ?? {}), display_name: myProfile.display_name, avatar_ref: p?.avatar_ref ?? [(myProfile as any).avatar_url].filter(Boolean) };
+              }
               return {
                 id: `${g.account_id}:${g.role}`,
                 user_id: g.account_id,
