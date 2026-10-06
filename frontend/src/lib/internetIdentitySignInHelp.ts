@@ -10,7 +10,7 @@
  */
 
 const OPEN_IN_BROWSER_TIP =
-  "If you opened this page from another app (like email or a chat), open it in Chrome or Safari instead and try again.";
+  "If you opened this page from another app (like email or a chat), open it in your device's browser instead and try again.";
 
 /** The one-line explainer shown under the sign-in button before anything goes wrong. */
 export const II_SIGN_IN_HINT =
@@ -56,7 +56,7 @@ export function describeIcpSignInError(rawMessage: string): string {
   if (message.includes("could not be opened")) {
     return (
       "Your browser blocked the sign-in window. Allow pop-ups for this site and try again — " +
-      "or open this page directly in Chrome or Safari."
+      "or open this page directly in your device's browser."
     );
   }
 

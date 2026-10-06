@@ -16,6 +16,7 @@ describe("Consumer ICP sign-in", () => {
     expect(screen.getByRole("heading", { name: "Welcome to Ignite" })).toBeInTheDocument();
     expect(screen.getByText("Sign in or create your account to continue.")).toBeInTheDocument();
     expect(screen.getByText("Powered by Internet Identity")).toBeInTheDocument();
+    expect(screen.getByText("Powered by Internet Identity").querySelector("svg, img")).toBeNull();
     expect(screen.getByText("New to Ignite? Just continue — we'll create your account automatically.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Browser sign-in guidance")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -26,7 +27,8 @@ describe("Consumer ICP sign-in", () => {
     ua(`${safari} ${marker}`);
     render(<IcpSignInScreen {...props} />);
     expect(screen.getByText("Open Ignite in your browser")).toBeInTheDocument();
-    expect(screen.getByText("Secure sign-in may not work inside this app. Open this page in Chrome or Safari to continue.")).toBeInTheDocument();
+    expect(screen.getByText("Secure sign-in may not work inside this app. Open this page in your device's browser to continue.")).toBeInTheDocument();
+    expect(screen.queryByText(/Chrome or Safari/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open in browser" })).not.toBeInTheDocument();
   });
   it("does not mislabel the installed native app's WebView as an incompatible social browser", () => {

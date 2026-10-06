@@ -6,7 +6,8 @@ describe("describeIcpSignInError", () => {
     const result = describeIcpSignInError("Channel was closed before a response was received");
     expect(result).toContain("closed before sign-in finished");
     expect(result).toContain("leave the Internet Identity window open");
-    expect(result).toContain("Chrome or Safari");
+    expect(result).toContain("your device's browser");
+    expect(result).not.toMatch(/Chrome|Safari/);
     expect(result).not.toContain("Channel was closed");
   });
 
@@ -19,6 +20,8 @@ describe("describeIcpSignInError", () => {
     const result = describeIcpSignInError("Signer window could not be opened");
     expect(result).toContain("blocked the sign-in window");
     expect(result).toContain("pop-ups");
+    expect(result).toContain("your device's browser");
+    expect(result).not.toMatch(/Chrome|Safari/);
   });
 
   it("explains the outside-click-handler error as a simple retry", () => {
