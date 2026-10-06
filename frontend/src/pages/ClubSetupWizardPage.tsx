@@ -846,7 +846,7 @@ function OperationalGroupsStep({
               seen.add(key);
               roleEntries.push([candidate.principal, matched.role === "club_admin" ? "admin" : "member"]);
             }
-            const meta = await createLiveGroupWithRoles(ctx, clubId, null, g.name.trim(), "role_group", roleEntries);
+            const meta = await createLiveGroupWithRoles(ctx, clubId, null, g.name.trim(), "group", roleEntries);
             update(g.tempId, { status: "saved", createdId: meta.conversation_id });
           },
         });

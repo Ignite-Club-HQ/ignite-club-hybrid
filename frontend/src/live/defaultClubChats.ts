@@ -49,7 +49,7 @@ export async function ensureLiveDefaultClubChats(
         for (const c of matching) {
           if (c.id !== selfText) entries.push([c.principal, "member"]);
         }
-        await createLiveGroupWithRoles(ctx, clubId, null, def.name, "role_group", entries);
+        await createLiveGroupWithRoles(ctx, clubId, null, def.name, "group", entries);
       } else if (matching.length > 0) {
         // Members already in the group are skipped canister-side.
         await addLiveGroupMembers(ctx, group.conversationId, matching.map((c) => c.principal));

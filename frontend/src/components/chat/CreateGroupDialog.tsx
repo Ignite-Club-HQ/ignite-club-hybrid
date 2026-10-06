@@ -367,7 +367,7 @@ export default function CreateGroupDialog({
               icpClubId,
               icpTeamId,
               name.trim(),
-              "role_group",
+              "group",
               roleEntries,
             );
           },
