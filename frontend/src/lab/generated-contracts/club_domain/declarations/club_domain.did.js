@@ -961,6 +961,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_user_club_roles' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Text)))],
+        ['query'],
+      ),
     'mark_member_paid' : IDL.Func(
         [
           IDL.Text,
