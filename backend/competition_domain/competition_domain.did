@@ -345,6 +345,13 @@ type Main =
        Err: text;
        Ok: nat;
      });
+   update_competition_settings: (competition_id: text, name: text,
+    description: opt text, status: text, visibility: text, points_win: 
+    nat16, points_draw: nat16, points_loss: nat16) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
    update_eoi_status: (id: text, status: text) ->
     (variant {
        Err: text;
@@ -477,11 +484,16 @@ type CompetitionEngagementSummary =
 type Competition = 
  record {
    club_id: text;
+   description: opt text;
    id: text;
    name: text;
+   points_draw: nat16;
+   points_loss: nat16;
+   points_win: nat16;
    revision: nat64;
    season: text;
    status: text;
+   visibility: text;
  };
 type ChatSettings = 
  record {
