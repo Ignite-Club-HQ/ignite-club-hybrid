@@ -1,0 +1,157 @@
+# Ignite Club HQ — top a canister up with cycles, run from the GitHub Actions tab.
+#
+# Every canister pays for its own reads, writes and storage out of its cycle
+# balance. When one runs dry it simply stops answering (that is what stopped
+# photos from unlocking). This workflow moves cycles from the deploy account —
+# the DEPLOYER_PEM identity that already paid for the deploy — into a canister.
+# Nobody has to be the canister's controller to top it up.
+#
+# Inputs:
+#   canister   — a name from the deploy ID table (pii_access_control), a raw
+#                canister ID (iui5p-aaaaa-aaaal-qxllq-cai), or "all" to top up
+#                every deployed canister with the same amount.
+#   amount_t   — how many trillions of cycles to add to each one. 1T cycles
+#                costs about US$1.30, so 3T ≈ $4.
+#
+# If the deploy account is holding ICP rather than cycles, this workflow
+# converts it first, exactly like the deploy workflow does.
+
+name: Top up canister cycles
+
+on:
+  workflow_dispatch:
+    inputs:
+      canister:
+        description: "Canister name (pii_access_control), ID (iui5p-...-cai), or all"
+        required: true
+        default: "pii_access_control"
+        type: string
+      amount_t:
+        description: "Cycles to add per canister, in trillions (whole numbers, e.g. 3)"
+        required: true
+        default: "3"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  topup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install the icp CLI
+        run: npm install -g @icp-sdk/icp-cli --no-fund --no-audit
+
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOYER_PEM:-}" ]; then
+            echo "::error::No DEPLOYER_PEM secret, so the deploy account can't be reached."
+            echo "Add the deployer key as a repository secret (Settings → Secrets and"
+            echo "variables → Actions → New repository secret → DEPLOYER_PEM) and re-run."
+            exit 1
+          fi
+          mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
+          # Same normalisation the deploy workflow uses: strip CRLF, literal "\n"
+          # escapes, a JSON wrapper, and anything outside the PEM block.
+          printf '%s' "$DEPLOYER_PEM" \
+            | tr -d '\r' \
+            | sed 's/\\\\n/\n/g' \
+            | sed 's/\\n/\n/g' \
+            | sed -n '/-----BEGIN/,/-----END/p' \
+            | sed 's/^.*-----BEGIN/-----BEGIN/' \
+            | sed 's/\(-----END [A-Z ]*KEY-----\).*$/\1/' \
+            > "$PEM_FILE"
+          if ! grep -q -- '-----BEGIN' "$PEM_FILE" || ! grep -q -- '-----END' "$PEM_FILE"; then
+            echo "::error::The DEPLOYER_PEM secret does not contain a valid key file."
+            exit 1
+          fi
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          echo "==> Deployer principal: $(icp identity principal)"
+          echo "==> Its funding address: $(icp identity account-id || true)"
+
+      - name: Make sure the account holds cycles
+        run: |
+          set -uo pipefail
+          # Balance queries run OUTSIDE the checkout: the committed local-lab
+          # icp.yaml at the repo root makes even `icp token balance` load the
+          # lab canisters' init-args files and die before touching the network.
+          mkdir -p "$RUNNER_TEMP/icp-no-project" && cd "$RUNNER_TEMP/icp-no-project"
+          CYC_RAW="$(icp cycles balance -n ic 2>/dev/null || true)"
+          echo "Cycles balance: $CYC_RAW"
+          CYC_NUM="$(echo "$CYC_RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || echo 0)"
+          if [ "$(awk -v c="${CYC_NUM:-0}" 'BEGIN{print (c<=0)?1:0}')" = "1" ]; then
+            RAW="$(icp token balance -n ic 2>/dev/null || true)"
+            echo "ICP balance: $RAW"
+            AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
+            MINT="$(awk -v b="${AMT:-0}" 'BEGIN{ m = b - 0.0001; if (m <= 0) m = 0; printf "%.8f", m }')"
+            if [ "$MINT" != "0.00000000" ]; then
+              echo "==> Converting $MINT ICP into cycles"
+              icp cycles mint --icp "$MINT" -n ic
+              CYC_RAW="$(icp cycles balance -n ic 2>/dev/null || true)"
+              echo "Cycles balance now: $CYC_RAW"
+              CYC_NUM="$(echo "$CYC_RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || echo 0)"
+            fi
+          fi
+          if [ "$(awk -v c="${CYC_NUM:-0}" 'BEGIN{print (c<=0)?1:0}')" = "1" ]; then
+            echo "::error::The deploy account has no cycles to send."
+            echo "Send ICP to the account address printed above, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Top up
+        run: |
+          set -euo pipefail
+          RAW="${{ inputs.canister }}"
+          AMT="${{ inputs.amount_t }}"
+          case "$AMT" in
+            ''|*[!0-9]*) echo "::error::amount_t must be a whole number of trillions (got '$AMT')."; exit 1 ;;
+          esac
+          [ -n "$AMT" ] || { echo "::error::amount_t is empty."; exit 1; }
+
+          DEPLOY_DIR="$GITHUB_WORKSPACE/deploy/mainnet"
+          IDS="$DEPLOY_DIR/.icp/data/mappings/ic.ids.json"
+          [ -f "$IDS" ] || { echo "::error::Canister ID table not found at $IDS"; exit 1; }
+
+          if printf '%s' "$RAW" | grep -qE '^[a-z0-9-]{25,}$'; then
+            # A raw canister ID: talk to the network directly, from outside any
+            # project so the lab icp.yaml at the repo root is never loaded.
+            mkdir -p "$RUNNER_TEMP/icp-no-project"
+            cd "$RUNNER_TEMP/icp-no-project"
+            TARGETS="$RAW"
+            set -- -n ic
+          elif [ "$RAW" = "all" ]; then
+            cd "$DEPLOY_DIR"
+            TARGETS="$(node -e "const m=require('$IDS');console.log(Object.keys(m).join(' '))")"
+            set -- -e ic
+          else
+            cd "$DEPLOY_DIR"
+            TARGETS="$RAW"
+            set -- -e ic
+          fi
+
+          for T in $TARGETS; do
+            echo ""
+            echo "==> $T (before)"
+            icp canister status "$T" "$@" 2>&1 | grep -iE 'cycles|status' || true
+            echo "==> Topping $T up with ${AMT}T cycles"
+            icp canister top-up "$T" --amount "${AMT}T" "$@"
+            echo "==> $T (after)"
+            icp canister status "$T" "$@" 2>&1 | grep -iE 'cycles|status' || true
+          done
+          echo ""
+          echo "==> Done. The photo-access canister can unlock photos again; the"
+          echo "==> Canister balances panel in Placement Settings shows the new figures."
