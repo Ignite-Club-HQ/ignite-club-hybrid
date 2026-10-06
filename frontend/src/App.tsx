@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState, Fragment, type ReactNode } from "react";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { restoreQueryCache, startQueryCachePersistence, QUERY_CACHE_KEY } from "@/lib/queryCachePersistence";
 import NativeOnlyGate from "@/components/NativeOnlyGate";
 import { Capacitor } from "@capacitor/core";
 // Force publish - Firebase upgraded to v12.7.0 for Capacitor 8 compatibility
@@ -220,13 +221,47 @@ const queryClient = new QueryClient({
       refetchOnReconnect: "always",
       // Tighter defaults to reduce redundant refetches; per-query overrides
       // (e.g. staleTime: 0, refetchOnWindowFocus: true) still win where declared.
-      staleTime: 30_000,
-      gcTime: 10 * 60_000,
+      staleTime: 60_000,
+      // Long gcTime so data saved on the device (queryCachePersistence) stays
+      // available across launches; stale entries still refetch on mount.
+      gcTime: 24 * 60 * 60_000,
       refetchOnWindowFocus: false,
     },
     mutations: { networkMode: "offlineFirst" },
   },
 });
+
+// Paint the last-seen data for every page instantly on launch, then refresh.
+restoreQueryCache(queryClient);
+startQueryCachePersistence(queryClient);
+
+// Download the main pages' code while the app is idle so the first tap on
+// any of them does not wait for a code download.
+if (typeof window !== "undefined") {
+  const warm = () => {
+    const pages = [
+      () => import("./pages/HomePage"), () => import("./pages/MessagesPage"),
+      () => import("./pages/EventsPage"), () => import("./pages/ClubsPage"),
+      () => import("./pages/ClubDetailPage"), () => import("./pages/TeamDetailPage"),
+      () => import("./pages/MediaPage"), () => import("./pages/VaultPage"),
+      () => import("./pages/ProfilePage"), () => import("./pages/SettingsPage"),
+      () => import("./pages/EventDetailPage"), () => import("./pages/NotificationsPage"),
+      () => import("./pages/TeamChatPage"), () => import("./pages/ClubChatPage"),
+      () => import("./pages/GroupChatPage"), () => import("./pages/DirectMessagePage"),
+    ];
+    let i = 0;
+    const next = () => {
+      if (i >= pages.length) return;
+      pages[i++]().catch(() => {}).finally(() => {
+        const ric = (window as any).requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 200));
+        ric(next);
+      });
+    };
+    next();
+  };
+  window.addEventListener("load", () => setTimeout(warm, 3000), { once: true });
+}
+
 
 
 // ICP mode: paint the last-seen data for every page instantly while
