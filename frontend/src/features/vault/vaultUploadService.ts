@@ -122,6 +122,12 @@ export async function uploadVaultItem(
   // Quota reserve/settle are Supabase-only and intentionally skipped:
   // storage accounting is hard-zeroed for ICP (vaultAccessRepository).
   if (isFeatureRoutedToIcp("vault")) {
+    // Every on-chain byte costs upload time; shrink photos first (same
+    // resize the gallery uses). Non-images pass through untouched.
+    if (options.kind === "photo") {
+      const { compressImage } = await import("@/lib/imageCompression");
+      options = { ...options, file: (await compressImage(options.file)).file };
+    }
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
           storagePath,
