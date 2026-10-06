@@ -379,14 +379,17 @@ export default function EditProfilePage() {
             </p>
           </div>
 
-          {/* Email (read-only) */}
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <Input value={user?.email || ""} disabled className="bg-muted" />
-            <p className="text-xs text-muted-foreground">
-              Email cannot be changed
-            </p>
-          </div>
+          {/* Email (read-only) — hidden in ICP mode, where no email is collected
+              and user.email holds the Internet Identity principal */}
+          {!isIcpLive && (
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={user?.email || ""} disabled className="bg-muted" />
+              <p className="text-xs text-muted-foreground">
+                Email cannot be changed
+              </p>
+            </div>
+          )}
 
           {/* Country */}
           {!isIcpLive && (
