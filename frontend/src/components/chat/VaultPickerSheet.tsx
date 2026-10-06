@@ -25,6 +25,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
+import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
 
 export type VaultPickerItem =
   | { kind: "file" | "folder"; id: string; name: string }
@@ -93,6 +94,10 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
     queryKey: ["vault-picker-root-name", rootScope, rootScopeId],
     queryFn: async () => {
       if (!rootScope || !rootScopeId) return null;
+      if (isIcpSession()) {
+        if (rootScope === "team") return (await icpGetTeam(rootScopeId))?.name ?? null;
+        return await icpGetClubName(rootScopeId);
+      }
       if (rootScope === "team") {
         const { data, error } = await supabase
           .from("teams")

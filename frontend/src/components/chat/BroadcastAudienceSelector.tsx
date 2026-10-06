@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Globe, Users2, Check, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -29,6 +30,7 @@ export function BroadcastAudienceSelector({ value, onChange, disabled }: Broadca
   const { data: clubs, isLoading } = useQuery({
     queryKey: ["broadcast-audience-clubs"],
     queryFn: async () => {
+      if (isIcpSession()) return await icpListClubs();
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name")

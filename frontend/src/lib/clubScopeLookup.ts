@@ -16,6 +16,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
 import type { ClubScopeTable } from "@/lib/routeClubScope";
 
 /** Tables whose owning club can be recovered from a `team_id` column. */
@@ -43,6 +44,9 @@ export async function lookupRouteClubId(
   const teamId = wantsTeam ? (data.team_id as string | null) : null;
   if (!teamId) return null;
 
+  if (isIcpSession()) {
+    try { return (await icpGetTeam(teamId))?.club_id ?? null; } catch { return null; }
+  }
   const { data: team, error: teamError } = await supabase
     .from("teams")
     .select("club_id")
