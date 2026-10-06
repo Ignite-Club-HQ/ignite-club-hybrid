@@ -1,4 +1,5 @@
 # Roadmap — ICP speed-up part 2
+- [ ] Simplify ICP login presentation without changing authentication; verify redirects, invites, cancellation and browser guidance
 - [x] Shared batching helper (live/features/batching.ts)
 - [x] Events batched reads (list_events_multi, get_event_rosters, list_duties_multi)
 - [x] Messaging batched reads (mute prefs, group metadata, groups by clubs)
