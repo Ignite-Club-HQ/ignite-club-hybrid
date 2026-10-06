@@ -31,7 +31,13 @@ function safeStringify(value: unknown): string | null {
   }
 }
 
+function isIcpSession(): boolean {
+  // ICP sessions use the principal-scoped IndexedDB copy (icpQueryCachePersist).
+  try { return !!localStorage.getItem("ignite_icp_internet_identity_session"); } catch { return false; }
+}
+
 export function restoreQueryCache(client: QueryClient) {
+  if (isIcpSession()) return;
   try {
     const raw = localStorage.getItem(QUERY_CACHE_KEY);
     if (!raw) return;
@@ -50,6 +56,7 @@ export function startQueryCachePersistence(client: QueryClient) {
   let timer: number | undefined;
   const save = () => {
     timer = undefined;
+    if (isIcpSession()) return;
     try {
       const state = dehydrate(client, {
         shouldDehydrateQuery: (q) => q.state.status === "success" && q.meta?.persist !== false,
