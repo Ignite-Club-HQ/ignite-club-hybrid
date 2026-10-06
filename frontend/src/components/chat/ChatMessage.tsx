@@ -760,7 +760,7 @@ function ChatMessageInner({
       reactionType: type,
       existingReaction,
     });
-  }, [addReactionMutation, armDismissGuard, removeReactionMutation, getLatestReactions, currentUserId]);
+  }, [addReactionMutation, armDismissGuard, removeReactionMutation, getLatestReactions, currentUserId, isPendingMessage]);
 
   const closeReactionPicker = useCallback(() => {
     clearDismissGuard();
