@@ -167,7 +167,11 @@ function IcpLabCompleteProfilePage({ userId, onDone }: { userId: string; onDone:
 
 function SupabaseCompleteProfilePage() {
   const { user, profile, loading: authLoading, profileLoading, profileError, refreshProfile } = useAuth();
-  const queryClient = useQueryClient();
+   const queryClient = useQueryClient();
+  // Secure sign-in (Internet Identity) already uses passkeys for device
+  // unlock, so the biometric toggle's Supabase passkey registration is
+  // redundant — hide it for ICP accounts (same pattern as SettingsPage).
+  const isIcpAccount = resolveAuthBackend() === "icp";
   const { setActiveClubTheme } = useClubTheme();
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
