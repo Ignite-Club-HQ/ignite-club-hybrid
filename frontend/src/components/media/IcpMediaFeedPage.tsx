@@ -356,7 +356,32 @@ export function IcpMediaFeedPage() {
             ? removeLiveReaction(ctx, post.representativeAssetId)
             : addLiveReaction(ctx, post.representativeAssetId, emoji, Date.now()),
       }),
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Reaction failed"),
+    // Instant on-screen update; the canister save finishes in the background.
+    onMutate: async ({ post, emoji, remove }) => {
+      const key = ["icp-media-feed", principal];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<LiveMediaFeed>(key);
+      if (previous && principal) {
+        queryClient.setQueryData<LiveMediaFeed>(key, {
+          ...previous,
+          posts: previous.posts.map((p) => {
+            if (p.id !== post.id) return p;
+            const others = p.reactions.filter((r) => r.user_id !== principal);
+            return {
+              ...p,
+              reactions: remove
+                ? others
+                : [...others, { user_id: principal, reaction_type: emoji, profiles: { display_name: "You", avatar_url: null } }],
+            };
+          }),
+        });
+      }
+      return { previous, key };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(context.key, context.previous);
+      toast.error(err instanceof Error ? err.message : "Reaction failed");
+    },
     onSettled: invalidate,
   });
 
@@ -368,16 +393,17 @@ export function IcpMediaFeedPage() {
         },
         icp: (ctx) => addLiveComment(ctx, post.representativeAssetId, text, Date.now()),
       }),
-    onSuccess: (_res, { post, text }) => {
+    // Show the comment the moment Send is tapped; the feed refetch replaces
+    // it with the canister copy (the sheet reads the live post).
+    onMutate: ({ post, text }) => {
       setCommentInput("");
-      // Show the comment straight away; the feed refetch replaces it with
-      // the canister copy (the sheet reads the live post, not a snapshot).
+      const pendingId = `pending-${Date.now()}`;
       setPendingComments((prev) => ({
         ...prev,
         [post.id]: [
           ...(prev[post.id] ?? []),
           {
-            id: `pending-${Date.now()}`,
+            id: pendingId,
             text,
             user_id: principal ?? "",
             created_at: new Date().toISOString(),
@@ -385,8 +411,16 @@ export function IcpMediaFeedPage() {
           },
         ],
       }));
+      return { pendingId };
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Comment failed"),
+    onError: (err, { post, text }, context) => {
+      setPendingComments((prev) => ({
+        ...prev,
+        [post.id]: (prev[post.id] ?? []).filter((c) => c.id !== context?.pendingId),
+      }));
+      setCommentInput(text);
+      toast.error(err instanceof Error ? err.message : "Comment failed");
+    },
     onSettled: invalidate,
   });
 
