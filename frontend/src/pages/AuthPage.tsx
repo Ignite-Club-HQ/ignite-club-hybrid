@@ -847,7 +847,8 @@ export default function AuthPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <CardDescription className="text-center">
-                  Sign in with your Internet Identity passkey.
+                  Sign in with your Internet Identity passkey. First time here? Your account is
+                  created automatically — there's nothing to sign up for.
                 </CardDescription>
                 {authError && (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
@@ -873,6 +874,14 @@ export default function AuthPage() {
                     <p className="text-xs text-muted-foreground text-center leading-relaxed">
                       {II_SIGN_IN_HINT}
                     </p>
+                    <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-foreground leading-relaxed" role="note">
+                      <p className="font-medium">New to Ignite?</p>
+                      <p className="mt-1">
+                        You don't need a separate sign-up. Tap “Continue with Internet Identity”, follow the steps
+                        to create your passkey, then choose your display name. To join a club, open the invite
+                        link your club sent you (by email, text or QR code) after signing in.
+                      </p>
+                    </div>
                   </>
                 )}
                 {isLikelyInAppBrowser() && (
