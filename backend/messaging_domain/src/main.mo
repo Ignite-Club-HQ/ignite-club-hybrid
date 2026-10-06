@@ -2191,14 +2191,14 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
-  // Every user with a heartbeat inside the 90-second online window. App
+  // Every user with a heartbeat inside the 150-second online window. App
   // admin only — this is the OnlineUsersPage/OnlineUsersTab admin surface,
   // not something members should be able to enumerate.
   public query ({ caller }) func list_all_online_users() : async { #Ok : [Types.OnlineUser]; #Err : Text } {
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("App admin required");
     let now = nowMs();
-    let windowMs : Nat64 = 90_000;
+    let windowMs : Nat64 = 150_000;
     let online = presence.filter(func(entry) = entry.last_seen_ms + windowMs >= now);
     #Ok(online.map<Types.PresencePing, Types.OnlineUser>(func(entry) = { user = entry.user; last_seen_ms = entry.last_seen_ms; platform = entry.platform }))
   };
@@ -2451,13 +2451,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // How many participants of the conversation (excluding the caller) sent a
-  // heartbeat within the last 90 seconds. Mirrors the Supabase presence
+  // heartbeat within the last 150 seconds. Mirrors the Supabase presence
   // window so both backends report comparable numbers.
   public query ({ caller }) func online_count(conversation_id : Text) : async { #Ok : Nat64; #Err : Text } {
     if (caller.equal(Principal.anonymous())) return #Err("Authenticated caller required");
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     let now = nowMs();
-    let windowMs : Nat64 = 90_000;
+    let windowMs : Nat64 = 150_000;
     var count : Nat64 = 0;
     for (c in conversations.values()) {
       if (c.id == conversation_id) {

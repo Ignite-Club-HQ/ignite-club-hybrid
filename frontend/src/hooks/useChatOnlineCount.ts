@@ -54,15 +54,23 @@ export function useChatOnlineCount(
   // same convention as the message send/read paths).
   useEffect(() => {
     if (!routedToIcp || !enabled || !chatId) return;
+    // Each beat is a paid canister write: every 2 minutes, and only while the
+    // app is visible (canister online window is 150s).
     const beat = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       withFeatureBackend("messaging", {
         supabase: async () => {},
         icp: (ctx) => livePresenceHeartbeat(ctx, Capacitor.isNativePlatform() ? Capacitor.getPlatform() : "web"),
       }).catch(() => {});
     };
     beat();
-    const timer = setInterval(beat, 45 * 1000);
-    return () => clearInterval(timer);
+    const timer = setInterval(beat, 120 * 1000);
+    const onVisible = () => { if (document.visibilityState === "visible") beat(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [routedToIcp, enabled, chatId]);
 
   const { data: icpOnlineCount } = useQuery({
@@ -73,8 +81,9 @@ export function useChatOnlineCount(
         icp: (ctx) => liveOnlineCount(ctx, chatId!),
       }),
     enabled: routedToIcp && enabled && !!chatId,
-    staleTime: 30 * 1000,
-    refetchInterval: 45 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 120 * 1000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: memberIds } = useQuery({
