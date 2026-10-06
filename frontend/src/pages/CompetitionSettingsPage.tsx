@@ -36,7 +36,268 @@ export default function CompetitionSettingsPage() {
     return <IcpCompetitionSettingsPage />;
   }
 
+  if (isIcpPageMode()) {
+    return <LiveIcpCompetitionSettingsPage />;
+  }
+
   return <SupabaseCompetitionSettingsPage />;
+}
+
+// Live ICP settings: same form as the Supabase page, backed by
+// competition_domain. Division ladder visibility, per-competition admins
+// and the competition chat toggle stay Supabase-only (no canister shape).
+function LiveIcpCompetitionSettingsPage() {
+  const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const { data: competition, isLoading, refetch } = useQuery({
+    queryKey: ["icp-live-competition-settings", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const [{ icpCtx, icpGetClubName }, { listLiveCompetitionsMulti }, { listLiveMembershipClubs }] = await Promise.all([
+        import("@/lib/icpClubTeamLookup"),
+        import("@/live/features/competitions"),
+        import("@/live/features/membership"),
+      ]);
+      const ctx = await icpCtx();
+      const clubs = await listLiveMembershipClubs(ctx);
+      const comps = await listLiveCompetitionsMulti(ctx, clubs.map((c: any) => c.id));
+      const found = comps.find((c: any) => c.id === id);
+      if (!found) return null;
+      const clubName = await icpGetClubName(found.club_id).catch(() => null);
+      return { ...found, organizerClubName: clubName };
+    },
+  });
+
+  const { data: isAdmin = false, isLoading: adminLoading } = useQuery({
+    queryKey: ["icp-live-competition-isadmin", id, competition?.club_id],
+    enabled: !!competition,
+    queryFn: async () => {
+      const [{ icpCtx }, { getLiveMyRoleGrants }] = await Promise.all([
+        import("@/lib/icpClubTeamLookup"),
+        import("@/live/features/membership"),
+      ]);
+      const ctx = await icpCtx();
+      const grants = await getLiveMyRoleGrants(ctx);
+      return grants.some((g: any) =>
+        (g.role === "club_admin" || g.role === "app_admin") && g.club?.[0] === competition!.club_id
+      );
+    },
+  });
+
+  const [name, setName] = useState("");
+  const [status, setStatus] = useState("");
+  const [visibility, setVisibility] = useState("");
+  const [description, setDescription] = useState("");
+  const [pointsWin, setPointsWin] = useState("3");
+  const [pointsDraw, setPointsDraw] = useState("1");
+  const [pointsLoss, setPointsLoss] = useState("0");
+  const [saving, setSaving] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  if (competition && !hydrated) {
+    setName(competition.name);
+    setStatus(competition.status === "open" ? "active" : competition.status);
+    setVisibility(competition.visibility ?? "private");
+    setDescription(competition.description?.[0] ?? "");
+    setPointsWin(String(competition.points_win ?? 3));
+    setPointsDraw(String(competition.points_draw ?? 1));
+    setPointsLoss(String(competition.points_loss ?? 0));
+    setHydrated(true);
+  }
+
+  const initial = useMemo(() => competition ? ({
+    name: competition.name ?? "",
+    status: competition.status === "open" ? "active" : (competition.status ?? "draft"),
+    visibility: competition.visibility ?? "private",
+    description: competition.description?.[0] ?? "",
+    pointsWin: String(competition.points_win ?? 3),
+    pointsDraw: String(competition.points_draw ?? 1),
+    pointsLoss: String(competition.points_loss ?? 0),
+  }) : null, [competition]);
+
+  const current = { name, status, visibility, description, pointsWin, pointsDraw, pointsLoss };
+  const isDirty = !!initial && (
+    initial.name !== name ||
+    initial.status !== status ||
+    initial.visibility !== visibility ||
+    initial.description !== description ||
+    initial.pointsWin !== pointsWin ||
+    initial.pointsDraw !== pointsDraw ||
+    initial.pointsLoss !== pointsLoss
+  );
+
+  const clampPoint = (v: string) => {
+    const n = Number.parseInt(v, 10);
+    if (Number.isNaN(n) || n < 0) return "0";
+    return String(n);
+  };
+
+  const save = async () => {
+    if (!isDirty) return;
+    setSaving(true);
+    try {
+      const [{ icpCtx }, { updateLiveCompetitionSettings }] = await Promise.all([
+        import("@/lib/icpClubTeamLookup"),
+        import("@/live/features/competitions"),
+      ]);
+      const ctx = await icpCtx();
+      await updateLiveCompetitionSettings(ctx, id!, {
+        name: name.trim(),
+        description: description.trim() || null,
+        status,
+        visibility,
+        pointsWin: Number.parseInt(pointsWin, 10) || 0,
+        pointsDraw: Number.parseInt(pointsDraw, 10) || 0,
+        pointsLoss: Number.parseInt(pointsLoss, 10) || 0,
+      });
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
+      refetch();
+    } catch (error) {
+      toast({ title: "Could not save", description: error instanceof Error ? error.message : "Save failed", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading || adminLoading) {
+    return <div className="p-6 flex justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>;
+  }
+  if (!competition) {
+    return <div className="p-6 text-center text-sm text-muted-foreground">Competition not found.</div>;
+  }
+  if (!isAdmin) {
+    return (
+      <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
+        <Button asChild variant="ghost" size="icon" className="-ml-2 h-11 w-11" aria-label={`Back to ${competition.name}`}>
+          <Link to={`/competitions/${id}`}><ArrowLeft className="h-5 w-5" /></Link>
+        </Button>
+        <p className="text-sm text-muted-foreground">You don't have permission to manage this competition.</p>
+      </div>
+    );
+  }
+
+  const statusOptions: { value: string; label: string }[] = [
+    { value: "draft", label: "Draft" },
+    { value: "active", label: "Published" },
+    { value: "archived", label: "Archived" },
+  ];
+  if (!statusOptions.find((o) => o.value === status) && status) {
+    statusOptions.splice(2, 0, { value: status, label: status.charAt(0).toUpperCase() + status.slice(1) });
+  }
+
+  return (
+    <div className="container max-w-3xl mx-auto px-4 py-6 pb-32 space-y-5">
+      <div className="flex items-start gap-2">
+        <Button asChild variant="ghost" size="icon" className="-ml-2 h-11 w-11 shrink-0" aria-label={`Back to ${competition.name}`}>
+          <Link to={`/competitions/${id}`}><ArrowLeft className="h-5 w-5" /></Link>
+        </Button>
+        <div className="space-y-1 pt-1.5">
+          <h1 className="text-2xl font-bold leading-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground">Manage competition details, visibility and scoring.</p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Competition details</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="comp-name">Name</Label>
+            <Input id="comp-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="comp-desc">Description</Label>
+            <Textarea
+              id="comp-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add competition details, rules or notes"
+              rows={4}
+              className="resize-y min-h-[96px]"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Publishing</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="comp-status">Competition status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger id="comp-status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="comp-public">Public page</Label>
+              <p className="text-xs text-muted-foreground">Anyone with the link can view this competition.</p>
+            </div>
+            <Switch
+              id="comp-public"
+              checked={visibility === "public"}
+              onCheckedChange={(v) => setVisibility(v ? "public" : "private")}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Ladder scoring</CardTitle>
+          <CardDescription>Set the points awarded for each result.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="pts-win" className="text-xs">Win</Label>
+              <Input id="pts-win" type="number" inputMode="numeric" min={0} value={pointsWin} onChange={(e) => setPointsWin(e.target.value)} onBlur={(e) => setPointsWin(clampPoint(e.target.value))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pts-draw" className="text-xs">Draw</Label>
+              <Input id="pts-draw" type="number" inputMode="numeric" min={0} value={pointsDraw} onChange={(e) => setPointsDraw(e.target.value)} onBlur={(e) => setPointsDraw(clampPoint(e.target.value))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pts-loss" className="text-xs">Loss</Label>
+              <Input id="pts-loss" type="number" inputMode="numeric" min={0} value={pointsLoss} onChange={(e) => setPointsLoss(e.target.value)} onBlur={(e) => setPointsLoss(clampPoint(e.target.value))} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div
+        className={cn(
+          "fixed inset-x-0 z-[45] border-t bg-background shadow-lg transition-transform",
+          isDirty || justSaved ? "translate-y-0" : "translate-y-full"
+        )}
+        style={{
+          bottom: "var(--bottom-nav-offset, calc(4rem + env(safe-area-inset-bottom, 1rem)))",
+        }}
+      >
+        <div className="container max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {justSaved ? "Changes saved" : isDirty ? "You have unsaved changes" : ""}
+          </p>
+          <Button onClick={save} disabled={!isDirty || saving || !name.trim()}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : justSaved ? <Check className="h-4 w-4 mr-2" /> : null}
+            {justSaved ? "Saved" : "Save changes"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function IcpCompetitionSettingsPage() {

@@ -101,6 +101,35 @@ export async function listLiveCompetitions(ctx: FeatureBackendContext, clubId: s
   return unwrapCandid(actor.list_competitions(clubId), "List competitions");
 }
 
+export async function updateLiveCompetitionSettings(
+  ctx: FeatureBackendContext,
+  competitionId: string,
+  settings: {
+    name: string;
+    description: string | null;
+    status: string;
+    visibility: string;
+    pointsWin: number;
+    pointsDraw: number;
+    pointsLoss: number;
+  },
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_competition_settings(
+      competitionId,
+      settings.name,
+      candidOpt(settings.description),
+      settings.status,
+      settings.visibility,
+      settings.pointsWin,
+      settings.pointsDraw,
+      settings.pointsLoss,
+    ),
+    "Save competition settings",
+  );
+}
+
 export async function listLiveCompetitionEntries(ctx: FeatureBackendContext, competitionId: string) {
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_entries(competitionId), "List competition entries");

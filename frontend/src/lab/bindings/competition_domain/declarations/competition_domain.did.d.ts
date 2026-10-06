@@ -20,8 +20,13 @@ export interface Competition {
   'id' : string,
   'status' : string,
   'name' : string,
+  'description' : [] | [string],
   'season' : string,
+  'points_draw' : number,
+  'points_loss' : number,
+  'points_win' : number,
   'revision' : bigint,
+  'visibility' : string,
   'club_id' : string,
 }
 export interface CompetitionEngagementSummary {
@@ -401,6 +406,11 @@ export interface Main {
   'trim_rounds' : ActorMethod<
     [string, number],
     { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
+  'update_competition_settings' : ActorMethod<
+    [string, string, [] | [string], string, string, number, number, number],
+    { 'Ok' : Competition } |
       { 'Err' : string }
   >,
   'update_eoi_status' : ActorMethod<

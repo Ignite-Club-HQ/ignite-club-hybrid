@@ -83,9 +83,34 @@ persistent actor class Main(governorInit : Principal) {
     let club_ok = isGovernor(caller) or roles.any(func(role) = role.user.equal(caller) and role.role == "club_admin" and role.competition_id == club_id);
     if (not club_ok) return #Err("Club admin required");
     let id = "cmp-" # club_id # "-" # Nat.toText(competitions.size() + 1);
-    let competition : Types.Competition = { id; club_id; name; season; status = "open"; revision = 1 };
+    let competition : Types.Competition = { id; club_id; name; season; status = "open"; description = null; visibility = "private"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
     competitions := competitions.concat([competition]);
     #Ok(competition)
+  };
+
+  // Competition settings (name, description, status, visibility, ladder
+  // scoring). Season stays create-only. Mirrors the Supabase
+  // CompetitionSettingsPage update.
+  public shared ({ caller }) func update_competition_settings(competition_id : Text, name : Text, description : ?Text, status : Text, visibility : Text, points_win : Nat16, points_draw : Nat16, points_loss : Nat16) : async { #Ok : Types.Competition; #Err : Text } {
+    auth(caller);
+    if (not canManageCompetition(caller, competition_id)) return #Err("Competition management forbidden");
+    if (not valid(name)) return #Err("Invalid name");
+    if (not valid(status) or not valid(visibility)) return #Err("Invalid settings");
+    switch (description) {
+      case (?d) { if (d.size() > 2000) return #Err("Description too long") };
+      case null {};
+    };
+    var updated : ?Types.Competition = null;
+    competitions := competitions.map(func(item : Types.Competition) : Types.Competition {
+      if (item.id != competition_id) return item;
+      let next : Types.Competition = { item with name; description; status; visibility; points_win; points_draw; points_loss; revision = item.revision + 1 };
+      updated := ?next;
+      next
+    });
+    switch (updated) {
+      case (?competition) #Ok(competition);
+      case null #Err("Competition not found");
+    }
   };
 
   public shared ({ caller }) func register_team(competition_id : Text, team_id : Text, club_id : Text) : async { #Ok : Types.TeamEntry; #Err : Text } {

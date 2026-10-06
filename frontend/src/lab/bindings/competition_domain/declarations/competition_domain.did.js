@@ -82,8 +82,13 @@ export const idlFactory = ({ IDL }) => {
     'id' : IDL.Text,
     'status' : IDL.Text,
     'name' : IDL.Text,
+    'description' : IDL.Opt(IDL.Text),
     'season' : IDL.Text,
+    'points_draw' : IDL.Nat16,
+    'points_loss' : IDL.Nat16,
+    'points_win' : IDL.Nat16,
     'revision' : IDL.Nat64,
+    'visibility' : IDL.Text,
     'club_id' : IDL.Text,
   });
   const CompetitionJoinLink = IDL.Record({
@@ -476,6 +481,20 @@ export const idlFactory = ({ IDL }) => {
     'trim_rounds' : IDL.Func(
         [IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
+    'update_competition_settings' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Text,
+          IDL.Text,
+          IDL.Nat16,
+          IDL.Nat16,
+          IDL.Nat16,
+        ],
+        [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
         [],
       ),
     'update_eoi_status' : IDL.Func(
