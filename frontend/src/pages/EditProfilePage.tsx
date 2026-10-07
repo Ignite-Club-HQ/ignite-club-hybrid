@@ -22,6 +22,11 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { compressImage } from "@/lib/imageCompression";
 
+// Profile photos render at most ~96px in the UI — 384px covers high-DPR
+// screens with headroom, and the small file keeps the encrypted on-chain
+// upload to one fast chunk instead of several round trips.
+const AVATAR_COMPRESS_OPTIONS = { maxWidth: 384, maxHeight: 384, quality: 0.82 };
+
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("membership");
@@ -82,7 +87,9 @@ export default function EditProfilePage() {
       let uploadBlob: Blob = result.blob;
       try {
         const asFile = new File([result.blob], `avatar.${mimeToExtension(result.mimeType) || "jpg"}`, { type: result.mimeType });
-        const compressed = await compressImage(asFile);
+        // Avatars render small everywhere — 384px is plenty and keeps the
+        // encrypted on-chain upload to a single fast chunk.
+        const compressed = await compressImage(asFile, AVATAR_COMPRESS_OPTIONS);
         if (compressed.file.size < uploadBlob.size) uploadBlob = compressed.file;
       } catch {
         // keep original if compression fails
@@ -141,7 +148,7 @@ export default function EditProfilePage() {
     // Resize on-device so any photo (even a 5MB camera shot) fits the budget.
     let uploadFile: File = file;
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, AVATAR_COMPRESS_OPTIONS);
       if (compressed.file.size < uploadFile.size) uploadFile = compressed.file;
     } catch {
       // keep original if compression fails

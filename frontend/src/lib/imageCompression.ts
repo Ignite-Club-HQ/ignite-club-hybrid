@@ -25,7 +25,13 @@ function passthrough(file: File): CompressionResult {
   };
 }
 
-export async function compressImage(file: File): Promise<CompressionResult> {
+export interface CompressImageOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  quality?: number;
+}
+
+export async function compressImage(file: File, options: CompressImageOptions = {}): Promise<CompressionResult> {
   // Skip compression for non-image files
   if (!file.type.startsWith('image/')) {
     return passthrough(file);
@@ -43,7 +49,7 @@ export async function compressImage(file: File): Promise<CompressionResult> {
   }
 
   // Race the compression against a timeout so we never hang indefinitely
-  const compressionPromise = compressImageCore(file);
+  const compressionPromise = compressImageCore(file, options);
   const timeoutPromise = new Promise<CompressionResult>((resolve) => {
     setTimeout(() => {
       console.warn('[compressImage] Timed out after', COMPRESSION_TIMEOUT_MS, 'ms — using original');
@@ -54,8 +60,11 @@ export async function compressImage(file: File): Promise<CompressionResult> {
   return Promise.race([compressionPromise, timeoutPromise]);
 }
 
-function compressImageCore(file: File): Promise<CompressionResult> {
+function compressImageCore(file: File, options: CompressImageOptions = {}): Promise<CompressionResult> {
   const originalSize = file.size;
+  const maxWidth = options.maxWidth ?? MAX_WIDTH;
+  const maxHeight = options.maxHeight ?? MAX_HEIGHT;
+  const quality = options.quality ?? QUALITY;
 
   return new Promise((resolve) => {
     const img = new Image();
@@ -66,8 +75,8 @@ function compressImageCore(file: File): Promise<CompressionResult> {
       let { width, height } = img;
 
       // Calculate new dimensions while maintaining aspect ratio
-      if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-        const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
@@ -120,7 +129,7 @@ function compressImageCore(file: File): Promise<CompressionResult> {
           });
         },
         'image/jpeg',
-        QUALITY
+        quality
       );
     };
 
