@@ -2425,9 +2425,41 @@ persistent actor class Main(governorInit : Principal) {
   // call (chat link previews are a member feature); the URL must be a public
   // https:// address. Replicated GET: reads are idempotent, so consensus
   // mode is safe and the cheaper default.
+  // Link previews serve every app user (secure sign-in and email accounts —
+  // the latter call anonymously, replacing the old Netlify endpoint). Results
+  // are cached per URL for 24h so repeat links cost no outcall; anonymous
+  // callers share an hourly outcall budget to cap cycle spend from abuse.
+  transient let PREVIEW_CACHE_MS : Nat64 = 86_400_000;
+  transient let PREVIEW_CACHE_MAX = 2_000;
+  transient let ANON_PREVIEW_PER_HOUR = 300;
+  transient var previewCache : [(Text, Nat64, Types.LinkPreview)] = [];
+  transient var anonPreviewWindowStart : Nat64 = 0;
+  transient var anonPreviewCount = 0;
+
+  func cachedPreview(url : Text) : ?Types.LinkPreview {
+    let now = nowMs();
+    switch (Array.find<(Text, Nat64, Types.LinkPreview)>(previewCache, func((u, t, _)) { u == url and now - t < PREVIEW_CACHE_MS })) {
+      case (?(_, _, p)) { ?p };
+      case null { null };
+    };
+  };
+
+  func rememberPreview(url : Text, p : Types.LinkPreview) {
+    let now = nowMs();
+    let kept = Array.filter<(Text, Nat64, Types.LinkPreview)>(previewCache, func((u, t, _)) { u != url and now - t < PREVIEW_CACHE_MS });
+    let trimmed = if (kept.size() >= PREVIEW_CACHE_MAX) Array.sliceToArray(kept, kept.size() - PREVIEW_CACHE_MAX + 1, kept.size()) else kept;
+    previewCache := trimmed.concat([(url, now, p)]);
+  };
+
   public shared ({ caller }) func fetch_link_preview(url : Text) : async { #Ok : Types.LinkPreview; #Err : Text } {
-    auth(caller);
     if (not Text.startsWith(url, #text "https://") or url.size() > 2048) return #Err("URL must be a public https:// address");
+    switch (cachedPreview(url)) { case (?p) { return #Ok(p) }; case null {} };
+    if (caller.equal(Principal.anonymous())) {
+      let now = nowMs();
+      if (now - anonPreviewWindowStart >= 3_600_000) { anonPreviewWindowStart := now; anonPreviewCount := 0 };
+      if (anonPreviewCount >= ANON_PREVIEW_PER_HOUR) return #Err("Preview limit reached, try again later");
+      anonPreviewCount += 1;
+    };
     let request : IC.HttpRequestArgs = {
       url;
       max_response_bytes = ?(64_000 : Nat64);
@@ -2460,12 +2492,14 @@ persistent actor class Main(governorInit : Principal) {
         case (?d) { ?d };
         case null { findMetaContent(bodyText, "description") };
       };
-      #Ok({
+      let preview : Types.LinkPreview = {
         title = switch (title) { case (?t) { ?truncateText(t, 300) }; case null { null } };
         description = switch (description) { case (?d) { ?truncateText(d, 500) }; case null { null } };
         image = findMetaContent(bodyText, "og:image");
         site_name = findMetaContent(bodyText, "og:site_name");
-      })
+      };
+      rememberPreview(url, preview);
+      #Ok(preview)
     } catch (e) {
       #Err("Preview fetch failed: " # Error.message(e))
     }
