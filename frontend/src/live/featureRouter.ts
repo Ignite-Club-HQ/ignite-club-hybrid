@@ -1,6 +1,6 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
-import { getCurrentInternetIdentity } from "./internetIdentityAuth";
+import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getEffectiveBackendForFeature, tryGetActiveIcpTarget } from "./loadBackendRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
@@ -46,7 +46,8 @@ export async function withFeatureBackend<T>(
     }
     return providers.supabase();
   }
-  const identity = await getCurrentInternetIdentity();
+  // Ride out the brief "no session" gap while the session renews itself.
+  const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
   if (!identity) {
     throw new Error(
       `The "${feature}" feature is routed to the Internet Computer backend, ` +

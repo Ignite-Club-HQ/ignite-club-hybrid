@@ -76,12 +76,24 @@ export function resolveLiveCanisterId(target: IcpTargetConfig, domainKey: string
  * stale agent. Cleared on Internet Identity sign-out via `clearLiveAgentCache`.
  */
 const liveAgentCache = new Map<string, Promise<HttpAgent>>();
+const liveAgentIdentity = new Map<string, Identity>();
 
 export async function createLiveAgent(target: IcpTargetConfig, identity: Identity): Promise<HttpAgent> {
   const host = resolveTargetHost(target);
   const cacheKey = `${target.alias}|${host}|${identity.getPrincipal().toText()}`;
   const cached = liveAgentCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // The II session re-mints its short-lived delegation under the SAME
+    // principal; a cached agent still signing with the old delegation fails
+    // every call once it expires. Swap in the fresh identity.
+    if (liveAgentIdentity.get(cacheKey) !== identity) {
+      liveAgentIdentity.set(cacheKey, identity);
+      const agent = await cached;
+      agent.replaceIdentity(identity);
+      return agent;
+    }
+    return cached;
+  }
   const created = HttpAgent.create({
     host,
     identity,
@@ -90,10 +102,14 @@ export async function createLiveAgent(target: IcpTargetConfig, identity: Identit
     retryTimes: 2,
   });
   liveAgentCache.set(cacheKey, created);
+  liveAgentIdentity.set(cacheKey, identity);
   // A failed handshake must not poison the cache: drop the entry so the next
   // call retries instead of reusing a rejected agent forever.
   created.catch(() => {
-    if (liveAgentCache.get(cacheKey) === created) liveAgentCache.delete(cacheKey);
+    if (liveAgentCache.get(cacheKey) === created) {
+      liveAgentCache.delete(cacheKey);
+      liveAgentIdentity.delete(cacheKey);
+    }
   });
   return created;
 }
@@ -101,6 +117,7 @@ export async function createLiveAgent(target: IcpTargetConfig, identity: Identit
 /** Drops every cached agent; called on Internet Identity sign-out. */
 export function clearLiveAgentCache(): void {
   liveAgentCache.clear();
+  liveAgentIdentity.clear();
 }
 
 export async function createLiveActor<T>(
