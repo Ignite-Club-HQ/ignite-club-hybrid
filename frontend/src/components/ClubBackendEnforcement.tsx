@@ -200,6 +200,8 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         // Reload the ROOT, not the current URL: the published/preview hosting
         // has no SPA fallback, so reloading a deep path (e.g. /auth) answers
         // a plain "Not Found" instead of the app.
+        // Drop any device-level ?auth= choice so the club's method wins.
+        try { localStorage.removeItem("ignite.authChoice"); } catch { /* ignore */ }
         window.location.replace("/");
       } catch (error) {
         console.warn("[club-backend] Enforcement check failed.", error);
