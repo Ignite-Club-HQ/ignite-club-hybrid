@@ -1,5 +1,5 @@
 # Roadmap — ICP speed-up part 2
-- [ ] Add matching legal/contact links to secure sign-in and verify profile policy links; confirm real destinations
+- [x] Match legal/contact links across sign-in modes; repair profile and internal policy destinations; 24 tests passed and all five pages plus profile policy links opened in browser (full signed-in profile/native-device check requires account/device access)
 - [x] Refine login with platform-neutral embedded-browser and error guidance; text-only provider attribution retained; 29 checks and live normal/embedded-browser presentation verified
 - [x] Simplify ICP login presentation without changing authentication; 49 regression checks passed; browser layouts, popup opening and cancellation verified
 - [ ] Confirm real Internet Identity account sign-in on physical Android/iOS, installed apps/PWA and Facebook/Messenger — requires device access and user approval for an account sign-in
