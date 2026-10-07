@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from "react";
+import { markMountedAuthProvider } from "@/live/authBackendMode";
 import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -183,6 +184,7 @@ export function setCachedProfile(profile: Profile | null, userId?: string) {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  markMountedAuthProvider("supabase");
   const queryClient = useQueryClient();
 
   const waitForSessionUser = useCallback(async (expectedUserId: string, maxAttempts = 8): Promise<Session | null> => {
@@ -735,6 +737,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('Initial session check:', existingSession?.user?.id);
       
+      // Signed in with email: any Internet Identity record still on this
+      // device is from an earlier sign-in and must not decide routing.
+      if (existingSession?.user) {
+        try { localStorage.removeItem("ignite_icp_internet_identity_session"); } catch { /* ignore */ }
+      }
       setSession(existingSession);
       setUser(existingSession?.user ?? null);
       setSessionRestoration(existingSession?.user ? "authenticated" : "signed_out");
@@ -1305,6 +1312,7 @@ function withIcpTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function IcpAuthProvider({ children, persona = "member" }: { children: ReactNode; persona?: string }) {
+  markMountedAuthProvider("icp");
   const [session, setSession] = useState<InternetIdentitySession | null>(() => {
     try {
       const raw = localStorage.getItem("ignite_icp_internet_identity_session");

@@ -104,8 +104,22 @@ function hasInternetIdentitySessionStored(): boolean {
  * signed-in system always decides where their data is read from — a club
  * pin to ICP can't serve someone without an Internet Identity.
  */
+let mountedAuthProvider: BackendProvider | null = null;
+
+/**
+ * Called by the mounted auth provider (Supabase AuthProvider or
+ * IcpAuthProvider). The mounted provider is the truth about how the person
+ * signed in — a leftover Internet Identity record on the device from an
+ * earlier sign-in must not pull an email user's pages onto the canisters.
+ */
+export function markMountedAuthProvider(provider: BackendProvider): void {
+  mountedAuthProvider = provider;
+}
+
 export function isSignedInWithEmail(): boolean {
+  if (mountedAuthProvider === "icp") return false;
   if (!hasSupabaseSessionStored()) return false;
+  if (mountedAuthProvider === "supabase") return true;
   if (readAuthChoice() === "supabase") return true;
   return !hasInternetIdentitySessionStored();
 }
