@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
+import { ProfilePolicyLinks } from "@/components/ProfilePolicyLinks";
 import { fetchWelcomeDmMessage } from "@/lib/welcomeMessage";
 import { subscribeToPushNotifications } from "@/lib/pushNotifications";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
@@ -1454,22 +1455,7 @@ function SupabaseCompleteProfilePage() {
                 className="mt-0.5"
               />
               <Label htmlFor="policies" className="text-sm text-muted-foreground leading-relaxed cursor-pointer">
-                I have read and agree to the{" "}
-                <button 
-                  type="button"
-                  className="text-primary hover:underline inline"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeOpenUrl("https://reference.invalid"); }}
-                >
-                  Terms of Service
-                </button>
-                {" "}and{" "}
-                <button 
-                  type="button"
-                  className="text-primary hover:underline inline"
-                  onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeOpenUrl("https://reference.invalid"); }}
-                >
-                  Privacy Policy
-                </button>
+                <ProfilePolicyLinks />
               </Label>
             </div>
 
