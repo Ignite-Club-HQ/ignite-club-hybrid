@@ -22,6 +22,8 @@ import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } 
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
 import { getUserClubIds } from "./userClubs";
+import { isSignedInWithEmail } from "./authBackendMode";
+export { isSignedInWithEmail };
 
 /**
  * Loads the app-admin backend routing configuration from
@@ -254,26 +256,3 @@ function hasStoredInternetIdentitySession(): boolean {
   }
 }
 
-function hasSupabaseSessionStored(): boolean {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
-    }
-  } catch { /* ignore */ }
-  return false;
-}
-
-/**
- * True when the current session is an email (Supabase) sign-in: a Supabase
- * session exists and either the device chose email (?auth=email) or there is
- * no Internet Identity session. A leftover II session from an earlier sign-in
- * must not pull an email user's pages onto the canisters.
- */
-export function isSignedInWithEmail(): boolean {
-  if (!hasSupabaseSessionStored()) return false;
-  let choice: string | null = null;
-  try { choice = localStorage.getItem("ignite.authChoice"); } catch { /* ignore */ }
-  if (choice === "supabase") return true;
-  return !hasStoredInternetIdentitySession();
-}

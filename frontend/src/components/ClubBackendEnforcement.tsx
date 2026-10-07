@@ -103,12 +103,14 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         // re-minting) used to classify an ICP member as "supabase", sign them
         // out and reload the page.
         const isIcpUser = (user as { app_metadata?: { provider?: string } }).app_metadata?.provider === "icp";
-        const identity = isIcpUser ? await getCurrentInternetIdentityConfirmed() : await getCurrentInternetIdentity();
+        // An email (Supabase) account never uses an Internet Identity, even if
+        // an old one is still stored on this device.
+        const identity = isIcpUser ? await getCurrentInternetIdentityConfirmed() : null;
         if (isIcpUser && !identity) {
           settle();
           return;
         }
-        const provider: BackendProvider = identity ? "icp" : "supabase";
+        const provider: BackendProvider = isIcpUser ? "icp" : "supabase";
         let clubIds: string[] = [];
         // App admins administer the whole app (Placement Settings, routing
         // config) from Supabase-backed screens, so a club pin must never sign
