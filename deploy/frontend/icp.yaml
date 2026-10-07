@@ -1,7 +1,7 @@
 # Ignite web app hosted on an ICP certified-assets canister.
 # Kept as its own project (separate from deploy/mainnet) so the frontend
 # canister never lands in the app's backend canister ID table.
-# Build first: cd frontend && npm run build:live && node scripts/prepare-canister-dist.mjs
+# Build first: cd frontend && npm run build:live && node scripts/prepare-canister-dist.mjs, then copy frontend/dist-canister to deploy/frontend/dist (the static-site plugin may only read inside this folder)
 # Deploy:      cd deploy/frontend && icp deploy -e ic
 # Workflow:    .github/workflows/deploy-frontend-canister.yml
 canisters:
@@ -9,7 +9,7 @@ canisters:
     recipe:
       type: "@dfinity/static-site@v0.4.0"
       configuration:
-        dir: ../../frontend/dist-canister
+        dir: dist
 
 environments:
   - name: ic
