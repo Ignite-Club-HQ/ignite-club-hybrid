@@ -1407,7 +1407,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
   } as unknown as User : null;
-  const profile = principal ? {
+  // On a fetch failure with no cached profile, expose profile as null so
+  // AppLayout shows its retry screen — a non-null profile with a null
+  // display_name would be misread as "new user" and bounce an existing
+  // member to /complete-profile.
+  const profile = principal && !(icpProfileError && !icpProfile) ? {
     id: principal,
     display_name: icpProfile?.displayName ?? null,
     avatar_url: icpProfile?.avatarRef ?? null,
