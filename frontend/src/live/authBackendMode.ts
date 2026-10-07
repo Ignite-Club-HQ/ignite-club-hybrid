@@ -59,13 +59,17 @@ const AUTH_CHOICE_KEY = "ignite.authChoice";
 /**
  * Device-level sign-in choice from `?auth=email` / `?auth=icp` (persisted so
  * the whole app — not just /auth — stays on that system after the redirect).
- * Lets the on-chain copy run in Supabase mode even when routing would pick ICP.
+ * Lets the on-chain copy run in Supabase mode even when routing would pick ICP,
+ * and vice versa. `?auth=auto` clears the choice and follows routing again.
  */
 function readAuthChoice(): BackendProvider | null {
   try {
     const param = new URLSearchParams(window.location.search).get("auth");
     if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
     else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
+    // `?auth=auto` forgets the device choice so the club pin / default decides
+    // again — the only other wipe is the club-backend enforcement switch.
+    else if (param === "auto" || param === "default") localStorage.removeItem(AUTH_CHOICE_KEY);
     const v = localStorage.getItem(AUTH_CHOICE_KEY);
     return v === "supabase" || v === "icp" ? v : null;
   } catch {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveAuthBackend, useIcpAuthScreen } from "./authBackendMode";
 import { applyBackendRoutingConfig, cacheClubBackendHint } from "./backendRouting";
 import { applyIcpAdminOverrides } from "./icpAdminOverrides";
@@ -125,6 +125,71 @@ describe("resolveAuthBackend with per-club overrides", () => {
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     cacheClubBackendHint("icp");
     setUserClubIds(["club-supabase"]);
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+});
+
+describe("resolveAuthBackend with the ?auth= device override", () => {
+  const icpDefaultConfig = {
+    defaultBackend: "icp" as const,
+    countryRules: {},
+    targets: [],
+    countryTargets: {},
+    clubBackendOverrides: {},
+  };
+
+  function setUrlSearch(search: string): void {
+    window.history.replaceState(null, "", `/auth${search}`);
+  }
+
+  function forgetChoice(): void {
+    localStorage.removeItem("ignite.authChoice");
+  }
+
+  beforeEach(() => {
+    resetState();
+    forgetChoice();
+    setUrlSearch("");
+    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
+  });
+
+  afterEach(() => {
+    forgetChoice();
+    setUrlSearch("");
+  });
+
+  it("?auth=icp forces the Internet Identity screen when routing says email", () => {
+    setUrlSearch("?auth=icp");
+    expect(resolveAuthBackend()).toBe("icp");
+    expect(useIcpAuthScreen()).toBe(true);
+  });
+
+  it("?auth=email forces the email screen when the default backend is ICP", () => {
+    applyBackendRoutingConfig(icpDefaultConfig);
+    setUrlSearch("?auth=email");
+    expect(resolveAuthBackend()).toBe("supabase");
+    expect(useIcpAuthScreen()).toBe(false);
+  });
+
+  it("the choice keeps applying after the URL param is gone", () => {
+    applyBackendRoutingConfig(icpDefaultConfig);
+    setUrlSearch("?auth=email");
+    expect(resolveAuthBackend()).toBe("supabase");
+    setUrlSearch("");
+    expect(resolveAuthBackend()).toBe("supabase");
+  });
+
+  it("?auth=auto forgets the stored choice so routing decides again", () => {
+    applyBackendRoutingConfig(icpDefaultConfig);
+    setUrlSearch("?auth=email");
+    expect(resolveAuthBackend()).toBe("supabase");
+    setUrlSearch("?auth=auto");
+    expect(resolveAuthBackend()).toBe("icp");
+  });
+
+  it("?auth=icp cannot force ICP before canisters exist", () => {
+    applyIcpAdminOverrides(null);
+    setUrlSearch("?auth=icp");
     expect(resolveAuthBackend()).toBe("supabase");
   });
 });
