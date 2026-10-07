@@ -339,6 +339,23 @@ export async function getCurrentInternetIdentity(): Promise<Identity | null> {
   }
 }
 
+/**
+ * Like getCurrentInternetIdentity, but only answers null after the session is
+ * still missing across several checks. The auth client briefly reports
+ * "not signed in" while it re-mints its short-lived session or re-reads
+ * storage after another tab wrote it; treating that blip as sign-out dropped
+ * active members back through sign-in.
+ */
+export async function getCurrentInternetIdentityConfirmed(attempts = 4, delayMs = 1500): Promise<Identity | null> {
+  for (let i = 0; i < attempts; i++) {
+    const identity = await getCurrentInternetIdentity();
+    if (identity) return identity;
+    if (signOutRequested) return null;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return null;
+}
+
 export async function signOutInternetIdentity(): Promise<void> {
   // Block the silent resume path FIRST, before any await: the auth hook
   // clears its session state right after calling us, and a resume racing

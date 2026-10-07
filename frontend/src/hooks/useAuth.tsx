@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1369,7 +1369,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
           // Client code itself could not load (flaky connection) — transient.
           throw new Error("Internet Identity sign-in client unavailable");
         }
-        const identity = await authMod.getCurrentInternetIdentity();
+        const identity = await authMod.getCurrentInternetIdentityConfirmed();
         if (!identity) {
           if (!cancelled && icpProfileRequestRef.current === requestId) {
             await clearDeadIcpSession();
@@ -1396,28 +1396,33 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
       cancelled = true;
     };
   }, [principal, clearDeadIcpSession]);
-  const user = principal ? {
+  // Memoized: a fresh object every render re-fired every effect keyed on
+  // `user`/`profile` across the app (refetch + reconnect cascades).
+  const icpDisplayName = icpProfile?.displayName ?? null;
+  const icpAvatarRef = icpProfile?.avatarRef ?? null;
+  const user = useMemo(() => principal ? {
     id: principal,
     aud: "authenticated",
     role: "authenticated",
     email: `${principal}@internet-identity.ignite-icp.test`,
     app_metadata: { provider: "icp" },
-    user_metadata: { display_name: icpProfile?.displayName ?? null },
+    user_metadata: { display_name: icpDisplayName },
     identities: [],
     created_at: new Date(0).toISOString(),
     updated_at: new Date(0).toISOString(),
-  } as unknown as User : null;
+  } as unknown as User : null, [principal, icpDisplayName]);
   // On a fetch failure with no cached profile, expose profile as null so
   // AppLayout shows its retry screen — a non-null profile with a null
   // display_name would be misread as "new user" and bounce an existing
   // member to /complete-profile.
-  const profile = principal && !(icpProfileError && !icpProfile) ? {
+  const profileHidden = icpProfileError && !icpProfile;
+  const profile = useMemo(() => principal && !profileHidden ? {
     id: principal,
-    display_name: icpProfile?.displayName ?? null,
-    avatar_url: icpProfile?.avatarRef ?? null,
+    display_name: icpDisplayName,
+    avatar_url: icpAvatarRef,
     ignite_points: 0,
     theme_preference: null,
-  } : null;
+  } : null, [principal, profileHidden, icpDisplayName, icpAvatarRef]);
   // Preload the Internet Identity module and eagerly construct its auth
   // client as soon as this provider mounts (well before the user can click
   // sign-in). The signer transport used by `client.signIn()` only allows
@@ -1580,7 +1585,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         ]);
         await withIcpTimeout(authMod.warmInternetIdentityAuthClient(), 30000);
         if (!authMod.isInternetIdentitySignInReady()) return; // transient — AppLayout's retry loop fires again
-        const identity = await authMod.getCurrentInternetIdentity();
+        const identity = await authMod.getCurrentInternetIdentityConfirmed();
         if (!identity) {
           await clearDeadIcpSession();
           return;
