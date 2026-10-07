@@ -166,6 +166,9 @@ function currentClubBackendOverride(config: BackendRoutingConfig): BackendProvid
 }
 
 export function getEffectiveBackend(): BackendProvider {
+  // Signed in with email: their data lives in Supabase, whatever the club pin
+  // says — an ICP route has no Internet Identity to call canisters with.
+  if (isSignedInWithEmail()) return "supabase";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
   const pin = currentClubBackendOverride(config);
@@ -231,6 +234,7 @@ export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProv
  */
 export function isFeatureRoutedToIcp(feature: FeatureArea): boolean {
   if (getEffectiveBackendForFeature(feature) === "icp") return true;
+  if (isSignedInWithEmail()) return false;
   // Mirror withFeatureBackend's fallback: an Internet Identity user has no
   // Supabase data, so when routing momentarily resolves to Supabase (e.g. a
   // just-created, unpinned club tips the club-pin check) keep pages on the
@@ -248,4 +252,28 @@ function hasStoredInternetIdentitySession(): boolean {
   } catch {
     return false;
   }
+}
+
+function hasSupabaseSessionStored(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+/**
+ * True when the current session is an email (Supabase) sign-in: a Supabase
+ * session exists and either the device chose email (?auth=email) or there is
+ * no Internet Identity session. A leftover II session from an earlier sign-in
+ * must not pull an email user's pages onto the canisters.
+ */
+export function isSignedInWithEmail(): boolean {
+  if (!hasSupabaseSessionStored()) return false;
+  let choice: string | null = null;
+  try { choice = localStorage.getItem("ignite.authChoice"); } catch { /* ignore */ }
+  if (choice === "supabase") return true;
+  return !hasStoredInternetIdentitySession();
 }
