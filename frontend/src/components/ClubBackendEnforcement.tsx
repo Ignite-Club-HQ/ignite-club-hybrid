@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getCurrentInternetIdentity,
+  getCurrentInternetIdentityConfirmed,
   signOutInternetIdentity,
 } from "@/live/internetIdentityAuth";
 // features/membership is imported lazily at the call site so the ICP SDK
@@ -97,7 +98,16 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
     };
     void (async () => {
       try {
-        const identity = await getCurrentInternetIdentity();
+        // Decide the provider from the signed-in account, not from whether the
+        // II client answered yet: a momentary null (client still restoring or
+        // re-minting) used to classify an ICP member as "supabase", sign them
+        // out and reload the page.
+        const isIcpUser = (user as { app_metadata?: { provider?: string } }).app_metadata?.provider === "icp";
+        const identity = isIcpUser ? await getCurrentInternetIdentityConfirmed() : await getCurrentInternetIdentity();
+        if (isIcpUser && !identity) {
+          settle();
+          return;
+        }
         const provider: BackendProvider = identity ? "icp" : "supabase";
         let clubIds: string[] = [];
         // App admins administer the whole app (Placement Settings, routing
