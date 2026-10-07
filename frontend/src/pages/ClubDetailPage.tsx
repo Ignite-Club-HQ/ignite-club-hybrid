@@ -448,7 +448,7 @@ export default function ClubDetailPage() {
               teams: { id: team.id, name: team.name },
             };
           }),
-        ) as any[];
+        )] as any[];
       }
       // First get team IDs for this club
       const { data: teamsData } = await supabase
