@@ -10,7 +10,7 @@ import {
 // features/membership is imported lazily at the call site so the ICP SDK
 // stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
-import { isIcpAuthAvailable } from "@/live/authBackendMode";
+import { isIcpAuthAvailable, readAuthChoice } from "@/live/authBackendMode";
 import {
   cacheClubBackendHint,
   getBackendRoutingConfig,
