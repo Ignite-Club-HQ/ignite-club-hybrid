@@ -82,7 +82,9 @@ export default function EditProfilePage() {
       let uploadBlob: Blob = result.blob;
       try {
         const asFile = new File([result.blob], `avatar.${mimeToExtension(result.mimeType) || "jpg"}`, { type: result.mimeType });
-        const compressed = await compressImage(asFile);
+        // Avatars render small everywhere — 384px is plenty and keeps the
+        // encrypted on-chain upload to a single fast chunk.
+        const compressed = await compressImage(asFile, AVATAR_COMPRESS_OPTIONS);
         if (compressed.file.size < uploadBlob.size) uploadBlob = compressed.file;
       } catch {
         // keep original if compression fails
@@ -141,7 +143,7 @@ export default function EditProfilePage() {
     // Resize on-device so any photo (even a 5MB camera shot) fits the budget.
     let uploadFile: File = file;
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, AVATAR_COMPRESS_OPTIONS);
       if (compressed.file.size < uploadFile.size) uploadFile = compressed.file;
     } catch {
       // keep original if compression fails
