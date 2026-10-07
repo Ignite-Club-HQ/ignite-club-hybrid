@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
           npm ci --ignore-scripts --no-fund --no-audit
-          node scripts/sync-canister-ids.mjs || true
+          node ../scripts/sync-canister-ids.mjs || true
           npm run build:live
           node scripts/prepare-canister-dist.mjs
 

@@ -16,3 +16,12 @@
 - [x] Photo storage sharding (needs mainnet deploy for fullness limits)
 - [x] ICP Children page: add/remove children, team assignment, guardians (club_domain parent self-service methods; needs mainnet redeploy)
 - [x] My Roles (ICP): real club/team names, hide deleted clubs
+
+## Frontend on ICP / retire Netlify
+- [x] Remove GIPHY endpoint (app reads key from Placement Settings)
+- [ ] Home for link-preview + club-website-registration endpoints — blocked: platform disallows new Supabase Edge Functions; awaiting user choice
+- [x] Frontend canister config, packaging (headers, cache, SPA fallback), deploy workflow
+- [x] Canister addresses sign in as the published-site account (needs canister ID added to ii-alternative-origins after first deploy)
+- [ ] First deploy + fund canister (user), add canister origin to II list + Supabase Auth redirects
+- [ ] Review codemagic.yaml (user to share)
+- [ ] Side-by-side test, move custom domain, delete Netlify
