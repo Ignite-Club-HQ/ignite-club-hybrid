@@ -45,15 +45,23 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
 
   const { data: club, isLoading } = useQuery({
     queryKey: ["club-invite-email-style", clubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clubs")
-        .select("id, invite_email_style")
-        .eq("id", clubId)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select("id, invite_email_style")
+            .eq("id", clubId)
+            .maybeSingle();
+          if (error) throw error;
+          return data as { invite_email_style?: string | null } | null;
+        },
+        icp: async (ctx) => {
+          const { getLiveClubSettings } = await import("@/live/features/club");
+          const s: any = await getLiveClubSettings(ctx, clubId).catch(() => null);
+          return { invite_email_style: s?.invite_email_style?.[0] ?? null };
+        },
+      }),
   });
 
   const updateMutation = useMutation({
@@ -71,11 +79,20 @@ export function ClubInviteEmailSettings({ clubId }: Props) {
         },
       });
     },
+    onMutate: async (style) => {
+      const key = ["club-invite-email-style", clubId];
+      const prev = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, (old: any) => ({ ...(old ?? {}), invite_email_style: style }));
+      return { prev };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-invite-email-style", clubId] });
       toast.success("Invite email style updated");
     },
-    onError: (e: Error) => toast.error("Failed to update: " + e.message),
+    onError: (e: Error, _v, c) => {
+      if (c?.prev !== undefined) queryClient.setQueryData(["club-invite-email-style", clubId], c.prev);
+      toast.error("Failed to update: " + e.message);
+    },
   });
 
   if (isLoading) {
