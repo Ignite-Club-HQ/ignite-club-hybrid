@@ -2,6 +2,7 @@ import { ExternalLink, Flame, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isLikelyInAppBrowser } from "@/lib/internetIdentitySignInHelp";
 import { readRedirectParam, safeSessionGet } from "@/lib/authRedirectStorage";
+import { AuthLegalLinks } from "@/components/AuthLegalLinks";
 
 interface IcpSignInScreenProps {
   shellStyle: React.CSSProperties;
@@ -49,6 +50,7 @@ export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, nativ
           </div>
 
           <p className="mt-8 text-sm leading-relaxed text-muted-foreground">New to Ignite? Just continue — we'll create your account automatically.</p>
+          <div className="mt-8"><AuthLegalLinks /></div>
 
           {error && <p className="mt-5 text-sm leading-relaxed text-destructive" role="alert">{error}</p>}
           {!online && <p className="mt-5 text-sm text-destructive" role="alert">You're offline. Reconnect to sign in.</p>}

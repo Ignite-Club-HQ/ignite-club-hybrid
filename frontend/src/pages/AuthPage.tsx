@@ -20,6 +20,7 @@ import { resolveKeyboardCssHeight } from "@/lib/keyboardCssHeight";
 import { isIcpAuthAvailable, useIcpAuthScreen } from "@/live/authBackendMode";
 import { describeIcpSignInError } from "@/lib/internetIdentitySignInHelp";
 import { IcpSignInScreen } from "@/components/IcpSignInScreen";
+import { AuthLegalLinks } from "@/components/AuthLegalLinks";
 
 import { z } from "zod";
 import type { Database } from "@/integrations/supabase/types";
@@ -1378,29 +1379,7 @@ export default function AuthPage() {
 
         {/* Footer Links — hidden when keyboard is open on native sign-in */}
         {!isFormKeyboardOpen && (
-          <div className="text-center text-xs text-muted-foreground space-y-2">
-            <div className="flex justify-center gap-4">
-              {Capacitor.isNativePlatform() ? (
-                <>
-                  <Link to="/terms" className="hover:text-foreground hover:underline">Terms</Link>
-                  <Link to="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>
-                  <Link to="/cancellation" className="hover:text-foreground hover:underline">Cancellation</Link>
-                </>
-              ) : (
-                <>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Terms</a>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Privacy</a>
-                  <a href="https://reference.invalid" onClick={(e) => { e.preventDefault(); import("@/lib/safeOpenUrl").then(({ safeOpenUrl }) => safeOpenUrl("https://reference.invalid")); }} className="hover:text-foreground hover:underline cursor-pointer">Cancellation</a>
-                </>
-              )}
-            </div>
-            {!Capacitor.isNativePlatform() && (
-              <div className="flex justify-center gap-4">
-                <a href="mailto:redacted@example.invalid" className="hover:text-foreground hover:underline">Contact</a>
-                <a href="mailto:redacted@example.invalid" className="hover:text-foreground hover:underline">Support</a>
-              </div>
-            )}
-          </div>
+          <AuthLegalLinks />
         )}
       </div>
       </div>
