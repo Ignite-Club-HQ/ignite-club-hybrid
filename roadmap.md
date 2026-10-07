@@ -19,7 +19,8 @@
 
 ## Frontend on ICP / retire Netlify
 - [x] Remove GIPHY endpoint (app reads key from Placement Settings)
-- [ ] Home for link-preview + club-website-registration endpoints — blocked: platform disallows new Supabase Edge Functions; awaiting user choice
+- [x] Link previews → messaging canister for all users (needs messaging_domain redeploy; Netlify fallback until then)
+- [ ] Club-website registration endpoint home — still on Netlify (needs a secret-holding server)
 - [x] Frontend canister config, packaging (headers, cache, SPA fallback), deploy workflow
 - [x] Canister addresses sign in as the published-site account (needs canister ID added to ii-alternative-origins after first deploy)
 - [ ] First deploy + fund canister (user), add canister origin to II list + Supabase Auth redirects

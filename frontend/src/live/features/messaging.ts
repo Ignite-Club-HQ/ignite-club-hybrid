@@ -587,6 +587,22 @@ export async function fetchLiveLinkPreview(
 }
 
 /**
+ * Link preview for email-account (Supabase) users: same messaging_domain
+ * outcall, called anonymously (the canister caches per URL and caps anonymous
+ * outcalls per hour). Returns null when the messaging canister isn't set.
+ */
+export async function fetchAnonymousLinkPreview(url: string) {
+  const [{ AnonymousIdentity }, { getActiveIcpTarget }, { isDomainConfigured }] = await Promise.all([
+    import("@icp-sdk/core/agent"),
+    import("../targetRegistry"),
+    import("../domains"),
+  ]);
+  const target = getActiveIcpTarget();
+  if (!isDomainConfigured(target, "messaging_domain")) return null;
+  return fetchLiveLinkPreview({ target, identity: new AnonymousIdentity() } as unknown as FeatureBackendContext, url);
+}
+
+/**
  * Online participant count for a conversation (last 90s, caller excluded).
  * Callers pass the team/club/group id — it doubles as the conversation id
  * under the same provisional mapping the send/read paths use.

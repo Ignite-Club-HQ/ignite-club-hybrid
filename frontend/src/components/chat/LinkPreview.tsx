@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { fetchLiveLinkPreview } from "@/live/features/messaging";
+import { fetchAnonymousLinkPreview, fetchLiveLinkPreview } from "@/live/features/messaging";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { runWhenChatScrollIdle } from "@/lib/chatScrollActivity";
 import { preventIfReactionInteractionGuarded } from "@/lib/reactionInteractionGuard";
@@ -60,6 +60,21 @@ async function fetchPreviewOnce(url: string): Promise<CacheEntry> {
       // canister-side (replicated HTTPS outcall); same metadata shape.
       const data = await withFeatureBackend("messaging", {
         supabase: async () => {
+          // Messaging canister first (Netlify endpoint kept as a transition fallback).
+          try {
+            const p = await fetchAnonymousLinkPreview(fetchUrl);
+            if (p) {
+              return {
+                url: fetchUrl,
+                title: p.title[0] ?? undefined,
+                description: p.description[0] ?? undefined,
+                image: p.image[0] ?? undefined,
+                siteName: p.site_name[0] ?? undefined,
+              };
+            }
+          } catch {
+            // fall through to the legacy endpoint
+          }
           const res = await fetch("/api/fetch-link-preview", {
             method: "POST",
             headers: { "content-type": "application/json" },
