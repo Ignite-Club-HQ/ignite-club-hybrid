@@ -71,6 +71,21 @@ jobs:
           icp identity default ignite-governor
           echo "Deployer: $(icp identity principal)"
 
+      - name: Convert any ICP into cycles
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/icp-no-project" && cd "$RUNNER_TEMP/icp-no-project"
+          echo "Cycles balance: $(icp cycles balance -n ic 2>/dev/null || true)"
+          RAW="$(icp token balance -n ic 2>/dev/null || true)"
+          echo "ICP balance: $RAW"
+          AMT="$(echo "$RAW" | grep -oE '[0-9]+(\.[0-9]+)?' | head -1 || true)"
+          MINT="$(awk -v b="${AMT:-0}" 'BEGIN{ m = b - 0.0001; if (m <= 0) m = 0; printf "%.8f", m }')"
+          if [ "$MINT" != "0.00000000" ]; then
+            echo "==> Converting $MINT ICP into cycles"
+            icp cycles mint --icp "$MINT" -n ic
+          fi
+          echo "Cycles balance now: $(icp cycles balance -n ic 2>/dev/null || true)"
+
       - name: Upload to frontend canister
         working-directory: deploy/frontend
         run: |
