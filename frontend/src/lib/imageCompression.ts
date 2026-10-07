@@ -60,8 +60,11 @@ export async function compressImage(file: File, options: CompressImageOptions = 
   return Promise.race([compressionPromise, timeoutPromise]);
 }
 
-function compressImageCore(file: File): Promise<CompressionResult> {
+function compressImageCore(file: File, options: CompressImageOptions = {}): Promise<CompressionResult> {
   const originalSize = file.size;
+  const maxWidth = options.maxWidth ?? MAX_WIDTH;
+  const maxHeight = options.maxHeight ?? MAX_HEIGHT;
+  const quality = options.quality ?? QUALITY;
 
   return new Promise((resolve) => {
     const img = new Image();
