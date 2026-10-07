@@ -49,7 +49,7 @@ export async function compressImage(file: File, options: CompressImageOptions = 
   }
 
   // Race the compression against a timeout so we never hang indefinitely
-  const compressionPromise = compressImageCore(file);
+  const compressionPromise = compressImageCore(file, options);
   const timeoutPromise = new Promise<CompressionResult>((resolve) => {
     setTimeout(() => {
       console.warn('[compressImage] Timed out after', COMPRESSION_TIMEOUT_MS, 'ms — using original');
