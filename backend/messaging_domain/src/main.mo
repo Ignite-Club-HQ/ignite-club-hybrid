@@ -1899,7 +1899,7 @@ persistent actor class Main(governorInit : Principal) {
   // Local roles are only governor-granted; club admins live on club_domain.
   // Fall back to the authoritative club_domain admin list (fail-closed if unset).
   func requireClubAdminLive(caller : Principal, club_id : Text) : async ?Text {
-    switch (await requireClubAdminLive(caller, club_id)) {
+    switch (requireClubAdmin(caller, club_id)) {
       case null { return null };
       case (?e) {
         if (not valid(club_id)) return ?e;
