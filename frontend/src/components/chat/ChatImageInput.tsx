@@ -603,6 +603,24 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       });
     }
 
+    // Images on the web: show instantly from a local object URL and let the
+    // member send right away — the upload runs in the background and the send
+    // path swaps in the stored URL (see lib/pendingChatUploads).
+    if (!isVideo && !Capacitor.isNativePlatform()) {
+      const instantUrl = URL.createObjectURL(file);
+      setLocalPreview(instantUrl);
+      const job = uploadBlob(file, { isVideo: false });
+      registerPendingChatUpload(instantUrl, job);
+      onImageUploaded(instantUrl);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      job.catch((error) => {
+        const errMsg = getReadableUploadError(error);
+        console.error("[ChatImageInput] Background image upload failed:", errMsg, error);
+        toast.error(errMsg || "Failed to upload image");
+      });
+      return;
+    }
+
     // Prefer a data URL for the preview — blob: URLs are unreliable in iOS
     // WKWebView and Android WebView. Fall back to blob: for videos / read
     // failures.
@@ -620,6 +638,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     }
     setLocalPreview(localUrl);
     setUploading(true);
+
 
     try {
       const storageUrl = await uploadBlob(file, { isVideo });
