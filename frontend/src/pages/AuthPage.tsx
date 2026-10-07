@@ -778,9 +778,9 @@ export default function AuthPage() {
       // No await before the existing provider call: keep the browser's
       // permission to open the Internet Identity window from this tap.
       const { error } = await signInWithGoogle();
-      if (error) setAuthError(describeIcpSignInError(error.message).replaceAll("Continue with Internet Identity", "Continue securely"));
+      if (error) setAuthError(describeIcpSignInError(error.message).split("Continue with Internet Identity").join("Continue securely"));
     } catch (error) {
-      setAuthError(describeIcpSignInError(error instanceof Error ? error.message : "Unable to sign in. Please try again.").replaceAll("Continue with Internet Identity", "Continue securely"));
+      setAuthError(describeIcpSignInError(error instanceof Error ? error.message : "Unable to sign in. Please try again.").split("Continue with Internet Identity").join("Continue securely"));
     } finally {
       authInFlightRef.current = false;
       setGoogleLoading(false);
