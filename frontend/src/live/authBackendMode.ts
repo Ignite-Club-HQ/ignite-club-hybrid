@@ -59,7 +59,8 @@ const AUTH_CHOICE_KEY = "ignite.authChoice";
 /**
  * Device-level sign-in choice from `?auth=email` / `?auth=icp` (persisted so
  * the whole app — not just /auth — stays on that system after the redirect).
- * Lets the on-chain copy run in Supabase mode even when routing would pick ICP.
+ * Lets the on-chain copy run in Supabase mode even when routing would pick ICP,
+ * and vice versa. `?auth=auto` clears the choice and follows routing again.
  */
 function readAuthChoice(): BackendProvider | null {
   try {
