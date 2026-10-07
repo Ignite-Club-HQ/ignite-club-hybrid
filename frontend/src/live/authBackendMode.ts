@@ -66,6 +66,9 @@ function readAuthChoice(): BackendProvider | null {
     const param = new URLSearchParams(window.location.search).get("auth");
     if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
     else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
+    // `?auth=auto` forgets the device choice so the club pin / default decides
+    // again — the only other wipe is the club-backend enforcement switch.
+    else if (param === "auto" || param === "default") localStorage.removeItem(AUTH_CHOICE_KEY);
     const v = localStorage.getItem(AUTH_CHOICE_KEY);
     return v === "supabase" || v === "icp" ? v : null;
   } catch {
