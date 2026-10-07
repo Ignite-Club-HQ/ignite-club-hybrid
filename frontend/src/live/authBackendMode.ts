@@ -54,7 +54,29 @@ function unanimousClubPin(config: ReturnType<typeof getBackendRoutingConfig>): B
  * unknown), and canister availability. Inherits the safety net from
  * `resolveBackendForCountry`: ICP is never returned before canisters exist.
  */
+const AUTH_CHOICE_KEY = "ignite.authChoice";
+
+/**
+ * Device-level sign-in choice from `?auth=email` / `?auth=icp` (persisted so
+ * the whole app — not just /auth — stays on that system after the redirect).
+ * Lets the on-chain copy run in Supabase mode even when routing would pick ICP.
+ */
+function readAuthChoice(): BackendProvider | null {
+  try {
+    const param = new URLSearchParams(window.location.search).get("auth");
+    if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
+    else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
+    const v = localStorage.getItem(AUTH_CHOICE_KEY);
+    return v === "supabase" || v === "icp" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveAuthBackend(): BackendProvider {
+  const choice = readAuthChoice();
+  if (choice === "supabase") return "supabase";
+  if (choice === "icp" && isIcpAuthAvailable()) return "icp";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
   // A per-club backend pin (whole app per club member) wins over the country

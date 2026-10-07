@@ -152,6 +152,7 @@ export default function AuthPage() {
   // when routing would pick Internet Identity (e.g. on the on-chain copy of
   // the app, where a single ICP-pinned club otherwise decides for every new
   // visitor).
+  // (persisted device-wide in authBackendMode.readAuthChoice).
   const forceEmailAuth = authParam === "email" || authParam === "supabase";
   const icpScreen = useIcpAuthScreen();
   const useIcpLab = !forceEmailAuth && (forceIcpAuth || icpScreen);
