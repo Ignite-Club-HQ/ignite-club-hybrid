@@ -83,7 +83,7 @@ async function fetchIcpLatestMessagesByScope(
       text: entry.body,
       author: nameByPrincipal[entry.sender.toText()] ?? "",
       created_at: new Date(entry.createdAtMs).toISOString(),
-      image_url: null,
+      image_url: entry.imageUrl,
     };
   }
   return latestMessages;
