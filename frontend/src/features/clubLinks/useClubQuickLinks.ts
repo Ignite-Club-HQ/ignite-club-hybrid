@@ -35,9 +35,18 @@ export function useClubQuickLinks(clubId?: string | null) {
     queryFn: async () => {
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {
-        if (!clubId) return [];
         const { liveClubLinksService } = await import("@/live/features/clubLinksService");
-        const rows = (await liveClubLinksService.listVisible(clubId)) as unknown as ClubLinkRow[];
+        let clubIds: string[] = clubId ? [clubId] : [];
+        if (!clubId) {
+          const { icpCtx } = await import("@/lib/icpClubTeamLookup");
+          const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+          const grants = ((await getLiveMyRoleGrants(await icpCtx()).catch(() => [])) as any[]) ?? [];
+          clubIds = Array.from(new Set(grants.map((g) => g.club?.[0]).filter(Boolean)));
+        }
+        const lists = await Promise.all(
+          clubIds.map((c) => liveClubLinksService.listVisible(c).catch(() => [])),
+        );
+        const rows = lists.flat() as unknown as ClubLinkRow[];
         writeHomeSectionSnapshot("club-links", clubId, rows);
         return rows;
       }
