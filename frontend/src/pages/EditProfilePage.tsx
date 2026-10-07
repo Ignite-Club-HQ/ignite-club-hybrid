@@ -22,6 +22,11 @@ import { isCancelledSelectionError } from "@/lib/uploadErrorUtils";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import { compressImage } from "@/lib/imageCompression";
 
+// Profile photos render at most ~96px in the UI — 384px covers high-DPR
+// screens with headroom, and the small file keeps the encrypted on-chain
+// upload to one fast chunk instead of several round trips.
+const AVATAR_COMPRESS_OPTIONS = { maxWidth: 384, maxHeight: 384, quality: 0.82 };
+
 export default function EditProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const useIcpLab = isFeatureRoutedToIcp("membership");
