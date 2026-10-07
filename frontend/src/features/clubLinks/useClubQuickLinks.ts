@@ -33,6 +33,14 @@ export function useClubQuickLinks(clubId?: string | null) {
   return useQuery<ClubLinkRow[]>({
     queryKey: ["club-quick-links", clubId ?? "all"],
     queryFn: async () => {
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      if (resolveAuthBackend() === "icp") {
+        if (!clubId) return [];
+        const { liveClubLinksService } = await import("@/live/features/clubLinksService");
+        const rows = (await liveClubLinksService.listVisible(clubId)) as unknown as ClubLinkRow[];
+        writeHomeSectionSnapshot("club-links", clubId, rows);
+        return rows;
+      }
       let query = supabase
         .from("club_links")
         .select("id, club_id, title, subtitle, url, icon, open_mode, sort_order, is_active")
