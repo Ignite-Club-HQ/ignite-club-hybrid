@@ -75,8 +75,8 @@ function compressImageCore(file: File, options: CompressImageOptions = {}): Prom
       let { width, height } = img;
 
       // Calculate new dimensions while maintaining aspect ratio
-      if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-        const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
@@ -129,7 +129,7 @@ function compressImageCore(file: File, options: CompressImageOptions = {}): Prom
           });
         },
         'image/jpeg',
-        QUALITY
+        quality
       );
     };
 
