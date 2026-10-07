@@ -22,7 +22,11 @@
 - [x] Link previews → messaging canister for all users (needs messaging_domain redeploy; Netlify fallback until then)
 - [ ] Club-website registration endpoint home — still on Netlify (needs a secret-holding server)
 - [x] Frontend canister config, packaging (headers, cache, SPA fallback), deploy workflow
-- [x] Canister addresses sign in as the published-site account (needs canister ID added to ii-alternative-origins after first deploy)
-- [ ] First deploy + fund canister (user), add canister origin to II list + Supabase Auth redirects
+- [x] First deploy done — frontend canister live at proe7-kqaaa-aaaas-qg6gq-cai.icp0.io / .icp.net, app boots, deep links fall back, assets + headers verified
+- [x] Canister addresses added to ii-alternative-origins so the new site signs in as the published-site account — published site must be republished for Internet Identity to accept them (verified: II currently shows "Unverified origin" until then)
+- [x] Canister security rules widened for IP-country detection and address search; video embeds repaired (needs one more canister deploy)
+- [ ] Supabase Auth redirect allow-list needs the canister URL (user)
+- [ ] Review codemagic.yaml (user to share)
+- [ ] Side-by-side test, move custom domain, delete Netlify
 - [ ] Review codemagic.yaml (user to share)
 - [ ] Side-by-side test, move custom domain, delete Netlify
