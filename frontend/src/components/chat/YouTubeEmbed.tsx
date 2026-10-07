@@ -9,7 +9,7 @@ export function YouTubeEmbed({ videoId, compact = false }: YouTubeEmbedProps) {
       <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
         <iframe
           className="absolute inset-0 w-full h-full"
-          src={`https://reference.invalid`}
+          src={`https://www.youtube.com/embed/${videoId}`}
           title="YouTube video"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
