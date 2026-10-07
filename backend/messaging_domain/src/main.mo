@@ -1896,9 +1896,30 @@ persistent actor class Main(governorInit : Principal) {
     null
   };
 
+  // Local roles are only governor-granted; club admins live on club_domain.
+  // Fall back to the authoritative club_domain admin list (fail-closed if unset).
+  func requireClubAdminLive(caller : Principal, club_id : Text) : async ?Text {
+    switch (await requireClubAdminLive(caller, club_id)) {
+      case null { return null };
+      case (?e) {
+        if (not valid(club_id)) return ?e;
+        switch (await clubDomainRef()) {
+          case null { ?e };
+          case (?cd) {
+            let admins = try { await cd.list_club_admins(club_id) } catch (_) { [] };
+            if (admins.any(func(p : Principal) : Bool = p.equal(caller))) null else {
+              let appAdmin = try { await cd.is_app_admin(caller) } catch (_) { false };
+              if (appAdmin) null else ?e
+            }
+          };
+        }
+      };
+    }
+  };
+
   public shared ({ caller }) func set_club_dm_settings(club_id : Text, dm_disabled : Bool, attachments_disabled : Bool) : async { #Ok; #Err : Text } {
     auth(caller);
-    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let existing = defaultClubDmSettings(club_id);
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null existing };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
@@ -1908,7 +1929,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_club_dm_allowed_roles(club_id : Text, allowed_roles : [Text]) : async { #Ok; #Err : Text } {
     auth(caller);
-    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; allowed_roles }]);
@@ -1917,7 +1938,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_club_message_privacy(club_id : Text, force_disable_previews : Bool) : async { #Ok; #Err : Text } {
     auth(caller);
-    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; force_disable_previews }]);
@@ -1926,7 +1947,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func set_club_ai_catch_up(club_id : Text, ai_catch_up_enabled : Bool) : async { #Ok; #Err : Text } {
     auth(caller);
-    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     let current = switch (clubDmSettings.find(func(s) = s.club_id == club_id)) { case (?s) s; case null defaultClubDmSettings(club_id) };
     clubDmSettings := clubDmSettings.filter(func(s) = s.club_id != club_id);
     clubDmSettings := clubDmSettings.concat([{ current with club_id; ai_catch_up_enabled }]);
@@ -1935,7 +1956,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func enable_ai_catch_up_for_all_members(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
     auth(caller);
-    switch (requireClubAdmin(caller, club_id)) { case (?e) return #Err(e); case null {} };
+    switch (await requireClubAdminLive(caller, club_id)) { case (?e) return #Err(e); case null {} };
     var count : Nat32 = 0;
     for (m in clubMemberships.values()) {
       if (m.club_id == club_id) {
