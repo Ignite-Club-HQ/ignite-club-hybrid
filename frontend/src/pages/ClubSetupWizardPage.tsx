@@ -1036,6 +1036,7 @@ function ReviewStep({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [brandingOpen, setBrandingOpen] = useState(false);
+  const [brandingSaved, setBrandingSaved] = useState(false);
   const [sponsorsOpen, setSponsorsOpen] = useState(false);
   const [committeeOpen, setCommitteeOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -1094,7 +1095,7 @@ function ReviewStep({
     {
       id: "branding",
       label: "Add club branding",
-      hint: "Optional",
+      hint: brandingSaved || (club && club.theme_primary_h !== null && club.theme_primary_h !== undefined) ? "Theme saved ✓" : "Optional",
     },
     {
       id: "sponsors",
@@ -1231,6 +1232,7 @@ function ReviewStep({
                         initialLogoOnlyMode={club.logo_only_mode ?? false}
                         initialThemeEnabled={club.theme_enabled ?? true}
                         onSave={() => {
+                          setBrandingSaved(true);
                           qc.invalidateQueries({ queryKey: ["club", clubId, "setup"] });
                           qc.invalidateQueries({ queryKey: ["club-themes"] });
                         }}
