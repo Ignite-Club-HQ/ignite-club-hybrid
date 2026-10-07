@@ -47,6 +47,27 @@ export default function EditProfilePage() {
 
   const isNative = shouldUseNativePicker();
 
+  // ICP: save the new photo to the profile straight away (no need to tap
+  // Save) and show it instantly from the local copy instead of waiting for
+  // a download + decrypt.
+  const persistIcpAvatar = async (url: string, localFile: Blob) => {
+    const { localUploadPreviews } = await import("@/components/media/localUploadPreviews");
+    localUploadPreviews.set(url, URL.createObjectURL(localFile));
+    setAvatarUrl(url);
+    if (!isIcpLive) return;
+    const [{ getCurrentInternetIdentity }, { saveIcpIdentityProfile }] = await Promise.all([
+      import("@/live/internetIdentityAuth"),
+      import("@/live/identityProfile"),
+    ]);
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) throw new Error("You need to sign in again.");
+    await saveIcpIdentityProfile(identity, user!.id, {
+      displayName: (displayName.trim() || profile?.display_name || "").trim(),
+      avatarRef: url,
+    });
+    void refreshProfile();
+  };
+
   const handleNativeAvatarPick = async () => {
     if (!user) return;
     // CRITICAL: Do NOT set uploading state before Camera.getPhoto —
@@ -80,8 +101,8 @@ export default function EditProfilePage() {
         // on-chain URL as the avatar reference.
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
         const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
-        setAvatarUrl(url);
-        toast({ title: "Photo uploaded!" });
+        await persistIcpAvatar(url, uploadBlob);
+        toast({ title: "Photo saved!" });
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
@@ -133,8 +154,8 @@ export default function EditProfilePage() {
         variant: "destructive",
       });
       return;
-    setAvatarPreview(URL.createObjectURL(uploadFile));
     }
+    setAvatarPreview(URL.createObjectURL(uploadFile));
 
     setUploadingAvatar(true);
 
@@ -148,8 +169,8 @@ export default function EditProfilePage() {
           mime: uploadFile.type || "image/jpeg",
           ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
         });
-        setAvatarUrl(url);
-        toast({ title: "Photo uploaded!" });
+        await persistIcpAvatar(url, uploadFile);
+        toast({ title: "Photo saved!" });
       } catch (error) {
         setAvatarPreview("");
         toast({
@@ -202,7 +223,7 @@ export default function EditProfilePage() {
 
     setSaving(true);
 
-    if (useIcpLab) {
+    if (useIcpLab && !isIcpLive) {
       setSaving(false);
       toast({ title: "Profile changes are local to this lab session" });
       navigate(-1);
