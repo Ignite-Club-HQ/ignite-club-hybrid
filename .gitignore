@@ -16,3 +16,9 @@ deploy/mainnet/.icp/data/*
 !deploy/mainnet/.icp/data/mappings/
 .local-icp/
 target/
+# Keep the frontend canister ID mapping too
+!deploy/frontend/.icp/
+deploy/frontend/.icp/*
+!deploy/frontend/.icp/data/
+deploy/frontend/.icp/data/*
+!deploy/frontend/.icp/data/mappings/

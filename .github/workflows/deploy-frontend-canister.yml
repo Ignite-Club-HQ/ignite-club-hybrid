@@ -1,0 +1,96 @@
+# Ignite web app → ICP frontend canister (replaces Netlify file hosting).
+#
+# Runs on every push to main that touches the frontend, or manually.
+# Uses the same DEPLOYER_PEM secret as "Deploy ICP canisters (mainnet)".
+# The first run creates the canister (~0.5T cycles from the deployer's cycles
+# balance) and commits deploy/frontend/.icp/data/mappings/ic.ids.json so later
+# runs reuse it. The site is then live at https://<canister-id>.icp.net.
+#
+# Optional repository variables (Settings → Variables): IGNITE_LIVE_SUPABASE_URL,
+# IGNITE_LIVE_SUPABASE_ANON_KEY (both public values; defaults below).
+
+name: Deploy web app (ICP frontend canister)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["frontend/**", "deploy/frontend/**"]
+
+concurrency:
+  group: deploy-frontend-canister
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ICP_HOME: ${{ github.workspace }}/.icp-home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install deploy tools
+        run: npm install -g @icp-sdk/icp-cli @icp-sdk/ic-wasm --no-fund --no-audit
+
+      - name: Build web app
+        working-directory: frontend
+        env:
+          IGNITE_LIVE_BUILD: "1"
+          IGNITE_LIVE_SUPABASE_URL: ${{ vars.IGNITE_LIVE_SUPABASE_URL || 'https://cdrxmelhysdqrccttsjg.supabase.co' }}
+          IGNITE_LIVE_SUPABASE_ANON_KEY: ${{ vars.IGNITE_LIVE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw' }}
+        run: |
+          set -euo pipefail
+          export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          npm ci --ignore-scripts --no-fund --no-audit
+          node ../scripts/sync-canister-ids.mjs || true
+          npm run build:live
+          node scripts/prepare-canister-dist.mjs
+
+      - name: Restore deployer identity
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::DEPLOYER_PEM secret missing — run the mainnet canister workflow first."
+            exit 1
+          fi
+          mkdir -p "$ICP_HOME/identity/keys"
+          PEM_FILE="$ICP_HOME/identity/keys/ignite-governor.pem"
+          printf '%s' "$DEPLOYER_PEM" | tr -d '\r' | sed 's/\\n/\n/g' \
+            | sed -n '/-----BEGIN/,/-----END/p' > "$PEM_FILE"
+          icp identity import --from-pem "$PEM_FILE" --storage plaintext ignite-governor
+          icp identity default ignite-governor
+          echo "Deployer: $(icp identity principal)"
+
+      - name: Upload to frontend canister
+        working-directory: deploy/frontend
+        run: |
+          set -euo pipefail
+          icp deploy -e ic frontend
+          ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
+          echo "::notice::Web app live at https://$ID.icp.net"
+          echo "### Web app deployed: https://$ID.icp.net" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit frontend canister ID
+        run: |
+          set -euo pipefail
+          IDS="deploy/frontend/.icp/data/mappings/ic.ids.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -f "$IDS"
+          if git diff --cached --quiet; then echo "Mapping unchanged."; exit 0; fi
+          git commit -m "Record frontend canister ID [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase --autostash -X theirs origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep 5
+          done
+          exit 1
