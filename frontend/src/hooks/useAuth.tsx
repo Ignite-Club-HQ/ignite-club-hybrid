@@ -559,6 +559,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         const incomingUserId = currentSession?.user?.id ?? null;
         const previousUserId = currentUserIdRef.current || cachedUserId;
+        if (incomingUserId) {
+          try { localStorage.removeItem("ignite_icp_internet_identity_session"); } catch { /* ignore */ }
+        }
         
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
