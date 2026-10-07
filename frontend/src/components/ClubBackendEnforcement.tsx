@@ -3,7 +3,6 @@ import { useOptionalAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  getCurrentInternetIdentity,
   getCurrentInternetIdentityConfirmed,
   signOutInternetIdentity,
 } from "@/live/internetIdentityAuth";
