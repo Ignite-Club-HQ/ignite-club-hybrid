@@ -230,6 +230,7 @@ export function ClubThemeEditor({
   const { toast } = useToast();
   const { resolvedTheme } = useTheme();
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   
   // Light mode colors
   const [primary, setPrimary] = useState<HSLColor>(
@@ -322,6 +323,8 @@ export function ClubThemeEditor({
     }
 
     setSaving(false);
+    setJustSaved(true);
+    window.setTimeout(() => setJustSaved(false), 4000);
     toast({
       title: "Theme saved!",
       description: "Your club's color scheme has been updated.",
@@ -728,14 +731,19 @@ export function ClubThemeEditor({
               Clear Theme
             </Button>
           )}
+          {justSaved && !saving && (
+            <span className="ml-auto self-center text-sm font-medium text-primary" role="status">
+              ✓ Theme saved
+            </span>
+          )}
           <Button 
             size="sm"
             onClick={handleSave}
             disabled={saving}
-            className="ml-auto"
+            className={justSaved && !saving ? "" : "ml-auto"}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            Save Theme
+            {saving ? "Saving…" : justSaved ? "Saved" : "Save Theme"}
           </Button>
         </div>
       </CardContent>
