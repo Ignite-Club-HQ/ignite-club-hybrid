@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GripVertical, Plus, Trash2, Pencil, X } from "lucide-react";
-import { clubLinksService } from "@/lab/clubLinksService.mjs";
+import { liveClubLinksService as clubLinksService } from "@/live/features/clubLinksService";
 import type { ClubLinksService } from "@/lab/ClubLinksService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
