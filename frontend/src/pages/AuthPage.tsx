@@ -148,7 +148,13 @@ export default function AuthPage() {
   // honoured when canisters are actually configured.
   const authParam = new URLSearchParams(window.location.search).get("auth");
   const forceIcpAuth = authParam === "icp" && isIcpAuthAvailable();
-  const useIcpLab = forceIcpAuth || useIcpAuthScreen();
+  // `?auth=email` is the opposite hatch: show the email/Google screen even
+  // when routing would pick Internet Identity (e.g. on the on-chain copy of
+  // the app, where a single ICP-pinned club otherwise decides for every new
+  // visitor).
+  const forceEmailAuth = authParam === "email" || authParam === "supabase";
+  const icpScreen = useIcpAuthScreen();
+  const useIcpLab = !forceEmailAuth && (forceIcpAuth || icpScreen);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
