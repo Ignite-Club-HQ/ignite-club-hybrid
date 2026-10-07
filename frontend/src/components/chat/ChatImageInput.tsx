@@ -536,21 +536,27 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
       requestAnimationFrame(restoreNativeLayout);
 
       const skipCompression = !IOS_SAFE_COMPRESSION_MIME_TYPES.has(mimeType);
-      let storageUrl: string;
-
-      try {
-        storageUrl = await uploadBlob(blob, { skipCompression });
-      } catch (primaryUploadError) {
-        if (!skipCompression) {
-          console.warn("[ChatImageInput] Retrying native upload without compression:", primaryUploadError);
-          storageUrl = await uploadBlob(blob, { skipCompression: true });
-        } else {
+      // Instant send: hand the local preview to the composer now and let the
+      // upload finish in the background (send path awaits it via
+      // lib/pendingChatUploads).
+      const job = (async () => {
+        try {
+          return await uploadBlob(blob, { skipCompression });
+        } catch (primaryUploadError) {
+          if (!skipCompression) {
+            console.warn("[ChatImageInput] Retrying native upload without compression:", primaryUploadError);
+            return await uploadBlob(blob, { skipCompression: true });
+          }
           throw primaryUploadError;
         }
-      }
-      console.log("[ChatImageInput] upload complete:", storageUrl.substring(0, 80));
-      // Keep localPreview (data URL) visible — remote private URL may not load.
-      onImageUploaded(storageUrl);
+      })();
+      registerPendingChatUpload(stablePreviewUrl, job);
+      onImageUploaded(stablePreviewUrl);
+      job.catch((error) => {
+        const errMsg = getReadableUploadError(error);
+        console.error("[ChatImageInput] Background native upload failed:", errMsg, error);
+        toast.error(errMsg || "Failed to upload image");
+      });
     } catch (error: unknown) {
       if (isCancelledSelectionError(error)) {
         console.log("[ChatImageInput] user cancelled photo selection");
@@ -607,8 +613,23 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     // Images on the web: show instantly from a local object URL and let the
     // member send right away — the upload runs in the background and the send
     // path swaps in the stored URL (see lib/pendingChatUploads).
-    if (!isVideo && !Capacitor.isNativePlatform()) {
-      const instantUrl = URL.createObjectURL(file);
+    if (!isVideo) {
+      // Native WebViews render data URLs more reliably than blob: URLs.
+      let instantUrl: string;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          instantUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error || new Error("Preview read failed"));
+            reader.readAsDataURL(file);
+          });
+        } catch {
+          instantUrl = URL.createObjectURL(file);
+        }
+      } else {
+        instantUrl = URL.createObjectURL(file);
+      }
       setLocalPreview(instantUrl);
       const job = uploadBlob(file, { isVideo: false });
       registerPendingChatUpload(instantUrl, job);
