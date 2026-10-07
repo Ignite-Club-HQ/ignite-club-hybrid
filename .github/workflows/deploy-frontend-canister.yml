@@ -93,6 +93,8 @@ jobs:
         working-directory: deploy/frontend
         run: |
           set -euo pipefail
+          # Make sure the canister has room to install/upload (it ran dry once).
+          icp canister top-up frontend --amount 0.3T -e ic || echo "Top-up skipped"
           icp deploy -e ic frontend --cycles 1000000000000
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
           echo "::notice::Web app live at https://$ID.icp.net"
