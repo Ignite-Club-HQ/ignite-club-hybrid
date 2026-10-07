@@ -407,7 +407,34 @@ export default function ClubDetailPage() {
           const cur = byId.get(sid);
           if ((!cur || !cur.display_name) && myProfile?.display_name) byId.set(sid, { ...(cur ?? {}), account_id: sid, display_name: myProfile.display_name, avatar_url: (myProfile as any).avatar_url ?? null });
         }
-        return grantLists.flatMap(({ team, grants }) =>
+        // Club-level grants (e.g. club_admin for the creator) have no team.
+        // The full list is club-admin-only; fall back to the caller's own grants.
+        const { listLiveRoleGrants, getLiveMyRoleGrants } = await import("@/live/features/membership");
+        let clubGrants: any[] = ((await listLiveRoleGrants(ctx, id!).catch(() => null)) as any[] | null) ?? [];
+        if (!clubGrants.length) {
+          const mine = ((await getLiveMyRoleGrants(ctx).catch(() => [])) as any[]) ?? [];
+          const selfUid = Array.from(selfIds).find((s) => byId.has(s)) ?? user?.id ?? "";
+          clubGrants = mine
+            .filter((g) => (g.club?.[0] ?? null) === id)
+            .map((g) => ({ ...g, account_id: g.account_id ?? selfUid }));
+        }
+        const clubLevel = clubGrants
+          .filter((g) => !(Array.isArray(g.team) ? g.team[0] : g.team))
+          .map((g) => {
+            const uid = userOf(g);
+            if (!byId.has(uid) && selfIds.has(uid) && myProfile?.display_name) byId.set(uid, { account_id: uid, display_name: myProfile.display_name, avatar_url: (myProfile as any).avatar_url ?? null });
+            const p = byId.get(uid);
+            return {
+              id: `club:${uid}:${g.role}`,
+              user_id: uid,
+              role: g.role,
+              team_id: null,
+              club_id: id!,
+              profiles: { id: uid, display_name: p?.display_name ?? null, avatar_url: p?.avatar_ref?.[0] ?? p?.avatar_url ?? null, ignite_points: 0 },
+              teams: null,
+            };
+          });
+        return [...clubLevel, ...grantLists.flatMap(({ team, grants }) =>
           grants.map((g) => {
             const uid = userOf(g);
             const p = byId.get(uid);
