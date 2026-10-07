@@ -77,7 +77,41 @@ export function readAuthChoice(): BackendProvider | null {
   }
 }
 
+function hasSupabaseSessionStored(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
+}
+
+function hasInternetIdentitySessionStored(): boolean {
+  try {
+    const raw = localStorage.getItem("ignite_icp_internet_identity_session");
+    const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
+    return typeof parsed?.principal === "string" && parsed.principal.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when the person is currently signed in with email (Supabase): a
+ * Supabase session is stored and either this device chose email
+ * (?auth=email) or there is no Internet Identity session. The actual
+ * signed-in system always decides where their data is read from — a club
+ * pin to ICP can't serve someone without an Internet Identity.
+ */
+export function isSignedInWithEmail(): boolean {
+  if (!hasSupabaseSessionStored()) return false;
+  if (readAuthChoice() === "supabase") return true;
+  return !hasInternetIdentitySessionStored();
+}
+
 export function resolveAuthBackend(): BackendProvider {
+  if (isSignedInWithEmail()) return "supabase";
   const choice = readAuthChoice();
   if (choice === "supabase") return "supabase";
   if (choice === "icp" && isIcpAuthAvailable()) return "icp";
