@@ -75,7 +75,7 @@ jobs:
         working-directory: deploy/frontend
         run: |
           set -euo pipefail
-          icp deploy -e ic frontend
+          icp deploy -e ic frontend --cycles 1000000000000
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
           echo "::notice::Web app live at https://$ID.icp.net"
           echo "### Web app deployed: https://$ID.icp.net" >> "$GITHUB_STEP_SUMMARY"
