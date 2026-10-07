@@ -83,15 +83,14 @@ const II_ALTERNATIVE_ORIGINS = new Set([
 ]);
 
 // The ICP frontend canister's default addresses (<id>.icp.net / .icp0.io /
-// .ic0.app). They only sign in "as" the published site once that canister's
-// address is listed in /.well-known/ii-alternative-origins; a custom domain
-// keeps its own accounts and is deliberately not matched here.
-const ICP_CANISTER_ORIGIN = /^https:\/\/[a-z0-9]{5}-[a-z0-9-]+-cai\.(icp\.net|icp0\.io|ic0\.app)$/;
+// .ic0.app) deliberately keep their OWN accounts (user decision 2026-10-07):
+// they are not matched here, so they sign in as themselves. When a custom
+// domain later fronts the canister, account migration will be planned then.
 
 function resolveDerivationOrigin(): string | undefined {
   if (typeof window === "undefined") return undefined;
   const origin = window.location.origin;
-  return II_ALTERNATIVE_ORIGINS.has(origin) || ICP_CANISTER_ORIGIN.test(origin) ? CANONICAL_II_ORIGIN : undefined;
+  return II_ALTERNATIVE_ORIGINS.has(origin) ? CANONICAL_II_ORIGIN : undefined;
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
