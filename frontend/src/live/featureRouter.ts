@@ -1,7 +1,7 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
 import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
-import { getEffectiveBackendForFeature, tryGetActiveIcpTarget } from "./loadBackendRouting";
+import { getEffectiveBackendForFeature, isSignedInWithEmail, tryGetActiveIcpTarget } from "./loadBackendRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
 /**
@@ -33,6 +33,7 @@ export async function withFeatureBackend<T>(
   feature: FeatureArea,
   providers: FeatureBackendProviders<T>,
 ): Promise<T> {
+  if (isSignedInWithEmail()) return providers.supabase();
   if (getEffectiveBackendForFeature(feature) !== "icp") {
     // An Internet Identity user has no Supabase account or data: if routing
     // momentarily resolves to Supabase (club-membership pin not loaded yet,
