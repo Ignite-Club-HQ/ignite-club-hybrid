@@ -19,11 +19,6 @@
   directory = "netlify/functions"
 
 [[redirects]]
-  from = "/api/giphy-search"
-  to = "/.netlify/functions/giphy-search"
-  status = 200
-
-[[redirects]]
   from = "/api/fetch-link-preview"
   to = "/.netlify/functions/fetch-link-preview"
   status = 200
