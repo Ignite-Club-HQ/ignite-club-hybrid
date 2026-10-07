@@ -39,6 +39,18 @@ interface IcpUploadPhotoSheetProps {
   defaultClubId?: string;
 }
 
+const preparedFiles = new WeakMap<File, Promise<{ file: File | Blob }>>();
+function prepareFile(raw: File): Promise<{ file: File | Blob }> {
+  let job = preparedFiles.get(raw);
+  if (!job) {
+    job = raw.type.startsWith("video/")
+      ? Promise.resolve({ file: raw })
+      : compressImage(raw).catch(() => ({ file: raw }));
+    preparedFiles.set(raw, job);
+  }
+  return job;
+}
+
 const SCOPE_UNSUPPORTED = /set_asset_scope|has no update method|not found/i;
 
 export function IcpUploadPhotoSheet({
@@ -78,6 +90,27 @@ export function IcpUploadPhotoSheet({
     }
   }, [open]);
 
+  // Warm the slow one-off steps (sign-in lookup, lock check, encryption key)
+  // while the member is still choosing photos, so pressing Share only pays
+  // for the upload itself.
+  useEffect(() => {
+    if (!open || !clubId) return;
+    void (async () => {
+      try {
+        const [{ getActiveIcpTarget }, { getCurrentInternetIdentity }, { encryptClubMedia }] = await Promise.all([
+          import("@/live/targetRegistry"),
+          import("@/live/internetIdentityAuth"),
+          import("@/live/piiVetKeys"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        await encryptClubMedia({ target: getActiveIcpTarget(), identity } as never, clubId, new Uint8Array(1));
+      } catch {
+        // Best-effort warm-up only.
+      }
+    })();
+  }, [open, clubId]);
+
   const clubTeams = teams.filter((t) => t.club_id === clubId);
   const clubMiniLeagues = miniLeagues.filter((m) => m.club_id === clubId);
   const clubCompetitions = competitions.filter((c) => c.club_id === clubId);
@@ -91,6 +124,8 @@ export function IcpUploadPhotoSheet({
       toast.error("Pick photos or videos");
       return;
     }
+    // Start shrinking photos now, not when Share is pressed.
+    for (const f of next) prepareFile(f);
     setFiles((prev) => [...prev, ...next].slice(0, 10));
   };
 
@@ -121,10 +156,12 @@ export function IcpUploadPhotoSheet({
           throw new Error("unreachable");
         },
         icp: async (ctx) => {
-          for (let i = 0; i < files.length; i++) {
+          let done = 0;
+          let nextIndex = 0;
+          const uploadOne = async (i: number) => {
             const raw = files[i];
             const isVideo = raw.type.startsWith("video/");
-            const prepared = isVideo ? { file: raw } : await compressImage(raw);
+            const prepared = await prepareFile(raw);
             const mime = prepared.file.type || raw.type || "application/octet-stream";
             // The clubs/<clubId>/ prefix is what grantLiveClubPiiRead matches
             // to give club members decrypt access. Keep the path short: the
@@ -173,8 +210,14 @@ export function IcpUploadPhotoSheet({
                 throw err;
               }
             }
-            setProgress({ done: i + 1, total: files.length });
-          }
+            done += 1;
+            setProgress({ done, total: files.length });
+          };
+          // Several photos upload side by side instead of one after another.
+          const worker = async () => {
+            while (nextIndex < files.length) await uploadOne(nextIndex++);
+          };
+          await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
         },
       });
       toast.success(
