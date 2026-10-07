@@ -75,14 +75,35 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
   const { data: sponsors, isLoading } = useQuery({
     queryKey: ["sponsors", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("*")
-        .eq("club_id", clubId)
-        .order("display_order", { ascending: true });
-      
-      if (error) throw error;
-      return data as Sponsor[];
+      return withFeatureBackend<Sponsor[]>("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("*")
+            .eq("club_id", clubId)
+            .order("display_order", { ascending: true });
+          if (error) throw error;
+          return data as Sponsor[];
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveSponsors(ctx, clubId);
+          return [...rows]
+            .sort((a, b) => Number(a.sort_order) - Number(b.sort_order))
+            .map((r) => ({
+              id: r.id,
+              club_id: r.club_id,
+              name: r.name,
+              description: r.description[0] ?? null,
+              website_url: r.website_url[0] ?? null,
+              logo_url: r.logo_url[0] ?? null,
+              is_active: r.is_active,
+              is_team_only: r.is_team_only,
+              tier: r.tier && r.tier !== "none" ? r.tier : null,
+              exposure_percentage: r.exposure_percentage[0] != null ? Number(r.exposure_percentage[0]) : null,
+              display_order: Number(r.sort_order),
+            }) as unknown as Sponsor);
+        },
+      });
     },
   });
 
