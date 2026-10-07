@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect, Suspense } from "react";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { isSameDay } from "date-fns";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { resolveChatMetadataState } from "@/lib/chatMetadataGate";
@@ -1629,6 +1630,7 @@ export default function TeamChatPage() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       // Lab mode: optimistic cache-only delivery, no backend write and no persistence.
       if (useIcpLab) {
         const localMessage = await sendLocalTeamMessage(

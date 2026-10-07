@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
+import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
 import { consumePendingChatJump, getLastConsumedPendingChatJumpTs, subscribePendingChatJump, type PendingChatJumpPayload } from "@/lib/pendingChatJump";
 import { resolveChatJumpTarget } from "@/lib/resolveChatJumpTarget";
@@ -1047,6 +1048,7 @@ export default function GroupChatPage() {
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ text, image_url, reply_to_id }: { text: string; image_url: string | null; reply_to_id: string | null }) => {
+      image_url = (await resolveChatUploadUrl(image_url)) as typeof image_url;
       if (!user || !groupId) return;
 
       if (useIcpLab) {
