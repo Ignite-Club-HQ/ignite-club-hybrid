@@ -18,12 +18,15 @@ export default defineConfig({
   envDir: false,
   envPrefix: "IGNITE_LIVE_",
   esbuild: { jsx: "automatic" },
+  // ic-websocket-js reads process.env.LOG_LEVEL; browsers have no `process`.
+  define: { "process.env.LOG_LEVEL": "undefined" },
   // Scan only the real entry for dependencies up front. Without this, Vite
   // discovers deps late, re-optimizes, and force-reloads the open page
   // ("optimized dependencies changed. reloading") — a source of the preview
   // bouncing back to a spinner / not-found mid-use.
   optimizeDeps: {
     entries: ["live-index.html"],
+    esbuildOptions: { define: { "process.env.LOG_LEVEL": "undefined" } },
     include: ["react", "react-dom", "react-dom/client", "react/jsx-runtime", "react/jsx-dev-runtime", "react-router-dom"],
   },
   resolve: {
