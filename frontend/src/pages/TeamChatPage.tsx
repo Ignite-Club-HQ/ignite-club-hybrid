@@ -972,7 +972,7 @@ export default function TeamChatPage() {
       const realByAuthorText = new Set(
         messages
           .filter((m) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
-          .map((m) => `${m.author_id}::${m.text ?? ""}::${m.image_url ?? ""}`),
+          .map((m) => `${m.author_id}::${m.text ?? ""}::${m.image_url ? "img" : ""}`),
       );
       const previousOnly = (prev || []).filter((message) => {
         // SECURITY (cross-team bleed): this merge is deliberately fail-open — it
@@ -986,7 +986,7 @@ export default function TeamChatPage() {
         // cache snapshot — never carry it over from the previous render state.
         if (isTombstoned(reconcileScope, message.id)) return false;
         if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ?? ""}`;
+          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ? "img" : ""}`;
           if (realByAuthorText.has(key)) return false;
         }
         return true;
