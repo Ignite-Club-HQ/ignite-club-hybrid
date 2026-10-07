@@ -154,6 +154,13 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
           settle();
           return;
         }
+        // The person deliberately picked email sign-in on this device
+        // (?auth=email): honour it — their data is read from Supabase.
+        if (provider === "supabase" && readAuthChoice() === "supabase") {
+          sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
+          return;
+        }
         if (isAppAdmin) {
           console.info(
             `[club-backend] App admin signed in via ${provider} while a club pin requires ${required} — skipping enforcement so admin settings stay reachable.`,

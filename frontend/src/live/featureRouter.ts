@@ -46,6 +46,12 @@ export async function withFeatureBackend<T>(
     }
     return providers.supabase();
   }
+  // Signed in with email (Supabase session, no Internet Identity): an ICP
+  // club pin can't be served without an identity, so read their Supabase data
+  // instead of failing every request.
+  if (hasSupabaseSession() && !(await getCurrentInternetIdentity().catch(() => null))) {
+    return providers.supabase();
+  }
   // Ride out the brief "no session" gap while the session renews itself.
   const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
   if (!identity) {
@@ -55,4 +61,14 @@ export async function withFeatureBackend<T>(
     );
   }
   return providers.icp({ identity, target: getActiveIcpTarget() });
+}
+
+function hasSupabaseSession(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("sb-") && k.endsWith("-auth-token") && localStorage.getItem(k)) return true;
+    }
+  } catch { /* ignore */ }
+  return false;
 }

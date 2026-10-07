@@ -62,7 +62,7 @@ const AUTH_CHOICE_KEY = "ignite.authChoice";
  * Lets the on-chain copy run in Supabase mode even when routing would pick ICP,
  * and vice versa. `?auth=auto` clears the choice and follows routing again.
  */
-function readAuthChoice(): BackendProvider | null {
+export function readAuthChoice(): BackendProvider | null {
   try {
     const param = new URLSearchParams(window.location.search).get("auth");
     if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
