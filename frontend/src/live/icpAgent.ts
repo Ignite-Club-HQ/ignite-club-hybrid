@@ -88,7 +88,6 @@ export async function createLiveAgent(target: IcpTargetConfig, identity: Identit
     // every call once it expires. Swap in the fresh identity.
     if (liveAgentIdentity.get(cacheKey) !== identity) {
       liveAgentIdentity.set(cacheKey, identity);
-      cached.then((agent) => agent.replaceIdentity(identity)).catch(() => {});
       const agent = await cached;
       agent.replaceIdentity(identity);
       return agent;
@@ -118,6 +117,7 @@ export async function createLiveAgent(target: IcpTargetConfig, identity: Identit
 /** Drops every cached agent; called on Internet Identity sign-out. */
 export function clearLiveAgentCache(): void {
   liveAgentCache.clear();
+  liveAgentIdentity.clear();
 }
 
 export async function createLiveActor<T>(

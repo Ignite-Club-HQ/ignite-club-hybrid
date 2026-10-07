@@ -1,6 +1,6 @@
 import type { Identity } from "@icp-sdk/core/agent";
 import { isFeatureCanisterConfigured, type FeatureArea } from "./featureBackend";
-import { getCurrentInternetIdentity } from "./internetIdentityAuth";
+import { getCurrentInternetIdentity, getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getEffectiveBackendForFeature, tryGetActiveIcpTarget } from "./loadBackendRouting";
 import { getActiveIcpTarget, type IcpTargetConfig } from "./targetRegistry";
 
