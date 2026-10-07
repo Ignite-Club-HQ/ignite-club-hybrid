@@ -25,7 +25,13 @@ function passthrough(file: File): CompressionResult {
   };
 }
 
-export async function compressImage(file: File): Promise<CompressionResult> {
+export interface CompressImageOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  quality?: number;
+}
+
+export async function compressImage(file: File, options: CompressImageOptions = {}): Promise<CompressionResult> {
   // Skip compression for non-image files
   if (!file.type.startsWith('image/')) {
     return passthrough(file);
