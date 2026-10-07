@@ -10,7 +10,7 @@ import {
 // features/membership is imported lazily at the call site so the ICP SDK
 // stays out of the entry chunk (this component mounts at app start).
 import { getActiveIcpTarget } from "@/live/targetRegistry";
-import { isIcpAuthAvailable } from "@/live/authBackendMode";
+import { isIcpAuthAvailable, readAuthChoice } from "@/live/authBackendMode";
 import {
   cacheClubBackendHint,
   getBackendRoutingConfig,
@@ -150,6 +150,13 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         const { country } = getCurrentCountry();
         const required = resolveBackendForUser(config, country, clubIds, isIcpAuthAvailable());
         if (required === provider) {
+          sessionStorage.removeItem(ENFORCED_KEY);
+          settle();
+          return;
+        }
+        // The person deliberately picked email sign-in on this device
+        // (?auth=email): honour it — their data is read from Supabase.
+        if (provider === "supabase" && readAuthChoice() === "supabase") {
           sessionStorage.removeItem(ENFORCED_KEY);
           settle();
           return;
