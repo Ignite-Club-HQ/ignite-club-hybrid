@@ -68,11 +68,32 @@ function resolveInternetIdentityProvider(target: IcpTargetConfig): { authorizeUr
   return undefined;
 }
 
+/**
+ * Internet Identity gives a DIFFERENT principal per site address, so the
+ * preview and the published site would otherwise create two separate
+ * accounts for the same person. Every alternative address signs in "as" the
+ * published site; the published site lists them in
+ * /.well-known/ii-alternative-origins.
+ */
+const CANONICAL_II_ORIGIN = "https://ignite-canister-connect.lovable.app";
+const II_ALTERNATIVE_ORIGINS = new Set([
+  "https://id-preview--9e0ff3f7-539e-4a59-aa6d-a6d3fe4c7c5e.lovable.app",
+  "https://project--9e0ff3f7-539e-4a59-aa6d-a6d3fe4c7c5e.lovable.app",
+  "https://project--9e0ff3f7-539e-4a59-aa6d-a6d3fe4c7c5e-dev.lovable.app",
+]);
+
+function resolveDerivationOrigin(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return II_ALTERNATIVE_ORIGINS.has(window.location.origin) ? CANONICAL_II_ORIGIN : undefined;
+}
+
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
   const provider = resolveInternetIdentityProvider(target);
+  const derivationOrigin = resolveDerivationOrigin();
   const { AuthClient } = await import("@icp-sdk/auth/client");
   return new AuthClient({
     ...(provider ? { identityProvider: provider } : {}),
+    ...(derivationOrigin ? { derivationOrigin } : {}),
     agentOptions: {
       host: target.host,
     },
