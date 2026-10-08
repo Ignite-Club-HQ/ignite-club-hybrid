@@ -10,7 +10,7 @@ on:
         required: true
         default: "Paul Cranwell"
       keep_principals:
-        description: "Principal(s) to KEEP, comma separated; "none" erases all; empty just lists"
+        description: 'Principal(s) to KEEP, comma separated; "none" erases all; empty just lists'
         required: false
         default: ""
       confirm:
