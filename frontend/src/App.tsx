@@ -234,6 +234,8 @@ const queryClient = new QueryClient({
 // Paint the last-seen data for every page instantly on launch, then refresh.
 restoreQueryCache(queryClient);
 startQueryCachePersistence(queryClient);
+// Still-sending chat messages survive leaving and re-opening the chat.
+installPendingSendKeeper(queryClient);
 
 // Download the main pages' code while the app is idle so the first tap on
 // any of them does not wait for a code download.
