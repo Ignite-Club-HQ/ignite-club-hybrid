@@ -8,9 +8,7 @@ import {
   getBuildTimeBackendRoutingConfig,
   readCachedBackendRoutingConfig,
   parseBackendRoutingConfig,
-  readCachedClubBackendHint,
   resolveBackendForCountry,
-  resolveClubBackendOverride,
   resolveTargetForCountry,
   resolveIcpEngineForCountry,
   isCloudEngineUsable,
@@ -21,8 +19,8 @@ import {
 import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { getUserClubIds } from "./userClubs";
-import { hasInternetIdentitySessionStored, isSignedInWithEmail } from "./authBackendMode";
+import { isSignedInWithEmail } from "./authBackendMode";
+
 export { isSignedInWithEmail };
 
 /**
@@ -149,23 +147,6 @@ function isIcpAvailable(): boolean {
   }
 }
 
-/**
- * Which backend should serve the current user right now, combining the saved
- * routing config, the user's country (profile override, else IP), and whether
- * any ICP canisters are actually configured. Feature routing only — this
- * never blocks access.
- */
-/**
- * The per-club backend pin for the current user, or null. Post-auth this
- * uses the live membership ids loaded by ClubBackendEnforcement; pre-auth
- * (the /auth screen decision) it falls back to the hint cached by the last
- * post-auth check.
- */
-function currentClubBackendOverride(config: BackendRoutingConfig): BackendProvider | null {
-  const clubIds = getUserClubIds();
-  if (clubIds.length > 0) return resolveClubBackendOverride(config, clubIds);
-  return readCachedClubBackendHint();
-}
 
 /**
  * The active ICP target, or null when none is configured. Never throws, so
