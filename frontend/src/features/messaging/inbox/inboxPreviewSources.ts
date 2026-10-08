@@ -336,7 +336,64 @@ export async function fetchTeamsWithMessages(
   }
 }
 
+/**
+ * Secure-sign-in counterpart of the chat_groups read: club groups live on
+ * messaging_domain. Also self-heals the default Coaches / Team Admins / Club
+ * Committee chats for clubs the user administers (idempotent, once per session).
+ */
+async function fetchIcpChatGroupsWithMessages() {
+  const ctx = await getIcpFeatureBackendContext();
+  const roleGrants = (await getLiveMyRoleGrants(ctx)) as any[];
+  const clubOf = (g: any) => g.club?.[0] ?? g.club_id?.[0] ?? g.club_id ?? null;
+  const clubIds = [...new Set(roleGrants.map(clubOf).filter(Boolean))] as string[];
+  if (clubIds.length === 0) return { groups: [] as any[], latestMessages: {} as Record<string, InboxPreview> };
+  const allClubs = (await listLiveMembershipClubs(ctx)) as any[];
+  const liveClubs = allClubs.filter((c) => clubIds.includes(c.id) && c.deleted_at_ms?.[0] === undefined);
+  const adminClubIds = new Set(roleGrants.filter((g) => g.role === "club_admin").map(clubOf));
+  const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
+  const { listLiveGroupsByClub } = await import("@/live/features/messaging");
+  await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map((c) =>
+    ensureLiveDefaultClubChats(ctx, c.id).catch(() => undefined)));
+  const perClub = await Promise.all(liveClubs.map(async (club) => {
+    const rows = await listLiveGroupsByClub(ctx, club.id).catch(() => []);
+    return rows
+      .filter((g) => g.isMember && !g.teamId && g.kind === "group")
+      .map((g) => ({
+        id: g.conversationId,
+        name: g.name,
+        description: g.description,
+        avatar_url: g.avatar,
+        club_id: club.id,
+        team_id: null,
+        mini_league_id: null,
+        allowed_roles: [],
+        created_at: new Date(Number(club.created_at_ms ?? 0)).toISOString(),
+        deleted_at: null,
+        teams: null,
+        clubs: { name: club.name, logo_url: club.logo_url?.[0] ?? null, deleted_at: null, purged_at: null },
+      }));
+  }));
+  const groups = perClub.flat();
+  const latestMessages: Record<string, InboxPreview> = {};
+  await Promise.all(groups.map(async (group) => {
+    try {
+      const page: any = await listLiveLatestMessagesPage(ctx, group.id, null, 1);
+      const m = page.messages?.[0];
+      if (!m) return;
+      const att = m.attachment?.[0] ?? null;
+      latestMessages[group.id] = {
+        text: (m.body ?? "").trim(),
+        author_display_name: null,
+        created_at: new Date(Number(m.created_at_ms)).toISOString(),
+        image_url: att?.kind === "image" ? (att.url?.[0] ?? att.ref_id ?? null) : null,
+      } as unknown as InboxPreview;
+    } catch { /* one unreadable chat must not blank the rest */ }
+  }));
+  return { groups, latestMessages };
+}
+
 export async function fetchChatGroupsWithMessages(client: InboxDataClient, userId: string) {
+  if (resolveAuthBackend() === "icp") return fetchIcpChatGroupsWithMessages();
   let accessibleIds: string[] | null = null;
   try {
     if (typeof window === "undefined" || window.localStorage.getItem("msg_accessible_ids_rpc") !== "0") {

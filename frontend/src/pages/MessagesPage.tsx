@@ -450,7 +450,7 @@ export default function MessagesPage() {
     queryKey: ["my-chat-groups-with-messages", user?.id],
     refetchOnReconnect: "always",
     queryFn: () => fetchChatGroupsWithMessages(supabase, user!.id),
-    enabled: !!user && initialized && !useIcpLab,
+    enabled: !!user && initialized,
     // Matches the sibling inbox queries. The 25s REST GET timeout in
     // `supabaseAuthRetry.ts` otherwise surfaces transient RLS-heavy timeouts
     // as hard errors after a single attempt.
