@@ -20,19 +20,30 @@ export function GoogleMapEmbed({
     return null;
   }
 
-  // A missing key must never leave a broken iframe in the event form.
+  // Without an authorized key (e.g. the ICP-hosted copy), use Google's keyless
+  // embed so the map still shows, plus a link to open it in Maps.
   if (!browserKey || !isAuthorizedHost) {
     return (
-      <a
-        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex h-48 w-full items-center justify-center gap-2 rounded-lg border bg-muted text-primary"
-      >
-        <MapPin className="h-5 w-5" />
-        View location on Google Maps
-        <ExternalLink className="h-4 w-4" />
-      </a>
+      <div className="space-y-1">
+        <iframe
+          className={className}
+          src={`https://www.google.com/maps?q=${encodeURIComponent(place)}&output=embed`}
+          allowFullScreen
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          title="Event location map"
+        />
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-sm text-primary"
+        >
+          <MapPin className="h-4 w-4" />
+          View location on Google Maps
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
     );
   }
 
