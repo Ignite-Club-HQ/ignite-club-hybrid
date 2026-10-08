@@ -118,6 +118,7 @@ function SupabaseMediaPage() {
   }, [searchParams]);
 
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [uploadingPreviews, setUploadingPreviews] = useState<string[]>([]);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<Record<string, { id: string; name: string } | undefined>>({});
@@ -1338,6 +1339,7 @@ function SupabaseMediaPage() {
             open={uploadDialogOpen}
             onOpenChange={setUploadDialogOpen}
             onUploadingCountChange={setUploadingCount}
+            onUploadingPreviewsChange={setUploadingPreviews}
             defaultTeamId={searchParams.get("team")}
             defaultEventId={searchParams.get("event")}
           />
@@ -1502,9 +1504,12 @@ function SupabaseMediaPage() {
                   </div>
                 </div>
                 <div className="relative aspect-square bg-muted">
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground font-medium">Uploading photo...</p>
+                  {uploadingPreviews[i] && (
+                    <img src={uploadingPreviews[i]} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  )}
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    <p className="text-xs text-foreground font-medium">Uploading…</p>
                   </div>
                 </div>
                 <CardContent className="p-3 space-y-3">
