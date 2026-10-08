@@ -367,6 +367,11 @@ export function cacheClubBackendHint(backend: BackendProvider | null): void {
 
 /** Reads the cached per-club backend pin, or null when absent/invalid. */
 export function readCachedClubBackendHint(): BackendProvider | null {
+  // Club pins are retired; ignore and clear any hint left on the device.
+  try { localStorage.removeItem(CLUB_BACKEND_HINT_KEY); } catch { /* ignore */ }
+  return null;
+}
+function _legacyReadCachedClubBackendHint(): BackendProvider | null {
   try {
     const raw = globalThis.localStorage?.getItem(CLUB_BACKEND_HINT_KEY);
     return raw === "supabase" || raw === "icp" ? raw : null;
