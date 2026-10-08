@@ -4,6 +4,7 @@
 import { createPrivateKey } from "node:crypto";
 import { Actor, HttpAgent } from "@icp-sdk/core/agent";
 import { Ed25519KeyIdentity } from "@icp-sdk/core/identity";
+import { Secp256k1KeyIdentity } from "@icp-sdk/core/identity/secp256k1";
 
 const CLUB_DOMAIN = "mzzzv-taaaa-aaaal-qxlrq-cai";
 const IDENTITY = "mq2sj-fiaaa-aaaal-qxlqa-cai";
@@ -13,7 +14,9 @@ const CONFIRM = process.env.CONFIRM === "yes";
 const pem = (process.env.DEPLOYER_PEM || "").replace(/\r/g, "").replace(/\\n/g, "\n");
 if (!pem) throw new Error("DEPLOYER_PEM is not set");
 const jwk = createPrivateKey(pem).export({ format: "jwk" });
-const identity = Ed25519KeyIdentity.fromSecretKey(new Uint8Array(Buffer.from(jwk.d, "base64url")));
+const secret = new Uint8Array(Buffer.from(jwk.d, "base64url"));
+const identity = jwk.kty === "OKP" ? Ed25519KeyIdentity.fromSecretKey(secret) : Secp256k1KeyIdentity.fromSecretKey(secret);
+console.log(`==> Acting as ${identity.getPrincipal().toText()} (${jwk.kty === "OKP" ? "Ed25519" : "secp256k1"} key)`);
 
 const clubIdl = ({ IDL }) => {
   const R = (t) => IDL.Variant({ Ok: t, Err: IDL.Text });
