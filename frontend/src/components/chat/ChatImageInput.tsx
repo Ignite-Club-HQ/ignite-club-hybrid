@@ -725,7 +725,9 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const prevImageUrlRef = useRef(imageUrl);
   useEffect(() => {
     if (prevImageUrlRef.current && !imageUrl && localPreview) {
-      if (localPreview.startsWith("blob:")) URL.revokeObjectURL(localPreview);
+      // Never revoke here: after a send, the "Sending…" bubble in the thread
+      // still renders this same local URL until the upload finishes.
+      // Revoke only when the user removes the photo (handleRemoveImage).
       setLocalPreview(null);
     }
     prevImageUrlRef.current = imageUrl;
