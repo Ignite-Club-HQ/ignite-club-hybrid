@@ -1,0 +1,39 @@
+# Ignite Club HQ — turn Pro on for every live club on the ICP backend.
+#
+# Run from the GitHub Actions tab: "Set all ICP clubs to Pro" → Run workflow.
+# Uses the same DEPLOYER_PEM governor key as the deploy workflow — no new
+# secrets needed. Safe to re-run: clubs already on Pro are unchanged.
+
+name: Set all ICP clubs to Pro
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  set-pro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+
+      - name: Install ICP SDK
+        run: npm install @icp-sdk/core --no-fund --no-audit --prefix /tmp/icp-sdk
+
+      - name: Set Pro on all live clubs
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          NODE_PATH: /tmp/icp-sdk/node_modules
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then
+            echo "::error::The DEPLOYER_PEM repository secret is not set."
+            exit 1
+          fi
+          node scripts/set-all-clubs-pro.mjs
