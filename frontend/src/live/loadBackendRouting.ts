@@ -22,7 +22,7 @@ import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } 
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
 import { getUserClubIds } from "./userClubs";
-import { isSignedInWithEmail } from "./authBackendMode";
+import { hasInternetIdentitySessionStored, isSignedInWithEmail } from "./authBackendMode";
 export { isSignedInWithEmail };
 
 /**

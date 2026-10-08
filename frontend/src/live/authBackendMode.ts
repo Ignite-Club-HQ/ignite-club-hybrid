@@ -87,7 +87,7 @@ function hasSupabaseSessionStored(): boolean {
   return false;
 }
 
-function hasInternetIdentitySessionStored(): boolean {
+export function hasInternetIdentitySessionStored(): boolean {
   try {
     const raw = localStorage.getItem("ignite_icp_internet_identity_session");
     const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
