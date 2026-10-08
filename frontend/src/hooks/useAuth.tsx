@@ -1400,7 +1400,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         console.warn("[Auth] ICP identity profile fetch failed:", error);
         // Keep rendering from cache when there is one; with no cache, surface
         // the retry screen (AppLayout auto-retries via refreshProfile()).
-        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)) {
+        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)?.displayName) {
           setIcpProfileResolved(true);
           setIcpProfileError(true);
         }
@@ -1429,7 +1429,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // AppLayout shows its retry screen — a non-null profile with a null
   // display_name would be misread as "new user" and bounce an existing
   // member to /complete-profile.
-  const profileHidden = icpProfileError && !icpProfile;
+  const profileHidden = icpProfileError && !icpProfile?.displayName;
   const profile = useMemo(() => principal && !profileHidden ? {
     id: principal,
     display_name: icpDisplayName,
@@ -1610,7 +1610,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         setIcpProfileError(false);
       } catch (error) {
         console.warn("[Auth] ICP profile refresh failed:", error);
-        if (!getCachedIcpIdentityProfile(principal)) setIcpProfileError(true);
+        if (!getCachedIcpIdentityProfile(principal)?.displayName) setIcpProfileError(true);
       }
     },
     refreshUnreadCount: async () => {},
