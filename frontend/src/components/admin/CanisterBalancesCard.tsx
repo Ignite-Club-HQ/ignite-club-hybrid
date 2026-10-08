@@ -32,7 +32,29 @@ async function loadBalances(): Promise<Balance[]> {
   ]);
   const agent = await HttpAgent.create({ host: target.host, identity: new AnonymousIdentity() });
   const idl = () => IDL.Service({ cycles_balance: IDL.Func([], [IDL.Nat], ["query"]) });
-  return Promise.all(
+  const proxyIdl = () =>
+    IDL.Service({ canister_cycles: IDL.Func([IDL.Principal], [IDL.Nat], []) });
+  const clubDomainId = target.canisterIds?.["club_domain"];
+  const frontendBalance = async (): Promise<Balance> => {
+    try {
+      if (!clubDomainId) throw new Error("no club_domain");
+      const { Principal } = await import("@icp-sdk/core/principal");
+      const proxy = Actor.createActor<{ canister_cycles: (id: unknown) => Promise<bigint> }>(proxyIdl, {
+        agent,
+        canisterId: clubDomainId,
+      });
+      const cycles = await proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID));
+      return { key: "frontend (web app)", canisterId: FRONTEND_CANISTER_ID, cycles };
+    } catch {
+      return {
+        key: "frontend (web app)",
+        canisterId: FRONTEND_CANISTER_ID,
+        cycles: null,
+        error: "Available after the next backend + web app deploys",
+      };
+    }
+  };
+  const balances = await Promise.all(
     entries.map(async ([key, canisterId]): Promise<Balance> => {
       try {
         const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint> }>(idl, { agent, canisterId });
