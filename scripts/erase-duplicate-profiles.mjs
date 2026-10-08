@@ -18,7 +18,8 @@ if (!name) throw new Error("DISPLAY_NAME is required");
 
 const pem = process.env.DEPLOYER_PEM.replace(/\r/g, "").replace(/\\n/g, "\n");
 const jwk = createPrivateKey(pem).export({ format: "jwk" });
-const identity = Ed25519KeyIdentity.fromSecretKey(new Uint8Array(Buffer.from(jwk.d, "base64url")));
+const secret = new Uint8Array(Buffer.from(jwk.d, "base64url"));
+const identity = jwk.kty === "OKP" ? Ed25519KeyIdentity.fromSecretKey(secret) : Secp256k1KeyIdentity.fromSecretKey(secret);
 
 const Res = (t) => IDL.Variant({ Ok: t, Err: IDL.Text });
 const idl = IDL.Service({
