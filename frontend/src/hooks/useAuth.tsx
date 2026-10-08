@@ -1336,8 +1336,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   const [icpProfile, setIcpProfile] = useState<IcpIdentityProfile | null>(() =>
     principal ? getCachedIcpIdentityProfile(principal) : null,
   );
+  // Only a cached profile WITH a name counts as resolved: a cached "no profile
+  // yet" can be stale (saved elsewhere since) and would bounce an existing
+  // member to profile setup before the canister answers.
   const [icpProfileResolved, setIcpProfileResolved] = useState(() =>
-    Boolean(principal && getCachedIcpIdentityProfile(principal)),
+    Boolean(principal && getCachedIcpIdentityProfile(principal)?.displayName),
   );
   // True when the profile could not be loaded AND there is no cache to render
   // from. Drives the "unable to load / retry" screen instead of an endless
@@ -1363,7 +1366,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
     const cached = getCachedIcpIdentityProfile(principal);
     setIcpProfile(cached);
-    setIcpProfileResolved(Boolean(cached));
+    setIcpProfileResolved(Boolean(cached?.displayName));
     setIcpProfileError(false);
     const requestId = ++icpProfileRequestRef.current;
     let cancelled = false;
