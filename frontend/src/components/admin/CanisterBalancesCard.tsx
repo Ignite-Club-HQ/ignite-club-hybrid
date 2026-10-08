@@ -96,8 +96,8 @@ export function CanisterBalancesCard() {
         <div className="space-y-1.5">
           <CardTitle className="text-base">Canister balances</CardTitle>
           <CardDescription>
-            Cycles left in each canister (lowest first). Top up anything under 2T using the deploy account or a site
-            like icscan.io. A canister at zero stops working.
+            Cycles left in each canister (lowest first), including the web-app canister. Top up anything under 2T —
+            cycle.express sends cycles straight to a canister ID. A canister at zero stops working.
           </CardDescription>
         </div>
         <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} aria-label="Refresh balances">
