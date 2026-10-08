@@ -1336,8 +1336,11 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   const [icpProfile, setIcpProfile] = useState<IcpIdentityProfile | null>(() =>
     principal ? getCachedIcpIdentityProfile(principal) : null,
   );
+  // Only a cached profile WITH a name counts as resolved: a cached "no profile
+  // yet" can be stale (saved elsewhere since) and would bounce an existing
+  // member to profile setup before the canister answers.
   const [icpProfileResolved, setIcpProfileResolved] = useState(() =>
-    Boolean(principal && getCachedIcpIdentityProfile(principal)),
+    Boolean(principal && getCachedIcpIdentityProfile(principal)?.displayName),
   );
   // True when the profile could not be loaded AND there is no cache to render
   // from. Drives the "unable to load / retry" screen instead of an endless
@@ -1363,7 +1366,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
     }
     const cached = getCachedIcpIdentityProfile(principal);
     setIcpProfile(cached);
-    setIcpProfileResolved(Boolean(cached));
+    setIcpProfileResolved(Boolean(cached?.displayName));
     setIcpProfileError(false);
     const requestId = ++icpProfileRequestRef.current;
     let cancelled = false;
@@ -1397,7 +1400,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         console.warn("[Auth] ICP identity profile fetch failed:", error);
         // Keep rendering from cache when there is one; with no cache, surface
         // the retry screen (AppLayout auto-retries via refreshProfile()).
-        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)) {
+        if (!cancelled && icpProfileRequestRef.current === requestId && !getCachedIcpIdentityProfile(principal)?.displayName) {
           setIcpProfileResolved(true);
           setIcpProfileError(true);
         }
@@ -1426,7 +1429,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
   // AppLayout shows its retry screen — a non-null profile with a null
   // display_name would be misread as "new user" and bounce an existing
   // member to /complete-profile.
-  const profileHidden = icpProfileError && !icpProfile;
+  const profileHidden = icpProfileError && !icpProfile?.displayName;
   const profile = useMemo(() => principal && !profileHidden ? {
     id: principal,
     display_name: icpDisplayName,
@@ -1607,7 +1610,7 @@ export function IcpAuthProvider({ children, persona = "member" }: { children: Re
         setIcpProfileError(false);
       } catch (error) {
         console.warn("[Auth] ICP profile refresh failed:", error);
-        if (!getCachedIcpIdentityProfile(principal)) setIcpProfileError(true);
+        if (!getCachedIcpIdentityProfile(principal)?.displayName) setIcpProfileError(true);
       }
     },
     refreshUnreadCount: async () => {},
