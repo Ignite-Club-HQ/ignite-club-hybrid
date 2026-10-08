@@ -1,6 +1,8 @@
 import { Suspense, useEffect, useState, Fragment, type ReactNode } from "react";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { restoreQueryCache, startQueryCachePersistence } from "@/lib/queryCachePersistence";
+import { installPendingSendKeeper } from "@/lib/pendingSendKeeper";
+
 import NativeOnlyGate from "@/components/NativeOnlyGate";
 import { Capacitor } from "@capacitor/core";
 // Force publish - Firebase upgraded to v12.7.0 for Capacitor 8 compatibility
