@@ -46,7 +46,7 @@ const Result = (ok) => IDL.Variant({ Ok: ok, Err: IDL.Text });
 
 const idl = ({ IDL }) =>
   IDL.Service({
-    list_clubs: IDL.Func([opt(IDL.Nat), opt(IDL.Nat)], [Result(IDL.Vec(Club))], ["query"]),
+    list_clubs: IDL.Func([opt(IDL.Text), IDL.Nat16], [Result(IDL.Vec(Club))], ["query"]),
     get_club_subscriptions: IDL.Func([IDL.Vec(IDL.Text)], [Result(IDL.Vec(ClubSubscription))], ["query"]),
     save_club_subscription: IDL.Func([ClubSubscription], [Result(ClubSubscription)], []),
   });
@@ -57,7 +57,7 @@ console.log("==> Governor principal:", identity.getPrincipal().toText());
 const agent = await HttpAgent.create({ host: "https://icp0.io", identity });
 const clubDomain = Actor.createActor(idl, { agent, canisterId: Principal.fromText(CLUB_DOMAIN) });
 
-const clubsRes = await clubDomain.list_clubs([], [100]);
+const clubsRes = await clubDomain.list_clubs([], 100);
 if ("Err" in clubsRes) throw new Error(`list_clubs failed: ${clubsRes.Err}`);
 const live = clubsRes.Ok.filter((c) => c.deleted_at_ms.length === 0);
 console.log(`==> ${live.length} live clubs`);
