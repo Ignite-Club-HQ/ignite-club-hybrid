@@ -73,6 +73,17 @@ export async function registerLiveAsset(
   return asset;
 }
 
+/** register_asset only — lets callers run it alongside the byte upload. */
+export async function registerLiveAssetRecord(ctx: FeatureBackendContext, input: LiveAssetRegistration) {
+  return registerLiveAsset(ctx, { ...input, blobRef: undefined });
+}
+
+/** Attaches uploaded on-chain bytes to an already-registered asset. */
+export async function attachLiveAssetBlob(ctx: FeatureBackendContext, assetId: string, blobRef: LiveBlobRef) {
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_blob_ref(assetId, [blobRef]), "Set blob reference");
+}
+
 type MediaMetadataActor = Awaited<ReturnType<typeof connectLiveMediaMetadata>>["actor"];
 
 async function setLiveAssetScopeWithActor(

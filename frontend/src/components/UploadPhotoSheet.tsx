@@ -509,59 +509,56 @@ export function UploadPhotoSheet({
     // length, and the full club/team/member layout above exceeds it
     // (register_asset fails with "Invalid asset"). The clubs/<clubId>/ prefix
     // is preserved so grantLiveClubPiiRead still derives the club grant.
-    const blobUpload = await tryUploadMediaToBlobStore({
-      storagePath: clubId
-        ? `clubs/${clubId}/${timestamp}-${randomSuffix}.${fileExt}`
-        : storagePath,
-      file,
-      mime: file.type || "application/octet-stream",
-    });
+    const blobStoragePath = clubId
+      ? `clubs/${clubId}/${timestamp}-${randomSuffix}.${fileExt}`
+      : storagePath;
 
-    let storageUrl: string;
-    if (blobUpload) {
-      storageUrl = blobUpload.url;
-    } else {
-      const { error: uploadError } = await supabase.storage
-        .from("photos")
-        .upload(storagePath, file, { cacheControl: "31536000" });
-
-      if (uploadError) throw uploadError;
-
-      // Store the Supabase storage URL format (will be converted to signed URL when displayed)
-      const supabaseUrl = "REDACTED_LAB_VALUE";
-      storageUrl = `${supabaseUrl}/storage/v1/object/public/photos/${storagePath}`;
-    }
-
-    // 1. Record the photo metadata. Hybrid routing: when the media feature
-    // resolves to ICP, the media_metadata canister is the source of truth and
-    // NO Supabase photos row is written (previously the row was always
-    // inserted and the canister only mirrored it — a data split). A
-    // configured-but-failed registration throws (same rule as the blob
-    // upload above) rather than silently losing the metadata. Photos without
-    // a club stay Supabase-only (the canister requires a club id).
+    // ICP fast path: register the photo record IN PARALLEL with the byte
+    // upload (each blockchain write is ~2s), then attach the on-chain bytes.
+    // Saves two sequential round trips per photo.
     if (clubId && isFeatureRoutedToIcp("media")) {
-      const asset = await withFeatureBackend("media", {
-        supabase: () => {
-          throw new Error("unreachable: media routing checked above");
-        },
-        icp: async (ctx) => {
-          const checksum = blobUpload
-            ? blobUpload.blobRef.content_hash
-            : await sha256Hex(new Uint8Array(await file.arrayBuffer()));
-          return registerLiveAsset(ctx, {
-            clubId,
-            kind: "photo",
-            mime: file.type || "application/octet-stream",
-            checksum,
-            storagePath: blobUpload ? blobUpload.blobRef.path : storagePath,
-            visibility: "club",
-            contentLength: file.size,
-            blobRef: blobUpload?.blobRef,
-          });
-        },
-      });
-      return { url: storageUrl, photoId: asset.id };
+      const mime = file.type || "application/octet-stream";
+      const plainHash = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+      const { registerLiveAssetRecord, attachLiveAssetBlob } = await import("@/live/features/media");
+      const [blobUpload, registered] = await Promise.all([
+        tryUploadMediaToBlobStore({ storagePath: blobStoragePath, file, mime }),
+        withFeatureBackend("media", {
+          supabase: () => {
+            throw new Error("unreachable: media routing checked above");
+          },
+          icp: async (ctx) => ({
+            ctx,
+            asset: await registerLiveAssetRecord(ctx, {
+              clubId,
+              kind: "photo",
+              mime,
+              checksum: plainHash,
+              storagePath: blobStoragePath,
+              visibility: "club",
+              contentLength: file.size,
+            }),
+          }),
+        }),
+      ]);
+      let storageUrl: string;
+      if (blobUpload) {
+        storageUrl = blobUpload.url;
+        await attachLiveAssetBlob(registered.ctx, registered.asset.id, blobUpload.blobRef);
+      } else {
+        const { error: uploadError } = await supabase.storage
+          .from("photos")
+          .upload(blobStoragePath, file, { cacheControl: "31536000" });
+        if (uploadError) throw uploadError;
+        storageUrl = `${"REDACTED_LAB_VALUE"}/storage/v1/object/public/photos/${blobStoragePath}`;
+      }
+      return { url: storageUrl, photoId: registered.asset.id };
     }
+
+    const { error: uploadError } = await supabase.storage
+      .from("photos")
+      .upload(storagePath, file, { cacheControl: "31536000" });
+    if (uploadError) throw uploadError;
+    const storageUrl = `${"REDACTED_LAB_VALUE"}/storage/v1/object/public/photos/${storagePath}`;
 
     const { data: insertedPhoto, error: insertError } = await supabase.from("photos").insert({
       image_url: storageUrl,
@@ -915,29 +912,33 @@ export function UploadPhotoSheet({
       }
     }
 
-    for (let i = 0; i < photosToUpload.length; i++) {
-      const photo = photosToUpload[i];
-      
-      // Update toast progress
-      toast.loading(
-        `Uploading photo ${i + 1} of ${totalPhotos}...`,
-        { id: uploadToastId }
-      );
-      
-      try {
-        const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, photoCaption, albumId);
-        uploadedUrls.push(url);
-        uploadedPhotoIds.push(photoId);
-        successCount++;
-      } catch (error: unknown) {
-        errorCount++;
-        if (!firstErrorMessage) {
-          firstErrorMessage = getReadableUploadError(error) || null;
+    // Up to three photos at once — each blockchain write is a ~2s round trip.
+    let started = 0;
+    let finished = 0;
+    const worker = async () => {
+      while (started < photosToUpload.length) {
+        const photo = photosToUpload[started++];
+        try {
+          const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, photoCaption, albumId);
+          uploadedUrls.push(url);
+          uploadedPhotoIds.push(photoId);
+          successCount++;
+        } catch (error: unknown) {
+          errorCount++;
+          if (!firstErrorMessage) {
+            firstErrorMessage = getReadableUploadError(error) || null;
+          }
+          console.error("Upload error:", error);
         }
-        console.error("Upload error:", error);
+        finished++;
+        if (finished < totalPhotos) {
+          toast.loading(`Uploading photo ${finished + 1} of ${totalPhotos}...`, { id: uploadToastId });
+        }
       }
-    }
-    
+    };
+    toast.loading(`Uploading photo 1 of ${totalPhotos}...`, { id: uploadToastId });
+    await Promise.all(Array.from({ length: Math.min(3, photosToUpload.length) }, worker));
+
     // Preload all uploaded images before dismissing toast
     if (uploadedUrls.length > 0) {
       toast.loading(
@@ -947,7 +948,7 @@ export function UploadPhotoSheet({
       
       // Preload all images in parallel
       await Promise.all(
-        uploadedUrls.map(url => 
+        uploadedUrls.filter(url => !/\.(icp0\.io|icp\.net|raw\.icp0\.io)\//.test(url)).map(url => 
           new Promise<void>((resolve) => {
             const img = new Image();
             img.onload = () => resolve();
