@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useState, useEffect } from "react";
 import { Search, Building2, Plus, MapPin, Loader2, Check, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -166,7 +167,8 @@ export default function FindOrCreateClubWizard({
               logo_url: null,
               sport: clubSport || null,
               created_by: user.id,
-            })
+              home_country: defaultClubHomeCountry(),
+            } as any)
             .select()
             .single();
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2, Shield, User } from "lucide-react";
@@ -87,7 +88,7 @@ export default function StartTeamPage() {
 
       const { data: shell, error: shellErr } = await supabase
         .from("clubs")
-        .insert({ name: `${who}'s teams`, kind: "shell", created_by: user.id })
+        .insert({ name: `${who}'s teams`, kind: "shell", created_by: user.id, home_country: defaultClubHomeCountry() } as any)
         .select("id")
         .single();
       if (shellErr || !shell) throw shellErr ?? new Error("Could not create personal organiser");
