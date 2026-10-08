@@ -74,6 +74,7 @@ async function loadBalances(): Promise<Balance[]> {
       }
     }),
   );
+  return [...balances, await frontendBalance()];
 }
 
 /** Cycle (credit) balance of every configured canister, read via its public cycles_balance query. */
