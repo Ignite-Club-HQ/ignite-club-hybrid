@@ -39,6 +39,7 @@ interface UploadPhotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploadingCountChange?: (count: number) => void;
+  onUploadingPreviewsChange?: (urls: string[]) => void;
   /**
    * Optional preselects (used by the post-game "Add photos" CTA in team chat).
    * When provided, the sheet seeds the club/team/event so the user can drop straight
@@ -85,6 +86,7 @@ export function UploadPhotoSheet({
   open,
   onOpenChange,
   onUploadingCountChange,
+  onUploadingPreviewsChange,
   defaultClubId,
   defaultTeamId,
   defaultEventId,
@@ -843,6 +845,7 @@ export function UploadPhotoSheet({
     
     // Notify parent about uploading count for skeleton display BEFORE closing
     onUploadingCountChange?.(totalPhotos);
+    onUploadingPreviewsChange?.(photosToUpload.map((p) => p.thumbnailUrl || p.previewUrl));
     
     // Close sheet immediately so user can see skeletons
     onOpenChange(false);
@@ -907,6 +910,7 @@ export function UploadPhotoSheet({
           setUploading(false);
           setUploadProgress(0);
           onUploadingCountChange?.(0);
+          onUploadingPreviewsChange?.([]);
           return;
         }
       }
@@ -1028,15 +1032,18 @@ export function UploadPhotoSheet({
     queryClient.invalidateQueries({ queryKey: ["vault-files"] });
     queryClient.invalidateQueries({ queryKey: ["storage-breakdown"] });
     queryClient.invalidateQueries({ queryKey: ["club-free-usage"] });
+    // Keep the instant previews on screen until the refreshed feed arrives.
+    await queryClient.refetchQueries({ queryKey: ["photos"], type: "active" }).catch(() => undefined);
     
     // Notify parent that uploading is complete
     onUploadingCountChange?.(0);
+    onUploadingPreviewsChange?.([]);
     
     // Dismiss loading toast and show final result
     toast.dismiss(uploadToastId);
     
     // Cleanup state
-    selectedPhotos.forEach(photo => {
+    photosToUpload.forEach(photo => {
       URL.revokeObjectURL(photo.previewUrl);
       if (photo.thumbnailUrl) URL.revokeObjectURL(photo.thumbnailUrl);
     });
