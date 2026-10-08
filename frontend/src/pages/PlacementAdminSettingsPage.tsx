@@ -550,7 +550,15 @@ export default function PlacementAdminSettingsPage() {
     }
     try {
       const targets = targetRows
-        .filter(row => row.alias.trim() || row.version.trim())
+        // A row with no name and nothing filled in is an untouched "Add target"
+        // placeholder (version/region come pre-filled) — skip it instead of failing.
+        .filter(row => row.alias.trim() || (row.host ?? "").trim() || (row.canisterIdsText ?? "").trim())
+        .map(row => {
+          if (!row.alias.trim()) {
+            throw new Error("Give each target a name (e.g. au-engine), or delete the empty target.");
+          }
+          return row;
+        })
         .map(row => {
           const isEngine = row.kind === "icp-cloud-engine";
           let canisterIds: Record<string, string> | undefined;
