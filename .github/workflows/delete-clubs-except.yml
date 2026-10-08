@@ -1,0 +1,34 @@
+name: Delete ICP clubs except one
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_club:
+        description: Name of the club to keep
+        default: Chick Burgers
+      confirm:
+        description: Type yes to actually delete (anything else is a dry run)
+        default: "no"
+
+permissions:
+  contents: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install ICP SDK
+        run: mkdir -p /tmp/icp-run && cd /tmp/icp-run && npm init -y >/dev/null && npm install @icp-sdk/core@^5.4.0 --no-fund --no-audit
+      - name: Delete clubs
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          KEEP_CLUB: ${{ inputs.keep_club }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          cp scripts/delete-clubs-except.mjs /tmp/icp-run/
+          node /tmp/icp-run/delete-clubs-except.mjs
