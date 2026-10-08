@@ -102,6 +102,8 @@ jobs:
           [ -n "$TOPPED" ] || echo "::warning::Top-up skipped — the deploy account needs more cycles (send ICP to it)."
           icp deploy -e ic frontend --cycles 1000000000000
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
+          # Let club_domain read this canister's cycle balance (admin settings panel).
+          icp canister update-settings frontend --add-controller mzzzv-taaaa-aaaal-qxlrq-cai -e ic || echo "::warning::Could not add club_domain as controller (already added?)"
           echo "::notice::Web app live at https://$ID.icp.net"
           echo "### Web app deployed: https://$ID.icp.net" >> "$GITHUB_STEP_SUMMARY"
 

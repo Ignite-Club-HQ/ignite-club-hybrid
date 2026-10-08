@@ -416,6 +416,9 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   /// Public: remaining cycles of a canister this canister controls
+   /// (e.g. the frontend asset canister).
+   canister_cycles: (principal) -> (nat);
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
    delete_club_permanent: (id: text) -> (variant {

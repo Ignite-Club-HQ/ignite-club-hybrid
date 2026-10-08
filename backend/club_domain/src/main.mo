@@ -20,6 +20,17 @@ persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
 
+  /// Public: remaining cycles of any canister this canister controls
+  /// (the frontend asset canister adds club_domain as a controller at deploy
+  /// time so admin settings can show its balance too).
+  public shared func canister_cycles(canister_id : Principal) : async Nat {
+    let ic = actor ("aaaaa-aa") : actor {
+      canister_status : shared { canister_id : Principal } -> async { cycles : Nat };
+    };
+    let status = await ic.canister_status({ canister_id });
+    status.cycles;
+  };
+
   transient let challengeTtlNs : Nat64 = 600_000_000_000;
 
   // IC HTTP gateway request/response shapes for `http_request` (same contract
