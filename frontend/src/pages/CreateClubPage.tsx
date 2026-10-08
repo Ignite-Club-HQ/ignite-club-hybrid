@@ -45,7 +45,7 @@ export default function CreateClubPage() {
   const [description, setDescription] = useState("");
   
   const [sport, setSport] = useState("");
-  const [homeCountry, setHomeCountry] = useState<string>(() => getCurrentCountry().code ?? "AU");
+  const [homeCountry, setHomeCountry] = useState<string>(() => getCurrentCountry().country?.toUpperCase() ?? "AU");
   const [saving, setSaving] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
