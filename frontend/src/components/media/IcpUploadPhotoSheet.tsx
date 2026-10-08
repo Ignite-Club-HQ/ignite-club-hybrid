@@ -31,7 +31,9 @@ export interface IcpUploadNamedOption {
 interface IcpUploadPhotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUploaded: () => void;
+  onUploaded: () => unknown;
+  /** Local copies of the photos being shared, shown in the feed right away. */
+  onPendingChange?: (previewUrls: string[]) => void;
   clubs: IcpUploadClubOption[];
   teams: IcpUploadTeamOption[];
   miniLeagues: IcpUploadNamedOption[];
@@ -62,6 +64,7 @@ export function IcpUploadPhotoSheet({
   miniLeagues,
   competitions,
   defaultClubId,
+  onPendingChange,
 }: IcpUploadPhotoSheetProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
@@ -144,7 +147,9 @@ export function IcpUploadPhotoSheet({
     }
     setUploading(true);
     setProgress({ done: 0, total: files.length });
-    const toastId = toast.loading(files.length > 1 ? `Sharing ${files.length} photos…` : "Sharing photo…");
+    // Show the photos in the feed instantly (like chat); no "shared" toast.
+    const previews = files.filter((f) => f.type.startsWith("image/")).map((f) => URL.createObjectURL(f));
+    onPendingChange?.(previews);
     onOpenChange(false);
     // Multi-photo uploads form one album post, like the Supabase gallery.
     const albumId = files.length > 1 ? crypto.randomUUID() : null;
@@ -220,19 +225,17 @@ export function IcpUploadPhotoSheet({
           await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker));
         },
       });
-      toast.success(
-        files.length > 1 ? `${files.length} photos shared` : "Photo shared",
-        { id: toastId },
-      );
       if (scopePending) {
         toast.info(
           "Tags and captions will appear after the media backend update is deployed.",
         );
       }
-      onUploaded();
+      // Keep the local copies on screen until the refreshed feed has them.
+      await Promise.resolve(onUploaded()).catch(() => undefined);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed", { id: toastId });
+      toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
+      onPendingChange?.([]);
       setUploading(false);
     }
   };

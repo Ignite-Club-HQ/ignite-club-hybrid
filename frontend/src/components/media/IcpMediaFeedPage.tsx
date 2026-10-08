@@ -372,6 +372,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -619,7 +620,7 @@ export function IcpMediaFeedPage() {
           </div>
         )}
 
-        {feedQuery.isSuccess && posts.length === 0 && (
+        {feedQuery.isSuccess && posts.length === 0 && pendingPreviews.length === 0 && (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
             <Images className="h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No media yet</p>
@@ -628,6 +629,15 @@ export function IcpMediaFeedPage() {
         )}
 
         <div className="space-y-6">
+          {pendingPreviews.map((src) => (
+            <div key={src} className="relative overflow-hidden rounded-xl border bg-card">
+              <img src={src} alt="" className="aspect-square w-full object-cover" />
+              <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                <p className="text-xs font-medium text-foreground">Uploading…</p>
+              </div>
+            </div>
+          ))}
           {posts.map((post, index) => (
             <div key={post.id}>
               <article className="overflow-hidden rounded-xl border border-border bg-card">
@@ -723,7 +733,8 @@ export function IcpMediaFeedPage() {
         <IcpUploadPhotoSheet
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          onUploaded={invalidate}
+          onUploaded={() => queryClient.refetchQueries({ queryKey: ["icp-media-feed"] })}
+          onPendingChange={setPendingPreviews}
           clubs={options.clubs}
           teams={options.teams}
           miniLeagues={options.miniLeagues}
