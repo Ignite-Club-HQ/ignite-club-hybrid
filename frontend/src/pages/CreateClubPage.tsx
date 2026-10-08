@@ -28,6 +28,8 @@ import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { createLiveClub } from "@/live/features/club";
 import { slugifyClubName } from "@/lib/eoiUtils";
+import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
+import { getCurrentCountry } from "@/live/userCountry";
 
 const SPORTS = Object.keys(SPORT_EMOJIS);
 
@@ -43,6 +45,7 @@ export default function CreateClubPage() {
   const [description, setDescription] = useState("");
   
   const [sport, setSport] = useState("");
+  const [homeCountry, setHomeCountry] = useState<string>(() => getCurrentCountry().country?.toUpperCase() ?? "AU");
   const [saving, setSaving] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -230,7 +233,9 @@ export default function CreateClubPage() {
               sport: sport || null,
               created_by: user!.id,
               class_mode_enabled: isClassModeSport(sport),
-            })
+              home_country: homeCountry,
+              backend: "supabase",
+            } as any)
             .select()
             .single();
 
@@ -451,6 +456,22 @@ export default function CreateClubPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Home country — decides where the club's data is kept, permanently. */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Club's country</Label>
+                  <Select value={homeCountry} onValueChange={setHomeCountry}>
+                    <SelectTrigger className="w-full h-12 text-base bg-muted/50 border-muted-foreground/20 focus:bg-background transition-colors">
+                      <SelectValue>{countryName(homeCountry)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[40vh]" position="popper" sideOffset={4}>
+                      {[...ISO_COUNTRY_CODES].sort((a, b) => countryName(a).localeCompare(countryName(b))).map((c) => (
+                        <SelectItem key={c} value={c}>{countryName(c)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Your club's data is kept in line with this country's rules. It can't be changed later.</p>
                 </div>
 
                 {/* Optional details — collapsed to keep the initial form focused. */}

@@ -2336,6 +2336,7 @@ export type Database = {
           ai_catch_up_enabled: boolean
           allow_guests_default: boolean
           auto_reward_threshold: number | null
+          backend: string
           bot_user_id: string | null
           chat_thread_ads_enabled: boolean
           city: string | null
@@ -2349,6 +2350,7 @@ export type Database = {
           description: string | null
           events_sponsor_strip_enabled: boolean
           force_disable_message_previews: boolean
+          home_country: string | null
           id: string
           invite_email_message: string | null
           invite_email_style: string
@@ -2425,6 +2427,7 @@ export type Database = {
           ai_catch_up_enabled?: boolean
           allow_guests_default?: boolean
           auto_reward_threshold?: number | null
+          backend?: string
           bot_user_id?: string | null
           chat_thread_ads_enabled?: boolean
           city?: string | null
@@ -2438,6 +2441,7 @@ export type Database = {
           description?: string | null
           events_sponsor_strip_enabled?: boolean
           force_disable_message_previews?: boolean
+          home_country?: string | null
           id?: string
           invite_email_message?: string | null
           invite_email_style?: string
@@ -2514,6 +2518,7 @@ export type Database = {
           ai_catch_up_enabled?: boolean
           allow_guests_default?: boolean
           auto_reward_threshold?: number | null
+          backend?: string
           bot_user_id?: string | null
           chat_thread_ads_enabled?: boolean
           city?: string | null
@@ -2527,6 +2532,7 @@ export type Database = {
           description?: string | null
           events_sponsor_strip_enabled?: boolean
           force_disable_message_previews?: boolean
+          home_country?: string | null
           id?: string
           invite_email_message?: string | null
           invite_email_style?: string
