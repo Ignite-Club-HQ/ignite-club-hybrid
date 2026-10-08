@@ -6,6 +6,7 @@ import { createPrivateKey } from "node:crypto";
 import { Actor, HttpAgent } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Ed25519KeyIdentity } from "@icp-sdk/core/identity";
+import { Secp256k1KeyIdentity } from "@icp-sdk/core/identity/secp256k1";
 
 const IDENTITY_ACCESS = "mq2sj-fiaaa-aaaal-qxlqa-cai";
 const name = (process.env.DISPLAY_NAME || "").trim();

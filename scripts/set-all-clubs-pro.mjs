@@ -9,6 +9,7 @@ import { createPrivateKey } from "node:crypto";
 import { Actor, HttpAgent } from "@icp-sdk/core/agent";
 import { IDL } from "@icp-sdk/core/candid";
 import { Ed25519KeyIdentity } from "@icp-sdk/core/identity";
+import { Secp256k1KeyIdentity } from "@icp-sdk/core/identity/secp256k1";
 import { Principal } from "@icp-sdk/core/principal";
 
 const CLUB_DOMAIN = "mzzzv-taaaa-aaaal-qxlrq-cai";
@@ -19,9 +20,8 @@ function loadIdentity() {
   const pem = pemRaw.replace(/\r/g, "").replace(/\\n/g, "\n");
   const key = createPrivateKey(pem);
   const jwk = key.export({ format: "jwk" });
-  if (jwk.kty !== "OKP" || !jwk.d) {
-    throw new Error("DEPLOYER_PEM is not an Ed25519 key");
-  }
+  if (!jwk.d) throw new Error("DEPLOYER_PEM has no private key");
+  if (jwk.kty !== "OKP") return Secp256k1KeyIdentity.fromSecretKey(new Uint8Array(Buffer.from(jwk.d, "base64url")));
   const seed = Buffer.from(jwk.d, "base64url");
   return Ed25519KeyIdentity.fromSecretKey(new Uint8Array(seed));
 }
