@@ -20,7 +20,7 @@ import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
 import { listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
-import { listLiveMembershipClubs } from "@/live/features/membership";
+import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -159,6 +159,11 @@ function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
 
 
 async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
+  // list_clubs returns every club on the canister, so scope it to the
+  // caller's own role grants — same membership the Clubs page uses.
+  const grants = await getLiveMyRoleGrants(ctx);
+  const grantClubIds = new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c));
+  const grantTeamIds = new Set(grants.map((g) => g.team[0]).filter((t): t is string => !!t));
   const clubsRaw = (await listLiveMembershipClubs(ctx)) as unknown as {
     id: string;
     name: string;
@@ -188,6 +193,12 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
       // Soft-deleted clubs keep their canister records (and assets) — never
       // surface them in the feed, the filter drawer, or the upload sheet.
       if (club.deleted_at_ms.length > 0) return;
+      const directMember = grantClubIds.has(club.id);
+      if (!directMember && grantTeamIds.size === 0) return;
+      if (!directMember) {
+        const clubTeams = (await listLiveTeams(ctx, club.id).catch(() => [])) as unknown as { id: string }[];
+        if (!clubTeams.some((t) => grantTeamIds.has(t.id))) return;
+      }
       options.clubs.push({ id: club.id, name: club.name, sport: club.sport[0] ?? null });
       const [assets, teams, miniLeagues, competitions] = await Promise.all([
         listLiveAssets(ctx, club.id).catch(() => []),
