@@ -7,6 +7,12 @@ import { getActiveIcpTarget } from "@/live/targetRegistry";
 
 type Balance = { key: string; canisterId: string; cycles: bigint | null; error?: string };
 
+// The web-app (asset) canister serving the blockchain copy of the site. It has
+// no cycles_balance query of its own, so its balance is read through
+// club_domain's canister_cycles proxy (club_domain is added as a controller by
+// the frontend deploy workflow).
+const FRONTEND_CANISTER_ID = "proe7-kqaaa-aaaas-qg6gq-cai";
+
 const T = 1_000_000_000_000n;
 const LOW = 500_000_000_000n; // 0.5T
 const WARN = 2n * T;
