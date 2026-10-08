@@ -80,7 +80,7 @@ describe("resolveAuthBackend", () => {
   });
 });
 
-describe("resolveAuthBackend with per-club overrides", () => {
+describe("resolveAuthBackend ignores retired per-club overrides", () => {
   const clubPinnedConfig = {
     defaultBackend: "supabase" as const,
     countryRules: {},
@@ -89,42 +89,34 @@ describe("resolveAuthBackend with per-club overrides", () => {
     clubBackendOverrides: { "club-icp": "icp" as const, "club-supabase": "supabase" as const },
   };
 
-  it("shows ICP auth when a member club is pinned to ICP and canisters exist", () => {
+  it("keeps Supabase auth for a member of an ICP-pinned club — the pin no longer decides", () => {
     applyBackendRoutingConfig(clubPinnedConfig);
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     setUserClubIds(["club-icp"]);
-    expect(resolveAuthBackend()).toBe("icp");
-    expect(useIcpAuthScreen()).toBe(true);
-  });
-
-  it("keeps Supabase auth when a member club is pinned to ICP but no canisters exist", () => {
-    applyBackendRoutingConfig(clubPinnedConfig);
-    setUserClubIds(["club-icp"]);
     expect(resolveAuthBackend()).toBe("supabase");
+    expect(useIcpAuthScreen()).toBe(false);
   });
 
-  it("a Supabase club pin wins over an ICP-only country rule", () => {
+  it("an ICP-only country rule decides the screen even when a club is pinned to Supabase", () => {
     applyBackendRoutingConfig({ ...clubPinnedConfig, countryRules: { DE: "icp" as const } });
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     setProfileCountry("DE");
     setUserClubIds(["club-supabase"]);
-    expect(resolveAuthBackend()).toBe("supabase");
+    expect(resolveAuthBackend()).toBe("icp");
   });
 
-  it("pre-auth falls back to the cached club backend hint", () => {
+  it("ignores a stale cached club backend hint left on the device", () => {
     applyBackendRoutingConfig(clubPinnedConfig);
     applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
     cacheClubBackendHint("icp");
-    expect(resolveAuthBackend()).toBe("icp");
+    expect(resolveAuthBackend()).toBe("supabase");
     cacheClubBackendHint("supabase");
     expect(resolveAuthBackend()).toBe("supabase");
   });
 
-  it("live membership ids take precedence over a stale cached hint", () => {
-    applyBackendRoutingConfig(clubPinnedConfig);
-    applyIcpAdminOverrides({ canisterIds: { identity_access: VALID_CANISTER_ID } });
-    cacheClubBackendHint("icp");
-    setUserClubIds(["club-supabase"]);
+  it("still needs configured canisters before routing a visitor to ICP", () => {
+    applyBackendRoutingConfig({ ...clubPinnedConfig, countryRules: { DE: "icp" as const } });
+    setProfileCountry("DE");
     expect(resolveAuthBackend()).toBe("supabase");
   });
 });

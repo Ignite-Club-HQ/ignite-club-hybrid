@@ -8,9 +8,7 @@ import {
   getBuildTimeBackendRoutingConfig,
   readCachedBackendRoutingConfig,
   parseBackendRoutingConfig,
-  readCachedClubBackendHint,
   resolveBackendForCountry,
-  resolveClubBackendOverride,
   resolveTargetForCountry,
   resolveIcpEngineForCountry,
   isCloudEngineUsable,
@@ -21,8 +19,8 @@ import {
 import { isFeatureCanisterConfigured, resolveFeatureBackend, type FeatureArea } from "./featureBackend";
 import { getActiveIcpTarget, registerIcpEngineResolver, type IcpTargetConfig } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { getUserClubIds } from "./userClubs";
-import { hasInternetIdentitySessionStored, isSignedInWithEmail } from "./authBackendMode";
+import { isSignedInWithEmail } from "./authBackendMode";
+
 export { isSignedInWithEmail };
 
 /**
@@ -149,32 +147,57 @@ function isIcpAvailable(): boolean {
   }
 }
 
+
 /**
- * Which backend should serve the current user right now, combining the saved
- * routing config, the user's country (profile override, else IP), and whether
- * any ICP canisters are actually configured. Feature routing only — this
- * never blocks access.
+ * The active ICP target, or null when none is configured. Never throws, so
+ * routing checks can call it freely.
  */
-/**
- * The per-club backend pin for the current user, or null. Post-auth this
- * uses the live membership ids loaded by ClubBackendEnforcement; pre-auth
- * (the /auth screen decision) it falls back to the hint cached by the last
- * post-auth check.
- */
-function currentClubBackendOverride(config: BackendRoutingConfig): BackendProvider | null {
-  const clubIds = getUserClubIds();
-  if (clubIds.length > 0) return resolveClubBackendOverride(config, clubIds);
-  return readCachedClubBackendHint();
+export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
+  try {
+    return getActiveIcpTarget();
+  } catch {
+    return null;
+  }
 }
 
+/**
+ * Which backend should serve the current user right now. One rule, no
+ * per-club pin: email sign-in reads Supabase, secure sign-in reads the
+ * canisters (when any are configured), and a signed-out visitor follows the
+ * routing config for their country.
+ */
 export function getEffectiveBackend(): BackendProvider {
-  // Signed in with email: their data lives in Supabase, whatever the club pin
-  // says — an ICP route has no Internet Identity to call canisters with.
   if (isSignedInWithEmail()) return "supabase";
-  // A club lives on exactly one backend, and each account system can only
-  // reach its own backend's clubs — so a secure sign-in session reads the
-  // canisters (when that feature's canister is deployed), never by club pin.
-  if (hasInternetIdentitySessionStored()) {
+  if (hasStoredInternetIdentitySession()) return isIcpAvailable() ? "icp" : "supabase";
+  const config = getBackendRoutingConfig();
+  const { country } = getCurrentCountry();
+  return resolveBackendForCountry(config, country, isIcpAvailable());
+}
+
+/**
+ * The approved deployment target that should serve the current user, or
+ * undefined when no enabled target exists for the effective backend (callers
+ * then use the backend's built-in default).
+ */
+export function getEffectiveTarget(): ApprovedBackendTarget | undefined {
+  const config = getBackendRoutingConfig();
+  const { country } = getCurrentCountry();
+  return resolveTargetForCountry(config, country, isIcpAvailable());
+}
+
+/**
+ * Which backend should serve one feature area right now: the same rule as
+ * getEffectiveBackend(), narrowed per feature — a secure sign-in session only
+ * gets "icp" when that feature's canister is actually configured, so a
+ * feature whose canister is not deployed yet keeps using Supabase instead of
+ * failing every request.
+ */
+export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProvider {
+  // Signed in with email: every feature reads Supabase. Without this,
+  // isFeatureRoutedToIcp() returned true for email users and Messages/Media
+  // went to the canisters (blank).
+  if (isSignedInWithEmail()) return "supabase";
+  if (hasStoredInternetIdentitySession()) {
     const target = tryGetActiveIcpTarget();
     return target && isFeatureCanisterConfigured(target, feature) ? "icp" : "supabase";
   }

@@ -162,14 +162,15 @@ describe("per-club backend overrides", () => {
     expect(resolveBackendForUser(icpConfig, "US", [], true)).toBe("icp");
   });
 
-  it("round-trips the cached club backend hint", () => {
+  it("ignores and clears a stale club backend hint left on the device", () => {
+    // Club pins are retired: a club's backend follows its home country, so a
+    // hint cached by an older build must never route anything — and it is
+    // cleared so the device stops carrying the retired choice.
+    localStorage.setItem(CLUB_BACKEND_HINT_KEY, "icp");
     expect(readCachedClubBackendHint()).toBeNull();
+    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBeNull();
     cacheClubBackendHint("icp");
-    expect(readCachedClubBackendHint()).toBe("icp");
-    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBe("icp");
-    cacheClubBackendHint("supabase");
-    expect(readCachedClubBackendHint()).toBe("supabase");
-    cacheClubBackendHint(null);
     expect(readCachedClubBackendHint()).toBeNull();
+    expect(localStorage.getItem(CLUB_BACKEND_HINT_KEY)).toBeNull();
   });
 });
