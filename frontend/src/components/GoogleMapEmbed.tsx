@@ -27,7 +27,7 @@ export function GoogleMapEmbed({
       <div className="space-y-1">
         <iframe
           className={className}
-          src={`https://maps.google.com/maps?q=${encodeURIComponent(place)}&output=embed`}
+          src={`https://www.google.com/maps?q=${encodeURIComponent(place)}&output=embed`}
           allowFullScreen
           loading="lazy"
           referrerPolicy="strict-origin-when-cross-origin"

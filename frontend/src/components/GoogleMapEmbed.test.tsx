@@ -21,7 +21,7 @@ describe("GoogleMapEmbed", () => {
     render(<GoogleMapEmbed address="35 Driffield" />);
     expect(screen.getByTitle("Event location map")).toHaveAttribute(
       "src",
-      "https://maps.google.com/maps?q=35%20Driffield&output=embed",
+      "https://www.google.com/maps?q=35%20Driffield&output=embed",
     );
     expect(screen.getByRole("link", { name: /View location on Google Maps/i })).toHaveAttribute(
       "href",
