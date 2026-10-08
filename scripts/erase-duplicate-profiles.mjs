@@ -34,7 +34,7 @@ if ("Err" in res) throw new Error(res.Err);
 const matches = res.Ok.filter((p) => p.display_name.trim().toLowerCase() === name.toLowerCase());
 console.log(`Found ${matches.length} account(s) named "${name}":`);
 for (const p of matches) console.log(`  ${p.principal.toText()}  (account ${p.account_id})${keep.has(p.principal.toText()) ? "  KEEP" : ""}`);
-if (keep.size === 0 && !eraseAll) { console.log("\nNo principals to keep given — listing only. Re-run with keep_principals set to the one to keep, or "none" to erase them all."); process.exit(0); }
+if (keep.size === 0 && !eraseAll) { console.log("\nNo principals to keep given — listing only. Re-run with keep_principals set to the one to keep, or \"none\" to erase them all."); process.exit(0); }
 const missing = [...keep].filter((k) => !matches.some((p) => p.principal.toText() === k));
 if (missing.length) throw new Error(`Keep principal(s) not found among matches: ${missing.join(", ")}`);
 const targets = matches.filter((p) => !keep.has(p.principal.toText()));
