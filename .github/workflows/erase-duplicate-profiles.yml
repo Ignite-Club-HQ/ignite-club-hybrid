@@ -1,0 +1,45 @@
+# Erase duplicate secure-sign-in profiles (same display name) on the blockchain
+# backend, keeping the principal(s) you list. Lists only unless confirm = yes.
+name: Erase duplicate ICP profiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_name:
+        description: "Display name to de-duplicate"
+        required: true
+        default: "Paul Cranwell"
+      keep_principals:
+        description: "Principal(s) to KEEP, comma separated (leave empty to just list)"
+        required: false
+        default: ""
+      confirm:
+        description: "Type yes to actually erase (otherwise dry run)"
+        required: false
+        default: "no"
+
+permissions:
+  contents: read
+
+jobs:
+  erase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install ICP SDK
+        run: mkdir -p /tmp/icp-run && cd /tmp/icp-run && npm init -y >/dev/null && npm install @icp-sdk/core@^5.4.0 --no-fund --no-audit
+      - name: Erase duplicates
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          DISPLAY_NAME: ${{ inputs.display_name }}
+          KEEP_PRINCIPALS: ${{ inputs.keep_principals }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then echo "::error::DEPLOYER_PEM secret is not set."; exit 1; fi
+          cp scripts/erase-duplicate-profiles.mjs /tmp/icp-run/
+          node /tmp/icp-run/erase-duplicate-profiles.mjs
