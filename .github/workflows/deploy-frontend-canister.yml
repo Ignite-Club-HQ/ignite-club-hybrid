@@ -94,7 +94,12 @@ jobs:
         run: |
           set -euo pipefail
           # Make sure the canister has room to install/upload (it ran dry once).
-          icp canister top-up frontend --amount 0.3T -e ic || echo "Top-up skipped"
+          # Try smaller amounts if the deploy account is short on cycles.
+          TOPPED=""
+          for A in 0.3T 0.15T 0.1T 0.05T; do
+            if icp canister top-up frontend --amount "$A" -e ic; then TOPPED="$A"; echo "Topped up $A"; break; fi
+          done
+          [ -n "$TOPPED" ] || echo "::warning::Top-up skipped — the deploy account needs more cycles (send ICP to it)."
           icp deploy -e ic frontend --cycles 1000000000000
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
           echo "::notice::Web app live at https://$ID.icp.net"
