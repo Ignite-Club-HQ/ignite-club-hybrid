@@ -217,6 +217,10 @@ export function tryGetActiveIcpTarget(): IcpTargetConfig | null {
  * deployed yet transparently keeps using Supabase.
  */
 export function getEffectiveBackendForFeature(feature: FeatureArea): BackendProvider {
+  // Signed in with email: every feature reads Supabase, whatever the club pin
+  // says. Without this, isFeatureRoutedToIcp() returned true for email users
+  // in an ICP-pinned club and Messages/Media went to the canisters (blank).
+  if (isSignedInWithEmail()) return "supabase";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
   const pin = currentClubBackendOverride(config);
