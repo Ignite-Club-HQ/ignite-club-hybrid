@@ -78,7 +78,12 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
           // hosting has no SPA fallback, so reloading a deep path returns a
           // plain-text "Not Found". The app re-navigates to the route after
           // boot (and a stale chunk manifest is refreshed either way).
-          window.location.replace("/");
+          // The ICP asset canister has an SPA fallback, so there we reload
+          // the page the person was opening instead of dumping them on home.
+          const icpHosted = /\.(icp0\.io|icp\.net|ic0\.app|raw\.icp0\.io)$/.test(window.location.hostname);
+          window.location.replace(
+            icpHosted ? window.location.pathname + window.location.search + window.location.hash : "/",
+          );
           // Keep the promise pending while the reload happens so no error UI flashes.
           await new Promise(() => {});
         }
