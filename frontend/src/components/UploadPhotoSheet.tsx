@@ -912,29 +912,33 @@ export function UploadPhotoSheet({
       }
     }
 
-    for (let i = 0; i < photosToUpload.length; i++) {
-      const photo = photosToUpload[i];
-      
-      // Update toast progress
-      toast.loading(
-        `Uploading photo ${i + 1} of ${totalPhotos}...`,
-        { id: uploadToastId }
-      );
-      
-      try {
-        const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, photoCaption, albumId);
-        uploadedUrls.push(url);
-        uploadedPhotoIds.push(photoId);
-        successCount++;
-      } catch (error: unknown) {
-        errorCount++;
-        if (!firstErrorMessage) {
-          firstErrorMessage = getReadableUploadError(error) || null;
+    // Up to three photos at once — each blockchain write is a ~2s round trip.
+    let started = 0;
+    let finished = 0;
+    const worker = async () => {
+      while (started < photosToUpload.length) {
+        const photo = photosToUpload[started++];
+        try {
+          const { url, photoId } = await uploadSinglePhoto(photo.file, clubId, teamId, miniLeagueId, eventId, photoCaption, albumId);
+          uploadedUrls.push(url);
+          uploadedPhotoIds.push(photoId);
+          successCount++;
+        } catch (error: unknown) {
+          errorCount++;
+          if (!firstErrorMessage) {
+            firstErrorMessage = getReadableUploadError(error) || null;
+          }
+          console.error("Upload error:", error);
         }
-        console.error("Upload error:", error);
+        finished++;
+        if (finished < totalPhotos) {
+          toast.loading(`Uploading photo ${finished + 1} of ${totalPhotos}...`, { id: uploadToastId });
+        }
       }
-    }
-    
+    };
+    toast.loading(`Uploading photo 1 of ${totalPhotos}...`, { id: uploadToastId });
+    await Promise.all(Array.from({ length: Math.min(3, photosToUpload.length) }, worker));
+
     // Preload all uploaded images before dismissing toast
     if (uploadedUrls.length > 0) {
       toast.loading(
@@ -944,7 +948,7 @@ export function UploadPhotoSheet({
       
       // Preload all images in parallel
       await Promise.all(
-        uploadedUrls.map(url => 
+        uploadedUrls.filter(url => !/\.(icp0\.io|icp\.net|raw\.icp0\.io)\//.test(url)).map(url => 
           new Promise<void>((resolve) => {
             const img = new Image();
             img.onload = () => resolve();
