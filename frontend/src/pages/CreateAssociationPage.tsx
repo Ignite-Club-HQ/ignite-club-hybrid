@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, Info } from "lucide-react";
@@ -57,7 +58,7 @@ export default function CreateAssociationPage() {
         supabase: async () => {
           const { data: club, error } = await supabase
             .from("clubs")
-            .insert({ name: name.trim(), description: description.trim() || null, kind: "association" })
+            .insert({ name: name.trim(), description: description.trim() || null, kind: "association", home_country: defaultClubHomeCountry() } as any)
             .select("id")
             .single();
           if (error || !club) {

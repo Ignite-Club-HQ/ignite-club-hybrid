@@ -1,4 +1,5 @@
 import { useState, useEffect, Suspense } from "react";
+import { defaultClubHomeCountry } from "@/lib/clubHomeCountry";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Flame,
@@ -279,7 +280,8 @@ function SupabaseSignupProPage() {
         logo_url: null, // Will be updated after upload
         sport: clubSport || null,
         created_by: user!.id,
-      })
+        home_country: defaultClubHomeCountry(),
+      } as any)
       .select()
       .single();
 
