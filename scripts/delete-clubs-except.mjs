@@ -35,7 +35,7 @@ const agent = await HttpAgent.create({ host: "https://icp0.io", identity });
 const club = Actor.createActor(clubIdl, { agent, canisterId: CLUB_DOMAIN });
 const ident = Actor.createActor(idIdl, { agent, canisterId: IDENTITY });
 
-const res = await club.list_clubs([], 500);
+const res = await club.list_clubs([], 100);
 if ("Err" in res) throw new Error(res.Err);
 const keep = res.Ok.filter((c) => c.name.trim().toLowerCase() === KEEP && c.deleted_at_ms.length === 0);
 if (keep.length !== 1) throw new Error(`Expected exactly one live club named "${KEEP}", found ${keep.length}`);
@@ -46,7 +46,7 @@ const roles = await club.list_role_grants(kept.id);
 if ("Err" in roles) console.log("   could not read roles:", roles.Err);
 else {
   let profiles = [];
-  try { profiles = await ident.search_profiles("", 500); } catch { /* optional */ }
+  try { profiles = await ident.search_profiles("", 100); } catch { /* optional */ }
   const byAcct = new Map(profiles.map((p) => [p.account_id, p]));
   for (const r of roles.Ok.filter((r) => r.club.length && r.club[0] === kept.id)) {
     const p = byAcct.get(r.account_id);
