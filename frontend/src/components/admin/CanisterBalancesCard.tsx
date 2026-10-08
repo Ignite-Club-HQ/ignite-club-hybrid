@@ -7,6 +7,12 @@ import { getActiveIcpTarget } from "@/live/targetRegistry";
 
 type Balance = { key: string; canisterId: string; cycles: bigint | null; error?: string };
 
+// The web-app (asset) canister serving the blockchain copy of the site. It has
+// no cycles_balance query of its own, so its balance is read through
+// club_domain's canister_cycles proxy (club_domain is added as a controller by
+// the frontend deploy workflow).
+const FRONTEND_CANISTER_ID = "proe7-kqaaa-aaaas-qg6gq-cai";
+
 const T = 1_000_000_000_000n;
 const LOW = 500_000_000_000n; // 0.5T
 const WARN = 2n * T;
@@ -26,7 +32,29 @@ async function loadBalances(): Promise<Balance[]> {
   ]);
   const agent = await HttpAgent.create({ host: target.host, identity: new AnonymousIdentity() });
   const idl = () => IDL.Service({ cycles_balance: IDL.Func([], [IDL.Nat], ["query"]) });
-  return Promise.all(
+  const proxyIdl = () =>
+    IDL.Service({ canister_cycles: IDL.Func([IDL.Principal], [IDL.Nat], []) });
+  const clubDomainId = target.canisterIds?.["club_domain"];
+  const frontendBalance = async (): Promise<Balance> => {
+    try {
+      if (!clubDomainId) throw new Error("no club_domain");
+      const { Principal } = await import("@icp-sdk/core/principal");
+      const proxy = Actor.createActor<{ canister_cycles: (id: unknown) => Promise<bigint> }>(proxyIdl, {
+        agent,
+        canisterId: clubDomainId,
+      });
+      const cycles = await proxy.canister_cycles(Principal.fromText(FRONTEND_CANISTER_ID));
+      return { key: "frontend (web app)", canisterId: FRONTEND_CANISTER_ID, cycles };
+    } catch {
+      return {
+        key: "frontend (web app)",
+        canisterId: FRONTEND_CANISTER_ID,
+        cycles: null,
+        error: "Available after the next backend + web app deploys",
+      };
+    }
+  };
+  const balances = await Promise.all(
     entries.map(async ([key, canisterId]): Promise<Balance> => {
       try {
         const actor = Actor.createActor<{ cycles_balance: () => Promise<bigint> }>(idl, { agent, canisterId });
@@ -46,6 +74,7 @@ async function loadBalances(): Promise<Balance[]> {
       }
     }),
   );
+  return [...balances, await frontendBalance()];
 }
 
 /** Cycle (credit) balance of every configured canister, read via its public cycles_balance query. */
@@ -67,8 +96,8 @@ export function CanisterBalancesCard() {
         <div className="space-y-1.5">
           <CardTitle className="text-base">Canister balances</CardTitle>
           <CardDescription>
-            Cycles left in each canister (lowest first). Top up anything under 2T using the deploy account or a site
-            like icscan.io. A canister at zero stops working.
+            Cycles left in each canister (lowest first), including the web-app canister. Top up anything under 2T —
+            cycle.express sends cycles straight to a canister ID. A canister at zero stops working.
           </CardDescription>
         </div>
         <Button variant="ghost" size="icon" onClick={() => refetch()} disabled={isFetching} aria-label="Refresh balances">
