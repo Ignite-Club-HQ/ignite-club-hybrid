@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: () => ({}) } }));
 vi.mock("./authBackendMode", () => ({ isSignedInWithEmail: () => true }));
 vi.mock("./userClubs", () => ({ getUserClubIds: () => ["club-icp"] }));
-vi.mock("./targetRegistry", () => ({
+vi.mock("./targetRegistry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./targetRegistry")>()),
   getActiveIcpTarget: () => ({ alias: "main", canisterIds: { messaging_domain: "aaaaa-aa", media_metadata: "aaaaa-aa" } }),
 }));
 
