@@ -624,7 +624,7 @@ export function UploadPhotoSheet({
 
   const handleClose = () => {
     // Cleanup preview URLs
-    photosToUpload.forEach(photo => {
+    selectedPhotos.forEach(photo => {
       URL.revokeObjectURL(photo.previewUrl);
       if (photo.thumbnailUrl) URL.revokeObjectURL(photo.thumbnailUrl);
     });
@@ -1043,7 +1043,7 @@ export function UploadPhotoSheet({
     toast.dismiss(uploadToastId);
     
     // Cleanup state
-    selectedPhotos.forEach(photo => {
+    photosToUpload.forEach(photo => {
       URL.revokeObjectURL(photo.previewUrl);
       if (photo.thumbnailUrl) URL.revokeObjectURL(photo.thumbnailUrl);
     });
