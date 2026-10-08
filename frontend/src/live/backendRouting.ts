@@ -245,23 +245,9 @@ export function parseBackendRoutingConfig(value: unknown): BackendRoutingConfig 
     }
   }
 
+  // Per-club backend pins are retired: a club's backend now follows its home
+  // country. Any legacy "clubBackendOverrides" key in stored config is ignored.
   const clubBackendOverrides: Record<string, BackendProvider> = {};
-  const rawClubOverrides = record.clubBackendOverrides;
-  if (rawClubOverrides !== null && rawClubOverrides !== undefined) {
-    if (typeof rawClubOverrides !== "object" || Array.isArray(rawClubOverrides)) {
-      throw new Error(`${BACKEND_ROUTING_CONFIG_KEY}.clubBackendOverrides must be a JSON object.`);
-    }
-    for (const [clubId, backend] of Object.entries(rawClubOverrides as Record<string, unknown>)) {
-      const id = clubId.trim();
-      if (!id || id.length > 128) {
-        throw new Error(`Club override key "${clubId || "(empty)"}" must be a non-empty club id.`);
-      }
-      if (backend !== "supabase" && backend !== "icp") {
-        throw new Error(`Backend pinned for club ${id} must be "supabase" or "icp".`);
-      }
-      clubBackendOverrides[id] = backend;
-    }
-  }
 
   return { defaultBackend: rawDefault, countryRules, targets, countryTargets, clubBackendOverrides };
 }

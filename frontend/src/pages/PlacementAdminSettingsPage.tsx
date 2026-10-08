@@ -599,15 +599,6 @@ export default function PlacementAdminSettingsPage() {
         }
       }
       const clubBackendOverrides: Record<string, BackendProvider> = {};
-      for (const row of clubOverrideRows) {
-        if (!row.clubId) {
-          throw new Error("Every club override row needs a club selected.");
-        }
-        if (clubBackendOverrides[row.clubId]) {
-          throw new Error("The same club is pinned twice.");
-        }
-        clubBackendOverrides[row.clubId] = row.backend;
-      }
       if (engineWarnings.length > 0) {
         toast({
           title: "Cloud Engine not ready",
@@ -1101,62 +1092,9 @@ export default function PlacementAdminSettingsPage() {
               </div>
             ))}
 
-            <div className="space-y-3 border-t pt-4">
-              <div className="space-y-1">
-                <Label>Club backend overrides</Label>
-                <p className="text-xs text-muted-foreground">
-                  Pin a club to one backend for every member of that club — features and the
-                  sign-in screen. A club pin wins over the country rules above. Useful for
-                  testing ICP with one club at a time. Members are switched to the correct
-                  sign-in method automatically on their next sign-in.
-                </p>
-              </div>
-              {clubOverrideRows.length === 0 && (
-                <p className="text-xs text-muted-foreground">No club overrides — every club follows the country rules.</p>
-              )}
-              {clubOverrideRows.map((row, index) => (
-                <div key={index} className="flex items-end gap-2">
-                  <div className="space-y-1 flex-1">
-                    <Label htmlFor={`club-override-${index}`}>Club</Label>
-                    <Select value={row.clubId} onValueChange={(v) => updateClubOverrideRow(index, { clubId: v })}>
-                      <SelectTrigger id={`club-override-${index}`}>
-                        <SelectValue placeholder="Select a club" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(clubs ?? []).map(club => (
-                          <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
-                        ))}
-                        {/* A pinned club whose name can't be resolved (e.g. a
-                            Supabase-only club while in ICP mode) must still be
-                            identifiable and removable instead of blank. */}
-                        {row.clubId && !(clubs ?? []).some(c => c.id === row.clubId) && (
-                          <SelectItem value={row.clubId}>Unknown club ({row.clubId.slice(0, 8)}…)</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1 w-44">
-                    <Label htmlFor={`club-backend-${index}`}>Backend</Label>
-                    <Select value={row.backend} onValueChange={(v) => updateClubOverrideRow(index, { backend: v as BackendProvider })}>
-                      <SelectTrigger id={`club-backend-${index}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="supabase">Supabase</SelectItem>
-                        <SelectItem value="icp">ICP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button variant="ghost" size="icon" onClick={() => removeClubOverrideRow(index)} aria-label="Remove club override">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" onClick={addClubOverrideRow}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add club override
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground border-t pt-4">
+              Clubs are no longer pinned one by one — each club's backend follows its home country.
+            </p>
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={addCountryRow}>
