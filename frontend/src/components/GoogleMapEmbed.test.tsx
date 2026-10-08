@@ -16,10 +16,13 @@ describe("GoogleMapEmbed", () => {
     );
   });
 
-  it("offers a usable map link instead of a broken frame when no key is configured", () => {
+  it("shows a keyless map plus a link when no key is configured", () => {
     vi.stubEnv("IGNITE_LIVE_GOOGLE_MAPS_BROWSER_KEY", "");
     render(<GoogleMapEmbed address="35 Driffield" />);
-    expect(screen.queryByTitle("Event location map")).toBeNull();
+    expect(screen.getByTitle("Event location map")).toHaveAttribute(
+      "src",
+      "https://maps.google.com/maps?q=35%20Driffield&output=embed",
+    );
     expect(screen.getByRole("link", { name: /View location on Google Maps/i })).toHaveAttribute(
       "href",
       "https://www.google.com/maps/search/?api=1&query=35%20Driffield",
