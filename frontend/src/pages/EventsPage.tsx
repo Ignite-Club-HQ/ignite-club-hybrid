@@ -1269,35 +1269,11 @@ export default function EventsPage() {
                   ["club_admin", "team_admin", "coach", "committee_member"].includes(r.role),
                 );
               if (!canCreate) {
-                const evts = upcomingEvents || [];
-                if (!evts.length) {
-                  toast({ title: "No upcoming events to export" });
-                  return;
-                }
-                exportEventsIcs(
-                  evts.map((e: any) => ({
-                    id: e.id,
-                    title: e.title,
-                    type: e.type,
-                    event_date: e.event_date,
-                    start_time: e.start_time,
-                    end_time: e.end_time,
-                    description: e.description,
-                    location_name: e.location_name,
-                    address: e.address,
-                    suburb: e.suburb,
-                    state: e.state,
-                    postcode: e.postcode,
-                    is_cancelled: e.is_cancelled,
-                    updated_at: e.updated_at,
-                    url: `${window.location.origin}/events/${e.id}`,
-                  })),
-                  "Ignite Schedule",
-                  "ignite-schedule",
-                ).then(() => {
-                  toast({ title: "Schedule exported" });
-                }).catch((err) => {
-                  toast({ title: "Couldn't export", description: (err as Error).message, variant: "destructive" });
+                // Calendar export has its own button next to List/Calendar —
+                // the + is for creating, so explain why it's unavailable.
+                toast({
+                  title: "Only coaches and club or team admins can add events",
+                  description: "Ask your club admin for a coach or admin role, or create your own club from the Clubs page.",
                 });
                 return;
               }
