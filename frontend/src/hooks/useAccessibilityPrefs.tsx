@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useOptionalAuth } from "@/hooks/useAuth";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export type AccessibilityPrefs = {
@@ -69,7 +69,7 @@ type Ctx = {
 const AccessibilityCtx = createContext<Ctx | null>(null);
 
 export function AccessibilityPrefsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const user = useOptionalAuth()?.user ?? null;
   const [prefs, setPrefsState] = useState<AccessibilityPrefs>(() => {
     const initial = readLocal();
     applyToDom(initial);
