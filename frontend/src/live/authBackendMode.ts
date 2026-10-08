@@ -131,16 +131,7 @@ export function resolveAuthBackend(): BackendProvider {
   if (choice === "icp" && isIcpAuthAvailable()) return "icp";
   const config = getBackendRoutingConfig();
   const { country } = getCurrentCountry();
-  // A per-club backend pin (whole app per club member) wins over the country
-  // rules. Post-auth the pin comes from live membership ids; pre-auth — which
-  // is when this function decides the /auth screen — it comes from the hint
-  // cached by the last post-auth check.
-  const clubIds = getUserClubIds();
-  const pin = clubIds.length > 0
-    ? resolveClubBackendOverride(config, clubIds)
-    : readCachedClubBackendHint() ?? unanimousClubPin(config);
-  if (pin === "supabase") return "supabase";
-  if (pin === "icp") return isIcpAuthAvailable() ? "icp" : "supabase";
+  // The sign-in screen follows the visitor's country only (club pins retired).
   return resolveBackendForCountry(config, country, isIcpAuthAvailable());
 }
 
