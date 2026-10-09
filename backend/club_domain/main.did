@@ -665,6 +665,15 @@ type Main =
        Err: text;
        Ok: vec NewsPost;
      }) query;
+   list_news_targets: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 text;
+                 text;
+               };
+     }) query;
    list_pending_invites_by_club: (club_id: text) ->
     (variant {
        Err: text;
@@ -991,6 +1000,11 @@ type Main =
                                                      Ok;
                                                    });
    set_messaging_domain_canister: (id: principal) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   set_news_post_target: (post_id: text, kind: text, target_id: opt text) ->
     (variant {
        Err: text;
        Ok;

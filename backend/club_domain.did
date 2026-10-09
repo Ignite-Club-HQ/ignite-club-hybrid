@@ -299,6 +299,11 @@ type Main =
                                         Err: text;
                                         Ok: TeamInvite;
                                       });
+   accept_team_invite_link: (token: text) ->
+    (variant {
+       Err: text;
+       Ok: TeamInviteLink;
+     });
    add_role_grant: (user: principal, club: text, role: text, team:
     opt text) -> (variant {
                     Err: text;
@@ -342,6 +347,10 @@ type Main =
                          Err: text;
                          Ok: nat;
                        });
+   /// Public: remaining cycles of any canister this canister controls
+   /// (the frontend asset canister adds club_domain as a controller at deploy
+   /// time so admin settings can show its balance too).
+   canister_cycles: (canister_id: principal) -> (nat);
    check_team_name_unique: (club_id: text, name: text) ->
     (variant {
        Err: text;
@@ -378,6 +387,10 @@ type Main =
        Err: text;
        Ok: NewsPost;
      });
+   create_own_child: () -> (variant {
+                              Err: text;
+                              Ok: Child;
+                            });
    create_parent_invite: (club_id: text, team_id: opt text, child_id:
     text) -> (variant {
                 Err: text;
@@ -407,6 +420,8 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      });
+   /// Public: remaining cycles (shown in admin settings).
+   cycles_balance: () -> (nat) query;
    delete_club_permanent: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -419,6 +434,10 @@ type Main =
                                       Err: text;
                                       Ok;
                                     });
+   delete_own_child: (child_id: text) -> (variant {
+                                            Err: text;
+                                            Ok;
+                                          });
    delete_sponsor: (id: text) -> (variant {
                                     Err: text;
                                     Ok;
@@ -463,6 +482,14 @@ type Main =
        Err: text;
        Ok: ClubBranding;
      }) query;
+   get_club_home_countries: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 text;
+               };
+     }) query;
    get_club_link: (link_id: text) ->
     (variant {
        Err: text;
@@ -473,6 +500,11 @@ type Main =
        Err: text;
        Ok: opt ClubProfile;
      }) query;
+   get_club_profiles: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     }) query;
    get_club_settings: (club_id: text) ->
     (variant {
        Err: text;
@@ -482,6 +514,11 @@ type Main =
     (variant {
        Err: text;
        Ok: opt ClubSubscription;
+     }) query;
+   get_club_subscriptions: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubSubscription;
      }) query;
    get_current_season: (club_id: text) ->
     (variant {
@@ -500,6 +537,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ParentInvite;
+     }) query;
+   get_pending_invite: (id: text) ->
+    (variant {
+       Err: text;
+       Ok: PendingInvite;
      }) query;
    get_shell_team_by_token: (token: text) ->
     (variant {
@@ -534,6 +576,16 @@ type Main =
        Err: text;
        Ok: opt TeamSubscription;
      }) query;
+   get_team_subscriptions: (team_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamSubscription;
+     }) query;
+   get_teams: (ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     }) query;
    has_club_staff_role: (user: principal, club_id: text) -> (bool) query;
    http_request: (request: HttpRequest) -> (HttpResponse) query;
    import_frozen_club: (club: text, listing: Listing) ->
@@ -550,6 +602,8 @@ type Main =
        Err: text;
        Ok: InviteStats;
      }) query;
+   is_app_admin: (user: principal) -> (bool) query;
+   is_club_member: (user: principal, club_id: text) -> (bool) query;
    is_member_removed: (club: text, user: principal) -> (bool) query;
    link_guardian: (child_id: text, user: principal) ->
     (variant {
@@ -565,10 +619,16 @@ type Main =
                                Err: text;
                                Ok: vec ClubSponsor;
                              }) query;
+   list_child_guardians: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec principal;
+     }) query;
    list_children: () -> (variant {
                            Err: text;
                            Ok: vec Child;
                          }) query;
+   list_club_admins: (club_id: text) -> (vec principal) query;
    list_club_join_requests: (club_id: text) ->
     (variant {
        Err: text;
@@ -594,6 +654,7 @@ type Main =
                 Err: text;
                 Ok: vec MemberPayment;
               }) query;
+   list_my_children: () -> (vec Child) query;
    list_news: (club_id: text) ->
     (variant {
        Err: text;
@@ -603,6 +664,15 @@ type Main =
     (variant {
        Err: text;
        Ok: vec NewsPost;
+     }) query;
+   list_news_targets: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 text;
+                 text;
+               };
      }) query;
    list_pending_invites_by_club: (club_id: text) ->
     (variant {
@@ -644,6 +714,11 @@ type Main =
        Err: text;
        Ok: vec ClubSponsor;
      }) query;
+   list_sponsors_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubSponsor;
+     }) query;
    list_team_captains: (team_id: text) ->
     (variant {
        Err: text;
@@ -679,6 +754,16 @@ type Main =
        Err: text;
        Ok: vec ClubTeam;
      }) query;
+   list_teams_multi: (club_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     }) query;
+   list_user_club_roles: (user: principal, club_id: text) ->
+    (vec record {
+           text;
+           opt text;
+         }) query;
    mark_member_paid: (club_id: text, user_id: text, child_id: opt text,
     payment_period: text, payment_type: text, amount: float64, notes:
     opt text) -> (variant {
@@ -873,6 +958,11 @@ type Main =
        Err: text;
        Ok: ClubSettings;
      });
+   set_club_home_country: (club_id: text, country: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_club_invite_email_style: (club_id: text, style: opt text) ->
     (variant {
        Err: text;
@@ -914,10 +1004,25 @@ type Main =
        Err: text;
        Ok;
      });
+   set_news_post_target: (post_id: text, kind: text, target_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_notification_queue_canister: (id: principal) ->
     (variant {
        Err: text;
        Ok;
+     });
+   set_own_child_guardian: (child_id: text, user: principal, linked: 
+    bool) -> (variant {
+                Err: text;
+                Ok;
+              });
+   set_own_child_team: (child_id: text, team_id: text, assigned: bool) ->
+    (variant {
+       Err: text;
+       Ok: Child;
      });
    set_pii_canister: (id: principal) -> (variant {
                                            Err: text;

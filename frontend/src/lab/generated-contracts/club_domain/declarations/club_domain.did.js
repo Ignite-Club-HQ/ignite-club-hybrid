@@ -893,6 +893,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_news_targets' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'list_pending_invites_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
@@ -1273,6 +1283,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_messaging_domain_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_news_post_target' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

@@ -79,6 +79,8 @@ persistent actor class Main(governorInit : Principal) {
   var mutationLog : [(Text, Text, Types.Mutation)];
 
   var newsPosts : [Types.NewsPost];
+  // (post_id, kind "competition" | "mini_league", target_id)
+  var newsTargets : [(Text, Text, Text)];
   var parentInvites : [Types.ParentInvite];
   var roleRequests : [Types.RoleRequest];
   var teamInvites : [Types.TeamInvite];
@@ -566,9 +568,41 @@ persistent actor class Main(governorInit : Principal) {
       case (?current) {
         if (not isAdmin(caller, current.club_id)) return #Err("Club admin required");
         newsPosts := newsPosts.filter(func(p) = p.id != id);
+        newsTargets := newsTargets.filter(func(t) = t.0 != id);
         #Ok
       };
     }
+  };
+
+  // Competition / mini-league audience for a news post (null clears it).
+  // Membership of those audiences lives on other canisters, so on ICP the
+  // target is recorded for display; visibility still follows club/team rules.
+  public shared ({ caller }) func set_news_post_target(post_id : Text, kind : Text, target_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (newsPosts.find(func(p) = p.id == post_id)) {
+      case null { #Err("News post not found") };
+      case (?post) {
+        if (not isAdmin(caller, post.club_id)) return #Err("Club admin required");
+        newsTargets := newsTargets.filter(func(t) = t.0 != post_id);
+        switch (target_id) {
+          case null {};
+          case (?tid) {
+            if (kind != "competition" and kind != "mini_league") return #Err("Invalid target kind");
+            if (tid == "" or tid.size() > 128) return #Err("Invalid target");
+            newsTargets := newsTargets.concat([(post_id, kind, tid)]);
+          };
+        };
+        #Ok
+      };
+    }
+  };
+
+  public query ({ caller }) func list_news_targets(club_ids : [Text]) : async { #Ok : [(Text, Text, Text)]; #Err : Text } {
+    auth(caller);
+    if (club_ids.size() > 50) return #Err("Too many clubs");
+    let visible = club_ids.filter(func(club) = isMember(caller, club) or isAdmin(caller, club));
+    #Ok(newsTargets.filter(func(t) = newsPosts.any(func(p) =
+      p.id == t.0 and visible.any(func(club) = club == p.club_id) and canSeeNewsPost(caller, p))))
   };
 
   // Admins see every post (including drafts); members see published posts

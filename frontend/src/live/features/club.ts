@@ -830,7 +830,7 @@ export async function createLiveClub(
   const country = homeCountry?.trim().toUpperCase();
   if (country && /^[A-Z]{2}$/.test(country)) {
     try {
-      unwrapCandid(await actor.set_club_home_country(id, country), "Set club home country");
+      await unwrapCandid(actor.set_club_home_country(id, country), "Set club home country");
     } catch (err) {
       console.warn("[createLiveClub] home country not recorded", err);
     }
@@ -846,7 +846,7 @@ export async function getLiveClubHomeCountries(
 ): Promise<Record<string, string>> {
   if (clubIds.length === 0) return {};
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const rows = unwrapCandid(await actor.get_club_home_countries(clubIds), "Get club home countries");
+  const rows = (await unwrapCandid(actor.get_club_home_countries(clubIds), "Get club home countries")) as Array<[string, string]>;
   return Object.fromEntries(rows);
 }
 
@@ -1296,4 +1296,15 @@ export async function listLiveChildGuardians(ctx: FeatureBackendContext, childId
 export async function setMyLiveChildGuardian(ctx: FeatureBackendContext, childId: string, user: Principal, linked: boolean) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian");
+}
+
+/** Competition / mini-league audience for a news post (null clears it). */
+export async function setLiveNewsPostTarget(
+  ctx: FeatureBackendContext,
+  postId: string,
+  kind: "competition" | "mini_league",
+  targetId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_news_post_target(postId, kind, candidOpt(targetId)), "Set news audience");
 }
