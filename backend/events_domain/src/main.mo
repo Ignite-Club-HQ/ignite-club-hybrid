@@ -2074,11 +2074,11 @@ persistent actor class Main(governorInit : Principal) {
       if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new }) else g);
       if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new }) else g);
       if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
-      if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) { r with account_id = newText } else r);
-      if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) { a with account_id = newText } else a);
-      if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) { d with account_id = newText } else d);
-      if (rosterOld > 0) roster := roster.map(func(r) = if (r.account_id == oldText) { r with account_id = newText } else r);
-      if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) { c with guardian_id = newText } else c);
+      if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
+      if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) ({ a with account_id = newText }) else a);
+      if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) ({ d with account_id = newText }) else d);
+      if (rosterOld > 0) roster := roster.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
+      if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) ({ c with guardian_id = newText }) else c);
 
       if (pushReachOldHas) {
         let newHas = pushReachability.any(func(p) = p.user.equal(new));

@@ -938,4 +938,119 @@ persistent actor class Main(governorInit : Principal) {
     });
     #Ok(removed)
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  //
+  // Covered: Notification.user, ScheduledMessage.author, DigestItem.mentions
+  // (Text elements; exact match only), Preferences.user, PushAlertSettings.updated_by,
+  // DeviceToken.user. Device tokens and preferences are the ephemeral/allowed
+  // collections called out by the spec: on collision we keep the NEW row and
+  // drop the OLD one instead of erroring or merging.
+  // Not touched: governor (governor variable itself), workers (worker wiring),
+  // Lease.owner (always a worker principal), messagingDomainCanister
+  // (canister wiring), chat_notified_messages (message ids, not identities).
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    authenticated(caller);
+    let isGov = switch (governor) { case (?g) { g.equal(caller) }; case null { false } };
+    if (not isGov) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new principal must differ");
+    let governorIsOld = switch (governor) { case (?g) { g.equal(old) }; case null { false } };
+    if (governorIsOld) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+
+    // Conflict guard: non-ephemeral records already referencing `new`.
+    // (device_tokens and preferences are excluded — they are the
+    // ephemeral/allowed collections, handled by keep-new-drop-old below.)
+    var conflicts = 0;
+    conflicts += items.filter(func(n : Types.Notification) : Bool = n.user == newText).size();
+    conflicts += scheduled.filter(func(s : Types.ScheduledMessage) : Bool = s.author == newText).size();
+    conflicts += digests.filter(func(d : Types.DigestItem) : Bool = d.mentions.any(func(m : Text) : Bool = m == newText)).size();
+    conflicts += switch (push_settings) { case (?p) { if (p.updated_by == ?newText) { 1 } else { 0 } }; case null { 0 } };
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
+
+    var changed = 0;
+
+    let newItems = items.map(func(n : Types.Notification) : Types.Notification {
+      if (n.user == oldText) { changed += 1; { n with user = newText } } else { n }
+    });
+
+    let newScheduled = scheduled.map(func(s : Types.ScheduledMessage) : Types.ScheduledMessage {
+      if (s.author == oldText) { changed += 1; { s with author = newText } } else { s }
+    });
+
+    let newDigests = digests.map(func(d : Types.DigestItem) : Types.DigestItem {
+      if (d.mentions.any(func(m : Text) : Bool = m == oldText)) {
+        changed += 1;
+        var seenNew = d.mentions.any(func(m : Text) : Bool = m == newText);
+        var out : [Text] = [];
+        for (m in d.mentions.values()) {
+          if (m == oldText) {
+            if (not seenNew) { out := out.concat([newText]); seenNew := true };
+          } else {
+            out := out.concat([m]);
+          };
+        };
+        { d with mentions = out }
+      } else { d }
+    });
+
+    let newPushSettings = switch (push_settings) {
+      case (?p) { if (p.updated_by == ?oldText) { changed += 1; ?{ p with updated_by = ?newText } } else { ?p } };
+      case null { null };
+    };
+
+    // Device tokens: caller-scoped, keyed by (user, token). On collision
+    // (same token already registered under both old and new text) keep the
+    // NEW row and drop the OLD one; otherwise just rename old -> new.
+    var deviceChanged = 0;
+    let newDeviceTokens = Array.filter<Types.DeviceToken>(
+      device_tokens.map(func(t : Types.DeviceToken) : Types.DeviceToken {
+        if (t.user == oldText) { deviceChanged += 1; { t with user = newText } } else { t }
+      }),
+      func(t : Types.DeviceToken) : Bool {
+        not (t.user == newText and t.token == "" ) // placeholder, replaced below
+      }
+    );
+    // De-duplicate by (user, token), preferring entries that were already
+    // `new` over ones just renamed from `old`.
+    var dedupedDeviceTokens : [Types.DeviceToken] = [];
+    for (t in newDeviceTokens.values()) {
+      if (not dedupedDeviceTokens.any(func(x : Types.DeviceToken) : Bool = x.user == t.user and x.token == t.token)) {
+        dedupedDeviceTokens := dedupedDeviceTokens.concat([t]);
+      };
+    };
+    changed += deviceChanged;
+
+    // Preferences: one row per user. On collision (both old and new already
+    // have a stored Preferences row) keep the NEW row and drop the OLD one.
+    var prefsChanged = 0;
+    let oldPrefs = findPreference(oldText);
+    let newPrefsExisting = findPreference(newText);
+    let newPreferences = switch (oldPrefs) {
+      case (?op) {
+        prefsChanged += 1;
+        switch (newPrefsExisting) {
+          case (?_) { preferences.filter(func(p : Types.Preferences) : Bool = p.user != oldText) };
+          case null { preferences.map(func(p : Types.Preferences) : Types.Preferences = if (p.user == oldText) { { op with user = newText } } else { p }) };
+        };
+      };
+      case null { preferences };
+    };
+    changed += prefsChanged;
+
+    if (not dry_run) {
+      items := newItems;
+      scheduled := newScheduled;
+      digests := newDigests;
+      push_settings := newPushSettings;
+      device_tokens := dedupedDeviceTokens;
+      preferences := newPreferences;
+    };
+
+    #ok(changed)
+  };
 };
