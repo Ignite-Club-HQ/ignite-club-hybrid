@@ -992,7 +992,10 @@ export default function BroadcastChatPage() {
                 if (news) return { kind: "news", refId: news[1], url: null };
                 return null;
               })();
-          await sendLiveMessage(ctx, "broadcast", text, `broadcast:${user!.id}:${Date.now()}`, attachment, reply_to_id);
+          // Idempotent: makes sure the shared feed exists before posting
+          // (send_message answers "Conversation not found" otherwise).
+          await ensureLiveBroadcastConversation(ctx);
+          await sendLiveMessage(ctx, "broadcast", text, `bc:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, attachment, reply_to_id);
           void recordLiveMessageSent(ctx, "broadcast", user!.id).catch(() => { /* best-effort engagement counter */ });
         },
       });
@@ -1083,6 +1086,7 @@ export default function BroadcastChatPage() {
       console.error("Failed to send broadcast message", err);
       toast({
         title: "Failed to send message",
+        description: err instanceof Error ? err.message.slice(0, 200) : undefined,
         variant: "destructive",
       });
     },
