@@ -700,10 +700,10 @@ persistent actor class Main(governorInit : Principal) {
   // GuardianRelationship.children (content/club ids, not user identities).
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
     auth(caller);
-    if (not isGovernor(caller)) return #Err("Forbidden");
-    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #Err("Invalid principal");
-    if (old.equal(new)) return #Err("old and new principal must differ");
-    if (isGovernor(old)) return #Err("Cannot rekey the governor");
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new principal must differ");
+    if (isGovernor(old)) return #err("Cannot rekey the governor");
 
     // Conflict guard: non-ephemeral records already referencing `new`.
     // (GuardianRelationship is excluded here: both-exist is a merge, not a
@@ -711,7 +711,7 @@ persistent actor class Main(governorInit : Principal) {
     var conflicts = 0;
     conflicts += pii_records.filter(func(r : PiiRecord) : Bool = r.domain_owner.equal(new) or r.readers.any(func(p : Principal) : Bool = p.equal(new))).size();
     conflicts += audit_log.filter(func(a : AuditRecord) : Bool = a.requesting_principal.equal(new)).size();
-    if (conflicts > 0) return #Err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in pii_access_control");
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in pii_access_control");
 
     var changed = 0;
 
@@ -771,6 +771,6 @@ persistent actor class Main(governorInit : Principal) {
       guardian_relationships := newGuardianRelationships;
     };
 
-    #Ok(changed)
+    #ok(changed)
   };
 }
