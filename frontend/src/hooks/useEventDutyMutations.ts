@@ -9,6 +9,7 @@ import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   completeLiveEventDuty,
   createLiveOpenDuty,
+  claimLiveOpenDuty,
   removeLiveEventDuty,
   setLiveEventDuty,
   uncompleteLiveEventDuty,
@@ -151,6 +152,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
           const duty = duties?.find((candidate) => candidate.id === dutyId);
           if (!duty?.name) throw new Error("Duty not found");
           await setLiveEventDuty(ctx, id, user.id, duty.name);
+          if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), user.id).catch(() => undefined);
           return true;
         },
       });
@@ -472,6 +474,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
               const duty = duties?.find((candidate) => candidate.id === selectedDutyId);
               if (!duty?.name) throw new Error("Duty not found");
               await setLiveEventDuty(ctx, id, userId, duty.name);
+              if (String(duty.id).startsWith("open:")) await claimLiveOpenDuty(ctx, String(duty.id).slice(5), userId).catch(() => undefined);
               return true;
             },
           })
