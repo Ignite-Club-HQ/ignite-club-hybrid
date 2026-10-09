@@ -26,10 +26,20 @@ echo "==> Looking up '$SEARCH_NAME' on identity_access"
 OUT="$(icp canister call identity_access search_profiles "(\"$SEARCH_NAME\", 5 : nat16)" -e ic)"
 echo "$OUT"
 
+# Optional exact sign-in ID: picks one profile when several share the name.
+ONLY_PRINCIPAL="${ONLY_PRINCIPAL:-}"
+ACCOUNTS="$(printf '%s' "$OUT" | grep -oE 'account_id = "[^"]+"' | sed 's/^account_id = "//; s/"$//' || true)"
+PRINCIPALS="$(printf '%s' "$OUT" | grep -oE 'principal "[a-z0-9-]{20,}"' | sed 's/^principal "//; s/"$//' || true)"
+if [ -n "$ONLY_PRINCIPAL" ]; then
+  IDX="$(printf '%s\n' "$PRINCIPALS" | grep -nxF "$ONLY_PRINCIPAL" | cut -d: -f1 || true)"
+  [ -n "$IDX" ] || { echo "ERROR: no '$SEARCH_NAME' profile has sign-in ID $ONLY_PRINCIPAL"; exit 1; }
+  OUT="account_id = \"$(printf '%s\n' "$ACCOUNTS" | sed -n "${IDX}p")\"; principal \"$ONLY_PRINCIPAL\"; display_name"
+fi
+
 MATCHES="$(printf '%s' "$OUT" | grep -o 'display_name' | wc -l | tr -d ' ')"
 if [ "$MATCHES" != "1" ]; then
   echo "ERROR: expected exactly 1 profile matching '$SEARCH_NAME', found $MATCHES."
-  echo "Fix the display name in the app profile, or pass a more specific name."
+  echo "Fix the display name in the app profile, or pass a more specific name, or fill in the sign-in ID input."
   exit 1
 fi
 

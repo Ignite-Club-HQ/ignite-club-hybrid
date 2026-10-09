@@ -14,6 +14,10 @@ on:
         description: "Display name of the Internet Identity user (exact profile name)"
         required: true
         default: "Paul Cranwell"
+      principal:
+        description: "Optional sign-in ID (Settings → Your sign-in ID) when several profiles share the name"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -71,4 +75,5 @@ jobs:
       - name: Grant app admin
         env:
           DISPLAY_NAME: ${{ inputs.display_name }}
+          ONLY_PRINCIPAL: ${{ inputs.principal }}
         run: bash scripts/grant-app-admin.sh "$DISPLAY_NAME"
