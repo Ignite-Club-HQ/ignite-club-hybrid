@@ -82,6 +82,7 @@ type Result_6 = variant { Ok : State; Err : text };
 type Result_7 = variant { Ok : vec ExternalSiteBinding; Err : text };
 type Result_8 = variant { Ok : vec Entitlement; Err : text };
 type Result_9 = variant { Ok : Profile; Err : text };
+type Result_rekey = variant { Ok : nat64; Err : text };
 type RoleGrant = record {
   account_id : text;
   club : opt text;
@@ -176,6 +177,8 @@ service : (Init) -> {
   // replay the signature because it is bound to the principal that produced
   // it (changing the principal changes the signed message).
   redeem_entitlement : (text, text, nat64, text, text) -> (Result_12);
+  // Governor-only: moves one user's sign-in ID to a new one (dry run first).
+  rekey_principal : (principal, principal, bool) -> (Result_rekey);
   register_account : () -> (Result);
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);

@@ -1007,20 +1007,12 @@ persistent actor class Main(governorInit : Principal) {
     // (same token already registered under both old and new text) keep the
     // NEW row and drop the OLD one; otherwise just rename old -> new.
     var deviceChanged = 0;
-    let newDeviceTokens = Array.filter<Types.DeviceToken>(
-      device_tokens.map(func(t : Types.DeviceToken) : Types.DeviceToken {
-        if (t.user == oldText) { deviceChanged += 1; { t with user = newText } } else { t }
-      }),
-      func(t : Types.DeviceToken) : Bool {
-        not (t.user == newText and t.token == "" ) // placeholder, replaced below
-      }
-    );
-    // De-duplicate by (user, token), preferring entries that were already
-    // `new` over ones just renamed from `old`.
     var dedupedDeviceTokens : [Types.DeviceToken] = [];
-    for (t in newDeviceTokens.values()) {
-      if (not dedupedDeviceTokens.any(func(x : Types.DeviceToken) : Bool = x.user == t.user and x.token == t.token)) {
-        dedupedDeviceTokens := dedupedDeviceTokens.concat([t]);
+    for (t in device_tokens.values()) {
+      let renamed : Types.DeviceToken = if (t.user == oldText) { { t with user = newText } } else { t };
+      if (t.user == oldText) { deviceChanged += 1 };
+      if (not dedupedDeviceTokens.any(func(x : Types.DeviceToken) : Bool = x.user == renamed.user and x.token == renamed.token)) {
+        dedupedDeviceTokens := dedupedDeviceTokens.concat([renamed]);
       };
     };
     changed += deviceChanged;
