@@ -78,6 +78,7 @@ import {
   getLiveEventRoster,
   getLiveEventRosterDetailed,
   listLiveDuties,
+  listLiveOpenDuties,
   getLiveMyChildren,
   getLiveMyChildTeamAssignments,
   listLiveChildTeamAssignments,
@@ -538,7 +539,10 @@ export default function EventDetailPage() {
           // completed, event_id } — no `id`/`name`/`assigned_to`/`status`
           // fields. Map it into the Supabase-shaped duty row the rest of the
           // page expects rather than casting onto a mismatched shape.
-          const rows = await listLiveDuties(ctx, id!);
+          const [rows, openDuties] = await Promise.all([
+            listLiveDuties(ctx, id!),
+            listLiveOpenDuties(ctx, id!).catch(() => [] as any[]),
+          ]);
           const assigneeIds = Array.from(new Set(rows.map((d) => d.account_id).filter(Boolean)));
           const profiles = assigneeIds.length > 0 ? await listLiveProfilesByIds(ctx, assigneeIds) : [];
           const profileMap = new Map(profiles.map((p: any) => [p.account_id, p]));
@@ -552,7 +556,19 @@ export default function EventDetailPage() {
               status: d.completed ? "completed" : "open",
               profiles: p ? { display_name: p.display_name, avatar_url: p.avatar_ref?.[0] ?? null } : null,
             };
-          });
+          }).concat(
+            // Newly added (unclaimed) duties live on the open-duty board.
+            (openDuties as any[])
+              .filter((od) => !(Array.isArray(od.claimed_by) ? od.claimed_by[0] : od.claimed_by))
+              .map((od) => ({
+                id: `open:${od.id}`,
+                event_id: od.event_id,
+                name: od.duty,
+                assigned_to: null,
+                status: "open",
+                profiles: null,
+              })),
+          );
         },
       });
     },
