@@ -28,8 +28,15 @@
 - [ ] Supabase Auth redirect allow-list needs the canister URL (user)
 - [ ] Review codemagic.yaml (user to share)
 - [ ] Side-by-side test, move custom domain, delete Netlify
-- [ ] Review codemagic.yaml (user to share)
-- [ ] Side-by-side test, move custom domain, delete Netlify
+
+## Native apps (Codemagic)
+- [x] codemagic.yaml: android-debug, android-release, ios-debug (simulator, unsigned), ios-release (App Store IPA); native projects scaffolded in CI, not committed
+- [x] @capacitor/cli + @capacitor/android + @capacitor/ios devDependencies, lockfile refreshed
+- [ ] User: connect repo in Codemagic, run android-debug then ios-debug (zero secrets)
+- [ ] User: android_release secrets (keystore + google-services.json) for Play
+- [ ] User: Apple Developer Program + App Store Connect integration named `ignite` + APP_STORE_APP_ID for TestFlight
+- [ ] Push on native: install @capacitor-firebase/messaging (absent today, so nativePush silently no-ops) + APNs key in Firebase
+- [ ] Deep links for store release: Android intent filters + iOS AASA/associated-domains on the published domain
 
 ## Country-based backend routing
 - [x] Per-club overrides removed; club home country + locked backend recorded on Supabase clubs
