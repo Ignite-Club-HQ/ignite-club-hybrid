@@ -1798,7 +1798,7 @@ export default function ClubChatPage() {
     : "Club chat";
 
   if (isLoadingClubSubscription && !club) {
-    return <ChatPageSkeleton title="Club chat" />;
+    return <ChatPageSkeleton title={clubDisplayName || undefined} />;
   }
 
   // Block access for non-Pro users - show full page blocker
@@ -1810,13 +1810,13 @@ export default function ClubChatPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Avatar className="h-10 w-10">
-            <AvatarImage src={club?.logo_url || undefined} />
+            <AvatarImage src={clubAvatarUrl} />
             <AvatarFallback className="bg-secondary text-secondary-foreground">
-              {club?.name?.charAt(0)?.toUpperCase() || "C"}
+              {(clubDisplayName || "C").charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
         <div className="flex-1">
-            <h1 className="font-semibold">{club?.name || "Club"}</h1>
+            <h1 className="font-semibold">{clubDisplayName || "Club"}</h1>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
