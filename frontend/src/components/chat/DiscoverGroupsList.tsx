@@ -493,7 +493,9 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
         <div className="px-2 pb-2 space-y-2">
           {groups.length === 0 ? (
             <p className="text-xs text-muted-foreground italic px-2 py-3">
-              No open groups yet. Ask a club admin to open an Operations or Volunteers group to the club.
+              {isClubAdmin
+                ? "No open groups yet. You can open one — edit an Operations or Volunteers group and set who can join to \"Anyone in the club can join\" or \"Approval required\"."
+                : "No open groups yet. Ask a club admin to open an Operations or Volunteers group to the club."}
             </p>
           ) : (
             <>
