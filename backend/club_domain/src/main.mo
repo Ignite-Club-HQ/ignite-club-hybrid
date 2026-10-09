@@ -145,6 +145,16 @@ persistent actor class Main(governorInit : Principal) {
   /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   /// Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Anonymous principal not allowed");
     if (old.equal(new)) return #err("old and new must differ");
@@ -189,7 +199,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += teamPlayerPositions.filter(func(p) = newTxt(p.member_id)).size();
     conflicts += themePrefs.filter(func(e) = e.0.equal(new)).size();
 
-    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
 
     var changed = 0;
 

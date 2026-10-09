@@ -158,6 +158,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_reactions' : IDL.Func([IDL.Text], [IDL.Vec(Reaction)], ['query']),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'register_asset' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : Asset, 'Err' : IDL.Text })],

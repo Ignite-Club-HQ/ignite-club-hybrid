@@ -18,6 +18,10 @@ import { Secp256k1KeyIdentity } from "@icp-sdk/core/identity/secp256k1";
 const oldText = (process.env.OLD_PRINCIPAL || "").trim();
 const newText = (process.env.NEW_PRINCIPAL || "").trim();
 const confirm = (process.env.CONFIRM || "").trim().toLowerCase() === "yes";
+// MERGE=yes: allowed even when the new ID already has data; both IDs' records
+// end up under the new one. Only these canisters can refuse, so only they need it.
+const merge = (process.env.MERGE || "").trim().toLowerCase() === "yes";
+const MERGE_CANISTERS = new Set(["club_domain", "events_domain", "messaging_domain", "notification_queue", "pii_access_control", "media_blob_store", "media_metadata"]);
 if (!oldText || !newText) throw new Error("OLD_PRINCIPAL and NEW_PRINCIPAL are required");
 const oldP = Principal.fromText(oldText);
 const newP = Principal.fromText(newText);
@@ -49,11 +53,12 @@ const secret = new Uint8Array(Buffer.from(jwk.d, "base64url"));
 const identity = jwk.kty === "OKP" ? Ed25519KeyIdentity.fromSecretKey(secret) : Secp256k1KeyIdentity.fromSecretKey(secret);
 const agent = await HttpAgent.create({ host: "https://icp-api.io", identity });
 console.log(`Governor: ${identity.getPrincipal().toText()}`);
-console.log(`Moving ${oldText}\n    -> ${newText}\n`);
+console.log(`${merge ? "Merging" : "Moving"} ${oldText}\n    -> ${newText}\n`);
 
 const motokoIdl = () =>
   IDL.Service({
     rekey_principal: IDL.Func([IDL.Principal, IDL.Principal, IDL.Bool], [IDL.Variant({ ok: IDL.Nat, err: IDL.Text })], []),
+    merge_principal: IDL.Func([IDL.Principal, IDL.Principal, IDL.Bool], [IDL.Variant({ ok: IDL.Nat, err: IDL.Text })], []),
   });
 const rustIdl = () =>
   IDL.Service({
@@ -65,14 +70,14 @@ async function call(name, dryRun) {
   if (!canisterId) return { name, skipped: "no canister id" };
   const actor = Actor.createActor(name === "identity_access" ? rustIdl : motokoIdl, { agent, canisterId });
   try {
-    const r = await actor.rekey_principal(oldP, newP, dryRun);
+    const r = merge && MERGE_CANISTERS.has(name) ? await actor.merge_principal(oldP, newP, dryRun) : await actor.rekey_principal(oldP, newP, dryRun);
     const err = r.err ?? r.Err;
     if (err !== undefined) return { name, err };
     return { name, count: Number(r.ok ?? r.Ok) };
   } catch (e) {
     const msg = String(e?.message ?? e);
     if (/has no update method|method not found|did not find method|no method/i.test(msg)) {
-      return { name, err: "rekey_principal is not installed yet — run the blockchain update on main first" };
+      return { name, err: "the move/merge feature is not installed yet — run the blockchain update on main first" };
     }
     return { name, err: msg.split("\n")[0].slice(0, 300) };
   }

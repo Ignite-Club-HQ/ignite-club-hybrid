@@ -2636,6 +2636,16 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("old and new must differ");
@@ -2667,7 +2677,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += userMessagingSettings.filter(func(u) = u.user.equal(new)).size();
     conflicts += blockedUsers.filter(func(b) = b.blocker.equal(new) or b.blocked.equal(new)).size();
     conflicts += pinnedMessages.filter(func(p) = p.pinned_by.equal(new)).size();
-    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in messaging_domain");
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in messaging_domain");
 
     var changed = 0;
 
@@ -2717,6 +2727,18 @@ persistent actor class Main(governorInit : Principal) {
     changed += blockOld;
     let pinOld = pinnedMessages.filter(func(p) = p.pinned_by.equal(old)).size();
     changed += pinOld;
+
+    // Merge: drop OLD keyed rows that collide with an existing NEW row (keep new).
+    if (allowMerge and not dry_run) {
+      receipts := receipts.filter(func(r) = not (r.user.equal(old) and receipts.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id and x.message_id == r.message_id)));
+      unread := unread.filter(func(r) = not (r.user.equal(old) and unread.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      clubMemberships := clubMemberships.filter(func(r) = not (r.user.equal(old) and clubMemberships.any(func(x) = x.user.equal(new) and x.club_id == r.club_id)));
+      groupRoles := groupRoles.filter(func(r) = not (r.user.equal(old) and groupRoles.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      pollVotes := pollVotes.filter(func(r) = not (r.user.equal(old) and pollVotes.any(func(x) = x.user.equal(new) and x.poll_id == r.poll_id)));
+      mutePreferences := mutePreferences.filter(func(r) = not (r.user.equal(old) and mutePreferences.any(func(x) = x.user.equal(new) and x.conversation_id == r.conversation_id)));
+      reactions := reactions.filter(func(r) = not (r.user.equal(old) and reactions.any(func(x) = x.user.equal(new) and x.message_id == r.message_id and x.emoji == r.emoji)));
+      if (userMessagingSettings.any(func(x) = x.user.equal(new))) userMessagingSettings := userMessagingSettings.filter(func(r) = not r.user.equal(old));
+    };
 
     // Ephemeral: presence pings — keep NEW row on conflict, drop OLD.
     let presenceOldHas = presence.any(func(p) = p.user.equal(old));

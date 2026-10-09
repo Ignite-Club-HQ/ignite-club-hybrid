@@ -76,6 +76,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'my_guardian_children' : ActorMethod<[], Array<string>>,
   'pii_vetkey_verification_key' : ActorMethod<[], Uint8Array>,
   'purge_club_grants' : ActorMethod<

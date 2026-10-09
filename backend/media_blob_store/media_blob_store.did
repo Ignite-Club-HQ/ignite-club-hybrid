@@ -61,6 +61,11 @@ service : {
   get_usage: () -> (Usage) query;
   health: () -> (Health) query;
   http_request: (request: HttpRequest) -> (HttpResponse) query;
+  merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
   put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
    (variant {

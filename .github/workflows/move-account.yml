@@ -14,6 +14,10 @@ on:
         description: "NEW sign-in ID (shown on the create-profile screen)"
         required: true
         default: "tavrz-s2z7n-5jkdv-dpho3-pvd3c-yog77-euqar-egkuv-xbzei-ftw3d-eqe"
+      merge:
+        description: "Type yes to merge when the new ID already has data"
+        required: false
+        default: "yes"
       confirm:
         description: "Type yes to actually move (otherwise dry run)"
         required: false
@@ -43,6 +47,7 @@ jobs:
           OLD_PRINCIPAL: ${{ inputs.old_principal }}
           NEW_PRINCIPAL: ${{ inputs.new_principal }}
           CONFIRM: ${{ inputs.confirm }}
+          MERGE: ${{ inputs.merge }}
           IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
         run: |
           set -euo pipefail

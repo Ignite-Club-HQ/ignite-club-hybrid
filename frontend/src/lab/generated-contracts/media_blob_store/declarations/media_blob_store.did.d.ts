@@ -59,6 +59,11 @@ export interface _SERVICE {
   'get_usage' : ActorMethod<[], Usage>,
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],

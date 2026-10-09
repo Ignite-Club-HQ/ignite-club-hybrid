@@ -459,6 +459,11 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    messages_since: (conversation_id: text, since_ms: nat64) ->
     (variant {
        Err: text;

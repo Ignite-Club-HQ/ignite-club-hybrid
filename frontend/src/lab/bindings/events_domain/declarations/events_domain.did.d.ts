@@ -672,6 +672,11 @@ export interface Main {
     { 'Ok' : Array<EventAttendance> } |
       { 'Err' : string }
   >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'move_group_player' : ActorMethod<
     [string, string, string, [] | [string]],
     { 'Ok' : null } |

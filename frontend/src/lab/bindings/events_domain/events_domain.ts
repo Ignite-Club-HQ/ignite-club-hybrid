@@ -755,6 +755,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     move_group_player(from_group_id: string, to_group_id: string, account_id: string, team_letter: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1979,6 +1986,16 @@ export class Events_domain implements events_domainInterface {
         const result = await this.actor.mark_attendance(arg0, arg1);
         return from_candid_variant_n83(result);
     }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n136(result);
+    }
     async move_group_player(arg0: string, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2040,7 +2057,7 @@ export class Events_domain implements events_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.record_reminder_sent(arg0, arg1, arg2);
-        return from_candid_variant_n136(result);
+        return from_candid_variant_n137(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -2050,7 +2067,7 @@ export class Events_domain implements events_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n137(result);
+        return from_candid_variant_n136(result);
     }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -3762,25 +3779,6 @@ function from_candid_variant_n135(value: {
     } : value;
 }
 function from_candid_variant_n136(value: {
-    Ok: _ReminderLog;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: ReminderLog;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n137(value: {
     ok: bigint;
 } | {
     err: string;
@@ -3797,6 +3795,25 @@ function from_candid_variant_n137(value: {
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
+    } : value;
+}
+function from_candid_variant_n137(value: {
+    Ok: _ReminderLog;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: ReminderLog;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
     } : value;
 }
 function from_candid_variant_n14(value: {

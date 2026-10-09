@@ -401,6 +401,11 @@ export interface Main {
     { 'Ok' : Receipt } |
       { 'Err' : string }
   >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'messages_since' : ActorMethod<
     [string, bigint],
     { 'Ok' : Array<MessageWithReactions> } |

@@ -505,6 +505,11 @@ type Main =
        Err: text;
        Ok: vec EventAttendance;
      });
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    move_group_player: (from_group_id: text, to_group_id: text, account_id:
     text, team_letter: opt text) -> (variant {
                                        Err: text;

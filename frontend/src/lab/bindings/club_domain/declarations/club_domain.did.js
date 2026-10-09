@@ -1016,6 +1016,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : MemberPayment, 'Err' : IDL.Text })],
         [],
       ),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'move_child_to_team' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
