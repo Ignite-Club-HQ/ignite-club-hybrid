@@ -59,4 +59,21 @@ module {
     club_id : ?Text;
     team_id : ?Text;
   };
+
+  // A vault folder/file (or whole club/team vault root) pinned to the top of
+  // a chat. Counterpart of the Supabase chat_pinned_vault table; keyed by
+  // (chat_type, chat_id). root_scope is "team" or "club" when a whole vault
+  // root is pinned instead of a single file/folder.
+  public type PinnedVault = {
+    chat_type : Text;
+    chat_id : Text;
+    club : Text;
+    vault_file_id : ?Text;
+    vault_folder_id : ?Text;
+    root_scope : ?Text;
+    root_id : ?Text;
+    enabled : Bool;
+    set_by : Principal;
+    updated_at_ms : Nat64;
+  };
 };
