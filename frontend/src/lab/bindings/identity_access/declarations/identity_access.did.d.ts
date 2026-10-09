@@ -114,6 +114,8 @@ export type Result_8 = { 'Ok' : Array<Entitlement> } |
   { 'Err' : string };
 export type Result_9 = { 'Ok' : Profile } |
   { 'Err' : string };
+export type Result_rekey = { 'Ok' : bigint } |
+  { 'Err' : string };
 export interface RoleGrant {
   'account_id' : string,
   'club' : [] | [string],
@@ -252,6 +254,13 @@ export interface _SERVICE {
     Result_12
   >,
   'register_account' : ActorMethod<[], Result>,
+  /**
+   * Governor-only: moves one user's sign-in ID to a new one (dry run first).
+   */
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    Result_rekey
+  >,
   /**
    * Governor-only: revokes a verifier principal.
    */

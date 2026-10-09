@@ -109,13 +109,6 @@ export type Result_1 = {
     __kind__: "Err";
     Err: string;
 };
-export interface RoleGrant {
-    account_id: string;
-    club?: string;
-    role: string;
-    team?: string;
-    site_id?: string;
-}
 export type Result_5 = {
     __kind__: "Ok";
     Ok: boolean;
@@ -123,6 +116,13 @@ export type Result_5 = {
     __kind__: "Err";
     Err: string;
 };
+export interface RoleGrant {
+    account_id: string;
+    club?: string;
+    role: string;
+    team?: string;
+    site_id?: string;
+}
 export type Result_11 = {
     __kind__: "Ok";
     Ok: Array<RoleGrant>;
@@ -237,6 +237,13 @@ export type Result_9 = {
     __kind__: "Err";
     Err: string;
 };
+export type Result_rekey = {
+    __kind__: "Ok";
+    Ok: bigint;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export interface FamilyLink {
     account_id: string;
     child_id: string;
@@ -307,6 +314,7 @@ export interface identity_accessInterface {
     my_terms_acceptance(): Promise<Result_10>;
     redeem_entitlement(arg0: string, arg1: string, arg2: bigint, arg3: string, arg4: string): Promise<Result_12>;
     register_account(): Promise<Result>;
+    rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_rekey>;
     remove_verifier(arg0: Principal): Promise<Result_2>;
     revoke(arg0: Principal, arg1: bigint): Promise<Result>;
     search_profiles(arg0: string, arg1: number): Promise<Result_13>;
@@ -320,7 +328,7 @@ export interface identity_accessInterface {
     set_terms_acceptance(arg0: number): Promise<Result_15>;
     whoami(): Promise<Result>;
 }
-import type { Access as _Access, Account as _Account, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
+import type { Access as _Access, Account as _Account, Entitlement as _Entitlement, Exclusion as _Exclusion, ExternalSiteBinding as _ExternalSiteBinding, FamilyLink as _FamilyLink, LinkChallenge as _LinkChallenge, PrivacyConsent as _PrivacyConsent, Profile as _Profile, ProfileSearchResult as _ProfileSearchResult, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_11 as _Result_11, Result_12 as _Result_12, Result_13 as _Result_13, Result_14 as _Result_14, Result_15 as _Result_15, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Result_rekey as _Result_rekey, RoleGrant as _RoleGrant, State as _State, TermsAcceptance as _TermsAcceptance } from "./declarations/identity_access.did";
 export class Identity_access implements identity_accessInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async accept_link(arg0: bigint): Promise<Result> {
@@ -415,6 +423,10 @@ export class Identity_access implements identity_accessInterface {
         const result = await this.actor.register_account();
         return from_candid_Result_n1(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<Result_rekey> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_Result_rekey_n41(result);
+    }
     async remove_verifier(arg0: Principal): Promise<Result_2> {
         const result = await this.actor.remove_verifier(arg0);
         return from_candid_Result_2_n6(result);
@@ -425,7 +437,7 @@ export class Identity_access implements identity_accessInterface {
     }
     async search_profiles(arg0: string, arg1: number): Promise<Result_13> {
         const result = await this.actor.search_profiles(arg0, arg1);
-        return from_candid_Result_13_n41(result);
+        return from_candid_Result_13_n43(result);
     }
     async set_attestation_secret(arg0: Uint8Array): Promise<Result_2> {
         const result = await this.actor.set_attestation_secret(arg0);
@@ -449,7 +461,7 @@ export class Identity_access implements identity_accessInterface {
     }
     async set_privacy_consent(arg0: string, arg1: string, arg2: boolean): Promise<Result_14> {
         const result = await this.actor.set_privacy_consent(arg0, arg1, arg2);
-        return from_candid_Result_14_n46(result);
+        return from_candid_Result_14_n48(result);
     }
     async set_profile(arg0: string, arg1: string | null): Promise<Result_9> {
         const result = await this.actor.set_profile(arg0, to_candid_opt_n3(arg1));
@@ -457,7 +469,7 @@ export class Identity_access implements identity_accessInterface {
     }
     async set_terms_acceptance(arg0: number): Promise<Result_15> {
         const result = await this.actor.set_terms_acceptance(arg0);
-        return from_candid_Result_15_n48(result);
+        return from_candid_Result_15_n50(result);
     }
     async whoami(): Promise<Result> {
         const result = await this.actor.whoami();
@@ -467,8 +479,8 @@ export class Identity_access implements identity_accessInterface {
 function from_candid_Exclusion_n19(value: _Exclusion): Exclusion {
     return from_candid_record_n20(value);
 }
-function from_candid_ProfileSearchResult_n44(value: _ProfileSearchResult): ProfileSearchResult {
-    return from_candid_record_n45(value);
+function from_candid_ProfileSearchResult_n46(value: _ProfileSearchResult): ProfileSearchResult {
+    return from_candid_record_n47(value);
 }
 function from_candid_Profile_n23(value: _Profile): Profile {
     return from_candid_record_n24(value);
@@ -482,14 +494,14 @@ function from_candid_Result_11_n37(value: _Result_11): Result_11 {
 function from_candid_Result_12_n39(value: _Result_12): Result_12 {
     return from_candid_variant_n40(value);
 }
-function from_candid_Result_13_n41(value: _Result_13): Result_13 {
-    return from_candid_variant_n42(value);
+function from_candid_Result_13_n43(value: _Result_13): Result_13 {
+    return from_candid_variant_n44(value);
 }
-function from_candid_Result_14_n46(value: _Result_14): Result_14 {
-    return from_candid_variant_n47(value);
-}
-function from_candid_Result_15_n48(value: _Result_15): Result_15 {
+function from_candid_Result_14_n48(value: _Result_14): Result_14 {
     return from_candid_variant_n49(value);
+}
+function from_candid_Result_15_n50(value: _Result_15): Result_15 {
+    return from_candid_variant_n51(value);
 }
 function from_candid_Result_1_n4(value: _Result_1): Result_1 {
     return from_candid_variant_n5(value);
@@ -520,6 +532,9 @@ function from_candid_Result_9_n32(value: _Result_9): Result_9 {
 }
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
+}
+function from_candid_Result_rekey_n41(value: _Result_rekey): Result_rekey {
+    return from_candid_variant_n42(value);
 }
 function from_candid_RoleGrant_n26(value: _RoleGrant): RoleGrant {
     return from_candid_record_n27(value);
@@ -641,7 +656,7 @@ function from_candid_record_n27(value: {
         site_id: record_opt_to_undefined(from_candid_opt_n21(value.site_id))
     };
 }
-function from_candid_record_n45(value: {
+function from_candid_record_n47(value: {
     account_id: string;
     principal: Principal;
     avatar_ref: [] | [string];
@@ -850,31 +865,12 @@ function from_candid_variant_n40(value: {
     } : value;
 }
 function from_candid_variant_n42(value: {
-    Ok: Array<_ProfileSearchResult>;
+    Ok: bigint;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: Array<ProfileSearchResult>;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_vec_n43(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n47(value: {
-    Ok: _PrivacyConsent;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: PrivacyConsent;
+    Ok: bigint;
 } | {
     __kind__: "Err";
     Err: string;
@@ -887,13 +883,32 @@ function from_candid_variant_n47(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n49(value: {
-    Ok: _TermsAcceptance;
+function from_candid_variant_n44(value: {
+    Ok: Array<_ProfileSearchResult>;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: TermsAcceptance;
+    Ok: Array<ProfileSearchResult>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_vec_n45(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n49(value: {
+    Ok: _PrivacyConsent;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: PrivacyConsent;
 } | {
     __kind__: "Err";
     Err: string;
@@ -913,6 +928,25 @@ function from_candid_variant_n5(value: {
 }): {
     __kind__: "Ok";
     Ok: Access;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n51(value: {
+    Ok: _TermsAcceptance;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: TermsAcceptance;
 } | {
     __kind__: "Err";
     Err: string;
@@ -972,8 +1006,8 @@ function from_candid_vec_n22(value: Array<_Profile>): Array<Profile> {
 function from_candid_vec_n25(value: Array<_RoleGrant>): Array<RoleGrant> {
     return value.map((x)=>from_candid_RoleGrant_n26(x));
 }
-function from_candid_vec_n43(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
-    return value.map((x)=>from_candid_ProfileSearchResult_n44(x));
+function from_candid_vec_n45(value: Array<_ProfileSearchResult>): Array<ProfileSearchResult> {
+    return value.map((x)=>from_candid_ProfileSearchResult_n46(x));
 }
 function to_candid_opt_n3(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);

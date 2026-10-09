@@ -1012,4 +1012,101 @@ persistent actor class Main(governorInit : Principal) {
       };
     }
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+    let oldTextPrefixed = "principal:" # oldText;
+    let newTextPrefixed = "principal:" # newText;
+
+    var conflicts = 0;
+    conflicts += roles.filter(func(item) = item.user.equal(new)).size();
+    conflicts += leagues.filter(func(item) = item.created_by.equal(new)).size();
+    conflicts += sessions.filter(func(item) = item.created_by.equal(new)).size();
+    conflicts += players.filter(func(item) = item.claimed_by == ?new or item.parent_user_id == ?newText or item.parent_user_id == ?newTextPrefixed).size();
+    conflicts += invites.filter(func(item) = item.claimed_by == ?new or item.created_by.equal(new)).size();
+    conflicts += availability.filter(func(item) = item.marked_by == ?new).size();
+    conflicts += admins.filter(func(item) = item.user_id.equal(new) or item.granted_by == ?new).size();
+    conflicts += joinLinks.filter(func(item) = item.created_by.equal(new)).size();
+    conflicts += children.filter(func(item) = item.parent_user_id == ?new or item.claimed_by == ?new).size();
+    conflicts += guardians.filter(func(item) = item.guardian_user_id.equal(new)).size();
+
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in mini_league_domain");
+
+    var changed = 0;
+
+    let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
+      if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
+    });
+    let newLeagues = leagues.map(func(item : Types.MiniLeague) : Types.MiniLeague {
+      if (item.created_by.equal(old)) { changed += 1; { item with created_by = new } } else item
+    });
+    let newSessions = sessions.map(func(item : Types.MiniLeagueSession) : Types.MiniLeagueSession {
+      if (item.created_by.equal(old)) { changed += 1; { item with created_by = new } } else item
+    });
+    let newPlayers = players.map(func(item : Types.MiniLeaguePlayer) : Types.MiniLeaguePlayer {
+      var touched = false;
+      var claimed_by = item.claimed_by;
+      var parent_user_id = item.parent_user_id;
+      if (claimed_by == ?old) { claimed_by := ?new; touched := true };
+      if (parent_user_id == ?oldText) { parent_user_id := ?newText; touched := true };
+      if (parent_user_id == ?oldTextPrefixed) { parent_user_id := ?newTextPrefixed; touched := true };
+      if (touched) { changed += 1; { item with claimed_by; parent_user_id } } else item
+    });
+    let newInvites = invites.map(func(item : Types.MiniLeagueInvite) : Types.MiniLeagueInvite {
+      var touched = false;
+      var claimed_by = item.claimed_by;
+      var created_by = item.created_by;
+      if (claimed_by == ?old) { claimed_by := ?new; touched := true };
+      if (created_by.equal(old)) { created_by := new; touched := true };
+      if (touched) { changed += 1; { item with claimed_by; created_by } } else item
+    });
+    let newAvailability = availability.map(func(item : Types.MiniLeagueSessionAvailability) : Types.MiniLeagueSessionAvailability {
+      if (item.marked_by == ?old) { changed += 1; { item with marked_by = ?new } } else item
+    });
+    let newAdmins = admins.map(func(item : Types.MiniLeagueAdmin) : Types.MiniLeagueAdmin {
+      var touched = false;
+      var user_id = item.user_id;
+      var granted_by = item.granted_by;
+      if (user_id.equal(old)) { user_id := new; touched := true };
+      if (granted_by == ?old) { granted_by := ?new; touched := true };
+      if (touched) { changed += 1; { item with user_id; granted_by } } else item
+    });
+    let newJoinLinks = joinLinks.map(func(item : Types.MiniLeagueJoinLink) : Types.MiniLeagueJoinLink {
+      if (item.created_by.equal(old)) { changed += 1; { item with created_by = new } } else item
+    });
+    let newChildren = children.map(func(item : Types.MiniLeagueChild) : Types.MiniLeagueChild {
+      var touched = false;
+      var parent_user_id = item.parent_user_id;
+      var claimed_by = item.claimed_by;
+      if (parent_user_id == ?old) { parent_user_id := ?new; touched := true };
+      if (claimed_by == ?old) { claimed_by := ?new; touched := true };
+      if (touched) { changed += 1; { item with parent_user_id; claimed_by } } else item
+    });
+    let newGuardians = guardians.map(func(item : Types.MiniLeagueGuardian) : Types.MiniLeagueGuardian {
+      if (item.guardian_user_id.equal(old)) { changed += 1; { item with guardian_user_id = new } } else item
+    });
+
+    if (not dry_run) {
+      roles := newRoles;
+      leagues := newLeagues;
+      sessions := newSessions;
+      players := newPlayers;
+      invites := newInvites;
+      availability := newAvailability;
+      admins := newAdmins;
+      joinLinks := newJoinLinks;
+      children := newChildren;
+      guardians := newGuardians;
+    };
+
+    #ok(changed)
+  };
 }

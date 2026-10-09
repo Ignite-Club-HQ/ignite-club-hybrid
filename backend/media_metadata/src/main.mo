@@ -538,4 +538,63 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
     #Ok({ schema = 4; governor; assets; capabilities; reactions; comments; roles; galleryChatCards })
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("Old and new principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    var conflicts = 0;
+    for (a in assets.values()) { if (a.owner.equal(new)) conflicts += 1 };
+    for (c in capabilities.values()) { if (c.owner.equal(new)) conflicts += 1 };
+    for (r in reactions.values()) { if (r.user.equal(new)) conflicts += 1 };
+    for (c in comments.values()) { if (c.author.equal(new)) conflicts += 1 };
+    for (g in roles.values()) { if (g.user.equal(new)) conflicts += 1 };
+    for (p in bulkAccessPrincipals.values()) { if (p.equal(new)) conflicts += 1 };
+    for (c in galleryChatCards.values()) { if (c.uploader_id.equal(new)) conflicts += 1 };
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_metadata");
+
+    var changed = 0;
+
+    let newAssets = Array.map<Types.Asset, Types.Asset>(assets, func(a) { if (a.owner.equal(old)) { changed += 1; { a with owner = new } } else a });
+    let newCapabilities = Array.map<Types.Capability, Types.Capability>(capabilities, func(c) { if (c.owner.equal(old)) { changed += 1; { c with owner = new } } else c });
+    let newReactions = Array.map<Types.Reaction, Types.Reaction>(reactions, func(r) { if (r.user.equal(old)) { changed += 1; { r with user = new } } else r });
+    let newComments = Array.map<Types.Comment, Types.Comment>(comments, func(c) { if (c.author.equal(old)) { changed += 1; { c with author = new } } else c });
+
+    var newRoles : [Types.RoleGrant] = [];
+    for (g in roles.values()) {
+      if (g.user.equal(old)) {
+        changed += 1;
+        let dup = Array.find<Types.RoleGrant>(roles, func(o) = o.user.equal(new) and o.role == g.role and o.club_id == g.club_id and o.team_id == g.team_id);
+        switch (dup) {
+          case (?_) {};
+          case null { newRoles := Array.concat(newRoles, [{ g with user = new }]) };
+        };
+      } else { newRoles := Array.concat(newRoles, [g]) };
+    };
+
+    var newBulk : [Principal] = [];
+    for (p in bulkAccessPrincipals.values()) {
+      if (p.equal(old)) {
+        changed += 1;
+        if (not bulkAccessPrincipals.any(func(o) = o.equal(new))) { newBulk := Array.concat(newBulk, [new]) };
+      } else { newBulk := Array.concat(newBulk, [p]) };
+    };
+
+    let newGalleryChatCards = Array.map<Types.GalleryChatCard, Types.GalleryChatCard>(galleryChatCards, func(c) { if (c.uploader_id.equal(old)) { changed += 1; { c with uploader_id = new } } else c });
+
+    if (not dry_run and changed > 0) {
+      assets := newAssets;
+      capabilities := newCapabilities;
+      reactions := newReactions;
+      comments := newComments;
+      roles := newRoles;
+      bulkAccessPrincipals := newBulk;
+      galleryChatCards := newGalleryChatCards;
+    };
+    #ok(changed)
+  };
 };

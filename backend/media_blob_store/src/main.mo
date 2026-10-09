@@ -374,4 +374,39 @@ persistent actor MediaBlobStore {
       total_bytes;
     }
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  // Covers: BlobRecord.owner, PendingUpload.owner. club_domain_canister is canister wiring and is
+  // never rewritten.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    auth(caller);
+    if (not isGovernor<system>(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new principal must differ");
+    if (isGovernor<system>(old)) return #err("Cannot rekey the governor");
+
+    var conflicts = 0;
+    conflicts += blobs.filter(func(b : BlobRecord) : Bool = b.owner.equal(new)).size();
+    conflicts += pending_uploads.filter(func(u : PendingUpload) : Bool = u.owner.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_blob_store");
+
+    var changed = 0;
+
+    let newBlobs = blobs.map(func(b : BlobRecord) : BlobRecord {
+      if (b.owner.equal(old)) { changed += 1; { b with owner = new } } else b
+    });
+
+    let newPendingUploads = pending_uploads.map(func(u : PendingUpload) : PendingUpload {
+      if (u.owner.equal(old)) { changed += 1; { u with owner = new } } else u
+    });
+
+    if (not dry_run) {
+      blobs := newBlobs;
+      pending_uploads := newPendingUploads;
+    };
+
+    #ok(changed)
+  };
+
+
 };

@@ -739,6 +739,15 @@ export interface Main {
     { 'Ok' : TeamCreationRequest } |
       { 'Err' : string }
   >,
+  /**
+   * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+   * / Any NEW stored principal / principal-text field added to this canister must be added here.
+   */
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_member' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |

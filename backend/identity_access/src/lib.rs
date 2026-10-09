@@ -1012,6 +1012,117 @@ fn erase_account(account_id: String) -> Outcome<()> {
     Ok(())
 }
 
+/// Governor-only: moves one user's sign-in ID (`old`) to a new one (`new`).
+/// Everything here except entitlements and link challenges is keyed by
+/// account_id, so the move links `new` to the old account (same account_id,
+/// so profile, roles, families, consents and terms follow) and unlinks
+/// `old`. A bare account auto-created for `new` at sign-in is removed first;
+/// any real data on it (profile, roles, ...) refuses the move. Returns the
+/// number of records changed (or that would change when `dry_run`).
+/// Any NEW stored principal / principal-text field must be added here.
+#[ic_cdk::update]
+fn rekey_principal(old: Principal, new: Principal, dry_run: bool) -> Outcome<u64> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    require_governor(&state, caller)?;
+    let changed = rekey_principal_core(&mut state, old, new, dry_run)?;
+    if !dry_run {
+        store(&state);
+    }
+    Ok(changed)
+}
+
+fn rekey_principal_core(
+    state: &mut CoreState,
+    old: Principal,
+    new: Principal,
+    dry_run: bool,
+) -> Outcome<u64> {
+    if old == Principal::anonymous() || new == Principal::anonymous() {
+        return Err("Anonymous principal not allowed".into());
+    }
+    if old == new {
+        return Err("Old and new sign-in IDs are the same".into());
+    }
+    if old == state.governor || new == state.governor {
+        return Err("The governor cannot be moved".into());
+    }
+    let Some(mut account) = find_account_by_principal(old) else {
+        // Already moved (or never existed): nothing to do.
+        return Ok(0);
+    };
+    let mut changed: u64 = 0;
+    // A bare account created for `new` at sign-in must go first.
+    let bare = match find_account_by_principal(new) {
+        Some(existing) if existing.id == account.id => None,
+        Some(existing) => {
+            let id = existing.id.clone();
+            let has_data = get_profile_entry(&id).is_some()
+                || state.roles.iter().any(|g| g.account_id == id)
+                || state.families.iter().any(|f| f.account_id == id)
+                || state.exclusions.iter().any(|e| e.account_id == id)
+                || state.external_bindings.iter().any(|b| b.account_id == id)
+                || all_entitlements().iter().any(|e| e.principal == new);
+            if has_data || existing.principals.len() > 1 {
+                return Err("New sign-in ID already has a profile or data in identity_access".into());
+            }
+            Some(existing)
+        }
+        None => None,
+    };
+    if let Some(existing) = &bare {
+        changed += 1;
+        if !dry_run {
+            remove_account(&existing.id);
+            deindex_principal(new);
+            let id = existing.id.clone();
+            state.privacy_consents.retain(|c| c.account_id != id);
+            state.terms_acceptances.retain(|t| t.account_id != id);
+            state.challenges.retain(|c| c.account_id != id);
+        }
+    }
+    // Link new, unlink old on the surviving account.
+    changed += 1;
+    if !dry_run {
+        account.principals.retain(|p| *p != old && *p != new);
+        account.principals.push(new);
+        account.version = account.version.saturating_add(1);
+        put_account(&account);
+        deindex_principal(old);
+        index_principal(new, &account.id);
+    }
+    // Principal-keyed entitlements.
+    let moved: Vec<(String, Entitlement)> = ENTITLEMENTS.with(|m| {
+        m.borrow()
+            .iter()
+            .filter_map(|e| {
+                let ent: Entitlement = decode(&e.value());
+                (ent.principal == old).then(|| (e.key().clone(), ent))
+            })
+            .collect()
+    });
+    changed += moved.len() as u64;
+    if !dry_run {
+        for (key, mut ent) in moved {
+            ENTITLEMENTS.with(|m| m.borrow_mut().remove(&key));
+            ent.principal = new;
+            let new_key = entitlement_key(new, &ent.product_id, &ent.transaction_id);
+            put_entitlement(&new_key, &ent);
+        }
+    }
+    // Pending link challenges naming old are void.
+    let stale = state
+        .challenges
+        .iter()
+        .filter(|c| c.issuer == old || c.target == old)
+        .count();
+    changed += stale as u64;
+    if !dry_run {
+        state.challenges.retain(|c| c.issuer != old && c.target != old);
+    }
+    Ok(changed)
+}
+
 #[ic_cdk::update]
 fn grant_role(
     account_id: String,
@@ -1419,6 +1530,78 @@ mod tests {
             attestation_secret: vec![],
             next_challenge: 0,
         }
+    }
+    #[test]
+    fn rekey_moves_account_to_new_principal_and_drops_bare_account() {
+        let governor = principal(1);
+        let old = principal(40);
+        let new = principal(41);
+        let old_id = account_id(old);
+        let new_id = account_id(new);
+        put_account(&Account { id: old_id.clone(), principals: vec![old], version: 3 });
+        index_principal(old, &old_id);
+        put_profile_entry(&Profile {
+            account_id: old_id.clone(),
+            display_name: "Paul".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0 });
+        index_principal(new, &new_id);
+        let key = entitlement_key(old, "pro", "");
+        put_entitlement(&key, &Entitlement {
+            principal: old,
+            product_id: "pro".into(),
+            transaction_id: String::new(),
+            expires_at_ms: 100,
+            source: "governor".into(),
+            granted_at_ms: 1,
+        });
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: old_id.clone(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
+
+        // Dry run reports changes but writes nothing.
+        assert_eq!(rekey_principal_core(&mut state, old, new, true), Ok(3));
+        assert_eq!(find_account_by_principal(old).map(|a| a.id), Some(old_id.clone()));
+
+        assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(3));
+        let moved = find_account_by_principal(new).expect("new linked");
+        assert_eq!(moved.id, old_id);
+        assert_eq!(moved.principals, vec![new]);
+        assert!(find_account_by_principal(old).is_none());
+        assert!(get_account(&new_id).is_none());
+        assert_eq!(get_profile_entry(&moved.id).map(|p| p.display_name), Some("Paul".into()));
+        assert!(state.roles.iter().any(|g| g.account_id == old_id && g.role == "app_admin"));
+        assert!(get_entitlement(&key).is_none());
+        assert_eq!(get_entitlement(&entitlement_key(new, "pro", "")).map(|e| e.principal), Some(new));
+        // Second run is a no-op.
+        assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(0));
+    }
+    #[test]
+    fn rekey_refuses_when_new_principal_has_a_profile() {
+        let governor = principal(1);
+        let old = principal(50);
+        let new = principal(51);
+        put_account(&Account { id: account_id(old), principals: vec![old], version: 0 });
+        index_principal(old, &account_id(old));
+        put_account(&Account { id: account_id(new), principals: vec![new], version: 0 });
+        index_principal(new, &account_id(new));
+        put_profile_entry(&Profile {
+            account_id: account_id(new),
+            display_name: "Someone".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        let mut state = empty_core_state(governor);
+        assert!(rekey_principal_core(&mut state, old, new, false).is_err());
+        assert!(rekey_principal_core(&mut state, governor, new, false).is_err());
+        assert!(find_account_by_principal(old).is_some());
     }
     #[test]
     fn ids_and_role_scope_are_bounded() {

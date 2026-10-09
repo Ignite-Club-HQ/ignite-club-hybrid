@@ -124,6 +124,7 @@ export const idlFactory = ({ IDL }) => {
     'Err' : IDL.Text,
   });
   const Result_12 = IDL.Variant({ 'Ok' : Entitlement, 'Err' : IDL.Text });
+  const Result_rekey = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
   const ProfileSearchResult = IDL.Record({
     'account_id' : IDL.Text,
     'principal' : IDL.Principal,
@@ -208,6 +209,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'register_account' : IDL.Func([], [Result], []),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [Result_rekey],
+        [],
+      ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
     'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_13], ['query']),

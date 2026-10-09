@@ -687,4 +687,103 @@ persistent actor class Main(governorInit : Principal) {
     let end = Nat.min(MAX_ACTIVITY_LIST, sorted.size());
     #Ok(sorted.sliceToArray(0, end))
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("Old and new principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+
+    // Conflict guard: count NON-EPHEMERAL records already referencing `new`.
+    // Ephemeral/excluded from the guard (rewritten but not counted): webVitals.user,
+    // perfSamples.user, clientPerfSamples.user, adEvents.user (telemetry), and
+    // userActivity.user_id / engagementCounters.activeUsers / sponsorReach.accountIds
+    // (account-id text buckets, not principal-keyed records).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += adminAlerts.filter(func(a) = a.resolved_by == ?new).size();
+    conflicts += auditLogs.filter(func(a) = a.actor_id.equal(new) or a.target_user_id == ?newText).size();
+    conflicts += feedback.filter(func(f) = f.user.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in insights_domain");
+
+    var changed = 0;
+
+    // roles
+    let newRoles = roles.map(func(r : Types.RoleGrant) : Types.RoleGrant {
+      if (r.user.equal(old)) { changed += 1; { r with user = new } } else r
+    });
+
+    // adminAlerts.resolved_by
+    let newAdminAlerts = adminAlerts.map(func(a : Types.AdminAlert) : Types.AdminAlert {
+      if (a.resolved_by == ?old) { changed += 1; { a with resolved_by = ?new } } else a
+    });
+
+    // auditLogs.actor_id / target_user_id
+    let newAuditLogs = auditLogs.map(func(a : Types.AuditLog) : Types.AuditLog {
+      var row = a;
+      if (row.actor_id.equal(old)) { changed += 1; row := { row with actor_id = new } };
+      if (row.target_user_id == ?oldText) { changed += 1; row := { row with target_user_id = ?newText } };
+      row
+    });
+
+    // feedback.user
+    let newFeedback = feedback.map(func(f : Types.Feedback) : Types.Feedback {
+      if (f.user.equal(old)) { changed += 1; { f with user = new } } else f
+    });
+
+    // ---- Ephemeral: rewritten, not counted in conflict guard ----
+    // webVitals.user — on key clash (both old and new rows for same metric/time),
+    // keep both since these are append-only telemetry rows, not keyed records.
+    let newWebVitals = webVitals.map(func(w : Types.WebVital) : Types.WebVital {
+      if (w.user.equal(old)) { { w with user = new } } else w
+    });
+    let newPerfSamples = perfSamples.map(func(p : Types.PerfSample) : Types.PerfSample {
+      if (p.user.equal(old)) { { p with user = new } } else p
+    });
+    let newClientPerfSamples = clientPerfSamples.map(func(c : Types.ClientPerfSample) : Types.ClientPerfSample {
+      if (c.user.equal(old)) { { c with user = new } } else c
+    });
+    let newAdEvents = adEvents.map(func(e : Types.AdEvent) : Types.AdEvent {
+      if (e.user.equal(old)) { { e with user = new } } else e
+    });
+    let newUserActivity = userActivity.map(func(u : Types.UserActivityEntry) : Types.UserActivityEntry {
+      if (u.user_id == oldText) { { u with user_id = newText } } else u
+    });
+    let newEngagementCounters = engagementCounters.map(func(c : Types.EngagementCounter) : Types.EngagementCounter {
+      if (c.activeUsers.any(func(u) = u == oldText)) {
+        let withoutOld = c.activeUsers.filter(func(u) = u != oldText);
+        let activeUsers = if (withoutOld.any(func(u) = u == newText)) withoutOld else withoutOld.concat([newText]);
+        { c with activeUsers }
+      } else c
+    });
+    let newSponsorReach = sponsorReach.map(func(s : Types.SponsorReachCounter) : Types.SponsorReachCounter {
+      if (s.accountIds.any(func(a) = a == oldText)) {
+        let withoutOld = s.accountIds.filter(func(a) = a != oldText);
+        let accountIds = if (withoutOld.any(func(a) = a == newText)) withoutOld else withoutOld.concat([newText]);
+        { s with accountIds }
+      } else s
+    });
+
+    if (not dry_run) {
+      roles := newRoles;
+      adminAlerts := newAdminAlerts;
+      auditLogs := newAuditLogs;
+      feedback := newFeedback;
+      webVitals := newWebVitals;
+      perfSamples := newPerfSamples;
+      clientPerfSamples := newClientPerfSamples;
+      adEvents := newAdEvents;
+      userActivity := newUserActivity;
+      engagementCounters := newEngagementCounters;
+      sponsorReach := newSponsorReach;
+    };
+
+    #ok(changed)
+  };
+
 }

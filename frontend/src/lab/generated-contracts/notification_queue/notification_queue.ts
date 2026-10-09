@@ -178,6 +178,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     remove_device_tokens(user: string, tokens: Array<string>): Promise<DeviceTokenCountResult>;
     schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
     set_messaging_domain_canister(id: Principal): Promise<{
@@ -492,12 +499,22 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.register_device_token(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3));
         return from_candid_variant_n25(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n56(result);
+    }
     async remove_device_tokens(arg0: string, arg1: Array<string>): Promise<DeviceTokenCountResult> {
         const result = await this.actor.remove_device_tokens(arg0, arg1);
-        return from_candid_DeviceTokenCountResult_n56(result);
+        return from_candid_DeviceTokenCountResult_n57(result);
     }
     async schedule_message(arg0: string, arg1: string, arg2: ChatType, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string, arg8: string | null, arg9: string | null, arg10: bigint, arg11: Recurrence, arg12: bigint | null): Promise<ScheduledResult> {
-        const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n57(arg2), to_candid_opt_n22(arg3), to_candid_opt_n22(arg4), to_candid_opt_n22(arg5), to_candid_opt_n22(arg6), arg7, to_candid_opt_n22(arg8), to_candid_opt_n22(arg9), arg10, to_candid_Recurrence_n59(arg11), to_candid_opt_n29(arg12));
+        const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n58(arg2), to_candid_opt_n22(arg3), to_candid_opt_n22(arg4), to_candid_opt_n22(arg5), to_candid_opt_n22(arg6), arg7, to_candid_opt_n22(arg8), to_candid_opt_n22(arg9), arg10, to_candid_Recurrence_n60(arg11), to_candid_opt_n29(arg12));
         return from_candid_ScheduledResult_n8(result);
     }
     async set_messaging_domain_canister(arg0: Principal): Promise<{
@@ -522,15 +539,15 @@ export class Notification_queue implements notification_queueInterface {
     }
     async unregister_device_token(arg0: string): Promise<DeviceTokenCountResult> {
         const result = await this.actor.unregister_device_token(arg0);
-        return from_candid_DeviceTokenCountResult_n56(result);
+        return from_candid_DeviceTokenCountResult_n57(result);
     }
     async update_scheduled_message(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: bigint | null, arg5: Recurrence | null, arg6: bigint | null): Promise<ScheduledResult> {
-        const result = await this.actor.update_scheduled_message(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3), to_candid_opt_n29(arg4), to_candid_opt_n61(arg5), to_candid_opt_n29(arg6));
+        const result = await this.actor.update_scheduled_message(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3), to_candid_opt_n29(arg4), to_candid_opt_n62(arg5), to_candid_opt_n29(arg6));
         return from_candid_ScheduledResult_n8(result);
     }
     async upsert_preferences(arg0: string, arg1: PreferencesInput): Promise<PreferencesResult> {
         const result = await this.actor.upsert_preferences(arg0, arg1);
-        return from_candid_PreferencesResult_n62(result);
+        return from_candid_PreferencesResult_n63(result);
     }
     async upsert_push_alert_settings(arg0: PushAlertSettingsInput): Promise<PushAlertSettings> {
         const result = await this.actor.upsert_push_alert_settings(arg0);
@@ -543,7 +560,7 @@ function from_candid_ChatNotifyBatchResult_n51(value: _ChatNotifyBatchResult): C
 function from_candid_ChatType_n17(value: _ChatType): ChatType {
     return from_candid_variant_n18(value);
 }
-function from_candid_DeviceTokenCountResult_n56(value: _DeviceTokenCountResult): DeviceTokenCountResult {
+function from_candid_DeviceTokenCountResult_n57(value: _DeviceTokenCountResult): DeviceTokenCountResult {
     return from_candid_variant_n24(value);
 }
 function from_candid_DeviceToken_n47(value: _DeviceToken): DeviceToken {
@@ -573,8 +590,8 @@ function from_candid_Notification_n3(value: _Notification): Notification {
 function from_candid_PreferencesPageResult_n49(value: _PreferencesPageResult): PreferencesPageResult {
     return from_candid_variant_n50(value);
 }
-function from_candid_PreferencesResult_n62(value: _PreferencesResult): PreferencesResult {
-    return from_candid_variant_n63(value);
+function from_candid_PreferencesResult_n63(value: _PreferencesResult): PreferencesResult {
+    return from_candid_variant_n64(value);
 }
 function from_candid_PushAlertSettings_n42(value: _PushAlertSettings): PushAlertSettings {
     return from_candid_record_n43(value);
@@ -1043,6 +1060,25 @@ function from_candid_variant_n55(value: {
         Err: value.Err
     } : value;
 }
+function from_candid_variant_n56(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
 function from_candid_variant_n6(value: {
     Failed: null;
 } | {
@@ -1054,7 +1090,7 @@ function from_candid_variant_n6(value: {
 }): Status {
     return "Failed" in value ? Status.Failed : "Delivered" in value ? Status.Delivered : "Processing" in value ? Status.Processing : "Pending" in value ? Status.Pending : value;
 }
-function from_candid_variant_n63(value: {
+function from_candid_variant_n64(value: {
     Ok: _Preferences;
 } | {
     Err: string;
@@ -1104,8 +1140,8 @@ function from_candid_vec_n34(value: Array<_DigestItem>): Array<DigestItem> {
 function from_candid_vec_n46(value: Array<_DeviceToken>): Array<DeviceToken> {
     return value.map((x)=>from_candid_DeviceToken_n47(x));
 }
-function to_candid_ChatType_n57(value: ChatType): _ChatType {
-    return to_candid_variant_n58(value);
+function to_candid_ChatType_n58(value: ChatType): _ChatType {
+    return to_candid_variant_n59(value);
 }
 function to_candid_DigestClassification_n52(value: DigestClassification): _DigestClassification {
     return to_candid_variant_n53(value);
@@ -1113,8 +1149,8 @@ function to_candid_DigestClassification_n52(value: DigestClassification): _Diges
 function to_candid_DigestSource_n30(value: DigestSource): _DigestSource {
     return to_candid_variant_n31(value);
 }
-function to_candid_Recurrence_n59(value: Recurrence): _Recurrence {
-    return to_candid_variant_n60(value);
+function to_candid_Recurrence_n60(value: Recurrence): _Recurrence {
+    return to_candid_variant_n61(value);
 }
 function to_candid_opt_n22(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
@@ -1122,8 +1158,8 @@ function to_candid_opt_n22(value: string | null): [] | [string] {
 function to_candid_opt_n29(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n61(value: Recurrence | null): [] | [_Recurrence] {
-    return value === null ? candid_none() : candid_some(to_candid_Recurrence_n59(value));
+function to_candid_opt_n62(value: Recurrence | null): [] | [_Recurrence] {
+    return value === null ? candid_none() : candid_some(to_candid_Recurrence_n60(value));
 }
 function to_candid_variant_n31(value: DigestSource): {
     Club: null;
@@ -1163,7 +1199,7 @@ function to_candid_variant_n53(value: DigestClassification): {
         Decision: null
     } : value;
 }
-function to_candid_variant_n58(value: ChatType): {
+function to_candid_variant_n59(value: ChatType): {
     Club: null;
 } | {
     Group: null;
@@ -1190,7 +1226,7 @@ function to_candid_variant_n58(value: ChatType): {
         Direct: null
     } : value;
 }
-function to_candid_variant_n60(value: Recurrence): {
+function to_candid_variant_n61(value: Recurrence): {
     Weekly: null;
 } | {
     None: null;

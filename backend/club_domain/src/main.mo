@@ -141,6 +141,199 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+
+  /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  /// Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Anonymous principal not allowed");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+    let oldTag = "principal:" # oldText;
+    let newTag = "principal:" # newText;
+
+    func pEq(p : Principal) : Bool { p.equal(old) };
+    func tEq(t : Text) : Bool { t == oldText or t == oldTag };
+    func tSwap(t : Text) : Text {
+      if (t == oldText) newText else if (t == oldTag) newTag else t;
+    };
+
+    // ---- conflict guard: count NON-EPHEMERAL records already referencing `new` ----
+    var conflicts = 0;
+    func newTxt(t : Text) : Bool { t == newText or t == newTag };
+    conflicts += acl.roles.filter(func(g) = g.user.equal(new)).size();
+    conflicts += acl.guardians.filter(func(g) = g.user.equal(new)).size();
+    conflicts += acl.exclusions.filter(func(e) = e.user.equal(new)).size();
+    conflicts += acl.children.filter(func(c) = switch (c.parent) { case (?p) p.equal(new); case null false }).size();
+    conflicts += accounts.filter(func(a) = a.legacy_subject.equal(new) or a.principals.any(func(p) = p.equal(new))).size();
+    conflicts += accountExclusions.filter(func(e) = newTxt(e.account_id)).size();
+    conflicts += accountRoles.filter(func(r) = newTxt(r.account_id)).size();
+    conflicts += accountFamilies.filter(func(f) = newTxt(f.account_id)).size();
+    conflicts += accountChallenges.filter(func(c) = newTxt(c.account_id) or c.issuer.equal(new) or c.target.equal(new)).size();
+    conflicts += teamFolders.filter(func(f) = f.created_by.equal(new)).size();
+    conflicts += teams.filter(func(t) = t.shell_claimed_by == ?new or t.shell_invited_by == ?new).size();
+    conflicts += newsPosts.filter(func(p) = p.created_by.equal(new)).size();
+    conflicts += parentInvites.filter(func(i) = i.invited_by.equal(new) or i.accepted_by == ?new).size();
+    conflicts += roleRequests.filter(func(r) = newTxt(r.account_id) or r.user.equal(new) or r.decided_by == ?new).size();
+    conflicts += teamInvites.filter(func(i) = i.invited_by.equal(new) or i.accepted_by == ?new).size();
+    conflicts += teamInviteLinks.filter(func(l) = l.created_by.equal(new)).size();
+    conflicts += pendingInvites.filter(func(i) = i.invited_by.equal(new) or i.accepted_by == ?new).size();
+    conflicts += teamCreationRequests.filter(func(r) = r.requested_by.equal(new) or r.decided_by == ?new).size();
+    conflicts += teamCaptains.filter(func(c) = c.user.equal(new)).size();
+    conflicts += clubJoinRequests.filter(func(r) = r.user.equal(new) or r.decided_by == ?new).size();
+    conflicts += removedMembers.filter(func(r) = r.user.equal(new) or r.removed_by.equal(new)).size();
+    conflicts += memberPayments.filter(func(p) = p.marked_by.equal(new) or newTxt(p.user_id)).size();
+    conflicts += teamPlayerPositions.filter(func(p) = newTxt(p.member_id)).size();
+    conflicts += themePrefs.filter(func(e) = e.0.equal(new)).size();
+
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_domain");
+
+    var changed = 0;
+
+    // ---- acl ----
+    let newRoles = acl.roles.map(func(g : Types.RoleGrant) : Types.RoleGrant = if (pEq(g.user)) { changed += 1; { g with user = new } } else g);
+    let newGuardians = acl.guardians.map(func(g : Types.Guardian) : Types.Guardian = if (pEq(g.user)) { changed += 1; { g with user = new } } else g);
+    let newExclusions = acl.exclusions.map(func(e : Types.Exclusion) : Types.Exclusion = if (pEq(e.user)) { changed += 1; { e with user = new } } else e);
+    let newChildren = acl.children.map(func(c : Types.Child) : Types.Child = switch (c.parent) { case (?p) if (pEq(p)) { changed += 1; { c with parent = ?new } } else c; case null c });
+
+    // ---- accounts ----
+    let newAccounts = accounts.map(func(a : Types.Account) : Types.Account {
+      var touched = false;
+      let legacy = if (pEq(a.legacy_subject)) { touched := true; new } else a.legacy_subject;
+      let hasOld = a.principals.any(pEq);
+      let hasNew = a.principals.any(func(p) = p.equal(new));
+      let principals = if (hasOld) {
+        touched := true;
+        if (hasNew) a.principals.filter(func(p) = not pEq(p))
+        else a.principals.map(func(p) = if (pEq(p)) new else p);
+      } else a.principals;
+      if (touched) { changed += 1 };
+      { a with legacy_subject = legacy; principals };
+    });
+
+    let newAccountExclusions = accountExclusions.map(func(e : Types.AccountExclusion) : Types.AccountExclusion = if (tEq(e.account_id)) { changed += 1; { e with account_id = tSwap(e.account_id) } } else e);
+    let newAccountRoles = accountRoles.map(func(r : Types.AccountRole) : Types.AccountRole = if (tEq(r.account_id)) { changed += 1; { r with account_id = tSwap(r.account_id) } } else r);
+    let newAccountFamilies = accountFamilies.map(func(f : Types.Family) : Types.Family = if (tEq(f.account_id)) { changed += 1; { f with account_id = tSwap(f.account_id) } } else f);
+    let newAccountChallenges = accountChallenges.map(func(c : Types.Challenge) : Types.Challenge {
+      var touched = false;
+      let account_id = if (tEq(c.account_id)) { touched := true; tSwap(c.account_id) } else c.account_id;
+      let issuer = if (pEq(c.issuer)) { touched := true; new } else c.issuer;
+      let target = if (pEq(c.target)) { touched := true; new } else c.target;
+      if (touched) { changed += 1 };
+      { c with account_id; issuer; target };
+    });
+
+    let newTeamFolders = teamFolders.map(func(f : Types.TeamFolder) : Types.TeamFolder = if (pEq(f.created_by)) { changed += 1; { f with created_by = new } } else f);
+    let newTeams = teams.map(func(t : Types.ClubTeam) : Types.ClubTeam {
+      var touched = false;
+      let claimed = if (t.shell_claimed_by == ?old) { touched := true; ?new } else t.shell_claimed_by;
+      let invited = if (t.shell_invited_by == ?old) { touched := true; ?new } else t.shell_invited_by;
+      if (touched) { changed += 1 };
+      { t with shell_claimed_by = claimed; shell_invited_by = invited };
+    });
+    let newNewsPosts = newsPosts.map(func(p : Types.NewsPost) : Types.NewsPost = if (pEq(p.created_by)) { changed += 1; { p with created_by = new } } else p);
+    let newParentInvites = parentInvites.map(func(i : Types.ParentInvite) : Types.ParentInvite {
+      var touched = false;
+      let invited_by = if (pEq(i.invited_by)) { touched := true; new } else i.invited_by;
+      let accepted_by = if (i.accepted_by == ?old) { touched := true; ?new } else i.accepted_by;
+      if (touched) { changed += 1 };
+      { i with invited_by; accepted_by };
+    });
+    let newRoleRequests = roleRequests.map(func(r : Types.RoleRequest) : Types.RoleRequest {
+      var touched = false;
+      let account_id = if (tEq(r.account_id)) { touched := true; tSwap(r.account_id) } else r.account_id;
+      let user = if (pEq(r.user)) { touched := true; new } else r.user;
+      let decided_by = if (r.decided_by == ?old) { touched := true; ?new } else r.decided_by;
+      if (touched) { changed += 1 };
+      { r with account_id; user; decided_by };
+    });
+    let newTeamInvites = teamInvites.map(func(i : Types.TeamInvite) : Types.TeamInvite {
+      var touched = false;
+      let invited_by = if (pEq(i.invited_by)) { touched := true; new } else i.invited_by;
+      let accepted_by = if (i.accepted_by == ?old) { touched := true; ?new } else i.accepted_by;
+      if (touched) { changed += 1 };
+      { i with invited_by; accepted_by };
+    });
+    let newTeamInviteLinks = teamInviteLinks.map(func(l : Types.TeamInviteLink) : Types.TeamInviteLink = if (pEq(l.created_by)) { changed += 1; { l with created_by = new } } else l);
+    let newPendingInvites = pendingInvites.map(func(i : Types.PendingInvite) : Types.PendingInvite {
+      var touched = false;
+      let invited_by = if (pEq(i.invited_by)) { touched := true; new } else i.invited_by;
+      let accepted_by = if (i.accepted_by == ?old) { touched := true; ?new } else i.accepted_by;
+      if (touched) { changed += 1 };
+      { i with invited_by; accepted_by };
+    });
+    let newTeamCreationRequests = teamCreationRequests.map(func(r : Types.TeamCreationRequest) : Types.TeamCreationRequest {
+      var touched = false;
+      let requested_by = if (pEq(r.requested_by)) { touched := true; new } else r.requested_by;
+      let decided_by = if (r.decided_by == ?old) { touched := true; ?new } else r.decided_by;
+      if (touched) { changed += 1 };
+      { r with requested_by; decided_by };
+    });
+    let hasCaptainNew = teamCaptains.any(func(c) = c.user.equal(new));
+    let newTeamCaptains = if (hasCaptainNew) teamCaptains.filter(func(c) = not pEq(c.user)) else teamCaptains.map(func(c : Types.TeamCaptain) : Types.TeamCaptain = if (pEq(c.user)) { { c with user = new } } else c);
+    for (c in teamCaptains.values()) { if (pEq(c.user)) { changed += 1 } };
+
+    let newClubJoinRequests = clubJoinRequests.map(func(r : Types.ClubJoinRequest) : Types.ClubJoinRequest {
+      var touched = false;
+      let user = if (pEq(r.user)) { touched := true; new } else r.user;
+      let decided_by = if (r.decided_by == ?old) { touched := true; ?new } else r.decided_by;
+      if (touched) { changed += 1 };
+      { r with user; decided_by };
+    });
+    let newRemovedMembers = removedMembers.map(func(r : Types.RemovedMember) : Types.RemovedMember {
+      var touched = false;
+      let user = if (pEq(r.user)) { touched := true; new } else r.user;
+      let removed_by = if (pEq(r.removed_by)) { touched := true; new } else r.removed_by;
+      if (touched) { changed += 1 };
+      { r with user; removed_by };
+    });
+    let newMemberPayments = memberPayments.map(func(p : Types.MemberPayment) : Types.MemberPayment {
+      var touched = false;
+      let marked_by = if (pEq(p.marked_by)) { touched := true; new } else p.marked_by;
+      let user_id = if (tEq(p.user_id)) { touched := true; tSwap(p.user_id) } else p.user_id;
+      if (touched) { changed += 1 };
+      { p with marked_by; user_id };
+    });
+    let newTeamPlayerPositions = teamPlayerPositions.map(func(p : Types.TeamPlayerPosition) : Types.TeamPlayerPosition = if (tEq(p.member_id)) { changed += 1; { p with member_id = tSwap(p.member_id) } } else p);
+    let hasThemeNew = themePrefs.any(func(e) = e.0.equal(new));
+    var themeChanged = false;
+    let newThemePrefs = if (themePrefs.any(func(e) = e.0.equal(old))) {
+      themeChanged := true;
+      if (hasThemeNew) themePrefs.filter(func(e) = not e.0.equal(old))
+      else themePrefs.map(func(e) = if (e.0.equal(old)) (new, e.1) else e);
+    } else themePrefs;
+    if (themeChanged) { changed += 1 };
+
+    if (not dry_run) {
+      acl := { acl with roles = newRoles; guardians = newGuardians; exclusions = newExclusions; children = newChildren };
+      accounts := newAccounts;
+      accountExclusions := newAccountExclusions;
+      accountRoles := newAccountRoles;
+      accountFamilies := newAccountFamilies;
+      accountChallenges := newAccountChallenges;
+      teamFolders := newTeamFolders;
+      teams := newTeams;
+      newsPosts := newNewsPosts;
+      parentInvites := newParentInvites;
+      roleRequests := newRoleRequests;
+      teamInvites := newTeamInvites;
+      teamInviteLinks := newTeamInviteLinks;
+      pendingInvites := newPendingInvites;
+      teamCreationRequests := newTeamCreationRequests;
+      teamCaptains := newTeamCaptains;
+      clubJoinRequests := newClubJoinRequests;
+      removedMembers := newRemovedMembers;
+      memberPayments := newMemberPayments;
+      teamPlayerPositions := newTeamPlayerPositions;
+      themePrefs := newThemePrefs;
+    };
+
+    #ok(changed)
+  };
+
   func auth(caller : Principal) {
     if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated user required");
   };
