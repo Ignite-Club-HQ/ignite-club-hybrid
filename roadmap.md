@@ -38,6 +38,7 @@
 - [ ] Push on native: install @capacitor-firebase/messaging (absent today, so nativePush silently no-ops) + APNs key in Firebase
 - [ ] Deep links for store release: Android intent filters + iOS AASA/associated-domains on the published domain
 
+## Country-based backend routing
 - [x] Per-club overrides removed; club home country + locked backend recorded on Supabase clubs
 - [x] Sign-in screen follows visitor country; ?auth= override kept for testing
 - [x] club_domain records club home country (set-once for admins, governor can correct; batched read) — needs mainnet redeploy
