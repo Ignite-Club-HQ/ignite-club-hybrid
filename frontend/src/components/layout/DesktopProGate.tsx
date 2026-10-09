@@ -9,7 +9,44 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureBackend";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 import igniteIcon from "@/assets/ignite-icon.png";
+
+/**
+ * Whether the signed-in user belongs to ANY club (directly or via a team),
+ * in either backend. Desktop is only gated once the user actually has a
+ * club — a brand-new user with no clubs must be able to reach club creation
+ * on desktop. Unknown (loading/errored) counts as "has clubs" so the gate
+ * never opens on a guess.
+ */
+function useUserHasAnyClub() {
+  const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
+  const query = useQuery({
+    queryKey: ["desktop-gate-has-any-club", user?.id, isIcp],
+    enabled: !!user?.id,
+    staleTime: 60_000,
+    queryFn: async (): Promise<boolean> => {
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            return grants.some((g) => g.club[0] || g.team[0]);
+          },
+        });
+      }
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("club_id, team_id")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return (data ?? []).some((r) => r.club_id || r.team_id);
+    },
+  });
+  return { hasAnyClub: query.data !== false, isLoading: query.isLoading || query.isError };
+}
 
 /**
  * Clubs the user belongs to that currently have Pro access. Used so a user
@@ -89,12 +126,18 @@ export function DesktopProGate() {
 
   const anyClub = useUserHasAnyClubPro();
   const activeClub = useClubProAccess(activeClubId, { enabled: !!activeClubId });
+  const membership = useUserHasAnyClub();
 
+  // Users with no clubs at all are never locked — desktop must stay open so
+  // they can create their first club. The gate only applies once a club
+  // exists and that club (or every club they belong to) is on the free plan.
   const locked = Capacitor.isNativePlatform()
     ? false
-    : activeClubId
-      ? !activeClub.isLoading && !activeClub.hasPro
-      : !anyClub.isLoading && !anyClub.hasAnyClubPro;
+    : membership.isLoading || !membership.hasAnyClub
+      ? false
+      : activeClubId
+        ? !activeClub.isLoading && !activeClub.hasPro
+        : !anyClub.isLoading && !anyClub.hasAnyClubPro;
 
   // Hook order must stay stable — always call, gate with `enabled`.
   const proClubs = useUserProClubs(locked);
