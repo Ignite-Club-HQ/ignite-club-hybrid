@@ -201,7 +201,7 @@ export function DesktopProGate() {
   // Pro-club list is also the no-filter entitlement source: with no club
   // selected, desktop stays open when ANY club the user belongs to is Pro
   // (per-club subscriptions), not just when the identity itself has Pro.
-  const proClubs = useUserProClubs(!!user?.id && (!activeClubId || lockedByActiveClub));
+  const proClubs = useUserProClubs(!activeClubId || lockedByActiveClub);
   const anyProClub = (proClubs.data ?? []).length > 0;
 
   const locked = Capacitor.isNativePlatform() || onSetupWizard
