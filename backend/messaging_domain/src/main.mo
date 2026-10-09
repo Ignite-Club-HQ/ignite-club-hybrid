@@ -24,6 +24,12 @@ persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
 
+  /// Public: aggregate record counts (shown in admin settings). Counts only —
+  /// no record contents, so no PII is exposed.
+  public query func usage_stats() : async { conversations : Nat; messages : Nat; scheduled_messages : Nat } {
+    { conversations = conversations.size(); messages = messages.size(); scheduled_messages = scheduledMessages.size() };
+  };
+
   var governor : Principal;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
