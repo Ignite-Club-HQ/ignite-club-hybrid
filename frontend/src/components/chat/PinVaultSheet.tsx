@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ChevronRight, ChevronLeft, Folder, Loader2, Pin, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveVaultFolders } from "@/live/features/vault";
 import {
   useChatPinnedVault,
   type PinnedVaultChatType,
@@ -54,7 +56,7 @@ export function PinVaultSheet({
     chatId,
     // Sheet is a secondary consumer — only run the query while open, and never
     // own the realtime channel (the parent chat page already subscribes).
-    { enabled: open, subscribe: false },
+    { enabled: open, subscribe: false, clubId },
   );
 
   // Local working copy
@@ -86,6 +88,40 @@ export function PinVaultSheet({
     queryKey: ["pin-vault-sheet-folders", clubId, teamId ?? "club", currentFolderId ?? "root"],
     enabled: open && !!clubId,
     queryFn: async (): Promise<{ club: FolderRow[]; team: FolderRow[] }> => {
+      if (!clubId) return { club: [], team: [] };
+      return withFeatureBackend("vault", {
+        supabase: () => listSupabaseFolders(),
+        icp: async (ctx) => {
+          // The canister returns the whole club/team folder tree in one call;
+          // filter to the current level client-side.
+          const all = await listLiveVaultFolders(ctx, clubId, null);
+          type LiveFolder = (typeof all)[number];
+          const liveId = (f: LiveFolder) => f.id;
+          const parentOf = (f: LiveFolder) => (f.parent_id.length ? f.parent_id[0] : null);
+          const teamOf = (f: LiveFolder) => (f.team.length ? f.team[0] : null);
+          const rows = all.filter((f) => parentOf(f) === currentFolderId);
+          const childIds = new Set(
+            all.map((f) => parentOf(f)).filter((p): p is string => !!p),
+          );
+          const hydrated: FolderRow[] = rows.map((f) => ({
+            id: liveId(f),
+            name: f.name,
+            team_id: teamOf(f),
+            has_children: childIds.has(liveId(f)),
+          }));
+          if (currentFolderId === null) {
+            return {
+              club: hydrated.filter((r) => !r.team_id),
+              team: teamId ? hydrated.filter((r) => r.team_id === teamId) : [],
+            };
+          }
+          return { club: hydrated, team: [] };
+        },
+      });
+    },
+  });
+
+  async function listSupabaseFolders(): Promise<{ club: FolderRow[]; team: FolderRow[] }> {
       if (!clubId) return { club: [], team: [] };
       let query = supabase
         .from("vault_folders")
