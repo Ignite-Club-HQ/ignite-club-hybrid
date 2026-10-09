@@ -78,6 +78,7 @@ import {
   getLiveEventRoster,
   getLiveEventRosterDetailed,
   listLiveDuties,
+  listLiveOpenDuties,
   getLiveMyChildren,
   getLiveMyChildTeamAssignments,
   listLiveChildTeamAssignments,
