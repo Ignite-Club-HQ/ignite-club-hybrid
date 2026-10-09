@@ -53,18 +53,74 @@ function useUserHasAnyClub() {
 
 /**
  * Clubs the user belongs to that currently have Pro access. Used so a user
- * stuck on a free club can switch back to a Pro club from the lock screen.
+ * stuck on a free club can switch back to a Pro club from the lock screen,
+ * and so the no-club-filter view stays open when any of the user's clubs
+ * is Pro. Works on both backends: Supabase reads user_roles +
+ * club_subscriptions; ICP reads club_domain role grants + per-club
+ * subscription rows (never Supabase for an Internet Identity principal).
  */
 function useUserProClubs(enabled: boolean) {
   const { user } = useAuth();
   const isIcp = resolveAuthBackend() === "icp";
-  // NEEDS-CANISTER: no canister equivalent of "every Pro club I belong to";
-  // never query Supabase for an Internet Identity principal.
   return useQuery({
-    queryKey: ["desktop-gate-pro-clubs", user?.id],
-    enabled: enabled && !!user?.id && !isIcp,
+    queryKey: ["desktop-gate-pro-clubs", user?.id, isIcp],
+    enabled: enabled && !!user?.id,
     staleTime: 60_000,
     queryFn: async () => {
+      if (isIcp) {
+        const [{ withFeatureBackend }, { getLiveMyRoleGrants }] = await Promise.all([
+          import("@/live/featureRouter"),
+          import("@/live/features/membership"),
+        ]);
+        return withFeatureBackend("membership", {
+          supabase: async () => [] as { id: string; name: string; logoUrl: string | null }[],
+          icp: async (ctx) => {
+            const grants = ((await getLiveMyRoleGrants(ctx).catch(() => [])) as any[]) ?? [];
+            const clubIds = new Set<string>();
+            const teamIds: string[] = [];
+            grants.forEach((g) => {
+              const club = Array.isArray(g.club) ? g.club[0] : g.club;
+              const team = Array.isArray(g.team) ? g.team[0] : g.team;
+              if (club) clubIds.add(club);
+              else if (team) teamIds.push(team);
+            });
+            const { getLiveTeam, getLiveClubSubscription, getLiveClubProfile } = await import("@/live/features/club");
+            // Resolve the club behind team-scoped grants.
+            await Promise.all(
+              teamIds.map(async (tid) => {
+                try {
+                  const t = (await getLiveTeam(ctx, tid)) as any;
+                  const cid = t?.club_id ?? t?.club;
+                  if (cid) clubIds.add(cid);
+                } catch {
+                  /* team gone — skip */
+                }
+              }),
+            );
+            const pro = await Promise.all(
+              Array.from(clubIds).map(async (cid) => {
+                try {
+                  const sub = await getLiveClubSubscription(ctx, cid);
+                  const isPro = Boolean(
+                    sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override,
+                  );
+                  if (!isPro) return null;
+                  const rawProfile = await getLiveClubProfile(ctx, cid);
+                  const p = (Array.isArray(rawProfile) ? rawProfile[0] : rawProfile) as any;
+                  return {
+                    id: cid,
+                    name: (p?.name ?? "Club") as string,
+                    logoUrl: (p?.logo_url ?? p?.logoUrl ?? null) as string | null,
+                  };
+                } catch {
+                  return null;
+                }
+              }),
+            );
+            return pro.filter((c): c is { id: string; name: string; logoUrl: string | null } => !!c);
+          },
+        });
+      }
       const [direct, viaTeam] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user!.id).not("club_id", "is", null),
         supabase.from("user_roles").select("teams!inner(club_id)").eq("user_id", user!.id).not("team_id", "is", null),
@@ -139,16 +195,25 @@ export function DesktopProGate() {
   // Users with no clubs at all are never locked — desktop must stay open so
   // they can create their first club. The gate only applies once a club
   // exists and that club (or every club they belong to) is on the free plan.
+  const lockedByActiveClub = !!activeClubId && !activeClub.isLoading && !activeClub.hasPro;
+
+  // Hook order must stay stable — always call, gate with `enabled`. The
+  // Pro-club list is also the no-filter entitlement source: with no club
+  // selected, desktop stays open when ANY club the user belongs to is Pro
+  // (per-club subscriptions), not just when the identity itself has Pro.
+  const proClubs = useUserProClubs(!activeClubId || lockedByActiveClub);
+  const anyProClub = (proClubs.data ?? []).length > 0;
+
   const locked = Capacitor.isNativePlatform() || onSetupWizard
     ? false
     : membership.isLoading || !membership.hasAnyClub
       ? false
       : activeClubId
-        ? !activeClub.isLoading && !activeClub.hasPro
-        : !anyClub.isLoading && !anyClub.hasAnyClubPro;
+        ? lockedByActiveClub
+        : anyClub.isLoading || proClubs.isLoading
+          ? false
+          : !anyClub.hasAnyClubPro && !anyProClub;
 
-  // Hook order must stay stable — always call, gate with `enabled`.
-  const proClubs = useUserProClubs(locked);
   const switchable = (proClubs.data ?? []).filter((c) => c.id !== activeClubId);
 
   if (!locked) return null;
