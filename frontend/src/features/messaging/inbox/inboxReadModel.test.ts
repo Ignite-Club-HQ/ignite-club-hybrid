@@ -259,6 +259,27 @@ describe("messaging inbox read model", () => {
     ]);
   });
 
+  it("keeps brand-new chats with no messages visible instead of hiding them as inactive", () => {
+    const fresh = Array.from({ length: 10 }, (_, index) =>
+      conversation(`new-${index}`, "group", { lastActivity: "", createdAt: "2026-08-03T09:00:00.000Z" }),
+    );
+    const result = resolveOperationalConversationDisclosure(fresh, {
+      now: NOW, showAll: false, typeFilter: "all", hasSearchQuery: false,
+    });
+    expect(result.hiddenOps).toEqual([]);
+    expect(result.visibleRecent).toHaveLength(10);
+  });
+
+  it("still collapses quiet chats created more than 30 days ago", () => {
+    const old = Array.from({ length: 10 }, (_, index) =>
+      conversation(`old-${index}`, "group", { lastActivity: "", createdAt: "2026-06-01T09:00:00.000Z" }),
+    );
+    const result = resolveOperationalConversationDisclosure(old, {
+      now: NOW, showAll: false, typeFilter: "all", hasSearchQuery: false,
+    });
+    expect(result.hiddenOps).toHaveLength(8);
+  });
+
   it("does not collapse at the threshold or while disclosure is explicitly requested", () => {
     const stale = Array.from({ length: 7 }, (_, index) =>
       conversation(`stale-${index}`, "group", { lastActivity: "" }),
