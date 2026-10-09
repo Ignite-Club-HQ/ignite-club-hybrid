@@ -126,12 +126,18 @@ export function DesktopProGate() {
 
   const anyClub = useUserHasAnyClubPro();
   const activeClub = useClubProAccess(activeClubId, { enabled: !!activeClubId });
+  const membership = useUserHasAnyClub();
 
+  // Users with no clubs at all are never locked — desktop must stay open so
+  // they can create their first club. The gate only applies once a club
+  // exists and that club (or every club they belong to) is on the free plan.
   const locked = Capacitor.isNativePlatform()
     ? false
-    : activeClubId
-      ? !activeClub.isLoading && !activeClub.hasPro
-      : !anyClub.isLoading && !anyClub.hasAnyClubPro;
+    : membership.isLoading || !membership.hasAnyClub
+      ? false
+      : activeClubId
+        ? !activeClub.isLoading && !activeClub.hasPro
+        : !anyClub.isLoading && !anyClub.hasAnyClubPro;
 
   // Hook order must stay stable — always call, gate with `enabled`.
   const proClubs = useUserProClubs(locked);
