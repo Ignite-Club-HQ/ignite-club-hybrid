@@ -35,6 +35,8 @@ export interface InboxConversation {
   dmData?: unknown;
   draftText?: string;
   category?: string | null;
+  /** When the chat itself was created; lets brand-new, still-quiet chats count as active. */
+  createdAt?: string | null;
 }
 
 export interface OperationalDisclosureOptions {
