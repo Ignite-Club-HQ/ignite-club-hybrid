@@ -62,6 +62,11 @@ service : {
   health: () -> (Health) query;
   http_request: (request: HttpRequest) -> (HttpResponse) query;
   put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
+  rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
   set_capacity_limit: (limit_bytes: nat64) -> (Result);
   set_club_domain_canister: (canister_id: principal) -> (Result);
 }
