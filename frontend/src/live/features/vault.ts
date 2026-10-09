@@ -571,3 +571,70 @@ export async function permanentlyDeleteLiveVaultFile(ctx: FeatureBackendContext,
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_file_permanent(fileId), "Permanently delete vault file");
 }
+
+/**
+ * Pinned vault per chat — canister counterpart of the Supabase
+ * chat_pinned_vault table. One pin per (chatType, chatId).
+ */
+export interface LivePinnedVault {
+  chat_type: string;
+  chat_id: string;
+  club: string;
+  vault_file_id: [] | [string];
+  vault_folder_id: [] | [string];
+  root_scope: [] | [string];
+  root_id: [] | [string];
+  enabled: boolean;
+  set_by: Principal;
+  updated_at_ms: bigint;
+}
+
+export interface LivePinnedVaultTarget {
+  clubId: string;
+  vaultFileId?: string | null;
+  vaultFolderId?: string | null;
+  rootScope?: "team" | "club" | null;
+  rootId?: string | null;
+  enabled: boolean;
+}
+
+export async function getLivePinnedVault(
+  ctx: FeatureBackendContext,
+  chatType: string,
+  chatId: string,
+): Promise<LivePinnedVault | null> {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  const row = await unwrapCandid(actor.get_pinned_vault(chatType, chatId), "Get pinned vault");
+  return row.length ? row[0] : null;
+}
+
+export async function setLivePinnedVault(
+  ctx: FeatureBackendContext,
+  chatType: string,
+  chatId: string,
+  target: LivePinnedVaultTarget,
+): Promise<LivePinnedVault> {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_pinned_vault(
+      chatType,
+      chatId,
+      target.clubId,
+      candidOpt(target.vaultFileId),
+      candidOpt(target.vaultFolderId),
+      candidOpt(target.rootScope),
+      candidOpt(target.rootId),
+      target.enabled,
+    ),
+    "Pin vault",
+  );
+}
+
+export async function clearLivePinnedVault(
+  ctx: FeatureBackendContext,
+  chatType: string,
+  chatId: string,
+) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.clear_pinned_vault(chatType, chatId), "Unpin vault");
+}
