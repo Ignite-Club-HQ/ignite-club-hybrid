@@ -28,8 +28,6 @@
 - [ ] Supabase Auth redirect allow-list needs the canister URL (user)
 - [ ] Review codemagic.yaml (user to share)
 - [ ] Side-by-side test, move custom domain, delete Netlify
-- [ ] Review codemagic.yaml (user to share)
-- [ ] Side-by-side test, move custom domain, delete Netlify
 
 ## Country-based backend routing
 - [x] Per-club overrides removed; club home country + locked backend recorded on Supabase clubs
