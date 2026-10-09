@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo, type Context } from "react";
 import { markMountedAuthProvider } from "@/live/authBackendMode";
 import { User, Session } from "@supabase/supabase-js";
 import { useQueryClient, onlineManager } from "@tanstack/react-query";
@@ -79,7 +79,10 @@ interface AuthContextType {
   decrementUnreadCount: (n: number) => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+// Kept on globalThis so a hot reload of this module reuses the same context
+// (otherwise consumers re-imported after HMR throw "must be used within an AuthProvider").
+const authContextHolder = globalThis as unknown as { __igniteAuthContext?: Context<AuthContextType | null> };
+const AuthContext = (authContextHolder.__igniteAuthContext ??= createContext<AuthContextType | null>(null));
 
 const PROFILE_CACHE_KEY = 'ignite_cached_profile';
 
