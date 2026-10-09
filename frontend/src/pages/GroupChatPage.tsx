@@ -178,9 +178,6 @@ export default function GroupChatPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [miniLeagueInviteOpen, setMiniLeagueInviteOpen] = useState(false);
-  const scheduleTarget: ScheduleTarget | null = groupId
-    ? { chat_type: "group", group_id: groupId, pro_club_id: group?.club_id ?? null }
-    : null;
   const [replyTo, setReplyTo] = useChatDraftReply<GroupMessage>(groupId);
   const [editingMessage, setEditingMessage] = useState<GroupMessage | null>(null);
   const [eventPickerOpen, setEventPickerOpen] = useState(false);
@@ -451,6 +448,9 @@ export default function GroupChatPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const scheduleTarget: ScheduleTarget | null = groupId
+    ? { chat_type: "group", group_id: groupId, pro_club_id: group?.club_id ?? null }
+    : null;
   const { hasPro: clubPro, isLoading: clubProLoading } = useClubProAccess(group?.club_id ?? null, { enabled: chatReady });
   // Personal groups have no club_id, so the club lookup never resolves and the
   // menu would show Pro locks to genuine Pro users. Fall back to the user's
