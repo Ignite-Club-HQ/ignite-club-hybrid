@@ -88,6 +88,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
     `${opts.clubName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`,
     "Synthetic club for testing",
     "soccer",
+    "AU",
   );
   const clubId = club.id as string;
 
