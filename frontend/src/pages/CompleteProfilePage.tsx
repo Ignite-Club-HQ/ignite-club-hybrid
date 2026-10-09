@@ -1293,24 +1293,29 @@ function SupabaseCompleteProfilePage() {
         </div>
 
         {isIcpAccount && user?.id && (
-          <div className="rounded-lg border border-border/50 bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
-            <p>
-              This Internet Identity doesn't have an Ignite profile at this address yet. If you already have an
-              account, you probably picked a different identity or passkey on the Internet Identity screen.
-            </p>
-            <p>
-              Sign-in ID: <span className="font-mono text-foreground break-all">{user.id}</span>
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => { void signOut(); }}
-            >
-              Use a different identity
-            </Button>
-          </div>
+          <details className="text-xs text-muted-foreground text-center">
+            <summary className="cursor-pointer select-none hover:text-foreground">
+              Already have an Ignite account?
+            </summary>
+            <div className="mt-2 rounded-lg border border-border/50 bg-muted/40 p-3 space-y-2 text-left">
+              <p>
+                You may have chosen a different passkey or account when signing in. Sign out and pick the one you
+                normally use.
+              </p>
+              <p>
+                Sign-in ID: <span className="font-mono text-foreground break-all">{user.id}</span>
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => { void signOut(); }}
+              >
+                Sign in a different way
+              </Button>
+            </div>
+          </details>
         )}
 
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
