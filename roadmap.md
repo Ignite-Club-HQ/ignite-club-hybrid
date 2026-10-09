@@ -39,11 +39,11 @@
 - [ ] Regional backends (EU Supabase project / ICP Cloud Engine) — future ops task
 
 ## Move account to new sign-in ID (plan 2026-10-09)
-- [ ] rekey_principal on identity_access (Rust)
-- [ ] rekey_principal on club_domain, events_domain, messaging_domain
-- [ ] rekey_principal on vault_domain, notification_queue, pii_access_control, media_blob_store
-- [ ] rekey_principal on media_metadata, mini_league_domain, competition_domain, club_points_domain, insights_domain
-- [ ] .did + bindings regenerated, drift check clean
-- [ ] scripts/move-account.mjs + move-account.yml workflow
-- [ ] AGENTS.md rule
+- [x] rekey_principal on identity_access (Rust)
+- [x] rekey_principal on club_domain, events_domain, messaging_domain
+- [x] rekey_principal on vault_domain, notification_queue, pii_access_control, media_blob_store
+- [x] rekey_principal on media_metadata, mini_league_domain, competition_domain, club_points_domain, insights_domain
+- [x] .did + bindings regenerated, drift check clean
+- [x] scripts/move-account.mjs + move-account.yml workflow
+- [x] AGENTS.md rule
 - [ ] User: top up, run blockchain update, run move workflow (dry run then confirm), sign out/in on laptop
