@@ -225,7 +225,14 @@ and Capacitor config, so they must travel as-is.
   one appId equals one store listing. If the other repo already ships an app,
   these builds become a second listing — fine if intended, a collision if not.
 
-**Two gaps that follow the code, not the repo**
+**Gaps that follow the code, not the repo**
+
+- **Internet Identity sign-in does not work in a phone app.** It opens a popup a
+  phone web view cannot open, and inside a phone app the sign-in identity is
+  derived from `localhost` rather than the canister address, so the same person
+  becomes a new, empty account. Email sign-in is unaffected. Decide before a
+  native release: ship email-only, load the deployed site inside the shell, or
+  wire sign-in through the in-app browser and register the app's address.
 
 - **Push is not wired natively.** `@capacitor-firebase/messaging` is not
   installed, so `nativePush.ts` loads it optionally and silently no-ops. Needs

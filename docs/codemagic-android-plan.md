@@ -25,6 +25,14 @@ hookup and the signing secrets for whichever store you release to first.
   app. Keeps the repo clean; native config lives in `capacitor.config.ts`.
 - Web build uses the existing pipeline: `node scripts/ensure-frontend-deps.mjs` then
   `npm run build:live` (never bare `npm ci`).
+- **The build step must supply the back-end addresses.** `npm run build:live`
+  refuses to run unless the public Supabase address and key are in the
+  environment (`frontend/scripts/check-live-config.mjs` throws first), so every
+  job exports them — the same public defaults used by
+  `.github/workflows/deploy-frontend-canister.yml`, overridable from a Codemagic
+  env group — plus the blockchain canister IDs read from
+  `deploy/mainnet/.icp/data/mappings/ic.ids.json`. Without these all four jobs
+  fail on their second step, before anything is compiled.
 - **The install step must run from the repo root.** `scripts/ensure-frontend-deps.mjs` lives
   at the repo root, not in `frontend/scripts/`, and resolves `frontend/` itself. Running it
   with `working_directory: frontend` fails with "Cannot find module" — that mistake was in
@@ -61,6 +69,42 @@ hookup and the signing secrets for whichever store you release to first.
      `GoogleService-Info.plist` from the same Firebase project, for push on iOS.
 6. Trigger the release workflow; the `.aab` / `.ipa` appears in the build artifacts. The iOS
    workflow also submits straight to TestFlight.
+
+## Back-end routing inside the phone app
+
+The choice between the two back-ends is plain code — saved routing rules, the
+visitor's country, and whether canisters exist — so it behaves the same inside a
+phone app as in a browser: the country lookup uses an absolute address, and both
+back-ends' settings are baked into the bundle by `npm run build:live` (verified
+in the built file: the Supabase address, the canister IDs, and the country
+lookup are all present).
+
+- **Email sign-in and all Supabase-backed data: works.** Password sign-in is a
+  plain network call and the session is kept on the device.
+- **Google sign-in: needs deep links first.** It leaves the app for Google and
+  returns to the published web address; without intent filters (Android) and an
+  Apple App Site Association file (iOS) there is no way back in. Same
+  requirement as invite links — see the deep links note below.
+- **Internet Identity sign-in: does not work in a phone app as things stand.**
+  Two independent blockers:
+  1. It opens the sign-in window as a popup (`transport: "window"` in
+     `src/live/internetIdentityAuth.ts`), and a phone app's web view cannot open
+     popups.
+  2. The sign-in identity is derived from the app's own address. Inside a phone
+     app that address is `localhost` (`https://localhost` on Android,
+     `capacitor://localhost` on iOS), which is not the canister address, so the
+     same Internet Identity produces a **different** account — the person would
+     be asked to create a profile again, the same duplicate-account problem
+     already fought on laptop vs phone. Checked directly:
+     `resolveDerivationOriginFor` returns no override for either phone address,
+     so the identity comes from the app's own address.
+
+  Options, cheapest first: ship the phone app email-only; load the deployed site
+  inside the shell instead of a bundled copy (the identity then matches, but it
+  is a thin remote browser — no offline, and App Store review risk); or do the
+  real work — sign in through the in-app browser with a return link, and
+  register the app's address with the canister so the identity matches the web
+  one.
 
 ## Notes / open items
 
