@@ -195,16 +195,25 @@ export function DesktopProGate() {
   // Users with no clubs at all are never locked — desktop must stay open so
   // they can create their first club. The gate only applies once a club
   // exists and that club (or every club they belong to) is on the free plan.
+  const lockedByActiveClub = !!activeClubId && !activeClub.isLoading && !activeClub.hasPro;
+
+  // Hook order must stay stable — always call, gate with `enabled`. The
+  // Pro-club list is also the no-filter entitlement source: with no club
+  // selected, desktop stays open when ANY club the user belongs to is Pro
+  // (per-club subscriptions), not just when the identity itself has Pro.
+  const proClubs = useUserProClubs(!!user?.id && (!activeClubId || lockedByActiveClub));
+  const anyProClub = (proClubs.data ?? []).length > 0;
+
   const locked = Capacitor.isNativePlatform() || onSetupWizard
     ? false
     : membership.isLoading || !membership.hasAnyClub
       ? false
       : activeClubId
-        ? !activeClub.isLoading && !activeClub.hasPro
-        : !anyClub.isLoading && !anyClub.hasAnyClubPro;
+        ? lockedByActiveClub
+        : anyClub.isLoading || proClubs.isLoading
+          ? false
+          : !anyClub.hasAnyClubPro && !anyProClub;
 
-  // Hook order must stay stable — always call, gate with `enabled`.
-  const proClubs = useUserProClubs(locked);
   const switchable = (proClubs.data ?? []).filter((c) => c.id !== activeClubId);
 
   if (!locked) return null;
