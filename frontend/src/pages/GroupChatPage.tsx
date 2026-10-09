@@ -471,6 +471,9 @@ export default function GroupChatPage() {
     queryKey: ["group-chat-admin", groupId, user?.id, group?.team_id, group?.club_id],
     queryFn: async () => {
       if (!group) return false;
+      const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
+      const icp = await resolveIcpChatAdmin({ clubId: group.club_id, teamId: group.team_id, teamRoles: ["team_admin"] });
+      if (icp !== null) return icp;
       
       // Run all role checks in parallel
       const [teamRoleResult, clubRoleResult, appAdminResult] = await Promise.all([

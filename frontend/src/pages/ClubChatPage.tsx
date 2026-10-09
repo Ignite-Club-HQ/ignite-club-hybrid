@@ -408,6 +408,9 @@ export default function ClubChatPage() {
       const uid = user?.id;
       const cid = clubId;
       if (!uid || !cid) return false;
+      const { resolveIcpChatAdmin } = await import("@/lib/icpChatAdmin");
+      const icp = await resolveIcpChatAdmin({ clubId: cid });
+      if (icp !== null) return icp;
       const { data } = await supabase
         .from("user_roles")
         .select("id")
