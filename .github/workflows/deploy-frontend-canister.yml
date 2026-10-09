@@ -57,6 +57,36 @@ jobs:
           rm -rf ../deploy/frontend/dist
           cp -r dist-canister ../deploy/frontend/dist
 
+      # Keep the previous deploys' hashed JS/CSS files on the canister for 14
+      # days. Each deploy otherwise deletes them, and any tab still open on the
+      # old version fails to load the next screen's code and reloads the page.
+      - name: Restore previous asset files
+        uses: actions/cache/restore@v4
+        with:
+          path: .asset-history
+          key: frontend-asset-history-${{ github.run_id }}
+          restore-keys: frontend-asset-history-
+
+      - name: Carry previous asset files into this deploy
+        run: |
+          set -euo pipefail
+          mkdir -p .asset-history deploy/frontend/dist/assets
+          # Prune files no deploy has shipped for 14 days.
+          find .asset-history -type f -mtime +14 -delete || true
+          # Older files fill gaps only — never overwrite this build's files.
+          cp -n .asset-history/* deploy/frontend/dist/assets/ 2>/dev/null || true
+          # Record this build's files (fresh mtime) for future deploys.
+          cp -p deploy/frontend/dist/assets/* .asset-history/ 2>/dev/null || true
+          touch $(ls -d frontend/dist-canister/assets/* | sed 's#frontend/dist-canister/assets/#.asset-history/#') 2>/dev/null || true
+          echo "Assets in this deploy: $(ls deploy/frontend/dist/assets | wc -l)"
+
+      - name: Save asset history
+        uses: actions/cache/save@v4
+        with:
+          path: .asset-history
+          key: frontend-asset-history-${{ github.run_id }}
+
+
       - name: Restore deployer identity
         env:
           DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
