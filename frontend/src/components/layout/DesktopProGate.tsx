@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Smartphone, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "react-router-dom";
 import { LogoImage } from "@/components/ui/logo-image";
 import { Button } from "@/components/ui/button";
 import { useUserHasAnyClubPro } from "@/hooks/useUserHasAnyClubPro";
@@ -125,15 +126,20 @@ function useUserProClubs(enabled: boolean) {
 export function DesktopProGate() {
   const { activeThemeData, activeClubFilter, setActiveClubTheme } = useClubTheme();
   const activeClubId = activeClubFilter ?? null;
+  const { pathname } = useLocation();
 
   const anyClub = useUserHasAnyClubPro();
   const activeClub = useClubProAccess(activeClubId, { enabled: !!activeClubId });
   const membership = useUserHasAnyClub();
 
+  // The club setup wizard must stay reachable on desktop: a brand-new free
+  // club gets until the wizard is finished before the Pro lock appears.
+  const onSetupWizard = /^\/clubs\/[^/]+\/setup/.test(pathname);
+
   // Users with no clubs at all are never locked — desktop must stay open so
   // they can create their first club. The gate only applies once a club
   // exists and that club (or every club they belong to) is on the free plan.
-  const locked = Capacitor.isNativePlatform()
+  const locked = Capacitor.isNativePlatform() || onSetupWizard
     ? false
     : membership.isLoading || !membership.hasAnyClub
       ? false
