@@ -24,6 +24,8 @@ import { createLiveNewsPost } from "@/live/features/club";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { useClubTeamsForNews, useNewsPublishableClubs } from "@/features/news/useClubNews";
+import { useNewsAudienceTargets } from "@/features/news/useNewsAudienceTargets";
+import { setLiveNewsPostTarget } from "@/live/features/club";
 import {
   attachmentToken,
   formatFileSize,
@@ -44,7 +46,7 @@ interface Props {
   defaultClubId?: string | null;
 }
 
-type Audience = "club" | "teams";
+type Audience = "club" | "teams" | "competition" | "mini_league";
 
 /**
  * Club News composer. Reuses the existing club-admin role model for
@@ -70,6 +72,10 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
   const [content, setContent] = useState("");
   const [audience, setAudience] = useState<Audience>("club");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  const [targetId, setTargetId] = useState("");
+  const { data: targets } = useNewsAudienceTargets(effectiveClubId || null);
+  const competitions = targets?.competitions ?? [];
+  const miniLeagues = targets?.miniLeagues ?? [];
   const [important, setImportant] = useState(false);
   const [sendPush, setSendPush] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -119,6 +125,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
     setContent("");
     setAudience("club");
     setTeamIds([]);
+    setTargetId("");
     setImportant(false);
     setSendPush(true);
     setImageFile(null);
@@ -203,6 +210,9 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
       if (audience === "teams" && teamIds.length === 0) {
         throw new Error("Select at least one team");
       }
+      if ((audience === "competition" || audience === "mini_league") && !targetId) {
+        throw new Error(audience === "competition" ? "Select a competition" : "Select a mini league");
+      }
 
       let imageUrl: string | null = null;
       if (imageFile) {
@@ -247,6 +257,8 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               image_url: imageUrl,
               author_id: user?.id ?? null,
               target_team_ids: audience === "teams" ? teamIds : null,
+              target_competition_id: audience === "competition" ? targetId : null,
+              target_mini_league_id: audience === "mini_league" ? targetId : null,
               is_important: important,
               attachments: attachments as unknown as never,
             })
@@ -281,6 +293,9 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               })),
             },
           );
+          if (audience === "competition" || audience === "mini_league") {
+            await setLiveNewsPostTarget(ctx, post.id, audience, targetId);
+          }
           return { id: post.id };
         },
       });
@@ -574,12 +589,21 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
                 [
                   { key: "club" as Audience, label: "Entire club" },
                   { key: "teams" as Audience, label: "Selected teams" },
+                  ...(competitions.length > 0
+                    ? [{ key: "competition" as Audience, label: "Competition" }]
+                    : []),
+                  ...(miniLeagues.length > 0
+                    ? [{ key: "mini_league" as Audience, label: "Mini league" }]
+                    : []),
                 ]
               ).map((o) => (
                 <button
                   key={o.key}
                   type="button"
-                  onClick={() => setAudience(o.key)}
+                  onClick={() => {
+                    setAudience(o.key);
+                    setTargetId("");
+                  }}
                   className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                     audience === o.key
                       ? "border-primary bg-primary/5 text-foreground"
@@ -590,6 +614,18 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
                 </button>
               ))}
             </div>
+            {(audience === "competition" || audience === "mini_league") && (
+              <MobileCardSelect
+                label={audience === "competition" ? "Competition" : "Mini league"}
+                value={targetId}
+                onValueChange={setTargetId}
+                options={(audience === "competition" ? competitions : miniLeagues).map((x) => ({
+                  value: x.id,
+                  label: x.name,
+                }))}
+                placeholder={audience === "competition" ? "Select competition" : "Select mini league"}
+              />
+            )}
             {audience === "teams" && (
               <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border p-3">
                 {teams.length === 0 ? (
