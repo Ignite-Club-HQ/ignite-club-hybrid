@@ -2,15 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import { Ed25519KeyIdentity } from "@icp-sdk/core/identity";
 
 const identity = Ed25519KeyIdentity.generate();
-vi.mock("@/live/internetIdentityAuth", () => ({
+vi.mock("@/live/internetIdentityAuth", async (orig) => ({ ...(await orig() as any),
   getCurrentInternetIdentity: async () => identity,
   getCurrentInternetIdentityConfirmed: async () => identity,
 }));
-vi.mock("@/live/authBackendMode", () => ({ resolveAuthBackend: () => "icp" }));
-vi.mock("@/live/targetRegistry", async () => {
+vi.mock("@/live/authBackendMode", async (orig) => ({ ...(await orig() as any), resolveAuthBackend: () => "icp" }));
+vi.mock("@/live/targetRegistry", async (orig) => {
+  const real: any = await orig();
   const ids = (await import("@/live/generated/deployedCanisterIds")).DEPLOYED_MAINNET_CANISTER_IDS;
   const t = { alias: "mainnet", host: "https://icp-api.io", canisterIds: ids, kind: "mainnet" };
-  return { getActiveIcpTarget: () => t };
+  return { ...real, getActiveIcpTarget: () => t };
 });
 
 describe("probe", () => {
