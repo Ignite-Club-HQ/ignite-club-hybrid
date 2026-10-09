@@ -35,6 +35,8 @@ export interface InboxConversation {
   dmData?: unknown;
   draftText?: string;
   category?: string | null;
+  /** When the chat itself was created; lets brand-new, still-quiet chats count as active. */
+  createdAt?: string | null;
 }
 
 export interface OperationalDisclosureOptions {
@@ -238,12 +240,21 @@ export function resolveOperationalConversationDisclosure(
   const collapseThreshold = options.collapseThreshold ?? 6;
   const visibleWhenCollapsed = options.visibleWhenCollapsed ?? 2;
   const cutoff = options.now - staleAfterDays * 24 * 60 * 60 * 1000;
-  const stale = recent.filter((conversation) =>
-    (conversation.type === "group" || conversation.type === "league") &&
-    conversation.unreadCount === 0 &&
-    !conversation.draftText &&
-    (!conversation.lastActivity || new Date(conversation.lastActivity).getTime() < cutoff),
-  );
+  // A chat with no messages yet is judged by when it was created, so the
+  // default chats a new club gets (Coaches, Team Admins, Club Committee,
+  // sub-committees) stay visible instead of vanishing behind "Show more".
+  const activityTime = (conversation: InboxConversation): number | null => {
+    const stamp = conversation.lastActivity || conversation.createdAt;
+    if (!stamp) return null;
+    const ms = new Date(stamp).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const stale = recent.filter((conversation) => {
+    if (conversation.type !== "group" && conversation.type !== "league") return false;
+    if (conversation.unreadCount !== 0 || conversation.draftText) return false;
+    const at = activityTime(conversation);
+    return at === null || at < cutoff;
+  });
 
   if (
     stale.length <= collapseThreshold ||
