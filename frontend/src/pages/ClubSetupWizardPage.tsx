@@ -527,7 +527,33 @@ export default function ClubSetupWizardPage() {
 
   // ---------- navigation ----------
 
-  const finish = () => {
+  const finish = async () => {
+    // Create any named sub-committee groups the user added but never tapped
+    // "Create group" on — finishing must not silently drop them.
+    const unsavedGroups = groups.filter((g) => g.name.trim() && g.status !== "saved" && g.status !== "saving");
+    if (unsavedGroups.length > 0 && clubId && user?.id) {
+      let failed = 0;
+      for (const g of unsavedGroups) {
+        setGroups((prev) => prev.map((x) => (x.tempId === g.tempId ? { ...x, status: "saving" } : x)));
+        try {
+          const createdId = await createOperationalGroup(clubId, user.id, g.name.trim());
+          setGroups((prev) => prev.map((x) => (x.tempId === g.tempId ? { ...x, status: "saved", createdId, errorMsg: undefined } : x)));
+        } catch (err: any) {
+          failed += 1;
+          setGroups((prev) => prev.map((x) => (x.tempId === g.tempId ? { ...x, status: "error", errorMsg: err?.message } : x)));
+        }
+      }
+      invalidateChatGroupQueries(qc);
+      if (failed > 0) {
+        continueInProgressRef.current = false;
+        toast({
+          title: "Some groups weren't created",
+          description: "Open “Create Subcommittees” to retry, or remove them before finishing.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     if (storageKey) {
       try { localStorage.removeItem(storageKey); } catch { /* noop */ }
     }
