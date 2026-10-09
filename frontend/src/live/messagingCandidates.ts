@@ -32,6 +32,11 @@ export interface LiveMessagingCandidate {
   roles: LiveMessagingCandidateRole[];
 }
 
+/** club_domain account ids are "principal:<text>"; return the bare principal text. */
+export function normalizeAccountId(accountId: string): string {
+  return accountId.startsWith("principal:") ? accountId.slice("principal:".length) : accountId;
+}
+
 export function shortPrincipalLabel(principalText: string): string {
   if (principalText.length <= 12) return principalText;
   return `${principalText.slice(0, 5)}…${principalText.slice(-4)}`;
