@@ -1899,6 +1899,22 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
         onNavigateToUpgrade={navigate}
       />
 
+      {(chatGroupsWithMessages as { setupErrors?: string[] } | undefined)?.setupErrors?.length ? (
+        <div className="mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium text-foreground">Some club chats couldn't be set up.</p>
+          <p className="mt-1 break-words text-xs text-muted-foreground">
+            {(chatGroupsWithMessages as { setupErrors?: string[] }).setupErrors!.slice(0, 3).join(" · ")}
+          </p>
+          <button
+            type="button"
+            className="mt-2 text-xs font-medium text-primary underline"
+            onClick={() => queryClient.refetchQueries({ queryKey: ["my-chat-groups-with-messages", user?.id] })}
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
       <QueryErrorBanner
         // Only alarm the user when there is genuinely nothing to show. A
         // failed background refresh over a rendered (cached) inbox is not an
