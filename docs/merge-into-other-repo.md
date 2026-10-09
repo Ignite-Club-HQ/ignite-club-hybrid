@@ -29,7 +29,7 @@ Supabase migrations.
 | `deploy/` | `deploy/mainnet/icp.yaml` + `deploy/mainnet/.icp/data/mappings/ic.ids.json` and `deploy/frontend/icp.yaml` + `deploy/frontend/.icp/data/mappings/ic.ids.json`. The two ID tables are committed on purpose. |
 | `supabase/` | `functions/verify-iap-receipt-icp/index.ts` (+ `_shared/cors.ts`), `config.toml`, 5 migration SQL files. |
 | `.github/workflows/` | 11 files — see §4. |
-| Root files | `mops.toml`, `mops.lock`, `Cargo.toml`, `Cargo.lock`, `icp.yaml`, `icp-domain-topology.json`, `netlify.toml`, `tsconfig.json`, `.env.example`, `.gitignore` (merge, don't overwrite), `AGENTS.md`, `README.md`, `docs/` (8 runbook/audit files), `roadmap.md`. |
+| Root files | `mops.toml`, `mops.lock`, `Cargo.toml`, `Cargo.lock`, `icp.yaml`, `icp-domain-topology.json`, `netlify.toml`, `codemagic.yaml`, `tsconfig.json`, `.env.example`, `.gitignore` (merge, don't overwrite), `AGENTS.md`, `README.md`, `docs/` (runbook/audit files incl. `codemagic-android-plan.md`), `roadmap.md`. |
 
 **Do NOT copy (Lovable-editor scaffolding, meaningless elsewhere):**
 `lovable.toml`, `.lovable/`, `.workspace/`, `.git`, `node_modules/`,
@@ -38,6 +38,11 @@ Supabase migrations.
 `scripts/dev-preview.mjs`, `scripts/build-preview.mjs`, `scripts/typecheck-noop.ts`,
 root `package.json` (dependency-free shim that only exists so Lovable can build),
 and the stray `final_fix.py`, `fix_header_v3.py`, `fix_leaks.py`, `fix_ui_mess.py`.
+
+**One exception:** `scripts/ensure-frontend-deps.mjs` is on the do-not-copy list
+because it exists for Lovable's editor, but all four Codemagic jobs call it as
+their first step. Either copy that single file across or rewrite the install
+step — see §8.
 
 ## 3. Recommended structure — keep the folder names identical
 
@@ -163,13 +168,84 @@ history here must not be rewritten).
    applied to `cdrxmelhysdqrccttsjg`; after merging, the other repo's migration
    folder must become the single source of truth and these files must not be
    re-run.
-4. **Where native-app builds fit** — Codemagic builds stay bundled and are
-   unaffected, but confirm nothing in this repo's `netlify/` config is still
-   referenced by them.
+4. **Where native-app builds fit** — answered 2026-10-09: the Codemagic jobs
+   reference nothing in `netlify/` or `netlify.toml`; they bundle `dist-live`
+   built by `npm run build:live`, so the Netlify config is irrelevant to them.
+   Two native gaps do remain — Firebase push is not installed, and two
+   same-origin `/api/*` calls go nowhere inside a bundled app. See §8.
 5. **What happens to this Lovable project afterwards** — editor-only sandbox,
    re-pointed at the merged repo, or retired.
 
-## 8. Rough effort
+## 8. Native-app builds (Codemagic)
+
+`codemagic.yaml` (repo root) holds four jobs — `android-debug`, `android-release`,
+`ios-debug`, `ios-release`. Each one does: install frontend deps → `npm run
+build:live` in `frontend/` → `npx cap add` / `npx cap sync` to scaffold the
+native project in CI → gradle or xcodebuild → collect the artifact. `android/`
+and `ios/` are never committed, so nothing extra has to land in the other repo
+beyond the YAML itself and `frontend/capacitor.config.ts` (appId
+`com.igniteclubhq.app`, webDir `dist-live`).
+
+**Free to reuse (account-level, not repo-level):** the App Store Connect
+integration named `ignite`, the environment-variable groups `android_release`
+and `ios_release`, and the chosen instance types all live in Codemagic team
+settings. Any workflow in any repo on that team can use them — there is nothing
+to transfer.
+
+**Not reusable from the other repo's own jobs:** their build steps compile their
+app from their folders. The steps above are tied to this frontend's build output
+and Capacitor config, so they must travel as-is.
+
+**Two ways to merge the YAML**
+
+1. Append the four job keys into the other repo's `codemagic.yaml`. Keys must be
+   unique — if their file already has an `android-release`, rename these to e.g.
+   `ignite-android-release`.
+2. *Recommended:* keep this as a separate config file (`codemagic.ignite.yaml`)
+   at the merged repo root and register a second Codemagic app on the same repo
+   and branch, pointed at that file. Their jobs stay untouched, this app's builds
+   stay isolated, and both still share the same signing groups and secrets.
+
+**Edits needed either way**
+
+- **Install step (real trap).** All four jobs start with
+  `node scripts/ensure-frontend-deps.mjs` run from the repo root, and §2 says not
+  to copy that file. On merge day pick one: copy that single file across (it only
+  resolves `frontend/`), or replace the step with the other repo's normal install
+  command for `frontend/`. Leaving it pointing at a missing file fails the build
+  on its very first line.
+- **Nested folders.** If `frontend/` lands anywhere other than the top level,
+  every `working_directory` (`frontend`, `frontend/android`, `frontend/ios/App`)
+  and every artifact path (`frontend/android/app/build/outputs/…`,
+  `frontend/ios/App/build/ios/ipa/*.ipa`) has to be rewritten — roughly 10 lines
+  across the four jobs. A flat copy needs zero edits.
+- **`APP_STORE_APP_ID: 0000000000`** is a placeholder; fill in the numeric Apple
+  ID from App Store Connect once the app record exists.
+- **Store identity.** `com.igniteclubhq.app` is permanent at first upload, and
+  one appId equals one store listing. If the other repo already ships an app,
+  these builds become a second listing — fine if intended, a collision if not.
+
+**Two gaps that follow the code, not the repo**
+
+- **Push is not wired natively.** `@capacitor-firebase/messaging` is not
+  installed, so `nativePush.ts` loads it optionally and silently no-ops. Needs
+  the package plus `google-services.json` (Android) / `GoogleService-Info.plist`
+  (iOS) — the decode steps and env vars are already in the workflows — and an
+  APNs key uploaded to Firebase.
+- **Same-origin `/api/*` calls.** `LinkPreview.tsx` fetches
+  `/api/fetch-link-preview` and `websiteBackendSync.ts` fetches
+  `/api/register-club-backend`. Inside a bundled native app a relative URL
+  resolves against the app's own local origin, not the deployed site, so both
+  silently do nothing on a phone. Point them at the absolute deployed URL (or
+  leave those features out of the native build) before shipping them.
+
+**Native checks to add to the step 6 ladder**
+
+Run `android-debug` first (it needs no secrets at all) and install the APK, then
+`ios-debug` (simulator, unsigned). Both prove the toolchain before any signing or
+store secrets are involved.
+
+## 9. Rough effort
 
 Half a day for the copy plus secret transfer if folder names are kept flat;
 a day or so if paths get nested and every workflow's path references and trigger
