@@ -607,7 +607,7 @@ export default function ClubSetupWizardPage() {
       }
       setStepIndex((i) => i + 1);
     } else {
-      finish();
+      await finish();
     }
   };
 
