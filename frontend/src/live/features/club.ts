@@ -830,7 +830,7 @@ export async function createLiveClub(
   const country = homeCountry?.trim().toUpperCase();
   if (country && /^[A-Z]{2}$/.test(country)) {
     try {
-      unwrapCandid(await actor.set_club_home_country(id, country), "Set club home country");
+      await unwrapCandid(actor.set_club_home_country(id, country), "Set club home country");
     } catch (err) {
       console.warn("[createLiveClub] home country not recorded", err);
     }
@@ -846,7 +846,7 @@ export async function getLiveClubHomeCountries(
 ): Promise<Record<string, string>> {
   if (clubIds.length === 0) return {};
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const rows = unwrapCandid(await actor.get_club_home_countries(clubIds), "Get club home countries");
+  const rows = (await unwrapCandid(actor.get_club_home_countries(clubIds), "Get club home countries")) as Array<[string, string]>;
   return Object.fromEntries(rows);
 }
 
