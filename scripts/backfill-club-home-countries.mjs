@@ -54,8 +54,9 @@ if ("Err" in clubsRes) throw new Error(`list_clubs failed: ${clubsRes.Err}`);
 const live = clubsRes.Ok.filter((c) => c.deleted_at_ms.length === 0);
 console.log(`==> ${live.length} live clubs`);
 
-const existing = await clubDomain.get_club_home_countries(live.map((c) => c.id));
-const haveCountry = new Map(existing);
+const existingRes = await clubDomain.get_club_home_countries(live.map((c) => c.id));
+if ("Err" in existingRes) throw new Error(`get_club_home_countries failed: ${existingRes.Err}`);
+const haveCountry = new Map(existingRes.Ok);
 const missing = live.filter((c) => !haveCountry.has(c.id));
 console.log(`==> ${haveCountry.size} already have a country, ${missing.length} missing`);
 
