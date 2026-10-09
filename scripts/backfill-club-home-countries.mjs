@@ -39,7 +39,7 @@ const Result = (ok) => IDL.Variant({ Ok: ok, Err: IDL.Text });
 const idl = ({ IDL }) =>
   IDL.Service({
     list_clubs: IDL.Func([opt(IDL.Text), IDL.Nat16], [Result(IDL.Vec(Club))], ["query"]),
-    get_club_home_countries: IDL.Func([IDL.Vec(IDL.Text)], [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))], ["query"]),
+    get_club_home_countries: IDL.Func([IDL.Vec(IDL.Text)], [Result(IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)))], ["query"]),
     set_club_home_country: IDL.Func([IDL.Text, IDL.Text], [Result(IDL.Null)], []),
   });
 
