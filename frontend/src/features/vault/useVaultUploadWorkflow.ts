@@ -36,6 +36,40 @@ export function useVaultUploadWorkflow({
   const [uploadType, setUploadType] = useState<"photo" | "file">("photo");
   const [fileName, setFileName] = useState("");
 
+  // Show the item in the list straight away (local copy) while the real
+  // upload finishes in the background, like chat photos.
+  const matchesView = (key: readonly unknown[]) =>
+    key[0] === "vault-files" && JSON.stringify(key[1]) === JSON.stringify(currentView);
+  const addPlaceholder = (file: File, name: string, kind: "photo" | "file") => {
+    const id = `pending-${crypto.randomUUID()}`;
+    const row = {
+      id,
+      name: kind === "file" ? `${name} · uploading…` : name,
+      file_url: URL.createObjectURL(file),
+      file_type: file.type || null,
+      file_size: file.size,
+      folder_id: getCurrentFolderId(),
+      club_id: currentView.type === "root" ? null : currentView.clubId,
+      team_id: currentView.type === "team" ? currentView.teamId : null,
+      mini_league_id: currentView.type === "mini-league" ? currentView.miniLeagueId : null,
+      uploaded_by: userId ?? null,
+      is_external_link: false,
+      created_at: new Date().toISOString(),
+      deleted_at: null,
+    };
+    queryClient.setQueriesData({ predicate: (q) => matchesView(q.queryKey) }, (old: unknown) =>
+      Array.isArray(old) ? [row, ...old] : old,
+    );
+    return { id, url: row.file_url };
+  };
+  const removePlaceholder = (p: { id: string; url: string } | undefined) => {
+    if (!p) return;
+    queryClient.setQueriesData({ predicate: (q) => matchesView(q.queryKey) }, (old: unknown) =>
+      Array.isArray(old) ? old.filter((r: { id?: string }) => r?.id !== p.id) : old,
+    );
+    setTimeout(() => URL.revokeObjectURL(p.url), 60_000);
+  };
+
   // Vault photo uploads go to vault_files ONLY (not photos table).
   // This keeps vault photos separate from the media gallery.
   const uploadPhotoMutation = useMutation({
@@ -49,12 +83,17 @@ export function useVaultUploadWorkflow({
         view: currentView,
       });
     },
-    onSuccess: () => {
-      invalidateVaultCache(queryClient, ["files", "clubs", "storageBreakdown"]);
+    onMutate: (file: File) => {
       setUploadDialogOpen(false);
+      return addPlaceholder(file, file.name, "photo");
+    },
+    onSuccess: (_d, _v, placeholder) => {
+      invalidateVaultCache(queryClient, ["files", "clubs", "storageBreakdown"]);
+      removePlaceholder(placeholder);
       // No toast for successful photo uploads
     },
-    onError: (error: any) => {
+    onError: (error: any, _v, placeholder) => {
+      removePlaceholder(placeholder);
       toast.error(error.message || "Failed to upload photo");
     },
   });
@@ -71,14 +110,20 @@ export function useVaultUploadWorkflow({
       });
       // Note: Storage tracking is now per team, handled by the storage breakdown query
     },
-    onSuccess: () => {
-      invalidateVaultCache(queryClient, ["files", "clubs", "storageBreakdown"]);
-      invalidateVaultCache(queryClient, ["clubFreeUsage"]);
+    onMutate: ({ file, customFileName }) => {
+      const placeholder = addPlaceholder(file, customFileName || fileName || file.name, "file");
       setUploadDialogOpen(false);
       setFileName("");
+      return placeholder;
+    },
+    onSuccess: (_d, _v, placeholder) => {
+      invalidateVaultCache(queryClient, ["files", "clubs", "storageBreakdown"]);
+      invalidateVaultCache(queryClient, ["clubFreeUsage"]);
+      removePlaceholder(placeholder);
       toast.success("File uploaded successfully!");
     },
-    onError: (error: any) => {
+    onError: (error: any, _v, placeholder) => {
+      removePlaceholder(placeholder);
       toast.error(error.message || "Failed to upload file");
     },
   });
@@ -87,25 +132,19 @@ export function useVaultUploadWorkflow({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
+    // Background upload: the item shows immediately, errors surface as a toast.
     if (uploadType === "photo") {
-      await uploadPhotoMutation.mutateAsync(file);
+      uploadPhotoMutation.mutate(file);
     } else {
-      await uploadFileMutation.mutateAsync({ file });
+      uploadFileMutation.mutate({ file });
     }
-    setUploading(false);
   };
 
   const handleDialogUpload = async (file: File, type: "photo" | "file", customFileName?: string) => {
-    setUploading(true);
-    try {
-      if (type === "photo") {
-        await uploadPhotoMutation.mutateAsync(file);
-      } else {
-        await uploadFileMutation.mutateAsync({ file, customFileName });
-      }
-    } finally {
-      setUploading(false);
+    if (type === "photo") {
+      uploadPhotoMutation.mutate(file);
+    } else {
+      uploadFileMutation.mutate({ file, customFileName });
     }
   };
 
