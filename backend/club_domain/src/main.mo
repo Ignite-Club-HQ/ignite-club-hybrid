@@ -116,6 +116,14 @@ persistent actor class Main(governorInit : Principal) {
   // routing config. Never store secrets here — state is replica-visible.
   var appConfig : [(Text, Text)];
 
+  // Per-club home country (ISO two-letter code), mirroring the Supabase
+  // clubs.home_country column. Fixed at creation: club admins can set it
+  // once, and only the governor can change it afterwards (a deliberate
+  // migration, never a toggle). Kept out of ClubProfile so the record type
+  // — and every migration mentioning it — stays stable.
+  var clubHomeCountries : [(Text, Text)];
+
+
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
