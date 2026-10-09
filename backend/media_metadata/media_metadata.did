@@ -80,6 +80,11 @@ type Main =
    list_gallery_chat_cards: (club_id: text, team_id: text) ->
     (vec GalleryChatCard) query;
    list_reactions: (asset_id: text) -> (vec Reaction) query;
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    register_asset: (club_id: text, kind: text, mime: text, checksum: 
     text, storage_path: text, visibility: text, expires_at_ms: nat64) ->
     (variant {

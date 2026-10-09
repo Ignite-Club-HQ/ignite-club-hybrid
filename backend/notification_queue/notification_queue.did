@@ -195,6 +195,11 @@ type Main =
    mark_failed: (id: text, error: text) -> (ScheduledResult);
    mark_read: (id: text) -> (Result);
    mark_sent: (id: text, sent_message_id: text) -> (ScheduledResult);
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    record_chat_notify_batch: (message_id: text, conversation_id: text,
     sender: text, preview: text, recipients: vec text, mute_list:
     vec text) -> (ChatNotifyBatchResult);

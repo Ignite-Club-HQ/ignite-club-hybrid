@@ -770,6 +770,11 @@ type Main =
                     Err: text;
                     Ok: MemberPayment;
                   });
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    move_child_to_team: (child_id: text, from_team: opt text, to_team:
     text) -> (variant {
                 Err: text;
