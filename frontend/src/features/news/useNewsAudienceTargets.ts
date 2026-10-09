@@ -23,7 +23,7 @@ export function useNewsAudienceTargets(clubId: string | null) {
       const competitions = await safe<Option>(() =>
         withFeatureBackend("competitions", {
           supabase: async () => {
-            const { data: ids } = await supabase.rpc("club_news_competition_ids", { _club_id: clubId! });
+            const { data: ids } = await (supabase.rpc as unknown as (f: string, a: Record<string, unknown>) => Promise<{ data: unknown }>)("club_news_competition_ids", { _club_id: clubId! });
             const list = ((ids ?? []) as unknown as string[]).filter(Boolean);
             if (list.length === 0) return [];
             const { data } = await supabase.from("competitions").select("id, name").in("id", list).order("name");

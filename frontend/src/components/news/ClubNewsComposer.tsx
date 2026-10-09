@@ -257,8 +257,7 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
               image_url: imageUrl,
               author_id: user?.id ?? null,
               target_team_ids: audience === "teams" ? teamIds : null,
-              target_competition_id: audience === "competition" ? targetId : null,
-              target_mini_league_id: audience === "mini_league" ? targetId : null,
+              ...({ target_competition_id: audience === "competition" ? targetId : null, target_mini_league_id: audience === "mini_league" ? targetId : null } as Record<string, unknown>),
               is_important: important,
               attachments: attachments as unknown as never,
             })
