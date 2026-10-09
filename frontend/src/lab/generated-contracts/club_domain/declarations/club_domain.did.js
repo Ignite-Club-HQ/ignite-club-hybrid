@@ -1057,6 +1057,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_member' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

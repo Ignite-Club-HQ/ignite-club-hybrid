@@ -208,6 +208,11 @@ type Main =
                           Err: text;
                           Ok;
                         });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    remove_device_tokens: (user: text, tokens: vec text) ->
     (DeviceTokenCountResult);
    schedule_message: (id: text, author: text, chat_type: ChatType, team_id:

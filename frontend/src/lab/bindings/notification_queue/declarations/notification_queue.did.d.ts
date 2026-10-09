@@ -127,6 +127,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_device_tokens' : ActorMethod<
     [string, Array<string>],
     DeviceTokenCountResult

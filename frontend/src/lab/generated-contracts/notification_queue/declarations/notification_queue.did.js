@@ -317,6 +317,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_device_tokens' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text)],
         [DeviceTokenCountResult],
