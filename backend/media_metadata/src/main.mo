@@ -542,6 +542,16 @@ persistent actor class Main(governorInit : Principal) {
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
     if (old.equal(new)) return #err("Old and new principal must differ");
@@ -555,7 +565,7 @@ persistent actor class Main(governorInit : Principal) {
     for (g in roles.values()) { if (g.user.equal(new)) conflicts += 1 };
     for (p in bulkAccessPrincipals.values()) { if (p.equal(new)) conflicts += 1 };
     for (c in galleryChatCards.values()) { if (c.uploader_id.equal(new)) conflicts += 1 };
-    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_metadata");
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in media_metadata");
 
     var changed = 0;
 

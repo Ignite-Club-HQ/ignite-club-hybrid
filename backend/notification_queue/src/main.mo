@@ -951,6 +951,16 @@ persistent actor class Main(governorInit : Principal) {
   // Lease.owner (always a worker principal), messagingDomainCanister
   // (canister wiring), chat_notified_messages (message ids, not identities).
   public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, false)
+  };
+
+  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
+  // both IDs' records end up under the new one (keyed duplicates keep the new row).
+  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new, dry_run, true)
+  };
+
+  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     authenticated(caller);
     let isGov = switch (governor) { case (?g) { g.equal(caller) }; case null { false } };
     if (not isGov) return #err("Forbidden");
@@ -970,7 +980,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += scheduled.filter(func(s : Types.ScheduledMessage) : Bool = s.author == newText).size();
     conflicts += digests.filter(func(d : Types.DigestItem) : Bool = d.mentions.any(func(m : Text) : Bool = m == newText)).size();
     conflicts += switch (push_settings) { case (?p) { if (p.updated_by == ?newText) { 1 } else { 0 } }; case null { 0 } };
-    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
+    if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in notification_queue");
 
     var changed = 0;
 
