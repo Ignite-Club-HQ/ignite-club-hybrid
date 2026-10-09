@@ -789,6 +789,80 @@ export default function ClubSetupWizardPage() {
   );
 }
 
+function invalidateChatGroupQueries(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["chat-groups"] });
+  qc.invalidateQueries({ queryKey: ["my-chat-groups-with-messages"] });
+}
+
+/**
+ * Creates one sub-committee chat (e.g. "Fundraising") for the club and seeds
+ * current club admins + committee members. Throws on failure so callers can
+ * show the error. Returns the new group/conversation id.
+ */
+async function createOperationalGroup(clubId: string, userId: string, name: string): Promise<string> {
+  if (isFeatureRoutedToIcp("messaging")) {
+    // ICP counterpart: messaging_domain groups have explicit members (no
+    // role-based membership mode), so seed the club's current club_admins
+    // and committee_members; the creator owns the group.
+    return withFeatureBackend("messaging", {
+      supabase: async () => { throw new Error("unreachable"); },
+      icp: async (ctx) => {
+        const creator = ctx.identity.getPrincipal();
+        const roleEntries: Array<[Principal, string]> = [[creator, "owner"]];
+        const seen = new Set<string>([creator.toText()]);
+        const candidates = await fetchLiveMessagingCandidates(ctx, [clubId], new Set()).catch(() => []);
+        for (const candidate of candidates) {
+          const key = candidate.principal.toText();
+          if (seen.has(key)) continue;
+          const matched = candidate.roles.find(
+            (r) => r.clubId === clubId && (r.role === "club_admin" || r.role === "committee_member"),
+          );
+          if (!matched) continue;
+          seen.add(key);
+          roleEntries.push([candidate.principal, matched.role === "club_admin" ? "admin" : "member"]);
+        }
+        const meta = await createLiveGroupWithRoles(ctx, clubId, null, name, "group", roleEntries);
+        return meta.conversation_id;
+      },
+    });
+  }
+
+  const { data, error } = await supabase
+    .from("chat_groups")
+    .insert({
+      name,
+      club_id: clubId,
+      created_by: userId,
+      allowed_roles: ["committee_member", "club_admin"],
+      membership_mode: "role",
+      category: "subcommittee",
+      join_policy: "invite_only",
+    } as any)
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+
+  // Auto-seed existing club_admin + committee_member users into the group
+  // so they're members immediately (not just role-eligible).
+  try {
+    const { data: roleRows } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("club_id", clubId)
+      .in("role", ["club_admin", "committee_member"]);
+    const userIds = Array.from(new Set([userId, ...(roleRows ?? []).map((r: any) => r.user_id)]));
+    if (userIds.length > 0) {
+      await supabase.from("group_members").upsert(
+        userIds.map((uid) => ({ group_id: data.id, user_id: uid, added_by: userId })) as any,
+        { onConflict: "group_id,user_id", ignoreDuplicates: true } as any,
+      );
+    }
+  } catch {
+    /* seeding failure is non-fatal — role-based access still applies */
+  }
+  return data.id as string;
+}
+
 // ---------- step: operational groups (sub-committees) ----------
 
 function OperationalGroupsStep({
@@ -862,12 +936,7 @@ function OperationalGroupsStep({
                 key={s}
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  setGroups((prev) => [
-                    ...prev,
-                    { tempId: crypto.randomUUID(), name: s, description: "", status: "pending" },
-                  ])
-                }
+                onClick={() => addSuggestion(s)}
               >
                 <Plus className="h-3 w-3 mr-1" /> {s}
               </Button>
