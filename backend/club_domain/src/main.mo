@@ -151,7 +151,7 @@ persistent actor class Main(governorInit : Principal) {
     acl.children.any(func(c) {
       let isParent = switch (c.parent) { case (?p) p.equal(caller); case null false };
       let isGuardian = acl.guardians.any(func(g) = g.child == c.id and g.user.equal(caller));
-      (isParent or isGuardian) and c.teams.any(func(teamId) = acl.teams.any(func(t) = t.id == teamId and t.club == club))
+      (isParent or isGuardian) and c.teams.any(func(teamId) = teamInClub(teamId, club))
     })
   };
 
@@ -461,6 +461,13 @@ persistent actor class Main(governorInit : Principal) {
 
   func validNewsStatus(status : Text) : Bool { status == "draft" or status == "published" };
 
+  // A team belongs to a club if either the ACL mirror or the team records
+  // say so — teams created via save_team only exist in the records store.
+  func teamInClub(teamId : Text, club : Text) : Bool {
+    acl.teams.any(func(t) = t.id == teamId and t.club == club)
+    or teams.any(func(t) = t.id == teamId and t.club_id == club and t.deleted_at_ms == null)
+  };
+
   // Caller belongs to (or parents a child on) the given team.
   func isOnTeam(caller : Principal, teamId : Text) : Bool {
     acl.roles.any(func(grant) = grant.user.equal(caller) and grant.team == ?teamId)
@@ -489,7 +496,7 @@ persistent actor class Main(governorInit : Principal) {
       case (?teamIds) {
         if (teamIds.size() > 100) return ?"Too many target teams";
         for (teamId in teamIds.values()) {
-          if (not acl.teams.any(func(t) = t.id == teamId and t.club == club_id)) return ?"Target team not in club";
+          if (not teamInClub(teamId, club_id)) return ?"Target team not in club";
         };
       };
     };
@@ -594,7 +601,7 @@ persistent actor class Main(governorInit : Principal) {
     if (child_id == "" or child_id.size() > 128) return #Err("Invalid child");
     switch (team_id) {
       case (?team) {
-        if (not acl.teams.any(func(t) = t.id == team and t.club == club_id)) return #Err("Team not found in club");
+        if (not teamInClub(team, club_id)) return #Err("Team not found in club");
       };
       case null {};
     };
@@ -1735,7 +1742,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func create_child_for_parent_on_team(club_id : Text, team_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
     auth(caller);
     if (not canManageTeam(caller, club_id, ?team_id)) return #Err("Team or club admin required");
-    if (not acl.teams.any(func(t) = t.id == team_id and t.club == club_id)) return #Err("Team not found in club");
+    if (not teamInClub(team_id, club_id)) return #Err("Team not found in club");
     let child : Types.Child = {
       id = "child-" # club_id # "-" # Nat.toText(acl.children.size() + 1) # "-" # Nat64.toText(nowNs() % 1_000_000_000);
       teams = [team_id];
@@ -1873,7 +1880,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func move_member_to_team(club_id : Text, user : Principal, from_team : ?Text, to_team : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
-    if (not acl.teams.any(func(t) = t.id == to_team and t.club == club_id)) return #Err("Target team not found in club");
+    if (not teamInClub(to_team, club_id)) return #Err("Target team not found in club");
     acl := { acl with roles = acl.roles.map(func(g) = if (g.user.equal(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g) };
     accountRoles := accountRoles.map(func(g) = if (g.account_id == accountIdFor(user) and g.club == ?club_id and g.team == from_team) ({ g with team = ?to_team }) else g);
     #Ok
