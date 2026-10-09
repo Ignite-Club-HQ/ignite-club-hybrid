@@ -233,7 +233,6 @@ and Capacitor config, so they must travel as-is.
   becomes a new, empty account. Email sign-in is unaffected. Decide before a
   native release: ship email-only, load the deployed site inside the shell, or
   wire sign-in through the in-app browser and register the app's address.
-
 - **Push is not wired natively.** `@capacitor-firebase/messaging` is not
   installed, so `nativePush.ts` loads it optionally and silently no-ops. Needs
   the package plus `google-services.json` (Android) / `GoogleService-Info.plist`
