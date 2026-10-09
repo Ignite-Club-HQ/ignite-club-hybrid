@@ -1,0 +1,96 @@
+# Codemagic CI for Ignite Club HQ native apps.
+#
+# Workflows:
+#   android-debug   — unsigned debug APK, no secrets needed. Use this first to
+#                     prove the pipeline end to end.
+#   android-release — signed AAB for Google Play. Requires the environment
+#                     variables listed below to be configured in the Codemagic
+#                     UI (Application -> Environment variables, group
+#                     "android_release"):
+#                       CM_KEYSTORE            base64 of the upload keystore (.jks)
+#                       CM_KEYSTORE_PASSWORD   keystore store password
+#                       CM_KEY_ALIAS           key alias inside the keystore
+#                       CM_KEY_PASSWORD        key password
+#                       GOOGLE_SERVICES_JSON   base64 of google-services.json
+#                                              (Firebase project used for push)
+#
+# Both workflows build the live web app (frontend/scripts/build-live.mjs ->
+# frontend/dist-live), scaffold the Capacitor android/ project in CI (it is
+# intentionally NOT committed), sync, then build with Gradle.
+
+workflows:
+  android-debug:
+    name: Android debug APK
+    max_build_duration: 45
+    instance_type: linux_x2
+    environment:
+      node: 22
+    scripts:
+      - name: Install frontend dependencies
+        working_directory: frontend
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: npm run build:live
+      - name: Scaffold and sync Capacitor Android
+        working_directory: frontend
+        script: |
+          npx cap add android
+          npx cap sync android
+      - name: Build debug APK
+        working_directory: frontend/android
+        script: ./gradlew assembleDebug
+    artifacts:
+      - frontend/android/app/build/outputs/apk/debug/*.apk
+
+  android-release:
+    name: Android release AAB
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      node: 22
+      groups:
+        - android_release
+    scripts:
+      - name: Install frontend dependencies
+        working_directory: frontend
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: npm run build:live
+      - name: Scaffold and sync Capacitor Android
+        working_directory: frontend
+        script: |
+          npx cap add android
+          npx cap sync android
+      - name: Decode signing and Firebase files
+        working_directory: frontend/android
+        script: |
+          echo "$CM_KEYSTORE" | base64 --decode > app/upload-keystore.jks
+          echo "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+      - name: Configure signing
+        working_directory: frontend/android
+        script: |
+          cat >> app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('upload-keystore.jks')
+                      storePassword System.getenv('CM_KEYSTORE_PASSWORD')
+                      keyAlias System.getenv('CM_KEY_ALIAS')
+                      keyPassword System.getenv('CM_KEY_PASSWORD')
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+      - name: Build release AAB
+        working_directory: frontend/android
+        script: ./gradlew bundleRelease
+    artifacts:
+      - frontend/android/app/build/outputs/bundle/release/*.aab
