@@ -822,89 +822,25 @@ function OperationalGroupsStep({
       toast({ title: "Add a group name first", variant: "destructive" });
       return;
     }
-    update(g.tempId, { status: "saving" });
-
-    if (isFeatureRoutedToIcp("messaging")) {
-      // ICP counterpart: messaging_domain groups have explicit members (no
-      // role-based membership mode), so seed the club's current club_admins
-      // and committee_members; the creator owns the group.
-      try {
-        await withFeatureBackend("messaging", {
-          supabase: async () => { throw new Error("unreachable"); },
-          icp: async (ctx) => {
-            const creator = Principal.fromText(userId);
-            const roleEntries: Array<[Principal, string]> = [[creator, "owner"]];
-            const seen = new Set<string>([creator.toText()]);
-            const candidates = await fetchLiveMessagingCandidates(ctx, [clubId], new Set());
-            for (const candidate of candidates) {
-              const key = candidate.principal.toText();
-              if (seen.has(key)) continue;
-              const matched = candidate.roles.find(
-                (r) => r.clubId === clubId && (r.role === "club_admin" || r.role === "committee_member"),
-              );
-              if (!matched) continue;
-              seen.add(key);
-              roleEntries.push([candidate.principal, matched.role === "club_admin" ? "admin" : "member"]);
-            }
-            const meta = await createLiveGroupWithRoles(ctx, clubId, null, g.name.trim(), "group", roleEntries);
-            update(g.tempId, { status: "saved", createdId: meta.conversation_id });
-          },
-        });
-      } catch (err: any) {
-        update(g.tempId, { status: "error", errorMsg: err?.message });
-        toast({ title: "Could not create group", description: err?.message, variant: "destructive" });
-        return;
-      }
-      qc.invalidateQueries({ queryKey: ["chat-groups"] });
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("chat_groups")
-      .insert({
-        name: g.name.trim(),
-        club_id: clubId,
-        created_by: userId,
-        allowed_roles: ["committee_member", "club_admin"],
-        membership_mode: "role",
-        category: "subcommittee",
-        join_policy: "invite_only",
-      } as any)
-      .select("id")
-      .single();
-    if (error) {
-      update(g.tempId, { status: "error", errorMsg: error.message });
-      toast({ title: "Could not create group", description: error.message, variant: "destructive" });
-      return;
-    }
-    update(g.tempId, { status: "saved", createdId: data.id as string });
-
-    // Auto-seed existing club_admin + committee_member users into the group
-    // so they're members immediately (not just role-eligible).
+    update(g.tempId, { status: "saving", errorMsg: undefined });
     try {
-      const { data: roleRows } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("club_id", clubId)
-        .in("role", ["club_admin", "committee_member"]);
-      const userIds = Array.from(
-        new Set([userId, ...(roleRows ?? []).map((r: any) => r.user_id)]),
-      );
-      if (userIds.length > 0) {
-        await supabase.from("group_members").upsert(
-          userIds.map((uid) => ({
-            group_id: data.id,
-            user_id: uid,
-            added_by: userId,
-          })) as any,
-          { onConflict: "group_id,user_id", ignoreDuplicates: true } as any,
-        );
-      }
-    } catch {
-      /* seeding failure is non-fatal — role-based access still applies */
+      const createdId = await createOperationalGroup(clubId, userId, g.name.trim());
+      update(g.tempId, { status: "saved", createdId });
+    } catch (err: any) {
+      update(g.tempId, { status: "error", errorMsg: err?.message });
+      toast({ title: "Could not create group", description: err?.message, variant: "destructive" });
+      return;
     }
+    invalidateChatGroupQueries(qc);
+  };
 
-    qc.invalidateQueries({ queryKey: ["chat-groups"] });
+  // Tapping a suggestion creates the group straight away — previously it only
+  // added a draft row that needed a second "Create group" tap, so groups the
+  // user picked were silently dropped when they moved on.
+  const addSuggestion = (name: string) => {
+    const g: DraftGroup = { tempId: crypto.randomUUID(), name, description: "", status: "pending" };
+    setGroups((prev) => [...prev, g]);
+    void save(g);
   };
 
   return (
