@@ -147,7 +147,7 @@ export async function sendLiveMessage(
   // (the full address still travels in `url`, which allows 2048 chars).
   const safeBody = body.trim() === "" && attachment ? " " : body;
   const refId = attachment ? await shortCanisterRefId(attachment.refId) : "";
-  return unwrapCandid(
+  const sent = await unwrapCandid(
     actor.send_message(
       conversationId,
       safeBody,
@@ -161,6 +161,25 @@ export async function sendLiveMessage(
     ),
     "Send message",
   );
+  kickIcpPush();
+  return sent;
+}
+
+/**
+ * Fire-and-forget: asks the Supabase push sender (verify-iap-receipt-icp
+ * ?job=push-kick) to deliver queued notifications now instead of waiting for
+ * the 5-minute backstop worker. Never blocks or fails the send.
+ */
+function kickIcpPush() {
+  try {
+    void import("@/integrations/supabase/client")
+      .then(({ supabase }) =>
+        supabase.functions.invoke("verify-iap-receipt-icp?job=push-kick", { body: {} }),
+      )
+      .catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function updateLiveMessage(
