@@ -125,6 +125,12 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Second, unrelated job hosted here: instant ICP chat push (?job=push-kick).
+  if (new URL(req.url).searchParams.get("job") === "push-kick") {
+    return handlePushKick();
+  }
+
+
   try {
     if (req.method !== "POST") {
       return new Response(JSON.stringify({ error: "Method not allowed" }), {
