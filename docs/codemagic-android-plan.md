@@ -121,3 +121,12 @@ lookup are all present).
   filters with the published domain added to the scaffolded `AndroidManifest.xml`, and iOS
   needs an Apple App Site Association file served from the domain plus associated-domains
   entitlement. Flag both when you get to store release.
+
+## Decision (2026-10-10): phone app loads the live site
+`frontend/capacitor.config.ts` sets `server.url` to the frontend canister
+(`https://proe7-kqaaa-aaaas-qg6gq-cai.icp0.io`, override with `IGNITE_NATIVE_APP_URL`).
+Result: Placement Settings routing (email/Supabase vs blockchain) is identical to the
+browser, and Internet Identity gives the same account as the website. Web updates
+reach phones without a store release. Trade-offs: needs internet to open; Apple
+review may query "website wrapper" apps (native push helps). Still to verify on a
+real phone: the Internet Identity sign-in window opens and returns inside the app.
