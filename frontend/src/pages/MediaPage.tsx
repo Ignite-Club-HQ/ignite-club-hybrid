@@ -91,6 +91,8 @@ import {
 // date don't show a view count since scroll views weren't recorded yet.
 const PHOTO_VIEWS_FEATURE_LAUNCH = new Date("2026-04-18T00:00:00Z");
 
+const EMPTY_ROLES: Array<{ role: string; club_id: string | null; team_id: string | null }> = [];
+
 export default function MediaPage() {
   if (isFeatureRoutedToIcp("media")) {
     return <IcpMediaFeedPage />;
@@ -320,7 +322,7 @@ function SupabaseMediaPage() {
     console.warn(`[MediaDiag] ${step}`, { t: new Date().toISOString(), userId: user?.id, ...extra });
   };
 
-  const { data: userRoles, isLoading: loadingRoles } = useQuery({
+  const { data: supabaseUserRoles, isLoading: loadingRolesSb } = useQuery({
     queryKey: ["user-roles-media", user?.id],
     queryFn: async () => {
       const start = performance.now();
@@ -340,6 +342,8 @@ function SupabaseMediaPage() {
     placeholderData: (prev) => prev,
   });
 
+  const userRoles = isIcpMode ? EMPTY_ROLES : supabaseUserRoles;
+  const loadingRoles = isIcpMode ? false : loadingRolesSb;
   const isAppAdmin = useMemo(() => 
     userRoles?.some(r => r.role === "app_admin") ?? false, 
     [userRoles]
@@ -362,7 +366,7 @@ function SupabaseMediaPage() {
 // caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
 // via what canister) is a pending product decision; this is intentionally
 // left as-is (no behavior change) until that's decided.
-  const { data: hasProClub, isLoading: loadingProAccess, error: proAccessError } = useQuery({
+  const { data: hasProClubSb, isLoading: loadingProAccessSb, error: proAccessError } = useQuery({
     queryKey: ["has-pro-access", user?.id, roleClubIds.join(","), roleTeamIds.join(",")],
     queryFn: async () => {
       try { await ensureFreshSession(); } catch { /* offline / signed out — let queries surface real errors */ }
@@ -453,13 +457,18 @@ function SupabaseMediaPage() {
 
       return false;
     },
-    enabled: !!user,
+    enabled: !!user && !isIcpMode,
     staleTime: 300000,
     gcTime: 300000,
     retry: (failureCount, error) => failureCount < 2 && (isAuthLikeError(error) || onlineManager.isOnline()),
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
     placeholderData: (prev) => prev,
   });
+  // ICP: Pro comes from the identity canister's entitlements (cached on
+  // device, so this resolves instantly on repeat visits).
+  const icpEntitlements = useIcpEntitlements({ enabled: isIcpMode });
+  const hasProClub = isIcpMode ? (icpEntitlements.isLoading ? undefined : icpEntitlements.isPro) : hasProClubSb;
+  const loadingProAccess = isIcpMode ? icpEntitlements.isLoading : loadingProAccessSb;
 
   const { data: userProfile } = useQuery({
     queryKey: ["user-profile-media", user?.id],
