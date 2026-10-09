@@ -278,6 +278,12 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: remaining cycles of any canister this canister controls
+   * / (the frontend asset canister adds club_domain as a controller at deploy
+   * / time so admin settings can show its balance too).
+   */
+  'canister_cycles' : ActorMethod<[Principal], bigint>,
   'check_team_name_unique' : ActorMethod<
     [string, string],
     { 'Ok' : boolean } |
@@ -413,6 +419,11 @@ export interface Main {
   'get_club_branding' : ActorMethod<
     [string],
     { 'Ok' : ClubBranding } |
+      { 'Err' : string }
+  >,
+  'get_club_home_countries' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, string]> } |
       { 'Err' : string }
   >,
   'get_club_link' : ActorMethod<
@@ -885,6 +896,11 @@ export interface Main {
   'set_club_header_toggles' : ActorMethod<
     [string, boolean, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_home_country' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_invite_email_style' : ActorMethod<

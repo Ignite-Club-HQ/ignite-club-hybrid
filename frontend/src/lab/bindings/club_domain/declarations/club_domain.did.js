@@ -523,6 +523,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
+    'canister_cycles' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'check_team_name_unique' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Bool, 'Err' : IDL.Text })],
@@ -682,6 +683,16 @@ export const idlFactory = ({ IDL }) => {
     'get_club_branding' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_home_countries' : IDL.Func(
+        [IDL.Vec(IDL.Text)],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'get_club_link' : IDL.Func(
@@ -1210,6 +1221,11 @@ export const idlFactory = ({ IDL }) => {
     'set_club_header_toggles' : IDL.Func(
         [IDL.Text, IDL.Bool, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_home_country' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_invite_email_style' : IDL.Func(
