@@ -79,7 +79,10 @@ interface AuthContextType {
   decrementUnreadCount: (n: number) => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+// Kept on globalThis so a hot reload of this module reuses the same context
+// (otherwise consumers re-imported after HMR throw "must be used within an AuthProvider").
+const authContextHolder = globalThis as unknown as { __igniteAuthContext?: React.Context<AuthContextType | null> };
+const AuthContext = (authContextHolder.__igniteAuthContext ??= createContext<AuthContextType | null>(null));
 
 const PROFILE_CACHE_KEY = 'ignite_cached_profile';
 
