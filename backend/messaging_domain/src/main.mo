@@ -2633,4 +2633,144 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func has_blocked(user : Principal) : async Bool {
     blockedUsers.any(func(entry) = entry.blocker.equal(caller) and entry.blocked.equal(user))
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new`.
+    // Ephemeral/excluded: presence (online pings), typingPings (typing indicators).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += conversations.filter(func(c) = c.participants.any(func(p) = p.equal(new))).size();
+    conflicts += messages.filter(func(m) = m.sender.equal(new)).size();
+    conflicts += receipts.filter(func(r) = r.user.equal(new)).size();
+    conflicts += unread.filter(func(u) = u.user.equal(new)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += groupMetadata.filter(func(g) = g.members.any(func(p) = p.equal(new)) or (switch (g.deleted_by) { case (?p) p.equal(new); case null false })).size();
+    conflicts += clubMemberships.filter(func(m) = m.user.equal(new)).size();
+    conflicts += competitionAdmins.filter(func(c) = c.user.equal(new)).size();
+    conflicts += (if (dmAttachmentsDisabled.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += groupRoles.filter(func(g) = g.user.equal(new)).size();
+    conflicts += joinRequests.filter(func(j) = j.user.equal(new)).size();
+    conflicts += polls.filter(func(p) = p.creator.equal(new)).size();
+    conflicts += pollVotes.filter(func(v) = v.user.equal(new)).size();
+    conflicts += mutePreferences.filter(func(m) = m.user.equal(new)).size();
+    conflicts += dmLinks.filter(func(d) = d.a.equal(new) or d.b.equal(new)).size();
+    conflicts += forwardRecords.filter(func(f) = f.original_sender.equal(new)).size();
+    conflicts += scheduledMessages.filter(func(s) = s.sender.equal(new)).size();
+    conflicts += attachmentMetadata.filter(func(a) = a.uploader.equal(new)).size();
+    conflicts += reactions.filter(func(r) = r.user.equal(new)).size();
+    conflicts += userMessagingSettings.filter(func(u) = u.user.equal(new)).size();
+    conflicts += blockedUsers.filter(func(b) = b.blocker.equal(new) or b.blocked.equal(new)).size();
+    conflicts += pinnedMessages.filter(func(p) = p.pinned_by.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in messaging_domain");
+
+    var changed = 0;
+
+    let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
+    changed += rolesOld;
+    let convOld = conversations.filter(func(c) = c.participants.any(func(p) = p.equal(old))).size();
+    changed += convOld;
+    let msgOld = messages.filter(func(m) = m.sender.equal(old)).size();
+    changed += msgOld;
+    let receiptOld = receipts.filter(func(r) = r.user.equal(old)).size();
+    changed += receiptOld;
+    let unreadOld = unread.filter(func(u) = u.user.equal(old)).size();
+    changed += unreadOld;
+    let bulkOld = bulkAccessPrincipals.any(func(p) = p.equal(old));
+    if (bulkOld) changed += 1;
+    let groupMetaOld = groupMetadata.filter(func(g) = g.members.any(func(p) = p.equal(old)) or (switch (g.deleted_by) { case (?p) p.equal(old); case null false })).size();
+    changed += groupMetaOld;
+    let clubMemOld = clubMemberships.filter(func(m) = m.user.equal(old)).size();
+    changed += clubMemOld;
+    let compAdminOld = competitionAdmins.filter(func(c) = c.user.equal(old)).size();
+    changed += compAdminOld;
+    let dmAttachOld = dmAttachmentsDisabled.any(func(p) = p.equal(old));
+    if (dmAttachOld) changed += 1;
+    let groupRoleOld = groupRoles.filter(func(g) = g.user.equal(old)).size();
+    changed += groupRoleOld;
+    let joinReqOld = joinRequests.filter(func(j) = j.user.equal(old)).size();
+    changed += joinReqOld;
+    let pollOld = polls.filter(func(p) = p.creator.equal(old)).size();
+    changed += pollOld;
+    let pollVoteOld = pollVotes.filter(func(v) = v.user.equal(old)).size();
+    changed += pollVoteOld;
+    let muteOld = mutePreferences.filter(func(m) = m.user.equal(old)).size();
+    changed += muteOld;
+    let dmLinkOld = dmLinks.filter(func(d) = d.a.equal(old) or d.b.equal(old)).size();
+    changed += dmLinkOld;
+    let forwardOld = forwardRecords.filter(func(f) = f.original_sender.equal(old)).size();
+    changed += forwardOld;
+    let schedOld = scheduledMessages.filter(func(s) = s.sender.equal(old)).size();
+    changed += schedOld;
+    let attachOld = attachmentMetadata.filter(func(a) = a.uploader.equal(old)).size();
+    changed += attachOld;
+    let reactOld = reactions.filter(func(r) = r.user.equal(old)).size();
+    changed += reactOld;
+    let settingsOld = userMessagingSettings.filter(func(u) = u.user.equal(old)).size();
+    changed += settingsOld;
+    let blockOld = blockedUsers.filter(func(b) = b.blocker.equal(old) or b.blocked.equal(old)).size();
+    changed += blockOld;
+    let pinOld = pinnedMessages.filter(func(p) = p.pinned_by.equal(old)).size();
+    changed += pinOld;
+
+    // Ephemeral: presence pings — keep NEW row on conflict, drop OLD.
+    let presenceOldHas = presence.any(func(p) = p.user.equal(old));
+    if (presenceOldHas) changed += 1;
+    // Ephemeral: typing pings — keep NEW (conversation_id, user) row on conflict, drop OLD.
+    let typingOldCount = typingPings.filter(func(t) = t.user.equal(old)).size();
+    if (typingOldCount > 0) changed += typingOldCount;
+
+    if (not dry_run) {
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (convOld > 0) conversations := conversations.map(func(c) = if (c.participants.any(func(p) = p.equal(old))) ({ c with participants = Array.filterMap<Principal, Principal>(c.participants, func(p) = if (p.equal(old)) null else ?p).concat(if (c.participants.any(func(p) = p.equal(new))) [] else [new]) }) else c);
+      if (msgOld > 0) messages := messages.map(func(m) = if (m.sender.equal(old)) ({ m with sender = new }) else m);
+      if (receiptOld > 0) receipts := receipts.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (unreadOld > 0) unread := unread.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
+      if (groupMetaOld > 0) groupMetadata := groupMetadata.map(func(g) {
+        let members2 = if (g.members.any(func(p) = p.equal(old))) {
+          Array.filterMap<Principal, Principal>(g.members, func(p) = if (p.equal(old)) null else ?p).concat(if (g.members.any(func(p) = p.equal(new))) [] else [new])
+        } else g.members;
+        let deletedBy2 = switch (g.deleted_by) { case (?p) if (p.equal(old)) ?new else ?p; case null null };
+        { g with members = members2; deleted_by = deletedBy2 }
+      });
+      if (clubMemOld > 0) clubMemberships := clubMemberships.map(func(m) = if (m.user.equal(old)) ({ m with user = new }) else m);
+      if (compAdminOld > 0) competitionAdmins := competitionAdmins.map(func(c) = if (c.user.equal(old)) ({ c with user = new }) else c);
+      if (dmAttachOld) dmAttachmentsDisabled := dmAttachmentsDisabled.filter(func(p) = not p.equal(old)).concat([new]);
+      if (groupRoleOld > 0) groupRoles := groupRoles.map(func(g) = if (g.user.equal(old)) ({ g with user = new }) else g);
+      if (joinReqOld > 0) joinRequests := joinRequests.map(func(j) = if (j.user.equal(old)) ({ j with user = new }) else j);
+      if (pollOld > 0) polls := polls.map(func(p) = if (p.creator.equal(old)) ({ p with creator = new }) else p);
+      if (pollVoteOld > 0) pollVotes := pollVotes.map(func(v) = if (v.user.equal(old)) ({ v with user = new }) else v);
+      if (muteOld > 0) mutePreferences := mutePreferences.map(func(m) = if (m.user.equal(old)) ({ m with user = new }) else m);
+      if (dmLinkOld > 0) dmLinks := dmLinks.map(func(d) = { d with a = (if (d.a.equal(old)) new else d.a); b = (if (d.b.equal(old)) new else d.b) });
+      if (forwardOld > 0) forwardRecords := forwardRecords.map(func(f) = if (f.original_sender.equal(old)) ({ f with original_sender = new }) else f);
+      if (schedOld > 0) scheduledMessages := scheduledMessages.map(func(s) = if (s.sender.equal(old)) ({ s with sender = new }) else s);
+      if (attachOld > 0) attachmentMetadata := attachmentMetadata.map(func(a) = if (a.uploader.equal(old)) ({ a with uploader = new }) else a);
+      if (reactOld > 0) reactions := reactions.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (settingsOld > 0) userMessagingSettings := userMessagingSettings.map(func(u) = if (u.user.equal(old)) ({ u with user = new }) else u);
+      if (blockOld > 0) blockedUsers := blockedUsers.map(func(b) = { b with blocker = (if (b.blocker.equal(old)) new else b.blocker); blocked = (if (b.blocked.equal(old)) new else b.blocked) });
+      if (pinOld > 0) pinnedMessages := pinnedMessages.map(func(p) = if (p.pinned_by.equal(old)) ({ p with pinned_by = new }) else p);
+
+      if (presenceOldHas) {
+        let newHas = presence.any(func(p) = p.user.equal(new));
+        if (newHas) {
+          presence := presence.filter(func(p) = not p.user.equal(old));
+        } else {
+          presence := presence.map(func(p) = if (p.user.equal(old)) ({ p with user = new }) else p);
+        };
+      };
+      if (typingOldCount > 0) {
+        typingPings := typingPings.filter(func(t) = not (t.user.equal(old) and typingPings.any(func(u) = u.conversation_id == t.conversation_id and u.user.equal(new))))
+          .map(func(t) = if (t.user.equal(old)) ({ t with user = new }) else t);
+      };
+    };
+
+    #ok(changed)
+  };
+
 };

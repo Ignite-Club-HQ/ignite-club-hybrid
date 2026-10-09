@@ -1,0 +1,51 @@
+# Move one person's account from an old secure-sign-in ID to a new one on the
+# blockchain backend (every canister). Dry run unless confirm = yes; the dry
+# run checks every canister first and nothing is written if any refuses.
+name: Move account to new sign-in ID
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_principal:
+        description: "OLD sign-in ID (the one that has the profile)"
+        required: true
+        default: "mbrvi-lvde7-gdspi-hamp3-nxj43-p4tt6-at6q5-jlbit-eehve-7xqwc-wqe"
+      new_principal:
+        description: "NEW sign-in ID (shown on the create-profile screen)"
+        required: true
+        default: "tavrz-s2z7n-5jkdv-dpho3-pvd3c-yog77-euqar-egkuv-xbzei-ftw3d-eqe"
+      confirm:
+        description: "Type yes to actually move (otherwise dry run)"
+        required: false
+        default: "no"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: move-account
+  cancel-in-progress: false
+
+jobs:
+  move:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Install ICP SDK
+        run: mkdir -p /tmp/icp-run && cd /tmp/icp-run && npm init -y >/dev/null && npm install @icp-sdk/core@^5.4.0 --no-fund --no-audit
+      - name: Move account
+        env:
+          DEPLOYER_PEM: ${{ secrets.DEPLOYER_PEM }}
+          OLD_PRINCIPAL: ${{ inputs.old_principal }}
+          NEW_PRINCIPAL: ${{ inputs.new_principal }}
+          CONFIRM: ${{ inputs.confirm }}
+          IDS_FILE: ${{ github.workspace }}/deploy/mainnet/.icp/data/mappings/ic.ids.json
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOYER_PEM" ]; then echo "::error::DEPLOYER_PEM secret is not set."; exit 1; fi
+          cp scripts/move-account.mjs /tmp/icp-run/
+          node /tmp/icp-run/move-account.mjs

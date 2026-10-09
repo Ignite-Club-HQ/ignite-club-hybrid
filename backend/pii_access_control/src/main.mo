@@ -688,4 +688,89 @@ persistent actor class Main(governorInit : Principal) {
     log_audit(caller, "system", "emergency", "shutdown", true, "Emergency shutdown executed");
     #Ok
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  //
+  // Covered: PiiRecord.domain_owner, PiiRecord.readers (array, dedupe on
+  // collision), GuardianRelationship.guardian (merges `children` into the
+  // NEW row if both old and new already have one), AuditRecord.requesting_principal.
+  // Not touched: governor (governor variable itself), club_domain_canister
+  // (canister wiring), ClubReadGrant.club_id / PiiRecord.pii_id / field_id /
+  // GuardianRelationship.children (content/club ids, not user identities).
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    auth(caller);
+    if (not isGovernor(caller)) return #Err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #Err("Invalid principal");
+    if (old.equal(new)) return #Err("old and new principal must differ");
+    if (isGovernor(old)) return #Err("Cannot rekey the governor");
+
+    // Conflict guard: non-ephemeral records already referencing `new`.
+    // (GuardianRelationship is excluded here: both-exist is a merge, not a
+    // conflict, per spec.)
+    var conflicts = 0;
+    conflicts += pii_records.filter(func(r : PiiRecord) : Bool = r.domain_owner.equal(new) or r.readers.any(func(p : Principal) : Bool = p.equal(new))).size();
+    conflicts += audit_log.filter(func(a : AuditRecord) : Bool = a.requesting_principal.equal(new)).size();
+    if (conflicts > 0) return #Err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in pii_access_control");
+
+    var changed = 0;
+
+    let newPiiRecords = pii_records.map(func(r : PiiRecord) : PiiRecord {
+      var out = r;
+      var touched = false;
+      if (out.domain_owner.equal(old)) { out := { out with domain_owner = new }; touched := true };
+      if (out.readers.any(func(p : Principal) : Bool = p.equal(old))) {
+        let hasNew = out.readers.any(func(p : Principal) : Bool = p.equal(new));
+        var newReaders : [Principal] = [];
+        for (p in out.readers.values()) {
+          if (p.equal(old)) {
+            if (not hasNew and not newReaders.any(func(q : Principal) : Bool = q.equal(new))) { newReaders := newReaders.concat([new]) };
+          } else if (not newReaders.any(func(q : Principal) : Bool = q.equal(p))) {
+            newReaders := newReaders.concat([p]);
+          };
+        };
+        out := { out with readers = newReaders };
+        touched := true;
+      };
+      if (touched) { changed += 1 };
+      out
+    });
+
+    let newAuditLog = audit_log.map(func(a : AuditRecord) : AuditRecord {
+      if (a.requesting_principal.equal(old)) { changed += 1; { a with requesting_principal = new } } else { a }
+    });
+
+    // Guardian relationships: merge `children` into the NEW row if both old
+    // and new already exist; otherwise just rename old's guardian to new.
+    let oldGuardian = guardian_relationships.find(func(g : GuardianRelationship) : Bool = g.guardian.equal(old));
+    let newGuardian = guardian_relationships.find(func(g : GuardianRelationship) : Bool = g.guardian.equal(new));
+    let newGuardianRelationships = switch (oldGuardian) {
+      case (?og) {
+        changed += 1;
+        switch (newGuardian) {
+          case (?ng) {
+            var mergedChildren = ng.children;
+            for (c in og.children.values()) {
+              if (not mergedChildren.any(func(x : Text) : Bool = x == c)) { mergedChildren := mergedChildren.concat([c]) };
+            };
+            guardian_relationships
+              .filter(func(g : GuardianRelationship) : Bool = not g.guardian.equal(old))
+              .map(func(g : GuardianRelationship) : GuardianRelationship = if (g.guardian.equal(new)) { { g with children = mergedChildren } } else { g });
+          };
+          case null {
+            guardian_relationships.map(func(g : GuardianRelationship) : GuardianRelationship = if (g.guardian.equal(old)) { { g with guardian = new } } else { g });
+          };
+        };
+      };
+      case null { guardian_relationships };
+    };
+
+    if (not dry_run) {
+      pii_records := newPiiRecords;
+      audit_log := newAuditLog;
+      guardian_relationships := newGuardianRelationships;
+    };
+
+    #Ok(changed)
+  };
 }
