@@ -59,6 +59,8 @@ export interface ScheduleTarget {
   club_id?: string | null;
   group_id?: string | null;
   conversation_id?: string | null;
+  /** Entitlement-only: club that owns a group chat. Never persisted or matched. */
+  pro_club_id?: string | null;
 }
 
 export interface CreateScheduledMessageInput extends ScheduleTarget {

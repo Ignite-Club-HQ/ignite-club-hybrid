@@ -179,7 +179,7 @@ export default function GroupChatPage() {
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [miniLeagueInviteOpen, setMiniLeagueInviteOpen] = useState(false);
   const scheduleTarget: ScheduleTarget | null = groupId
-    ? { chat_type: "group", group_id: groupId }
+    ? { chat_type: "group", group_id: groupId, pro_club_id: group?.club_id ?? null }
     : null;
   const [replyTo, setReplyTo] = useChatDraftReply<GroupMessage>(groupId);
   const [editingMessage, setEditingMessage] = useState<GroupMessage | null>(null);

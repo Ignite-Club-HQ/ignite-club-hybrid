@@ -28,7 +28,9 @@ import type { ScheduleTarget } from "@/hooks/useScheduledMessages";
 // via what canister) is a pending product decision; this is intentionally
 // left as-is (no behavior change) until that's decided.
 export function useScheduleProAccess(target: ScheduleTarget | null | undefined) {
-  const hasExplicitClub = !!target?.club_id;
+  // A club-owned group chat is club-scoped for entitlement purposes.
+  const explicitClubId = target?.club_id ?? (target?.team_id ? null : target?.pro_club_id ?? null);
+  const hasExplicitClub = !!explicitClubId;
   const hasTeam = !!target?.team_id;
   const teamId = target?.team_id ?? null;
 
@@ -66,7 +68,7 @@ export function useScheduleProAccess(target: ScheduleTarget | null | undefined) 
   });
 
   const resolvedClubId = hasExplicitClub
-    ? target!.club_id!
+    ? explicitClubId!
     : teamLookupEnabled
       ? (teamLookup.data ?? null)
       : null;
