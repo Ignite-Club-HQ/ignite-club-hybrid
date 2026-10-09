@@ -164,8 +164,7 @@ export function PinVaultSheet({
         };
       }
       return { club: hydrated, team: [] };
-    },
-  });
+  }
 
   const selectionMatches = (t: PinnedVaultTarget) =>
     (t.vault_folder_id ?? null) === (currentSelection.vault_folder_id ?? null)
