@@ -45,7 +45,20 @@ workflows:
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
-        script: npm run build:live
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
       - name: Scaffold and sync Capacitor Android
         working_directory: frontend
         script: |
@@ -70,7 +83,20 @@ workflows:
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
-        script: npm run build:live
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
       - name: Scaffold and sync Capacitor Android
         working_directory: frontend
         script: |
@@ -124,7 +150,20 @@ workflows:
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
-        script: npm run build:live
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
       - name: Scaffold and sync Capacitor iOS
         working_directory: frontend
         script: |
@@ -172,7 +211,20 @@ workflows:
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
-        script: npm run build:live
+        script: |
+          # The live build bakes the backend addresses into the bundle; the guard
+          # (frontend/scripts/check-live-config.mjs) exits before vite runs when
+          # they are missing. Same public defaults as
+          # .github/workflows/deploy-frontend-canister.yml; both can be overridden
+          # by setting the variable in a Codemagic environment group.
+          export IGNITE_LIVE_SUPABASE_URL="${IGNITE_LIVE_SUPABASE_URL:-https://cdrxmelhysdqrccttsjg.supabase.co}"
+          export IGNITE_LIVE_SUPABASE_ANON_KEY="${IGNITE_LIVE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkcnhtZWxoeXNkcXJjY3R0c2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NzIxMTMsImV4cCI6MjEwNjE0ODExM30.vRVXXZuoh-9VliT7vt6lw2nANooLwlgOeyfBTFLQjXw}"
+          # Blockchain canister IDs come from the committed ID table (same source
+          # the site build uses), so the native bundle targets the real canisters.
+          if [ -f ../deploy/mainnet/.icp/data/mappings/ic.ids.json ]; then
+            export IGNITE_LIVE_ICP_CANISTER_IDS_JSON="$(cat ../deploy/mainnet/.icp/data/mappings/ic.ids.json | tr -d '\n ')"
+          fi
+          npm run build:live
       - name: Scaffold and sync Capacitor iOS
         working_directory: frontend
         script: |
