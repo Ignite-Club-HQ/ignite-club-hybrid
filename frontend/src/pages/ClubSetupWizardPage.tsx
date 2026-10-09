@@ -1233,6 +1233,7 @@ function ReviewStep({
                         initialThemeEnabled={club.theme_enabled ?? true}
                         onSave={() => {
                           setBrandingSaved(true);
+                          qc.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
                           qc.invalidateQueries({ queryKey: ["club", clubId, "setup"] });
                           qc.invalidateQueries({ queryKey: ["club-themes"] });
                         }}

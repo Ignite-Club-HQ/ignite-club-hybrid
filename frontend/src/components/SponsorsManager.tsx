@@ -206,6 +206,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
       toast({ title: "Sponsor added successfully" });
+      queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
       resetForm();
     },
     onError: (error) => {
@@ -284,6 +285,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
       toast({ title: "Sponsor updated successfully" });
+      queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
       resetForm();
     },
     onError: (error) => {
@@ -307,6 +309,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
       toast({ title: "Sponsor deleted" });
+      queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
     },
     onError: (error) => {
       toast({ title: "Failed to delete sponsor", description: error.message, variant: "destructive" });
