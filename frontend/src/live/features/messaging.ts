@@ -147,7 +147,7 @@ export async function sendLiveMessage(
   // (the full address still travels in `url`, which allows 2048 chars).
   const safeBody = body.trim() === "" && attachment ? " " : body;
   const refId = attachment ? await shortCanisterRefId(attachment.refId) : "";
-  return unwrapCandid(
+  const sent = await unwrapCandid(
     actor.send_message(
       conversationId,
       safeBody,
