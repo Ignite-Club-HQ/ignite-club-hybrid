@@ -20,6 +20,12 @@ persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
   public query func cycles_balance() : async Nat { Cycles.balance() };
 
+  /// Public: aggregate record counts (shown in admin settings). Counts only —
+  /// no record contents, so no PII is exposed.
+  public query func usage_stats() : async { clubs : Nat; teams : Nat; accounts : Nat; news_posts : Nat } {
+    { clubs = profiles.size(); teams = teams.size(); accounts = accounts.size(); news_posts = newsPosts.size() };
+  };
+
   /// Public: remaining cycles of any canister this canister controls
   /// (the frontend asset canister adds club_domain as a controller at deploy
   /// time so admin settings can show its balance too).

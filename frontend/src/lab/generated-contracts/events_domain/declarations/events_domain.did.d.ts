@@ -948,6 +948,14 @@ export interface Main {
     { 'Ok' : EventSeries } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    { 'children' : bigint, 'events' : bigint, 'rsvps' : bigint }
+  >,
 }
 export interface MiniLeagueRsvp {
   'subject' : RsvpSubject,

@@ -1051,6 +1051,19 @@ export interface Main {
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    {
+      'teams' : bigint,
+      'clubs' : bigint,
+      'accounts' : bigint,
+      'news_posts' : bigint,
+    }
+  >,
   'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,
 }
 export interface MemberPayment {

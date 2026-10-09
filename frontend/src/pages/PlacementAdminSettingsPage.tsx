@@ -46,6 +46,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { PhotoStoresCard } from "@/components/admin/PhotoStoresCard";
 import { FreePlanLimitsCard } from "@/components/admin/FreePlanLimitsCard";
 import { CanisterBalancesCard } from "@/components/admin/CanisterBalancesCard";
+import { CanisterUsageCard } from "@/components/admin/CanisterUsageCard";
 import { ClubProOverridesCard } from "@/components/admin/ClubProOverridesCard";
 import { SeedTestDataCard } from "@/components/admin/SeedTestDataCard";
 import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
@@ -873,6 +874,7 @@ export default function PlacementAdminSettingsPage() {
         <FreePlanLimitsCard />
         <PhotoStoresCard />
         <CanisterBalancesCard />
+        <CanisterUsageCard />
         <ClubProOverridesCard />
         <SeedTestDataCard />
 

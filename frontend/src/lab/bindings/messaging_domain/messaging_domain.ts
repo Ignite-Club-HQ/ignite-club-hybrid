@@ -915,6 +915,15 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: aggregate record counts (shown in admin settings). Counts only —
+     * / no record contents, so no PII is exposed.
+     */
+    usage_stats(): Promise<{
+        messages: bigint;
+        scheduled_messages: bigint;
+        conversations: bigint;
+    }>;
     vote_poll(poll_id: string, option_index: number): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -2017,6 +2026,14 @@ export class Messaging_domain implements messaging_domainInterface {
     }> {
         const result = await this.actor.upsert_group_metadata(arg0, arg1, arg2, to_candid_opt_n12(arg3), to_candid_opt_n12(arg4), arg5);
         return from_candid_variant_n2(result);
+    }
+    async usage_stats(): Promise<{
+        messages: bigint;
+        scheduled_messages: bigint;
+        conversations: bigint;
+    }> {
+        const result = await this.actor.usage_stats();
+        return result;
     }
     async vote_poll(arg0: string, arg1: number): Promise<{
         __kind__: "Ok";

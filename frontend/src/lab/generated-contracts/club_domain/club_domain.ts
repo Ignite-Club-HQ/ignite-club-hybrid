@@ -1428,6 +1428,16 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: aggregate record counts (shown in admin settings). Counts only —
+     * / no record contents, so no PII is exposed.
+     */
+    usage_stats(): Promise<{
+        teams: bigint;
+        clubs: bigint;
+        accounts: bigint;
+        news_posts: bigint;
+    }>;
     whoami(): Promise<{
         __kind__: "Ok";
         Ok: Account;
@@ -3345,6 +3355,15 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.update_news_post(arg0, arg1, arg2, arg3, to_candid_opt_n43(arg4), arg5, to_candid_opt_n17(arg6), to_candid_vec_n44(arg7), arg8);
         return from_candid_variant_n47(result);
+    }
+    async usage_stats(): Promise<{
+        teams: bigint;
+        clubs: bigint;
+        accounts: bigint;
+        news_posts: bigint;
+    }> {
+        const result = await this.actor.usage_stats();
+        return result;
     }
     async whoami(): Promise<{
         __kind__: "Ok";
