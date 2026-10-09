@@ -29,7 +29,15 @@
 - [ ] Review codemagic.yaml (user to share)
 - [ ] Side-by-side test, move custom domain, delete Netlify
 
-## Country-based backend routing
+## Native apps (Codemagic)
+- [x] codemagic.yaml: android-debug, android-release, ios-debug (simulator, unsigned), ios-release (App Store IPA); native projects scaffolded in CI, not committed
+- [x] @capacitor/cli + @capacitor/android + @capacitor/ios devDependencies, lockfile refreshed
+- [ ] User: connect repo in Codemagic, run android-debug then ios-debug (zero secrets)
+- [ ] User: android_release secrets (keystore + google-services.json) for Play
+- [ ] User: Apple Developer Program + App Store Connect integration named `ignite` + APP_STORE_APP_ID for TestFlight
+- [ ] Push on native: install @capacitor-firebase/messaging (absent today, so nativePush silently no-ops) + APNs key in Firebase
+- [ ] Deep links for store release: Android intent filters + iOS AASA/associated-domains on the published domain
+
 - [x] Per-club overrides removed; club home country + locked backend recorded on Supabase clubs
 - [x] Sign-in screen follows visitor country; ?auth= override kept for testing
 - [x] club_domain records club home country (set-once for admins, governor can correct; batched read) — needs mainnet redeploy
