@@ -813,22 +813,24 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
                 const p = profile[0];
                 if (!p || p.deleted_at_ms.length) return null;
                 const hasPro = !!sub && (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
-                const primary = hexColorToHsl(settings.theme_primary_color[0]);
-                if (!hasPro || !primary || !settings.theme_enabled) return null;
+                const st = settings[0];
+                if (!st) return null;
+                const primary = hexColorToHsl(st.theme_primary_color[0]);
+                if (!hasPro || !primary || !st.theme_enabled) return null;
                 return {
                   clubId: p.id,
                   clubName: p.name,
                   logoUrl: p.logo_url[0] ?? null,
-                  showLogoInHeader: settings.header_logo_enabled,
-                  showNameInHeader: settings.header_club_name_enabled,
-                  logoOnlyMode: settings.logo_only_mode,
+                  showLogoInHeader: st.header_logo_enabled,
+                  showNameInHeader: st.header_club_name_enabled,
+                  logoOnlyMode: st.logo_only_mode,
                   sport: (p as { sport?: [] | [string] }).sport?.[0] ?? null,
                   primary,
-                  secondary: hexColorToHsl(settings.theme_secondary_color[0]),
-                  accent: hexColorToHsl(settings.theme_accent_color[0]),
-                  darkPrimary: hexColorToHsl(settings.theme_dark_primary_color[0]),
-                  darkSecondary: hexColorToHsl(settings.theme_dark_secondary_color[0]),
-                  darkAccent: hexColorToHsl(settings.theme_dark_accent_color[0]),
+                  secondary: hexColorToHsl(st.theme_secondary_color[0]),
+                  accent: hexColorToHsl(st.theme_accent_color[0]),
+                  darkPrimary: hexColorToHsl(st.theme_dark_primary_color[0]),
+                  darkSecondary: hexColorToHsl(st.theme_dark_secondary_color[0]),
+                  darkAccent: hexColorToHsl(st.theme_dark_accent_color[0]),
                 };
               } catch {
                 return null;
