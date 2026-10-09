@@ -604,6 +604,11 @@ export interface Main {
     { 'Ok' : Array<NewsPost> } |
       { 'Err' : string }
   >,
+  'list_news_targets' : ActorMethod<
+    [Array<string>],
+    { 'Ok' : Array<[string, string, string]> } |
+      { 'Err' : string }
+  >,
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
@@ -948,6 +953,11 @@ export interface Main {
   >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_news_post_target' : ActorMethod<
+    [string, string, [] | [string]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
