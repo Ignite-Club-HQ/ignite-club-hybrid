@@ -2096,6 +2096,42 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(profile)
   };
 
+  // ---- Club home country (jurisdiction routing metadata) ----
+
+  func homeCountryOf(club_id : Text) : ?Text {
+    for (entry in clubHomeCountries.values()) {
+      if (entry.0 == club_id) return ?entry.1;
+    };
+    null
+  };
+
+  // Records the club's home country. Club admins can set it once (right
+  // after creation); afterwards only the governor can change it, since a
+  // country move is a deliberate data migration, never a toggle.
+  public shared ({ caller }) func set_club_home_country(club_id : Text, country : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAdmin(caller, club_id)) return #Err("Club admin required");
+    if (country.size() != 2) return #Err("Invalid country code");
+    for (c in country.chars()) {
+      if (c < 'A' or c > 'Z') return #Err("Invalid country code");
+    };
+    switch (homeCountryOf(club_id)) {
+      case (?_) {
+        if (not isGovernor(caller)) return #Err("Home country already set");
+      };
+      case null {};
+    };
+    clubHomeCountries := clubHomeCountries.filter(func(entry) = entry.0 != club_id);
+    clubHomeCountries := clubHomeCountries.concat([(club_id, country)]);
+    #Ok
+  };
+
+  // Batched read matching get_club_profiles; public like the club profile
+  // itself — a country code is not sensitive.
+  public query func get_club_home_countries(ids : [Text]) : async { #Ok : [(Text, Text)]; #Err : Text } {
+    #Ok(clubHomeCountries.filter(func(entry) = ids.any(func(id) = id == entry.0)))
+  };
+
   public shared ({ caller }) func request_club_join(club_id : Text) : async { #Ok : Types.ClubJoinRequest; #Err : Text } {
     auth(caller);
     if (isExcluded(caller, club_id)) return #Err("Forbidden");
