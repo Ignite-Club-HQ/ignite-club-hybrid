@@ -9,8 +9,6 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { withFeatureBackend } from "@/live/featureBackend";
-import { getLiveMyRoleGrants } from "@/live/features/membership";
 import igniteIcon from "@/assets/ignite-icon.png";
 
 /**
@@ -29,6 +27,10 @@ function useUserHasAnyClub() {
     staleTime: 60_000,
     queryFn: async (): Promise<boolean> => {
       if (isIcp) {
+        const [{ withFeatureBackend }, { getLiveMyRoleGrants }] = await Promise.all([
+          import("@/live/featureRouter"),
+          import("@/live/features/membership"),
+        ]);
         return withFeatureBackend("membership", {
           supabase: async () => false,
           icp: async (ctx) => {
