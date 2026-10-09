@@ -64,6 +64,18 @@ workflows:
         script: |
           npx cap add android
           npx cap sync android
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          f = ('<intent-filter><action android:name="android.intent.action.VIEW" />'
+               '<category android:name="android.intent.category.DEFAULT" />'
+               '<category android:name="android.intent.category.BROWSABLE" />'
+               '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
+          if "com.igniteclubhq.app" not in s:
+              s = s.replace("</activity>", f + "</activity>", 1)
+          open(p, "w").write(s)
+          PY
       - name: Build debug APK
         working_directory: frontend/android
         script: ./gradlew assembleDebug
@@ -102,6 +114,18 @@ workflows:
         script: |
           npx cap add android
           npx cap sync android
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          f = ('<intent-filter><action android:name="android.intent.action.VIEW" />'
+               '<category android:name="android.intent.category.DEFAULT" />'
+               '<category android:name="android.intent.category.BROWSABLE" />'
+               '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
+          if "com.igniteclubhq.app" not in s:
+              s = s.replace("</activity>", f + "</activity>", 1)
+          open(p, "w").write(s)
+          PY
       - name: Decode signing and Firebase files
         working_directory: frontend/android
         script: |
@@ -169,6 +193,12 @@ workflows:
         script: |
           npx cap add ios
           npx cap sync ios
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PL" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string com.igniteclubhq.app" "$PL"
       - name: Build for simulator (no signing)
         working_directory: frontend/ios/App
         script: |
@@ -230,6 +260,12 @@ workflows:
         script: |
           npx cap add ios
           npx cap sync ios
+          # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
+          PL=ios/App/App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "$PL" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "$PL"
+          /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string com.igniteclubhq.app" "$PL"
       - name: Install CocoaPods dependencies
         working_directory: frontend/ios/App
         script: pod install
