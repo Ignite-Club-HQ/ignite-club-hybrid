@@ -13,10 +13,25 @@
 #                       CM_KEY_PASSWORD        key password
 #                       GOOGLE_SERVICES_JSON   base64 of google-services.json
 #                                              (Firebase project used for push)
+#   ios-debug       — unsigned simulator build, no Apple account needed. Use this
+#                     to prove the iOS pipeline before touching any Apple secrets.
+#   ios-release     — signed App Store IPA. Requires an Apple Developer Program
+#                     membership and an "app_store_connect" integration in the
+#                     Codemagic team settings (Issuer ID + Key ID + the .p8 key
+#                     downloaded from App Store Connect -> Users and Access ->
+#                     Integrations -> App Store Connect API, App Manager access).
+#                     Optional group "ios_release":
+#                       GOOGLE_SERVICE_INFO_PLIST  base64 of GoogleService-Info.plist
+#                                                  (Firebase, for push on iOS)
 #
-# Both workflows build the live web app (frontend/scripts/build-live.mjs ->
-# frontend/dist-live), scaffold the Capacitor android/ project in CI (it is
-# intentionally NOT committed), sync, then build with Gradle.
+# All workflows build the live web app (frontend/scripts/build-live.mjs ->
+# frontend/dist-live), scaffold the Capacitor native project in CI (android/ and
+# ios/ are intentionally NOT committed), sync, then build natively.
+#
+# NOTE on the install step: scripts/ensure-frontend-deps.mjs lives at the repo
+# root, not inside frontend/. It resolves frontend/ itself, so it must be run
+# from the repo root — running it with working_directory: frontend fails with
+# "Cannot find module".
 
 workflows:
   android-debug:
@@ -27,7 +42,6 @@ workflows:
       node: 22
     scripts:
       - name: Install frontend dependencies
-        working_directory: frontend
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
@@ -53,7 +67,6 @@ workflows:
         - android_release
     scripts:
       - name: Install frontend dependencies
-        working_directory: frontend
         script: node scripts/ensure-frontend-deps.mjs
       - name: Build live web app
         working_directory: frontend
@@ -94,3 +107,106 @@ workflows:
         script: ./gradlew bundleRelease
     artifacts:
       - frontend/android/app/build/outputs/bundle/release/*.aab
+
+  # Proves the iOS toolchain without needing an Apple Developer account: builds
+  # the app for the simulator with code signing switched off. The .app cannot be
+  # installed on a real phone — it is a pipeline check only.
+  ios-debug:
+    name: iOS debug build (simulator, unsigned)
+    max_build_duration: 90
+    instance_type: mac_mini_m2
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: npm run build:live
+      - name: Scaffold and sync Capacitor iOS
+        working_directory: frontend
+        script: |
+          npx cap add ios
+          npx cap sync ios
+      - name: Build for simulator (no signing)
+        working_directory: frontend/ios/App
+        script: |
+          xcodebuild build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+    artifacts:
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/**/*.app
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-release:
+    name: iOS release IPA (App Store)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      # Must match the name of the App Store Connect integration created in
+      # Codemagic team settings.
+      app_store_connect: ignite
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.igniteclubhq.app
+      groups:
+        - ios_release
+      vars:
+        XCODE_WORKSPACE: App.xcworkspace
+        XCODE_SCHEME: App
+        # App Store Connect -> App -> General -> App Information -> the numeric
+        # Apple ID. Fill this in once the app record exists.
+        APP_STORE_APP_ID: 0000000000
+    scripts:
+      - name: Install frontend dependencies
+        script: node scripts/ensure-frontend-deps.mjs
+      - name: Build live web app
+        working_directory: frontend
+        script: npm run build:live
+      - name: Scaffold and sync Capacitor iOS
+        working_directory: frontend
+        script: |
+          npx cap add ios
+          npx cap sync ios
+      - name: Install CocoaPods dependencies
+        working_directory: frontend/ios/App
+        script: pod install
+      - name: Decode Firebase config (push on iOS)
+        working_directory: frontend/ios/App
+        script: |
+          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > GoogleService-Info.plist
+          else
+            echo "GOOGLE_SERVICE_INFO_PLIST not set - building without Firebase push"
+          fi
+      - name: Increment build number
+        working_directory: frontend/ios/App
+        script: |
+          agvtool new-version -all $((${CM_BUILD_NUMBER:-1}))
+          agvtool new-marketing-version 1.0.$(${CM_BUILD_NUMBER:-1})
+      - name: Set up code signing
+        working_directory: frontend/ios/App
+        script: xcode-project use-profiles
+      - name: Build App Store IPA
+        working_directory: frontend/ios/App
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - frontend/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
