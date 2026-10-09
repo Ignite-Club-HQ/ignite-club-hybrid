@@ -170,6 +170,9 @@ export async function sendLiveMessage(
  * ?job=push-kick) to deliver queued notifications now instead of waiting for
  * the 5-minute backstop worker. Never blocks or fails the send.
  */
+// icp-guard: allow push delivery — this edge function only drains the
+// notification_queue canister for Internet Identity users, so it is the ICP
+// path itself, not a Supabase write that needs routing to a canister.
 function kickIcpPush() {
   try {
     void import("@/integrations/supabase/client")
