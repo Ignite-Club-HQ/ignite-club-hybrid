@@ -62,6 +62,11 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'set_capacity_limit' : IDL.Func([IDL.Nat64], [Result], []),
     'set_club_domain_canister' : IDL.Func([IDL.Principal], [Result], []),
   });

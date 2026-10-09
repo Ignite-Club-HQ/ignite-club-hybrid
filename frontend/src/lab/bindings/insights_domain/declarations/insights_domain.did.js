@@ -428,6 +428,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'resolve_admin_alert' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],

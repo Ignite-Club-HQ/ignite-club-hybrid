@@ -691,6 +691,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1707,6 +1714,16 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.reject_join_request(arg0, arg1);
         return from_candid_variant_n1(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n85(result);
+    }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1764,7 +1781,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n85(arg3), to_candid_opt_n12(arg4));
+        const result = await this.actor.send_message(arg0, arg1, arg2, to_candid_opt_n86(arg3), to_candid_opt_n12(arg4));
         return from_candid_variant_n17(result);
     }
     async send_system_message(arg0: Principal, arg1: string, arg2: string): Promise<{
@@ -1894,7 +1911,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_recap_config(to_candid_opt_n88(arg0));
+        const result = await this.actor.set_recap_config(to_candid_opt_n89(arg0));
         return from_candid_variant_n1(result);
     }
     async set_typing(arg0: string, arg1: boolean, arg2: string): Promise<{
@@ -1975,7 +1992,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.unread_count(arg0);
-        return from_candid_variant_n89(result);
+        return from_candid_variant_n90(result);
     }
     async unread_count_by_club(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1985,7 +2002,7 @@ export class Messaging_domain implements messaging_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.unread_count_by_club(arg0);
-        return from_candid_variant_n90(result);
+        return from_candid_variant_n91(result);
     }
     async update_group(arg0: string, arg1: string | null, arg2: string | null, arg3: string | null, arg4: boolean | null): Promise<{
         __kind__: "Ok";
@@ -1994,7 +2011,7 @@ export class Messaging_domain implements messaging_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_group(arg0, to_candid_opt_n12(arg1), to_candid_opt_n12(arg2), to_candid_opt_n12(arg3), to_candid_opt_n91(arg4));
+        const result = await this.actor.update_group(arg0, to_candid_opt_n12(arg1), to_candid_opt_n12(arg2), to_candid_opt_n12(arg3), to_candid_opt_n92(arg4));
         return from_candid_variant_n2(result);
     }
     async update_message(arg0: string, arg1: string): Promise<{
@@ -2047,19 +2064,19 @@ export class Messaging_domain implements messaging_domainInterface {
     }
     async ws_close(arg0: CanisterWsCloseArguments): Promise<CanisterWsCloseResult> {
         const result = await this.actor.ws_close(arg0);
-        return from_candid_CanisterWsCloseResult_n92(result);
+        return from_candid_CanisterWsCloseResult_n93(result);
     }
     async ws_get_messages(arg0: CanisterWsGetMessagesArguments): Promise<CanisterWsGetMessagesResult> {
         const result = await this.actor.ws_get_messages(arg0);
-        return from_candid_CanisterWsGetMessagesResult_n93(result);
+        return from_candid_CanisterWsGetMessagesResult_n94(result);
     }
     async ws_message(arg0: CanisterWsMessageArguments, arg1: WsAppMessage | null): Promise<CanisterWsMessageResult> {
-        const result = await this.actor.ws_message(arg0, to_candid_opt_n95(arg1));
-        return from_candid_CanisterWsMessageResult_n98(result);
+        const result = await this.actor.ws_message(arg0, to_candid_opt_n96(arg1));
+        return from_candid_CanisterWsMessageResult_n99(result);
     }
     async ws_open(arg0: CanisterWsOpenArguments): Promise<CanisterWsOpenResult> {
         const result = await this.actor.ws_open(arg0);
-        return from_candid_CanisterWsOpenResult_n99(result);
+        return from_candid_CanisterWsOpenResult_n100(result);
     }
 }
 function from_candid_AttachmentMetadata_n34(value: _AttachmentMetadata): AttachmentMetadata {
@@ -2068,16 +2085,16 @@ function from_candid_AttachmentMetadata_n34(value: _AttachmentMetadata): Attachm
 function from_candid_Attachment_n21(value: _Attachment): Attachment {
     return from_candid_record_n22(value);
 }
-function from_candid_CanisterWsCloseResult_n92(value: _CanisterWsCloseResult): CanisterWsCloseResult {
+function from_candid_CanisterWsCloseResult_n93(value: _CanisterWsCloseResult): CanisterWsCloseResult {
     return from_candid_variant_n1(value);
 }
-function from_candid_CanisterWsGetMessagesResult_n93(value: _CanisterWsGetMessagesResult): CanisterWsGetMessagesResult {
-    return from_candid_variant_n94(value);
+function from_candid_CanisterWsGetMessagesResult_n94(value: _CanisterWsGetMessagesResult): CanisterWsGetMessagesResult {
+    return from_candid_variant_n95(value);
 }
-function from_candid_CanisterWsMessageResult_n98(value: _CanisterWsMessageResult): CanisterWsMessageResult {
+function from_candid_CanisterWsMessageResult_n99(value: _CanisterWsMessageResult): CanisterWsMessageResult {
     return from_candid_variant_n1(value);
 }
-function from_candid_CanisterWsOpenResult_n99(value: _CanisterWsOpenResult): CanisterWsOpenResult {
+function from_candid_CanisterWsOpenResult_n100(value: _CanisterWsOpenResult): CanisterWsOpenResult {
     return from_candid_variant_n1(value);
 }
 function from_candid_Conversation_n14(value: _Conversation): Conversation {
@@ -3195,23 +3212,23 @@ function from_candid_variant_n84(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n89(value: {
-    Ok: _Unread;
+function from_candid_variant_n85(value: {
+    ok: bigint;
 } | {
-    Err: string;
+    err: string;
 }): {
-    __kind__: "Ok";
-    Ok: Unread;
+    __kind__: "ok";
+    ok: bigint;
 } | {
-    __kind__: "Err";
-    Err: string;
+    __kind__: "err";
+    err: string;
 } {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
     } : value;
 }
 function from_candid_variant_n9(value: {
@@ -3234,6 +3251,25 @@ function from_candid_variant_n9(value: {
     } : value;
 }
 function from_candid_variant_n90(value: {
+    Ok: _Unread;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Unread;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n91(value: {
     Ok: Array<_ClubUnreadSummary>;
 } | {
     Err: string;
@@ -3252,7 +3288,7 @@ function from_candid_variant_n90(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n94(value: {
+function from_candid_variant_n95(value: {
     Ok: _CanisterOutputCertifiedMessages;
 } | {
     Err: string;
@@ -3317,11 +3353,11 @@ function from_candid_vec_n74(value: Array<_MessageWithReactions>): Array<Message
 function from_candid_vec_n80(value: Array<_RecentConversation>): Array<RecentConversation> {
     return value.map((x)=>from_candid_RecentConversation_n81(x));
 }
-function to_candid_Attachment_n86(value: Attachment): _Attachment {
-    return to_candid_record_n87(value);
+function to_candid_Attachment_n87(value: Attachment): _Attachment {
+    return to_candid_record_n88(value);
 }
-function to_candid_WsAppMessage_n96(value: WsAppMessage): _WsAppMessage {
-    return to_candid_variant_n97(value);
+function to_candid_WsAppMessage_n97(value: WsAppMessage): _WsAppMessage {
+    return to_candid_variant_n98(value);
 }
 function to_candid_opt_n12(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
@@ -3329,19 +3365,19 @@ function to_candid_opt_n12(value: string | null): [] | [string] {
 function to_candid_opt_n61(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n85(value: Attachment | null): [] | [_Attachment] {
-    return value === null ? candid_none() : candid_some(to_candid_Attachment_n86(value));
+function to_candid_opt_n86(value: Attachment | null): [] | [_Attachment] {
+    return value === null ? candid_none() : candid_some(to_candid_Attachment_n87(value));
 }
-function to_candid_opt_n88(value: RecapConfig | null): [] | [_RecapConfig] {
+function to_candid_opt_n89(value: RecapConfig | null): [] | [_RecapConfig] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n91(value: boolean | null): [] | [boolean] {
+function to_candid_opt_n92(value: boolean | null): [] | [boolean] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n95(value: WsAppMessage | null): [] | [_WsAppMessage] {
-    return value === null ? candid_none() : candid_some(to_candid_WsAppMessage_n96(value));
+function to_candid_opt_n96(value: WsAppMessage | null): [] | [_WsAppMessage] {
+    return value === null ? candid_none() : candid_some(to_candid_WsAppMessage_n97(value));
 }
-function to_candid_record_n87(value: {
+function to_candid_record_n88(value: {
     url?: string;
     kind: string;
     ref_id: string;
@@ -3356,7 +3392,7 @@ function to_candid_record_n87(value: {
         ref_id: value.ref_id
     };
 }
-function to_candid_variant_n97(value: {
+function to_candid_variant_n98(value: {
     __kind__: "chat_poke";
     chat_poke: {
         conversation_id: string;

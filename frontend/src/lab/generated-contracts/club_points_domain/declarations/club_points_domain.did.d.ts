@@ -202,6 +202,11 @@ export interface Main {
     { 'Ok' : RewardRedemption } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'removeBulkAccessPrincipal' : ActorMethod<
     [Principal],
     { 'Ok' : null } |

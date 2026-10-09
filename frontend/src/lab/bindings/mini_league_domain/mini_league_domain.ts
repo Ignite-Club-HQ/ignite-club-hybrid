@@ -306,6 +306,13 @@ export interface MainInterface {
     }>;
     my_availability(): Promise<Array<MiniLeagueSessionAvailability>>;
     my_leagues(): Promise<Array<MiniLeague>>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     remove_admin(mini_league_id: string, user_id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -876,6 +883,16 @@ export class Mini_league_domain implements mini_league_domainInterface {
         const result = await this.actor.my_leagues();
         return from_candid_vec_n40(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n59(result);
+    }
     async remove_admin(arg0: string, arg1: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -924,7 +941,7 @@ export class Mini_league_domain implements mini_league_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_availability(arg0, arg1, arg2);
-        return from_candid_variant_n59(result);
+        return from_candid_variant_n60(result);
     }
     async set_mini_league_status(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -1796,6 +1813,25 @@ function from_candid_variant_n57(value: {
     } : value;
 }
 function from_candid_variant_n59(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n60(value: {
     Ok: _MiniLeagueSessionAvailability;
 } | {
     Err: string;

@@ -441,6 +441,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : TeamEntry, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'removeBulkAccessPrincipal' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

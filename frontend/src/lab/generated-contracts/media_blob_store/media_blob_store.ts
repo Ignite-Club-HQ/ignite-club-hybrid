@@ -113,6 +113,13 @@ export interface media_blob_storeInterface {
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     set_capacity_limit(limit_bytes: bigint): Promise<Result>;
     set_club_domain_canister(canister_id: Principal): Promise<Result>;
 }
@@ -158,6 +165,16 @@ export class Media_blob_store implements media_blob_storeInterface {
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);
         return from_candid_Result_n1(result);
+    }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n8(result);
     }
     async set_capacity_limit(arg0: bigint): Promise<Result> {
         const result = await this.actor.set_capacity_limit(arg0);
@@ -235,6 +252,25 @@ function from_candid_variant_n6(value: {
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
+    } : value;
+}
+function from_candid_variant_n8(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
     } : value;
 }
 export interface CreateActorOptions {

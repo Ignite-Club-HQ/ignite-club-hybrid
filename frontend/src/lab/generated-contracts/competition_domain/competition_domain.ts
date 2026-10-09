@@ -381,6 +381,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1190,6 +1197,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.register_team(arg0, arg1, arg2);
         return from_candid_variant_n16(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n58(result);
+    }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -1258,7 +1275,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.send_competition_broadcast(arg0, arg1, arg2);
-        return from_candid_variant_n58(result);
+        return from_candid_variant_n59(result);
     }
     async set_chat_settings(arg0: string, arg1: boolean, arg2: boolean, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -1288,7 +1305,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_division_hide_ladder(arg0, arg1, arg2);
-        return from_candid_variant_n59(result);
+        return from_candid_variant_n60(result);
     }
     async set_match_result(arg0: string, arg1: number, arg2: number, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -1328,7 +1345,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.suggest_eoi_teams(arg0);
-        return from_candid_variant_n60(result);
+        return from_candid_variant_n61(result);
     }
     async sync_my_competition_access(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1358,7 +1375,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trim_rounds(arg0, arg1);
-        return from_candid_variant_n61(result);
+        return from_candid_variant_n62(result);
     }
     async update_competition_settings(arg0: string, arg1: string, arg2: string | null, arg3: string, arg4: string, arg5: number, arg6: number, arg7: number): Promise<{
         __kind__: "Ok";
@@ -1397,7 +1414,7 @@ export class Competition_domain implements competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n7(arg3), to_candid_opt_n62(arg4), to_candid_opt_n7(arg5), to_candid_opt_n7(arg6), to_candid_opt_n63(arg7), to_candid_opt_n63(arg8), to_candid_opt_n63(arg9), to_candid_opt_n7(arg10), arg11);
+        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n7(arg3), to_candid_opt_n63(arg4), to_candid_opt_n7(arg5), to_candid_opt_n7(arg6), to_candid_opt_n64(arg7), to_candid_opt_n64(arg8), to_candid_opt_n64(arg9), to_candid_opt_n7(arg10), arg11);
         return from_candid_variant_n57(result);
     }
 }
@@ -2308,31 +2325,31 @@ function from_candid_variant_n57(value: {
     } : value;
 }
 function from_candid_variant_n58(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n59(value: {
     Ok: _Broadcast;
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
     Ok: Broadcast;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n59(value: {
-    Ok: _DivisionSetting;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: DivisionSetting;
 } | {
     __kind__: "Err";
     Err: string;
@@ -2365,6 +2382,25 @@ function from_candid_variant_n6(value: {
     } : value;
 }
 function from_candid_variant_n60(value: {
+    Ok: _DivisionSetting;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: DivisionSetting;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n61(value: {
     Ok: Array<_EoiTeamSuggestion>;
 } | {
     Err: string;
@@ -2383,7 +2419,7 @@ function from_candid_variant_n60(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n61(value: {
+function from_candid_variant_n62(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -2442,10 +2478,10 @@ function from_candid_vec_n39(value: Array<_Competition>): Array<Competition> {
 function from_candid_vec_n40(value: Array<_RoleGrant>): Array<RoleGrant> {
     return value.map((x)=>from_candid_RoleGrant_n9(x));
 }
-function to_candid_opt_n62(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n63(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n63(value: number | null): [] | [number] {
+function to_candid_opt_n64(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_opt_n7(value: string | null): [] | [string] {

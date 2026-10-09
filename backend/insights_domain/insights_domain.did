@@ -275,6 +275,11 @@ type Main =
                                  Err: text;
                                  Ok;
                                });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    resolve_admin_alert: (id: text) -> (variant {
                                          Err: text;
                                          Ok: AdminAlert;

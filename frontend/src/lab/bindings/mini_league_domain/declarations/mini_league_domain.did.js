@@ -373,6 +373,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'my_leagues' : IDL.Func([], [IDL.Vec(MiniLeague)], ['query']),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
