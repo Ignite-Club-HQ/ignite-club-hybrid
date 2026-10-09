@@ -185,3 +185,24 @@ describe("resolveAuthBackend with the ?auth= device override", () => {
     expect(resolveAuthBackend()).toBe("supabase");
   });
 });
+
+describe("isAuthChoiceOverrideOrigin — the ?auth= override is blockchain-copy-only", () => {
+  it("allows the override on the ICP frontend canister addresses", () => {
+    expect(isAuthChoiceOverrideOrigin("proe7-kqaaa-aaaas-qg6gq-cai.icp0.io")).toBe(true);
+    expect(isAuthChoiceOverrideOrigin("proe7-kqaaa-aaaas-qg6gq-cai.icp.net")).toBe(true);
+    expect(isAuthChoiceOverrideOrigin("proe7-kqaaa-aaaas-qg6gq-cai.ic0.app")).toBe(true);
+    expect(isAuthChoiceOverrideOrigin("proe7-kqaaa-aaaas-qg6gq-cai.raw.icp0.io")).toBe(true);
+  });
+
+  it("allows the override on localhost for development", () => {
+    expect(isAuthChoiceOverrideOrigin("localhost")).toBe(true);
+    expect(isAuthChoiceOverrideOrigin("127.0.0.1")).toBe(true);
+  });
+
+  it("blocks the override on the main site and custom domains", () => {
+    expect(isAuthChoiceOverrideOrigin("ignite-canister-connect.lovable.app")).toBe(false);
+    expect(isAuthChoiceOverrideOrigin("id-preview--9e0ff3f7.lovable.app")).toBe(false);
+    expect(isAuthChoiceOverrideOrigin("app.igniteexample.com")).toBe(false);
+    expect(isAuthChoiceOverrideOrigin("icp0.io.evil.example")).toBe(false);
+  });
+});
