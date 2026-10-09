@@ -110,6 +110,13 @@ function resolveDerivationOrigin(): string | undefined {
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
+  // Phone app: built-in copy runs from a private origin, so sign in through
+  // the canister-hosted bridge in the system browser (same account as web).
+  const { Capacitor } = await import("@capacitor/core");
+  if (Capacitor.isNativePlatform()) {
+    const { createNativeAuthClient } = await import("./nativeInternetIdentity");
+    return createNativeAuthClient();
+  }
   const provider = resolveInternetIdentityProvider(target);
   const derivationOrigin = resolveDerivationOrigin();
   const { AuthClient } = await import("@icp-sdk/auth/client");
