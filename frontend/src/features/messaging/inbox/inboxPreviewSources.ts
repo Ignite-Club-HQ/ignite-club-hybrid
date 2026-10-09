@@ -352,10 +352,20 @@ async function fetchIcpChatGroupsWithMessages() {
   const adminClubIds = new Set(roleGrants.filter((g) => g.role === "club_admin").map(clubOf));
   const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
   const { listLiveGroupsByClub } = await import("@/live/features/messaging");
-  await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map((c) =>
-    ensureLiveDefaultClubChats(ctx, c.id).catch(() => undefined)));
+  const setupErrors: string[] = [];
+  await Promise.all(liveClubs.filter((c) => adminClubIds.has(c.id)).map(async (c) => {
+    try {
+      const failed = await ensureLiveDefaultClubChats(ctx, c.id);
+      failed.forEach((f) => setupErrors.push(`${c.name}: ${f}`));
+    } catch (err) {
+      setupErrors.push(`${c.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+    }
+  }));
   const perClub = await Promise.all(liveClubs.map(async (club) => {
-    const rows = await listLiveGroupsByClub(ctx, club.id).catch(() => []);
+    const rows = await listLiveGroupsByClub(ctx, club.id).catch((err) => {
+      if (adminClubIds.has(club.id)) setupErrors.push(`${club.name}: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300));
+      return [];
+    });
     return rows
       .filter((g) => g.isMember && !g.teamId && g.kind === "group")
       .map((g) => ({
@@ -389,7 +399,7 @@ async function fetchIcpChatGroupsWithMessages() {
       } as unknown as InboxPreview;
     } catch { /* one unreadable chat must not blank the rest */ }
   }));
-  return { groups, latestMessages };
+  return { groups, latestMessages, setupErrors };
 }
 
 export async function fetchChatGroupsWithMessages(client: InboxDataClient, userId: string) {
