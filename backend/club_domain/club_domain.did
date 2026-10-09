@@ -1085,6 +1085,15 @@ type Main =
        Err: text;
        Ok: NewsPost;
      });
+   /// Public: aggregate record counts (shown in admin settings). Counts only —
+   /// no record contents, so no PII is exposed.
+   usage_stats: () ->
+    (record {
+       accounts: nat;
+       clubs: nat;
+       news_posts: nat;
+       teams: nat;
+     }) query;
    whoami: () -> (variant {
                     Err: text;
                     Ok: Account;
