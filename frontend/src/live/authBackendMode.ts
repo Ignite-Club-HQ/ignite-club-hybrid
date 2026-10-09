@@ -43,13 +43,33 @@ export function isIcpAuthAvailable(): boolean {
 const AUTH_CHOICE_KEY = "ignite.authChoice";
 
 /**
+ * The `?auth=` testing override is only honoured on the blockchain copy's own
+ * addresses (the ICP frontend canister) and on localhost for development.
+ * Everywhere else — the main site and any custom domain — the country routing
+ * rules decide the sign-in screen with no way around them.
+ */
+export function isAuthChoiceOverrideOrigin(hostname?: string): boolean {
+  const host = (hostname ?? window.location.hostname).toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1") return true;
+  return (
+    host.endsWith(".icp0.io") ||
+    host.endsWith(".icp.net") ||
+    host.endsWith(".ic0.app") ||
+    host.endsWith(".raw.icp0.io") ||
+    host.endsWith(".raw.icp.net")
+  );
+}
+
+/**
  * Device-level sign-in choice from `?auth=email` / `?auth=icp` (persisted so
  * the whole app — not just /auth — stays on that system after the redirect).
  * Lets the on-chain copy run in Supabase mode even when routing would pick ICP,
  * and vice versa. `?auth=auto` clears the choice and follows routing again.
+ * Ignored entirely on origins where the override is not allowed.
  */
 export function readAuthChoice(): BackendProvider | null {
   try {
+    if (!isAuthChoiceOverrideOrigin()) return null;
     const param = new URLSearchParams(window.location.search).get("auth");
     if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
     else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
