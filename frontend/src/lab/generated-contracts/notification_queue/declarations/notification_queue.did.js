@@ -283,6 +283,11 @@ export const idlFactory = ({ IDL }) => {
     'mark_failed' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
     'mark_read' : IDL.Func([IDL.Text], [Result], []),
     'mark_sent' : IDL.Func([IDL.Text, IDL.Text], [ScheduledResult], []),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'record_chat_notify_batch' : IDL.Func(
         [
           IDL.Text,

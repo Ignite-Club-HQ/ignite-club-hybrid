@@ -703,6 +703,11 @@ export interface Main {
     { 'Ok' : MemberPayment } |
       { 'Err' : string }
   >,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'move_child_to_team' : ActorMethod<
     [string, [] | [string], string],
     { 'Ok' : Child } |

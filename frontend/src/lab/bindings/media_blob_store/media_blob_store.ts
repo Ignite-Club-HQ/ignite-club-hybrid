@@ -112,6 +112,13 @@ export interface media_blob_storeInterface {
     get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
@@ -161,6 +168,16 @@ export class Media_blob_store implements media_blob_storeInterface {
     async http_request(arg0: HttpRequest): Promise<HttpResponse> {
         const result = await this.actor.http_request(arg0);
         return result;
+    }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n8(result);
     }
     async put_chunk(arg0: string, arg1: number, arg2: Uint8Array): Promise<Result> {
         const result = await this.actor.put_chunk(arg0, arg1, arg2);

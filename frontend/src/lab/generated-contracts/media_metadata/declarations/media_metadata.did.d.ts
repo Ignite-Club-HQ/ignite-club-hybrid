@@ -127,6 +127,11 @@ export interface Main {
     Array<GalleryChatCard>
   >,
   'list_reactions' : ActorMethod<[string], Array<Reaction>>,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'register_asset' : ActorMethod<
     [string, string, string, string, string, string, bigint],
     { 'Ok' : Asset } |

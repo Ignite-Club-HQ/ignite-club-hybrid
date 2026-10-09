@@ -168,6 +168,13 @@ export interface MainInterface {
     mark_failed(id: string, error: string): Promise<ScheduledResult>;
     mark_read(id: string): Promise<Result>;
     mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     record_chat_notify_batch(message_id: string, conversation_id: string, sender: string, preview: string, recipients: Array<string>, mute_list: Array<string>): Promise<ChatNotifyBatchResult>;
     record_digest_item(id: string, message_id: string, message_type: DigestSource, chat_scope_id: string, message_created_at_ms: bigint, classification: DigestClassification, summary: string, topic: string | null, mentions: Array<string>, provider: string | null): Promise<DigestResult>;
     recover(): Promise<ResultNat16>;
@@ -477,13 +484,23 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.mark_sent(arg0, arg1);
         return from_candid_ScheduledResult_n8(result);
     }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n51(result);
+    }
     async record_chat_notify_batch(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<ChatNotifyBatchResult> {
         const result = await this.actor.record_chat_notify_batch(arg0, arg1, arg2, arg3, arg4, arg5);
-        return from_candid_ChatNotifyBatchResult_n51(result);
+        return from_candid_ChatNotifyBatchResult_n52(result);
     }
     async record_digest_item(arg0: string, arg1: string, arg2: DigestSource, arg3: string, arg4: bigint, arg5: DigestClassification, arg6: string, arg7: string | null, arg8: Array<string>, arg9: string | null): Promise<DigestResult> {
-        const result = await this.actor.record_digest_item(arg0, arg1, to_candid_DigestSource_n30(arg2), arg3, arg4, to_candid_DigestClassification_n52(arg5), arg6, to_candid_opt_n22(arg7), arg8, to_candid_opt_n22(arg9));
-        return from_candid_DigestResult_n54(result);
+        const result = await this.actor.record_digest_item(arg0, arg1, to_candid_DigestSource_n30(arg2), arg3, arg4, to_candid_DigestClassification_n53(arg5), arg6, to_candid_opt_n22(arg7), arg8, to_candid_opt_n22(arg9));
+        return from_candid_DigestResult_n55(result);
     }
     async recover(): Promise<ResultNat16> {
         const result = await this.actor.recover();
@@ -507,7 +524,7 @@ export class Notification_queue implements notification_queueInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n56(result);
+        return from_candid_variant_n51(result);
     }
     async remove_device_tokens(arg0: string, arg1: Array<string>): Promise<DeviceTokenCountResult> {
         const result = await this.actor.remove_device_tokens(arg0, arg1);
@@ -554,7 +571,7 @@ export class Notification_queue implements notification_queueInterface {
         return from_candid_PushAlertSettings_n42(result);
     }
 }
-function from_candid_ChatNotifyBatchResult_n51(value: _ChatNotifyBatchResult): ChatNotifyBatchResult {
+function from_candid_ChatNotifyBatchResult_n52(value: _ChatNotifyBatchResult): ChatNotifyBatchResult {
     return from_candid_variant_n24(value);
 }
 function from_candid_ChatType_n17(value: _ChatType): ChatType {
@@ -575,8 +592,8 @@ function from_candid_DigestClassification_n39(value: _DigestClassification): Dig
 function from_candid_DigestItem_n35(value: _DigestItem): DigestItem {
     return from_candid_record_n36(value);
 }
-function from_candid_DigestResult_n54(value: _DigestResult): DigestResult {
-    return from_candid_variant_n55(value);
+function from_candid_DigestResult_n55(value: _DigestResult): DigestResult {
+    return from_candid_variant_n56(value);
 }
 function from_candid_DigestResults_n32(value: _DigestResults): DigestResults {
     return from_candid_variant_n33(value);
@@ -1041,26 +1058,7 @@ function from_candid_variant_n50(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n55(value: {
-    Ok: _DigestItem;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: DigestItem;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: from_candid_DigestItem_n35(value.Ok)
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n56(value: {
+function from_candid_variant_n51(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1077,6 +1075,25 @@ function from_candid_variant_n56(value: {
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
+    } : value;
+}
+function from_candid_variant_n56(value: {
+    Ok: _DigestItem;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: DigestItem;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: from_candid_DigestItem_n35(value.Ok)
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
     } : value;
 }
 function from_candid_variant_n6(value: {
@@ -1143,8 +1160,8 @@ function from_candid_vec_n46(value: Array<_DeviceToken>): Array<DeviceToken> {
 function to_candid_ChatType_n58(value: ChatType): _ChatType {
     return to_candid_variant_n59(value);
 }
-function to_candid_DigestClassification_n52(value: DigestClassification): _DigestClassification {
-    return to_candid_variant_n53(value);
+function to_candid_DigestClassification_n53(value: DigestClassification): _DigestClassification {
+    return to_candid_variant_n54(value);
 }
 function to_candid_DigestSource_n30(value: DigestSource): _DigestSource {
     return to_candid_variant_n31(value);
@@ -1176,7 +1193,7 @@ function to_candid_variant_n31(value: DigestSource): {
         Team: null
     } : value;
 }
-function to_candid_variant_n53(value: DigestClassification): {
+function to_candid_variant_n54(value: DigestClassification): {
     Question: null;
 } | {
     Info: null;

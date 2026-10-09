@@ -121,6 +121,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     my_guardian_children(): Promise<Array<string>>;
     pii_vetkey_verification_key(): Promise<Uint8Array>;
     purge_club_grants(club_id: string): Promise<{
@@ -326,6 +333,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.grant_pii_read_club(arg0, arg1, arg2);
         return from_candid_variant_n1(result);
     }
+    async merge_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.merge_principal(arg0, arg1, arg2);
+        return from_candid_variant_n10(result);
+    }
     async my_guardian_children(): Promise<Array<string>> {
         const result = await this.actor.my_guardian_children();
         return result;
@@ -342,7 +359,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.purge_club_grants(arg0);
-        return from_candid_variant_n10(result);
+        return from_candid_variant_n11(result);
     }
     async register_pii(arg0: string, arg1: string, arg2: Uint8Array, arg3: Principal): Promise<{
         __kind__: "Ok";
@@ -352,7 +369,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         Err: string;
     }> {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
-        return from_candid_variant_n11(result);
+        return from_candid_variant_n12(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -362,7 +379,7 @@ export class Pii_access_control implements pii_access_controlInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n12(result);
+        return from_candid_variant_n10(result);
     }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
@@ -438,44 +455,6 @@ function from_candid_variant_n1(value: {
     } : value;
 }
 function from_candid_variant_n10(value: {
-    Ok: number;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: number;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n11(value: {
-    Ok: _EncryptedPii;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: EncryptedPii;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_variant_n12(value: {
     ok: bigint;
 } | {
     err: string;
@@ -492,6 +471,44 @@ function from_candid_variant_n12(value: {
     } : "err" in value ? {
         __kind__: "err",
         err: value.err
+    } : value;
+}
+function from_candid_variant_n11(value: {
+    Ok: number;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: number;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n12(value: {
+    Ok: _EncryptedPii;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: EncryptedPii;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
     } : value;
 }
 function from_candid_variant_n4(value: {

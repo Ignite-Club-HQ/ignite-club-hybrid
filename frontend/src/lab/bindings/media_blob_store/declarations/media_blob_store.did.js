@@ -57,6 +57,11 @@ export const idlFactory = ({ IDL }) => {
     'get_usage' : IDL.Func([], [Usage], ['query']),
     'health' : IDL.Func([], [Health], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
+    'merge_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'put_chunk' : IDL.Func(
         [IDL.Text, IDL.Nat32, IDL.Vec(IDL.Nat8)],
         [Result],

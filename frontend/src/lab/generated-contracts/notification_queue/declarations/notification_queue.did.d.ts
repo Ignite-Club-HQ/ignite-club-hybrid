@@ -102,6 +102,11 @@ export interface Main {
   'mark_failed' : ActorMethod<[string, string], ScheduledResult>,
   'mark_read' : ActorMethod<[string], Result>,
   'mark_sent' : ActorMethod<[string, string], ScheduledResult>,
+  'merge_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'record_chat_notify_batch' : ActorMethod<
     [string, string, string, string, Array<string>, Array<string>],
     ChatNotifyBatchResult
