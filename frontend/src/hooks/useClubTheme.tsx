@@ -795,12 +795,49 @@ export function ClubThemeProvider({ children }: { children: ReactNode }) {
       if (!clubIds.length) return guardClubListResult(`club-themes:${user.id}`, []);
 
       if (isIcp) {
-        // The canister has no theme-HSL columns, so no ICP club can appear in
-        // the themed (Pro + theme) catalogue. Returning [] here keeps the
-        // dropdown's locked-club branch (sourced from all-user-clubs in
-        // AppHeader) as the only entry point and avoids a Supabase `clubs`
-        // round-trip that can only fail for canister IDs.
-        return guardClubListResult(`club-themes:${user.id}`, []);
+        // Theme colours live in club_domain ClubSettings as "#RRGGBB" text.
+        const [{ getLiveClubProfile, getLiveClubSettings, getLiveClubSubscription }, { hexColorToHsl }] = await Promise.all([
+          import("@/live/features/club"),
+          import("@/lib/hexToHsl"),
+        ]);
+        const themes = await withFeatureBackend("membership", {
+          supabase: async () => [] as ClubTheme[],
+          icp: async (ctx) => {
+            const rows = await Promise.all(clubIds.map(async (clubId): Promise<ClubTheme | null> => {
+              try {
+                const [profile, settings, sub] = await Promise.all([
+                  getLiveClubProfile(ctx, clubId),
+                  getLiveClubSettings(ctx, clubId),
+                  getLiveClubSubscription(ctx, clubId).catch(() => null),
+                ]);
+                const p = profile[0];
+                if (!p || p.deleted_at_ms.length) return null;
+                const hasPro = !!sub && (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
+                const primary = hexColorToHsl(settings.theme_primary_color[0]);
+                if (!hasPro || !primary || !settings.theme_enabled) return null;
+                return {
+                  clubId: p.id,
+                  clubName: p.name,
+                  logoUrl: p.logo_url[0] ?? null,
+                  showLogoInHeader: settings.header_logo_enabled,
+                  showNameInHeader: settings.header_club_name_enabled,
+                  logoOnlyMode: settings.logo_only_mode,
+                  sport: (p as { sport?: [] | [string] }).sport?.[0] ?? null,
+                  primary,
+                  secondary: hexColorToHsl(settings.theme_secondary_color[0]),
+                  accent: hexColorToHsl(settings.theme_accent_color[0]),
+                  darkPrimary: hexColorToHsl(settings.theme_dark_primary_color[0]),
+                  darkSecondary: hexColorToHsl(settings.theme_dark_secondary_color[0]),
+                  darkAccent: hexColorToHsl(settings.theme_dark_accent_color[0]),
+                };
+              } catch {
+                return null;
+              }
+            }));
+            return rows.filter((r): r is ClubTheme => r !== null);
+          },
+        });
+        return guardClubListResult(`club-themes:${user.id}`, themes);
       }
 
       // Fetch clubs with theme settings (left join on subscriptions)
