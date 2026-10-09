@@ -615,4 +615,95 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 1; governor; roles; pointsHistory; userClubPoints; childClubPoints; clubRewards; redemptions; cooldowns })
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("Old and new principal must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+    func textMatchesOld(t : Text) : Bool { t == oldText or t == ("principal:" # oldText) };
+    func rekeyText(t : Text) : Text {
+      if (t == oldText) newText
+      else if (t == ("principal:" # oldText)) "principal:" # newText
+      else t
+    };
+
+    // Conflict guard: count NON-EPHEMERAL records already referencing `new`.
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += pointsHistory.filter(func(p) = p.user_id == ?newText or p.created_by == ?new).size();
+    conflicts += userClubPoints.filter(func(u) = u.user_id == newText).size();
+    conflicts += redemptions.filter(func(r) = r.user_id == ?newText or r.verified_by == ?new).size();
+    conflicts += cooldowns.filter(func(c) = c.user_id == newText).size();
+    conflicts += bulkAccessPrincipals.filter(func(p) = p.equal(new)).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in club_points_domain");
+
+    var changed = 0;
+
+    // roles
+    let newRoles = roles.map(func(r : Types.RoleGrant) : Types.RoleGrant {
+      if (r.user.equal(old)) { changed += 1; { r with user = new } } else r
+    });
+
+    // pointsHistory (user_id text, created_by principal)
+    let newPointsHistory = pointsHistory.map(func(p : Types.PointsHistoryEntry) : Types.PointsHistoryEntry {
+      var row = p;
+      if (textMatchesOld(switch (row.user_id) { case (?u) u; case null "" }) and row.user_id != null) {
+        changed += 1; row := { row with user_id = ?rekeyText(switch (row.user_id) { case (?u) u; case null "" }) };
+      };
+      switch (row.created_by) {
+        case (?cb) { if (cb.equal(old)) { changed += 1; row := { row with created_by = ?new } } };
+        case null {};
+      };
+      row
+    });
+
+    // userClubPoints (keyed by user_id text) — move entry; if new already exists (shouldn't due to guard)
+    let newUserClubPoints = userClubPoints.map(func(u : Types.UserClubPoints) : Types.UserClubPoints {
+      if (u.user_id == oldText) { changed += 1; { u with user_id = newText } } else u
+    });
+
+    // redemptions (user_id text, verified_by principal)
+    let newRedemptions = redemptions.map(func(r : Types.RewardRedemption) : Types.RewardRedemption {
+      var row = r;
+      if (row.user_id == ?oldText) { changed += 1; row := { row with user_id = ?newText } };
+      switch (row.verified_by) {
+        case (?vb) { if (vb.equal(old)) { changed += 1; row := { row with verified_by = ?new } } };
+        case null {};
+      };
+      row
+    });
+
+    // cooldowns (user_id text, keyed with other fields but not a unique key by itself)
+    let newCooldowns = cooldowns.map(func(c : Types.PointsCooldown) : Types.PointsCooldown {
+      if (c.user_id == oldText) { changed += 1; { c with user_id = newText } } else c
+    });
+
+    // bulkAccessPrincipals (array of principals) — replace, dedupe if new already present
+    var newBulkAccess = bulkAccessPrincipals;
+    if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
+      changed += 1;
+      if (bulkAccessPrincipals.any(func(p) = p.equal(new))) {
+        newBulkAccess := bulkAccessPrincipals.filter(func(p) = not p.equal(old));
+      } else {
+        newBulkAccess := bulkAccessPrincipals.map(func(p) = if (p.equal(old)) new else p);
+      };
+    };
+
+    if (not dry_run) {
+      roles := newRoles;
+      pointsHistory := newPointsHistory;
+      userClubPoints := newUserClubPoints;
+      redemptions := newRedemptions;
+      cooldowns := newCooldowns;
+      bulkAccessPrincipals := newBulkAccess;
+    };
+
+    #ok(changed)
+  };
+
 };
