@@ -1845,9 +1845,9 @@ export default function ClubChatPage() {
       {/* Header */}
       <ChatHeaderShell
         type="club"
-        name={club?.name || "Club"}
+        name={clubDisplayName || "Club"}
         sublabel={clubHeaderSublabel}
-        avatarUrl={club?.logo_url}
+        avatarUrl={clubAvatarUrl}
         onOpenDetails={() => setMembersOpen(true)}
         leftSlot={
           <ChatSearchBar onSearch={setSearchQuery} isOpen={searchOpen} onOpenChange={setSearchOpen} isSearching={isSearchFetching} />
@@ -1891,9 +1891,9 @@ export default function ClubChatPage() {
         onOpenChange={setMembersOpen}
         chatType="club"
         chatId={clubId!}
-        name={club?.name || "Club"}
+        name={clubDisplayName || "Club"}
         sublabel="Club chat"
-        avatarUrl={club?.logo_url}
+        avatarUrl={clubAvatarUrl}
       />
 
 
