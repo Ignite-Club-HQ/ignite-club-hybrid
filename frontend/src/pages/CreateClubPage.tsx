@@ -202,6 +202,7 @@ export default function CreateClubPage() {
             slugifyClubName(name.trim()) || `club-${Date.now()}`,
             description.trim() || "",
             sport || null,
+            homeCountry,
           );
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
