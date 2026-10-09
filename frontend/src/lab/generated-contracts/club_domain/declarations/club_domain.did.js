@@ -1381,6 +1381,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),
+    'usage_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'teams' : IDL.Nat,
+            'clubs' : IDL.Nat,
+            'accounts' : IDL.Nat,
+            'news_posts' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'whoami' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],

@@ -1142,6 +1142,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EventSeries, 'Err' : IDL.Text })],
         [],
       ),
+    'usage_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'children' : IDL.Nat,
+            'events' : IDL.Nat,
+            'rsvps' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
   });
   
   return Main;

@@ -603,6 +603,18 @@ export interface Main {
     { 'Ok' : GroupMetadata } |
       { 'Err' : string }
   >,
+  /**
+   * / Public: aggregate record counts (shown in admin settings). Counts only —
+   * / no record contents, so no PII is exposed.
+   */
+  'usage_stats' : ActorMethod<
+    [],
+    {
+      'messages' : bigint,
+      'scheduled_messages' : bigint,
+      'conversations' : bigint,
+    }
+  >,
   'vote_poll' : ActorMethod<
     [string, number],
     { 'Ok' : null } |

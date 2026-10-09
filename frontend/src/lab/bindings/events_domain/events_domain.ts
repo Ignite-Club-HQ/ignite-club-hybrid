@@ -1064,6 +1064,15 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    /**
+     * / Public: aggregate record counts (shown in admin settings). Counts only —
+     * / no record contents, so no PII is exposed.
+     */
+    usage_stats(): Promise<{
+        children: bigint;
+        events: bigint;
+        rsvps: bigint;
+    }>;
 }
 export interface EventGroup {
     id: string;
@@ -2415,6 +2424,14 @@ export class Events_domain implements events_domainInterface {
     }> {
         const result = await this.actor.update_series(arg0, arg1, arg2, arg3, to_candid_opt_n3(arg4), arg5);
         return from_candid_variant_n168(result);
+    }
+    async usage_stats(): Promise<{
+        children: bigint;
+        events: bigint;
+        rsvps: bigint;
+    }> {
+        const result = await this.actor.usage_stats();
+        return result;
     }
 }
 function from_candid_ActiveGame_n81(value: _ActiveGame): ActiveGame {

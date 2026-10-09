@@ -866,6 +866,17 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : GroupMetadata, 'Err' : IDL.Text })],
         [],
       ),
+    'usage_stats' : IDL.Func(
+        [],
+        [
+          IDL.Record({
+            'messages' : IDL.Nat,
+            'scheduled_messages' : IDL.Nat,
+            'conversations' : IDL.Nat,
+          }),
+        ],
+        ['query'],
+      ),
     'vote_poll' : IDL.Func(
         [IDL.Text, IDL.Nat32],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
