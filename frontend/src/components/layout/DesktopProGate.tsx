@@ -105,10 +105,8 @@ function useUserProClubs(enabled: boolean) {
                     sub?.is_pro || sub?.is_pro_football || sub?.admin_pro_override || sub?.admin_pro_football_override,
                   );
                   if (!isPro) return null;
-                  const profile = Array.isArray(await getLiveClubProfile(ctx, cid))
-                    ? (await getLiveClubProfile(ctx, cid))[0]
-                    : await getLiveClubProfile(ctx, cid);
-                  const p = profile as any;
+                  const rawProfile = await getLiveClubProfile(ctx, cid);
+                  const p = (Array.isArray(rawProfile) ? rawProfile[0] : rawProfile) as any;
                   return {
                     id: cid,
                     name: (p?.name ?? "Club") as string,
