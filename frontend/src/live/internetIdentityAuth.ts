@@ -82,15 +82,31 @@ const II_ALTERNATIVE_ORIGINS = new Set([
   "https://project--9e0ff3f7-539e-4a59-aa6d-a6d3fe4c7c5e-dev.lovable.app",
 ]);
 
-// The ICP frontend canister's default addresses (<id>.icp.net / .icp0.io /
-// .ic0.app) deliberately keep their OWN accounts (user decision 2026-10-07):
-// they are not matched here, so they sign in as themselves. When a custom
-// domain later fronts the canister, account migration will be planned then.
+// The ICP frontend canister keeps accounts separate from the Lovable sites
+// (user decision 2026-10-07), but ALL of the canister's own addresses
+// (<id>.icp.net, <id>.raw.icp0.io, <id>.ic0.app, ...) sign in as
+// https://<id>.icp0.io so one person gets one identity whichever address
+// they open. The canister lists them in its /.well-known/ii-alternative-origins
+// (written by scripts/prepare-canister-dist.mjs).
+const CANISTER_ALIAS_HOST = /^([a-z0-9]{5}(?:-[a-z0-9]{5}){3}-cai)\.(?:raw\.icp0\.io|icp\.net|raw\.icp\.net|ic0\.app|raw\.ic0\.app)$/;
+
+export function resolveDerivationOriginFor(origin: string): string | undefined {
+  if (II_ALTERNATIVE_ORIGINS.has(origin)) return CANONICAL_II_ORIGIN;
+  let host: string;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return undefined;
+    host = url.hostname;
+  } catch {
+    return undefined;
+  }
+  const match = CANISTER_ALIAS_HOST.exec(host);
+  return match ? `https://${match[1]}.icp0.io` : undefined;
+}
 
 function resolveDerivationOrigin(): string | undefined {
   if (typeof window === "undefined") return undefined;
-  const origin = window.location.origin;
-  return II_ALTERNATIVE_ORIGINS.has(origin) ? CANONICAL_II_ORIGIN : undefined;
+  return resolveDerivationOriginFor(window.location.origin);
 }
 
 async function createDefaultAuthClient(target: IcpTargetConfig): Promise<InternetIdentityAuthClient> {
