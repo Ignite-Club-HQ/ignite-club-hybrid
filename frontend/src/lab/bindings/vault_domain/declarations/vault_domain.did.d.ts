@@ -16,6 +16,11 @@ export interface BlobRef {
   'canister' : string,
 }
 export interface Main {
+  'clear_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'create_folder' : ActorMethod<
     [
       string,
@@ -54,6 +59,11 @@ export interface Main {
   'get_folder' : ActorMethod<
     [string],
     { 'Ok' : [] | [VaultFolder] } |
+      { 'Err' : string }
+  >,
+  'get_pinned_vault' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PinnedVault] } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -133,6 +143,20 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_pinned_vault' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      boolean,
+    ],
+    { 'Ok' : PinnedVault } |
+      { 'Err' : string }
+  >,
   'transfer_governorship' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -148,6 +172,18 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+}
+export interface PinnedVault {
+  'root_id' : [] | [string],
+  'root_scope' : [] | [string],
+  'club' : string,
+  'updated_at_ms' : bigint,
+  'set_by' : Principal,
+  'enabled' : boolean,
+  'vault_folder_id' : [] | [string],
+  'chat_id' : string,
+  'vault_file_id' : [] | [string],
+  'chat_type' : string,
 }
 export interface VaultFile {
   'id' : string,

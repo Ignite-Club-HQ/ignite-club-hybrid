@@ -23,8 +23,34 @@ interface ResolvedTarget {
 
 async function resolveTarget(record: PinnedVaultRecord): Promise<ResolvedTarget | null> {
   if (resolveAuthBackend() === "icp") {
-    // Whole team/club vault pins resolve their name from club_domain; single
-    // file/folder pins still have no routed lookup, so they stay hidden.
+    const { withFeatureBackend } = await import("@/live/featureRouter");
+    if (record.vault_file_id) {
+      return withFeatureBackend("vault", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const { getLiveVaultFile } = await import("@/live/features/vault");
+          const file = await getLiveVaultFile(ctx, record.vault_file_id!);
+          return file ? { label: file.name || "Vault file", href: `/vault?file=${file.id}`, count: 0 } : null;
+        },
+      });
+    }
+    if (record.vault_folder_id) {
+      return withFeatureBackend("vault", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const { getLiveVaultFolder, listLiveVaultFiles } = await import("@/live/features/vault");
+          const folder = await getLiveVaultFolder(ctx, record.vault_folder_id!);
+          if (!folder) return null;
+          const files = await listLiveVaultFiles(ctx, folder.id).catch(() => []);
+          return {
+            label: folder.name || "Vault folder",
+            href: `/vault/folder/${folder.id}`,
+            count: files.length,
+          };
+        },
+      });
+    }
+    // Whole team/club vault pins resolve their name from club_domain.
     if (!record.root_scope || !record.root_id) return null;
     const { icpGetTeam, icpGetClubName } = await import("@/lib/icpClubTeamLookup");
     if (record.root_scope === "team") {

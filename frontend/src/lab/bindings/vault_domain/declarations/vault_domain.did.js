@@ -47,12 +47,29 @@ export const idlFactory = ({ IDL }) => {
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'uploaded_by' : IDL.Principal,
   });
+  const PinnedVault = IDL.Record({
+    'root_id' : IDL.Opt(IDL.Text),
+    'root_scope' : IDL.Opt(IDL.Text),
+    'club' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'set_by' : IDL.Principal,
+    'enabled' : IDL.Bool,
+    'vault_folder_id' : IDL.Opt(IDL.Text),
+    'chat_id' : IDL.Text,
+    'vault_file_id' : IDL.Opt(IDL.Text),
+    'chat_type' : IDL.Text,
+  });
   const VaultFileWithFolder = IDL.Record({
     'folder_name' : IDL.Opt(IDL.Text),
     'folder_path' : IDL.Vec(IDL.Text),
     'file' : VaultFile,
   });
   const Main = IDL.Service({
+    'clear_pinned_vault' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_folder' : IDL.Func(
         [
           IDL.Text,
@@ -88,6 +105,11 @@ export const idlFactory = ({ IDL }) => {
     'get_folder' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(VaultFolder), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pinned_vault' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(PinnedVault), 'Err' : IDL.Text })],
         ['query'],
       ),
     'grant_role' : IDL.Func(
@@ -180,6 +202,20 @@ export const idlFactory = ({ IDL }) => {
     'set_club_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_pinned_vault' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+        ],
+        [IDL.Variant({ 'Ok' : PinnedVault, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(

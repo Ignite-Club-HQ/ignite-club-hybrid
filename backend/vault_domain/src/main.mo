@@ -18,6 +18,7 @@ persistent actor class Main(governorInit : Principal) {
   var files : [Types.VaultFile];
   var roles : [Types.RoleGrant];
   var club_domain_canister : ?Principal;
+  var pinned_vaults : [Types.PinnedVault];
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -454,5 +455,58 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_trashed_files_with_folder(club : Text) : async { #Ok : [Types.VaultFileWithFolder]; #Err : Text } {
     auth(caller);
     #Ok(files.filter(func(item) = item.club == club and item.deleted_at_ms != null).map(withFolderJoin))
+  };
+
+  // Pinned vault per chat (Supabase chat_pinned_vault counterpart). Keyed by
+  // (chat_type, chat_id); one pin per chat. Writes need a club role, reads
+  // any authenticated caller — same trust model as the rest of this canister.
+  func validChatType(value : Text) : Bool {
+    value == "team" or value == "club" or value == "group"
+  };
+
+  public shared ({ caller }) func set_pinned_vault(
+    chat_type : Text,
+    chat_id : Text,
+    club : Text,
+    vault_file_id : ?Text,
+    vault_folder_id : ?Text,
+    root_scope : ?Text,
+    root_id : ?Text,
+    enabled : Bool,
+  ) : async { #Ok : Types.PinnedVault; #Err : Text } {
+    auth(caller);
+    if (not validChatType(chat_type)) return #Err("Invalid chat type");
+    if (not valid(chat_id) or not valid(club)) return #Err("Invalid pin fields");
+    switch (root_scope) {
+      case (?scope) { if (scope != "team" and scope != "club") return #Err("Invalid root scope") };
+      case null {};
+    };
+    if (vault_file_id == null and vault_folder_id == null and root_id == null) {
+      return #Err("Nothing to pin");
+    };
+    if (not (await canWrite(caller, club, null))) return #Err("Club role required");
+    let pin : Types.PinnedVault = {
+      chat_type; chat_id; club; vault_file_id; vault_folder_id; root_scope; root_id;
+      enabled; set_by = caller; updated_at_ms = nowMs();
+    };
+    pinned_vaults := pinned_vaults.filter(func(item) = not (item.chat_type == chat_type and item.chat_id == chat_id)).concat([pin]);
+    #Ok(pin)
+  };
+
+  public query ({ caller }) func get_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok : ?Types.PinnedVault; #Err : Text } {
+    auth(caller);
+    #Ok(pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id))
+  };
+
+  public shared ({ caller }) func clear_pinned_vault(chat_type : Text, chat_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pinned_vaults.find(func(item) = item.chat_type == chat_type and item.chat_id == chat_id)) {
+      case null { #Ok };
+      case (?pin) {
+        if (not (await canWrite(caller, pin.club, null))) return #Err("Club role required");
+        pinned_vaults := pinned_vaults.filter(func(item) = not (item.chat_type == chat_type and item.chat_id == chat_id));
+        #Ok
+      };
+    }
   };
 };
