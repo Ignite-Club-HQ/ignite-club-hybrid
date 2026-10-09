@@ -1031,4 +1031,70 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     #Ok(broadcasts.filter(func(item) = item.competition_id == competition_id).reverse())
   };
+
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+
+    var conflicts = 0;
+    conflicts += roles.filter(func(item) = item.user.equal(new)).size();
+    conflicts += tokens.filter(func(item) = item.issued_by.equal(new)).size();
+    conflicts += competitionInvites.filter(func(item) = item.invitee.equal(new) or item.created_by.equal(new)).size();
+    conflicts += competitionJoinLinks.filter(func(item) = item.created_by.equal(new)).size();
+    conflicts += eoiSubmissions.filter(func(item) = item.parent_user_id == ?new).size();
+    conflicts += broadcasts.filter(func(item) = item.sender.equal(new)).size();
+    if (bulkAccessPrincipals.any(func(p) = p.equal(new))) { conflicts += 1 };
+
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in competition_domain");
+
+    var changed = 0;
+
+    let newRoles = roles.map(func(item : Types.RoleGrant) : Types.RoleGrant {
+      if (item.user.equal(old)) { changed += 1; { item with user = new } } else item
+    });
+    let newTokens = tokens.map(func(item : Types.JoinToken) : Types.JoinToken {
+      if (item.issued_by.equal(old)) { changed += 1; { item with issued_by = new } } else item
+    });
+    let newCompetitionInvites = competitionInvites.map(func(item : Types.CompetitionInvite) : Types.CompetitionInvite {
+      var touched = false;
+      var invitee = item.invitee;
+      var created_by = item.created_by;
+      if (invitee.equal(old)) { invitee := new; touched := true };
+      if (created_by.equal(old)) { created_by := new; touched := true };
+      if (touched) { changed += 1; { item with invitee; created_by } } else item
+    });
+    let newCompetitionJoinLinks = competitionJoinLinks.map(func(item : Types.CompetitionJoinLink) : Types.CompetitionJoinLink {
+      if (item.created_by.equal(old)) { changed += 1; { item with created_by = new } } else item
+    });
+    let newEoiSubmissions = eoiSubmissions.map(func(item : Types.EoiSubmission) : Types.EoiSubmission {
+      if (item.parent_user_id == ?old) { changed += 1; { item with parent_user_id = ?new } } else item
+    });
+    let newBroadcasts = broadcasts.map(func(item : Types.Broadcast) : Types.Broadcast {
+      if (item.sender.equal(old)) { changed += 1; { item with sender = new } } else item
+    });
+    var newBulkAccessPrincipals = bulkAccessPrincipals;
+    if (bulkAccessPrincipals.any(func(p) = p.equal(old))) {
+      let hasNew = bulkAccessPrincipals.any(func(p) = p.equal(new));
+      newBulkAccessPrincipals := bulkAccessPrincipals.filterMap(func(p) : ?Principal {
+        if (p.equal(old)) { if (hasNew) null else ?new } else ?p
+      });
+      changed += 1;
+    };
+
+    if (not dry_run) {
+      roles := newRoles;
+      tokens := newTokens;
+      competitionInvites := newCompetitionInvites;
+      competitionJoinLinks := newCompetitionJoinLinks;
+      eoiSubmissions := newEoiSubmissions;
+      broadcasts := newBroadcasts;
+      bulkAccessPrincipals := newBulkAccessPrincipals;
+    };
+
+    #ok(changed)
+  };
 };
