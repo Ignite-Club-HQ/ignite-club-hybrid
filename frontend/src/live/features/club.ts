@@ -817,14 +817,37 @@ export async function createLiveClub(
   slug: string,
   description: string,
   sport?: string | null,
+  homeCountry?: string | null,
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   const created = await unwrapCandid(
     actor.create_club(id, name, slug, candidOpt(description || null), candidOpt(sport || null)),
     "Create club",
   );
+  // Record the club's home country (jurisdiction routing metadata, mirroring
+  // Supabase clubs.home_country). Set-once for admins; the club already
+  // exists if this fails, so log rather than fail the creation.
+  const country = homeCountry?.trim().toUpperCase();
+  if (country && /^[A-Z]{2}$/.test(country)) {
+    try {
+      unwrapCandid(await actor.set_club_home_country(id, country), "Set club home country");
+    } catch (err) {
+      console.warn("[createLiveClub] home country not recorded", err);
+    }
+  }
   syncAvatarClubGrantsBestEffort(ctx);
   return created;
+}
+
+/** Batched read of club home countries (jurisdiction routing metadata). */
+export async function getLiveClubHomeCountries(
+  ctx: FeatureBackendContext,
+  clubIds: string[],
+): Promise<Record<string, string>> {
+  if (clubIds.length === 0) return {};
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const rows = unwrapCandid(await actor.get_club_home_countries(clubIds), "Get club home countries");
+  return Object.fromEntries(rows);
 }
 
 export async function listLiveClubJoinRequests(ctx: FeatureBackendContext, clubId: string) {
