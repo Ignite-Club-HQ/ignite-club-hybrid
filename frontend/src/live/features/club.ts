@@ -1297,3 +1297,14 @@ export async function setMyLiveChildGuardian(ctx: FeatureBackendContext, childId
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.set_own_child_guardian(childId, user, linked), "Update guardian");
 }
+
+/** Competition / mini-league audience for a news post (null clears it). */
+export async function setLiveNewsPostTarget(
+  ctx: FeatureBackendContext,
+  postId: string,
+  kind: "competition" | "mini_league",
+  targetId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_news_post_target(postId, kind, candidOpt(targetId)), "Set news audience");
+}
