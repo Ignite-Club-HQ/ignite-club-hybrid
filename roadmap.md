@@ -30,3 +30,10 @@
 - [ ] Side-by-side test, move custom domain, delete Netlify
 - [ ] Review codemagic.yaml (user to share)
 - [ ] Side-by-side test, move custom domain, delete Netlify
+
+## Country-based backend routing
+- [x] Per-club overrides removed; club home country + locked backend recorded on Supabase clubs
+- [x] Sign-in screen follows visitor country; ?auth= override kept for testing
+- [x] club_domain records club home country (set-once for admins, governor can correct; batched read) — needs mainnet redeploy
+- [ ] Backfill home country for existing ICP clubs (Chick Burgers, Winter Cats, Kitty Kats) via governor call after redeploy
+- [ ] Regional backends (EU Supabase project / ICP Cloud Engine) — future ops task
