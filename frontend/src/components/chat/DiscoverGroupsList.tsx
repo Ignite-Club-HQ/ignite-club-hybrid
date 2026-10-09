@@ -204,6 +204,39 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
     },
   });
 
+  // Club admins get different empty-state guidance (they can open groups
+  // themselves), so resolve admin status for the active club on both
+  // backends. ICP uses club_domain role grants; Supabase uses user_roles.
+  const { data: isClubAdmin = false } = useQuery({
+    queryKey: ["discover-groups-is-club-admin", user?.id, activeClubFilter ?? null],
+    enabled: !!user?.id && !!activeClubFilter,
+    staleTime: 60_000,
+    queryFn: async () => {
+      if (isFeatureRoutedToIcp("messaging")) {
+        return withFeatureBackend("messaging", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { getLiveMyRoleGrants } = await import("@/live/features/membership");
+            const grants = ((await getLiveMyRoleGrants(ctx).catch(() => [])) as any[]) ?? [];
+            return grants.some(
+              (g) =>
+                (g.club?.[0] ?? null) === activeClubFilter &&
+                !(Array.isArray(g.team) ? g.team[0] : g.team) &&
+                (g.role === "club_admin" || g.role === "committee_member"),
+            );
+          },
+        });
+      }
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user!.id)
+        .eq("club_id", activeClubFilter!)
+        .in("role", ["club_admin", "committee_member"] as any);
+      return (data ?? []).length > 0;
+    },
+  });
+
   const requestMutation = useMutation({
     mutationFn: async (groupId: string) => {
       if (isFeatureRoutedToIcp("messaging")) {
@@ -460,7 +493,9 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
         <div className="px-2 pb-2 space-y-2">
           {groups.length === 0 ? (
             <p className="text-xs text-muted-foreground italic px-2 py-3">
-              No open groups yet. Ask a club admin to open an Operations or Volunteers group to the club.
+              {isClubAdmin
+                ? "No open groups yet. You can open one — edit an Operations or Volunteers group and set who can join to \"Anyone in the club can join\" or \"Approval required\"."
+                : "No open groups yet. Ask a club admin to open an Operations or Volunteers group to the club."}
             </p>
           ) : (
             <>
