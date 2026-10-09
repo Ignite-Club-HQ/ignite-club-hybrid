@@ -220,6 +220,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     rename_file(id: string, name: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -459,6 +466,16 @@ export class Vault_domain implements vault_domainInterface {
         const result = await this.actor.register_file(arg0, arg1, arg2, to_candid_opt_n2(arg3), arg4, arg5, arg6, arg7, arg8, to_candid_opt_n29(arg9), to_candid_opt_n2(arg10));
         return from_candid_variant_n28(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n30(result);
+    }
     async rename_file(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: VaultFile;
@@ -497,7 +514,7 @@ export class Vault_domain implements vault_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.set_pinned_vault(arg0, arg1, arg2, to_candid_opt_n2(arg3), to_candid_opt_n2(arg4), to_candid_opt_n2(arg5), to_candid_opt_n2(arg6), arg7);
-        return from_candid_variant_n30(result);
+        return from_candid_variant_n31(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -866,6 +883,25 @@ function from_candid_variant_n3(value: {
     } : value;
 }
 function from_candid_variant_n30(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n31(value: {
     Ok: _PinnedVault;
 } | {
     Err: string;

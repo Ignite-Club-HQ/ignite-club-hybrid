@@ -128,6 +128,11 @@ export interface Main {
     { 'Ok' : VaultFile } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'rename_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |

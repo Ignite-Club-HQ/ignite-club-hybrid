@@ -1985,4 +1985,116 @@ persistent actor class Main(governorInit : Principal) {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
     #Ok({ schema = 5; governor; roles; events; rsvps; attendance; lineups; lineupSnapshots; duties; roster; recurrences; series; eventAttendance; eventGuests; children; childGuardians; coachNotes; eventViews; reminderLogs; pushReachability; eventGroups; eventGroupPlayers; eventGroupDuties; teamTrainingPauses; openDuties; miniLeagueRsvps; childTeamAssignments })
   };
+  // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
+  // Any NEW stored principal / principal-text field added to this canister must be added here.
+  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    if (not isGovernor(caller)) return #err("Forbidden");
+    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(governor)) return #err("Cannot rekey the governor");
+    let oldText = Principal.toText(old);
+    let newText = Principal.toText(new);
+
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new`.
+    // Ephemeral/excluded: eventViews (telemetry), pushReachability (push reachability ping).
+    var conflicts = 0;
+    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
+    conflicts += events.filter(func(e) = e.creator.equal(new)).size();
+    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new)).size();
+    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new)).size();
+    conflicts += series.filter(func(s) = s.creator.equal(new)).size();
+    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new)).size();
+    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new)).size();
+    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new)).size();
+    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new)).size();
+    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new)).size();
+    conflicts += activeGames.filter(func(g) = g.user_id.equal(new)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += rsvps.filter(func(r) = r.account_id == newText).size();
+    conflicts += attendance.filter(func(a) = a.account_id == newText).size();
+    conflicts += duties.filter(func(d) = d.account_id == newText).size();
+    conflicts += roster.filter(func(r) = r.account_id == newText).size();
+    conflicts += childGuardians.filter(func(c) = c.guardian_id == newText).size();
+    if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in events_domain");
+
+    var changed = 0;
+
+    let rolesOld = roles.filter(func(r) = r.user.equal(old)).size();
+    changed += rolesOld;
+    let eventsOld = events.filter(func(e) = e.creator.equal(old)).size();
+    changed += eventsOld;
+    let assocOld = associationEvents.filter(func(a) = a.created_by.equal(old)).size();
+    changed += assocOld;
+    let lineupSnapOld = lineupSnapshots.filter(func(s) = s.updated_by.equal(old)).size();
+    changed += lineupSnapOld;
+    let seriesOld = series.filter(func(s) = s.creator.equal(old)).size();
+    changed += seriesOld;
+    let eventAttOld = eventAttendance.filter(func(a) = a.marked_by.equal(old)).size();
+    changed += eventAttOld;
+    let eventGuestOld = eventGuests.filter(func(g) = g.added_by.equal(old)).size();
+    changed += eventGuestOld;
+    let coachNoteOld = coachNotes.filter(func(c) = c.updated_by.equal(old)).size();
+    changed += coachNoteOld;
+    let trainingPauseOld = teamTrainingPauses.filter(func(t) = t.created_by.equal(old)).size();
+    changed += trainingPauseOld;
+    let gameResultOld = gameResults.filter(func(g) = g.saved_by.equal(old)).size();
+    changed += gameResultOld;
+    let activeGameOld = activeGames.filter(func(g) = g.user_id.equal(old)).size();
+    changed += activeGameOld;
+    let bulkOld = bulkAccessPrincipals.any(func(p) = p.equal(old));
+    if (bulkOld) changed += 1;
+    let rsvpOld = rsvps.filter(func(r) = r.account_id == oldText).size();
+    changed += rsvpOld;
+    let attendanceOld = attendance.filter(func(a) = a.account_id == oldText).size();
+    changed += attendanceOld;
+    let dutyOld = duties.filter(func(d) = d.account_id == oldText).size();
+    changed += dutyOld;
+    let rosterOld = roster.filter(func(r) = r.account_id == oldText).size();
+    changed += rosterOld;
+    let guardianOld = childGuardians.filter(func(c) = c.guardian_id == oldText).size();
+    changed += guardianOld;
+
+    // Ephemeral: push reachability — keep NEW row on conflict, drop OLD.
+    let pushReachOldHas = pushReachability.any(func(p) = p.user.equal(old));
+    if (pushReachOldHas) changed += 1;
+    // Ephemeral: event views — keep NEW (event_id, viewer) row on conflict, drop OLD.
+    let eventViewOldCount = eventViews.filter(func(v) = v.viewer.equal(old)).size();
+    if (eventViewOldCount > 0) changed += eventViewOldCount;
+
+    if (not dry_run) {
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
+      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new }) else e);
+      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new }) else a);
+      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new }) else s);
+      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new }) else s);
+      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new }) else a);
+      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new }) else g);
+      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new }) else c);
+      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new }) else t);
+      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new }) else g);
+      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new }) else g);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
+      if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) { r with account_id = newText } else r);
+      if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) { a with account_id = newText } else a);
+      if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) { d with account_id = newText } else d);
+      if (rosterOld > 0) roster := roster.map(func(r) = if (r.account_id == oldText) { r with account_id = newText } else r);
+      if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) { c with guardian_id = newText } else c);
+
+      if (pushReachOldHas) {
+        let newHas = pushReachability.any(func(p) = p.user.equal(new));
+        if (newHas) {
+          pushReachability := pushReachability.filter(func(p) = not p.user.equal(old));
+        } else {
+          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new }) else p);
+        };
+      };
+      if (eventViewOldCount > 0) {
+        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new))))
+          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new }) else v);
+      };
+    };
+
+    #ok(changed)
+  };
+
 };
