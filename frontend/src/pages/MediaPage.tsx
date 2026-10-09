@@ -49,6 +49,8 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { toast } from "sonner";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { useClubProAccess } from "@/hooks/useClubProAccess";
+import { useIcpEntitlements } from "@/hooks/useIcpProAccess";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import { startOfDay, endOfDay, isWithinInterval } from "date-fns";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 import { Link } from "react-router-dom";
@@ -67,7 +69,7 @@ import { useClubFreeUsage, readClubFreeUsageSnapshot, FREE_PHOTO_UPLOADS_PER_CYC
 import { UsageMeter } from "@/components/subscription/UsageMeter";
 import { FREE_UPGRADE_MESSAGES } from "@/lib/freeUpgradeMessages";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
-import { cachePhotos, removePhotoFromCache, getFeedPhotosFromCache, backgroundRefreshPhotos, CachedPhoto } from "@/lib/mediaCache";
+import { cachePhotos, getCachedPhotos, removePhotoFromCache, getFeedPhotosFromCache, backgroundRefreshPhotos, CachedPhoto } from "@/lib/mediaCache";
 import { useProfiles } from "@/hooks/useProfiles";
 import { usePhotoViewCounts, useRecordPhotoView, usePhotoViewRealtime } from "@/hooks/usePhotoViews";
 import { IcpMediaFeedPage, PhotoSkeleton } from "@/components/media/IcpMediaFeedPage";
@@ -183,6 +185,10 @@ function SupabaseMediaPage() {
   const [cachedPhotosData, setCachedPhotosData] = useState<CachedPhoto[] | null>(null);
   const [isCacheStale, setIsCacheStale] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  // Secure-sign-in (ICP) feeds are always club-scoped; cache per club so the
+  // last-seen photos paint instantly while the canister read refreshes.
+  const isIcpMode = resolveAuthBackend() === "icp";
+  const feedCacheClubRef = useRef<string | null>(null);
   const PHOTOS_PER_PAGE = 9; // Smaller initial load for faster first paint
 
   // Load cached photos immediately on mount for instant display, AND re-hydrate
@@ -192,7 +198,10 @@ function SupabaseMediaPage() {
   // original mount-time hydrate had already run with no cache present.
   useEffect(() => {
     const hydrate = () => {
-      const { photos: cached, isStale } = getFeedPhotosFromCache();
+      const club = feedCacheClubRef.current;
+      const { photos: cached, isStale } = club
+        ? getCachedPhotos(null, club, null, { allowStale: true })
+        : getFeedPhotosFromCache();
       if (cached && cached.length > 0) {
         setCachedPhotosData(cached);
         setIsCacheStale(isStale);
@@ -325,7 +334,8 @@ function SupabaseMediaPage() {
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    // ICP accounts have no Supabase roles — skip the round trip entirely.
+    enabled: !!user && !isIcpMode,
     staleTime: 300000,
     placeholderData: (prev) => prev,
   });
@@ -533,6 +543,14 @@ function SupabaseMediaPage() {
   });
 
   const selectedClubFilter = selectedClubId !== "all" ? selectedClubId : null;
+  // ICP: show this club's cached photos immediately (also on filter change).
+  useEffect(() => {
+    if (!isIcpMode || !selectedClubFilter) return;
+    feedCacheClubRef.current = selectedClubFilter;
+    const { photos: cached, isStale } = getCachedPhotos(null, selectedClubFilter, null, { allowStale: true });
+    setCachedPhotosData(cached && cached.length > 0 ? cached : null);
+    setIsCacheStale(isStale);
+  }, [isIcpMode, selectedClubFilter]);
   const selectedTeamFilter = selectedTeamId !== "all" ? selectedTeamId : null;
   const dateFromKey = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
   const dateToKey = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
@@ -596,8 +614,9 @@ function SupabaseMediaPage() {
       if (error) throw error;
 
       // Cache first page results for offline access
-      if (pageParam === 0 && data && !selectedClubFilter && !selectedTeamFilter && !urlEventId && !dateFromKey && !dateToKey && !cardId) {
-        cachePhotos(null, null, null, data.map(p => ({
+      const icpClubFeed = isIcpMode && !!selectedClubFilter;
+      if (pageParam === 0 && data && (icpClubFeed || !selectedClubFilter) && !selectedTeamFilter && !urlEventId && !dateFromKey && !dateToKey && !cardId) {
+        cachePhotos(null, icpClubFeed ? selectedClubFilter : null, null, data.map(p => ({
           id: p.id,
           file_url: p.file_url || p.image_url,
           title: p.title,
