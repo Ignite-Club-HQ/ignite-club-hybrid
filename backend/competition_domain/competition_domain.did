@@ -290,6 +290,11 @@ type Main =
        Err: text;
        Ok: TeamEntry;
      });
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    removeBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
