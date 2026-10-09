@@ -32,6 +32,11 @@ export interface LiveMessagingCandidate {
   roles: LiveMessagingCandidateRole[];
 }
 
+/** club_domain account ids are "principal:<text>"; return the bare principal text. */
+export function normalizeAccountId(accountId: string): string {
+  return accountId.startsWith("principal:") ? accountId.slice("principal:".length) : accountId;
+}
+
 export function shortPrincipalLabel(principalText: string): string {
   if (principalText.length <= 12) return principalText;
   return `${principalText.slice(0, 5)}…${principalText.slice(-4)}`;
@@ -58,7 +63,10 @@ export async function fetchLiveMessagingCandidates(
   const byAccount = new Map<string, LiveMessagingCandidateRole[]>();
   for (const grants of grantLists) {
     for (const grant of grants) {
-      const accountId = grant.account_id;
+      // club_domain returns account ids as "principal:<text>"; strip the
+      // prefix or every grant fails Principal.fromText and the self check —
+      // which left default/sub-committee chats with only their creator.
+      const accountId = normalizeAccountId(grant.account_id);
       if (accountId === selfText || excludeIds.has(accountId)) continue;
       const roles = byAccount.get(accountId) ?? [];
       roles.push({

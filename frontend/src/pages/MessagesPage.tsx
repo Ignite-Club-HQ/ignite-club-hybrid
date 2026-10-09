@@ -1478,6 +1478,12 @@ queryClient.setQueryData(["dm-conversations", user.id], (old: any[] | undefined)
   // Filter chat groups by user's roles
   const displayChatGroups = useMemo(() => {
     if (isAppAdmin || isCommitteeMember) return allChatGroups;
+    // Secure sign-in: the canister only returns groups the caller is an
+    // explicit member of (no role-based groups), so membership is already
+    // enforced. The role filter below reads Supabase user_roles, which is
+    // always empty for these accounts — it was hiding every club chat
+    // (Coaches / Team Admins / Club Committee / sub-committees).
+    if (useIcpLab) return allChatGroups;
 
     // Offline with no roles loaded: the cached groups were already RLS- and
     // role-filtered for THIS user when they were written (cache is
