@@ -51,7 +51,7 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 export function lazyWithRetry<T extends ComponentType<unknown>>(
   factory: () => Promise<{ default: T }>,
-  { retries = 2, backoffMs = 350 }: { retries?: number; backoffMs?: number } = {},
+  { retries = 4, backoffMs = 800 }: { retries?: number; backoffMs?: number } = {},
 ) {
   return lazy(async () => {
     let lastError: unknown;
