@@ -22,6 +22,36 @@ function formatCycles(c: bigint): string {
   return `${whole.toFixed(2)}T`;
 }
 
+// 1T cycles = 1 XDR (fixed by the protocol). XDR→USD drifts; ~1.35 is close enough for an estimate.
+const USD_PER_T = 1.35;
+const HISTORY_KEY = "admin-canister-cycle-history-v1";
+const MIN_SPAN_MS = 6 * 3600_000; // need 6h of history before estimating
+type Snap = { t: number; c: string };
+
+/** Records this reading and returns cycles burned per day, from the oldest reading since the last top-up. */
+function burnPerDay(canisterId: string, cycles: bigint): number | null {
+  try {
+    const all: Record<string, Snap[]> = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "{}");
+    let list = (all[canisterId] ?? []).filter((s) => Date.now() - s.t < 30 * 86400_000);
+    const last = list[list.length - 1];
+    if (last && BigInt(last.c) < cycles) list = []; // topped up: restart the baseline
+    if (!last || Date.now() - last.t > 15 * 60_000 || list.length === 0) list.push({ t: Date.now(), c: cycles.toString() });
+    all[canisterId] = list.slice(-200);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+    const first = list[0];
+    const span = Date.now() - first.t;
+    if (span < MIN_SPAN_MS) return null;
+    const burned = Number(BigInt(first.c) - cycles);
+    return Math.max(0, burned) / (span / 86400_000);
+  } catch {
+    return null;
+  }
+}
+
+function usdPerMonth(perDay: number): number {
+  return (perDay * 30) / 1e12 * USD_PER_T;
+}
+
 async function loadBalances(): Promise<Balance[]> {
   const target = getActiveIcpTarget();
   const entries = Object.entries(target.canisterIds ?? {}).filter(([, id]) => !!id);
@@ -84,6 +114,10 @@ export function CanisterBalancesCard() {
     queryFn: loadBalances,
     staleTime: 60_000,
   });
+  const rates = new Map<string, number | null>();
+  for (const b of data ?? []) if (b.cycles !== null) rates.set(b.canisterId, burnPerDay(b.canisterId, b.cycles));
+  const known = [...rates.values()].filter((r): r is number => r !== null);
+  const totalUsd = known.reduce((sum, r) => sum + usdPerMonth(r), 0);
   const sorted = [...(data ?? [])].sort((a, b) => {
     if (a.cycles === null) return -1;
     if (b.cycles === null) return 1;
@@ -109,11 +143,35 @@ export function CanisterBalancesCard() {
         {!isLoading && sorted.length === 0 && (
           <p className="text-sm text-muted-foreground">No canister IDs configured.</p>
         )}
+        {data && data.length > 0 && (
+          <div className="rounded-md bg-muted p-2 text-sm">
+            {known.length > 0 ? (
+              <>
+                Estimated running cost: <span className="font-semibold">${totalUsd.toFixed(2)}/month</span>
+                {known.length < rates.size && " (some canisters still measuring)"}
+              </>
+            ) : (
+              "Estimated running cost appears after this page has been opened twice, at least 6 hours apart."
+            )}
+            <p className="text-xs text-muted-foreground">
+              Based on cycles burned between your visits to this page (on this device), at about ${USD_PER_T} per 1T
+              cycles. Top-ups restart the measurement.
+            </p>
+          </div>
+        )}
         {sorted.map((b) => (
           <div key={b.key} className="flex items-center justify-between gap-3 rounded-md border p-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{b.key}</p>
               <p className="truncate font-mono text-xs text-muted-foreground">{b.canisterId}</p>
+              {rates.get(b.canisterId) != null && (
+                <p className="text-xs text-muted-foreground">
+                  ~${usdPerMonth(rates.get(b.canisterId)!).toFixed(2)}/month ·{" "}
+                  {formatCycles(BigInt(Math.round(rates.get(b.canisterId)! * 30)))} per 30 days
+                  {b.cycles !== null && rates.get(b.canisterId)! > 0 &&
+                    ` · lasts ~${Math.floor(Number(b.cycles) / rates.get(b.canisterId)!)} days`}
+                </p>
+              )}
               {b.error && <p className="text-xs text-muted-foreground">{b.error}</p>}
             </div>
             {b.cycles !== null ? (
