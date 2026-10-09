@@ -349,6 +349,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     resolve_admin_alert(id: string): Promise<{
         __kind__: "Ok";
         Ok: AdminAlert;
@@ -1017,6 +1024,16 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.record_web_vital(arg0, arg1, arg2, arg3);
         return from_candid_variant_n3(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n65(result);
+    }
     async resolve_admin_alert(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: AdminAlert;
@@ -1044,7 +1061,7 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n65(arg3), to_candid_opt_n65(arg4), to_candid_opt_n65(arg5), to_candid_opt_n65(arg6), to_candid_opt_n65(arg7), to_candid_opt_n66(arg8));
+        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n66(arg3), to_candid_opt_n66(arg4), to_candid_opt_n66(arg5), to_candid_opt_n66(arg6), to_candid_opt_n66(arg7), to_candid_opt_n67(arg8));
         return from_candid_variant_n3(result);
     }
     async submit_feedback(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<{
@@ -1055,7 +1072,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.submit_feedback(arg0, to_candid_opt_n2(arg1), arg2, to_candid_opt_n2(arg3));
-        return from_candid_variant_n67(result);
+        return from_candid_variant_n68(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1085,7 +1102,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n48(arg1), to_candid_opt_n2(arg2));
-        return from_candid_variant_n67(result);
+        return from_candid_variant_n68(result);
     }
     async upsert_ad_setting(arg0: string, arg1: boolean, arg2: boolean, arg3: boolean): Promise<{
         __kind__: "Ok";
@@ -1763,7 +1780,26 @@ function from_candid_variant_n62(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n67(value: {
+function from_candid_variant_n65(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n68(value: {
     Ok: _Feedback;
 } | {
     Err: string;
@@ -1887,10 +1923,10 @@ function to_candid_opt_n41(value: Principal | null): [] | [Principal] {
 function to_candid_opt_n47(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
     return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n48(value));
 }
-function to_candid_opt_n65(value: number | null): [] | [number] {
+function to_candid_opt_n66(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n66(value: number | null): [] | [number] {
+function to_candid_opt_n67(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n12(value: {

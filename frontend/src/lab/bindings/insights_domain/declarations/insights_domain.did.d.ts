@@ -336,6 +336,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'resolve_admin_alert' : ActorMethod<
     [string],
     { 'Ok' : AdminAlert } |

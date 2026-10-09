@@ -307,6 +307,11 @@ type Main =
      }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) query;
    my_leagues: () -> (vec MiniLeague) query;
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+    (variant {
+       err: text;
+       ok: nat;
+     });
    remove_admin: (mini_league_id: text, user_id: principal) ->
     (variant {
        Err: text;

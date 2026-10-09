@@ -219,6 +219,11 @@ export interface Main {
   >,
   'my_availability' : ActorMethod<[], Array<MiniLeagueSessionAvailability>>,
   'my_leagues' : ActorMethod<[], Array<MiniLeague>>,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_admin' : ActorMethod<
     [string, Principal],
     { 'Ok' : null } |

@@ -237,6 +237,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     removeBulkAccessPrincipal(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -603,6 +610,16 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.redeem_reward(arg0, to_candid_Subject_n8(arg1), arg2, to_candid_opt_n10(arg3));
         return from_candid_variant_n2(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n42(result);
+    }
     async removeBulkAccessPrincipal(arg0: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -621,7 +638,7 @@ export class Club_points_domain implements club_points_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
-        return from_candid_variant_n42(result);
+        return from_candid_variant_n43(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1177,6 +1194,25 @@ function from_candid_variant_n41(value: {
     } : value;
 }
 function from_candid_variant_n42(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: _ClubPointsSettings;
 } | {
     Err: string;

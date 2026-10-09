@@ -137,6 +137,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
     remove_guardian_relationship(guardian: Principal, child_id: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -347,6 +354,16 @@ export class Pii_access_control implements pii_access_controlInterface {
         const result = await this.actor.register_pii(arg0, arg1, arg2, arg3);
         return from_candid_variant_n11(result);
     }
+    async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
+        __kind__: "ok";
+        ok: bigint;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
+        const result = await this.actor.rekey_principal(arg0, arg1, arg2);
+        return from_candid_variant_n12(result);
+    }
     async remove_guardian_relationship(arg0: Principal, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -456,6 +473,25 @@ function from_candid_variant_n11(value: {
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
+    } : value;
+}
+function from_candid_variant_n12(value: {
+    ok: bigint;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: bigint;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
     } : value;
 }
 function from_candid_variant_n4(value: {

@@ -97,6 +97,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : EncryptedPii, 'Err' : IDL.Text })],
         [],
       ),
+    'rekey_principal' : IDL.Func(
+        [IDL.Principal, IDL.Principal, IDL.Bool],
+        [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
+        [],
+      ),
     'remove_guardian_relationship' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],

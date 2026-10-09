@@ -60,6 +60,11 @@ export interface _SERVICE {
   'health' : ActorMethod<[], Health>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
   'put_chunk' : ActorMethod<[string, number, Uint8Array], Result>,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'set_capacity_limit' : ActorMethod<[bigint], Result>,
   'set_club_domain_canister' : ActorMethod<[Principal], Result>,
 }

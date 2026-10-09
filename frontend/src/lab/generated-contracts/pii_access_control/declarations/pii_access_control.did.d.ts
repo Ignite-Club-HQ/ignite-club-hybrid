@@ -88,6 +88,11 @@ export interface Main {
     { 'Ok' : EncryptedPii } |
       { 'Err' : string }
   >,
+  'rekey_principal' : ActorMethod<
+    [Principal, Principal, boolean],
+    { 'ok' : bigint } |
+      { 'err' : string }
+  >,
   'remove_guardian_relationship' : ActorMethod<
     [Principal, string],
     { 'Ok' : null } |
