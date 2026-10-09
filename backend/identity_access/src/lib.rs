@@ -1532,6 +1532,78 @@ mod tests {
         }
     }
     #[test]
+    fn rekey_moves_account_to_new_principal_and_drops_bare_account() {
+        let governor = principal(1);
+        let old = principal(40);
+        let new = principal(41);
+        let old_id = account_id(old);
+        let new_id = account_id(new);
+        put_account(&Account { id: old_id.clone(), principals: vec![old], version: 3 });
+        index_principal(old, &old_id);
+        put_profile_entry(&Profile {
+            account_id: old_id.clone(),
+            display_name: "Paul".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0 });
+        index_principal(new, &new_id);
+        let key = entitlement_key(old, "pro", "");
+        put_entitlement(&key, &Entitlement {
+            principal: old,
+            product_id: "pro".into(),
+            transaction_id: String::new(),
+            expires_at_ms: 100,
+            source: "governor".into(),
+            granted_at_ms: 1,
+        });
+        let mut state = empty_core_state(governor);
+        state.roles.push(RoleGrant {
+            account_id: old_id.clone(),
+            role: "app_admin".into(),
+            site_id: None,
+            club: None,
+            team: None,
+        });
+
+        // Dry run reports changes but writes nothing.
+        assert_eq!(rekey_principal_core(&mut state, old, new, true), Ok(3));
+        assert_eq!(find_account_by_principal(old).map(|a| a.id), Some(old_id.clone()));
+
+        assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(3));
+        let moved = find_account_by_principal(new).expect("new linked");
+        assert_eq!(moved.id, old_id);
+        assert_eq!(moved.principals, vec![new]);
+        assert!(find_account_by_principal(old).is_none());
+        assert!(get_account(&new_id).is_none());
+        assert_eq!(get_profile_entry(&moved.id).map(|p| p.display_name), Some("Paul".into()));
+        assert!(state.roles.iter().any(|g| g.account_id == old_id && g.role == "app_admin"));
+        assert!(get_entitlement(&key).is_none());
+        assert_eq!(get_entitlement(&entitlement_key(new, "pro", "")).map(|e| e.principal), Some(new));
+        // Second run is a no-op.
+        assert_eq!(rekey_principal_core(&mut state, old, new, false), Ok(0));
+    }
+    #[test]
+    fn rekey_refuses_when_new_principal_has_a_profile() {
+        let governor = principal(1);
+        let old = principal(50);
+        let new = principal(51);
+        put_account(&Account { id: account_id(old), principals: vec![old], version: 0 });
+        index_principal(old, &account_id(old));
+        put_account(&Account { id: account_id(new), principals: vec![new], version: 0 });
+        index_principal(new, &account_id(new));
+        put_profile_entry(&Profile {
+            account_id: account_id(new),
+            display_name: "Someone".into(),
+            avatar_ref: None,
+            updated_at_ns: 1,
+        });
+        let mut state = empty_core_state(governor);
+        assert!(rekey_principal_core(&mut state, old, new, false).is_err());
+        assert!(rekey_principal_core(&mut state, governor, new, false).is_err());
+        assert!(find_account_by_principal(old).is_some());
+    }
+    #[test]
     fn ids_and_role_scope_are_bounded() {
         assert!(valid_id("club-a"));
         assert!(!valid_id(""));
