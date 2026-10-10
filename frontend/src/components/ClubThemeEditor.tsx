@@ -39,7 +39,7 @@ interface ClubThemeEditorProps {
   initialShowNameInHeader?: boolean;
   initialLogoOnlyMode?: boolean;
   initialThemeEnabled?: boolean;
-  onSave?: () => void;
+  onSave?: () => void | Promise<void>;
 }
 
 const DEFAULT_LIGHT_COLORS = {
@@ -312,6 +312,7 @@ export function ClubThemeEditor({
           await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, showNameInHeader);
         },
       });
+      await await onSave?.();
     } catch (e: any) {
       toast({
         title: "Error",
@@ -330,7 +331,6 @@ export function ClubThemeEditor({
       description: "Your club's color scheme has been updated.",
     });
 
-    onSave?.();
   };
 
   const handleResetLight = () => {
@@ -378,6 +378,7 @@ export function ClubThemeEditor({
           await clearLiveClubTheme(ctx, clubId);
         },
       });
+      await await onSave?.();
     } catch (e: any) {
       setSaving(false);
       toast({
@@ -395,7 +396,6 @@ export function ClubThemeEditor({
       description: "Your club's custom theme has been removed.",
     });
 
-    onSave?.();
   };
 
   // Get preview colors based on active tab
@@ -429,10 +429,12 @@ export function ClubThemeEditor({
           </div>
           <Switch
             id="theme-enabled"
+            disabled={saving}
             checked={themeEnabled}
             onCheckedChange={async (checked) => {
               setThemeEnabled(checked);
 
+              setSaving(true);
               try {
                 await withFeatureBackend("membership", {
                   supabase: async () => {
@@ -446,7 +448,9 @@ export function ClubThemeEditor({
                     await setLiveClubThemeEnabled(ctx, clubId, checked);
                   },
                 });
+                await await onSave?.();
               } catch {
+                setSaving(false);
                 toast({
                   title: "Error",
                   description: "Failed to update theme setting.",
@@ -456,13 +460,13 @@ export function ClubThemeEditor({
                 return;
               }
 
+              setSaving(false);
               toast({
                 title: checked ? "Theme enabled" : "Theme disabled",
                 description: checked 
                   ? "Members can now apply your club's theme." 
                   : "Your club theme is now hidden from members.",
               });
-              onSave?.();
             }}
           />
         </div>
@@ -579,6 +583,7 @@ export function ClubThemeEditor({
                 setShowLogoInHeader(true);
               }
 
+              setSaving(true);
               try {
                 await withFeatureBackend("membership", {
                   supabase: async () => {
@@ -598,7 +603,9 @@ export function ClubThemeEditor({
                     }
                   },
                 });
+                await await onSave?.();
               } catch {
+                setSaving(false);
                 toast({
                   title: "Error",
                   description: "Failed to update setting.",
@@ -608,6 +615,7 @@ export function ClubThemeEditor({
                 return;
               }
 
+              setSaving(false);
               toast({
                 title: checked ? "Logo Only Mode enabled" : "Logo Only Mode disabled",
                 description: checked 
@@ -615,9 +623,8 @@ export function ClubThemeEditor({
                   : "Custom theme colours will be applied",
               });
               
-              onSave?.();
             }}
-            disabled={!clubLogoUrl}
+            disabled={saving || !clubLogoUrl}
           />
         </div>
 
@@ -637,6 +644,7 @@ export function ClubThemeEditor({
             onCheckedChange={async (checked) => {
               setShowLogoInHeader(checked);
 
+              setSaving(true);
               try {
                 await withFeatureBackend("membership", {
                   supabase: async () => {
@@ -648,7 +656,9 @@ export function ClubThemeEditor({
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader); },
                 });
+                await await onSave?.();
               } catch {
+                setSaving(false);
                 toast({
                   title: "Error",
                   description: "Failed to update setting.",
@@ -658,6 +668,7 @@ export function ClubThemeEditor({
                 return;
               }
               
+              setSaving(false);
               toast({
                 title: checked ? "Club logo enabled" : "Club logo disabled",
                 description: checked 
@@ -665,9 +676,8 @@ export function ClubThemeEditor({
                   : "Club logo hidden from header",
               });
               
-              onSave?.();
             }}
-            disabled={!clubLogoUrl || logoOnlyMode}
+            disabled={saving || !clubLogoUrl || logoOnlyMode}
           />
         </div>
 
@@ -681,10 +691,12 @@ export function ClubThemeEditor({
           </div>
           <Switch
             id="show-name"
+            disabled={saving}
             checked={showNameInHeader}
             onCheckedChange={async (checked) => {
               setShowNameInHeader(checked);
 
+              setSaving(true);
               try {
                 await withFeatureBackend("membership", {
                   supabase: async () => {
@@ -696,7 +708,9 @@ export function ClubThemeEditor({
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked); },
                 });
+                await await onSave?.();
               } catch {
+                setSaving(false);
                 toast({
                   title: "Error",
                   description: "Failed to update setting.",
@@ -706,6 +720,7 @@ export function ClubThemeEditor({
                 return;
               }
               
+              setSaving(false);
               toast({
                 title: checked ? "Club name enabled" : "Club name disabled",
                 description: checked 
@@ -713,7 +728,6 @@ export function ClubThemeEditor({
                   : "Club name hidden from header",
               });
               
-              onSave?.();
             }}
           />
         </div>

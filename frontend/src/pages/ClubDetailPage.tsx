@@ -2363,9 +2363,11 @@ export default function ClubDetailPage() {
             initialShowNameInHeader={(club as any).show_name_in_header ?? true}
             initialLogoOnlyMode={(club as any).logo_only_mode ?? false}
             initialThemeEnabled={(club as any).theme_enabled ?? true}
-            onSaved={() => {
-              queryClient.invalidateQueries({ queryKey: ["club", id] });
-              queryClient.invalidateQueries({ queryKey: ["club-themes"] });
+            onSaved={async () => {
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["club", id] }),
+                queryClient.invalidateQueries({ queryKey: ["club-themes"] }),
+              ]);
             }}
           />
         );

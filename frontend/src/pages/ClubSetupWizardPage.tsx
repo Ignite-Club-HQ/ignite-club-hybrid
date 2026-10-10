@@ -1262,11 +1262,13 @@ function ReviewStep({
                         initialShowNameInHeader={club.show_name_in_header ?? true}
                         initialLogoOnlyMode={club.logo_only_mode ?? false}
                         initialThemeEnabled={club.theme_enabled ?? true}
-                        onSave={() => {
+                        onSave={async () => {
                           setBrandingSaved(true);
-                          qc.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
-                          qc.invalidateQueries({ queryKey: ["club", clubId, "setup"] });
-                          qc.invalidateQueries({ queryKey: ["club-themes"] });
+                          await Promise.all([
+                            qc.invalidateQueries({ queryKey: ["club-setup-progress", clubId] }),
+                            qc.invalidateQueries({ queryKey: ["club", clubId, "setup"] }),
+                            qc.invalidateQueries({ queryKey: ["club-themes"] }),
+                          ]);
                         }}
                       />
                     ) : (
