@@ -134,6 +134,12 @@ export default function EditClubPage() {
 
   const [uploading, setUploading] = useState(false);
   const isNative = shouldUseNativePicker();
+  // The avatar shows an instant local preview (blob: URL) while the real
+  // upload finishes; the real uploaded URL is kept here so a save never
+  // writes a blob: URL to the backend.
+  const uploadedLogoUrlRef = useRef<string | null>(null);
+  const logoUrlForSave = () =>
+    uploadedLogoUrlRef.current ?? (logoUrl.startsWith("blob:") ? club?.logo_url ?? "" : logoUrl);
 
   const handleNativeLogoPick = async () => {
     if (!id) return;
@@ -170,6 +176,7 @@ export default function EditClubPage() {
 
       if (blobUpload) {
         // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users: if they are routed to ICP but the blob store
         // isn't ready, they cannot upload to Supabase.
