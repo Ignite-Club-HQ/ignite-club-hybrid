@@ -27,6 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
+import { useClubTheme } from "@/hooks/useClubTheme";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
