@@ -78,16 +78,42 @@ export default function EditClubPage() {
           club_subscriptions: null,
         } : null;
       }
-      const { data, error } = await supabase
-        .from("clubs")
-        .select(`
-          *,
-          club_subscriptions(is_pro, is_pro_football, expires_at)
-        `)
-        .eq("id", id!)
-        .single();
-      if (error) throw error;
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("clubs")
+            .select(`
+              *,
+              club_subscriptions(is_pro, is_pro_football, expires_at)
+            `)
+            .eq("id", id!)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const [profileOpt, settingsOpt] = await Promise.all([
+            getLiveClubProfile(ctx, id!),
+            getLiveClubSettings(ctx, id!),
+          ]);
+          const profile = profileOpt[0];
+          if (!profile) return null;
+          const settings = settingsOpt[0];
+          return {
+            id: profile.id,
+            name: profile.name,
+            description: profile.description[0] ?? null,
+            logo_url: profile.logo_url[0] ?? null,
+            sport: (profile as any).sport?.[0] ?? null,
+            contact_email: settings?.contact_email?.[0] ?? null,
+            class_mode_enabled: false,
+            allow_guests_default: false,
+            max_guests_per_member_default: 2,
+            events_sponsor_strip_enabled: settings?.events_sponsor_strip_enabled ?? false,
+            club_subscriptions: null,
+          };
+        },
+      });
     },
     enabled: !!id,
   });
