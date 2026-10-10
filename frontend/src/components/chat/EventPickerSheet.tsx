@@ -8,6 +8,9 @@ import { Clock, MapPin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveEvents } from "@/live/features/events";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +38,83 @@ export function EventPickerSheet({ open, onOpenChange, onSelectEvent, teamId, cl
   const { data: events, isLoading } = useQuery({
     queryKey: ["event-picker", teamId, clubId, miniLeagueId, competitionId, user?.id],
     queryFn: async () => {
+      return withFeatureBackend("events", {
+        supabase: querySupabaseEvents,
+        icp: (ctx) => queryLiveEvents(ctx),
+      });
+    },
+    enabled: open && !!(teamId || clubId) && !!user?.id,
+    staleTime: 60 * 1000,
+  });
+
+  // ICP (blockchain) path: read upcoming events from the events canister and
+  // map them into the same shape the Supabase query returns.
+  async function queryLiveEvents(ctx: import("@/live/featureRouter").FeatureBackendContext) {
+    const mapEvent = (ev: any) => {
+      const start = new Date(Number(ev.starts_at_ms));
+      return {
+        id: ev.id as string,
+        title: ev.title as string,
+        event_date: format(start, "yyyy-MM-dd"),
+        start_time: start.toISOString(),
+        location_name: (ev.location?.[0] ?? null) as string | null,
+        location: null as string | null,
+        type: ev.event_type as string,
+        opponent: (ev.opponent?.[0] ?? null) as string | null,
+        mini_league_id: (ev.mini_league_id?.[0] ?? null) as string | null,
+        competition_match_id: null as string | null,
+        is_cancelled: !!ev.cancelled,
+        team_id: (ev.team_id?.[0] ?? null) as string | null,
+        target_team_ids: null as string[] | null,
+      };
+    };
+    const upcoming = (ev: any) =>
+      !ev.deleted && !ev.cancelled && Number(ev.starts_at_ms) >= Date.now() - 24 * 60 * 60 * 1000;
+
+    if (teamId) {
+      // Team chat: this team's events plus club-wide game events.
+      const [ownRows, clubRows] = await Promise.all([
+        listLiveEvents(ctx, null, teamId).catch(() => [] as any[]),
+        clubId ? listLiveEvents(ctx, clubId, null).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+      ]);
+      const clubGames = (clubRows as any[]).filter(
+        (e) => !e.team_id?.[0] && e.event_type === "game",
+      );
+      const seen = new Set<string>();
+      return [...(ownRows as any[]), ...clubGames]
+        .filter(upcoming)
+        .filter((e) => (seen.has(e.id) ? false : (seen.add(e.id), true)))
+        .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
+        .slice(0, 50)
+        .map(mapEvent);
+    }
+
+    if (clubId) {
+      // Club-wide / group chat: club-level events plus events for teams the
+      // user has a role on.
+      const grants = await getLiveMyRoleGrants(ctx).catch(() => [] as any[]);
+      const myTeamIds = new Set(
+        grants
+          .filter((g: any) => g.team?.[0] && (!g.club?.[0] || g.club[0] === clubId))
+          .map((g: any) => g.team[0] as string),
+      );
+      const rows = (await listLiveEvents(ctx, clubId, null).catch(() => [] as any[])) as any[];
+      return rows
+        .filter(upcoming)
+        .filter((e) => {
+          const t = e.team_id?.[0] as string | undefined;
+          return !t || myTeamIds.has(t);
+        })
+        .sort((a, b) => Number(a.starts_at_ms) - Number(b.starts_at_ms))
+        .slice(0, 50)
+        .map(mapEvent);
+    }
+
+    return [];
+  }
+
+  // Supabase path (original behaviour, unchanged).
+  async function querySupabaseEvents() {
       // Team chat: this team's own events, plus club-wide GAME events this
       // team is invited to (untargeted, or targeted at this team). Other
       // club-wide event types (social, training) and other teams' events
@@ -153,10 +233,7 @@ export function EventPickerSheet({ open, onOpenChange, onSelectEvent, teamId, cl
       }
 
       return [];
-    },
-    enabled: open && !!(teamId || clubId) && !!user?.id,
-    staleTime: 60 * 1000,
-  });
+  }
 
   const filtered = useMemo(() => {
     if (!events) return [];
