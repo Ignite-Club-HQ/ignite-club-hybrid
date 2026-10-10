@@ -56,6 +56,7 @@ export default function EditProfilePage() {
   // Save) and show it instantly from the local copy instead of waiting for
   // a download + decrypt.
   const persistIcpAvatar = async (url: string, localFile: Blob) => {
+    if (!user) throw new Error("You need to sign in again.");
     const { localUploadPreviews } = await import("@/components/media/localUploadPreviews");
     localUploadPreviews.set(url, URL.createObjectURL(localFile));
     setAvatarUrl(url);
@@ -66,11 +67,11 @@ export default function EditProfilePage() {
     ]);
     const identity = await getCurrentInternetIdentity();
     if (!identity) throw new Error("You need to sign in again.");
-    await saveIcpIdentityProfile(identity, user!.id, {
+    await saveIcpIdentityProfile(identity, user.id, {
       displayName: (displayName.trim() || profile?.display_name || "").trim(),
       avatarRef: url,
     });
-    void refreshProfile();
+    await refreshProfile();
   };
 
   const handleNativeAvatarPick = async () => {
@@ -220,6 +221,7 @@ export default function EditProfilePage() {
   };
 
   const handleSave = async () => {
+    if (uploadingAvatar || saving || !user) return;
     if (!displayName.trim()) {
       toast({
         title: "Display name required",
@@ -245,7 +247,7 @@ export default function EditProfilePage() {
         ]);
         const identity = await getCurrentInternetIdentity();
         if (!identity) throw new Error("You need to sign in again.");
-        await saveIcpIdentityProfile(identity, user!.id, {
+        await saveIcpIdentityProfile(identity, user.id, {
           displayName: displayName.trim(),
           avatarRef: avatarUrl.trim() || null,
         });
@@ -276,8 +278,8 @@ export default function EditProfilePage() {
         return;
       }
 
-      setSaving(false);
       await refreshProfile();
+      setSaving(false);
       toast({ title: "Profile updated!" });
       navigate("/profile");
       return;
@@ -458,7 +460,7 @@ export default function EditProfilePage() {
           <Button
             className="w-full"
             onClick={handleSave}
-            disabled={saving || !displayName.trim()}
+            disabled={saving || uploadingAvatar || !displayName.trim()}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
           </Button>

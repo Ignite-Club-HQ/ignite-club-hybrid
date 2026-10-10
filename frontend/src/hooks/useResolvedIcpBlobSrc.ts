@@ -1,6 +1,7 @@
 import * as React from "react";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listBlobStoreCanisterIds } from "@/live/mediaStorage";
+import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 
 /**
  * ICP media (profile photos, club logos, sponsor images) lives on the
@@ -46,6 +47,8 @@ export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedI
   const input = src ?? undefined;
   const compute = (): ResolvedIcpBlobSrc => {
     if (!input || !isIcpBlobUrl(input)) return { src: input, pending: false, failed: false };
+    const preview = localUploadPreviews.get(input);
+    if (preview) return { src: preview, pending: false, failed: false };
     const cached = decryptedCache.get(input);
     if (cached) return { src: cached, pending: false, failed: false };
     const failedAt = failedCache.get(input);

@@ -8,7 +8,7 @@ type ClubThemeEditorProps = ComponentProps<typeof ClubThemeEditor>;
 
 interface ClubBrandingSectionProps extends Omit<ClubThemeEditorProps, "onSave"> {
   hasProAccess: boolean;
-  onSaved: () => void;
+  onSaved: () => void | Promise<void>;
 }
 
 export function ClubBrandingSection({ hasProAccess, onSaved, ...editorProps }: ClubBrandingSectionProps) {
