@@ -566,13 +566,11 @@ export default function HomePage() {
         // can keep yesterday's data alive into the next day. Re-filter on
         // render so stale past events never leak into Next Up.
         if (!isStillUpcomingForNextUp(event, nowMs)) return false;
-        if (event.mini_league_id) {
-          return miniLeagueIds.includes(event.mini_league_id);
-        } else if (event.team_id) {
-          return teamIds.includes(event.team_id);
-        } else {
-          return clubIdsArr.includes(event.club_id);
-        }
+        return isHomeEventForMember(event as any, {
+          teamIds,
+          clubIds: clubIdsArr,
+          miniLeagueIds,
+        });
       });
 
       // Limit recurring series to next 3 upcoming occurrences
