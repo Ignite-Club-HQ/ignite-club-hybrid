@@ -233,11 +233,14 @@ and Capacitor config, so they must travel as-is.
   becomes a new, empty account. Email sign-in is unaffected. Decide before a
   native release: ship email-only, load the deployed site inside the shell, or
   wire sign-in through the in-app browser and register the app's address.
-- **Push is not wired natively.** `@capacitor-firebase/messaging` is not
-  installed, so `nativePush.ts` loads it optionally and silently no-ops. Needs
-  the package plus `google-services.json` (Android) / `GoogleService-Info.plist`
-  (iOS) — the decode steps and env vars are already in the workflows — and an
-  APNs key uploaded to Firebase.
+- **Push (now wired natively) shares one Firebase project with the other repo's
+  app.** Direct/device-token sends cannot cross apps — every token is per app
+  instance. The one leak path is **topics**: if both apps ever subscribe to the
+  same topic name (e.g. `news`), both receive those broadcasts. Rule: prefix
+  every topic with the app ID — Ignite subscribes to
+  `ignite.<topic>` (e.g. `ignite.club-news`), the other app keeps its own
+  prefix. Server-side broadcast code must only ever publish to the
+  `ignite.` namespace. Apply this before any topic-based broadcast ships.
 - **Same-origin `/api/*` calls.** `LinkPreview.tsx` fetches
   `/api/fetch-link-preview` and `websiteBackendSync.ts` fetches
   `/api/register-club-backend`. Inside a bundled native app a relative URL
