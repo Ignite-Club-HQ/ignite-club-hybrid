@@ -189,6 +189,7 @@ export default function EditClubPage() {
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({ title: "Logo uploaded", description: "Your club logo has been uploaded successfully." });
@@ -236,6 +237,7 @@ export default function EditClubPage() {
 
       if (blobUpload) {
         // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users
         if (isFeatureRoutedToIcp("membership")) {
