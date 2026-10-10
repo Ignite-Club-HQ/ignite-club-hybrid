@@ -138,7 +138,7 @@ export function shouldUseRedirectSignIn(origin: string, userAgent: string, maxTo
   return iPadOs || /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
 }
 
-function useRedirectSignIn(): boolean {
+function prefersRedirectSignIn(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   return shouldUseRedirectSignIn(window.location.origin, navigator.userAgent, navigator.maxTouchPoints ?? 0);
 }
@@ -160,7 +160,7 @@ async function createDefaultAuthClient(target: IcpTargetConfig): Promise<Interne
     agentOptions: {
       host: target.host,
     },
-    transport: useRedirectSignIn() ? "redirect" : "window",
+    transport: prefersRedirectSignIn() ? "redirect" : "window",
   }) as unknown as InternetIdentityAuthClient;
 }
 
@@ -406,7 +406,7 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
   // An explicit tap always re-arms the silent resume path.
   signOutRequested = false;
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
-  if (!client.isAuthenticated() && useRedirectSignIn()) {
+  if (!client.isAuthenticated() && prefersRedirectSignIn()) {
     await startRedirectSignIn(target, returnTo);
   }
   const identity = client.isAuthenticated()
