@@ -110,6 +110,7 @@ export default function EditProfilePage() {
         const { uploadIcpAvatar } = await import("@/live/avatarUpload");
         const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
         await persistIcpAvatar(url, uploadBlob);
+        await refreshProfile();
         toast({ title: "Photo saved!" });
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
@@ -120,6 +121,7 @@ export default function EditProfilePage() {
 
         const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(fileName);
         setAvatarUrl(publicUrlData.publicUrl);
+        await refreshProfile();
         toast({ title: "Photo uploaded!" });
       }
     } catch (error: any) {
@@ -178,6 +180,7 @@ export default function EditProfilePage() {
           ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
         });
         await persistIcpAvatar(url, uploadFile);
+        await refreshProfile();
         toast({ title: "Photo saved!" });
       } catch (error) {
         setAvatarPreview("");
@@ -207,7 +210,8 @@ export default function EditProfilePage() {
       
       const storageUrl = publicUrlData.publicUrl;
       setAvatarUrl(storageUrl);
-      toast({ title: "Photo uploaded!" });
+      await refreshProfile();
+        toast({ title: "Photo uploaded!" });
     } catch (error) {
       setAvatarPreview("");
       toast({

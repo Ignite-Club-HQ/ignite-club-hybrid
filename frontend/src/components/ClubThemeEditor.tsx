@@ -312,7 +312,7 @@ export function ClubThemeEditor({
           await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, showNameInHeader);
         },
       });
-      await onSave?.();
+      await await onSave?.();
     } catch (e: any) {
       toast({
         title: "Error",
@@ -378,7 +378,7 @@ export function ClubThemeEditor({
           await clearLiveClubTheme(ctx, clubId);
         },
       });
-      await onSave?.();
+      await await onSave?.();
     } catch (e: any) {
       setSaving(false);
       toast({
@@ -448,7 +448,7 @@ export function ClubThemeEditor({
                     await setLiveClubThemeEnabled(ctx, clubId, checked);
                   },
                 });
-                await onSave?.();
+                await await onSave?.();
               } catch {
                 setSaving(false);
                 toast({
@@ -603,7 +603,7 @@ export function ClubThemeEditor({
                     }
                   },
                 });
-                await onSave?.();
+                await await onSave?.();
               } catch {
                 setSaving(false);
                 toast({
@@ -656,7 +656,7 @@ export function ClubThemeEditor({
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, checked, showNameInHeader); },
                 });
-                await onSave?.();
+                await await onSave?.();
               } catch {
                 setSaving(false);
                 toast({
@@ -708,7 +708,7 @@ export function ClubThemeEditor({
                   },
                   icp: async (ctx) => { await setLiveClubHeaderToggles(ctx, clubId, showLogoInHeader, checked); },
                 });
-                await onSave?.();
+                await await onSave?.();
               } catch {
                 setSaving(false);
                 toast({
