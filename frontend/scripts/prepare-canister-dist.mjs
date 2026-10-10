@@ -82,6 +82,10 @@ writeFileSync(
   Access-Control-Allow-Origin: *
   Content-Type: application/json
 
+/.well-known/ii-auth-callbacks
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 `,
