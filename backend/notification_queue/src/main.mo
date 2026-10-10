@@ -8,6 +8,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
+import Timer "mo:core/Timer";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
@@ -659,6 +660,116 @@ persistent actor class Main(governorInit : Principal) {
     };
     #Ok(res)
   };
+
+
+  // ======================================================================
+  // Scheduled-message delivery. A transient 60-second timer posts every due
+  // Pending scheduled message to messaging_domain as its author (via
+  // deliver_scheduled_message, which trusts only this canister and re-runs
+  // all send checks). Recurring messages roll forward to their next slot.
+  // Idempotency key "sched:<id>:<slot>" makes a repeated tick a no-op.
+  // ======================================================================
+
+  transient var deliveringScheduled = false;
+  transient let SCHEDULED_BATCH = 20;
+
+  func scheduledConversation(item : Types.ScheduledMessage) : ?Text {
+    switch (item.chat_type) {
+      case (#Broadcast) { ?"broadcast" };
+      case (#Direct or #ClubAdmin) { item.conversation_id };
+      case _ { scheduledTarget(item) };
+    }
+  };
+
+  func looksLikePrincipal(t : Text) : Bool {
+    t.size() >= 5 and t.size() <= 63 and t.contains(#char '-')
+  };
+
+  func nextSlot(item : Types.ScheduledMessage) : ?Nat64 {
+    let day : Nat64 = 86_400_000;
+    let step : Nat64 = switch (item.recurrence) {
+      case (#None) { return null };
+      case (#Daily) { day };
+      case (#Weekly) { 7 * day };
+      case (#Monthly) { 30 * day };
+    };
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var next = item.scheduled_for_ms + step;
+    while (next <= now) { next += step };
+    switch (item.recurrence_until_ms) {
+      case (?until) { if (next > until) { null } else { ?next } };
+      case null { ?next };
+    }
+  };
+
+  func settleScheduled(id : Text, slot : Nat64, outcome : { #Sent : Text; #Failed : Text }) {
+    switch (findScheduledIndex(id)) {
+      case null {};
+      case (?index) {
+        let item = scheduled[index];
+        // Edited/cancelled while in flight: leave the newer state alone.
+        if (item.status != #Pending or item.scheduled_for_ms != slot) { return };
+        let stamp = Nat64.fromIntWrap(Time.now() / 1_000_000);
+        let updated = switch (outcome) {
+          case (#Sent(msgId)) {
+            switch (nextSlot(item)) {
+              case (?next) { { item with scheduled_for_ms = next; sent_message_id = ?msgId; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+              case null { { item with status = #Sent; sent_message_id = ?msgId; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+            }
+          };
+          case (#Failed(err)) { { item with status = #Failed; error_message = ?err; attempted_at_ms = ?stamp; updated_at_ms = stamp } };
+        };
+        replaceScheduled(index, updated);
+      };
+    }
+  };
+
+  func deliverDueScheduled() : async () {
+    if (deliveringScheduled) { return };
+    let messaging = switch (messagingDomainCanister) { case (?m) { m }; case null { return } };
+    let now = Nat64.fromIntWrap(Time.now() / 1_000_000);
+    var due : [Types.ScheduledMessage] = [];
+    for (item in scheduled.values()) {
+      if (due.size() < SCHEDULED_BATCH and item.status == #Pending and item.scheduled_for_ms <= now) {
+        due := due.concat([item]);
+      };
+    };
+    if (due.size() == 0) { return };
+    deliveringScheduled := true;
+    let chat : actor {
+      deliver_scheduled_message : shared (Principal, Text, Text, Text, ?{ kind : Text; ref_id : Text; url : ?Text }, ?Text) -> async { #Ok : { id : Text }; #Err : Text };
+    } = actor (Principal.toText(messaging));
+    for (item in due.values()) {
+      let slot = item.scheduled_for_ms;
+      switch (scheduledConversation(item)) {
+        case null { settleScheduled(item.id, slot, #Failed("No chat to post to")) };
+        case (?conversation) {
+          if (not looksLikePrincipal(item.author)) {
+            settleScheduled(item.id, slot, #Failed("Author is not a blockchain account"));
+          } else {
+            let attachment = switch (item.image_url) {
+              case (?url) { ?{ kind = "image"; ref_id = "sched-" # item.id; url = ?url } };
+              case null { null };
+            };
+            let body = if (item.body == "" and attachment != null) { " " } else { item.body };
+            try {
+              switch (await chat.deliver_scheduled_message(Principal.fromText(item.author), conversation, body, "sched:" # item.id # ":" # Nat64.toText(slot), attachment, item.reply_to_id)) {
+                case (#Ok(msg)) { settleScheduled(item.id, slot, #Sent(msg.id)) };
+                case (#Err(e)) { settleScheduled(item.id, slot, #Failed(e)) };
+              };
+            } catch (_) {
+              // Transient call failure: stay Pending, retried next tick.
+            };
+          };
+        };
+      };
+    };
+    deliveringScheduled := false;
+  };
+
+  transient let _scheduledTimer = Timer.recurringTimer<system>(#seconds(60), func() : async () {
+    try { await deliverDueScheduled() } catch (_) { deliveringScheduled := false };
+  });
 
   // ======================================================================
   // Message digests
