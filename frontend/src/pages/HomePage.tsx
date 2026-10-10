@@ -86,6 +86,7 @@ import {
   getLocalDateKey,
   isStillUpcomingForNextUp,
   selectVisibleHomeEvents,
+  isHomeEventForMember,
 } from "@/components/home/homeEventSelection";
 import { HomeDashboardSections } from "@/components/home/HomeDashboardSections";
 
