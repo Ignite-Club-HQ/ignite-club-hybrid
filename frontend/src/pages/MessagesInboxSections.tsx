@@ -150,8 +150,11 @@ export function MessagesInboxSections({
           { id: "dms", label: "DMs", visible: counts.dms > 0, type: "dm", unread: unread.dms },
         ];
         const shown = chips.filter((chip) => chip.visible);
-        if (totalUnread === 0 && allItems.length <= 6) return null;
-        if (shown.length <= 2) return null;
+        // Never hide the chips while a non-"all" filter is active: the user
+        // would have no way to switch back (the filter is persisted).
+        const filterActive = typeFilter !== "all";
+        if (!filterActive && totalUnread === 0 && allItems.length <= 6) return null;
+        if (!filterActive && shown.length <= 2) return null;
 
         const currentUnread = chips.find((chip) => chip.id === typeFilter)?.unread ?? 0;
         const elsewhere = chips
