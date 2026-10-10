@@ -220,6 +220,11 @@ export default function ClubDetailPage() {
               await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
             }
             if (!p) return null;
+            // Header/logo toggles live in ClubSettings on the canister —
+            // without them the theme editor starts "show logo in header" off
+            // and a theme save would write that off value back.
+            const settingsOpt = await getLiveClubSettings(ctx, id).catch(() => [] as Awaited<ReturnType<typeof getLiveClubSettings>>);
+            const st = settingsOpt[0];
             // Map the canister profile onto the Supabase clubs row shape this
             // page renders; the canister has no theme-HSL/sponsor columns.
             return {
