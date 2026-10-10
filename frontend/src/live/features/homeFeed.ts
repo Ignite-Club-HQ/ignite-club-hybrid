@@ -225,7 +225,19 @@ export async function fetchLiveHomeFeed(
     }),
   );
 
-  let events = merged.map((event) => mapLiveHomeEvent(event, clubNameById));
+  // Only events this user is actually part of: club-level roles (club admin,
+  // competition admin) must not surface other teams' games. listLiveEvents by
+  // club returns every team's events, so filter like the Supabase branch.
+  const { isHomeEventForMember } = await import("@/components/home/homeEventSelection");
+  let events = merged
+    .map((event) => mapLiveHomeEvent(event, clubNameById))
+    .filter((event) =>
+      isHomeEventForMember(event, {
+        teamIds: memberships.teamIds,
+        clubIds: memberships.clubIds,
+        miniLeagueIds: null,
+      }),
+    );
 
   // Same client-side freshness/recurring handling as the Supabase branch.
   // Imported lazily so the live layer keeps no static dependency on the

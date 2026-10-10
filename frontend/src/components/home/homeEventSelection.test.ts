@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getEventStartMs,
+  isHomeEventForMember,
   isStillUpcomingForNextUp,
   selectVisibleHomeEvents,
 } from "./homeEventSelection";
@@ -50,5 +51,27 @@ describe("homeEventSelection", () => {
     expect(selectVisibleHomeEvents(events, "club-1", now, 1)).toEqual([
       events[1],
     ]);
+  });
+
+  describe("isHomeEventForMember", () => {
+    const clubAdmin = { teamIds: ["u7"], clubIds: ["club-1"], miniLeagueIds: null };
+
+    it("hides another team's game from a club/competition admin", () => {
+      expect(isHomeEventForMember({ club_id: "club-1", team_id: "red" }, clubAdmin)).toBe(false);
+    });
+
+    it("shows games for the user's own team", () => {
+      expect(isHomeEventForMember({ club_id: "club-1", team_id: "u7" }, clubAdmin)).toBe(true);
+    });
+
+    it("hides club-wide events targeted at teams the user is not in", () => {
+      expect(
+        isHomeEventForMember({ club_id: "club-1", target_team_ids: ["red", "white"] }, clubAdmin),
+      ).toBe(false);
+    });
+
+    it("shows untargeted club-wide events to club members", () => {
+      expect(isHomeEventForMember({ club_id: "club-1" }, clubAdmin)).toBe(true);
+    });
   });
 });
