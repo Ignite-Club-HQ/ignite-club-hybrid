@@ -9,6 +9,7 @@ import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { LogoImage } from "@/components/ui/logo-image";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -678,7 +679,13 @@ export default function ProfilePage() {
             <AvatarImage src={profile?.avatar_url || undefined} />
             <AvatarFallback className="bg-muted flex items-center justify-center p-0">
               {activeThemeData?.logoUrl ? (
-                <img src={activeThemeData.logoUrl} alt={activeThemeData.clubName} className="h-14 w-14 object-contain" />
+                <LogoImage
+                  src={activeThemeData.logoUrl}
+                  alt={activeThemeData.clubName}
+                  className="h-14 w-14"
+                  imgClassName="object-contain"
+                  fallback={<img src={igniteIcon} alt="Profile" className="h-full w-full object-cover rounded-full" />}
+                />
               ) : (
                 <img src={igniteIcon} alt="Profile" className="h-full w-full object-cover rounded-full" />
               )}
