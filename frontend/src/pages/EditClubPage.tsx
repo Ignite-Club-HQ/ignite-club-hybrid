@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, Loader2, UserPlus } from "lucide-react";
@@ -134,6 +134,12 @@ export default function EditClubPage() {
 
   const [uploading, setUploading] = useState(false);
   const isNative = shouldUseNativePicker();
+  // The avatar shows an instant local preview (blob: URL) while the real
+  // upload finishes; the real uploaded URL is kept here so a save never
+  // writes a blob: URL to the backend.
+  const uploadedLogoUrlRef = useRef<string | null>(null);
+  const logoUrlForSave = () =>
+    uploadedLogoUrlRef.current ?? (logoUrl.startsWith("blob:") ? club?.logo_url ?? "" : logoUrl);
 
   const handleNativeLogoPick = async () => {
     if (!id) return;
@@ -170,6 +176,7 @@ export default function EditClubPage() {
 
       if (blobUpload) {
         // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users: if they are routed to ICP but the blob store
         // isn't ready, they cannot upload to Supabase.
@@ -182,6 +189,7 @@ export default function EditClubPage() {
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage.from('club-logos').getPublicUrl(fileName);
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({ title: "Logo uploaded", description: "Your club logo has been uploaded successfully." });
@@ -229,6 +237,7 @@ export default function EditClubPage() {
 
       if (blobUpload) {
         // Blob-store URLs serve ciphertext — keep the local preview on screen.
+        uploadedLogoUrlRef.current = blobUpload.url;
       } else {
         // Fail closed for ICP users
         if (isFeatureRoutedToIcp("membership")) {
@@ -244,6 +253,7 @@ export default function EditClubPage() {
           .from('club-logos')
           .getPublicUrl(fileName);
 
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({
@@ -294,7 +304,7 @@ export default function EditClubPage() {
             .update({
               name: name.trim(),
               description: description.trim() || null,
-              logo_url: logoUrl || null,
+              logo_url: logoUrlForSave() || null,
               sport: sport || null,
               contact_email: contactEmail.trim() || null,
               class_mode_enabled: classModeEnabled,
@@ -313,7 +323,7 @@ export default function EditClubPage() {
                 ...existingProfile,
                 name: name.trim(),
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
               }
             : {
                 // provisional mapping — verify against deployed canister
@@ -321,7 +331,7 @@ export default function EditClubPage() {
                 name: name.trim(),
                 slug: id!,
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
                 primary_color: [],
                 secondary_color: [],
                 is_active: true,
@@ -383,6 +393,13 @@ export default function EditClubPage() {
     }
 
     setSaving(false);
+
+    // Refresh everywhere the club name/logo shows: the header theme query,
+    // club lists, and this club's own profile reads.
+    queryClient.invalidateQueries({ queryKey: ["all-user-clubs-for-theme-v2"] });
+    queryClient.invalidateQueries({ queryKey: ["clubs"] });
+    queryClient.invalidateQueries({ queryKey: ["club", id] });
+    queryClient.invalidateQueries({ queryKey: ["club-profile", id] });
 
     toast({
       title: "Club updated!",
