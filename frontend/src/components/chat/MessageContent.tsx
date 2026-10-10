@@ -139,7 +139,7 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
     let lastIndex = 0;
     
     // Combined regex. Order: vault root, vault file/folder, poll, board, event, gallery, markdown links, event URLs, plain URLs, mentions
-    const combinedRegex = /(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(\[poll:([0-9a-f-]{36})\])|(\[board:([0-9a-f-]{36})\])|(\[event:([0-9a-f-]{36})\])|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([0-9a-f-]{36})\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|((?:https?:\/\/[^\s]*)?\/events\/([0-9a-f-]{36})(?:\S*)?)|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))/gi;
+    const combinedRegex = /(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(\[poll:([0-9a-f-]{36})\])|(\[board:([0-9a-f-]{36})\])|(\[event:([0-9a-f-]{36})\])|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([A-Za-z0-9-]+)\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|((?:https?:\/\/[^\s]*)?\/events\/([0-9a-f-]{36})(?:\S*)?)|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))/gi;
     let match;
     
     while ((match = combinedRegex.exec(text)) !== null) {
