@@ -394,6 +394,13 @@ export default function EditClubPage() {
 
     setSaving(false);
 
+    // Refresh everywhere the club name/logo shows: the header theme query,
+    // club lists, and this club's own profile reads.
+    queryClient.invalidateQueries({ queryKey: ["all-user-clubs-for-theme-v2"] });
+    queryClient.invalidateQueries({ queryKey: ["clubs"] });
+    queryClient.invalidateQueries({ queryKey: ["club", id] });
+    queryClient.invalidateQueries({ queryKey: ["club-profile", id] });
+
     toast({
       title: "Club updated!",
       description: `${name} has been updated successfully.`,
