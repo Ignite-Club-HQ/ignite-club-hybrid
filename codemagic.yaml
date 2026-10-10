@@ -64,6 +64,10 @@ workflows:
         script: |
           npx cap add android
           npx cap sync android
+          # Optional: notifications in the test build when the Firebase file is set.
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
+          fi
           # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
           python3 - <<'PY'
           p = "android/app/src/main/AndroidManifest.xml"
@@ -269,14 +273,9 @@ workflows:
       - name: Install CocoaPods dependencies
         working_directory: frontend/ios/App
         script: pod install
-      - name: Decode Firebase config (push on iOS)
-        working_directory: frontend/ios/App
-        script: |
-          if [ -n "$GOOGLE_SERVICE_INFO_PLIST" ]; then
-            echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > GoogleService-Info.plist
-          else
-            echo "GOOGLE_SERVICE_INFO_PLIST not set - building without Firebase push"
-          fi
+      - name: Wire Firebase push (iOS)
+        working_directory: frontend
+        script: bash ../scripts/native-push-ios.sh
       - name: Increment build number
         working_directory: frontend/ios/App
         script: |
