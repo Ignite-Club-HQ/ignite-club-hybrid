@@ -242,7 +242,10 @@ export default function ClubDetailPage() {
               // with inert defaults.
               class_mode_enabled: false,
               primary_sponsor_id: null,
-              show_logo_in_header: false,
+              show_logo_in_header: st?.header_logo_enabled ?? false,
+              show_name_in_header: st?.header_club_name_enabled ?? true,
+              logo_only_mode: st?.logo_only_mode ?? false,
+              theme_enabled: st?.theme_enabled ?? true,
               theme_primary_h: null,
               theme_primary_s: null,
               theme_primary_l: null,
