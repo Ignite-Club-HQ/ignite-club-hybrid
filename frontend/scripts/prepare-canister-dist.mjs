@@ -69,6 +69,10 @@ writeFileSync(
   Content-Security-Policy: ${csp}
   Cache-Control: no-cache
 
+/.well-known/ii-alternative-origins
+  Access-Control-Allow-Origin: *
+  Content-Type: application/json
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 `,
