@@ -706,6 +706,22 @@ persistent actor class Main(governorInit : Principal) {
 
   public shared ({ caller }) func send_message(conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
     auth(caller);
+    await* sendAs(caller, conversation_id, body, idempotency_key, attachment, reply_to_id)
+  };
+
+  // Scheduled-message delivery: notification_queue's timer posts a due
+  // scheduled message as its author. Only the configured notification_queue
+  // canister may call this; the author still goes through every send_message
+  // check (membership, blocks, admin-only posting, broadcast admin), so a
+  // scheduled message can never post where its author could not post live.
+  public shared ({ caller }) func deliver_scheduled_message(sender : Principal, conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async { #Ok : Types.Message; #Err : Text } {
+    let trusted = switch (notificationQueueCanister) { case (?nq) { nq.equal(caller) }; case null { false } };
+    if (not trusted) return #Err("Only notification_queue may deliver scheduled messages");
+    if (sender.equal(Principal.anonymous())) return #Err("Invalid sender");
+    await* sendAs(sender, conversation_id, body, idempotency_key, attachment, reply_to_id)
+  };
+
+  func sendAs(caller : Principal, conversation_id : Text, body : Text, idempotency_key : Text, attachment : ?Types.Attachment, reply_to_id : ?Text) : async* { #Ok : Types.Message; #Err : Text } {
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     // The broadcast conversation is open-read, so the check above passes for
     // every signed-in member; only platform admins (club_domain's app_admin

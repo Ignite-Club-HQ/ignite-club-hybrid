@@ -205,6 +205,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'deliver_scheduled_message' : ActorMethod<
+    [Principal, string, string, string, [] | [Attachment], [] | [string]],
+    { 'Ok' : Message } |
+      { 'Err' : string }
+  >,
   'dm_attachments_disabled' : ActorMethod<[Principal], boolean>,
   'enable_ai_catch_up_for_all_members' : ActorMethod<
     [string],

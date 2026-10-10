@@ -393,6 +393,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
+    'deliver_scheduled_message' : IDL.Func(
+        [
+          IDL.Principal,
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(Attachment),
+          IDL.Opt(IDL.Text),
+        ],
+        [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],
+        [],
+      ),
     'dm_attachments_disabled' : IDL.Func(
         [IDL.Principal],
         [IDL.Bool],
