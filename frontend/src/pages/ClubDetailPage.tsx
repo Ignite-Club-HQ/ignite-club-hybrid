@@ -107,7 +107,7 @@ import { friendlyQueryError } from "@/lib/friendlyQueryError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
+import { listLiveSponsors, listLiveTeamSponsorAllocations, getLiveClubProfile, getLiveClubSettings, listLiveTeams, listLiveTeamFolders, saveLiveTeamFolder, deleteLiveTeamFolder, setLiveTeamFolder, getLiveClubSubscription, saveLiveClubSubscription, softDeleteLiveTeam, restoreLiveTeam } from "@/live/features/club";
 import { markTeamDeleted, unmarkTeamDeleted } from "@/lib/deletedTeamTombstones";
 import { listLiveTeamSubscriptions, mapLiveTeamSubscriptionToRow } from "@/live/features/proAccess";
 import {
@@ -220,6 +220,11 @@ export default function ClubDetailPage() {
               await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
             }
             if (!p) return null;
+            // Header/logo toggles live in ClubSettings on the canister —
+            // without them the theme editor starts "show logo in header" off
+            // and a theme save would write that off value back.
+            const settingsOpt = await getLiveClubSettings(ctx, id).catch(() => [] as Awaited<ReturnType<typeof getLiveClubSettings>>);
+            const st = settingsOpt[0];
             // Map the canister profile onto the Supabase clubs row shape this
             // page renders; the canister has no theme-HSL/sponsor columns.
             return {
@@ -237,7 +242,10 @@ export default function ClubDetailPage() {
               // with inert defaults.
               class_mode_enabled: false,
               primary_sponsor_id: null,
-              show_logo_in_header: false,
+              show_logo_in_header: st?.header_logo_enabled ?? false,
+              show_name_in_header: st?.header_club_name_enabled ?? true,
+              logo_only_mode: st?.logo_only_mode ?? false,
+              theme_enabled: st?.theme_enabled ?? true,
               theme_primary_h: null,
               theme_primary_s: null,
               theme_primary_l: null,
