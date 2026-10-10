@@ -148,18 +148,28 @@ export default function EditClubPage() {
       const result = await pickNativePhoto({ quality: 80 });
       setUploading(true);
 
+      // Show the chosen logo straight away while the real upload finishes.
+      const localPreview = URL.createObjectURL(result.blob);
+      setLogoUrl(localPreview);
+
       const ext = mimeToExtension(result.mimeType);
       const fileName = `${id}/${Date.now()}.${ext}`;
       const storagePath = `club-logos/${fileName}`;
 
+      // On-chain bytes cost upload time; shrink the logo first.
+      const { compressImage } = await import("@/lib/imageCompression");
+      const compressed = await compressImage(
+        new File([result.blob], `logo.${ext}`, { type: result.mimeType }),
+      );
+
       const blobUpload = await tryUploadMediaToBlobStore({
         storagePath,
-        file: result.blob,
-        mime: result.mimeType,
+        file: compressed.file,
+        mime: compressed.file.type || result.mimeType,
       });
 
       if (blobUpload) {
-        setLogoUrl(blobUpload.url);
+        // Blob-store URLs serve ciphertext — keep the local preview on screen.
       } else {
         // Fail closed for ICP users: if they are routed to ICP but the blob store
         // isn't ready, they cannot upload to Supabase.
@@ -199,18 +209,26 @@ export default function EditClubPage() {
 
     setUploading(true);
     try {
+      // Show the chosen logo straight away while the real upload finishes.
+      const localPreview = URL.createObjectURL(file);
+      setLogoUrl(localPreview);
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${id}/${Date.now()}.${fileExt}`;
       const storagePath = `club-logos/${fileName}`;
 
+      // On-chain bytes cost upload time; shrink the logo first.
+      const { compressImage } = await import("@/lib/imageCompression");
+      const compressed = await compressImage(file);
+
       const blobUpload = await tryUploadMediaToBlobStore({
         storagePath,
-        file,
-        mime: file.type,
+        file: compressed.file,
+        mime: compressed.file.type || file.type,
       });
 
       if (blobUpload) {
-        setLogoUrl(blobUpload.url);
+        // Blob-store URLs serve ciphertext — keep the local preview on screen.
       } else {
         // Fail closed for ICP users
         if (isFeatureRoutedToIcp("membership")) {
