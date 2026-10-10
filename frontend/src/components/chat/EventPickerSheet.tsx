@@ -8,6 +8,9 @@ import { Clock, MapPin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/useAuth";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveEvents } from "@/live/features/events";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
 import {
   Dialog,
   DialogContent,
