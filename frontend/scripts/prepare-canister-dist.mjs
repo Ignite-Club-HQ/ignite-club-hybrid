@@ -34,6 +34,10 @@ writeFileSync(
         `https://${frontendCanisterId}.raw.icp.net`,
         `https://${frontendCanisterId}.ic0.app`,
         `https://${frontendCanisterId}.raw.ic0.app`,
+        // Club website (separate project) signs in as this canister too, so
+        // one person gets the same principal on the app and the website.
+        "https://igniteclubhq.com",
+        "https://ignite-club-heart.lovable.app",
       ],
     },
     null,
