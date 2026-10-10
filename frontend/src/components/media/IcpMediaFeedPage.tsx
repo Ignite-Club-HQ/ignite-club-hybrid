@@ -385,6 +385,13 @@ export function IcpMediaFeedPage() {
   }, [searchParams, setSearchParams]);
   const [selectedClubId, setSelectedClubId] = useState("all");
   const [selectedTeamId, setSelectedTeamId] = useState("all");
+  // Follow the top-left club switcher: when the app is filtered to one club,
+  // the feed must not show other clubs' media.
+  const { activeClubFilter } = useClubTheme();
+  useEffect(() => {
+    setSelectedClubId(activeClubFilter ?? "all");
+    setSelectedTeamId("all");
+  }, [activeClubFilter]);
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
