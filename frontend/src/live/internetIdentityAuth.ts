@@ -406,6 +406,9 @@ export async function signInWithInternetIdentity(returnTo?: string): Promise<Int
   // An explicit tap always re-arms the silent resume path.
   signOutRequested = false;
   const { client, target } = getWarmedAuthClient() ?? (await getAuthClient());
+  if (!client.isAuthenticated() && useRedirectSignIn()) {
+    await startRedirectSignIn(target, returnTo);
+  }
   const identity = client.isAuthenticated()
     ? await client.getIdentity()
     : await signInWithStoredSessionRecovery(client, returnTo);

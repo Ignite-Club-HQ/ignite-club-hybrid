@@ -45,6 +45,15 @@ writeFileSync(
   ) + "\n",
 );
 
+// Phones sign in by sending the whole page to Internet Identity and back
+// (see shouldUseRedirectSignIn in src/live/internetIdentityAuth.ts). II only
+// returns to an address listed here, matched exactly, for each canister host.
+const callbackHosts = ["icp0.io", "raw.icp0.io", "icp.net", "raw.icp.net", "ic0.app", "raw.ic0.app"];
+writeFileSync(
+  `${out}/.well-known/ii-auth-callbacks`,
+  JSON.stringify({ callbacks: callbackHosts.map((h) => `https://${frontendCanisterId}.${h}/auth`) }, null, 2) + "\n",
+);
+
 const csp = [
   "default-src 'none'",
   "script-src 'self'",
