@@ -140,10 +140,19 @@ export function ResponsiveDialogContent({
         }
 
       >
-        <div className={fullScreen 
-          ? "flex flex-1 min-h-0 flex-col w-full overflow-hidden" 
-          : "mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto"
-        }>
+        <div
+          className={fullScreen
+            ? "flex flex-1 min-h-0 flex-col w-full overflow-hidden"
+            : "mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto"
+          }
+          style={
+            !fullScreen && visualHeight
+              ? // Shrink with the soft keyboard so the focused field and the
+                // action button stay on screen (85vh ignores the keyboard).
+                { maxHeight: Math.min(visualHeight * 0.92, visualHeight - 8) }
+              : undefined
+          }
+        >
           {children}
         </div>
       </DrawerContent>
