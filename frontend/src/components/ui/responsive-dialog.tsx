@@ -108,6 +108,7 @@ export function ResponsiveDialogContent({
   fullScreen = false,
 }: ResponsiveDialogContentProps) {
   const { isMobile } = React.useContext(ResponsiveDialogContext);
+  const visualHeight = useVisualViewportHeight();
 
   if (isMobile) {
     return (
