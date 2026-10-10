@@ -1,4 +1,5 @@
 # Roadmap — ICP speed-up part 2
+- [x] Recognise complete ICP poll IDs in chat cards, card-only messages and inbox previews; seven attachment-ID tests passed (frontend update required)
 - [x] Align ICP profile-photo and theme confirmations with saved, refreshed display; prevent overlapping saves and reuse uploaded photo previews
 - [x] Match legal/contact links across sign-in modes; repair profile and internal policy destinations; 24 tests passed and all five pages plus profile policy links opened in browser (full signed-in profile/native-device check requires account/device access)
 - [x] Refine login with platform-neutral embedded-browser and error guidance; text-only provider attribution retained; 29 checks and live normal/embedded-browser presentation verified
