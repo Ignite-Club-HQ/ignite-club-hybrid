@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Camera, Loader2, UserPlus } from "lucide-react";
@@ -323,7 +323,7 @@ export default function EditClubPage() {
                 ...existingProfile,
                 name: name.trim(),
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
               }
             : {
                 // provisional mapping — verify against deployed canister
@@ -331,7 +331,7 @@ export default function EditClubPage() {
                 name: name.trim(),
                 slug: id!,
                 description: candidOpt(description.trim() || undefined),
-                logo_url: candidOpt(logoUrl || undefined),
+                logo_url: candidOpt(logoUrlForSave() || undefined),
                 primary_color: [],
                 secondary_color: [],
                 is_active: true,
