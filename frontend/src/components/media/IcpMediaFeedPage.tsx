@@ -27,6 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
+import { useClubTheme } from "@/hooks/useClubTheme";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
@@ -384,6 +385,13 @@ export function IcpMediaFeedPage() {
   }, [searchParams, setSearchParams]);
   const [selectedClubId, setSelectedClubId] = useState("all");
   const [selectedTeamId, setSelectedTeamId] = useState("all");
+  // Follow the top-left club switcher: when the app is filtered to one club,
+  // the feed must not show other clubs' media.
+  const { activeClubFilter } = useClubTheme();
+  useEffect(() => {
+    setSelectedClubId(activeClubFilter ?? "all");
+    setSelectedTeamId("all");
+  }, [activeClubFilter]);
   const [commentPost, setCommentPost] = useState<LiveMediaPost | null>(null);
   const [commentInput, setCommentInput] = useState("");
   const [pendingComments, setPendingComments] = useState<Record<string, LiveCommentView[]>>({});
