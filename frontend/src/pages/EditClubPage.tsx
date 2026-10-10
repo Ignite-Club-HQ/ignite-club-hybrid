@@ -253,6 +253,7 @@ export default function EditClubPage() {
           .from('club-logos')
           .getPublicUrl(fileName);
 
+        uploadedLogoUrlRef.current = urlData.publicUrl;
         setLogoUrl(urlData.publicUrl);
       }
       toast({
@@ -303,7 +304,7 @@ export default function EditClubPage() {
             .update({
               name: name.trim(),
               description: description.trim() || null,
-              logo_url: logoUrl || null,
+              logo_url: logoUrlForSave() || null,
               sport: sport || null,
               contact_email: contactEmail.trim() || null,
               class_mode_enabled: classModeEnabled,
