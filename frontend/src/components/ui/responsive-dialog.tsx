@@ -55,6 +55,25 @@ const ResponsiveDialogContext = React.createContext<{ isMobile: boolean }>({
   isMobile: false,
 });
 
+/**
+ * Tracks the visual viewport height in px. On Android the soft keyboard
+ * shrinks the visual viewport but not the layout viewport, so a drawer sized
+ * in vh keeps its top (and the focused input) hidden behind the keyboard.
+ * Capping the drawer to the visual viewport keeps the whole sheet visible.
+ */
+function useVisualViewportHeight(): number | null {
+  const [height, setHeight] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setHeight(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  return height;
+}
+
 export function ResponsiveDialog({
   open,
   onOpenChange,
