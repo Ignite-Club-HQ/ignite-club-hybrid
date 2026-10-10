@@ -233,10 +233,7 @@ export function EventPickerSheet({ open, onOpenChange, onSelectEvent, teamId, cl
       }
 
       return [];
-    },
-    enabled: open && !!(teamId || clubId) && !!user?.id,
-    staleTime: 60 * 1000,
-  });
+  }
 
   const filtered = useMemo(() => {
     if (!events) return [];
