@@ -55,6 +55,25 @@ const ResponsiveDialogContext = React.createContext<{ isMobile: boolean }>({
   isMobile: false,
 });
 
+/**
+ * Tracks the visual viewport height in px. On Android the soft keyboard
+ * shrinks the visual viewport but not the layout viewport, so a drawer sized
+ * in vh keeps its top (and the focused input) hidden behind the keyboard.
+ * Capping the drawer to the visual viewport keeps the whole sheet visible.
+ */
+function useVisualViewportHeight(): number | null {
+  const [height, setHeight] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setHeight(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  return height;
+}
+
 export function ResponsiveDialog({
   open,
   onOpenChange,
@@ -89,6 +108,7 @@ export function ResponsiveDialogContent({
   fullScreen = false,
 }: ResponsiveDialogContentProps) {
   const { isMobile } = React.useContext(ResponsiveDialogContext);
+  const visualHeight = useVisualViewportHeight();
 
   if (isMobile) {
     return (
@@ -120,10 +140,19 @@ export function ResponsiveDialogContent({
         }
 
       >
-        <div className={fullScreen 
-          ? "flex flex-1 min-h-0 flex-col w-full overflow-hidden" 
-          : "mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto"
-        }>
+        <div
+          className={fullScreen
+            ? "flex flex-1 min-h-0 flex-col w-full overflow-hidden"
+            : "mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] max-h-[85vh] overflow-y-auto"
+          }
+          style={
+            !fullScreen && visualHeight
+              ? // Shrink with the soft keyboard so the focused field and the
+                // action button stay on screen (85vh ignores the keyboard).
+                { maxHeight: Math.min(visualHeight * 0.92, visualHeight - 8) }
+              : undefined
+          }
+        >
           {children}
         </div>
       </DrawerContent>
