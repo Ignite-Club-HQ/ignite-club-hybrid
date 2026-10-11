@@ -68,6 +68,21 @@ export async function listLiveProfilesByIds(
         out.push({ ...profile, account_id: requested });
       }
     }
+    // Linked/moved accounts may retain a UUID derived from an older principal.
+    // The caller's own profile resolves that account through the canister's
+    // identity mapping rather than assuming its UUID can still be derived.
+    const caller = ctx.identity.getPrincipal().toText();
+    const ownIds = [...new Set(ids)].filter((id) =>
+      (id === caller || id === `principal:${caller}`) && !seen.has(id),
+    );
+    if (ownIds.length) {
+      try {
+        const ownProfile = await client.getProfile();
+        for (const id of ownIds) out.push({ ...ownProfile, account_id: id });
+      } catch {
+        // A new account may not have completed its profile yet.
+      }
+    }
     return out;
   } finally {
     client.dispose();
