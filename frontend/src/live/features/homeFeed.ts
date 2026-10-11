@@ -111,10 +111,22 @@ export interface LiveHomeEvent {
 export function mapLiveHomeEvent(
   event: LiveEvent,
   clubNameById: ReadonlyMap<string, string>,
+  teamNameById?: ReadonlyMap<string, string>,
 ): LiveHomeEvent {
+  const teamId = event.team_id[0] ?? null;
+  const teamName = teamId ? teamNameById?.get(teamId) ?? null : null;
+  const opponent = event.opponent[0] ?? null;
+  // Canister games often store an empty title (the Supabase branch auto-titles
+  // "Team vs Opponent" at creation). Derive the same display title so the
+  // Next Up card never renders a nameless game.
+  const title =
+    event.title.trim() ||
+    (teamName && opponent
+      ? `${teamName} vs ${opponent}`
+      : (teamName ?? opponent ?? ""));
   return {
     id: event.id,
-    title: event.title,
+    title,
     type: event.event_type === "game" || event.event_type === "social" ? event.event_type : "training",
     event_date: new Date(Number(event.starts_at_ms)).toISOString(),
     start_time: null,
