@@ -202,6 +202,11 @@ export interface Main {
     { 'Ok' : RewardRedemption } |
       { 'Err' : string }
   >,
+  'refresh_club_roles' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'rekey_principal' : ActorMethod<
     [Principal, Principal, boolean],
     { 'ok' : bigint } |
@@ -215,6 +220,11 @@ export interface Main {
   'save_club_points_settings' : ActorMethod<
     [string, [] | [string], boolean],
     { 'Ok' : ClubPointsSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_domain_canister' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'transfer_governorship' : ActorMethod<

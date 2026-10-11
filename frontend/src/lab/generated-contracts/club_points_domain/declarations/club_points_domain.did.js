@@ -279,6 +279,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : RewardRedemption, 'Err' : IDL.Text })],
         [],
       ),
+    'refresh_club_roles' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'rekey_principal' : IDL.Func(
         [IDL.Principal, IDL.Principal, IDL.Bool],
         [IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text })],
@@ -292,6 +297,11 @@ export const idlFactory = ({ IDL }) => {
     'save_club_points_settings' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_domain_canister' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'transfer_governorship' : IDL.Func(
