@@ -28,12 +28,20 @@ export interface IcpUploadNamedOption {
   club_id: string;
 }
 
+/** A photo shown in the feed while its upload finishes in the background. */
+export interface IcpPendingUploadPreview {
+  src: string;
+  clubName: string;
+  /** Team, mini-league or competition name the photo is scoped to, if any. */
+  scopeName: string | null;
+}
+
 interface IcpUploadPhotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUploaded: () => unknown;
   /** Local copies of the photos being shared, shown in the feed right away. */
-  onPendingChange?: (previewUrls: string[]) => void;
+  onPendingChange?: (previews: IcpPendingUploadPreview[]) => void;
   clubs: IcpUploadClubOption[];
   teams: IcpUploadTeamOption[];
   miniLeagues: IcpUploadNamedOption[];
@@ -148,7 +156,19 @@ export function IcpUploadPhotoSheet({
     setUploading(true);
     setProgress({ done: 0, total: files.length });
     // Show the photos in the feed instantly (like chat); no "shared" toast.
-    const previews = files.filter((f) => f.type.startsWith("image/")).map((f) => URL.createObjectURL(f));
+    // Carry the club/team names so the placeholder card looks like a real
+    // post (uploader + club/team) instead of a bare image.
+    const clubName = clubs.find((c) => c.id === clubId)?.name ?? "";
+    const scopeName = teamId
+      ? teams.find((t) => t.id === teamId)?.name ?? null
+      : miniLeagueId
+        ? miniLeagues.find((m) => m.id === miniLeagueId)?.name ?? null
+        : competitionId
+          ? competitions.find((c) => c.id === competitionId)?.name ?? null
+          : null;
+    const previews = files
+      .filter((f) => f.type.startsWith("image/"))
+      .map((f) => ({ src: URL.createObjectURL(f), clubName, scopeName }));
     onPendingChange?.(previews);
     onOpenChange(false);
     // Multi-photo uploads form one album post, like the Supabase gallery.

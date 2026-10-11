@@ -36,7 +36,7 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
-import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 
@@ -375,7 +375,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<IcpPendingUploadPreview[]>([]);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -646,9 +646,22 @@ export function IcpMediaFeedPage() {
         )}
 
         <div className="space-y-6">
-          {pendingPreviews.map((src) => (
-            <div key={src} className="relative overflow-hidden rounded-xl border bg-card">
-              <img src={src} alt="" className="aspect-square w-full object-cover" />
+          {pendingPreviews.map((pending) => (
+            <div key={pending.src} className="relative overflow-hidden rounded-xl border bg-card">
+              <div className="flex items-center gap-3 px-3 py-2.5">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback>
+                    {(profile?.display_name || "You").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{profile?.display_name || "You"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {pending.scopeName ? `${pending.clubName} · ${pending.scopeName}` : pending.clubName}
+                  </p>
+                </div>
+              </div>
+              <img src={pending.src} alt="" className="aspect-square w-full object-cover" />
               <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-full bg-background/85 px-2.5 py-1">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 <p className="text-xs font-medium text-foreground">Uploading…</p>
