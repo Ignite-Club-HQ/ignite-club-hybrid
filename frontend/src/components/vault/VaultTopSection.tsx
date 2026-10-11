@@ -33,6 +33,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import type { FolderView, VaultExportProgress } from "@/features/vault/useVaultExport";
 import type { VaultStorageBreakdown as VaultStorageBreakdownData } from "@/features/vault/vaultStorageRepository";
 import { VaultStorageBarRow } from "./VaultStorageBarRow";
@@ -151,8 +152,11 @@ function VaultMoreMenuItems({
       handleResolveDriveTitles,
     },
   } = primaryActions;
+  // Google Drive import/link/title-resolution is Supabase-only — hide every
+  // Drive action when the vault is served by the ICP backend.
+  const driveAvailable = !isFeatureRoutedToIcp("vault");
   const canUseDrive =
-    includeDriveActions && isClubAdmin && Capacitor.getPlatform() !== 'ios' && 'clubId' in currentView && DRIVE_IMPORT_ALLOWED_CLUB_IDS.has(currentView.clubId);
+    driveAvailable && includeDriveActions && isClubAdmin && Capacitor.getPlatform() !== 'ios' && 'clubId' in currentView && DRIVE_IMPORT_ALLOWED_CLUB_IDS.has(currentView.clubId);
 
   return (
     <>
@@ -197,7 +201,7 @@ function VaultMoreMenuItems({
           Sync with Drive folder
         </DropdownMenuItem>
       )}
-      {includeDriveActions && isClubAdmin && (
+      {includeDriveActions && driveAvailable && isClubAdmin && (
         <DropdownMenuItem
           onClick={handleResolveDriveTitles}
           disabled={resolvingDriveTitles}
@@ -458,7 +462,7 @@ function VaultActionToolbar({
     },
   } = primaryActions;
   const canUseDrive =
-    isClubAdmin && Capacitor.getPlatform() !== 'ios' && 'clubId' in currentView && DRIVE_IMPORT_ALLOWED_CLUB_IDS.has(currentView.clubId);
+    !isFeatureRoutedToIcp("vault") && isClubAdmin && Capacitor.getPlatform() !== 'ios' && 'clubId' in currentView && DRIVE_IMPORT_ALLOWED_CLUB_IDS.has(currentView.clubId);
 
   return (
     <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
