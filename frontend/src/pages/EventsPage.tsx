@@ -736,7 +736,12 @@ export default function EventsPage() {
               const rows = rowsByClub[clubIndex];
               for (const ev of rows as any[]) {
                 if (ev.deleted) continue;
-                const start = new Date(Number(ev.starts_at_ms));
+                const startMs = Number(ev.starts_at_ms);
+                const endMs = Number(ev.ends_at_ms);
+                // Skip rows with missing/invalid timestamps — formatting an
+                // Invalid Date throws RangeError and blanks the whole page.
+                if (!Number.isFinite(startMs)) continue;
+                const start = new Date(startMs);
                 if (start < thirtyDaysAgo || start > upperBound) continue;
                 if (filter !== "all" && ev.event_type !== filter) continue;
                 const teamId = (ev.team_id?.[0] ?? null) as string | null;
