@@ -36,7 +36,7 @@ import { PhotoLightbox } from "@/components/PhotoLightbox";
 import { CreateActionButton } from "@/components/CreateActionButton";
 import { MediaHeaderSponsorStrip } from "@/components/media/MediaHeaderSponsorStrip";
 import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
-import { IcpUploadPhotoSheet } from "@/components/media/IcpUploadPhotoSheet";
+import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
 
