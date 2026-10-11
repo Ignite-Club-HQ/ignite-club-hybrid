@@ -107,4 +107,32 @@ describe("mapLiveHomeEvent", () => {
     expect(mapped.is_recurring).toBe(false);
     expect(mapped.type).toBe("training");
   });
+
+  it("resolves the team name so the Next Up card can title the game", () => {
+    const mapped = mapLiveHomeEvent(
+      { ...canisterEvent, event_type: "game", title: "", opponent: ["Rovers"] },
+      new Map(),
+      new Map([["team-1", "U9"]]),
+    );
+    expect(mapped.teams).toEqual({ name: "U9", default_match_arrival_minutes: null });
+    expect(mapped.title).toBe("U9 vs Rovers");
+  });
+
+  it("falls back to the team name alone when the game has no opponent", () => {
+    const mapped = mapLiveHomeEvent(
+      { ...canisterEvent, event_type: "game", title: "  " },
+      new Map(),
+      new Map([["team-1", "U9"]]),
+    );
+    expect(mapped.title).toBe("U9");
+  });
+
+  it("keeps a stored title even when a team name is available", () => {
+    const mapped = mapLiveHomeEvent(
+      canisterEvent,
+      new Map(),
+      new Map([["team-1", "U9"]]),
+    );
+    expect(mapped.title).toBe("Saturday training");
+  });
 });
