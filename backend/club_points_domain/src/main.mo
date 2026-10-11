@@ -9,6 +9,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
+import RewardRoleMirror "rewardRoleMirror";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -68,8 +69,7 @@ persistent actor class Main(governorInit : Principal) {
         let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
         try {
           let fresh = await cd.list_user_club_roles(caller, club_id);
-          roles := roles.filter(func(item) = not (item.user.equal(caller) and item.club_id == club_id))
-            .concat(fresh.map(func((role, team)) = { user = caller; role; club_id; team_id = team }));
+          roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);
           #Ok
         } catch (_) { #Err("Could not verify club membership. Please try again.") };
       };
