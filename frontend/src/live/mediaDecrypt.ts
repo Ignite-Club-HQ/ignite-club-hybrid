@@ -23,6 +23,19 @@ export const MEDIA_BLOB_PII_FIELD = "blob";
 
 const ICP_GATEWAY_HOSTS = ["icp0.io", "raw.icp0.io"];
 
+/** Principal from the stored Internet Identity session, without awaiting
+ * session restoration. Enough to key the on-device photo cache; never used
+ * to derive keys or fetch ciphertext. */
+function storedSessionPrincipal(): string | null {
+  try {
+    const raw = localStorage.getItem("ignite_icp_internet_identity_session");
+    const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
+    return typeof parsed?.principal === "string" ? parsed.principal : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Parses a blob-store URL into its canister path, or null when the URL is
  * not served by the configured media_blob_store canister. */
 export function parseIcpBlobUrl(
