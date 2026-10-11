@@ -156,7 +156,7 @@ export default function EventsPage() {
   usePageTitle("Schedule");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeClubFilter } = useClubTheme();
+  const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Production ICP-mode gate — no canister equivalent for these
   // child_guardians/children parent-filter lookups yet.
@@ -982,6 +982,10 @@ export default function EventsPage() {
       params.delete("team"); // Clear team when club changes
     }
     setSearchParams(params);
+    // The page dropdown must win over the global club theme filter —
+    // otherwise activeClubFilter (preferred in clubFilter above) keeps the
+    // calendar showing the previously selected club's events.
+    setActiveClubTheme(value === "all" ? null : value);
   };
 
   const handleTeamChange = (value: string) => {
