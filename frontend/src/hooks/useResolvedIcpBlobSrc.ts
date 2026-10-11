@@ -58,6 +58,33 @@ export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedI
     return { src: undefined, pending: true, failed: false };
   };
   const [state, setState] = React.useState<ResolvedIcpBlobSrc>(compute);
+  const [retryEpoch, retry] = React.useReducer((value: number) => value + 1, 0);
+
+  // A cold refresh can mount the cached header before sign-in is restored.
+  // Failed unlocks must not latch the header onto its fallback indefinitely.
+  React.useEffect(() => {
+    if (!input || !state.failed) return;
+    const retryAfterCooldown = () => {
+      if (navigator.onLine === false) return;
+      const failedAt = failedCache.get(input);
+      if (failedAt && Date.now() - failedAt < FAILURE_RETRY_MS) return;
+      retry();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retryAfterCooldown();
+    };
+    const remaining = Math.max(0, FAILURE_RETRY_MS - (Date.now() - (failedCache.get(input) ?? 0)));
+    const timer = window.setTimeout(retryAfterCooldown, remaining);
+    window.addEventListener("online", retryAfterCooldown);
+    window.addEventListener("focus", retryAfterCooldown);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retryAfterCooldown);
+      window.removeEventListener("focus", retryAfterCooldown);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [input, state.failed, retryEpoch]);
 
   React.useEffect(() => {
     const next = compute();
@@ -81,7 +108,7 @@ export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedI
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input]);
+  }, [input, retryEpoch]);
 
   return state;
 }
