@@ -1,3 +1,6 @@
+## Sign-in image loading
+- [x] Wait for restored sign-in before unlocking ICP images and share repeated logo requests; add regression tests.
+
 # Roadmap — ICP speed-up part 2
 - [x] Show the actual uploader name after ICP media uploads, including linked/moved accounts and cached signed-in profiles; three regression tests passed (frontend update required)
 - [x] Recognise complete ICP event IDs in shared chat cards and message previews; ten event-ID regression tests passed (frontend update required)

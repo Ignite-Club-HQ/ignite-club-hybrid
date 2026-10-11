@@ -6,15 +6,43 @@ import { useResolvedIcpBlobSrc } from "./useResolvedIcpBlobSrc";
 vi.mock("@/live/targetRegistry", () => ({ getActiveIcpTarget: () => ({}) }));
 vi.mock("@/live/mediaStorage", () => ({ listBlobStoreCanisterIds: () => ["photos-cai"] }));
 const decrypt = vi.hoisted(() => vi.fn());
+const auth = vi.hoisted(() => ({ user: { id: "member-1" }, sessionRestoration: "authenticated" }));
+vi.mock("@/hooks/useAuth", () => ({ useAuth: () => auth }));
 vi.mock("@/live/mediaDecrypt", () => ({ resolveIcpBlobObjectUrl: decrypt }));
 
 afterEach(() => {
   localUploadPreviews.clear();
   vi.clearAllMocks();
+  auth.user = { id: "member-1" };
+  auth.sessionRestoration = "authenticated";
   vi.useRealTimers();
 });
 
 describe("newly uploaded profile photo resolution", () => {
+  it("waits for sign-in restoration and loads immediately when it completes", async () => {
+    auth.sessionRestoration = "restoring";
+    decrypt.mockResolvedValueOnce("blob:ready-logo");
+    const { result, rerender } = renderHook(() => useResolvedIcpBlobSrc("https://photos-cai.raw.icp0.io/clubs/restoring/logo.jpg"));
+    expect(result.current.pending).toBe(true);
+    expect(decrypt).not.toHaveBeenCalled();
+    auth.sessionRestoration = "authenticated";
+    rerender();
+    await waitFor(() => expect(result.current.src).toBe("blob:ready-logo"));
+    expect(decrypt).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one unlock between the header and switcher", async () => {
+    let finish: ((url: string) => void) | undefined;
+    decrypt.mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const url = "https://photos-cai.raw.icp0.io/clubs/shared/logo.jpg";
+    const first = renderHook(() => useResolvedIcpBlobSrc(url));
+    const second = renderHook(() => useResolvedIcpBlobSrc(url));
+    await waitFor(() => expect(decrypt).toHaveBeenCalledTimes(1));
+    await act(async () => { finish?.("blob:shared-logo"); });
+    expect(first.result.current.src).toBe("blob:shared-logo");
+    expect(second.result.current.src).toBe("blob:shared-logo");
+  });
+
   it("uses the local uploaded bytes without downloading or decrypting again", () => {
     const uploaded = "https://photos-cai.raw.icp0.io/avatars/new.jpg";
     localUploadPreviews.set(uploaded, "blob:local-photo");

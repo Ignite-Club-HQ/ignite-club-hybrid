@@ -2,6 +2,7 @@ import * as React from "react";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listBlobStoreCanisterIds } from "@/live/mediaStorage";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * ICP media (profile photos, club logos, sponsor images) lives on the
@@ -16,6 +17,7 @@ import { localUploadPreviews } from "@/components/media/localUploadPreviews";
  */
 const decryptedCache = new Map<string, string>();
 const failedCache = new Map<string, number>();
+const inFlight = new Map<string, Promise<string | null>>();
 const FAILURE_RETRY_MS = 60_000;
 
 export function isIcpBlobUrl(src: string): boolean {
@@ -44,14 +46,19 @@ export interface ResolvedIcpBlobSrc {
 }
 
 export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedIcpBlobSrc {
+  const { user, sessionRestoration } = useAuth();
   const input = src ?? undefined;
+  const cacheKey = `${user?.id ?? "signed-out"}:${input ?? ""}`;
+  const ready = sessionRestoration === "authenticated" && !!user;
   const compute = (): ResolvedIcpBlobSrc => {
     if (!input || !isIcpBlobUrl(input)) return { src: input, pending: false, failed: false };
+    // Do not turn a still-restoring session into a minute-long image failure.
+    if (!ready) return { src: undefined, pending: sessionRestoration === "restoring", failed: false };
     const preview = localUploadPreviews.get(input);
     if (preview) return { src: preview, pending: false, failed: false };
-    const cached = decryptedCache.get(input);
+    const cached = decryptedCache.get(cacheKey);
     if (cached) return { src: cached, pending: false, failed: false };
-    const failedAt = failedCache.get(input);
+    const failedAt = failedCache.get(cacheKey);
     if (failedAt && Date.now() - failedAt < FAILURE_RETRY_MS) {
       return { src: undefined, pending: false, failed: true };
     }
@@ -66,14 +73,14 @@ export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedI
     if (!input || !state.failed) return;
     const retryAfterCooldown = () => {
       if (navigator.onLine === false) return;
-      const failedAt = failedCache.get(input);
+      const failedAt = failedCache.get(cacheKey);
       if (failedAt && Date.now() - failedAt < FAILURE_RETRY_MS) return;
       retry();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") retryAfterCooldown();
     };
-    const remaining = Math.max(0, FAILURE_RETRY_MS - (Date.now() - (failedCache.get(input) ?? 0)));
+    const remaining = Math.max(0, FAILURE_RETRY_MS - (Date.now() - (failedCache.get(cacheKey) ?? 0)));
     const timer = window.setTimeout(retryAfterCooldown, remaining);
     window.addEventListener("online", retryAfterCooldown);
     window.addEventListener("focus", retryAfterCooldown);
@@ -84,31 +91,45 @@ export function useResolvedIcpBlobSrc(src: string | undefined | null): ResolvedI
       window.removeEventListener("focus", retryAfterCooldown);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [input, state.failed, retryEpoch]);
+  }, [input, cacheKey, state.failed, retryEpoch]);
 
   React.useEffect(() => {
     const next = compute();
     setState(next);
-    if (!next.pending || !input) return;
+    if (!next.pending || !input || !ready) return;
     let cancelled = false;
     // Dynamic import: the decrypt path pulls in the vetKeys SDK, which must
     // stay out of the initial bundle for Supabase sessions.
-    import("@/live/mediaDecrypt")
-      .then((m) => m.resolveIcpBlobObjectUrl(input))
+    // Header, sidebar and club switcher often request the same logo together.
+    // Share its download/key unlock instead of paying for each mounted image.
+    let request = inFlight.get(cacheKey);
+    if (!request) {
+      request = import("@/live/mediaDecrypt")
+        .then((m) => m.resolveIcpBlobObjectUrl(input))
+        .then((url) => {
+          if (url) decryptedCache.set(cacheKey, url);
+          else failedCache.set(cacheKey, Date.now());
+          return url;
+        })
+        .catch((error: unknown) => {
+          failedCache.set(cacheKey, Date.now());
+          throw error;
+        })
+        .finally(() => { inFlight.delete(cacheKey); });
+      inFlight.set(cacheKey, request);
+    }
+    request
       .then((url) => {
-        if (url) decryptedCache.set(input, url);
-        else failedCache.set(input, Date.now());
         if (!cancelled) setState({ src: url ?? undefined, pending: false, failed: !url });
       })
       .catch(() => {
-        failedCache.set(input, Date.now());
         if (!cancelled) setState({ src: undefined, pending: false, failed: true });
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, retryEpoch]);
+  }, [input, cacheKey, ready, sessionRestoration, retryEpoch]);
 
   return state;
 }

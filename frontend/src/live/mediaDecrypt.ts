@@ -1,4 +1,4 @@
-import { getCurrentInternetIdentity } from "./internetIdentityAuth";
+import { getCurrentInternetIdentityConfirmed } from "./internetIdentityAuth";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { blobAssetUrl, listBlobStoreCanisterIds } from "./mediaStorage";
 import { clubIdFromMediaPath, decryptPiiValue, tryDecryptClubMedia } from "./piiVetKeys";
@@ -66,7 +66,7 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   const target = getActiveIcpTarget();
   const match = parseIcpBlobUrl(url, target);
   if (!match) return null;
-  const identity = await getCurrentInternetIdentity();
+  const identity = await getCurrentInternetIdentityConfirmed();
   if (!identity) {
     throw new Error("Internet Identity sign-in required to decrypt blob-store media");
   }
