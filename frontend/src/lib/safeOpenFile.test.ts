@@ -63,6 +63,8 @@ beforeEach(() => {
   fileOpenerMock.open.mockResolvedValue(undefined);
   shareMock.share.mockRejectedValue(new Error("Share not available"));
   fetchMock.mockReset();
+  resolveSignedUrlMock.mockReset();
+  resolveSignedUrlMock.mockImplementation(async (url: string) => url);
   vi.stubGlobal("fetch", fetchMock);
   // jsdom FileReader works on real Blobs; keep it.
 });
@@ -275,7 +277,7 @@ describe("safeOpenFile — external / public non-storage URLs", () => {
 
     await safeOpenFile(externalUrl);
 
-    expect(resolveSignedUrlMock).not.toHaveBeenCalled();
+    expect(resolveSignedUrlMock).toHaveBeenCalledWith(externalUrl);
     expect(safeOpenUrlMock).toHaveBeenCalledWith(externalUrl);
   });
 
@@ -283,7 +285,40 @@ describe("safeOpenFile — external / public non-storage URLs", () => {
     capacitorMock.isNativePlatform.mockReturnValue(false);
     const externalUrl = "https://reference.invalid";
     await safeOpenFile(externalUrl);
-    expect(resolveSignedUrlMock).not.toHaveBeenCalled();
+    expect(resolveSignedUrlMock).toHaveBeenCalledWith(externalUrl);
     expect(safeOpenUrlMock).toHaveBeenCalledWith(externalUrl);
+  });
+});
+
+describe("safeOpenFile — encrypted spreadsheets", () => {
+  const stored = "https://store.raw.icp0.io/clubs/club/1791576858300.xlsx";
+  const unlocked = "blob:http://localhost/decrypted-spreadsheet";
+
+  it("writes decrypted binary bytes rather than downloading ciphertext and retains xlsx name/type", async () => {
+    resolveSignedUrlMock.mockResolvedValue(unlocked);
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0xff, 0x80, 0x0a]);
+    fetchMock.mockResolvedValue({ ok: true, blob: async () => new Blob([bytes]), headers: { get: () => null } });
+    await safeOpenFile(stored, { fileName: "Club budget", mimeType: "application/octet-stream" });
+    expect(fetchMock).toHaveBeenCalledWith(unlocked);
+    expect(filesystemMock.downloadFile).not.toHaveBeenCalled();
+    expect(filesystemMock.writeFile.mock.calls[0][0].data).toBe("UEsDBAD/gAo=");
+    expect(filesystemMock.writeFile.mock.calls[0][0].path).toMatch(/\/Club_budget.xlsx$/);
+    expect(fileOpenerMock.open.mock.calls[0][0].contentType).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(safeOpenUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose ciphertext if spreadsheet decryption fails", async () => {
+    resolveSignedUrlMock.mockRejectedValue(new Error("unlock failed"));
+    await expect(safeOpenFile(stored)).rejects.toThrow("authorized");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(filesystemMock.downloadFile).not.toHaveBeenCalled();
+    expect(safeOpenUrlMock).not.toHaveBeenCalled();
+  });
+
+  it("does not send a WebView object URL to the system browser if cache writing fails", async () => {
+    resolveSignedUrlMock.mockResolvedValue(unlocked);
+    fetchMock.mockRejectedValue(new Error("fetch failed"));
+    await expect(safeOpenFile(stored)).rejects.toThrow("saved for viewing");
+    expect(safeOpenUrlMock).not.toHaveBeenCalled();
   });
 });

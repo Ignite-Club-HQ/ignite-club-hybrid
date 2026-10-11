@@ -26,6 +26,7 @@ import { HighlightedText } from "@/components/vault/HighlightedText";
 import { VaultPhotoItem } from "@/components/vault/VaultPhotoItem";
 import { formatVaultFileSize, getVaultExternalLinkInfo, isVaultDocumentFile, isVaultSpreadsheetFile } from "@/features/vault/vaultFilePresentation";
 import { toast } from "sonner";
+import { downloadStoredFile } from "@/lib/downloadStoredFile";
 
 import type { VaultFile, VaultPhoto } from "@/components/vault/VaultTypes";
 
@@ -38,22 +39,22 @@ function downloadAndOpenExternal(
   instructions: string,
   showToast: (msg: string, opts?: { description?: string }) => void
 ): void {
-  // Download the file first
-  const link = document.createElement('a');
-  link.href = fileUrl;
-  link.download = fileName;
-  link.click();
-  
-  // Show toast with instructions
-  showToast("File downloaded!", {
-    description: `Opening ${serviceName}... ${instructions}`
-  });
-  
-  // Open the service after a brief delay
-  setTimeout(async () => {
-    const { safeOpenUrl } = await import("@/lib/safeOpenUrl");
-    safeOpenUrl(serviceUrl);
-  }, 500);
+  void (async () => {
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform()) {
+        const { safeOpenFile } = await import("@/lib/safeOpenFile");
+        await safeOpenFile(fileUrl, { fileName });
+        return;
+      }
+      await downloadStoredFile(fileUrl, fileName);
+      showToast("File ready", { description: `${serviceName}: ${instructions}` });
+      const { safeOpenUrl } = await import("@/lib/safeOpenUrl");
+      await safeOpenUrl(serviceUrl);
+    } catch {
+      toast.error("Could not open file", { description: "Please try again." });
+    }
+  })();
 }
 
 // Helper function to open a file in Google Sheets
@@ -61,7 +62,7 @@ function openInGoogleSheets(fileUrl: string, fileName: string, showToast: (msg: 
   downloadAndOpenExternal(
     fileUrl, 
     fileName, 
-    "https://reference.invalid",
+    "https://sheets.google.com",
     "Google Sheets",
     "Use File > Import to open your downloaded file.",
     showToast
@@ -73,7 +74,7 @@ function openInGoogleDrive(fileUrl: string, fileName: string, showToast: (msg: s
   downloadAndOpenExternal(
     fileUrl, 
     fileName, 
-    "https://reference.invalid",
+    "https://drive.google.com",
     "Google Drive",
     "Click 'New' > 'File upload' to upload your downloaded file.",
     showToast
@@ -85,7 +86,7 @@ function openInDropbox(fileUrl: string, fileName: string, showToast: (msg: strin
   downloadAndOpenExternal(
     fileUrl, 
     fileName, 
-    "https://reference.invalid",
+    "https://www.dropbox.com/home",
     "Dropbox",
     "Click 'Upload' to add your downloaded file.",
     showToast
@@ -213,7 +214,7 @@ export function ContentSection({
                         fileName: file.name || undefined,
                         mimeType: file.file_type || undefined,
                       }),
-                    ).catch(() => {});
+                     ).catch(() => toast.error("Could not open file", { description: "Please try again." }));
                   }
                 }}
               >
@@ -340,23 +341,18 @@ export function ContentSection({
                               fileName: file.name || undefined,
                               mimeType: file.file_type || undefined,
                             }),
-                          ).catch(() => {})
+                           ).catch(() => toast.error("Could not open file", { description: "Please try again." }))
                         }
                       />
                       <Item
                         icon={Download}
                         label="Download"
                         onClick={async () => {
-                          const { resolveSignedUrl } = await import("@/hooks/useSignedPhotoUrl");
-                          const href = await resolveSignedUrl(file.file_url);
-                          const a = document.createElement('a');
-                          a.href = href;
-                          a.download = file.name || '';
-                          a.rel = 'noopener';
-                          a.target = '_blank';
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
+                           try {
+                             await downloadStoredFile(file.file_url, file.name || 'file', file.file_type || undefined);
+                           } catch {
+                             toast.error("Could not download file", { description: "Please try again." });
+                           }
                         }}
                       />
                     </>

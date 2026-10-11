@@ -55,27 +55,35 @@ export async function safeOpenFile(
   // Resolve signed URL up-front for Supabase storage URLs. Fail closed on
   // signing errors so we never expose or download the raw private URL.
   let resolvedUrl = url;
-  if (isStorageUrl) {
+  {
     try {
       const { resolveSignedUrl } = await import("@/hooks/useSignedPhotoUrl");
       resolvedUrl = await resolveSignedUrl(url);
     } catch {
       // Do not include the raw URL, tokens, or the underlying error message
       // (which may contain sensitive query params) in the thrown error.
-      console.warn("[safeOpenFile] signing failed; refusing to open private file");
+      console.warn("[safeOpenFile] authorization/unlock failed; refusing to open stored file");
       throw new Error("This file could not be authorized for viewing. Please try again.");
     }
   }
 
+  const guessedName = opts.fileName?.trim() || guessFileNameFromUrl(url);
+  const displayName = withExtension(sanitizeFileName(guessedName), url);
+  const nameType = guessMimeFromName(displayName);
+  const documentType = normalizeMimeType(opts.mimeType) || normalizeMimeType(nameType);
+
   if (!isNative) {
-    await safeOpenUrl(resolvedUrl);
+    if (resolvedUrl.startsWith("blob:")) {
+      const { downloadResolvedFile } = await import("./downloadStoredFile");
+      await downloadResolvedFile(resolvedUrl, displayName, documentType || undefined);
+    } else {
+      await safeOpenUrl(resolvedUrl);
+    }
     return;
   }
 
   // Build a safe filename in a unique cache sub-directory so the viewer
   // shows the real document name (not a timestamped/mangled one).
-  const guessedName = opts.fileName?.trim() || guessFileNameFromUrl(resolvedUrl);
-  const displayName = withExtension(sanitizeFileName(guessedName), resolvedUrl);
   const relativePath = `ignite-files/${Date.now()}/${displayName}`;
 
   let local: LocalCopy | null = null;
@@ -86,6 +94,9 @@ export async function safeOpenFile(
   }
 
   if (!local) {
+    if (resolvedUrl.startsWith("blob:")) {
+      throw new Error("This file could not be saved for viewing. Please try again.");
+    }
     // Nothing on disk to hand to a viewer — browser is the only option left.
     console.warn("[safeOpenFile] no local copy; falling back to browser");
     await safeOpenUrl(resolvedUrl);
@@ -93,7 +104,7 @@ export async function safeOpenFile(
   }
 
   const primaryType =
-    normalizeMimeType(opts.mimeType) ||
+    documentType ||
     normalizeMimeType(local.serverContentType) ||
     guessMimeFromName(displayName);
 
@@ -107,6 +118,9 @@ export async function safeOpenFile(
   // Fall back to browser using the RESOLVED URL only — never the raw
   // private URL.
   console.warn("[safeOpenFile] viewer and share unavailable, falling back to browser");
+  if (resolvedUrl.startsWith("blob:")) {
+    throw new Error("No app could open this file. Please install a compatible document viewer.");
+  }
   await safeOpenUrl(resolvedUrl);
 }
 
@@ -125,6 +139,9 @@ async function downloadToCache(
 
   // Strategy 1: native download straight to disk.
   try {
+    // Object URLs exist only inside the WebView. Native HTTP downloaders
+    // cannot read them; write the decrypted bytes through the fetch path.
+    if (url.startsWith("blob:")) throw new Error("Use WebView bytes for object URLs");
     const dl = (await Filesystem.downloadFile({
       url,
       path: relativePath,
