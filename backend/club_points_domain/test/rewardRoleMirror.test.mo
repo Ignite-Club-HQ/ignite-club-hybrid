@@ -1,4 +1,5 @@
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 import Mirror "../src/rewardRoleMirror";
 import Types "../src/types";
 let caller = Principal.fromText("aaaaa-aa");

@@ -1,4 +1,5 @@
 import Principal "mo:core/Principal";
+import Array "mo:core/Array";
 import Types "types";
 module {
   public func replace(roles : [Types.RoleGrant], caller : Principal, club : Text, fresh : [(Text, ?Text)]) : [Types.RoleGrant] {
