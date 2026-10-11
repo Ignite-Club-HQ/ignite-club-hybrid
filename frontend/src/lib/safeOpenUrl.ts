@@ -28,6 +28,19 @@ function shouldOpenInNativeApp(url: string): boolean {
 }
 
 export async function safeOpenUrl(url: string): Promise<void> {
+  // Stored ICP files are encrypted. Delegate to the file pipeline, which
+  // unlocks bytes and makes a local native copy before opening another app.
+  if (/^https?:\/\//i.test(url)) {
+    const [{ parseIcpBlobUrl }, { getActiveIcpTarget }] = await Promise.all([
+      import("@/live/mediaDecrypt"),
+      import("@/live/targetRegistry"),
+    ]);
+    if (parseIcpBlobUrl(url, getActiveIcpTarget())) {
+      const { safeOpenFile } = await import("./safeOpenFile");
+      await safeOpenFile(url);
+      return;
+    }
+  }
   // Resolve Supabase private-bucket URLs to signed URLs before opening.
   let resolvedUrl = url;
   try {
@@ -36,7 +49,8 @@ export async function safeOpenUrl(url: string): Promise<void> {
       resolvedUrl = await resolveSignedUrl(url);
     }
   } catch (err) {
-    console.warn('[safeOpenUrl] Failed to resolve signed URL, opening original:', err);
+    console.warn('[safeOpenUrl] Could not authorize stored file');
+    throw new Error("This file could not be authorized for viewing. Please try again.");
   }
 
   if (!Capacitor.isNativePlatform()) {
