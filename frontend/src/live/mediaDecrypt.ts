@@ -23,6 +23,19 @@ export const MEDIA_BLOB_PII_FIELD = "blob";
 
 const ICP_GATEWAY_HOSTS = ["icp0.io", "raw.icp0.io"];
 
+/** Principal from the stored Internet Identity session, without awaiting
+ * session restoration. Enough to key the on-device photo cache; never used
+ * to derive keys or fetch ciphertext. */
+function storedSessionPrincipal(): string | null {
+  try {
+    const raw = localStorage.getItem("ignite_icp_internet_identity_session");
+    const parsed = raw ? (JSON.parse(raw) as { principal?: unknown }) : null;
+    return typeof parsed?.principal === "string" ? parsed.principal : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Parses a blob-store URL into its canister path, or null when the URL is
  * not served by the configured media_blob_store canister. */
 export function parseIcpBlobUrl(
@@ -66,14 +79,25 @@ export async function resolveIcpBlobObjectUrl(url: string): Promise<string | nul
   const target = getActiveIcpTarget();
   const match = parseIcpBlobUrl(url, target);
   if (!match) return null;
+  // Photos seen before on this device open straight from the local cache.
+  // Check it BEFORE awaiting session re-confirmation: after a reconnect or
+  // tab reload the confirmed identity can take a moment to restore, and a
+  // cached photo needs no fresh proof — the bytes are already decrypted
+  // on this device, scoped to the stored principal.
+  const storedPrincipal = storedSessionPrincipal();
+  if (storedPrincipal) {
+    const cached = await readCachedPhoto(storedPrincipal, match.canisterId, match.path);
+    if (cached) return URL.createObjectURL(cached);
+  }
   const identity = await getCurrentInternetIdentityConfirmed();
   if (!identity) {
     throw new Error("Internet Identity sign-in required to decrypt blob-store media");
   }
-  // Photos seen before on this device open straight from the local cache.
   const principal = identity.getPrincipal().toText();
-  const cached = await readCachedPhoto(principal, match.canisterId, match.path);
-  if (cached) return URL.createObjectURL(cached);
+  if (principal !== storedPrincipal) {
+    const cached = await readCachedPhoto(principal, match.canisterId, match.path);
+    if (cached) return URL.createObjectURL(cached);
+  }
   // Always fetch via the routable raw subdomain, whatever form was stored.
   const response = await fetch(blobAssetUrl(match.canisterId, match.path));
   if (!response.ok) {
