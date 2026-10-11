@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mergePendingRows } from "./pendingSendKeeper";
+import { QueryClient } from "@tanstack/react-query";
+import { installPendingSendKeeper, mergePendingRows } from "./pendingSendKeeper";
 
 describe("mergePendingRows", () => {
   const pending = { id: "temp-1", author_id: "a", text: "", image_url: "blob:x" };
@@ -8,5 +9,23 @@ describe("mergePendingRows", () => {
   });
   it("does not restore once the real message has arrived", () => {
     expect(mergePendingRows([{ id: "m2", author_id: "a", text: "", image_url: "https://x" }], [pending])).toBeNull();
+  });
+  it("removes a restored preview already present alongside its confirmed photo", () => {
+    const real = { id: "m2", author_id: "a", text: "", image_url: "https://x" };
+    expect(mergePendingRows([pending, real], [pending])).toEqual([real]);
+  });
+  it("keeps only the saved photo after leaving, restoring and confirming a send", async () => {
+    const client = new QueryClient();
+    const key = ["club-messages", "goat"];
+    installPendingSendKeeper(client);
+    client.setQueryData(key, { messages: [pending] });
+    await client.fetchQuery({ queryKey: key, queryFn: async () => ({ messages: [] }) });
+    expect(client.getQueryData(key)).toEqual({ messages: [pending] });
+    const real = { id: "m2", author_id: "a", text: "", image_url: "https://x" };
+    client.setQueryData(key, { messages: [pending, real] });
+    expect(client.getQueryData(key)).toEqual({ messages: [real] });
+    await client.fetchQuery({ queryKey: key, queryFn: async () => ({ messages: [real] }) });
+    expect(client.getQueryData(key)).toEqual({ messages: [real] });
+    client.clear();
   });
 });
