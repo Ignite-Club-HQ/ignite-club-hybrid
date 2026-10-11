@@ -28,6 +28,14 @@ export interface IcpUploadNamedOption {
   club_id: string;
 }
 
+/** A photo shown in the feed while its upload finishes in the background. */
+export interface IcpPendingUploadPreview {
+  src: string;
+  clubName: string;
+  /** Team, mini-league or competition name the photo is scoped to, if any. */
+  scopeName: string | null;
+}
+
 interface IcpUploadPhotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
