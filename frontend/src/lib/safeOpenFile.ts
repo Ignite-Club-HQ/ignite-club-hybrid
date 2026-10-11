@@ -2,23 +2,6 @@ import { Capacitor } from "@capacitor/core";
 import { safeOpenUrl } from "./safeOpenUrl";
 import { loadOptionalNativeModule } from "./loadOptionalNativeModule";
 
-/**
- * Recognized Supabase storage URL forms that require authorization before
- * download/open. Kept in sync with the classifier used by resolveSignedUrl.
- */
-const PRIVATE_STORAGE_MARKERS = [
-  "/storage/v1/object/public/",
-  "/storage/v1/object/sign/",
-  "/storage/v1/object/authenticated/",
-  "/storage/v1/render/image/public/",
-  "/storage/v1/render/image/sign/",
-];
-
-function isSupabaseStorageUrl(url: string): boolean {
-  const clean = url.split("?")[0].split("#")[0];
-  return PRIVATE_STORAGE_MARKERS.some((m) => clean.includes(m));
-}
-
 type LocalCopy = {
   /** file:// URI (or native path) of the cached copy. */
   uri: string;
@@ -50,10 +33,7 @@ export async function safeOpenFile(
   opts: { fileName?: string; mimeType?: string } = {},
 ): Promise<void> {
   const isNative = Capacitor.isNativePlatform();
-  const isStorageUrl = isSupabaseStorageUrl(url);
-
-  // Resolve signed URL up-front for Supabase storage URLs. Fail closed on
-  // signing errors so we never expose or download the raw private URL.
+  // Resolve authorization AND ICP decryption before any viewer/download.
   let resolvedUrl = url;
   {
     try {
@@ -104,7 +84,7 @@ export async function safeOpenFile(
   }
 
   const primaryType =
-    documentType ||
+    normalizeMimeType(opts.mimeType) ||
     normalizeMimeType(local.serverContentType) ||
     guessMimeFromName(displayName);
 
