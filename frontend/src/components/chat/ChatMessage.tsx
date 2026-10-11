@@ -45,6 +45,7 @@ import { observeChatElementHeight } from "@/lib/chatScrollActivity";
 import { markLongPressOnboardingCompleted, claimFirstBubbleHint } from "@/hooks/useChatActionsOnboarding";
 import { scrollMessageIntoLowerThird } from "@/lib/scrollMessageIntoLowerThird";
 import { POLL_TOKEN_PATTERN } from "@/lib/chatPollToken";
+import { EVENT_TOKEN_PATTERN, EVENT_URL_PATTERN } from "@/lib/chatEventToken";
 
 
 interface Reaction {
@@ -876,11 +877,12 @@ function ChatMessageInner({
   // typed caption): the token renders as an empty inline span, so a padded,
   // coloured bubble would show as a weird blank bubble next to the card.
   // Detect this and strip the bubble chrome — the card renders outside.
-  const CARD_TOKEN_REGEX = new RegExp(String.raw`${POLL_TOKEN_PATTERN}|\[(?:(event|board|vault|vaultfolder|gallery|galleryprompt|news):[0-9a-f-]{36}(?::(?:team|club))?|vaultroot:(?:team|club):[0-9a-f-]{36})\]`, "i");
+  const CARD_TOKEN_REGEX = new RegExp(String.raw`${EVENT_TOKEN_PATTERN}|${POLL_TOKEN_PATTERN}|\[(?:(event|board|vault|vaultfolder|gallery|galleryprompt|news):[0-9a-f-]{36}(?::(?:team|club))?|vaultroot:(?:team|club):[0-9a-f-]{36})\]`, "i");
   const visibleCaptionText = displayText
     .replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
-    .replace(/(?:https?:\/\/[^\s]*)?\/events\/[0-9a-f-]{36}(?:\S*)?/gi, "")
+    .replace(new RegExp(EVENT_URL_PATTERN, "gi"), "")
+    .replace(new RegExp(EVENT_TOKEN_PATTERN, "gi"), "")
     .replace(new RegExp(POLL_TOKEN_PATTERN, "gi"), "")
     .replace(/\[(?:(?:event|poll|board|vault|vaultfolder|gallery|galleryprompt|news)(?::[0-9a-f-]{36}){1,2}|vaultroot:(?:team|club):[0-9a-f-]{36})\]/gi, "")
     .trim();

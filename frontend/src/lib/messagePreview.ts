@@ -4,9 +4,10 @@
 
 import { isVideoUrl } from "./videoUtils";
 import { POLL_TOKEN_PATTERN } from "./chatPollToken";
+import { EVENT_TOKEN_PATTERN } from "./chatEventToken";
 
 const MENTION_RE = /@\[([^\]]+)\]\(([^)]+)\)/g;
-const EVENT_TOKEN_RE = /\[event:([0-9a-f-]{36})\]/gi;
+const EVENT_TOKEN_RE = new RegExp(EVENT_TOKEN_PATTERN, "gi");
 const POLL_TOKEN_RE = new RegExp(POLL_TOKEN_PATTERN, "gi");
 const BOARD_TOKEN_RE = /\[board:([0-9a-f-]{36})\]/gi;
 const NEWS_TOKEN_RE = /\[news:([A-Za-z0-9-]+)\]/gi;
