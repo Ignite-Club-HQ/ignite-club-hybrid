@@ -237,12 +237,32 @@ export async function fetchLiveHomeFeed(
     }),
   );
 
+  // Team names for the carousel cards — the Next Up card uses the team name
+  // as its primary title, so without this every ICP game renders nameless.
+  // Best effort per team, same contract as the club-name lookup above.
+  const teamNameById = new Map<string, string>();
+  await Promise.all(
+    [...new Set(merged.map((event) => event.team_id[0]).filter((id): id is string => !!id))].map(
+      async (teamId) => {
+        try {
+          const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+            name: string;
+          }>;
+          const name = teamOpt[0]?.name;
+          if (name) teamNameById.set(teamId, name);
+        } catch {
+          // Best effort — see club-name comment above.
+        }
+      },
+    ),
+  );
+
   // Only events this user is actually part of: club-level roles (club admin,
   // competition admin) must not surface other teams' games. listLiveEvents by
   // club returns every team's events, so filter like the Supabase branch.
   const { isHomeEventForMember } = await import("@/components/home/homeEventSelection");
   let events = merged
-    .map((event) => mapLiveHomeEvent(event, clubNameById))
+    .map((event) => mapLiveHomeEvent(event, clubNameById, teamNameById))
     .filter((event) =>
       isHomeEventForMember(event, {
         teamIds: memberships.teamIds,
