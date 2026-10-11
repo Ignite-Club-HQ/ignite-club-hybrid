@@ -1,4 +1,5 @@
 # Roadmap — ICP speed-up part 2
+- [x] Show the actual uploader name after ICP media uploads, including linked/moved accounts and cached signed-in profiles; three regression tests passed (frontend update required)
 - [x] Recognise complete ICP event IDs in shared chat cards and message previews; ten event-ID regression tests passed (frontend update required)
 - [x] Recover saved header logos after refresh-time ICP unlock failures without requiring another refresh; three resolver tests passed (frontend update required)
 - [x] Recognise complete ICP poll IDs in chat cards, card-only messages and inbox previews; seven attachment-ID tests passed (frontend update required)

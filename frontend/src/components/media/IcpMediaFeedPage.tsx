@@ -28,6 +28,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/u
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
 import { useClubTheme } from "@/hooks/useClubTheme";
+import { useAuth } from "@/hooks/useAuth";
 import { AlbumCarousel } from "@/components/AlbumCarousel";
 import { EmojiReactions } from "@/components/EmojiReactions";
 import { MediaCommentSheet } from "@/components/MediaCommentSheet";
@@ -362,6 +363,7 @@ export function PhotoSkeleton() {
 }
 
 export function IcpMediaFeedPage() {
+  const { user, profile } = useAuth();
   const principalQuery = useQuery({
     queryKey: ["icp-principal"],
     staleTime: Infinity,
@@ -651,10 +653,10 @@ export function IcpMediaFeedPage() {
               <article className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar className="h-9 w-9">
-                    <AvatarFallback>{post.ownerName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback>{(post.ownerId === user?.id ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{post.ownerName}</p>
+                    <p className="truncate text-sm font-medium">{post.ownerId === user?.id ? profile?.display_name || post.ownerName : post.ownerName}</p>
                     <p className="truncate text-xs text-muted-foreground">{subtitleFor(post)}</p>
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground">
