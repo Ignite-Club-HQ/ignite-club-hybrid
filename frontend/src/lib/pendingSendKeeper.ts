@@ -12,7 +12,6 @@ type Row = { id: string; author_id?: string; text?: string | null; image_url?: s
 type Tracked = { row: Row; at: number };
 
 const MAX_AGE_MS = 3 * 60_000;
-const tracked = new Map<string, Map<string, Tracked>>();
 
 const isTemp = (id: unknown) => typeof id === "string" && id.startsWith("temp-");
 const sig = (m: Row) => `${m.author_id}::${m.text ?? ""}::${m.image_url ? "img" : ""}`;
@@ -21,11 +20,17 @@ const sig = (m: Row) => `${m.author_id}::${m.text ?? ""}::${m.image_url ? "img" 
 export function mergePendingRows(messages: Row[], pending: Row[]): Row[] | null {
   const ids = new Set(messages.map((m) => m.id));
   const real = new Set(messages.filter((m) => !isTemp(m.id)).map(sig));
+  // A refetch can restore a preview just before the saved row arrives.
+  // Clean previews already IN the snapshot, not only those we might append.
+  const confirmedOnly = messages.filter((m) => !isTemp(m.id) || !real.has(sig(m)));
   const missing = pending.filter((p) => !ids.has(p.id) && !real.has(sig(p)));
-  return missing.length ? [...messages, ...missing] : null;
+  return missing.length || confirmedOnly.length !== messages.length
+    ? [...confirmedOnly, ...missing]
+    : null;
 }
 
 export function installPendingSendKeeper(queryClient: QueryClient): void {
+  const tracked = new Map<string, Map<string, Tracked>>();
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated") return;
     const query = event.query;
@@ -50,7 +55,7 @@ export function installPendingSendKeeper(queryClient: QueryClient): void {
       // A local edit (failed send rollback) removed it on purpose.
       else if (!present.has(id) && event.action.type !== "success") map.delete(id);
     }
-    if (map.size === 0) { tracked.delete(key); return; }
+    if (map.size === 0) tracked.delete(key);
     if (event.action.type !== "success") return;
 
     const merged = mergePendingRows(messages, [...map.values()].map((t) => t.row));

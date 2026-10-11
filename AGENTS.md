@@ -16,6 +16,7 @@
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - Poll attachment recognition shares `chatPollToken` across chat content, card-only detection and inbox previews; this preserves opaque backend IDs consistently.
 - Event attachment recognition shares `chatEventToken` across chat content, card-only detection and inbox previews; this prevents ICP event IDs being exposed as raw text.
+- Pending-send recovery is scoped to each QueryClient and reconciles previews already in fetched snapshots as well as missing previews; this prevents duplicate photo bubbles after returning to chat.
 - ICP images wait for authenticated session restoration and share account-scoped in-flight unlocks; genuine failures retry after cooldown and foreground recovery. Why: cold startup must not cache missing identity as a failure or unlock the same logo repeatedly.
 - Stored document opens and downloads must resolve authorized/decrypted URLs before hand-off, preserve the original extension/MIME, and write WebView blob bytes to native cache instead of using native HTTP downloaders. Why: raw ICP URLs contain ciphertext, not readable documents.
 - ICP reward writes verify caller roles against governor-configured club_domain; catalog/settings reads refresh the caller's role mirror first. Why: creating a club must not require a separate manual points-service role grant.

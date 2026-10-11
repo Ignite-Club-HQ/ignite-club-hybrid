@@ -1,3 +1,7 @@
+## Duplicate chat photo after returning
+- [x] Reconcile restored uploading-photo bubbles with confirmed messages; leave/return/refetch regressions and failed-send recovery passed (29 tests).
+- [ ] Deploy the frontend update and confirm on Paul's phone — requires the user's deployment and device access.
+
 ## Spreadsheet opening
 - [x] Ensure stored documents are decrypted before opening/downloading and retain spreadsheet filenames/types; binary-preservation regressions added.
 - [ ] Deploy the frontend update and reopen Paul's existing spreadsheet on his phone — requires the user's deployment and device access.
