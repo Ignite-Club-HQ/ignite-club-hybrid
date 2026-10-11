@@ -772,7 +772,9 @@ export default function EventsPage() {
                   start_time: format(start, "HH:mm"),
                   end_time: format(end, "HH:mm"),
                   description: ev.description ?? "",
-                  updated_at: new Date(Number(ev.updated_at_ms ?? ev.starts_at_ms)).toISOString(),
+                  updated_at: new Date(
+                    Number.isFinite(Number(ev.updated_at_ms)) ? Number(ev.updated_at_ms) : startMs,
+                  ).toISOString(),
                 } as Event);
               }
             }
