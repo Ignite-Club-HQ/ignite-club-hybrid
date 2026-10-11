@@ -16,7 +16,7 @@
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - Poll attachment recognition shares `chatPollToken` across chat content, card-only detection and inbox previews; this preserves opaque backend IDs consistently.
 - Event attachment recognition shares `chatEventToken` across chat content, card-only detection and inbox previews; this prevents ICP event IDs being exposed as raw text.
-- ICP image unlock failures retry after a cooldown on mounted views and foreground recovery; cold sign-in restoration must not permanently latch saved logos onto a fallback.
+- ICP images wait for authenticated session restoration and share account-scoped in-flight unlocks; genuine failures retry after cooldown and foreground recovery. Why: cold startup must not cache missing identity as a failure or unlock the same logo repeatedly.
 - ICP profile batching resolves missing caller profiles through get_profile, not only principal-derived UUIDs; linked or moved accounts may keep their original account ID.
 - Club setup progress reads the active membership backend and determines saved branding from stored palettes/logo, independently of entitlement; sponsor/theme saves invalidate its query. Why: free clubs must not lose acknowledgement of saved setup, and ICP has no Supabase rows.
 - ICP login presentation lives in IcpSignInScreen; AuthPage retains provider invocation and redirect resolution so visual changes cannot alter identity or invite/session semantics.
