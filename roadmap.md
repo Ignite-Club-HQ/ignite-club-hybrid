@@ -1,3 +1,6 @@
+## ICP reward saving
+- [ ] Connect rewards to verified club roles, preserve form errors, validate and regenerate contracts; blockchain deployment required.
+
 ## Sign-in image loading
 - [x] Wait for restored sign-in before unlocking ICP images and share repeated logo requests; add regression tests.
 
