@@ -14,6 +14,11 @@ describe("mergePendingRows", () => {
     const real = { id: "m2", author_id: "a", text: "", image_url: "https://x" };
     expect(mergePendingRows([pending, real], [pending])).toEqual([real]);
   });
+  it("preserves a different pending send when a photo is confirmed", () => {
+    const other = { id: "temp-2", author_id: "a", text: "Another photo", image_url: "blob:y" };
+    const real = { id: "m2", author_id: "a", text: "", image_url: "https://x" };
+    expect(mergePendingRows([pending, other, real], [pending, other])).toEqual([other, real]);
+  });
   it("keeps only the saved photo after leaving, restoring and confirming a send", async () => {
     const client = new QueryClient();
     const key = ["club-messages", "goat"];
