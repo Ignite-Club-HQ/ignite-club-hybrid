@@ -538,8 +538,15 @@ export function IcpMediaFeedPage() {
     const pending = (pendingComments[commentPost.id] ?? []).filter(
       (pc) => !live.comments.some((c) => c.text === pc.text),
     );
-    return [...live.comments, ...pending];
-  }, [commentPost, feedQuery.data?.posts, pendingComments]);
+    // Your own comments always show your name, even if the batch profile
+    // lookup missed it (e.g. linked accounts keyed by an older id).
+    const ownName = profile?.display_name || null;
+    return [...live.comments, ...pending].map((c) =>
+      ownName && principal && c.user_id === principal && (!c.profiles?.display_name || c.profiles.display_name === "You")
+        ? { ...c, profiles: { ...c.profiles, display_name: ownName, avatar_url: c.profiles?.avatar_url ?? profile?.avatar_url ?? null } }
+        : c,
+    );
+  }, [commentPost, feedQuery.data?.posts, pendingComments, principal, profile?.display_name, profile?.avatar_url]);
 
   const options = feedQuery.data?.options;
   const hasFilters = (options?.clubs.length ?? 0) > 1 || (options?.teams.length ?? 0) > 0;
@@ -653,10 +660,10 @@ export function IcpMediaFeedPage() {
               <article className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar className="h-9 w-9">
-                    <AvatarFallback>{(post.ownerId === user?.id ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
+                    <AvatarFallback>{((post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{post.ownerId === user?.id ? profile?.display_name || post.ownerName : post.ownerName}</p>
+                    <p className="truncate text-sm font-medium">{(post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName}</p>
                     <p className="truncate text-xs text-muted-foreground">{subtitleFor(post)}</p>
                   </div>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -759,7 +766,13 @@ export function IcpMediaFeedPage() {
           if (!open) setCommentPost(null);
         }}
         photoUrl={commentPost?.assets[0]?.url ?? ""}
-        uploaderName={commentPost?.ownerName ?? null}
+        uploaderName={
+          commentPost
+            ? (commentPost.ownerId === principal || commentPost.ownerId === user?.id) && profile?.display_name
+              ? profile.display_name
+              : commentPost.ownerName
+            : null
+        }
         teamName={commentPost ? subtitleFor(commentPost) : null}
         teamId={commentPost?.teamId}
         clubId={commentPost?.clubId}
