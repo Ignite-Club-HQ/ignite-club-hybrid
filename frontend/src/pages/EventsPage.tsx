@@ -748,7 +748,7 @@ export default function EventsPage() {
                 // Club-wide events (no team) show to every club member; team
                 // events show to that team's members and club admins.
                 if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
-                const end = new Date(Number(ev.ends_at_ms));
+                const end = new Date(Number.isFinite(endMs) ? endMs : startMs);
                 all.push({
                   id: ev.id,
                   title: ev.title,
