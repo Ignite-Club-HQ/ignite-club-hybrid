@@ -1,3 +1,6 @@
+## Duplicate chat photo after returning
+- [ ] Reconcile restored uploading-photo bubbles with confirmed messages and add navigation/refetch regressions.
+
 ## Spreadsheet opening
 - [x] Ensure stored documents are decrypted before opening/downloading and retain spreadsheet filenames/types; binary-preservation regressions added.
 - [ ] Deploy the frontend update and reopen Paul's existing spreadsheet on his phone — requires the user's deployment and device access.
