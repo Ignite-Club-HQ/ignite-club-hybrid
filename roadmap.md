@@ -1,5 +1,6 @@
 ## Spreadsheet opening
-- [ ] Ensure stored documents are decrypted before opening/downloading and retain spreadsheet filenames/types; verify binary-preservation regressions.
+- [x] Ensure stored documents are decrypted before opening/downloading and retain spreadsheet filenames/types; binary-preservation regressions added.
+- [ ] Deploy the frontend update and reopen Paul's existing spreadsheet on his phone — requires the user's deployment and device access.
 
 ## ICP reward saving
 - [x] Connect rewards to verified club roles and preserve form errors; five frontend tests, role-isolation tests, canister check and contract drift check passed.
