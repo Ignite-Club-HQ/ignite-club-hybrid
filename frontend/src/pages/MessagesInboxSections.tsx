@@ -149,10 +149,13 @@ export function MessagesInboxSections({
           { id: "groups", label: "Groups", visible: counts.groupish > 0, type: "group", unread: unread.groupish },
           { id: "dms", label: "DMs", visible: counts.dms > 0, type: "dm", unread: unread.dms },
         ];
-        const shown = chips.filter((chip) => chip.visible);
         // Never hide the chips while a non-"all" filter is active: the user
-        // would have no way to switch back (the filter is persisted).
+        // would have no way to switch back (the filter is persisted). The
+        // counts above are computed from the already-filtered list, so a
+        // non-active category would read 0 and its chip would vanish —
+        // force every chip visible while a filter is active.
         const filterActive = typeFilter !== "all";
+        const shown = chips.filter((chip) => chip.visible || filterActive);
         if (!filterActive && totalUnread === 0 && allItems.length <= 6) return null;
         if (!filterActive && shown.length <= 2) return null;
 
