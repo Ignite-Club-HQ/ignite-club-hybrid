@@ -156,7 +156,7 @@ export default function EventsPage() {
   usePageTitle("Schedule");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activeClubFilter } = useClubTheme();
+  const { activeClubFilter, setActiveClubTheme } = useClubTheme();
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   // Production ICP-mode gate — no canister equivalent for these
   // child_guardians/children parent-filter lookups yet.
