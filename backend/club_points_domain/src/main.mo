@@ -9,6 +9,7 @@ import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Types "types";
+import RewardRoleMirror "rewardRoleMirror";
 
 persistent actor class Main(governorInit : Principal) {
   /// Public: remaining cycles (shown in admin settings).
@@ -28,6 +29,7 @@ persistent actor class Main(governorInit : Principal) {
   var cooldowns : [Types.PointsCooldown];
   var bulkAccessPrincipals : [Principal];
   var clubPointsSettings : [Types.ClubPointsSettings];
+  var clubDomainCanister : ?Principal;
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -49,6 +51,35 @@ persistent actor class Main(governorInit : Principal) {
   };
   func hasRole(caller : Principal, role : Text, club : Text) : Bool {
     roles.any(func(grant) { grant.user.equal(caller) and grant.role == role and grant.club_id == club })
+  };
+  // Only the governor chooses the trusted membership source. Never accept
+  // roles from the browser; refresh this caller's mirror from club_domain.
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    if (id.equal(Principal.anonymous())) return #Err("Invalid canister");
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  func syncClubRoles(caller : Principal, club_id : Text) : async { #Ok; #Err : Text } {
+    if (isGovernor(caller)) return #Ok;
+    switch (clubDomainCanister) {
+      case null #Err("Club membership service is not configured");
+      case (?cid) {
+        let cd : actor { list_user_club_roles : shared query (Principal, Text) -> async [(Text, ?Text)] } = actor (Principal.toText(cid));
+        try {
+          let fresh = await cd.list_user_club_roles(caller, club_id);
+          roles := RewardRoleMirror.replace(roles, caller, club_id, fresh);
+          #Ok
+        } catch (_) { #Err("Could not verify club membership. Please try again.") };
+      };
+    }
+  };
+
+  public shared ({ caller }) func refresh_club_roles(club_id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    await syncClubRoles(caller, club_id)
   };
   // Club/team admins and coaches may award points and administer rewards —
   // mirrors the Supabase RLS "club admin/coach" write policies on
@@ -257,6 +288,7 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func save_club_points_settings(club_id : Text, display_name : ?Text, disabled : Bool) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
+    switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     switch (display_name) { case (?n) { if (not valid(n)) return #Err("Invalid display name") }; case null {} };
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
     let ts = nowMs();
@@ -389,6 +421,7 @@ persistent actor class Main(governorInit : Principal) {
   ) : async { #Ok : Types.ClubReward; #Err : Text } {
     auth(caller);
     if (not valid(club_id) or not valid(name) or not valid(reward_type)) return #Err("Invalid reward");
+    switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     if (not (isGovernor(caller) or hasRole(caller, "club_admin", club_id))) return #Err("Club admin required");
     let ts = nowMs();
     let reward : Types.ClubReward = {
@@ -410,6 +443,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
       case (?current) {
+        switch (await syncClubRoles(caller, current.club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         if (not (isGovernor(caller) or hasRole(caller, "club_admin", current.club_id))) return #Err("Club admin required");
         if (not valid(name) or not valid(reward_type)) return #Err("Invalid reward update");
         let updated : Types.ClubReward = { current with name; description; points_required; is_default; is_active; reward_type; logo_url; qr_code_url; show_qr_code; sponsor_id; team_id; updated_at_ms = nowMs() };
@@ -424,6 +458,7 @@ persistent actor class Main(governorInit : Principal) {
     switch (clubRewards.find(func(item) = item.id == id)) {
       case null #Err("Reward not found");
       case (?current) {
+        switch (await syncClubRoles(caller, current.club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
         if (not (isGovernor(caller) or hasRole(caller, "club_admin", current.club_id))) return #Err("Club admin required");
         clubRewards := clubRewards.filter(func(item) = item.id != id);
         #Ok

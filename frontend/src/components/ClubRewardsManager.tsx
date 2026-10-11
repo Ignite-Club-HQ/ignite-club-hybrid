@@ -90,6 +90,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingReward, setEditingReward] = useState<ClubReward | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [pointsRequired, setPointsRequired] = useState(20);
@@ -344,8 +345,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       setDialogOpen(false);
       toast({ title: "Reward added" });
     },
-    onError: () => {
-      toast({ title: "Failed to add reward", variant: "destructive" });
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      setSaveError(message);
+      toast({ title: "Failed to add reward", description: message, variant: "destructive" });
     },
   });
 
@@ -394,8 +397,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
       setDialogOpen(false);
       toast({ title: "Reward updated" });
     },
-    onError: () => {
-      toast({ title: "Failed to update reward", variant: "destructive" });
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      setSaveError(message);
+      toast({ title: "Failed to update reward", description: message, variant: "destructive" });
     },
   });
 
@@ -596,6 +601,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   };
 
   const handleOpenDialog = (reward?: ClubReward) => {
+    setSaveError(null);
     if (reward) {
       setEditingReward(reward);
       setName(reward.name);
@@ -613,6 +619,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   };
 
   const handleSubmit = () => {
+    setSaveError(null);
     if (!name.trim()) {
       toast({ title: "Please enter a reward name", variant: "destructive" });
       return;
@@ -1229,6 +1236,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                 ) : editingReward ? "Update Reward" : "Add Reward"}
               </Button>
             </ResponsiveDialogFooter>
+            {saveError && <p role="alert" className="text-sm text-destructive pb-4">{saveError}</p>}
           </div>
         </ResponsiveDialogContent>
       </ResponsiveDialog>

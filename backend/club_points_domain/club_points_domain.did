@@ -205,6 +205,10 @@ type Main =
                                      Err: text;
                                      Ok: RewardRedemption;
                                    });
+   refresh_club_roles: (club_id: text) -> (variant {
+                                             Err: text;
+                                             Ok;
+                                           });
    rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
@@ -220,6 +224,10 @@ type Main =
                           Err: text;
                           Ok: ClubPointsSettings;
                         });
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    transfer_governorship: (new_governor: principal) ->
     (variant {
        Err: text;

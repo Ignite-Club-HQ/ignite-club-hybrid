@@ -1,3 +1,7 @@
+## ICP reward saving
+- [x] Connect rewards to verified club roles and preserve form errors; five frontend tests, role-isolation tests, canister check and contract drift check passed.
+- [ ] Deploy updated club_points_domain and frontend canisters, then verify Add Reward signed in on a phone — blocked on the user's GitHub deployment and Internet Identity session.
+
 ## Sign-in image loading
 - [x] Wait for restored sign-in before unlocking ICP images and share repeated logo requests; add regression tests.
 

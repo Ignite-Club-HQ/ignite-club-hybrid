@@ -156,6 +156,7 @@ export async function getLiveClubPointsSettings(
   clubId: string,
 ): Promise<{ display_name: [] | [string]; disabled: boolean } | null> {
   const a = await actor(ctx);
+  await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   const row = await unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
   return row.length ? row[0] : null;
 }
@@ -167,7 +168,7 @@ export async function saveLiveClubPointsSettings(
   disabled: boolean,
 ): Promise<void> {
   const a = await actor(ctx);
-  unwrapCandid(a.save_club_points_settings(clubId, candidOpt(displayName ?? null), disabled), "Save club points settings");
+  await unwrapCandid(a.save_club_points_settings(clubId, candidOpt(displayName ?? null), disabled), "Save club points settings");
 }
 
 export async function getLiveUserPoints(
@@ -223,6 +224,7 @@ export async function listLiveClubRewards(
   activeOnly: boolean,
 ): Promise<ClubReward[]> {
   const a = await actor(ctx);
+  await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   return unwrapCandid(a.list_rewards(clubId, candidOpt(teamId), activeOnly), "List club rewards");
 }
 

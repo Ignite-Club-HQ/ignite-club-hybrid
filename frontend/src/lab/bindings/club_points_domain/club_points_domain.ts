@@ -237,6 +237,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    refresh_club_roles(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -254,6 +261,13 @@ export interface MainInterface {
     save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_club_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -610,6 +624,16 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.redeem_reward(arg0, to_candid_Subject_n8(arg1), arg2, to_candid_opt_n10(arg3));
         return from_candid_variant_n2(result);
     }
+    async refresh_club_roles(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.refresh_club_roles(arg0);
+        return from_candid_variant_n1(result);
+    }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
@@ -639,6 +663,16 @@ export class Club_points_domain implements club_points_domainInterface {
     }> {
         const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
         return from_candid_variant_n43(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n1(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
