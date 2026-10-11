@@ -30,14 +30,17 @@ describe("newly uploaded profile photo resolution", () => {
   });
 
   it("recovers a failed cold-refresh unlock after the cooldown without remounting", async () => {
+    vi.useFakeTimers();
     decrypt.mockRejectedValueOnce(new Error("Sign-in is still restoring"))
       .mockResolvedValueOnce("blob:restored-logo");
     const { result } = renderHook(() => useResolvedIcpBlobSrc("https://photos-cai.raw.icp0.io/clubs/cold/logo.jpg"));
-    await waitFor(() => expect(result.current.failed).toBe(true));
-    vi.useFakeTimers();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.failed).toBe(true);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
+    vi.useRealTimers();
+    await waitFor(() => expect(result.current.failed).toBe(false));
     expect(result.current).toEqual({ src: "blob:restored-logo", pending: false, failed: false });
     expect(decrypt).toHaveBeenCalledTimes(2);
   });
