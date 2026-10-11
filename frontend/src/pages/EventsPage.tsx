@@ -982,6 +982,10 @@ export default function EventsPage() {
       params.delete("team"); // Clear team when club changes
     }
     setSearchParams(params);
+    // The page dropdown must win over the global club theme filter —
+    // otherwise activeClubFilter (preferred in clubFilter above) keeps the
+    // calendar showing the previously selected club's events.
+    setActiveClubTheme(value === "all" ? null : value);
   };
 
   const handleTeamChange = (value: string) => {
