@@ -180,27 +180,30 @@ export default function EditProfilePage() {
     setUploadingAvatar(true);
 
     if (useIcpLab) {
-      // ICP mode: encrypt + store on the blob-store canister, keep the
-      // on-chain URL as the avatar reference.
-      try {
-        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({
-          file: uploadFile,
-          mime: uploadFile.type || "image/jpeg",
-          ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
-        });
-        await persistIcpAvatar(url, uploadFile);
-        await refreshProfile();
-        toast({ title: "Photo saved!" });
-      } catch (error) {
-        setAvatarPreview("");
-        toast({
-          title: "Upload failed",
-          description: error instanceof Error ? error.message : "Could not upload photo",
-          variant: "destructive",
-        });
-      }
+      // ICP mode: the photo is already on screen — encrypt + store on the
+      // blob-store canister in the BACKGROUND so the upload feels instant.
+      // The canister round trips (~10s) no longer block the page.
       setUploadingAvatar(false);
+      void (async () => {
+        try {
+          const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+          const url = await uploadIcpAvatar({
+            file: uploadFile,
+            mime: uploadFile.type || "image/jpeg",
+            ext: uploadFile.type === "image/jpeg" ? "jpg" : (uploadFile.name.split('.').pop() || "jpg"),
+          });
+          await persistIcpAvatar(url, uploadFile);
+          await refreshProfile();
+          toast({ title: "Photo saved!" });
+        } catch (error) {
+          setAvatarPreview("");
+          toast({
+            title: "Upload failed",
+            description: error instanceof Error ? error.message : "Could not upload photo",
+            variant: "destructive",
+          });
+        }
+      })();
       return;
     }
 
