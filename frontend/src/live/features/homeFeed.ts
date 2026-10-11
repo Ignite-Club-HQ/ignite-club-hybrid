@@ -134,7 +134,7 @@ export function mapLiveHomeEvent(
     location_name: event.location[0] ?? null,
     suburb: null,
     club_id: event.club_id,
-    team_id: event.team_id[0] ?? null,
+    team_id: teamId,
     mini_league_id: event.mini_league_id[0] ?? null,
     is_cancelled: event.cancelled,
     is_bye: false,
