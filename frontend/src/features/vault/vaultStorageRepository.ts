@@ -152,13 +152,36 @@ export async function fetchVaultStorageBreakdown(
   clubId: string,
   client: IgniteSupabaseClient = supabase,
 ): Promise<VaultStorageBreakdown> {
-  // Defense-in-depth: VaultPage only calls this repository from Supabase-only
-  // query paths today, but guard here too so an II principal can never fire
-  // these Supabase reads if a future caller forgets to route around it.
-  // NEEDS-CANISTER: no club storage-usage breakdown equivalent exists on any
-  // canister yet, so ICP callers get an empty breakdown.
+  // Secure sign-in: total the vault files stored on the vault canister (no
+  // Supabase reads). Gallery photos are not counted there yet.
   if (resolveAuthBackend() === "icp") {
-    return emptyVaultStorageBreakdown();
+    const { withFeatureBackend } = await import("@/live/featureRouter");
+    return withFeatureBackend("vault", {
+      supabase: async () => emptyVaultStorageBreakdown(),
+      icp: async (ctx) => {
+        const [{ listLiveVaultClubFiles }, { listLiveTeams }] = await Promise.all([
+          import("@/live/features/vault"),
+          import("@/live/features/club"),
+        ]);
+        const [files, teams] = await Promise.all([
+          listLiveVaultClubFiles(ctx, clubId, null, null),
+          listLiveTeams(ctx, clubId).catch(() => [] as any[]),
+        ]);
+        return calculateVaultStorageBreakdown({
+          photos: [],
+          files: (files as any[])
+            .filter((file) => !file.is_external_link)
+            .map((file) => ({
+              file_size: Number(file.size ?? 0),
+              team_id: file.team?.[0] ?? null,
+              mini_league_id: file.mini_league_id?.[0] ?? null,
+              name: file.name ?? null,
+            })),
+          teams: (teams as any[]).map((team) => ({ id: team.id, name: team.name })),
+          miniLeagues: [],
+        });
+      },
+    });
   }
   const { data: photos } = await client
     .from("photos")
