@@ -250,11 +250,20 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
       if (error) throw error;
       return data as string;
     },
-    onSuccess: () => {
+    onMutate: async (groupId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["discover-open-groups"] });
+      const snapshot = queryClient.getQueriesData({ queryKey: ["discover-open-groups"] });
+      queryClient.setQueriesData({ queryKey: ["discover-open-groups"] }, (cur: any) =>
+        Array.isArray(cur) ? cur.map((g: any) => (g.id === groupId ? { ...g, requested: true } : g)) : cur,
+      );
       toast.success("Request sent — a current member must approve");
+      return { snapshot };
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discover-open-groups"] });
     },
-    onError: (err: any) => {
+    onError: (err: any, _id, ctx: any) => {
+      ctx?.snapshot?.forEach(([key, data]: any) => queryClient.setQueryData(key, data));
       toast.error(err?.message ?? "Could not send request");
     },
     onSettled: () => setJoiningId(null),
@@ -273,13 +282,22 @@ export default function DiscoverGroupsList({ activeClubFilter }: DiscoverGroupsL
       if (error) throw error;
       return data as string;
     },
-    onSuccess: () => {
+    onMutate: async (groupId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["discover-open-groups"] });
+      const snapshot = queryClient.getQueriesData({ queryKey: ["discover-open-groups"] });
+      queryClient.setQueriesData({ queryKey: ["discover-open-groups"] }, (cur: any) =>
+        Array.isArray(cur) ? cur.filter((g: any) => g.id !== groupId) : cur,
+      );
       toast.success("You've joined the group");
+      return { snapshot };
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["discover-open-groups"] });
       queryClient.invalidateQueries({ queryKey: ["my-chat-groups"] });
     },
-    onError: (err: any) => {
-      toast.error(err?.message ?? "Could not join group");
+    onError: (err: any, _id, ctx: any) => {
+      ctx?.snapshot?.forEach(([key, data]: any) => queryClient.setQueryData(key, data));
+      toast.error(err?.message ?? "Could not join group — please try again");
     },
     onSettled: () => setJoiningId(null),
   });
