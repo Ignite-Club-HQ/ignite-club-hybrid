@@ -118,6 +118,17 @@ export default function CreateGroupDialog({
   const { data: clubInfo } = useQuery({
     queryKey: ["create-group-club-info", resolvedClubId, teamId, miniLeagueId],
     queryFn: async () => {
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        if (teamId) {
+          const t = await lookup.icpGetTeam(teamId).catch(() => null);
+          const cid = t?.club_id || resolvedClubId || null;
+          return { clubId: cid, clubName: cid ? await lookup.icpGetClubName(cid).catch(() => null) : null, teamName: t?.name || null, leagueName: null as string | null };
+        }
+        if (resolvedClubId) {
+          return { clubId: resolvedClubId, clubName: await lookup.icpGetClubName(resolvedClubId).catch(() => null), teamName: null, leagueName: null as string | null };
+        }
+      }
       if (teamId) {
         const { data } = await supabase
           .from("teams")
@@ -182,6 +193,10 @@ export default function CreateGroupDialog({
     queryKey: ["create-group-club-teams", clubInfo?.clubId],
     queryFn: async () => {
       if (!clubInfo?.clubId) return [];
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        return (await lookup.icpListTeams(clubInfo.clubId)).map((t) => ({ id: t.id, name: t.name }));
+      }
       const { data } = await supabase
         .from("teams")
         .select("id, name")
