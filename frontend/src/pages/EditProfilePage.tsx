@@ -105,13 +105,23 @@ export default function EditProfilePage() {
       setAvatarPreview(URL.createObjectURL(uploadBlob));
       const ext = mimeToExtension(uploadBlob.type || result.mimeType) || "jpg";
       if (useIcpLab) {
-        // ICP mode: encrypt + store on the blob-store canister, keep the
-        // on-chain URL as the avatar reference.
-        const { uploadIcpAvatar } = await import("@/live/avatarUpload");
-        const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
-        await persistIcpAvatar(url, uploadBlob);
-        await refreshProfile();
-        toast({ title: "Photo saved!" });
+        // ICP mode: the photo is already on screen — encrypt + store on the
+        // blob-store canister in the BACKGROUND so the picker feels instant.
+        // The canister round trips (~10s) no longer block the page.
+        setUploadingAvatar(false);
+        void (async () => {
+          try {
+            const { uploadIcpAvatar } = await import("@/live/avatarUpload");
+            const url = await uploadIcpAvatar({ file: uploadBlob, mime: uploadBlob.type || result.mimeType, ext });
+            await persistIcpAvatar(url, uploadBlob);
+            await refreshProfile();
+            toast({ title: "Photo saved!" });
+          } catch (error) {
+            setAvatarPreview("");
+            toast({ title: "Upload failed", description: error instanceof Error ? error.message : "Could not upload photo", variant: "destructive" });
+          }
+        })();
+        return;
       } else {
         const fileName = `${user.id}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
