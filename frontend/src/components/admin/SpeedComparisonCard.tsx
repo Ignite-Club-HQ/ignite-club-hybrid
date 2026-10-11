@@ -118,6 +118,11 @@ export function SpeedComparisonCard() {
             <p className="mt-2 text-xs text-muted-foreground">
               Chat open timings recorded before 11 Oct 2026 included time spent elsewhere in the app and read too high.
             </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Note: an earlier side-by-side speed test compared the two backends from a computer in Europe, which unfairly
+              made Supabase reads look about 10× slower. From Australia both versions read at very similar speeds — judge
+              the columns above, which come from real phones, not that test.
+            </p>
           </div>
         )}
       </CardContent>
