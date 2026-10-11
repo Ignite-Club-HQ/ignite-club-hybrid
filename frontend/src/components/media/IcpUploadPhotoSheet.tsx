@@ -33,7 +33,7 @@ interface IcpUploadPhotoSheetProps {
   onOpenChange: (open: boolean) => void;
   onUploaded: () => unknown;
   /** Local copies of the photos being shared, shown in the feed right away. */
-  onPendingChange?: (previewUrls: string[]) => void;
+  onPendingChange?: (previews: IcpPendingUploadPreview[]) => void;
   clubs: IcpUploadClubOption[];
   teams: IcpUploadTeamOption[];
   miniLeagues: IcpUploadNamedOption[];
