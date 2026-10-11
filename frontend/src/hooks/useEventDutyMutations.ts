@@ -269,6 +269,25 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
     });
   };
 
+  // Instant on-screen status flip (ICP saves take ~1.3s); caller rolls back
+  // from the returned snapshot on failure.
+  const optimisticDutyStatus = async (dutyId: string, status: "open" | "completed") => {
+    if (useIcpLab || !id) return undefined;
+    const key = eventKeys.duties(id);
+    await queryClient.cancelQueries({ queryKey: key });
+    const snapshot = queryClient.getQueryData(key);
+    queryClient.setQueryData(key, (current: unknown) =>
+      Array.isArray(current)
+        ? current.map((d: any) =>
+            d.id === dutyId
+              ? { ...d, status, completed_at: status === "completed" ? new Date().toISOString() : null }
+              : d,
+          )
+        : current,
+    );
+    return { snapshot };
+  };
+
   // Complete duty mutation
   const completeDutyMutation = useMutation({
     mutationFn: async (dutyId: string) => {
@@ -326,6 +345,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       await notifyDutyCompleted(duty);
       return { outcome: "completed" as const };
     },
+    onMutate: (dutyId: string) => optimisticDutyStatus(dutyId, "completed"),
     onSuccess: (result) => {
       if (useIcpLab) {
         toast({ title: "Duty completed locally" });
@@ -338,7 +358,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       }
     },
 
-    onError: (error) => {
+    onError: (error, _dutyId, ctx: any) => {
       if (error instanceof DutyNotificationPartialError) {
         // The duty IS completed — never roll back or reopen it, and never
         // report a total failure.
@@ -350,6 +370,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         });
         return;
       }
+      if (ctx && "snapshot" in ctx) queryClient.setQueryData(eventKeys.duties(id), ctx.snapshot);
       toast({ 
         title: "Failed to complete duty", 
         description: error.message,
@@ -388,6 +409,7 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
         .eq("id", dutyId);
       if (error) throw error;
     },
+    onMutate: (dutyId: string) => optimisticDutyStatus(dutyId, "open"),
     onSuccess: () => {
       if (useIcpLab) {
         toast({ title: "Duty reopened locally" });
@@ -397,7 +419,8 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       queryClient.invalidateQueries({ queryKey: eventKeys.duties(id) });
       toast({ title: "Marked as not complete" });
     },
-    onError: (error) => {
+    onError: (error, _dutyId, ctx: any) => {
+      if (ctx && "snapshot" in ctx) queryClient.setQueryData(eventKeys.duties(id), ctx.snapshot);
       toast({
         title: "Failed to undo",
         description: error.message,
