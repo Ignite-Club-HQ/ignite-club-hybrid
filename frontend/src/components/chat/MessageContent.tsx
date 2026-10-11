@@ -16,6 +16,7 @@ import { NewsLinkCard } from "@/components/chat/NewsLinkCard";
 import { preventIfReactionInteractionGuarded } from "@/lib/reactionInteractionGuard";
 import { isVideoUrl } from "@/lib/videoUtils";
 import { POLL_TOKEN_PATTERN } from "@/lib/chatPollToken";
+import { EVENT_TOKEN_PATTERN, EVENT_URL_PATTERN } from "@/lib/chatEventToken";
 import {
   getCachedImageAspectRatio,
   setCachedImageAspectRatio,
@@ -40,10 +41,6 @@ const URL_REGEX = /(?:https?:\/\/|www\.)[^\s]+/gi;
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 // Markdown link pattern [text](url)
 const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
-// Event link pattern [event:uuid]
-const EVENT_LINK_REGEX = /\[event:([0-9a-f-]{36})\]/gi;
-// Event URL pattern - matches /events/uuid in URLs
-const EVENT_URL_REGEX = /(?:https?:\/\/[^\s]*)?\/events\/([0-9a-f-]{36})/gi;
 
 // Ensure URL has protocol for href
 const ensureProtocol = (url: string): string => {
@@ -138,7 +135,7 @@ export const MessageContent = memo(function MessageContent({ text, imageUrl, sea
     let lastIndex = 0;
     
     // Combined regex. Order: vault root, vault file/folder, poll, board, event, gallery, markdown links, event URLs, plain URLs, mentions
-    const combinedRegex = new RegExp(String.raw`(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(${POLL_TOKEN_PATTERN})|(\[board:([0-9a-f-]{36})\])|(\[event:([0-9a-f-]{36})\])|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([A-Za-z0-9-]+)\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|((?:https?:\/\/[^\s]*)?\/events\/([0-9a-f-]{36})(?:\S*)?)|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))`, "gi");
+    const combinedRegex = new RegExp(String.raw`(\[vaultroot:(team|club):([0-9a-f-]{36})\])|(\[vault:([0-9a-f-]{36})\])|(\[vaultfolder:([0-9a-f-]{36})\])|(${POLL_TOKEN_PATTERN})|(\[board:([0-9a-f-]{36})\])|(${EVENT_TOKEN_PATTERN})|(\[(?:gallery|galleryprompt):([0-9a-f-]{36})\])|(\[news:([A-Za-z0-9-]+)\])|(\[([^\]]+)\]\((https?:\/\/[^)]+)\))|(${EVENT_URL_PATTERN})|((?:https?:\/\/|www\.)[^\s\]]+)|(@\[([^\]]+)\]\(([^)]+)\))`, "gi");
     let match;
     
     while ((match = combinedRegex.exec(text)) !== null) {
