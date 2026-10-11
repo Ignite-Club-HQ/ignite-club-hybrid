@@ -375,7 +375,7 @@ export function IcpMediaFeedPage() {
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<IcpPendingUploadPreview[]>([]);
   // Home's "Add photos" shortcut and gallery prompts link to /media?upload=1.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
