@@ -141,9 +141,9 @@ export function mapLiveHomeEvent(
     is_recurring: false,
     parent_event_id: null,
     amount: null,
-    opponent: event.opponent[0] ?? null,
+    opponent,
     arrival_minutes_before: null,
-    teams: null,
+    teams: teamName ? { name: teamName, default_match_arrival_minutes: null } : null,
     clubs: { name: clubNameById.get(event.club_id) ?? "", sport: null },
   };
 }
