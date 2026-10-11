@@ -736,14 +736,19 @@ export default function EventsPage() {
               const rows = rowsByClub[clubIndex];
               for (const ev of rows as any[]) {
                 if (ev.deleted) continue;
-                const start = new Date(Number(ev.starts_at_ms));
+                const startMs = Number(ev.starts_at_ms);
+                const endMs = Number(ev.ends_at_ms);
+                // Skip rows with missing/invalid timestamps — formatting an
+                // Invalid Date throws RangeError and blanks the whole page.
+                if (!Number.isFinite(startMs)) continue;
+                const start = new Date(startMs);
                 if (start < thirtyDaysAgo || start > upperBound) continue;
                 if (filter !== "all" && ev.event_type !== filter) continue;
                 const teamId = (ev.team_id?.[0] ?? null) as string | null;
                 // Club-wide events (no team) show to every club member; team
                 // events show to that team's members and club admins.
                 if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
-                const end = new Date(Number(ev.ends_at_ms));
+                const end = new Date(Number.isFinite(endMs) ? endMs : startMs);
                 all.push({
                   id: ev.id,
                   title: ev.title,
@@ -767,7 +772,9 @@ export default function EventsPage() {
                   start_time: format(start, "HH:mm"),
                   end_time: format(end, "HH:mm"),
                   description: ev.description ?? "",
-                  updated_at: new Date(Number(ev.updated_at_ms ?? ev.starts_at_ms)).toISOString(),
+                  updated_at: new Date(
+                    Number.isFinite(Number(ev.updated_at_ms)) ? Number(ev.updated_at_ms) : startMs,
+                  ).toISOString(),
                 } as Event);
               }
             }
