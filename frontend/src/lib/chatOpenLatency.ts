@@ -28,6 +28,16 @@ interface LogArgs {
   userId?: string | null;
 }
 
+/** Chat mounts later than this after app start = the user browsed elsewhere
+ *  first, so app-start time must not be counted as chat-open time. */
+export const COLD_OPEN_MAX_MOUNT_MS = 5_000;
+
+export function isTrueColdOpen(chatMountDeltaMs: number | undefined): boolean {
+  // chat_mount is first-write-wins per session; a missing or late mark means
+  // this chat was reached by in-app navigation, not opened at launch.
+  return typeof chatMountDeltaMs === "number" && chatMountDeltaMs <= COLD_OPEN_MAX_MOUNT_MS;
+}
+
 export async function logChatOpenLatency(args: LogArgs): Promise<void> {
   try {
     if (!args.userId) return;
@@ -41,7 +51,7 @@ export async function logChatOpenLatency(args: LogArgs): Promise<void> {
     if (args.source === "cold_open") {
       try {
         const snap = snapshotStages();
-        if (snap.anchor !== null) {
+        if (snap.anchor !== null && isTrueColdOpen(snap.deltas.chat_mount)) {
           const notifDelta = snap.deltas.notif_tap;
           if (typeof notifDelta === "number") {
             startTs = Math.min(startTs, snap.anchor + notifDelta);

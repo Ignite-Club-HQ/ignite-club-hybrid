@@ -47,6 +47,7 @@ import { PhotoStoresCard } from "@/components/admin/PhotoStoresCard";
 import { FreePlanLimitsCard } from "@/components/admin/FreePlanLimitsCard";
 import { CanisterBalancesCard } from "@/components/admin/CanisterBalancesCard";
 import { CanisterUsageCard } from "@/components/admin/CanisterUsageCard";
+import { SpeedComparisonCard } from "@/components/admin/SpeedComparisonCard";
 import { ClubProOverridesCard } from "@/components/admin/ClubProOverridesCard";
 import { SeedTestDataCard } from "@/components/admin/SeedTestDataCard";
 import { getLiveBackendTargetRegistry, getActiveIcpTarget, type IcpTargetConfig } from "@/live/targetRegistry";
@@ -875,6 +876,7 @@ export default function PlacementAdminSettingsPage() {
         <PhotoStoresCard />
         <CanisterBalancesCard />
         <CanisterUsageCard />
+        <SpeedComparisonCard />
         <ClubProOverridesCard />
         <SeedTestDataCard />
 
