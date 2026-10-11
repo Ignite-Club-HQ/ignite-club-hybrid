@@ -47,7 +47,7 @@ describe("collectInboxPreviewReferences", () => {
 
   it("ignores malformed and unrelated tokens", () => {
     const result = collectInboxPreviewReferences([
-      { lastMessage: { text: "[event:not-a-uuid] [poll:11111111-1111-4111-8111-111111111111] plain" } },
+      { lastMessage: { text: "[event:bad id] [poll:11111111-1111-4111-8111-111111111111] plain" } },
     ]);
     expect(result).toEqual({ eventIds: [], vaultFolderIds: [], vaultFileIds: [] });
   });
