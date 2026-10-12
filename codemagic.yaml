@@ -62,8 +62,15 @@ workflows:
       - name: Scaffold and sync Capacitor Android
         working_directory: frontend
         script: |
+          set -euo pipefail
+          # Fail loudly here (not later in Gradle) if the web build is missing.
+          test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
+          rm -rf android
           npx cap add android
+          # Capacitor writes capacitor.settings.gradle during update; regenerate if absent.
+          [ -f android/capacitor.settings.gradle ] || npx cap update android
           npx cap sync android
+          test -f android/capacitor.settings.gradle || { echo "capacitor.settings.gradle was not generated"; exit 1; }
           # Optional: notifications in the test build when the Firebase file is set.
           if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
             echo "$GOOGLE_SERVICES_JSON" | base64 --decode > android/app/google-services.json
@@ -116,8 +123,15 @@ workflows:
       - name: Scaffold and sync Capacitor Android
         working_directory: frontend
         script: |
+          set -euo pipefail
+          # Fail loudly here (not later in Gradle) if the web build is missing.
+          test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
+          rm -rf android
           npx cap add android
+          # Capacitor writes capacitor.settings.gradle during update; regenerate if absent.
+          [ -f android/capacitor.settings.gradle ] || npx cap update android
           npx cap sync android
+          test -f android/capacitor.settings.gradle || { echo "capacitor.settings.gradle was not generated"; exit 1; }
           # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
           python3 - <<'PY'
           p = "android/app/src/main/AndroidManifest.xml"
