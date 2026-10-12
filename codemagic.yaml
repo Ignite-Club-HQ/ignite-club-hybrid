@@ -7,6 +7,9 @@
 #                     variables listed below to be configured in the Codemagic
 #                     UI (Application -> Environment variables, group
 #                     "android_release"):
+#   Signing key — EITHER generate one in the Codemagic UI (app -> Code
+#                       signing -> Android -> Generate keystore; no Java needed,
+#                       its variables are injected automatically), OR set:
 #                       CM_KEYSTORE            base64 of the upload keystore (.jks)
 #                       CM_KEYSTORE_PASSWORD   keystore store password
 #                       CM_KEY_ALIAS           key alias inside the keystore
@@ -153,7 +156,18 @@ workflows:
       - name: Decode signing and Firebase files
         working_directory: frontend/android
         script: |
-          echo "$CM_KEYSTORE" | base64 --decode > app/upload-keystore.jks
+          # Signing key, two supported sources:
+          #  1. Codemagic's built-in keystore generator (UI -> Code signing ->
+          #     Android -> Generate keystore). Injects CM_KEYSTORE_PATH etc.
+          #  2. Manual: CM_KEYSTORE = base64 of a .jks file (needs Java to make).
+          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
+            cp "$CM_KEYSTORE_PATH" app/upload-keystore.jks
+          elif [ -n "$CM_KEYSTORE" ]; then
+            echo "$CM_KEYSTORE" | base64 --decode > app/upload-keystore.jks
+          else
+            echo "No signing key found. In Codemagic, open the app -> Code signing -> Android -> Generate keystore (no Java needed), or set CM_KEYSTORE to the base64 of a .jks file."
+            exit 1
+          fi
           echo "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
       - name: Configure signing
         working_directory: frontend/android
