@@ -12,7 +12,9 @@ import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { isIcpAuthAvailable, readAuthChoice } from "@/live/authBackendMode";
 import {
   cacheClubBackendHint,
+  deriveClubBackendsFromHomeCountries,
   getBackendRoutingConfig,
+  isClubHomeCountryRoutingActive,
   resolveBackendForUser,
   resolveClubBackendOverride,
   type BackendProvider,
@@ -74,7 +76,14 @@ async function fetchSupabaseMembership(
 }
 
 function hasClubPins(): boolean {
-  return Object.keys(getBackendRoutingConfig().clubBackendOverrides).length > 0;
+  return isClubHomeCountryRoutingActive(getBackendRoutingConfig());
+}
+
+async function fetchSupabaseHomeCountries(clubIds: string[]): Promise<Record<string, string | null>> {
+  if (clubIds.length === 0) return {};
+  const { data, error } = await supabase.from("clubs").select("id, home_country").in("id", clubIds);
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((c: any) => [c.id, c.home_country ?? null]));
 }
 
 export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
@@ -140,7 +149,25 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
         if (cancelled) return;
         setUserClubIds(clubIds);
 
+        // A club's backend follows its home country, using the same country
+        // rules as the sign-in screen.
         const config = getBackendRoutingConfig();
+        let homeCountries: Record<string, string | null> = {};
+        try {
+          if (identity) {
+            const { getLiveClubHomeCountries } = await import("@/live/features/club");
+            homeCountries = await getLiveClubHomeCountries({ identity, target: getActiveIcpTarget() }, clubIds);
+          } else {
+            homeCountries = await fetchSupabaseHomeCountries(clubIds);
+          }
+        } catch (error) {
+          membershipKnown = false;
+          console.warn("[club-backend] Could not load club home countries.", error);
+        }
+        if (cancelled) return;
+        config.clubBackendOverrides = deriveClubBackendsFromHomeCountries(
+          config, homeCountries, isIcpAuthAvailable(),
+        );
         const pin = resolveClubBackendOverride(config, clubIds);
         if (membershipKnown) cacheClubBackendHint(pin);
         if (pin === null) {

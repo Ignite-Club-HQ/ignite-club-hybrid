@@ -352,32 +352,59 @@ export function resolveBackendForUser(
  */
 export const CLUB_BACKEND_HINT_KEY = "ignite.clubBackendHint";
 
-/** Persists the last per-club backend pin (null clears it). Best-effort. */
+/** Key for the club-home-country hint (replaces the retired per-club pin hint). */
+export const CLUB_HOME_BACKEND_HINT_KEY = "ignite.clubHomeBackendHint";
+
+/** Persists the backend the user's clubs' home countries require (null clears it). Best-effort. */
 export function cacheClubBackendHint(backend: BackendProvider | null): void {
   try {
-    if (backend === null) {
-      globalThis.localStorage?.removeItem(CLUB_BACKEND_HINT_KEY);
-    } else {
-      globalThis.localStorage?.setItem(CLUB_BACKEND_HINT_KEY, backend);
-    }
+    globalThis.localStorage?.removeItem(CLUB_BACKEND_HINT_KEY);
+    if (backend === null) globalThis.localStorage?.removeItem(CLUB_HOME_BACKEND_HINT_KEY);
+    else globalThis.localStorage?.setItem(CLUB_HOME_BACKEND_HINT_KEY, backend);
   } catch {
-    // Storage unavailable (private mode, quota) — caching is best-effort.
+    // best-effort
   }
 }
 
-/** Reads the cached per-club backend pin, or null when absent/invalid. */
+/**
+ * Reads the cached club-home-country backend, or null. Hints written by the
+ * retired per-club pin feature (old key) are cleared and never honoured.
+ */
 export function readCachedClubBackendHint(): BackendProvider | null {
-  // Club pins are retired; ignore and clear any hint left on the device.
-  try { localStorage.removeItem(CLUB_BACKEND_HINT_KEY); } catch { /* ignore */ }
-  return null;
-}
-function _legacyReadCachedClubBackendHint(): BackendProvider | null {
   try {
-    const raw = globalThis.localStorage?.getItem(CLUB_BACKEND_HINT_KEY);
+    globalThis.localStorage?.removeItem(CLUB_BACKEND_HINT_KEY);
+    const raw = globalThis.localStorage?.getItem(CLUB_HOME_BACKEND_HINT_KEY);
     return raw === "supabase" || raw === "icp" ? raw : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * True when club home countries can route anyone away from the default:
+ * some country has a rule, or the default itself is ICP.
+ */
+export function isClubHomeCountryRoutingActive(config: BackendRoutingConfig): boolean {
+  return config.defaultBackend === "icp" || Object.keys(config.countryRules).length > 0;
+}
+
+/**
+ * Pure: derives each club's backend from its home country using the same
+ * country rules as the sign-in screen. Clubs with no recorded country are
+ * left out (no pin). The result is fed in as `clubBackendOverrides`.
+ */
+export function deriveClubBackendsFromHomeCountries(
+  config: BackendRoutingConfig,
+  homeCountries: Record<string, string | null | undefined>,
+  icpAvailable: boolean,
+): Record<string, BackendProvider> {
+  const out: Record<string, BackendProvider> = {};
+  for (const [clubId, country] of Object.entries(homeCountries)) {
+    const code = country?.trim().toUpperCase();
+    if (!code) continue;
+    out[clubId] = resolveBackendForCountry(config, code, icpAvailable);
+  }
+  return out;
 }
 
 /**
