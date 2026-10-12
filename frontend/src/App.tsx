@@ -14,7 +14,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } fr
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { AuthProvider, IcpAuthProvider } from "@/hooks/useAuth";
 import { ClubBackendEnforcement } from "@/components/ClubBackendEnforcement";
-import { useIcpAuthScreen } from "@/live/authBackendMode";
+import { useIcpAuthScreen, subscribeAuthChoice } from "@/live/authBackendMode";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ThemeProvider } from "next-themes";
 import { ClubThemeProvider } from "@/hooks/useClubTheme";
