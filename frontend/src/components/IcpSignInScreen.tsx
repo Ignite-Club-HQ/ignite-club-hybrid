@@ -57,7 +57,7 @@ export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, nativ
             className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
             onClick={onUseEmail}
           >
-            App admin? Sign in with email instead
+            Sign in with email instead
           </button>
           <div className="mt-8"><AuthLegalLinks /></div>
 
