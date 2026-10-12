@@ -39,6 +39,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -540,10 +541,22 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // NEEDS-CANISTER: reward-image blob storage has no canister/blob-store
-    // equivalent; raw Supabase Storage uploads cannot work for an II session.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Image uploads aren't available for Internet Identity accounts yet", variant: "destructive" });
+      setUploading(true);
+      try {
+        const result = await compressImage(file);
+        const uploaded = await tryUploadMediaToBlobStore({
+          storagePath: `clubs/${clubId}/rewards/${Date.now()}-${file.name}`,
+          file: result.file,
+          mime: result.file.type || file.type || "image/jpeg",
+        });
+        if (!uploaded) throw new Error("Photo storage is not configured");
+        setLogoUrl(uploaded.url);
+      } catch (error) {
+        toast({ title: "Failed to upload logo", variant: "destructive" });
+      } finally {
+        setUploading(false);
+      }
       return;
     }
     setUploading(true);
@@ -572,10 +585,22 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // NEEDS-CANISTER: reward-image blob storage has no canister/blob-store
-    // equivalent; raw Supabase Storage uploads cannot work for an II session.
     if (resolveAuthBackend() === "icp") {
-      toast({ title: "Image uploads aren't available for Internet Identity accounts yet", variant: "destructive" });
+      setUploadingQr(true);
+      try {
+        const result = await compressImage(file);
+        const uploaded = await tryUploadMediaToBlobStore({
+          storagePath: `clubs/${clubId}/qr-codes/${Date.now()}-${file.name}`,
+          file: result.file,
+          mime: result.file.type || file.type || "image/jpeg",
+        });
+        if (!uploaded) throw new Error("Photo storage is not configured");
+        setQrCodeUrl(uploaded.url);
+      } catch (error) {
+        toast({ title: "Failed to upload QR code", variant: "destructive" });
+      } finally {
+        setUploadingQr(false);
+      }
       return;
     }
     setUploadingQr(true);
