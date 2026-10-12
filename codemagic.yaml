@@ -106,6 +106,8 @@ workflows:
     environment:
       node: 22
       java: 21
+      android_signing:
+        - ignite_upload
       groups:
         - android_release
     scripts:
