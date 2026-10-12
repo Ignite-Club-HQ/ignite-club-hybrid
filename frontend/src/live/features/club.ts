@@ -49,6 +49,14 @@ export async function getLiveClubProfile(ctx: FeatureBackendContext, clubId: str
   );
 }
 
+/** club id -> ISO home country for the given clubs (public query). */
+export async function getLiveClubHomeCountries(ctx: FeatureBackendContext, clubIds: string[]): Promise<Record<string, string>> {
+  if (clubIds.length === 0) return {};
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(actor.get_club_home_countries(clubIds), "Get club home countries");
+  return Object.fromEntries(rows);
+}
+
 export async function saveLiveClubProfile(ctx: FeatureBackendContext, profile: LiveClubProfile) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.save_club_profile(profile), "Save club profile");
