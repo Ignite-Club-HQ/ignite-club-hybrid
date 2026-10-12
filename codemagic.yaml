@@ -89,7 +89,7 @@ workflows:
                '<category android:name="android.intent.category.DEFAULT" />'
                '<category android:name="android.intent.category.BROWSABLE" />'
                '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
-          if "com.igniteclubhq.app" not in s:
+          if "ii-callback" not in s:
               s = s.replace("</activity>", f + "</activity>", 1)
           open(p, "w").write(s)
           PY
@@ -152,7 +152,7 @@ workflows:
                '<category android:name="android.intent.category.DEFAULT" />'
                '<category android:name="android.intent.category.BROWSABLE" />'
                '<data android:scheme="com.igniteclubhq.app" android:host="ii-callback" /></intent-filter>')
-          if "com.igniteclubhq.app" not in s:
+          if "ii-callback" not in s:
               s = s.replace("</activity>", f + "</activity>", 1)
           open(p, "w").write(s)
           PY
