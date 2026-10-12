@@ -143,7 +143,9 @@ export function authoritativeMessageExists(
   return messages.some((m) => {
     if (!m?.id || m.id.startsWith("temp-") || m.id.startsWith("queued-")) return false;
     if (args.authorId && m.author_id !== args.authorId) return false;
-    if ((m.text ?? "") !== args.text) return false;
+    // Trim: the messaging canister stores a single space for photo-only
+    // messages while the optimistic row has empty text.
+    if ((m.text ?? "").trim() !== args.text.trim()) return false;
     if (!sameOptionalId(m.image_url, args.imageUrl)) return false;
     if (!sameOptionalId(m.reply_to_id, args.replyToId)) return false;
 
@@ -182,7 +184,9 @@ export interface AuthoritativeRowLike {
 function optimisticRowMatches(row: OptimisticRowLike, authoritative: AuthoritativeRowLike): boolean {
   if (!row?.id || !row.id.startsWith("temp-")) return false;
   if ((row.author_id ?? null) !== (authoritative.author_id ?? null)) return false;
-  if ((row.text ?? "") !== (authoritative.text ?? "")) return false;
+  // Trim: the messaging canister stores a single space for photo-only
+  // messages while the optimistic row has empty text.
+  if ((row.text ?? "").trim() !== (authoritative.text ?? "").trim()) return false;
   if (!sameOptionalId(row.image_url, authoritative.image_url)) return false;
   if (!sameOptionalId(row.reply_to_id, authoritative.reply_to_id)) return false;
   return true;

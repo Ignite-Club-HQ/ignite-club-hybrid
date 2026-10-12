@@ -512,7 +512,7 @@ export default function BroadcastChatPage() {
       const realByAuthorText = new Set(
         messages
           .filter((m: any) => !m.id.startsWith("temp-") && !m.id.startsWith("queued-"))
-          .map((m: any) => `${m.author_id}::${m.text ?? ""}::${m.image_url ? "img" : ""}`),
+          .map((m: any) => `${m.author_id}::${(m.text ?? "").trim()}::${m.image_url ? "img" : ""}`),
       );
       const previousOnly = (prev || []).filter((message: any) => {
         if (incomingIds.has(message.id)) return false;
@@ -520,7 +520,7 @@ export default function BroadcastChatPage() {
         // fail-open branch below would re-add it on every sync.
         if (isTombstoned(reconcileScope, message.id)) return false;
         if (message.id.startsWith("temp-") || message.id.startsWith("queued-")) {
-          const key = `${message.author_id}::${message.text ?? ""}::${message.image_url ? "img" : ""}`;
+          const key = `${message.author_id}::${(message.text ?? "").trim()}::${message.image_url ? "img" : ""}`;
           if (realByAuthorText.has(key)) return false;
         }
         return true;
