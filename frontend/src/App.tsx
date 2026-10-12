@@ -370,6 +370,15 @@ const App = () => {
   // the auth boundary below (Supabase vs Internet Identity) is chosen from
   // these settings, and the provider must not be swapped after mount.
   const [placementReady, setPlacementReady] = useState(false);
+  // Re-pick the auth provider when the device sign-in choice flips
+  // (?auth=icp / ?auth=email links on the sign-in screens). App sits outside
+  // the router, so without this subscription the URL change re-renders /auth
+  // but never swaps the mounted provider — the new screen's button would run
+  // the old system's sign-in. Must live above the placementReady early return
+  // to keep hook order stable.
+  const [authChoiceTick, setAuthChoiceTick] = useState(0);
+  useEffect(() => subscribeAuthChoice(() => setAuthChoiceTick((t) => t + 1)), []);
+  void authChoiceTick; // re-render trigger only; useIcpAuthScreen re-reads the choice
   useEffect(() => {
     let cancelled = false;
     void (async () => {
