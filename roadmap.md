@@ -1,5 +1,5 @@
 ## Native sign-in bridge audit
-- [ ] Replace orange styling and audit Continue, cancellation, and return-to-app handling.
+- [x] Replace orange with Ignite green; fix provider reply origin, return link and cancellation handling; 15 tests and browser opening/retry pass.
 - [ ] Confirm on Paul's phone after frontend-canister deployment and any required new native build.
 
 ## Android status bar
