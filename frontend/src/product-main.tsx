@@ -6,10 +6,15 @@ import { createRoot } from "react-dom/client";
 import App, { appCacheReady } from "./App";
 import { initWebVitalsTelemetry } from "./lib/observability/webVitals";
 import { installSupabaseAuthRetry } from "./lib/supabaseAuthRetry";
+import { initDeepLinkHandler } from "./lib/deepLinkHandler";
 import "./index.css";
 
 installSupabaseAuthRetry();
 initWebVitalsTelemetry();
+// Native only: resolves the cold-start launch URL and releases the startup
+// boundary. Without this the gate stays "pending" forever and the app hangs
+// on "Starting up...".
+initDeepLinkHandler();
 
 const root = document.getElementById("root");
 if (!root) {
