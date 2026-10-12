@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 40
     env:
       ICP_HOME: ${{ github.workspace }}/.icp-home
+      # Large bundles need more than the default 60s plugin compute limit.
+      ICP_CLI_PLUGIN_COMPUTE_LIMIT_SECS: "1800"
     steps:
       - uses: actions/checkout@v4
 
@@ -71,8 +73,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .asset-history deploy/frontend/dist/assets
-          # Prune files no deploy has shipped for 14 days.
-          find .asset-history -type f -mtime +14 -delete || true
+          # Prune files no deploy has shipped for 2 days (keeps the upload small).
+          find .asset-history -type f -mtime +2 -delete || true
           # Older files fill gaps only — never overwrite this build's files.
           cp -n .asset-history/* deploy/frontend/dist/assets/ 2>/dev/null || true
           # Record this build's files (fresh mtime) for future deploys.
