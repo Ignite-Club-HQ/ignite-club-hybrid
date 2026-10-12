@@ -1,6 +1,7 @@
 ## Native sign-in bridge audit
 - [x] Replace orange with Ignite green; fix provider reply origin, return link and cancellation handling; 15 tests and browser opening/retry pass.
-- [ ] Confirm on Paul's phone after frontend-canister deployment and any required new native build.
+- [x] Fewer taps: Internet Identity opens automatically; Android return uses a package-targeted intent link; reply survives Android closing the app (cold-start launch link). 18 tests pass.
+- [ ] Live canister still serves the old orange page (verified 2026-10-12) — "Deploy web app (ICP frontend canister)" GitHub workflow must run; then new Android build + phone confirmation.
 
 ## Android status bar
 - [x] Remove duplicate Android top spacing and repaint the backdrop after system icon styling; 12 frontend and two Android scaffold checks passed.
