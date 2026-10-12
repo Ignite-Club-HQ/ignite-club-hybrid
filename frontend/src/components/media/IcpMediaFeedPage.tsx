@@ -592,33 +592,36 @@ export function IcpMediaFeedPage() {
     if (flat >= 0) setLightboxIndex(flat);
   };
 
+  // Match SupabaseMediaPage: render as page content inside the shared app
+  // shell (AppHeader/BottomNav own the chrome) — no min-h-screen, no sticky
+  // page header, title row sits inline like every other page.
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-2 px-4 py-3">
-          <h1 className="text-2xl font-bold">Media</h1>
-          <div className="flex items-center gap-2">
-            {hasFilters && (
-              <Button
-                variant={hasActiveFilters ? "default" : "outline"}
-                size="icon"
-                aria-label="Filter"
-                onClick={() => setFilterOpen(true)}
-                className="relative"
-              >
-                <Filter className="h-4 w-4" />
-                {hasActiveFilters && (
-                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
-                )}
-              </Button>
-            )}
-            <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
-          </div>
+    <div className="py-6 pb-32 space-y-6 soft-reveal">
+      <div className="flex items-center justify-between gap-2 min-h-10">
+        <h1 className="text-2xl font-bold">Media</h1>
+        <div className="flex items-center gap-2">
+          {hasFilters && (
+            <Button
+              variant={hasActiveFilters ? "default" : "outline"}
+              size="icon"
+              aria-label="Filter"
+              onClick={() => setFilterOpen(true)}
+              className="relative"
+            >
+              <Filter className="h-4 w-4" />
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary" />
+              )}
+            </Button>
+          )}
+          <CreateActionButton ariaLabel="Add photos" onClick={() => setUploadOpen(true)} />
         </div>
+      </div>
+      <div className="max-w-lg mx-auto">
         <MediaHeaderSponsorStrip clubId={selectedClubId !== "all" ? selectedClubId : undefined} />
-      </header>
+      </div>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4">
+      <main className="mx-auto w-full max-w-lg flex-1">
         {feedQuery.isLoading && (
           <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
