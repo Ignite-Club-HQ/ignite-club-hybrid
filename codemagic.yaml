@@ -213,6 +213,7 @@ workflows:
       - name: Scaffold and sync Capacitor iOS
         working_directory: frontend
         script: |
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html
           npx cap add ios
           npx cap sync ios
           # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
@@ -280,6 +281,7 @@ workflows:
       - name: Scaffold and sync Capacitor iOS
         working_directory: frontend
         script: |
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html
           npx cap add ios
           npx cap sync ios
           # Internet Identity sign-in returns via com.igniteclubhq.app://ii-callback
