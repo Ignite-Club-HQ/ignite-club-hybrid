@@ -6,7 +6,9 @@
 // key never leaves the phone.
 (function () {
   "use strict";
-  var II_URL = "https://identity.internetcomputer.org/#authorize";
+  // The old identity.internetcomputer.org address redirects to id.ai. Checking
+  // messages against the old origin silently discarded every authorization reply.
+  var II_URL = "https://id.ai/authorize";
   var II_ORIGIN = new URL(II_URL).origin;
   // Only ever hand delegations to our own app scheme (never an arbitrary URL).
   var ALLOWED_CALLBACK = "com.igniteclubhq.app://ii-callback";
@@ -20,21 +22,33 @@
   var back = document.getElementById("back");
   var msg = document.getElementById("msg");
   var title = document.getElementById("title");
+  var popup = null;
+  var watchdog = null;
+  var timeout = null;
+
+  function stopWaiting() {
+    clearInterval(watchdog);
+    clearTimeout(timeout);
+  }
 
   function fail(text) {
+    stopWaiting();
     title.textContent = "Sign-in didn't finish";
     msg.textContent = text;
     msg.className = "err";
     go.textContent = "Try again";
-    go.className = "";
+    go.hidden = false;
     go.disabled = false;
   }
 
-  if (!/^[0-9a-f]{40,200}$/i.test(pk) || !/^[A-Za-z0-9-]{8,64}$/.test(nonce) || cb !== ALLOWED_CALLBACK) {
+  if (!/^(?:[0-9a-f]{2}){20,100}$/i.test(pk) || !/^[A-Za-z0-9-]{8,64}$/.test(nonce) || cb !== ALLOWED_CALLBACK) {
     fail("Please start sign-in from the Ignite Club HQ app.");
-    go.className = "hidden";
+    go.hidden = true;
     return;
   }
+  go.disabled = false;
+  back.href = ALLOWED_CALLBACK + "#n=" + encodeURIComponent(nonce) + "&cancel=1";
+  back.hidden = false;
 
   function hexToBytes(hex) {
     var out = new Uint8Array(hex.length / 2);
@@ -57,8 +71,6 @@
     return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  var popup = null;
-
   window.addEventListener("message", function (event) {
     if (event.origin !== II_ORIGIN || !popup || event.source !== popup) return;
     var data = event.data || {};
@@ -68,6 +80,7 @@
         II_ORIGIN,
       );
     } else if (data.kind === "authorize-client-success") {
+      stopWaiting();
       try { popup.close(); } catch (e) { /* ignore */ }
       try {
         var chain = {
@@ -83,7 +96,7 @@
         var href = ALLOWED_CALLBACK + "#n=" + encodeURIComponent(nonce) + "&d=" + b64url(JSON.stringify(chain));
         title.textContent = "You're signed in";
         msg.textContent = "Returning to the app…";
-        go.className = "hidden";
+        go.hidden = true;
         back.href = href;
         back.className = "btn";
         location.href = href;
@@ -91,16 +104,32 @@
         fail("Something went wrong reading the sign-in. Please try again.");
       }
     } else if (data.kind === "authorize-client-failure") {
+      stopWaiting();
       try { popup.close(); } catch (e) { /* ignore */ }
       fail(data.text || "Sign-in was cancelled.");
     }
   });
 
   go.addEventListener("click", function () {
+    stopWaiting();
     go.disabled = true;
     msg.className = "";
     msg.textContent = "Waiting for you to confirm…";
     popup = window.open(II_URL, "ii-signin", "width=500,height=720");
-    if (!popup) fail("Your browser blocked the sign-in window. Please allow pop-ups and try again.");
+    if (!popup) {
+      fail("Your browser blocked the sign-in window. Please allow pop-ups and try again.");
+      return;
+    }
+    watchdog = setInterval(function () {
+      if (popup && popup.closed) fail("Sign-in was cancelled. You can try again or return to the app.");
+    }, 500);
+    timeout = setTimeout(function () {
+      try { popup.close(); } catch (e) { /* ignore */ }
+      fail("Sign-in took too long. Please try again or return to the app.");
+    }, 5 * 60 * 1000);
+  });
+  back.addEventListener("click", function () {
+    stopWaiting();
+    try { if (popup) popup.close(); } catch (e) { /* ignore */ }
   });
 })();

@@ -1,3 +1,7 @@
+## Native sign-in bridge audit
+- [x] Replace orange with Ignite green; fix provider reply origin, return link and cancellation handling; 15 tests and browser opening/retry pass.
+- [ ] Confirm on Paul's phone after frontend-canister deployment and any required new native build.
+
 ## Android status bar
 - [x] Remove duplicate Android top spacing and repaint the backdrop after system icon styling; 12 frontend and two Android scaffold checks passed.
 - [x] Correct native status-bar background in both Android builds; actual Capacitor scaffold checks and light/dark/viewer regressions pass (four tests).

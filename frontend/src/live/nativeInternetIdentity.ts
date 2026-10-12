@@ -17,7 +17,13 @@ const BRIDGE_ORIGIN =
 const STORAGE_KEY = "ignite_native_ii_session_v1";
 
 export function isNativeIiCallback(url: string): boolean {
-  return url.startsWith(NATIVE_II_CALLBACK);
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "com.igniteclubhq.app:" && parsed.hostname === "ii-callback" &&
+      (parsed.pathname === "" || parsed.pathname === "/") && !parsed.username && !parsed.password && !parsed.port;
+  } catch {
+    return false;
+  }
 }
 
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
@@ -60,7 +66,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
   return {
     isAuthenticated: valid,
     async getIdentity() {
-      return valid() ? held!.identity : new AnonymousIdentity();
+      return held && valid() ? held.identity : new AnonymousIdentity();
     },
     async signIn() {
       const key = Ed25519KeyIdentity.generate();
@@ -78,13 +84,16 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
           handles.forEach((h) => void h.remove());
           fn();
         };
-        void App.addListener("appUrlOpen", ({ url: back }) => {
+        const register = async () => {
+        handles.push(await App.addListener("appUrlOpen", ({ url: back }) => {
           if (!isNativeIiCallback(back)) return;
           const params = new URLSearchParams(back.split("#")[1] ?? "");
+          // Ignore unrelated/stale returns without cancelling this sign-in.
+          if (params.get("n") !== nonce) return;
           void Browser.close().catch(() => undefined);
           finish(() => {
             try {
-              if (params.get("n") !== nonce) throw new Error("Sign-in reply did not match this request.");
+              if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled.");
               const chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
               if (!isDelegationValid(chain)) throw new Error("Sign-in reply has expired.");
               const id = DelegationIdentity.fromDelegation(key, chain);
@@ -95,13 +104,16 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
               reject(e);
             }
           });
-        }).then((h) => handles.push(h));
+        }));
         // Closing the browser without finishing = cancelled. Small delay so a
         // reply arriving as the browser closes still wins.
-        void Browser.addListener("browserFinished", () => {
+        handles.push(await Browser.addListener("browserFinished", () => {
           setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 1500);
-        }).then((h) => handles.push(h));
-        Browser.open({ url, presentationStyle: "popover" }).catch((e) => finish(() => reject(e)));
+        }));
+        // Both return/cancellation listeners must exist before opening the browser.
+        await Browser.open({ url, presentationStyle: "popover" });
+        };
+        void register().catch((e) => finish(() => reject(e)));
       });
       return identity;
     },
