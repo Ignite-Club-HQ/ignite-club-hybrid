@@ -121,6 +121,11 @@ async function applyInternal(theme: 'light' | 'dark', force: boolean) {
         bar: SystemBarType.StatusBar,
         style: theme === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
       });
+      // SystemBars resets decorView to the static light Android theme.
+      // Repaint last so both the app theme and viewer backdrop survive.
+      await StatusBarBackdrop.setBackgroundColor({
+        color: theme === 'dark' ? DARK_BG : LIGHT_BG,
+      });
     }
 
     lastAppliedTheme = theme;
@@ -151,6 +156,7 @@ async function applyViewerInternal() {
     await StatusBar.setStyle({ style: Style.Dark });
     if (platform === 'android') {
       await SystemBars.setStyle({ bar: SystemBarType.StatusBar, style: SystemBarsStyle.Dark });
+      await StatusBarBackdrop.setBackgroundColor({ color: VIEWER_BG });
     }
 
     // Mark the cache as 'viewer' so the next theme-apply always re-runs.

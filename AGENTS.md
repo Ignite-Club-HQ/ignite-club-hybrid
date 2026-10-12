@@ -14,7 +14,7 @@
 - build-preview.mjs must emit dist/index.html (copy of live-index.html) — static hosting serves index.html for / and SPA fallback; without it every URL is "Not found".
 - Keep retired URLs alive as redirects in App.tsx (ParamRedirect) instead of letting them hit the 404 page.
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
-- Android status bars use a registered native window-backdrop plugin plus SystemBars icon styling; both Codemagic workflows run scripts/configure-android-status-bar.py after scaffolding. Why: Android 15/16 ignores legacy statusBarColor and the running NoActionBar theme does not inherit AppTheme; preserve existing inset/keyboard handling.
+- Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
 - Poll attachment recognition shares `chatPollToken` across chat content, card-only detection and inbox previews; this preserves opaque backend IDs consistently.
 - Event attachment recognition shares `chatEventToken` across chat content, card-only detection and inbox previews; this prevents ICP event IDs being exposed as raw text.
 - Pending-send recovery is scoped to each QueryClient and reconciles previews already in fetched snapshots as well as missing previews; this prevents duplicate photo bubbles after returning to chat.

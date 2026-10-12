@@ -1,4 +1,5 @@
 ## Android status bar
+- [x] Remove duplicate Android top spacing and repaint the backdrop after system icon styling; 12 frontend and two Android scaffold checks passed.
 - [x] Correct native status-bar background in both Android builds; actual Capacitor scaffold checks and light/dark/viewer regressions pass (four tests).
 - [ ] Confirm on Paul's phone — requires a new Codemagic build and device access.
 
