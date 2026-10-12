@@ -64,6 +64,8 @@ workflows:
         script: |
           set -euo pipefail
           # Fail loudly here (not later in Gradle) if the web build is missing.
+          # The live build emits live-index.html; Capacitor needs index.html.
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html 2>/dev/null || true
           test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
           rm -rf android
           npx cap add android
@@ -125,6 +127,8 @@ workflows:
         script: |
           set -euo pipefail
           # Fail loudly here (not later in Gradle) if the web build is missing.
+          # The live build emits live-index.html; Capacitor needs index.html.
+          [ -f dist-live/index.html ] || cp dist-live/live-index.html dist-live/index.html 2>/dev/null || true
           test -f dist-live/index.html || { echo "dist-live/index.html missing - web build failed"; exit 1; }
           rm -rf android
           npx cap add android
