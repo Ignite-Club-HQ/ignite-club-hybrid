@@ -196,17 +196,20 @@ workflows:
       - name: Configure signing
         working_directory: frontend/android
         script: |
+          set -euo pipefail
+          # Google Play requires every upload to have a higher versionCode than
+          # any previous one. Use minutes since 1970: always increasing, never
+          # reused, independent of Codemagic's per-workflow build counter, and
+          # far below Play's 2,100,000,000 limit. Written straight into the
+          # generated defaultConfig (replacing Capacitor's "versionCode 1") so
+          # no second Gradle block can be ignored or overridden.
+          VC=$(( $(date +%s) / 60 ))
+          sed -i -E "s/versionCode[[:space:]]+[0-9]+/versionCode $VC/; s/versionName[[:space:]]+\"[^\"]*\"/versionName \"1.0.$VC\"/" app/build.gradle
+          grep -q "versionCode $VC" app/build.gradle || { echo "Could not set versionCode in app/build.gradle"; grep -n "version" app/build.gradle; exit 1; }
+          echo "Android versionCode set to $VC"
           cat >> app/build.gradle <<'EOF'
 
           android {
-              defaultConfig {
-                  // Google Play requires every upload to have a higher
-                  // versionCode than any previous one. Codemagic's build
-                  // number (CM_BUILD_NUMBER) goes up on every build, so each
-                  // AAB is automatically newer than the last.
-                  versionCode((System.getenv('CM_BUILD_NUMBER') ?: '1').toInteger() + 1)
-                  versionName "1.0.${System.getenv('CM_BUILD_NUMBER') ?: '1'}"
-              }
               signingConfigs {
                   release {
                       storeFile file('upload-keystore.jks')
