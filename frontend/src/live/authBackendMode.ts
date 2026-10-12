@@ -67,16 +67,45 @@ export function isAuthChoiceOverrideOrigin(hostname?: string): boolean {
  * and vice versa. `?auth=auto` clears the choice and follows routing again.
  * Ignored entirely on origins where the override is not allowed.
  */
+const AUTH_CHOICE_EVENT = "ignite:auth-choice-changed";
+
+/**
+ * Notifies listeners (App's provider picker) that the device sign-in choice
+ * changed. Without this, tapping "Sign in with Internet Identity instead"
+ * re-renders /auth (inside the router) but not App (outside it), leaving the
+ * old provider mounted behind the new screen — the passkey button then runs
+ * the wrong sign-in system.
+ */
+function notifyAuthChoiceChanged(): void {
+  try {
+    window.dispatchEvent(new Event(AUTH_CHOICE_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Subscribe to device sign-in choice changes; returns an unsubscribe. */
+export function subscribeAuthChoice(cb: () => void): () => void {
+  try {
+    window.addEventListener(AUTH_CHOICE_EVENT, cb);
+    return () => window.removeEventListener(AUTH_CHOICE_EVENT, cb);
+  } catch {
+    return () => undefined;
+  }
+}
+
 export function readAuthChoice(): BackendProvider | null {
   try {
     if (!isAuthChoiceOverrideOrigin()) return null;
     const param = new URLSearchParams(window.location.search).get("auth");
+    const before = localStorage.getItem(AUTH_CHOICE_KEY);
     if (param === "email" || param === "supabase") localStorage.setItem(AUTH_CHOICE_KEY, "supabase");
     else if (param === "icp") localStorage.setItem(AUTH_CHOICE_KEY, "icp");
     // `?auth=auto` forgets the device choice so the club pin / default decides
     // again — the only other wipe is the club-backend enforcement switch.
     else if (param === "auto" || param === "default") localStorage.removeItem(AUTH_CHOICE_KEY);
     const v = localStorage.getItem(AUTH_CHOICE_KEY);
+    if (v !== before) notifyAuthChoiceChanged();
     return v === "supabase" || v === "icp" ? v : null;
   } catch {
     return null;
