@@ -7,6 +7,9 @@
 #                     variables listed below to be configured in the Codemagic
 #                     UI (Application -> Environment variables, group
 #                     "android_release"):
+#   Signing key — EITHER generate one in the Codemagic UI (app -> Code
+#                       signing -> Android -> Generate keystore; no Java needed,
+#                       its variables are injected automatically), OR set:
 #                       CM_KEYSTORE            base64 of the upload keystore (.jks)
 #                       CM_KEYSTORE_PASSWORD   keystore store password
 #                       CM_KEY_ALIAS           key alias inside the keystore
