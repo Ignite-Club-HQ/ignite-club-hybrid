@@ -32,6 +32,7 @@ describe('Android transparent system-bar backdrop', () => {
     applyStatusBar('light', true);
     await vi.waitFor(() => expect(native.systemStyle).toHaveBeenCalledWith({ bar: 'StatusBar', style: 'LIGHT' }));
     expect(native.backdrop).toHaveBeenCalledWith({ color: '#f5f7f6' });
+    expect(native.backdrop.mock.invocationCallOrder.at(-1)).toBeGreaterThan(native.systemStyle.mock.invocationCallOrder.at(-1) ?? 0);
   });
 
   it('restores the dark backdrop and light icons after a viewer', async () => {
@@ -42,5 +43,6 @@ describe('Android transparent system-bar backdrop', () => {
     await vi.waitFor(() => expect(native.systemStyle).toHaveBeenCalledTimes(2));
     expect(native.backdrop).toHaveBeenNthCalledWith(1, { color: '#000000' });
     expect(native.systemStyle).toHaveBeenLastCalledWith({ bar: 'StatusBar', style: 'DARK' });
+    expect(native.backdrop.mock.invocationCallOrder.at(-1)).toBeGreaterThan(native.systemStyle.mock.invocationCallOrder.at(-1) ?? 0);
   });
 });

@@ -26,6 +26,16 @@ export const emitIOSNavGuard = (durationMs = 900, options?: { forceFloor?: boole
 const readSafeAreaInsetPx = (edge: "top" | "bottom") => {
   if (!canUseDOM()) return 0;
 
+  // SystemBars injects the remaining inset: zero means native padding owns it.
+  if (edge === "top") {
+    const injected = window.getComputedStyle(document.documentElement)
+      .getPropertyValue("--safe-area-inset-top").trim();
+    if (injected.endsWith("px")) {
+      const value = Number.parseFloat(injected);
+      if (Number.isFinite(value)) return Math.max(value, 0);
+    }
+  }
+
   const probe = document.createElement("div");
   probe.style.position = "fixed";
   probe.style.left = "0";
