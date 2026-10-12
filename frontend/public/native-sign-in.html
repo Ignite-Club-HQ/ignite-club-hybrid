@@ -6,22 +6,27 @@
   <meta name="robots" content="noindex" />
   <title>Sign in – Ignite Club HQ</title>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f1115; color: #f2f2f2; }
+    :root { color-scheme: dark; --background: #0f1512; --foreground: #f2f7f4; --muted: #a7b9ae; --primary: #34d399; --primary-foreground: #06271a; --border: #365044; --error: #fda4af; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; min-height: 100dvh; display: flex; align-items: center; justify-content: center; background: var(--background); color: var(--foreground); }
     main { max-width: 22rem; padding: 2rem 1.5rem; text-align: center; }
+    img { margin-bottom: 1rem; border-radius: 8px; }
     h1 { font-size: 1.35rem; margin: 0 0 .5rem; }
-    p { color: #b8b8b8; line-height: 1.45; margin: 0 0 1.5rem; }
-    button, a.btn { display: block; width: 100%; box-sizing: border-box; padding: .9rem 1rem; border: 0; border-radius: .75rem; background: #ff6a1a; color: #fff; font-size: 1rem; font-weight: 600; text-decoration: none; cursor: pointer; }
-    .hidden { display: none; }
-    .err { color: #ff8a8a; }
+    p { color: var(--muted); line-height: 1.45; margin: 0 0 1.5rem; }
+    button, a.btn { display: block; width: 100%; box-sizing: border-box; padding: .9rem 1rem; border: 0; border-radius: 8px; background: var(--primary); color: var(--primary-foreground); font-size: 1rem; font-weight: 600; text-decoration: none; cursor: pointer; }
+    a.secondary { margin-top: 1rem; background: transparent; color: var(--muted); }
+    button:disabled { opacity: .65; cursor: wait; }
+    :focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; }
+    [hidden], .hidden { display: none !important; }
+    .err { color: var(--error); }
   </style>
 </head>
 <body>
   <main>
     <img src="/ignite-icon.png" alt="" width="64" height="64" />
     <h1 id="title">Sign in to Ignite Club HQ</h1>
-    <p id="msg">Tap continue to confirm it's you. You'll go straight back to the app afterwards.</p>
-    <button id="go" type="button">Continue</button>
-    <a id="back" class="btn hidden" href="#">Back to the app</a>
+    <p id="msg" role="status" aria-live="polite">Sign in or create your account to continue.</p>
+    <button id="go" type="button" disabled>Continue securely</button>
+    <a id="back" class="btn secondary" hidden>Back to the app</a>
   </main>
   <script src="/native-sign-in.js"></script>
 </body>
