@@ -40,6 +40,18 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
+import { useResolvedIcpBlobSrc } from "@/hooks/useResolvedIcpBlobSrc";
+
+/** Reward/QR images may live on the ICP blob store (ciphertext URLs), so they
+ * need the decrypting resolver; Supabase URLs pass through untouched. */
+function RewardImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const resolved = useResolvedIcpBlobSrc(src);
+  if (resolved.pending) {
+    return <div className={`${className ?? ""} bg-muted animate-pulse`} aria-label={alt} />;
+  }
+  if (!resolved.src) return null;
+  return <img src={resolved.src} alt={alt} className={className} />;
+}
 import { compressImage } from "@/lib/imageCompression";
 import { PointsIconGallery } from "@/components/PointsIconGallery";
 import { withFeatureBackend } from "@/live/featureRouter";
@@ -887,10 +899,10 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   {/* Reward Icon/Logo */}
                   <div className="shrink-0">
                     {reward.logo_url ? (
-                      <img 
-                        src={reward.logo_url} 
-                        alt={reward.name || "Reward logo"} 
-                        className="h-12 w-12 rounded-xl object-cover border" 
+                      <RewardImage
+                        src={reward.logo_url}
+                        alt={reward.name || "Reward logo"}
+                        className="h-12 w-12 rounded-xl object-cover border"
                       />
                     ) : (
                       <div className={`h-12 w-12 rounded-xl flex items-center justify-center ${
@@ -1059,7 +1071,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
               <div className="flex items-center gap-3">
                 {logoUrl ? (
                   <div className="relative">
-                    <img src={logoUrl} alt="Reward logo" className="h-16 w-16 rounded-xl object-cover border" />
+                    <RewardImage src={logoUrl} alt="Reward logo" className="h-16 w-16 rounded-xl object-cover border" />
                     <button
                       type="button"
                       onClick={() => setLogoUrl(null)}
@@ -1209,7 +1221,7 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                   <div className="flex items-center gap-3">
                     {qrCodeUrl ? (
                       <div className="relative">
-                        <img src={qrCodeUrl} alt="QR Code" className="h-24 w-24 rounded-xl object-contain border bg-background p-1" />
+                        <RewardImage src={qrCodeUrl} alt="QR Code" className="h-24 w-24 rounded-xl object-contain border bg-background p-1" />
                         <button
                           type="button"
                           onClick={() => setQrCodeUrl(null)}
