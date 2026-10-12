@@ -182,7 +182,7 @@ workflows:
                   // versionCode than any previous one. Codemagic's build
                   // number (CM_BUILD_NUMBER) goes up on every build, so each
                   // AAB is automatically newer than the last.
-                  versionCode (System.getenv('CM_BUILD_NUMBER') ?: '1') as int
+                  versionCode((System.getenv('CM_BUILD_NUMBER') ?: '1').toInteger() + 1)
                   versionName "1.0.${System.getenv('CM_BUILD_NUMBER') ?: '1'}"
               }
               signingConfigs {
@@ -326,7 +326,7 @@ workflows:
         working_directory: frontend/ios/App
         script: |
           agvtool new-version -all $((${CM_BUILD_NUMBER:-1}))
-          agvtool new-marketing-version 1.0.$(${CM_BUILD_NUMBER:-1})
+          agvtool new-marketing-version 1.0.${CM_BUILD_NUMBER:-1}
       - name: Set up code signing
         working_directory: frontend/ios/App
         script: xcode-project use-profiles
