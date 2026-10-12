@@ -177,6 +177,14 @@ workflows:
           cat >> app/build.gradle <<'EOF'
 
           android {
+              defaultConfig {
+                  // Google Play requires every upload to have a higher
+                  // versionCode than any previous one. Codemagic's build
+                  // number (CM_BUILD_NUMBER) goes up on every build, so each
+                  // AAB is automatically newer than the last.
+                  versionCode (System.getenv('CM_BUILD_NUMBER') ?: '1') as int
+                  versionName "1.0.${System.getenv('CM_BUILD_NUMBER') ?: '1'}"
+              }
               signingConfigs {
                   release {
                       storeFile file('upload-keystore.jks')
