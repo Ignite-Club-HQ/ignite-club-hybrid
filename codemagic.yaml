@@ -92,18 +92,8 @@ workflows:
           if "com.igniteclubhq.app" not in s:
               s = s.replace("</activity>", f + "</activity>", 1)
           open(p, "w").write(s)
-          # Status bar: light background + dark icons from launch, matching the
-          # app. The in-app StatusBar plugin re-applies this at runtime, but the
-          # native default is black — if the runtime call loses a race the bar
-          # stays black with unreadable icons (seen on internal test builds).
-          sp = "android/app/src/main/res/values/styles.xml"
-          st = open(sp).read()
-          if "windowLightStatusBar" not in st:
-              items = ('<item name="android:statusBarColor">#f5f7f6</item>'
-                       '<item name="android:windowLightStatusBar">true</item>')
-              st = st.replace('</style>', items + '</style>', 1)
-          open(sp, "w").write(st)
           PY
+          python3 ../scripts/configure-android-status-bar.py
       - name: Build debug APK
         working_directory: frontend/android
         script: ./gradlew assembleDebug
@@ -165,18 +155,8 @@ workflows:
           if "com.igniteclubhq.app" not in s:
               s = s.replace("</activity>", f + "</activity>", 1)
           open(p, "w").write(s)
-          # Status bar: light background + dark icons from launch, matching the
-          # app. The in-app StatusBar plugin re-applies this at runtime, but the
-          # native default is black — if the runtime call loses a race the bar
-          # stays black with unreadable icons (seen on internal test builds).
-          sp = "android/app/src/main/res/values/styles.xml"
-          st = open(sp).read()
-          if "windowLightStatusBar" not in st:
-              items = ('<item name="android:statusBarColor">#f5f7f6</item>'
-                       '<item name="android:windowLightStatusBar">true</item>')
-              st = st.replace('</style>', items + '</style>', 1)
-          open(sp, "w").write(st)
           PY
+          python3 ../scripts/configure-android-status-bar.py
       - name: Decode signing and Firebase files
         working_directory: frontend/android
         script: |
