@@ -1,3 +1,7 @@
+## Android status bar
+- [x] Correct native status-bar background in both Android builds; actual Capacitor scaffold checks and light/dark/viewer regressions pass (four tests).
+- [ ] Confirm on Paul's phone — requires a new Codemagic build and device access.
+
 ## Duplicate chat photo after returning
 - [x] Reconcile restored uploading-photo bubbles with confirmed messages; leave/return/refetch regressions and failed-send recovery passed (29 tests).
 - [ ] Deploy the frontend update and confirm on Paul's phone — requires the user's deployment and device access.

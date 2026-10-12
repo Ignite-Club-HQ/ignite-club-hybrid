@@ -14,6 +14,16 @@ const config: CapacitorConfig = {
     // Mixed content off: all traffic is https (Supabase, ICP boundary nodes).
     allowMixedContent: false,
   },
+  plugins: {
+    StatusBar: {
+      backgroundColor: "#f5f7f6",
+      style: "LIGHT",
+      overlaysWebView: false,
+    },
+    SystemBars: {
+      style: "LIGHT",
+    },
+  },
   server: {
     androidScheme: "https",
     cleartext: false,
