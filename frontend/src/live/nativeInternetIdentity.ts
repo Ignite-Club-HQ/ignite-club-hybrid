@@ -15,6 +15,20 @@ const BRIDGE_ORIGIN =
   (import.meta.env.IGNITE_LIVE_NATIVE_II_BRIDGE_ORIGIN as string | undefined) ||
   "https://proe7-kqaaa-aaaas-qg6gq-cai.icp0.io";
 const STORAGE_KEY = "ignite_native_ii_session_v1";
+// The sign-in in progress, kept on the device so a reply still lands if Android
+// closed the app while the browser was open (the in-memory listener is gone).
+const PENDING_KEY = "ignite_native_ii_pending_v1";
+const PENDING_TTL_MS = 10 * 60 * 1000;
+
+/** Reply data travels in the query (Android intent:// links) or the hash (older bridge). */
+export function readNativeIiReply(url: string): URLSearchParams {
+  const out = new URLSearchParams();
+  const hash = url.includes("#") ? url.slice(url.indexOf("#") + 1) : "";
+  const beforeHash = url.split("#")[0];
+  const query = beforeHash.includes("?") ? beforeHash.slice(beforeHash.indexOf("?") + 1) : "";
+  for (const part of [query, hash]) new URLSearchParams(part).forEach((v, k) => { if (!out.has(k)) out.set(k, v); });
+  return out;
+}
 
 export function isNativeIiCallback(url: string): boolean {
   try {
@@ -61,6 +75,39 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }
 
+  const accept = (key: InstanceType<typeof Ed25519KeyIdentity>, params: URLSearchParams): Identity => {
+    if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled.");
+    const chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
+    if (!isDelegationValid(chain)) throw new Error("Sign-in reply has expired.");
+    const id = DelegationIdentity.fromDelegation(key, chain);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ key: key.toJSON(), chain: chain.toJSON() }));
+    try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
+    held = { identity: id, chain };
+    return id;
+  };
+
+  // Cold start: Android may have closed the app while the browser was open.
+  // The reply then arrives as the launch link instead of to a live listener.
+  if (!held) {
+    try {
+      const raw = localStorage.getItem(PENDING_KEY);
+      const pending = raw ? JSON.parse(raw) as { key: unknown; nonce: string; at: number } : null;
+      if (pending && Date.now() - pending.at < PENDING_TTL_MS) {
+        const launch = await App.getLaunchUrl().catch(() => undefined);
+        if (launch?.url && isNativeIiCallback(launch.url)) {
+          const params = readNativeIiReply(launch.url);
+          if (params.get("n") === pending.nonce && params.get("d")) {
+            accept(Ed25519KeyIdentity.fromJSON(JSON.stringify(pending.key)), params);
+          }
+        }
+      } else if (raw) {
+        localStorage.removeItem(PENDING_KEY);
+      }
+    } catch {
+      try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
+    }
+  }
+
   const valid = () => !!held && isDelegationValid(held.chain);
 
   return {
@@ -71,6 +118,9 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
     async signIn() {
       const key = Ed25519KeyIdentity.generate();
       const nonce = crypto.randomUUID();
+      try {
+        localStorage.setItem(PENDING_KEY, JSON.stringify({ key: key.toJSON(), nonce, at: Date.now() }));
+      } catch { /* storage full or blocked: live listener still works */ }
       const url =
         `${BRIDGE_ORIGIN}/native-sign-in.html#pk=${toHex(key.getPublicKey().toDer())}` +
         `&n=${nonce}&cb=${encodeURIComponent(NATIVE_II_CALLBACK)}`;
@@ -87,20 +137,15 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
         const register = async () => {
         handles.push(await App.addListener("appUrlOpen", ({ url: back }) => {
           if (!isNativeIiCallback(back)) return;
-          const params = new URLSearchParams(back.split("#")[1] ?? "");
+          const params = readNativeIiReply(back);
           // Ignore unrelated/stale returns without cancelling this sign-in.
           if (params.get("n") !== nonce) return;
           void Browser.close().catch(() => undefined);
           finish(() => {
             try {
-              if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled.");
-              const chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
-              if (!isDelegationValid(chain)) throw new Error("Sign-in reply has expired.");
-              const id = DelegationIdentity.fromDelegation(key, chain);
-              localStorage.setItem(STORAGE_KEY, JSON.stringify({ key: key.toJSON(), chain: chain.toJSON() }));
-              held = { identity: id, chain };
-              resolve(id);
+              resolve(accept(key, params));
             } catch (e) {
+              if (params.get("cancel") === "1") { try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ } }
               reject(e);
             }
           });
@@ -119,7 +164,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
     },
     async signOut() {
       held = null;
-      try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+      try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ }
     },
   };
 }
