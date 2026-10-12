@@ -12,6 +12,8 @@ interface IcpSignInScreenProps {
   native: boolean;
   online: boolean;
   error: string | null;
+  /** Switch to the email/Google sign-in screen (?auth=email). */
+  onUseEmail: () => void;
 }
 
 // Android can request an external browser. iOS embedded browsers do not
@@ -27,7 +29,7 @@ export function externalChromeHref(): string | null {
   return `intent://${url.host}${url.pathname}${url.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url.href)};end`;
 }
 
-export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, native, online, error }: IcpSignInScreenProps) {
+export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, native, online, error, onUseEmail }: IcpSignInScreenProps) {
   const embedded = !native && isLikelyInAppBrowser();
   const browserHref = embedded ? externalChromeHref() : null;
 
@@ -50,6 +52,13 @@ export function IcpSignInScreen({ shellStyle, onContinue, busy, preparing, nativ
           </div>
 
           <p className="mt-8 text-sm leading-relaxed text-muted-foreground">New to Ignite? Just continue — we'll create your account automatically.</p>
+          <button
+            type="button"
+            className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+            onClick={onUseEmail}
+          >
+            App admin? Sign in with email instead
+          </button>
           <div className="mt-8"><AuthLegalLinks /></div>
 
           {error && <p className="mt-5 text-sm leading-relaxed text-destructive" role="alert">{error}</p>}

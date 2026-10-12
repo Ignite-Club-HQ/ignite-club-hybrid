@@ -842,6 +842,11 @@ export default function AuthPage() {
         native={isNativePlatform}
         online={isOnline}
         error={authError}
+        onUseEmail={() => {
+          const params = new URLSearchParams(searchParams);
+          params.set("auth", "email");
+          setSearchParams(params, { replace: true });
+        }}
       />
     );
   }

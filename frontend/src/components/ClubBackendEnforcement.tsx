@@ -135,6 +135,9 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
             const { getLiveMyRoleGrants } = await import("@/live/features/membership");
             const grants = await getLiveMyRoleGrants({ identity, target: getActiveIcpTarget() });
             clubIds = [...new Set(grants.map(g => g.club[0]).filter((id): id is string => !!id))];
+            // App admins may sign in with either method — a club pin must
+            // never force them onto the other backend.
+            isAppAdmin = grants.some(g => g.role === "app_admin");
           } catch (error) {
             // Canister unreachable or not deployed: keep memberships empty so
             // routing falls back to country rules / the cached hint.

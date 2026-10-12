@@ -4,7 +4,7 @@ import { IcpSignInScreen, externalChromeHref } from "./IcpSignInScreen";
 
 const chrome = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36";
 const safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
-const props = { shellStyle: {}, onContinue: vi.fn(), busy: false, preparing: false, native: false, online: true, error: null };
+const props = { shellStyle: {}, onContinue: vi.fn(), busy: false, preparing: false, native: false, online: true, error: null, onUseEmail: vi.fn() };
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); vi.clearAllMocks(); });
 function ua(value: string) { vi.stubGlobal("navigator", { userAgent: value }); }
@@ -19,9 +19,11 @@ describe("Consumer ICP sign-in", () => {
     expect(screen.getByText("Powered by Internet Identity").querySelector("svg, img")).toBeNull();
     expect(screen.getByText("New to Ignite? Just continue — we'll create your account automatically.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Browser sign-in guidance")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getAllByRole("button")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Continue securely" }));
     expect(props.onContinue).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "App admin? Sign in with email instead" }));
+    expect(props.onUseEmail).toHaveBeenCalledOnce();
   });
   it.each(["FBAN/Messenger", "FBAV/400", "Messenger/500", "Instagram 300", "; wv)"])("warns only when an embedded browser is detected: %s", (marker) => {
     ua(`${safari} ${marker}`);
