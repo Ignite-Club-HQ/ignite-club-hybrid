@@ -45,6 +45,21 @@ const REFLUSH_DELAY_MS = 600;
 let state: LaunchIntentState = Capacitor.isNativePlatform()
   ? "pending"
   : "resolved-none";
+
+// Safety net: even if beginLaunchIntentResolution is never called (init
+// missed), the gate must release within the bounded wait — a missed init must
+// never leave the app stuck on the startup screen.
+if (Capacitor.isNativePlatform()) {
+  setTimeout(() => {
+    if (!isLaunchIntentPending()) return;
+    console.warn(
+      "[LaunchIntent] Resolution never started — releasing startup boundary",
+    );
+    capturingLaunchNavigation = false;
+    setState("resolved-none");
+  }, MAX_WAIT_MS);
+}
+
 let started = false;
 let ceiling: ReturnType<typeof setTimeout> | null = null;
 let reflushTimer: ReturnType<typeof setTimeout> | null = null;
