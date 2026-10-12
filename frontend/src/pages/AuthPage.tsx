@@ -1116,7 +1116,7 @@ export default function AuthPage() {
                         setSearchParams(params, { replace: true });
                       }}
                     >
-                      Club member? Sign in with Internet Identity instead
+                      Sign in with Internet Identity instead
                     </button>
                   )}
                 </form>

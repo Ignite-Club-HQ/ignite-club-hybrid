@@ -22,7 +22,7 @@ describe("Consumer ICP sign-in", () => {
     expect(screen.getAllByRole("button")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Continue securely" }));
     expect(props.onContinue).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "App admin? Sign in with email instead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with email instead" }));
     expect(props.onUseEmail).toHaveBeenCalledOnce();
   });
   it.each(["FBAN/Messenger", "FBAV/400", "Messenger/500", "Instagram 300", "; wv)"])("warns only when an embedded browser is detected: %s", (marker) => {
