@@ -5,7 +5,7 @@
 - [ ] Team creation requests on ICP
 - [ ] Home team/league access requests on ICP (currently silent no-op)
 - [ ] Publish chat photo to gallery on ICP
-- [ ] Monogram logo generator on ICP
+- [x] Monogram logo generator on ICP
 - [ ] Player list export on ICP
 - [ ] Fixture import on ICP
 - [ ] Short invite links on ICP

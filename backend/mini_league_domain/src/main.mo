@@ -222,6 +222,13 @@ persistent actor class Main(governorInit : Principal) {
     leagues.filter(func(item) = canViewLeague(caller, item))
   };
 
+  // Public: unauthenticated directory listing for the home page "browse
+  // mini-leagues" picker. No PII (created_by/admin lists excluded) — just
+  // enough to resolve a name/club for active leagues.
+  public query func list_public_mini_leagues() : async [Types.PublicMiniLeagueSummary] {
+    leagues.filter(func(item) = item.status == "active").map(func(item) = { id = item.id; name = item.name; club_id = item.club_id })
+  };
+
   // ---------------- Sessions ----------------
 
   public shared ({ caller }) func create_session(mini_league_id : Text, session_date : Text, start_time : Text, end_time : ?Text, location_name : ?Text, address : ?Text, postcode : ?Text, team_size_override : ?Nat16) : async { #Ok : Types.MiniLeagueSession; #Err : Text } {

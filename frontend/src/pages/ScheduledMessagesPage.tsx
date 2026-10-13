@@ -242,7 +242,7 @@ async function fetchSupabaseThreadLabels(
       return labels;
 }
 
-async function fetchIcpThreadLabels(
+export async function fetchIcpThreadLabels(
   ctx: FeatureBackendContext,
   rows: ScheduledMessageRow[],
   teamIds: string[],

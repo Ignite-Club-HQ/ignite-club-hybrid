@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { FeatureBackendContext } from "@/live/featureRouter";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { deleteLiveAsset, registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
+import { deleteLiveAsset, listLiveAssets, registerLiveAsset, setLiveAssetScope } from "@/live/features/media";
 import { parseIcpBlobUrl } from "@/live/mediaStorage";
 import { sha256Hex } from "@/live/blobStoreProtocol";
 
@@ -161,7 +162,7 @@ async function publishChatImageToGallerySupabase(
  * that points at the *same* blob_ref — no re-upload, no re-encryption.
  */
 async function publishChatImageToGalleryIcp(
-  ctx: import("@/live/featureRouter").FeatureBackendContext,
+  ctx: FeatureBackendContext,
   args: PublishChatImageArgs,
 ): Promise<PublishChatImageResult> {
   const { imageUrl, clubId, teamId, caption, albumId } = args;
