@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 /**
  * Admin-only synthetic test data for ICP mode: creates a fresh club with
  * teams, events, long chat histories (for virtualized scroll testing) and

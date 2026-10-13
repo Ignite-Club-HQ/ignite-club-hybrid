@@ -1,13 +1,10 @@
 import {
   getBackendRoutingConfig,
-  readCachedClubBackendHint,
   resolveBackendForCountry,
-  resolveClubBackendOverride,
   type BackendProvider,
 } from "./backendRouting";
 import { getActiveIcpTarget } from "./targetRegistry";
 import { getCurrentCountry } from "./userCountry";
-import { getUserClubIds } from "./userClubs";
 
 /**
  * Decides which sign-in screen `/auth` shows — Supabase (email/password +

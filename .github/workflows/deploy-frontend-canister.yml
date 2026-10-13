@@ -63,7 +63,8 @@ jobs:
       # they never aged out and the upload grew to ~34k files (one build is ~600).
       # Tabs left open on an old version recover via lazyWithRetry's reload.
       - name: Report upload size
-        run: echo "Files in this deploy: $(find deploy/frontend/dist -type f | wc -l)"
+        run: |
+          echo "Files in this deploy: $(find deploy/frontend/dist -type f | wc -l)"
 
       - name: Restore deployer identity
         env:

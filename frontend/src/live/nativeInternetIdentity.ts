@@ -1,4 +1,5 @@
 import type { Identity } from "@icp-sdk/core/agent";
+import type { DelegationChain as DelegationChainT, Ed25519KeyIdentity as Ed25519KeyIdentityT } from "@icp-sdk/core/identity";
 import type { InternetIdentityAuthClient } from "./internetIdentityAuth";
 
 /**
@@ -59,7 +60,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
       import("@capacitor/browser"),
     ]);
 
-  type Held = { identity: Identity; chain: InstanceType<typeof DelegationChain> };
+  type Held = { identity: Identity; chain: DelegationChainT };
   let held: Held | null = null;
 
   try {
@@ -75,7 +76,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }
 
-  const accept = (key: InstanceType<typeof Ed25519KeyIdentity>, params: URLSearchParams): Identity => {
+  const accept = (key: Ed25519KeyIdentityT, params: URLSearchParams): Identity => {
     if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled.");
     const chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
     if (!isDelegationValid(chain)) throw new Error("Sign-in reply has expired.");
