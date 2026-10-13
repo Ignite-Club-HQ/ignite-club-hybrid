@@ -223,7 +223,7 @@ export function useAddPendingTeamMemberMutation({
       email: customEmail.trim(),
       childrenCount: 0,
       childrenNames: [] as string[],
-      secondParentLink,
+      secondParentLink: secondParentLink as string,
       secondParentEmail: secondParentStatus === "invited" ? secondParentEmailTrimmed : "",
       secondParentName: secondParentStatus === "invited" ? secondParentName.trim() : "",
       secondParentAddedDirectly: false,
