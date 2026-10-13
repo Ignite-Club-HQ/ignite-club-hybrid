@@ -155,6 +155,78 @@ async function publishChatImageToGallerySupabase(
 }
 
 /**
+ * ICP path: the chat image's bytes already live in a media_blob_store
+ * canister (chat attachments on Internet Identity accounts upload there, not
+ * to Supabase), so publishing is just registering a media_metadata asset
+ * that points at the *same* blob_ref — no re-upload, no re-encryption.
+ */
+async function publishChatImageToGalleryIcp(
+  ctx: import("@/live/featureRouter").FeatureBackendContext,
+  args: PublishChatImageArgs,
+): Promise<PublishChatImageResult> {
+  const { imageUrl, clubId, teamId, caption, albumId } = args;
+  if (!clubId) {
+    throw new Error("Publishing to the gallery requires a club for Internet Identity accounts");
+  }
+
+  const blobLocation = parseIcpBlobUrl(imageUrl);
+  if (!blobLocation) {
+    throw new Error("This chat photo cannot be published to the gallery yet");
+  }
+
+  // Idempotency: re-registering the same bytes as a new asset would create a
+  // duplicate gallery post, so look for an existing asset with this blob_ref
+  // first. list_assets already filters to the caller's club.
+  const existing = await listLiveAssets(ctx, clubId);
+  const already = existing.find((asset: { blob_ref?: unknown[]; id: string }) => {
+    const ref = (asset.blob_ref as Array<{ path: string; canister: string }> | undefined)?.[0];
+    return ref?.path === blobLocation.path && ref?.canister === blobLocation.canisterId;
+  });
+  if (already) {
+    return { photoId: (already as { id: string }).id, alreadyPublished: true };
+  }
+
+  // Fetch the (already-uploaded) bytes once to learn size/mime/checksum for
+  // register_asset — the bytes themselves are not re-uploaded anywhere.
+  let blob: Blob;
+  try {
+    const res = await fetch(imageUrl);
+    if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+    blob = await res.blob();
+  } catch (err) {
+    console.error("[publishChatImageToGallery] icp download failed", err);
+    throw new Error("Could not load the image to publish");
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const checksum = await sha256Hex(bytes);
+
+  const asset = await registerLiveAsset(ctx, {
+    clubId,
+    kind: "photo",
+    mime: blob.type || "image/jpeg",
+    checksum,
+    storagePath: blobLocation.path,
+    visibility: "club",
+    contentLength: blob.size,
+    blobRef: { canister: blobLocation.canisterId, path: blobLocation.path, content_hash: checksum },
+  });
+
+  try {
+    await setLiveAssetScope(ctx, asset.id, {
+      teamId: teamId || null,
+      caption: caption ?? null,
+      albumId: albumId ?? null,
+    });
+  } catch (err) {
+    // Matches IcpUploadPhotoSheet: tags are best-effort until the deployed
+    // canister has set_asset_scope — don't fail the whole publish for it.
+    console.warn("[publishChatImageToGallery] icp scope set failed", err);
+  }
+
+  return { photoId: asset.id, alreadyPublished: false };
+}
+
+/**
  * Reverse a recent publish by soft-deleting the gallery photo row.
  * Mirrors the regular media gallery delete flow (sets deleted_at) so it
  * disappears from the gallery immediately and can be cleaned up later.
