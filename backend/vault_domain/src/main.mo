@@ -607,7 +607,7 @@ persistent actor class Main(governorInit : Principal) {
   // VaultFile.uploaded_by/deleted_by, PinnedVault.set_by.
   // Not touched: governor (governor variable itself), club_domain_canister
   // (canister wiring).
-  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+  public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
