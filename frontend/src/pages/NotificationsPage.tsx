@@ -95,6 +95,8 @@ interface Notification {
   id: string;
   user_id: string;
   type: string;
+  club?: string | null;
+  idempotency_key?: string | null;
   message: string;
   read: boolean;
   created_at: string;

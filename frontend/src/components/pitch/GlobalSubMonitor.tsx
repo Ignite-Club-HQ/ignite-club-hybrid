@@ -179,7 +179,7 @@ export default function GlobalSubMonitor() {
             const { withFeatureBackend } = await import("@/live/featureRouter");
             const { fanOutLiveNotifications } = await import("@/live/features/notifications");
             await withFeatureBackend("notifications", {
-              supabase: async () => {},
+              supabase: async () => 0,
               icp: async (ctx) =>
                 fanOutLiveNotifications(ctx, {
                   userIds: [user.id],
@@ -599,7 +599,7 @@ export default function GlobalSubMonitor() {
           const { withFeatureBackend } = await import("@/live/featureRouter");
           const { fanOutLiveNotifications } = await import("@/live/features/notifications");
           await withFeatureBackend("notifications", {
-            supabase: async () => {},
+            supabase: async () => 0,
             icp: async (ctx) =>
               fanOutLiveNotifications(ctx, {
                 userIds: [user.id],
