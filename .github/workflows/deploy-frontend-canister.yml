@@ -132,10 +132,17 @@ jobs:
             if icp canister top-up frontend --amount "$A" -e ic; then TOPPED="$A"; echo "Topped up $A"; break; fi
           done
           [ -n "$TOPPED" ] || echo "::warning::Top-up skipped — the deploy account needs more cycles (send ICP to it)."
-          # Reinstall, not upgrade: an upgrade copies every stored file through
-          # one message and hit the instruction limit once the canister held
-          # ~21k files. The site is re-uploaded in full each deploy anyway.
-          icp deploy -e ic frontend --mode reinstall --yes --cycles 1000000000000
+          # Normal upgrade = incremental upload (only changed files), so deploys
+          # stay fast. One catch: an upgrade copies every stored file through a
+          # single message, and the canister once held ~21k files, which hit the
+          # instruction limit. If that happens, fall back to a one-time
+          # reinstall (wipe + full upload) to clear the backlog; the 2-day
+          # asset-history prune then keeps the file count small so later
+          # upgrades stay incremental.
+          if ! icp deploy -e ic frontend --yes --cycles 1000000000000; then
+            echo "::warning::Upgrade failed (likely stored-file backlog) — retrying with reinstall."
+            icp deploy -e ic frontend --mode reinstall --yes --cycles 1000000000000
+          fi
           ID="$(jq -r '.frontend' .icp/data/mappings/ic.ids.json)"
           # Let club_domain read this canister's cycle balance (admin settings panel).
           icp canister update-settings frontend --add-controller mzzzv-taaaa-aaaal-qxlrq-cai -e ic || echo "::warning::Could not add club_domain as controller (already added?)"
