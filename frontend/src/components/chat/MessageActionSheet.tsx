@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Reply, Pencil, Trash2, Flag, ShieldAlert, MoreHorizontal, ChevronLeft, Copy, Link, ExternalLink, ImageIcon, Check, Pin, PinOff, ImagePlus, Loader2, Forward } from "lucide-react";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { stripMentionFormatting } from "@/lib/messagePreview";
 import {
   Sheet,
