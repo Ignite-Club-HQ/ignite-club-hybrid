@@ -1688,3 +1688,47 @@ export async function getLiveFreeUsageCounters(ctx: FeatureBackendContext, clubI
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.free_usage_counters(clubId), "Get free usage counters");
 }
+
+export interface LiveClubGeneralSettings {
+  classModeEnabled: boolean;
+  allowGuestsDefault: boolean;
+  maxGuestsPerMemberDefault: number;
+  eventsSponsorStripEnabled: boolean;
+}
+
+/** Club-wide general settings (class mode, guest defaults, sponsor strip). */
+export async function getLiveClubGeneralSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+): Promise<LiveClubGeneralSettings | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  try {
+    const s = await unwrapCandid(actor.get_club_general_settings(clubId), "Get club settings");
+    return {
+      classModeEnabled: s.class_mode_enabled,
+      allowGuestsDefault: s.allow_guests_default,
+      maxGuestsPerMemberDefault: Number(s.max_guests_per_member_default),
+      eventsSponsorStripEnabled: s.events_sponsor_strip_enabled,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function setLiveClubGeneralSettings(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  s: LiveClubGeneralSettings,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_general_settings(
+      clubId,
+      s.classModeEnabled,
+      s.allowGuestsDefault,
+      BigInt(Math.max(0, Math.floor(s.maxGuestsPerMemberDefault))),
+      s.eventsSponsorStripEnabled,
+    ),
+    "Save club settings",
+  );
+}

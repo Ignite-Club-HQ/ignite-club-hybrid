@@ -30,6 +30,8 @@ import { getLocalLabClubDetail } from "@/lab/fixtureDataLayer";
 import { withFeatureBackend } from "@/live/featureRouter";
 import {
   getLiveClubProfile,
+  getLiveClubGeneralSettings,
+  setLiveClubGeneralSettings,
   saveLiveClubProfile,
   getLiveClubSettings,
   saveLiveClubSettings,
@@ -92,9 +94,10 @@ export default function EditClubPage() {
           return data;
         },
         icp: async (ctx) => {
-          const [profileOpt, settingsOpt] = await Promise.all([
+          const [profileOpt, settingsOpt, general] = await Promise.all([
             getLiveClubProfile(ctx, id!),
             getLiveClubSettings(ctx, id!),
+            getLiveClubGeneralSettings(ctx, id!),
           ]);
           const profile = profileOpt[0];
           if (!profile) return null;
@@ -106,10 +109,10 @@ export default function EditClubPage() {
             logo_url: profile.logo_url[0] ?? null,
             sport: (profile as any).sport?.[0] ?? null,
             contact_email: settings?.contact_email?.[0] ?? null,
-            class_mode_enabled: false,
-            allow_guests_default: false,
-            max_guests_per_member_default: 2,
-            events_sponsor_strip_enabled: settings?.events_sponsor_strip_enabled ?? false,
+            class_mode_enabled: general?.classModeEnabled ?? false,
+            allow_guests_default: general?.allowGuestsDefault ?? false,
+            max_guests_per_member_default: general?.maxGuestsPerMemberDefault ?? 2,
+            events_sponsor_strip_enabled: general?.eventsSponsorStripEnabled ?? settings?.events_sponsor_strip_enabled ?? false,
             club_subscriptions: null,
           };
         },
@@ -293,9 +296,8 @@ export default function EditClubPage() {
     setSaving(true);
 
     // Routes to club_domain's club profile/settings when placement settings
-    // resolve ICP for membership. sport, class_mode_enabled,
-    // allow_guests_default, max_guests_per_member_default and
-    // events_sponsor_strip_enabled stay Supabase: no canister shape.
+    // resolve ICP for membership. Class mode, guest defaults and the events
+    // sponsor strip live in club_domain's general settings.
     try {
       await withFeatureBackend("membership", {
         supabase: async () => {
@@ -324,6 +326,7 @@ export default function EditClubPage() {
                 name: name.trim(),
                 description: candidOpt(description.trim() || undefined),
                 logo_url: candidOpt(logoUrlForSave() || undefined),
+                sport: candidOpt(sport || undefined),
               }
             : {
                 // provisional mapping — verify against deployed canister
@@ -380,6 +383,15 @@ export default function EditClubPage() {
                 header_club_name_enabled: false,
               };
           await saveLiveClubSettings(ctx, settings);
+          const prevGeneral = await getLiveClubGeneralSettings(ctx, id!);
+          await setLiveClubGeneralSettings(ctx, id!, {
+            classModeEnabled,
+            allowGuestsDefault,
+            maxGuestsPerMemberDefault: maxGuestsDefault,
+            eventsSponsorStripEnabled: showEventsStripToggle
+              ? eventsSponsorStripEnabled
+              : prevGeneral?.eventsSponsorStripEnabled ?? false,
+          });
         },
       });
     } catch (error: any) {

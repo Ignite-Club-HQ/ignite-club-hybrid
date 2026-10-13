@@ -124,7 +124,7 @@ export default function EditTeamPage() {
               id: club.id,
               name: club.name,
               sport: null,
-              class_mode_enabled: false
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, club.id))?.classModeEnabled ?? false
             } : null
           } as any;
         }

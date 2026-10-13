@@ -66,6 +66,13 @@ export interface ClubBranding {
   'contact_email' : [] | [string],
   'logo_url' : [] | [string],
 }
+export interface ClubGeneralSettings {
+  'class_mode_enabled' : boolean,
+  'allow_guests_default' : boolean,
+  'events_sponsor_strip_enabled' : boolean,
+  'max_guests_per_member_default' : bigint,
+  'club_id' : string,
+}
 export interface ClubJoinRequest {
   'id' : string,
   'status' : string,
@@ -472,6 +479,11 @@ export interface Main {
   'get_club_branding' : ActorMethod<
     [string],
     { 'Ok' : ClubBranding } |
+      { 'Err' : string }
+  >,
+  'get_club_general_settings' : ActorMethod<
+    [string],
+    { 'Ok' : ClubGeneralSettings } |
       { 'Err' : string }
   >,
   'get_club_home_countries' : ActorMethod<
@@ -1030,6 +1042,11 @@ export interface Main {
   'set_app_config' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_club_general_settings' : ActorMethod<
+    [string, boolean, boolean, bigint, boolean],
+    { 'Ok' : ClubGeneralSettings } |
       { 'Err' : string }
   >,
   'set_club_header_toggles' : ActorMethod<

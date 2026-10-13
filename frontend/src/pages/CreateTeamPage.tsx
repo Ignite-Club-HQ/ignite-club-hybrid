@@ -88,7 +88,7 @@ export default function CreateTeamPage() {
               ? {
                   name: p.name,
                   logo_url: p.logo_url[0] ?? null,
-                  class_mode_enabled: false,
+                  class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, clubId!))?.classModeEnabled ?? false,
                   contact_email: null,
                 }
               : null;

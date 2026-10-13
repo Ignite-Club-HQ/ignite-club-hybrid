@@ -236,7 +236,7 @@ export default function ClubDetailPage() {
               deleted_at: p.deleted_at_ms.length ? new Date(Number(p.deleted_at_ms[0])).toISOString() : null,
               // Supabase-only columns with no canister equivalent — render
               // with inert defaults.
-              class_mode_enabled: false,
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, p.id))?.classModeEnabled ?? false,
               primary_sponsor_id: null,
               show_logo_in_header: st?.header_logo_enabled ?? false,
               show_name_in_header: st?.header_club_name_enabled ?? true,

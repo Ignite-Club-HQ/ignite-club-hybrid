@@ -517,4 +517,16 @@ module {
   // the email (salt + lowercase email, SHA-256) before it ever reaches the
   // canister, so no plaintext email is required to detect a duplicate invite.
   public type PendingInviteEmailHash = { invite_id : Text; club_id : Text; hash : Text };
+
+  // Per-club general settings — class/term mode toggle, default guest
+  // policy for event RSVPs, and whether the events sponsor strip renders.
+  // Separate from ClubSettings (theme/branding) so this migration-added
+  // record stays independent of that earlier, already-stable type.
+  public type ClubGeneralSettings = {
+    club_id : Text;
+    class_mode_enabled : Bool;
+    allow_guests_default : Bool;
+    max_guests_per_member_default : Nat;
+    events_sponsor_strip_enabled : Bool;
+  };
 }

@@ -1,8 +1,9 @@
 // Adds: pending-invite labels, season EOI config blobs, season team
 // assignments (draft membership per season), a club association/kind flag,
-// class/term enrolment records, and per-club theme JSON blobs. Stored as
-// separate arrays/maps so existing records — and every migration that
-// mentions them — stay untouched.
+// class/term enrolment records, per-club theme JSON blobs, and per-club
+// general settings (class mode, guest defaults, sponsor strip toggle).
+// Stored as separate arrays/maps so existing records — and every migration
+// that mentions them — stay untouched.
 import Types "../../types";
 
 module {
@@ -18,6 +19,7 @@ module {
     var guardianMeta : [Types.GuardianMeta];
     var teamPlayerPositionAssignments : [Types.TeamPlayerPositionAssignment];
     var pendingInviteEmailHashes : [Types.PendingInviteEmailHash];
+    var clubGeneralSettings : [Types.ClubGeneralSettings];
   } {
     {
       var pendingInviteLabels = [];
@@ -29,6 +31,7 @@ module {
       var guardianMeta = [];
       var teamPlayerPositionAssignments = [];
       var pendingInviteEmailHashes = [];
+      var clubGeneralSettings = [];
     }
   };
 };
