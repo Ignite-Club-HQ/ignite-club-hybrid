@@ -614,29 +614,6 @@ function SupabaseAppSettingsPage() {
         </Card>
 
         <LegalReacceptanceAdminCard />
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5 text-primary" />
-              Post-game photo prompts
-            </CardTitle>
-            <CardDescription>
-              Every 15 minutes, people who went to a game that ended 2–6 hours ago get one "Got photos?" alert. Run it now to test.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={() => runIcpPhotoPrompts.mutate()}
-              disabled={runIcpPhotoPrompts.isPending}
-              className="gap-2"
-            >
-              {runIcpPhotoPrompts.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Run photo prompt now
-            </Button>
-          </CardContent>
-        </Card>
-
         <div className="text-center text-sm text-muted-foreground pt-4">
           <p>Current status: {isClubCreationLocked ? "Only app admins can create clubs" : "Anyone can create clubs"}</p>
         </div>
@@ -1002,6 +979,29 @@ function IcpAppSettingsPage() {
         ))}
 
         <LegalReacceptanceAdminCard />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5 text-primary" />
+              Post-game photo prompts
+            </CardTitle>
+            <CardDescription>
+              Every 15 minutes, people who went to a game that ended 2–6 hours ago get one "Got photos?" alert. Run it now to test.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => runIcpPhotoPrompts.mutate()}
+              disabled={runIcpPhotoPrompts.isPending}
+              className="gap-2"
+            >
+              {runIcpPhotoPrompts.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Run photo prompt now
+            </Button>
+          </CardContent>
+        </Card>
+
 
         <div className="text-center text-sm text-muted-foreground pt-4">
           <p>Current status: {isClubCreationLocked ? "Only app admins can create clubs" : "Anyone can create clubs"}</p>
