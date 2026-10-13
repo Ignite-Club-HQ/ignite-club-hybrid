@@ -76,4 +76,28 @@ module {
     set_by : Principal;
     updated_at_ms : Nat64;
   };
+
+  // Governor/app-admin snapshot of folder+file metadata (blob refs only,
+  // no decrypted bytes — metadata lives here, bytes stay in the blob store
+  // or Supabase storage). Counterpart of the Supabase `vault-backup` edge
+  // function's manifest, but kept fully on-chain: no decryption happens.
+  public type Backup = {
+    id : Text;
+    label : Text;
+    created_at_ms : Nat64;
+    created_by : Principal;
+    folders : [VaultFolder];
+    files : [VaultFile];
+  };
+
+  // Lightweight listing row so list_backups doesn't ship every folder/file
+  // in the snapshot over the wire.
+  public type BackupSummary = {
+    id : Text;
+    label : Text;
+    created_at_ms : Nat64;
+    created_by : Principal;
+    folder_count : Nat;
+    file_count : Nat;
+  };
 };

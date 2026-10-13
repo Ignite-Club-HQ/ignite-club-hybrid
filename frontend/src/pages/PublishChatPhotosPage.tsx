@@ -16,14 +16,19 @@ interface ChatImage {
   created_at: string;
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { getLocalLabPublishableChatPhotos } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
+import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 
 export default function PublishChatPhotosPage() {
   const useIcpLab = resolveLocalAuthMode(window.location.search, true);
   if (useIcpLab) {
     return <IcpLabPublishChatPhotosPage />;
+  }
+  if (resolveAuthBackend() === "icp") {
+    return <IcpPublishChatPhotosPage />;
   }
   return <SupabasePublishChatPhotosPage />;
 }

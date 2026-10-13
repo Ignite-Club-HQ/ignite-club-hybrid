@@ -19,6 +19,8 @@ persistent actor class Main(governorInit : Principal) {
   var roles : [Types.RoleGrant];
   var club_domain_canister : ?Principal;
   var pinned_vaults : [Types.PinnedVault];
+  var backups : [Types.Backup];
+  var nextBackupSeq : Nat64;
 
   if (governor.equal(Principal.anonymous()) and not governorInit.equal(Principal.anonymous())) {
     governor := governorInit;
@@ -53,6 +55,14 @@ persistent actor class Main(governorInit : Principal) {
 
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+
+  // Platform-only (governor or an app_admin role grant with no club/team
+  // scope) — never a club role, so a club admin cannot export/restore every
+  // club's vault metadata.
+  func isAppAdmin(caller : Principal) : Bool {
+    isGovernor(caller) or roles.any(func(grant) =
+      grant.user.equal(caller) and grant.role == "app_admin" and grant.club_id == null and grant.team_id == null)
   };
 
   func hasRole(caller : Principal, club : Text, team : ?Text) : Bool {

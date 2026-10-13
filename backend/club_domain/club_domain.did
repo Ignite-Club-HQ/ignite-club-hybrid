@@ -878,7 +878,7 @@ type Main =
                     Err: text;
                     Ok: MemberPayment;
                   });
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -938,7 +938,7 @@ type Main =
      });
    /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
    /// Any NEW stored principal / principal-text field added to this canister must be added here.
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
