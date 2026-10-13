@@ -1,6 +1,7 @@
 import { ReportContentDialog, type ReportReason } from "@/components/reporting/ReportContentDialog";
 
 interface ReportCommentDialogProps {
+  conversationId?: string;
   isOpen: boolean;
   onClose: () => void;
   commentId: string;

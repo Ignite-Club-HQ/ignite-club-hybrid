@@ -23,6 +23,7 @@ import {
   isLiveDmAttachmentsDisabled,
   getLiveGroupMetadata,
   myLiveUnreadCounts,
+  submitLiveContentReport,
 } from "./messaging";
 
 const ctx = { target: {}, identity: {} } as never;

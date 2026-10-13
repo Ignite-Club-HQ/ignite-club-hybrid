@@ -63,6 +63,12 @@ export const idlFactory = ({ IDL }) => {
     'created_at_ms' : IDL.Nat64,
     'club_id' : IDL.Text,
   });
+  const SeasonTeamAssignment = IDL.Record({
+    'season_id' : IDL.Text,
+    'added_at_ms' : IDL.Nat64,
+    'team_id' : IDL.Text,
+    'member_id' : IDL.Text,
+  });
   const Child = IDL.Record({
     'id' : IDL.Text,
     'teams' : IDL.Vec(IDL.Text),
@@ -102,6 +108,16 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'decided_by' : IDL.Opt(IDL.Principal),
     'age_group' : IDL.Opt(IDL.Text),
+  });
+  const Season = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'name' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'end_date' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'start_date' : IDL.Text,
+    'club_id' : IDL.Text,
   });
   const ClubTeam = IDL.Record({
     'id' : IDL.Text,
@@ -203,6 +219,16 @@ export const idlFactory = ({ IDL }) => {
     'subject' : IDL.Text,
     'body' : IDL.Text,
   });
+  const ClassEnrolment = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'term_id' : IDL.Text,
+    'updated_at_ms' : IDL.Nat64,
+    'created_at_ms' : IDL.Nat64,
+    'member_id' : IDL.Text,
+    'club_id' : IDL.Text,
+    'class_id' : IDL.Text,
+  });
   const Team = IDL.Record({ 'id' : IDL.Text, 'club' : IDL.Text });
   const Guardian = IDL.Record({ 'child' : IDL.Text, 'user' : IDL.Principal });
   const Exclusion = IDL.Record({ 'club' : IDL.Text, 'user' : IDL.Principal });
@@ -287,16 +313,6 @@ export const idlFactory = ({ IDL }) => {
     'cancelled_at_ms' : IDL.Opt(IDL.Nat64),
     'club_id' : IDL.Text,
     'expires_at_ms' : IDL.Opt(IDL.Nat64),
-  });
-  const Season = IDL.Record({
-    'id' : IDL.Text,
-    'status' : IDL.Text,
-    'name' : IDL.Text,
-    'updated_at_ms' : IDL.Nat64,
-    'end_date' : IDL.Text,
-    'created_at_ms' : IDL.Nat64,
-    'start_date' : IDL.Text,
-    'club_id' : IDL.Text,
   });
   const ClubSponsor = IDL.Record({
     'id' : IDL.Text,
@@ -483,6 +499,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'add_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SeasonTeamAssignment, 'Err' : IDL.Text })],
+        [],
+      ),
     'add_team_captain' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -506,6 +527,11 @@ export const idlFactory = ({ IDL }) => {
     'approve_team_creation_request' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : TeamCreationRequest, 'Err' : IDL.Text })],
+        [],
+      ),
+    'archive_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
     'archive_team' : IDL.Func(
@@ -654,6 +680,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'enrol_in_class' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ClassEnrolment, 'Err' : IDL.Text })],
+        [],
+      ),
     'ensure_club_conversations' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -679,6 +710,21 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Snapshot, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'free_usage_counters' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'teams' : IDL.Nat,
+              'members' : IDL.Nat,
+              'pending_invites' : IDL.Nat,
+              'news_posts' : IDL.Nat,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'freeze_club' : IDL.Func(
         [IDL.Text, IDL.Nat64],
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
@@ -698,6 +744,11 @@ export const idlFactory = ({ IDL }) => {
             'Err' : IDL.Text,
           }),
         ],
+        ['query'],
+      ),
+    'get_club_kind' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_club_link' : IDL.Func(
@@ -743,6 +794,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubSubscription), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_theme_json' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
     'get_current_season' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(Season), 'Err' : IDL.Text })],
@@ -766,6 +822,16 @@ export const idlFactory = ({ IDL }) => {
     'get_pending_invite' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_pending_invite_label' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(IDL.Text)],
+        ['query'],
+      ),
+    'get_season_eoi_config' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_shell_team_by_token' : IDL.Func(
@@ -870,6 +936,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(Child), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_class_enrolments' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClassEnrolment), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_club_admins' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(IDL.Principal)],
@@ -944,6 +1015,16 @@ export const idlFactory = ({ IDL }) => {
     'list_season_player_stats' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(SeasonPlayerStat), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_season_team_assignment' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(SeasonTeamAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'list_season_team_summary' : IDL.Func(
@@ -1049,6 +1130,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'move_pending_invite_team' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        [],
+      ),
+    'move_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : SeasonTeamAssignment, 'Err' : IDL.Text })],
+        [],
+      ),
     'mutate' : IDL.Func(
         [Request],
         [IDL.Variant({ 'Ok' : Mutation, 'Err' : IDL.Text })],
@@ -1059,6 +1150,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Vec(ProfileTeamHistoryEntry)],
         ['query'],
+      ),
+    'publish_season' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
+        [],
       ),
     'purge_expired_deletions' : IDL.Func(
         [],
@@ -1092,6 +1188,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'remove_role_grant' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'remove_season_team_assignment' : IDL.Func(
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -1171,6 +1272,11 @@ export const idlFactory = ({ IDL }) => {
     'revoke_team_invite_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'rollover_season' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
         [],
       ),
     'rotate_team_invite_link' : IDL.Func(
@@ -1276,6 +1382,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_kind' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_logo_only_mode' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
@@ -1294,6 +1405,11 @@ export const idlFactory = ({ IDL }) => {
     'set_club_theme_enabled' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_theme_json' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_theme_palette' : IDL.Func(
@@ -1339,8 +1455,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),
+    'set_pending_invite_label' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_pii_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
@@ -1414,6 +1540,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : NewsPost, 'Err' : IDL.Text })],
         [],
       ),
+    'update_pending_invite_role' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : PendingInvite, 'Err' : IDL.Text })],
+        [],
+      ),
     'usage_stats' : IDL.Func(
         [],
         [
@@ -1430,6 +1561,11 @@ export const idlFactory = ({ IDL }) => {
         [],
         [IDL.Variant({ 'Ok' : Account, 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'withdraw_from_class' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
       ),
   });
   

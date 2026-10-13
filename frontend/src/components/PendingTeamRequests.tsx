@@ -89,7 +89,7 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
 
   const approveMutation = useMutation({
     mutationFn: async (request: (typeof requests)[0]) =>
-      withFeatureBackend("membership", {
+      withFeatureBackend<unknown>("membership", {
         icp: async (ctx) => {
           await approveLiveTeamCreationRequest(ctx, request.id);
 

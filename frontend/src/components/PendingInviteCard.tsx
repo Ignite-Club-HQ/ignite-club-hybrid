@@ -47,7 +47,14 @@ import { formatDistanceToNow } from "date-fns";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { revokeLivePendingInvite, createLiveInviteShortCode } from "@/live/features/club";
+import {
+  revokeLivePendingInvite,
+  createLiveInviteShortCode,
+  setLivePendingInviteLabel,
+  updateLivePendingInviteRole,
+  moveLivePendingInviteTeam,
+  listLiveTeams,
+} from "@/live/features/club";
 
 interface PendingInviteCardProps {
   invite: {
@@ -187,9 +194,20 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
 
   // Fetch teams in the club for "Move to Team" (only when teamId is set)
   const { data: clubTeams = [] } = useQuery({
-    queryKey: ["club-teams-for-pending-move", clubId, teamId],
+    queryKey: ["club-teams-for-pending-move", clubId, teamId, isIcp],
     queryFn: async () => {
       if (!clubId) return [];
+      if (isIcp) {
+        return withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const teams = await listLiveTeams(ctx, clubId!);
+            return teams
+              .filter((t) => !t.is_archived && t.id !== teamId)
+              .map((t) => ({ id: t.id, name: t.name, is_archived: t.is_archived }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, is_archived")
@@ -198,17 +216,24 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
       if (error) throw error;
       return (data || []).filter((t) => !t.is_archived && t.id !== teamId);
     },
-    enabled: showMoveSheet && !!clubId && !!teamId && !isIcp,
+    enabled: showMoveSheet && !!clubId && !!teamId,
   });
 
   const movePendingInviteMutation = useMutation({
     mutationFn: async () => {
       if (!selectedMoveTeamId) throw new Error("No team selected");
-      const { error } = await supabase
-        .from("pending_invites")
-        .update({ team_id: selectedMoveTeamId })
-        .eq("id", invite.id);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("pending_invites")
+            .update({ team_id: selectedMoveTeamId })
+            .eq("id", invite.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await moveLivePendingInviteTeam(ctx, invite.id, selectedMoveTeamId);
+        },
+      });
     },
     onSuccess: () => {
       const targetTeam = clubTeams.find((t) => t.id === selectedMoveTeamId);
@@ -341,14 +366,22 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("pending_invites")
-        .update({
-          invited_label: editName.trim() || null,
-          role: editRole as any,
-        })
-        .eq("id", invite.id);
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("pending_invites")
+            .update({
+              invited_label: editName.trim() || null,
+              role: editRole as any,
+            })
+            .eq("id", invite.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await setLivePendingInviteLabel(ctx, invite.id, editName.trim());
+          await updateLivePendingInviteRole(ctx, invite.id, editRole);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
@@ -621,13 +654,10 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  {/* NEEDS-CANISTER: update pending invite (label/role) — hidden in ICP mode */}
-                  {!isIcp && (
-                    <DropdownMenuItem onClick={handleOpenEdit}>
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Edit
-                    </DropdownMenuItem>
-                  )}
+                  <DropdownMenuItem onClick={handleOpenEdit}>
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
                   {invite.invited_email && (
                     <DropdownMenuItem
                       onClick={() => {
@@ -639,8 +669,7 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
                       Copy email
                     </DropdownMenuItem>
                   )}
-                  {/* NEEDS-CANISTER: move pending invite between teams — hidden in ICP mode */}
-                  {!isIcp && teamId && clubId && (
+                  {teamId && clubId && (
                     <DropdownMenuItem onClick={() => setShowMoveSheet(true)}>
                       <ArrowRightLeft className="h-4 w-4 mr-2" />
                       Move to team

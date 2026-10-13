@@ -1376,3 +1376,224 @@ export async function getLiveClubRoster(
     })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Pending invite label/role/team edits — canister counterparts of the
+// Supabase `pending_invites` update (label/role) and move-team RPCs.
+// ---------------------------------------------------------------------------
+
+export async function getLivePendingInviteLabel(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.get_pending_invite_label(inviteId);
+}
+
+export async function setLivePendingInviteLabel(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  label: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_pending_invite_label(inviteId, label), "Set pending invite label");
+}
+
+export async function updateLivePendingInviteRole(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  role: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.update_pending_invite_role(inviteId, candidOpt(role)),
+    "Update pending invite role",
+  );
+}
+
+export async function moveLivePendingInviteTeam(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  teamId: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.move_pending_invite_team(inviteId, candidOpt(teamId)),
+    "Move pending invite team",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Season lifecycle (publish/archive/rollover) and EOI config — canister
+// counterparts of the Supabase season status transitions and
+// season_eoi_config JSON column.
+// ---------------------------------------------------------------------------
+
+export async function publishLiveSeason(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.publish_season(seasonId), "Publish season");
+}
+
+export async function archiveLiveSeason(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.archive_season(seasonId), "Archive season");
+}
+
+export async function rolloverLiveSeason(
+  ctx: FeatureBackendContext,
+  fromSeasonId: string,
+  newName: string,
+  startDate: string,
+  endDate: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.rollover_season(fromSeasonId, newName, startDate, endDate),
+    "Rollover season",
+  );
+}
+
+export async function getLiveSeasonEoiConfig(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_season_eoi_config(seasonId), "Get season EOI config");
+}
+
+export async function setLiveSeasonEoiConfig(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  configJson: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_season_eoi_config(seasonId, configJson),
+    "Set season EOI config",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Season team assignments — which team a member is assigned to for a given
+// season. Canister counterpart of the Supabase season_team_assignments table.
+// ---------------------------------------------------------------------------
+
+export async function listLiveSeasonTeamAssignment(ctx: FeatureBackendContext, seasonId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_season_team_assignment(seasonId), "List season team assignments");
+}
+
+export async function addLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  teamId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.add_season_team_assignment(seasonId, teamId, memberId),
+    "Add season team assignment",
+  );
+}
+
+export async function moveLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  memberId: string,
+  newTeamId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.move_season_team_assignment(seasonId, memberId, newTeamId),
+    "Move season team assignment",
+  );
+}
+
+export async function removeLiveSeasonTeamAssignment(
+  ctx: FeatureBackendContext,
+  seasonId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_season_team_assignment(seasonId, memberId),
+    "Remove season team assignment",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Club kind (full / shell / association) — canister counterpart of the
+// Supabase `clubs.kind` column.
+// ---------------------------------------------------------------------------
+
+export async function getLiveClubKind(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_club_kind(clubId), "Get club kind");
+}
+
+export async function setLiveClubKind(ctx: FeatureBackendContext, clubId: string, kind: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_kind(clubId, kind), "Set club kind");
+}
+
+// ---------------------------------------------------------------------------
+// Class enrolment (club terms + classes) — canister counterpart of the
+// Supabase `class_enrolments` table.
+// ---------------------------------------------------------------------------
+
+export async function enrolLiveInClass(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  termId: string,
+  classId: string,
+  memberId: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.enrol_in_class(clubId, termId, classId, memberId),
+    "Enrol in class",
+  );
+}
+
+export async function withdrawLiveFromClass(ctx: FeatureBackendContext, enrolmentId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.withdraw_from_class(enrolmentId), "Withdraw from class");
+}
+
+export async function listLiveClassEnrolments(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  termId?: string | null,
+  classId?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.list_class_enrolments(clubId, candidOpt(termId), candidOpt(classId)),
+    "List class enrolments",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Club theme (raw JSON blob) — canister counterpart of the Supabase per-field
+// HSL theme columns, stored as a single opaque JSON string canister-side.
+// ---------------------------------------------------------------------------
+
+export async function getLiveClubThemeJson(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return actor.get_club_theme_json(clubId);
+}
+
+export async function setLiveClubThemeJson(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  themeJson: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_club_theme_json(clubId, themeJson), "Set club theme JSON");
+}
+
+// ---------------------------------------------------------------------------
+// Free-tier usage counters — canister counterpart of the Supabase
+// `get_club_free_usage` RPC. The canister only tracks structural counts
+// (teams/members/pending invites/news posts); it has no upload/poll cycle
+// counters, so callers treat those as unavailable under the ICP backend.
+// ---------------------------------------------------------------------------
+
+export async function getLiveFreeUsageCounters(ctx: FeatureBackendContext, clubId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.free_usage_counters(clubId), "Get free usage counters");
+}

@@ -1,6 +1,7 @@
 import { ReportContentDialog, type ReportReason } from "@/components/reporting/ReportContentDialog";
 
 interface ReportPhotoDialogProps {
+  conversationId?: string;
   isOpen: boolean;
   onClose: () => void;
   photoId: string;

@@ -17,9 +17,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
 
-// NEEDS-CANISTER: association management has no canister shape yet — in ICP
-// mode every query/mutation here is disabled so no II principal reaches Supabase.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { AssociationEventsPanel } from "@/components/AssociationEventsPanel";
@@ -34,6 +36,22 @@ function SupabaseAssociationDetailPage() {
     queryKey: ["association", id],
     enabled: !!id && !isIcpPageMode(),
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        const [profile, kind] = await withFeatureBackend("membership", {
+          icp: (ctx) => Promise.all([
+            getLiveClubProfile(ctx, id!),
+            getLiveClubKind(ctx, id!),
+          ]),
+          supabase: async () => { throw new Error("unreachable"); },
+        });
+        if (profile.length === 0) return null;
+        return {
+          id: profile[0].id,
+          name: profile[0].name,
+          description: profile[0].description?.[0] ?? null,
+          kind: kind || "club",
+        };
+      }
       const { data } = await supabase.from("clubs").select("*").eq("id", id!).maybeSingle();
       return data;
     },
@@ -43,6 +61,13 @@ function SupabaseAssociationDetailPage() {
     queryKey: ["assoc-isadmin", id, user?.id],
     enabled: !!id && !!user && !isIcpPageMode(),
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        const grants = await withFeatureBackend("membership", {
+          icp: (ctx) => import("@/live/features/membership").then(m => m.getLiveMyRoleGrants(ctx)),
+          supabase: async () => [],
+        });
+        return grants.some(g => g.club?.[0] === id && g.role === "club_admin");
+      }
       const { data } = await supabase.rpc("is_association_admin", {
         _user_id: user!.id,
         _association_id: id!,

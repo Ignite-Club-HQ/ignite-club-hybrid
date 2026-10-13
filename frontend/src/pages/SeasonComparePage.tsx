@@ -18,6 +18,9 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { useClubSeasons } from "@/hooks/useClubSeasons";
 import { useSeasonTeamSummary } from "@/hooks/useSeasonAnalytics";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubProfile } from "@/live/features/club";
+import { listLiveRoleGrants } from "@/live/features/membership";
 
 export default SupabaseSeasonComparePage;
 
@@ -27,8 +30,6 @@ function SupabaseSeasonComparePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // NEEDS-CANISTER: season comparison has no canister yet — an II principal
-  // has no Supabase session, so the access/club checks below are skipped.
   const isIcp = resolveAuthBackend() === "icp";
   const [leftId, setLeftId] = useState<string | undefined>(searchParams.get("a") || undefined);
   const [rightId, setRightId] = useState<string | undefined>(searchParams.get("b") || undefined);
@@ -36,31 +37,48 @@ function SupabaseSeasonComparePage() {
   const { data: club } = useQuery({
     queryKey: ["club-basic", clubId],
     queryFn: async () => {
-      if (!clubId || isIcp) return null;
-      const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
-      return data;
+      if (!clubId) return null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const rows = await getLiveClubProfile(ctx, clubId);
+          return rows.length ? { id: rows[0].id, name: rows[0].name } : null;
+        },
+      });
     },
-    enabled: !!clubId && !isIcp,
+    enabled: !!clubId,
   });
 
   const { data: canAccess, isLoading: accessLoading } = useQuery({
     queryKey: ["can-compare-seasons", clubId, user?.id],
     queryFn: async () => {
-      if (!clubId || !user?.id || isIcp) return false;
-      const [appAdmin, clubAdmin, coach] = await Promise.all([
-        supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
-        supabase
-          .from("user_roles")
-          .select("role, teams!inner(club_id)")
-          .eq("user_id", user.id)
-          .in("role", ["coach", "team_admin"])
-          .eq("teams.club_id", clubId)
-          .limit(1),
-      ]);
-      return !!appAdmin.data || !!clubAdmin.data || (coach.data && coach.data.length > 0);
+      if (!clubId || !user?.id) return false;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const [appAdmin, clubAdmin, coach] = await Promise.all([
+            supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "app_admin").maybeSingle(),
+            supabase.from("user_roles").select("role").eq("user_id", user.id).eq("club_id", clubId).eq("role", "club_admin").maybeSingle(),
+            supabase
+              .from("user_roles")
+              .select("role, teams!inner(club_id)")
+              .eq("user_id", user.id)
+              .in("role", ["coach", "team_admin"])
+              .eq("teams.club_id", clubId)
+              .limit(1),
+          ]);
+          return !!appAdmin.data || !!clubAdmin.data || (coach.data && coach.data.length > 0);
+        },
+        icp: async (ctx) => {
+          const grants = await listLiveRoleGrants(ctx, clubId);
+          const me = ctx.identity.getPrincipal().toText();
+          return grants.some((g: any) => g.account_id === me && (g.role === "club_admin" || g.role === "app_admin" || g.role === "coach" || g.role === "team_admin"));
+        },
+      });
     },
-    enabled: !!clubId && !!user?.id && !isIcp,
+    enabled: !!clubId && !!user?.id,
   });
 
   const { data: seasons = [], isLoading: seasonsLoading } = useClubSeasons(clubId);

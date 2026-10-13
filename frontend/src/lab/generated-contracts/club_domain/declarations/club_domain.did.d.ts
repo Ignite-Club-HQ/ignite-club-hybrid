@@ -51,6 +51,16 @@ export interface Child {
   'club_id' : [] | [string],
   'parent' : [] | [Principal],
 }
+export interface ClassEnrolment {
+  'id' : string,
+  'status' : string,
+  'term_id' : string,
+  'updated_at_ms' : bigint,
+  'created_at_ms' : bigint,
+  'member_id' : string,
+  'club_id' : string,
+  'class_id' : string,
+}
 export interface ClubBranding {
   'name' : string,
   'contact_email' : [] | [string],
@@ -238,6 +248,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'add_season_team_assignment' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : SeasonTeamAssignment } |
+      { 'Err' : string }
+  >,
   'add_team_captain' : ActorMethod<
     [string, string, Principal],
     { 'Ok' : null } |
@@ -261,6 +276,11 @@ export interface Main {
   'approve_team_creation_request' : ActorMethod<
     [string],
     { 'Ok' : TeamCreationRequest } |
+      { 'Err' : string }
+  >,
+  'archive_season' : ActorMethod<
+    [string],
+    { 'Ok' : Season } |
       { 'Err' : string }
   >,
   'archive_team' : ActorMethod<
@@ -398,6 +418,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'enrol_in_class' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : ClassEnrolment } |
+      { 'Err' : string }
+  >,
   'ensure_club_conversations' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -415,6 +440,18 @@ export interface Main {
       { 'Err' : string }
   >,
   'export_links' : ActorMethod<[], { 'Ok' : Snapshot } | { 'Err' : string }>,
+  'free_usage_counters' : ActorMethod<
+    [string],
+    {
+        'Ok' : {
+          'teams' : bigint,
+          'members' : bigint,
+          'pending_invites' : bigint,
+          'news_posts' : bigint,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'freeze_club' : ActorMethod<
     [string, bigint],
     { 'Ok' : bigint } |
@@ -429,6 +466,11 @@ export interface Main {
   'get_club_home_countries' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<[string, string]> } |
+      { 'Err' : string }
+  >,
+  'get_club_kind' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
   'get_club_link' : ActorMethod<
@@ -466,6 +508,7 @@ export interface Main {
     { 'Ok' : Array<ClubSubscription> } |
       { 'Err' : string }
   >,
+  'get_club_theme_json' : ActorMethod<[string], [] | [string]>,
   'get_current_season' : ActorMethod<
     [string],
     { 'Ok' : [] | [Season] } |
@@ -485,6 +528,12 @@ export interface Main {
   'get_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
+  'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_season_eoi_config' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [string] } |
       { 'Err' : string }
   >,
   'get_shell_team_by_token' : ActorMethod<
@@ -577,6 +626,11 @@ export interface Main {
     { 'Ok' : Array<Child> } |
       { 'Err' : string }
   >,
+  'list_class_enrolments' : ActorMethod<
+    [string, [] | [string], [] | [string]],
+    { 'Ok' : Array<ClassEnrolment> } |
+      { 'Err' : string }
+  >,
   'list_club_admins' : ActorMethod<[string], Array<Principal>>,
   'list_club_join_requests' : ActorMethod<
     [string],
@@ -642,6 +696,11 @@ export interface Main {
   'list_season_player_stats' : ActorMethod<
     [string, string],
     { 'Ok' : Array<SeasonPlayerStat> } |
+      { 'Err' : string }
+  >,
+  'list_season_team_assignment' : ActorMethod<
+    [string],
+    { 'Ok' : Array<SeasonTeamAssignment> } |
       { 'Err' : string }
   >,
   'list_season_team_summary' : ActorMethod<
@@ -728,11 +787,26 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'move_pending_invite_team' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
+  'move_season_team_assignment' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : SeasonTeamAssignment } |
+      { 'Err' : string }
+  >,
   'mutate' : ActorMethod<[Request], { 'Ok' : Mutation } | { 'Err' : string }>,
   'my_role_grants' : ActorMethod<[], Array<RoleGrant>>,
   'profile_team_history' : ActorMethod<
     [string],
     Array<ProfileTeamHistoryEntry>
+  >,
+  'publish_season' : ActorMethod<
+    [string],
+    { 'Ok' : Season } |
+      { 'Err' : string }
   >,
   'purge_expired_deletions' : ActorMethod<
     [],
@@ -770,6 +844,11 @@ export interface Main {
   >,
   'remove_role_grant' : ActorMethod<
     [Principal, string, string, [] | [string]],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_season_team_assignment' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -841,6 +920,11 @@ export interface Main {
   'revoke_team_invite_link' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'rollover_season' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : Season } |
       { 'Err' : string }
   >,
   'rotate_team_invite_link' : ActorMethod<
@@ -942,6 +1026,11 @@ export interface Main {
     { 'Ok' : ClubSettings } |
       { 'Err' : string }
   >,
+  'set_club_kind' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_club_logo_only_mode' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
@@ -960,6 +1049,11 @@ export interface Main {
   'set_club_theme_enabled' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_theme_json' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_theme_palette' : ActorMethod<
@@ -1005,8 +1099,18 @@ export interface Main {
     { 'Ok' : Child } |
       { 'Err' : string }
   >,
+  'set_pending_invite_label' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pii_canister' : ActorMethod<
     [Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_season_eoi_config' : ActorMethod<
+    [string, string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1080,6 +1184,11 @@ export interface Main {
     { 'Ok' : NewsPost } |
       { 'Err' : string }
   >,
+  'update_pending_invite_role' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : PendingInvite } |
+      { 'Err' : string }
+  >,
   /**
    * / Public: aggregate record counts (shown in admin settings). Counts only —
    * / no record contents, so no PII is exposed.
@@ -1094,6 +1203,11 @@ export interface Main {
     }
   >,
   'whoami' : ActorMethod<[], { 'Ok' : Account } | { 'Err' : string }>,
+  'withdraw_from_class' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
 }
 export interface MemberPayment {
   'id' : string,
@@ -1227,6 +1341,12 @@ export interface SeasonPlayerStat {
   'events_attended' : number,
   'games_played' : number,
   'club_id' : string,
+}
+export interface SeasonTeamAssignment {
+  'season_id' : string,
+  'added_at_ms' : bigint,
+  'team_id' : string,
+  'member_id' : string,
 }
 export interface SeasonTeamSummary {
   'season_id' : string,
