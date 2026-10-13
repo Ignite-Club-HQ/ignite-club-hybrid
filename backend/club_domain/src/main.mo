@@ -127,6 +127,9 @@ persistent actor class Main(governorInit : Principal) {
   var clubKinds : [(Text, Text)];
   var classEnrolments : [Types.ClassEnrolment];
   var clubThemeJson : [(Text, Text)];
+  var guardianMeta : [Types.GuardianMeta];
+  var teamPlayerPositionAssignments : [Types.TeamPlayerPositionAssignment];
+  var pendingInviteEmailHashes : [Types.PendingInviteEmailHash];
 
   // Global app-wide config key/value store (app_settings parity for values
   // that must be readable pre-auth, e.g. the backend routing config). Values
