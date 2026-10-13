@@ -313,6 +313,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
               <ReturningMembersStep
                 sourceSeasonId={currentSeason.id}
                 targetSeasonId={createdSeasonId}
+                clubId={clubId}
                 selectedIds={selectedPlayerIds}
                 onChange={setSelectedPlayerIds}
                 assignments={assignments}

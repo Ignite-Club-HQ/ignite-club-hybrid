@@ -5,9 +5,9 @@ import { AlertTriangle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-// Client-side: orphan-event detection (events on teams with no season link)
-// has no canister counterpart — competition_domain has no events concept at
-// all yet, so this card stays Supabase-only and renders nothing on ICP.
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeams } from "@/live/features/club";
+import { listLiveEvents } from "@/live/features/events";
 
 interface Props {
   clubId: string;
@@ -24,14 +24,50 @@ interface OrphanEvent {
 export function OrphanEventsCard({ clubId }: Props) {
   const isIcp = resolveAuthBackend() === "icp";
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ["season-orphan-events", clubId],
-    queryFn: async (): Promise<OrphanEvent[]> => {
-      if (isIcp) return [];
-      const { data, error } = await supabase.rpc("season_orphan_events", { _club_id: clubId });
-      if (error) throw error;
-      return (data ?? []) as OrphanEvent[];
-    },
-    enabled: !isIcp,
+    queryKey: ["season-orphan-events", clubId, isIcp],
+    queryFn: async (): Promise<OrphanEvent[]> =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("season_orphan_events", { _club_id: clubId });
+          if (error) throw error;
+          return (data ?? []) as OrphanEvent[];
+        },
+        // Canister teams carry no season link at all, so every active team
+        // counts as "not linked to a season" here — surface their events as
+        // orphans the same way the Supabase RPC does for unlinked teams.
+        icp: async (ctx) => {
+          const teams = (await listLiveTeams(ctx, clubId)) as Array<{
+            id: string;
+            name: string;
+            is_active: boolean;
+            archived: boolean;
+            deleted_at_ms: [] | [bigint];
+          }>;
+          const activeTeams = teams.filter(
+            (t) => t.is_active && !t.archived && t.deleted_at_ms.length === 0,
+          );
+          if (activeTeams.length === 0) return [];
+          const teamNameById = new Map(activeTeams.map((t) => [t.id, t.name]));
+
+          const eventLists = await Promise.all(
+            activeTeams.map((t) => listLiveEvents(ctx, null, t.id)),
+          );
+          const out: OrphanEvent[] = [];
+          eventLists.forEach((evs, idx) => {
+            const teamId = activeTeams[idx].id;
+            (evs as Array<{ id: string; title: string; starts_at_ms: bigint }>).forEach((e) => {
+              out.push({
+                event_id: e.id,
+                title: e.title,
+                event_date: new Date(Number(e.starts_at_ms)).toISOString(),
+                team_id: teamId,
+                team_name: teamNameById.get(teamId) ?? teamId,
+              });
+            });
+          });
+          return out.sort((a, b) => a.event_date.localeCompare(b.event_date));
+        },
+      }),
   });
 
   if (isLoading || events.length === 0) return null;

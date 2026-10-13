@@ -91,19 +91,36 @@ export function ReturningMembersStep({
   });
 
   const { data: targetTeams = [] } = useQuery({
-    queryKey: ["season-target-teams", targetSeasonId],
-    enabled: !!targetSeasonId && !isIcp,
-    queryFn: async (): Promise<TargetTeam[]> => {
-      if (isIcp) return [];
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("season_id", targetSeasonId!)
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as TargetTeam[];
-    },
+    queryKey: ["season-target-teams", targetSeasonId, clubId, isIcp],
+    enabled: !!targetSeasonId && (isIcp ? !!clubId : true),
+    queryFn: async (): Promise<TargetTeam[]> =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("season_id", targetSeasonId!)
+            .is("deleted_at", null)
+            .order("name");
+          if (error) throw error;
+          return (data ?? []) as TargetTeam[];
+        },
+        // Canister teams have no season_id (they aren't season-scoped), so
+        // the target-season team picker just lists the club's active teams.
+        icp: async (ctx) => {
+          const teams = (await listLiveTeams(ctx, clubId!)) as Array<{
+            id: string;
+            name: string;
+            is_active: boolean;
+            archived: boolean;
+            deleted_at_ms: [] | [bigint];
+          }>;
+          return teams
+            .filter((t) => t.is_active && !t.archived && t.deleted_at_ms.length === 0)
+            .map((t) => ({ id: t.id, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
   });
 
   // Seed default assignments: same-named team in the new season, else unassigned.
