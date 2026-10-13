@@ -192,6 +192,20 @@ type RemovedMember =
    removed_by: principal;
    user: principal;
  };
+type PromoCode = 
+ record {
+   access_level: text;
+   club_id: opt text;
+   code: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   expires_at_ms: opt nat64;
+   id: text;
+   is_active: bool;
+   scope_type: text;
+   storage_gb: opt nat32;
+   uses_count: nat32;
+ };
 type ProfileTeamHistoryEntry = 
  record {
    club_id: text;
@@ -439,6 +453,12 @@ type Main =
              payload: InvitePayload;
            };
      });
+   create_promo_code: (code: text, access_level: text, scope_type: text,
+    club_id: opt text, storage_gb: opt nat32, expires_at_ms: opt nat64) ->
+    (variant {
+       Err: text;
+       Ok: PromoCode;
+     });
    create_shell_team_invite: (club_id: text, name: text, contact_email:
     opt text, contact_name: opt text) -> (variant {
                                             Err: text;
@@ -472,6 +492,10 @@ type Main =
                                             Err: text;
                                             Ok;
                                           });
+   delete_promo_code: (id: text) -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
    delete_sponsor: (id: text) -> (variant {
                                     Err: text;
                                     Ok;
@@ -816,6 +840,10 @@ type Main =
        Err: text;
        Ok: vec PendingInvite;
      }) query;
+   list_promo_codes: () -> (variant {
+                              Err: text;
+                              Ok: vec PromoCode;
+                            }) query;
    list_removed_members: (club: text) ->
     (variant {
        Err: text;
@@ -961,6 +989,13 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   /// Redeems a team promo code for `tier` ("pro" | "pro_football").
+   /// Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
+   redeem_team_promo_code: (code: text, team_id: text, tier: text, is_annual:
+    bool) -> (variant {
+                Err: text;
+                Ok: nat64;
+              });
    reject_club_join_request: (id: text) ->
     (variant {
        Err: text;
@@ -1260,6 +1295,11 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   set_promo_code_active: (id: text, is_active: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_season_eoi_config: (season_id: text, config_json: text) ->
     (variant {
        Err: text;

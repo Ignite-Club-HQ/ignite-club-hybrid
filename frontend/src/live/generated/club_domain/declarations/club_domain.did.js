@@ -219,6 +219,19 @@ export const idlFactory = ({ IDL }) => {
     'subject' : IDL.Text,
     'body' : IDL.Text,
   });
+  const PromoCode = IDL.Record({
+    'id' : IDL.Text,
+    'access_level' : IDL.Text,
+    'uses_count' : IDL.Nat32,
+    'code' : IDL.Text,
+    'scope_type' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'storage_gb' : IDL.Opt(IDL.Nat32),
+    'is_active' : IDL.Bool,
+    'club_id' : IDL.Opt(IDL.Text),
+    'expires_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const ClassEnrolment = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -653,6 +666,18 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'create_promo_code' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat64),
+        ],
+        [IDL.Variant({ 'Ok' : PromoCode, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_shell_team_invite' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
@@ -685,6 +710,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'delete_own_child' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_promo_code' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
@@ -878,6 +908,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Text)],
         ['query'],
       ),
+    'get_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'club_logo_url' : IDL.Opt(IDL.Text),
+                'season_id' : IDL.Text,
+                'season_name' : IDL.Text,
+                'config_json' : IDL.Opt(IDL.Text),
+                'club_name' : IDL.Text,
+                'club_id' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_season_eoi_config' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
@@ -985,6 +1034,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_association_clubs' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_child_guardians' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -1031,6 +1085,16 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_my_children' : IDL.Func([], [IDL.Vec(Child)], ['query']),
+    'list_my_personal_teams' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_removed_clubs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_news' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],
@@ -1064,6 +1128,11 @@ export const idlFactory = ({ IDL }) => {
     'list_pending_invites_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_promo_codes' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PromoCode), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_removed_members' : IDL.Func(
@@ -1166,6 +1235,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_unaffiliated_clubs' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_user_club_roles' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Opt(IDL.Text)))],
@@ -1233,6 +1307,11 @@ export const idlFactory = ({ IDL }) => {
     'record_presence_heartbeat' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'redeem_team_promo_code' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
     'reject_club_join_request' : IDL.Func(
@@ -1476,6 +1555,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
         [],
       ),
+    'set_club_parent_org' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_club_switcher_hint' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
@@ -1559,8 +1643,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_promo_code_active' : IDL.Func(
+        [IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_season_eoi_config' : IDL.Func(
         [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
