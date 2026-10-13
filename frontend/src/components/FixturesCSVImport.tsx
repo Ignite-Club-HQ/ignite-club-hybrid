@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { FixturePreviewEditor } from "@/components/FixturePreviewEditor";
 import { DriblImportMapper, isDriblFormat, parseDriblRows } from "@/components/DriblImportMapper";
 import { validateFixtureImportAuthorization } from "@/lib/fixtureImportAuthorization";
+import { buildLiveFixtureEventInput } from "@/lib/fixtureLiveEventMapping";
 import ExcelJS from "exceljs";
 
 interface Team {
@@ -643,24 +644,8 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         // same fields the Supabase insert above writes (title/opponent,
         // start/end window, location, team).
         icp: async (ctx) => {
-          // 2-hour default window: fixtures only carry a kickoff time, no
-          // explicit end, matching the Supabase row's single start_time.
-          const DEFAULT_GAME_DURATION_MS = 2 * 60 * 60 * 1000;
           for (const fixture of fixturesToInsert) {
-            const startsAt = new Date(`${fixture.date}T${fixture.time}`);
-            const endsAt = new Date(startsAt.getTime() + DEFAULT_GAME_DURATION_MS);
-            await createLiveEvent(ctx, {
-              clubId,
-              teamId: fixture.teamId || teamId || null,
-              title: fixture.title,
-              description: fixture.description || "",
-              eventType: "game",
-              location: fixture.address || null,
-              opponent: fixture.opponent || null,
-              address: fixture.address || null,
-              startsAtMs: startsAt,
-              endsAtMs: endsAt,
-            });
+            await createLiveEvent(ctx, buildLiveFixtureEventInput(fixture, clubId, teamId));
           }
         },
       });
