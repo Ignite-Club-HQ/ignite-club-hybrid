@@ -1,5 +1,5 @@
 ## ICP club chat preview
-- [ ] Restore latest photo-message previews for club chats; add focused regressions.
+- [x] Read club/team previews directly by scope ID and retain photos when sender lookup fails; 11 tests passed.
 - [ ] Confirm Giddy Goat on Paul's phone — requires the updated Android app and device access.
 
 ## ICP Messages DMs filter
