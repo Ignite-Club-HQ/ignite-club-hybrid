@@ -79,6 +79,10 @@ persistent actor class Main(governorInit : Principal) {
   var savedLocations : [Types.SavedLocation];
   var trainingDefaults : [Types.TrainingDefault];
   var rsvpCreatedAt : [Types.RsvpCreatedAt];
+  // Per-match captain/vice-captain + goalkeeper assignments (events_domain
+  // extras, migration 20261015_000000).
+  var matchCaptainAssignments : [Types.MatchCaptainAssignment];
+  var matchGoalkeeperAssignments : [Types.MatchGoalkeeperAssignment];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -2088,39 +2092,39 @@ persistent actor class Main(governorInit : Principal) {
   };
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
-  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
-    rekeyImpl(caller, old, new, dry_run, false)
+  public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, false)
   };
 
-  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
-  // both IDs' records end up under the new one (keyed duplicates keep the new row).
-  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
-    rekeyImpl(caller, old, new, dry_run, true)
+  // Same as rekey_principal, but allowed when the new_principal sign-in ID already has data:
+  // both IDs' records end up under the new_principal one (keyed duplicates keep the new_principal row).
+  public shared ({ caller }) func merge_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, true)
   };
 
-  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+  func rekeyImpl(caller : Principal, old : Principal, new_principal : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
-    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
-    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new_principal)) return #err("old and new_principal must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
     let oldText = Principal.toText(old);
-    let newText = Principal.toText(new);
+    let newText = Principal.toText(new_principal);
 
-    // Conflict guard: count NON-EPHEMERAL records that already reference `new`.
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new_principal`.
     // Ephemeral/excluded: eventViews (telemetry), pushReachability (push reachability ping).
     var conflicts = 0;
-    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
-    conflicts += events.filter(func(e) = e.creator.equal(new)).size();
-    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new)).size();
-    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new)).size();
-    conflicts += series.filter(func(s) = s.creator.equal(new)).size();
-    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new)).size();
-    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new)).size();
-    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new)).size();
-    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new)).size();
-    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new)).size();
-    conflicts += activeGames.filter(func(g) = g.user_id.equal(new)).size();
-    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += roles.filter(func(r) = r.user.equal(new_principal)).size();
+    conflicts += events.filter(func(e) = e.creator.equal(new_principal)).size();
+    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new_principal)).size();
+    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new_principal)).size();
+    conflicts += series.filter(func(s) = s.creator.equal(new_principal)).size();
+    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new_principal)).size();
+    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new_principal)).size();
+    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new_principal)).size();
+    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new_principal)).size();
+    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new_principal)).size();
+    conflicts += activeGames.filter(func(g) = g.user_id.equal(new_principal)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new_principal))) 1 else 0);
     conflicts += rsvps.filter(func(r) = r.account_id == newText).size();
     conflicts += attendance.filter(func(a) = a.account_id == newText).size();
     conflicts += duties.filter(func(d) = d.account_id == newText).size();
@@ -2173,18 +2177,18 @@ persistent actor class Main(governorInit : Principal) {
     if (eventViewOldCount > 0) changed += eventViewOldCount;
 
     if (not dry_run) {
-      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
-      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new }) else e);
-      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new }) else a);
-      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new }) else s);
-      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new }) else s);
-      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new }) else a);
-      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new }) else g);
-      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new }) else c);
-      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new }) else t);
-      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new }) else g);
-      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new }) else g);
-      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
+      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
+      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);
+      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new_principal }) else s);
+      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new_principal }) else s);
+      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new_principal }) else a);
+      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new_principal }) else g);
+      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new_principal }) else c);
+      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new_principal }) else t);
+      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new_principal }) else g);
+      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new_principal }) else g);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new_principal]);
       if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
       if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) ({ a with account_id = newText }) else a);
       if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) ({ d with account_id = newText }) else d);
@@ -2192,16 +2196,16 @@ persistent actor class Main(governorInit : Principal) {
       if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) ({ c with guardian_id = newText }) else c);
 
       if (pushReachOldHas) {
-        let newHas = pushReachability.any(func(p) = p.user.equal(new));
+        let newHas = pushReachability.any(func(p) = p.user.equal(new_principal));
         if (newHas) {
           pushReachability := pushReachability.filter(func(p) = not p.user.equal(old));
         } else {
-          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new }) else p);
+          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new_principal }) else p);
         };
       };
       if (eventViewOldCount > 0) {
-        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new))))
-          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new }) else v);
+        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new_principal))))
+          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new_principal }) else v);
       };
     };
 

@@ -46,9 +46,43 @@ type MembershipVerdict = "yes" | "no" | "error";
  * Returns "error" (not "no") when every lookup failed, so the caller can retry
  * rather than dropping the switch.
  */
+async function verifyClubMembershipIcp(clubId: string): Promise<MembershipVerdict> {
+  try {
+    const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, membership, club] = await Promise.all([
+      import("@/live/internetIdentityAuth"),
+      import("@/live/targetRegistry"),
+      import("@/live/features/membership"),
+      import("@/live/features/club"),
+    ]);
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) return "error";
+    const ctx = { identity, target: getActiveIcpTarget() };
+    const principalText = identity.getPrincipal().toText();
+
+    const grants = await membership.getLiveMyRoleGrants(ctx);
+    if (grants.some((g) => (g.club[0] ?? null) === clubId)) return "yes";
+
+    // Team-scoped grant (club field empty) that resolves to this club.
+    const teamScopedIds = grants.map((g) => g.team[0]).filter((id): id is string => !!id);
+    if (teamScopedIds.length > 0) {
+      const teams = await club.listLiveTeams(ctx, clubId);
+      const teamIds = new Set(teams.map((t) => t.id));
+      if (teamScopedIds.some((id) => teamIds.has(id))) return "yes";
+    }
+
+    // Guardian of a child rostered on one of this club's teams.
+    const roster = await club.getLiveClubRoster(ctx, clubId);
+    if (roster.children.some((c) => c.parent?.toText() === principalText)) return "yes";
+
+    return "no";
+  } catch (error) {
+    console.warn("[NotificationClubSwitch] ICP membership check failed", error);
+    return "error";
+  }
+}
+
 async function verifyClubMembership(userId: string, clubId: string): Promise<MembershipVerdict> {
-  // NEEDS-CANISTER: verifyClubMembership (membership check for notification switch)
-  if (resolveAuthBackend() === "icp") return "no";
+  if (resolveAuthBackend() === "icp") return verifyClubMembershipIcp(clubId);
   let sawError = false;
 
   const roleRes = await supabase

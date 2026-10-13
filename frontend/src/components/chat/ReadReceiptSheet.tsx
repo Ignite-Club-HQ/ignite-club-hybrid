@@ -55,10 +55,102 @@ export const ReadReceiptSheet = memo(function ReadReceiptSheet({
   // Use prop readers if available, otherwise use fetched readers
   const readers = propReaders.length > 0 ? propReaders : fetchedReaders;
 
-  // NEEDS-CANISTER: messaging_domain has no message_reads list method
-  // (Supabase `message_reads` has no canister counterpart) — silently
-  // skip the fetch for Internet Identity accounts instead of throwing or
-  // showing an "unavailable" state; the sheet just renders with no readers.
+  // Internet Identity accounts: messaging_domain exposes list_read_receipts
+  // (listLiveReadReceipts) plus get_group_metadata for the group member
+  // roster, so read/unread state renders from the canister instead of being
+  // silently skipped. Team/club contextIds have no canister membership list
+  // here, so those fall back to showing only the resolved readers (same
+  // fallback path the Supabase branch uses when `allMembers` is empty).
+  useEffect(() => {
+    if (!open || !messageId) return;
+    if (resolveAuthBackend() !== "icp") return;
+
+    let cancelled = false;
+    const fetchIcp = async () => {
+      setLoading(true);
+      try {
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const receipts = await withFeatureBackend("messaging", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const { listLiveReadReceipts } = await import("@/live/features/messaging");
+            return listLiveReadReceipts(ctx, contextId || messageId);
+          },
+        });
+        if (cancelled) return;
+
+        const readerIds = [
+          ...new Set(
+            receipts
+              .filter((r) => r.messageId === messageId && r.read)
+              .map((r) => r.user.toText())
+              .filter((id) => id !== currentUserId)
+          ),
+        ];
+
+        let memberIds: string[] = [];
+        if (messageType === "group" && contextId) {
+          try {
+            const meta = await withFeatureBackend("messaging", {
+              supabase: async () => null,
+              icp: async (ctx) => {
+                const { getLiveGroupMetadata } = await import("@/live/features/messaging");
+                return getLiveGroupMetadata(ctx, contextId);
+              },
+            });
+            memberIds = (meta?.members ?? [])
+              .map((p) => p.toText())
+              .filter((id) => id !== currentUserId);
+          } catch {
+            // Members list is best-effort; readers still render without it.
+          }
+        }
+
+        const allIds = [...new Set([...readerIds, ...memberIds])];
+        let profileMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
+        if (allIds.length > 0) {
+          const profiles = await withFeatureBackend("messaging", {
+            supabase: async () => [],
+            icp: async (ctx) => {
+              const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+              return listLiveProfilesByIds(ctx, allIds);
+            },
+          });
+          for (const p of profiles as any[]) {
+            profileMap.set(p.account_id, { display_name: p.display_name ?? null, avatar_url: p.avatar_url ?? null });
+          }
+        }
+        if (cancelled) return;
+
+        setFetchedReaders(
+          readerIds.map((id) => ({
+            user_id: id,
+            display_name: profileMap.get(id)?.display_name ?? null,
+            avatar_url: profileMap.get(id)?.avatar_url ?? null,
+          }))
+        );
+        if (memberIds.length > 0) {
+          setAllMembers(
+            memberIds.map((id) => ({
+              user_id: id,
+              display_name: profileMap.get(id)?.display_name ?? null,
+              avatar_url: profileMap.get(id)?.avatar_url ?? null,
+            }))
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching ICP read receipt data:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchIcp();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, messageId, contextId, messageType, currentUserId]);
+
   useEffect(() => {
     if (!open || !messageId) return;
     if (resolveAuthBackend() === "icp") return;

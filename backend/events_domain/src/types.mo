@@ -213,6 +213,24 @@ module {
   // changes (set_rsvp/admin_upsert_rsvp overwrite state but not this).
   public type RsvpCreatedAt = { event_id : Text; account_id : Text; created_at_ms : Nat64 };
 
+  // ---- Match captains / goalkeepers / player stats report (events_domain extras) ----
+  // Per-match captain/vice-captain assignment. ref_kind distinguishes an
+  // account (member) ref from a child ref, same "account" | "child"
+  // convention as RsvpSubject's #account variant plus the nameless Child
+  // records above (no PII stored here, only opaque ids).
+  public type MatchCaptainRole = { #captain; #vice };
+  public type MatchCaptainAssignment = { event_id : Text; ref_kind : Text; ref_id : Text; role : Text; assigned_by : Principal; updated_at_ms : Nat64 };
+  // Per-match goalkeeper assignment, scoped to a period/quarter label (free
+  // text so it fits whichever sport's period convention the client uses,
+  // e.g. "1", "2", "Q1"). Multiple rows per event allow a GK rotation.
+  public type MatchGoalkeeperAssignment = { event_id : Text; ref_kind : Text; ref_id : Text; period : Text; assigned_by : Principal; updated_at_ms : Nat64 };
+  // One aggregated row per player (ref_kind/ref_id) returned by
+  // get_player_stats_report: MVP counts come from existing GameResult rows,
+  // captain/vice counts from MatchCaptainAssignment, goalkeeper counts from
+  // MatchGoalkeeperAssignment, all folded over events in the requested
+  // club/team + date range.
+  public type PlayerStatRow = { ref_kind : Text; ref_id : Text; mvp_count : Nat32; captain_count : Nat32; vice_count : Nat32; goalkeeper_count : Nat32 };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];

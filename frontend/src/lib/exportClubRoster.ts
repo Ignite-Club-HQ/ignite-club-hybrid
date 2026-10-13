@@ -98,10 +98,9 @@ async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> 
 }
 
 export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow[]> {
-  // NEEDS-CANISTER: no club-wide player/guardian roster read exists on
-  // club_domain yet. Callers hide this for Internet Identity accounts;
-  // fail closed here too so a future caller can never fire Supabase
-  // roster queries for an II user.
+  // Internet Identity accounts build the roster from club_domain's
+  // get_club_roster (see fetchClubRosterRowsIcp above) instead of the
+  // Supabase queries below.
   if (resolveAuthBackend() === "icp") {
     return fetchClubRosterRowsIcp(clubId);
   }

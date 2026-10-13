@@ -96,3 +96,71 @@ export async function fetchIcpIdentityProfile(
     client.dispose();
   }
 }
+
+/**
+ * Persists the caller's theme preference ("light" | "dark") on the
+ * identity_access canister so it follows the Internet Identity account
+ * across devices, mirroring the Supabase `profiles.theme_preference` column.
+ */
+export async function setIcpThemePreference(
+  identity: Identity,
+  theme: "light" | "dark" | null,
+  target: IcpTargetConfig = getActiveIcpTarget(),
+): Promise<void> {
+  if (!isLiveIdentityAccessConfigured(target)) return;
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    await client.setThemePreference(theme);
+  } finally {
+    client.dispose();
+  }
+}
+
+/** Reads the caller's canister-stored theme preference, if any. */
+export async function getIcpThemePreference(
+  identity: Identity,
+  target: IcpTargetConfig = getActiveIcpTarget(),
+): Promise<"light" | "dark" | null> {
+  if (!isLiveIdentityAccessConfigured(target)) return null;
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    const profile = await client.getProfile();
+    const raw = profile?.theme_preference?.[0];
+    return raw === "dark" || raw === "light" ? raw : null;
+  } catch {
+    return null;
+  } finally {
+    client.dispose();
+  }
+}
+
+/** Marks the club-switcher coach-mark seen on the identity_access canister. */
+export async function setIcpClubSwitcherHintSeen(
+  identity: Identity,
+  target: IcpTargetConfig = getActiveIcpTarget(),
+): Promise<void> {
+  if (!isLiveIdentityAccessConfigured(target)) return;
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    await client.setClubSwitcherHintSeen();
+  } finally {
+    client.dispose();
+  }
+}
+
+/** Reads whether the club-switcher coach-mark has already been dismissed. */
+export async function getIcpClubSwitcherHintSeen(
+  identity: Identity,
+  target: IcpTargetConfig = getActiveIcpTarget(),
+): Promise<boolean> {
+  if (!isLiveIdentityAccessConfigured(target)) return true; // fail closed — never nag on an unknown state
+  const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
+  try {
+    const profile = await client.getProfile();
+    return (profile?.club_switcher_hint_seen_at?.length ?? 0) > 0;
+  } catch {
+    return true;
+  } finally {
+    client.dispose();
+  }
+}
