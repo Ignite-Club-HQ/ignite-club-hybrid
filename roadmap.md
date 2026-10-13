@@ -1,3 +1,7 @@
+## ICP club chat preview
+- [ ] Restore latest photo-message previews for club chats; add focused regressions.
+- [ ] Confirm Giddy Goat on Paul's phone — requires the updated Android app and device access.
+
 ## ICP Messages DMs filter
 - [x] Keep DMs reachable under All, including no existing direct conversations and small inboxes.
 - [ ] Confirm on Paul's phone — requires the updated Android app and device access.
