@@ -585,6 +585,60 @@ persistent actor class Main(governorInit : Principal) {
   // list_teams; writes are club-admin gated via the folder's owning club.
   var teamFolders : [Types.TeamFolder];
   var personalTeamOwners : [(Text, Principal)];
+  var clubParentOrgs : [(Text, Text)];
+
+  func clubKindOf(club_id : Text) : Text {
+    switch (clubKinds.find(func((k, _)) = k == club_id)) { case (?(_, v)) v; case null "full" }
+  };
+
+  func parentOrgOf(club_id : Text) : ?Text {
+    switch (clubParentOrgs.find(func((k, _)) = k == club_id)) { case (?(_, v)) ?v; case null null }
+  };
+
+  // Link (parent = ?assoc) or unlink (parent = null) a club and an
+  // association. Only an admin of the association involved may do either.
+  public shared ({ caller }) func set_club_parent_org(club_id : Text, parent_id : ?Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (profiles.find(func(p) = p.id == club_id) == null) return #Err("Club not found");
+    switch (parent_id) {
+      case (?assoc) {
+        if (assoc == club_id) return #Err("A club can't be its own association");
+        if (clubKindOf(assoc) != "association") return #Err("Target is not an association");
+        if (clubKindOf(club_id) == "association") return #Err("Associations can't be linked");
+        if (not isAdmin(caller, assoc)) return #Err("Association admin required");
+        if (parentOrgOf(club_id) != null) return #Err("Club already belongs to an association");
+        clubParentOrgs := clubParentOrgs.concat([(club_id, assoc)]);
+      };
+      case null {
+        switch (parentOrgOf(club_id)) {
+          case null {};
+          case (?assoc) {
+            if (not isAdmin(caller, assoc)) return #Err("Association admin required");
+            clubParentOrgs := clubParentOrgs.filter(func((k, _)) = k != club_id);
+          };
+        };
+      };
+    };
+    #Ok
+  };
+
+  public query func list_association_clubs(association_id : Text) : async { #Ok : [Types.ClubProfile]; #Err : Text } {
+    #Ok(profiles.filter(func(p) = parentOrgOf(p.id) == ?association_id))
+  };
+
+  // Full (non-association) active clubs with no association, name-filtered.
+  public query func list_unaffiliated_clubs(search : Text, limit : Nat16) : async { #Ok : [Types.ClubProfile]; #Err : Text } {
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let needle = search.trim(#char ' ').toLower();
+    var res : [Types.ClubProfile] = [];
+    for (p in profiles.values()) {
+      if (res.size() < Nat16.toNat(limit) and p.is_active and clubKindOf(p.id) != "association" and parentOrgOf(p.id) == null
+          and (needle == "" or p.name.toLower().contains(#text needle))) {
+        res := res.concat([p]);
+      };
+    };
+    #Ok(res)
+  };
 
   public shared ({ caller }) func save_team_folder(folder : Types.TeamFolder) : async { #Ok : Types.TeamFolder; #Err : Text } {
     auth(caller);
