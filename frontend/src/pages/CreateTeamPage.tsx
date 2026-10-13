@@ -333,6 +333,52 @@ export default function CreateTeamPage() {
 
     // Non-admin flow: submit as a team creation request
     if (!isClubAdmin) {
+      if (isFeatureRoutedToIcp("membership")) {
+        // club_domain's TeamCreationRequest only carries name/division/age_group
+        // — no logo, description, folder, team_type, or class fields. Attempt
+        // the logo upload (best-effort, surfaced to the admin separately once
+        // the canister gains a field for it) but never let it block the
+        // request itself.
+        if (logoFile) {
+          try {
+            const fileExt = logoFile.name.split('.').pop();
+            const storagePath = `club-logos/team-requests/${clubId}/${crypto.randomUUID()}.${fileExt}`;
+            await tryUploadMediaToBlobStore({
+              storagePath,
+              file: logoFile,
+              mime: logoFile.type,
+            });
+          } catch (error) {
+            console.error('Logo upload error:', error);
+          }
+        }
+
+        try {
+          await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("unreachable"); },
+            icp: (ctx) => requestLiveTeamCreation(
+              ctx,
+              clubId!,
+              name.trim(),
+              null,
+              levelAge.trim() || null,
+            ),
+          });
+        } catch (error) {
+          setSaving(false);
+          toast({
+            title: "Error",
+            description: `Failed to submit ${entityLabelLower(club)} request. Please try again.`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setSaving(false);
+        navigate(-1);
+        return;
+      }
+
       // Upload logo first if provided
       let logoUrl: string | null = null;
       if (logoFile) {
