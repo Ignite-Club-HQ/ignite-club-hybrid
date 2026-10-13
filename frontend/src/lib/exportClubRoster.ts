@@ -68,15 +68,15 @@ async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> 
         playerType: "Junior",
         yearOfBirth: "",
         teamName: team.name ?? "",
-        ageGroup: team.level_age ?? "",
+        ageGroup: team.division ?? "",
         parents: "",
       });
     }
   }
 
-  const playerGrants = roles.filter((r) => r.role === "player" && opt(r.team as unknown as [] | [string]));
+  const playerGrants = roles.filter((r) => r.role === "player" && r.team);
   for (const grant of playerGrants) {
-    const teamId = opt(grant.team as unknown as [] | [string]);
+    const teamId = grant.team ?? null;
     const team = teamId ? teamById.get(teamId) : null;
     if (!team) continue;
     const principalText = grant.user.toText();
@@ -86,7 +86,7 @@ async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> 
       playerType: "Adult",
       yearOfBirth: "",
       teamName: team.name ?? "",
-      ageGroup: team.level_age ?? "",
+      ageGroup: team.division ?? "",
       parents: "",
     });
   }
@@ -193,7 +193,7 @@ export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow
       playerType: "Junior",
       yearOfBirth: child.year_of_birth ? String(child.year_of_birth) : "",
       teamName: team.name ?? "",
-      ageGroup: team.level_age ?? "",
+      ageGroup: team.division ?? "",
       parents: (guardiansByChild.get(child.id) || []).join("; "),
     });
   }
@@ -210,7 +210,7 @@ export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow
       playerType: "Adult",
       yearOfBirth: "",
       teamName: team.name ?? "",
-      ageGroup: team.level_age ?? "",
+      ageGroup: team.division ?? "",
       parents: "",
     });
   }

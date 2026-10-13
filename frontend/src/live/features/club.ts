@@ -1327,39 +1327,24 @@ export async function setLiveNewsPostTarget(
 export interface LiveClubRosterChild {
   id: string;
   teams: string[];
-  clubId: string | null;
-  parent: Principal | null;
+  club_id?: string;
+  parent?: Principal;
 }
 
 export interface LiveClubRoster {
   children: LiveClubRosterChild[];
-  roles: Array<{ club: string | null; role: string; team: string | null; user: Principal }>;
+  roles: Array<{ club?: string; role: string; team?: string; user: Principal }>;
 }
 
 /**
- * Club-wide roster for the player-list export: club-scoped role grants
- * (adult players hold the `player` role) plus the children assigned to the
- * club's teams. Club-admin gated canister-side (`list_role_grants`); children
- * are filtered client-side to this club since `list_children` has no
- * club-scoped variant yet.
+ * Club-wide roster for the player-list export and schedule broadcasts:
+ * children on the club's teams plus club-scoped role grants. Staff-gated
+ * canister-side (club_domain get_club_roster).
  */
 export async function getLiveClubRoster(
   ctx: FeatureBackendContext,
   clubId: string,
 ): Promise<LiveClubRoster> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const [roles, teams] = await Promise.all([
-    unwrapCandid(actor.list_role_grants(clubId), "List role grants"),
-    unwrapCandid(actor.list_teams(clubId), "List teams"),
-  ]);
-  const teamIds = new Set(teams.map((t) => t.id));
-  // NEEDS-CANISTER: no club-scoped children read exists yet — `list_children`
-  // / `list_my_children` are caller-scoped. Until a `list_club_children`
-  // query ships, derive the set from children attached to this club's teams
-  // via the role-grant/guardian data we already have access to; for now this
-  // returns no children and callers should treat it as "none readable yet"
-  // rather than fail the export.
-  const children: LiveClubRosterChild[] = [];
-  void teamIds;
-  return { children, roles };
+  return unwrapCandid(actor.get_club_roster(clubId), "Load club roster");
 }

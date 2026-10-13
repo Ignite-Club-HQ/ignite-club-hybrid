@@ -71,10 +71,10 @@ describe("IcpExportStateBackupPanel", () => {
       }
       return el;
     });
-    createObjectURL.mockImplementation((blob: Blob) => {
+    createObjectURL.mockImplementation(((blob: Blob) => {
       capturedBlob = blob;
       return "blob:fake-url";
-    });
+    }) as unknown as () => string);
 
     renderPanel();
     const buttons = screen.getAllByRole("button", { name: /download export/i });
