@@ -8,7 +8,7 @@
 - [x] Monogram logo generator on ICP
 - [x] Player list export on ICP
 - [x] Fixture import on ICP
-- [ ] Short invite links on ICP
+- [x] Short invite links on ICP
 - [x] Export data / delete account on ICP
 - [x] Chat search (DM, club-admin, broadcast) on ICP
 - [x] Admin pages: update reminders, backups, realtime health, AI catch-up, AI model test, video guides
