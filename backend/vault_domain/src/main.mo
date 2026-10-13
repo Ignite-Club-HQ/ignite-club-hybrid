@@ -520,6 +520,86 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // ---------- On-chain vault backups (governor/app-admin only) ----------
+  // Snapshots the current folder/file metadata rows into a named backup.
+  // Blob refs only — no file bytes, no PII plaintext, no decryption; this
+  // mirrors the Supabase `vault-backup` edge function's manifest but keeps
+  // everything on-chain. Snapshots every club's folders/files (including
+  // trashed rows) since this is a platform-wide admin tool, not a club one.
+  func freshBackupId() : Text {
+    let id = "backup-" # Nat64.toText(nowMs()) # "-" # Nat64.toText(nextBackupSeq);
+    nextBackupSeq += 1;
+    id
+  };
+
+  public shared ({ caller }) func create_backup(label : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not validLong(label, 160)) return #Err("Invalid backup label");
+    let backup : Types.Backup = {
+      id = freshBackupId();
+      label;
+      created_at_ms = nowMs();
+      created_by = caller;
+      folders;
+      files;
+    };
+    backups := backups.concat([backup]);
+    #Ok(backup)
+  };
+
+  public query ({ caller }) func list_backups() : async { #Ok : [Types.BackupSummary]; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    #Ok(backups.map(func(b : Types.Backup) : Types.BackupSummary {
+      { id = b.id; label = b.label; created_at_ms = b.created_at_ms; created_by = b.created_by;
+        folder_count = b.folders.size(); file_count = b.files.size() }
+    }))
+  };
+
+  // Full snapshot (every folder/file row in the backup) for the download/export
+  // button — the frontend serializes this to a JSON file client-side.
+  public query ({ caller }) func get_backup(id : Text) : async { #Ok : Types.Backup; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {
+      case null { #Err("Backup not found") };
+      case (?backup) { #Ok(backup) };
+    }
+  };
+
+  // Re-inserts metadata rows from the backup that are missing from the live
+  // tables (matched by id) — never overwrites an existing row, so a restore
+  // can't clobber newer edits made after the snapshot was taken. Returns the
+  // number of folders/files actually re-inserted.
+  public shared ({ caller }) func restore_backup(id : Text) : async { #Ok : Nat; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    switch (backups.find(func(b : Types.Backup) : Bool = b.id == id)) {
+      case null { #Err("Backup not found") };
+      case (?backup) {
+        var restored = 0;
+        let missingFolders = backup.folders.filter(func(f : Types.VaultFolder) : Bool =
+          not folders.any(func(item : Types.VaultFolder) : Bool = item.id == f.id));
+        let missingFiles = backup.files.filter(func(f : Types.VaultFile) : Bool =
+          not files.any(func(item : Types.VaultFile) : Bool = item.id == f.id));
+        restored += missingFolders.size();
+        restored += missingFiles.size();
+        folders := folders.concat(missingFolders);
+        files := files.concat(missingFiles);
+        #Ok(restored)
+      };
+    }
+  };
+
+  public shared ({ caller }) func delete_backup(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not backups.any(func(b : Types.Backup) : Bool = b.id == id)) return #Err("Backup not found");
+    backups := backups.filter(func(b : Types.Backup) : Bool = b.id != id);
+    #Ok
+  };
+
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
   //
