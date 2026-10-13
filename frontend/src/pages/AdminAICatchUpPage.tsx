@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Loader2, Search, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +21,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface ProClubRow {
   id: string;
@@ -27,14 +31,93 @@ interface ProClubRow {
   is_pro_football: boolean;
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+const ICP_SETTING_KEY = "ai_catch_up_global_rollout_enabled";
 
 export default function AdminAICatchUpPage() {
-  if (resolveAuthBackend() === "icp") {
-    return <IcpUnavailablePage title="AI catch-up administration is unavailable in ICP lab mode" description="AI processing and provider configuration remain an approved external-worker boundary." />;
+  const isIcp = resolveAuthBackend() === "icp";
+  if (isIcp) {
+    return <IcpAdminAICatchUpPage />;
   }
   return <SupabaseAdminAICatchUpPage />;
+}
+
+function IcpAdminAICatchUpPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data: enabled, isLoading } = useQuery({
+    queryKey: ["icp-ai-catch-up-rollout-setting"],
+    queryFn: () =>
+      withFeatureBackend("admin", {
+        supabase: async () => false,
+        icp: async (ctx) => {
+          const { getLiveAppSetting, decodeAppSettingBool } = await import("@/live/features/appSettings");
+          const raw = await getLiveAppSetting(ctx, ICP_SETTING_KEY);
+          return decodeAppSettingBool(raw, false);
+        },
+      }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (value: boolean) =>
+      withFeatureBackend("admin", {
+        supabase: async () => {},
+        icp: async (ctx) => {
+          const { setLiveAppSetting } = await import("@/live/features/appSettings");
+          await setLiveAppSetting(ctx, ICP_SETTING_KEY, value);
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["icp-ai-catch-up-rollout-setting"] });
+      toast.success("Setting updated");
+    },
+    onError: (e: Error) => toast.error("Failed to update: " + e.message),
+  });
+
+  return (
+    <div className="max-w-3xl mx-auto p-4 space-y-4">
+      <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} className="gap-2">
+        <ArrowLeft className="h-4 w-4" /> Back to Admin
+      </Button>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            AI Chat Recap Rollout
+          </CardTitle>
+          <CardDescription>
+            Global rollout flag for AI Chat Recap on the Internet Computer backend. Per-club
+            enablement and member opt-out remain available from each club's own settings.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="rollout-enabled" className="text-base">
+                  Enable AI Chat Recap rollout
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Turns the feature on as the default for clubs on the Internet Computer backend.
+                </p>
+              </div>
+              <Switch
+                id="rollout-enabled"
+                checked={!!enabled}
+                disabled={updateMutation.isPending}
+                onCheckedChange={(v) => updateMutation.mutate(v)}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function SupabaseAdminAICatchUpPage() {
