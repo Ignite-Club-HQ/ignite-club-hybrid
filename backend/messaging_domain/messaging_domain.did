@@ -547,6 +547,11 @@ type Main =
                                                 Err: text;
                                                 Ok;
                                               });
+   search_messages: (conversation_id: text, needle: text, limit: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec Message;
+     }) query;
    send_message: (conversation_id: text, body: text, idempotency_key: 
     text, attachment: opt Attachment, reply_to_id: opt text) ->
     (variant {
@@ -562,11 +567,6 @@ type Main =
                                             Err: text;
                                             Ok: Message;
                                           });
-   search_messages: (conversation_id: text, needle: text, limit: nat16) ->
-    (variant {
-       Err: text;
-       Ok: vec Message;
-     }) query;
    set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
     (variant {
        Err: text;
