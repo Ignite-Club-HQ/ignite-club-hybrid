@@ -22,9 +22,9 @@ Audit date: 2026-10-14. Rule: in ICP mode everything except payments runs on-cha
 | 7 | Event page extras disabled (reminder cooldown, child-roster duty/attendance reads) | pages/EventDetailPage.tsx (isIcpAuthBackend gates) | fixed 2026-10-14 (untested on device) |
 
 ## Remaining known gaps
-- Event page: live pitch-board spectator view (watch a game in progress read-only) still reads Supabase game_summaries; hidden in ICP mode.
+- FIXED 2026-10-14: live game spectator detection uses the on-chain match timer (timer only; pitch positions not synced on-chain).
 - Public EOI form: no "send magic-link invite" email after an ICP submission (email delivery is off-chain by design); no form-view tracking.
-- Public EOI form needs the club admin to re-save the season's EOI settings once after the club_domain update (writes the public copy).
+- FIXED 2026-10-14: public EOI copy auto-republished when an admin opens the season's EOI card (no manual re-save).
 
 ## Not yet audited line-by-line
 HomePage, ClubDetailPage, CompetitionDetailPage, CreateTeamPage, DirectMessagePage; components/vault, pitch, eoi, news subtrees.
