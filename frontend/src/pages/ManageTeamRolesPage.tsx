@@ -8,8 +8,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { Principal } from "@icp-sdk/core/principal";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTeam } from "@/live/features/club";
 import {
-  getLiveTeam,
   listLiveTeamRoleGrants,
   listLiveRoleRequests,
   approveLiveRoleRequest,
