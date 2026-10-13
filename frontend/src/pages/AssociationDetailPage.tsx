@@ -19,8 +19,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
-import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubProfile, getLiveClubKind } from "@/live/features/club";
 
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { usePageTitle } from "@/hooks/usePageTitle";

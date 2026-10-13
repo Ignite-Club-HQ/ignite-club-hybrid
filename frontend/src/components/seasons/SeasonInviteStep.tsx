@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { createLivePendingInvite } from "@/live/features/club";
 
 type InviteRole = "player" | "parent" | "coach" | "team_admin";
 
@@ -171,10 +172,20 @@ export function SeasonInviteStep({ clubId, targetSeasonId, seasonName }: Props) 
 
           return { link: inviteLink, emailFailed: false, emailErrorMsg: undefined as string | undefined };
         },
-        // NEEDS-CANISTER: pending_invites (season/team invite) has no
-        // canister equivalent on competition_domain.
-        icp: async () => {
-          throw new Error("Sending season invites isn't available on this backend yet.");
+        // Mapped onto club_domain's create_pending_invite. There's no email
+        // send flow on the canister side yet, so the invite is created and a
+        // join link is returned without the Supabase "send-email" step.
+        icp: async (ctx) => {
+          const result = (await createLivePendingInvite(ctx, {
+            kind: "team",
+            clubId,
+            email: row.email.trim(),
+            teamId: row.teamId,
+            role: row.role,
+          })) as { invite?: { id?: string } };
+          const inviteId = result.invite?.id;
+          const inviteLink = inviteId ? `${window.location.origin}/join/p/${inviteId}` : "";
+          return { link: inviteLink, emailFailed: false, emailErrorMsg: undefined as string | undefined };
         },
       });
 

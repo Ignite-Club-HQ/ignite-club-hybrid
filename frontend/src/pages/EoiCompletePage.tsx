@@ -11,8 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
-// NEEDS-CANISTER: expression-of-interest claim flow has no canister shape yet —
-// in ICP mode every query here is disabled so no II principal reaches Supabase.
+// Client-side: the EOI claim/confirm flow (magic-link claim token, parent
+// confirmation, team allocation) has no canister counterpart — EOI config is
+// now stored as an opaque JSON blob via set/get_season_eoi_config, but there
+// is no per-submission claim record on the canister side. In ICP mode every
+// query here is disabled so no II principal reaches Supabase.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";

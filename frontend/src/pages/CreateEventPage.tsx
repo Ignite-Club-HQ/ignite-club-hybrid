@@ -822,7 +822,9 @@ function SupabaseCreateEventPage() {
           (await listLiveFavouriteEventTitles(ctx)).map((t) => ({
             id: t,
             title: t,
-            event_type: null as EventType | null,
+            event_type: "",
+            created_at: "",
+            user_id: "",
           })),
       }),
     enabled: !!user,

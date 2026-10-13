@@ -1072,6 +1072,97 @@ export async function listLiveGroupDuties(ctx: FeatureBackendContext, groupId: s
   return unwrapCandid(actor.list_group_duties(groupId), "List group duties");
 }
 
+/**
+ * Per-match captain/vice-captain assignment and per-match goalkeeper
+ * assignment (period/quarter-scoped) — counterparts of the Supabase
+ * `match_captains` / `match_goalkeepers` tables with no canister equivalent
+ * until this feature. `ref_kind` distinguishes an account id from a child id
+ * the same way EventGroupPlayer/Rsvp refs do elsewhere in this module.
+ */
+export async function setLiveMatchCaptain(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  role: "captain" | "vice",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_match_captain(eventId, refKind, refId, role),
+    "Set match captain",
+  );
+}
+
+export async function removeLiveMatchCaptain(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  role: "captain" | "vice",
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_match_captain(eventId, refKind, refId, role),
+    "Remove match captain",
+  );
+}
+
+export async function listLiveMatchCaptains(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_match_captains(eventId), "List match captains");
+}
+
+export async function setLiveMatchGoalkeeper(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  refKind: string,
+  refId: string,
+  period: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_match_goalkeeper(eventId, refKind, refId, period),
+    "Set match goalkeeper",
+  );
+}
+
+export async function removeLiveMatchGoalkeeper(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  period: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.remove_match_goalkeeper(eventId, period),
+    "Remove match goalkeeper",
+  );
+}
+
+export async function listLiveMatchGoalkeepers(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_match_goalkeepers(eventId), "List match goalkeepers");
+}
+
+/**
+ * Player stats report: aggregates MVP/captain/vice/goalkeeper counts per
+ * player across every non-deleted event for a club (optionally scoped to one
+ * team) between from_ms/to_ms. Counterpart of the Supabase player-stats
+ * report query joined from `game_results`/`match_captains`/`match_goalkeepers`.
+ */
+export async function getLivePlayerStatsReport(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string | null | undefined,
+  fromMs: number | Date,
+  toMs: number | Date,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_player_stats_report(clubId, candidOpt(teamId), toNat64(fromMs), toNat64(toMs)),
+    "Get player stats report",
+  );
+}
+
 export async function setLiveRsvpNote(
   ctx: FeatureBackendContext,
   eventId: string,

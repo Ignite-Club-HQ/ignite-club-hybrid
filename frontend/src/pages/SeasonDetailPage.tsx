@@ -119,14 +119,14 @@ function SupabaseSeasonDetailPage() {
           return data ?? [];
         },
         icp: async (ctx) => {
-          const all = await listLiveTeams(ctx, clubId!);
+          const all: any[] = await listLiveTeams(ctx, clubId!);
           return all
-            .filter((t) => t.season_id === seasonId)
+            .filter((t) => t.season_id === seasonId || (Array.isArray(t.season_id) && t.season_id[0] === seasonId))
             .map((t) => ({
               id: t.id,
               name: t.name,
-              level_age: t.level_age[0] || null,
-              lifecycle_status: t.lifecycle_status,
+              level_age: t.level_age?.[0] || null,
+              lifecycle_status: t.lifecycle_status ?? (t.archived ? "archived" : "active"),
             }));
         },
       });
@@ -451,11 +451,11 @@ function SupabaseSeasonDetailPage() {
       {seasonId && club && season && (
         <>
           <SeasonEoiConfigCard seasonId={seasonId} clubName={club.name} season={season as any} />
-          {season.eoi_enabled && (
+          {(season as any).eoi_enabled && (
             <EoiEmbedCard 
               clubId={club.id} 
               seasonId={seasonId} 
-              seasonSlug={season.eoi_slug || season.id} 
+              seasonSlug={(season as any).eoi_slug || season.id} 
               clubSlug={club.id}
             />
           )}
@@ -589,9 +589,8 @@ function SupabaseSeasonDetailPage() {
         <BulkRolloverDialog
           open={bulkRolloverOpen}
           onOpenChange={setBulkRolloverOpen}
-          clubId={clubId}
           targetSeasonId={seasonId}
-          priorSeasons={priorSeasons}
+          sourceSeasonId={priorSeasons[0]?.id ?? ""}
         />
       )}
     </div>

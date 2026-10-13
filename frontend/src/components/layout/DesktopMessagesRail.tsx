@@ -44,10 +44,37 @@ export function DesktopMessagesRail() {
   const [query, setQuery] = useState("");
 
   const isNative = Capacitor.isNativePlatform();
-  // NEEDS-CANISTER: no messaging_domain listing covers a combined recent
-  // conversations rail (DMs + groups + team/club chats with snippets) —
-  // Supabase-only until that wrapper exists.
   const messagingOnIcp = isFeatureRoutedToIcp("messaging");
+
+  // ICP: recent_conversations covers DMs + groups + team/club chats in one
+  // call (no club/team breakdown snippets, so we map to a single combined list).
+  const { data: icpItems = [] } = useQuery({
+    queryKey: ["desktop-rail-icp", user?.id],
+    enabled: !!user && initialized && !isNative && messagingOnIcp,
+    staleTime: 30_000,
+    queryFn: async (): Promise<RailItem[]> => {
+      const { getCurrentInternetIdentityConfirmed } = await import("@/live/internetIdentityAuth");
+      const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+      const { recentLiveConversations } = await import("@/live/features/messaging");
+      const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+      if (!identity) return [];
+      const ctx = { identity, target: getActiveIcpTarget() };
+      const conversations = await recentLiveConversations(ctx, identity.getPrincipal(), 12);
+      return (conversations as Array<{ conversation_id: string; kind: string; title: string; last_message_preview: string; last_activity_ms: bigint }>).map((c) => ({
+        id: c.conversation_id,
+        kind: (c.kind === "dm" ? "dm" : c.kind === "team" ? "team" : c.kind === "club" ? "club" : "group") as RailItem["kind"],
+        title: c.title || "Chat",
+        avatarUrl: null,
+        snippet: c.last_message_preview || "No messages yet",
+        activityAt: new Date(Number(c.last_activity_ms)).toISOString(),
+        route:
+          c.kind === "dm" ? `/messages/dm/${c.conversation_id}` :
+          c.kind === "team" ? `/messages/${c.conversation_id}` :
+          c.kind === "club" ? `/messages/club/${c.conversation_id}` :
+          `/groups/${c.conversation_id}`,
+      }));
+    },
+  });
 
 
   // DM conversations (same base query + latest-message RPC as MessagesPage)
@@ -335,6 +362,7 @@ export function DesktopMessagesRail() {
   });
 
   const items = useMemo(() => {
+    if (messagingOnIcp) return icpItems.slice(0, 8);
     let combined = [...dmItems, ...groupItems, ...teamItems, ...clubItems].sort(
       (a, b) => new Date(b.activityAt).getTime() - new Date(a.activityAt).getTime()
     );
@@ -359,10 +387,10 @@ export function DesktopMessagesRail() {
         )
       : combined;
     return filtered.slice(0, 8);
-  }, [dmItems, groupItems, teamItems, clubItems, query, activeClubFilter, activeClubTeamIds, usersInActiveClub]);
+  }, [dmItems, groupItems, teamItems, clubItems, icpItems, messagingOnIcp, query, activeClubFilter, activeClubTeamIds, usersInActiveClub]);
 
 
-  if (isNative || messagingOnIcp) return null;
+  if (isNative) return null;
 
   return (
     <section

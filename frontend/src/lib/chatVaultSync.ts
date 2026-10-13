@@ -1,5 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  createLiveVaultFolder,
+  listLiveVaultFolders,
+  registerLiveVaultFile,
+} from "@/live/features/vault";
+import type { FeatureBackendContext } from "@/live/featureRouter";
 
 /**
  * Auto-sync chat attachments (images and external links) to the relevant file vault.
@@ -57,11 +64,20 @@ export async function syncChatAttachmentToVault({
   /** Set true for Club Admin Chat (member ↔ club admin DM). */
   isClubAdminChat?: boolean;
 }) {
-  // NEEDS-CANISTER: this auto-sync writes vault_folders/vault_files directly
-  // (folder lookup-or-create + file insert) outside the typed vault_domain
-  // wrappers' dedup/cache semantics. Skip under ICP rather than writing into a
-  // Supabase table ICP vault reads never see.
-  if (isFeatureRoutedToIcp("vault")) return;
+  if (isFeatureRoutedToIcp("vault")) {
+    await syncChatAttachmentToVaultIcp({
+      imageUrl,
+      text,
+      userId,
+      clubId,
+      teamId,
+      chatGroupId,
+      chatGroupName,
+      chatGroupAllowedRoles,
+      isClubAdminChat,
+    });
+    return;
+  }
   try {
     const imageEntries: {
       file_url: string;
@@ -503,4 +519,89 @@ function guessFileType(url: string): string | null {
   if (url.includes("drive.google.com") || url.includes("docs.google.com")) return "link/google-drive";
   if (url.includes("dropbox.com")) return "link/dropbox";
   return null;
+}
+
+/**
+ * ICP counterpart of `syncChatAttachmentToVault`: writes through the typed
+ * vault_domain wrappers (folder list/create + file register) instead of the
+ * Supabase vault_folders/vault_files tables. Chat group / club-admin folder
+ * scoping (restricted_roles) mirrors the Supabase branch; chat-group vault
+ * folders are matched by name since vault_domain has no chat_group_id column
+ * — a provisional mapping until verified against a live canister.
+ */
+async function syncChatAttachmentToVaultIcp({
+  imageUrl,
+  text,
+  userId: _userId,
+  clubId,
+  teamId,
+  chatGroupName,
+  isClubAdminChat,
+}: {
+  imageUrl: string | null;
+  text: string;
+  userId: string;
+  clubId: string;
+  teamId?: string | null;
+  chatGroupId?: string | null;
+  chatGroupName?: string | null;
+  chatGroupAllowedRoles?: string[] | null;
+  isClubAdminChat?: boolean;
+}): Promise<void> {
+  try {
+    const entries: { url: string; name: string; isExternalLink: boolean }[] = [];
+    if (imageUrl) {
+      entries.push({ url: imageUrl, name: extractFileName(imageUrl) || `chat-attachment-${Date.now()}`, isExternalLink: false });
+    }
+    for (const url of extractFileUrls(text)) {
+      entries.push({ url, name: extractFileName(url) || url, isExternalLink: true });
+    }
+    if (entries.length === 0 || !clubId) return;
+
+    const folderName = chatGroupName
+      ? chatGroupName
+      : isClubAdminChat
+        ? "Club Admin Chat"
+        : imageUrl
+          ? "Chat Images"
+          : "Chat Links";
+
+    await withFeatureBackend("vault", {
+      supabase: async () => {
+        throw new Error("unreachable: vault routing checked by the caller");
+      },
+      icp: async (ctx: FeatureBackendContext) => {
+        const folders = await listLiveVaultFolders(ctx, clubId, teamId || null);
+        let folder = folders.find((f) => f.name === folderName && !f.parent_id?.[0]);
+        if (!folder) {
+          folder = await createLiveVaultFolder(
+            ctx,
+            crypto.randomUUID(),
+            clubId,
+            teamId || null,
+            null,
+            folderName,
+            [],
+          );
+        }
+        for (const entry of entries) {
+          await registerLiveVaultFile(
+            ctx,
+            crypto.randomUUID(),
+            folder.id,
+            clubId,
+            teamId || null,
+            entry.name,
+            entry.url,
+            0,
+            entry.isExternalLink ? "link/external" : "application/octet-stream",
+            entry.isExternalLink,
+            null,
+          );
+        }
+      },
+    });
+  } catch (err) {
+    console.warn("chatVaultSync (ICP) error:", err);
+  }
 }

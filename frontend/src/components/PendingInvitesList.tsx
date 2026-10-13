@@ -74,7 +74,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
         const effectiveClubId = clubId || (invites[0] as any).club_id;
         if (!effectiveClubId) throw new Error("Missing club ID for branding lookup");
 
-        const branding = await withFeatureBackend("club", {
+        const branding = await withFeatureBackend("membership", {
           supabase: async () => null,
           icp: (ctx) => getLiveClubBranding(ctx, effectiveClubId),
         });
@@ -86,7 +86,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
         // Fetch team name if teamId is provided
         let teamName = "";
         if (teamId) {
-          const team = await withFeatureBackend("club", {
+          const team = await withFeatureBackend("membership", {
             supabase: async () => null,
             icp: (ctx) => getLiveTeam(ctx, teamId),
           });
@@ -109,7 +109,7 @@ export default function PendingInvitesList({ invites, teamId, clubId, isAdmin = 
             const recipientName = invite.invited_label || invite.profiles?.display_name || "Member";
             
             // ICP invite metadata is often a JSON string or already parsed
-            const meta = (typeof res.metadata === 'string' ? JSON.parse(res.metadata) : res.metadata) as { children?: { name: string }[]; customMessage?: string } | null;
+            const meta = (typeof (res as any).invite?.metadata === 'string' ? JSON.parse((res as any).invite.metadata) : (res as any).invite?.metadata) as { children?: { name: string }[]; customMessage?: string } | null;
             const childrenNames = invite.role === "parent" && meta?.children
               ? meta.children.map(c => c.name)
               : undefined;

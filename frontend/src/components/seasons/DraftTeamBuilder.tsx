@@ -35,6 +35,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  moveLiveSeasonTeamAssignment,
+  addLiveSeasonTeamAssignment,
+  removeLiveSeasonTeamAssignment,
+} from "@/live/features/club";
 
 const UNASSIGNED_ID = "__unassigned__";
 const TEAM_MIN = 8;
@@ -177,10 +182,17 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
             if (error) throw error;
           }
         },
-        // NEEDS-CANISTER: team_memberships (draft team assignment) has no
-        // canister equivalent on competition_domain.
-        icp: async () => {
-          throw new Error("Moving players between teams isn't available on this backend yet.");
+        // Mapped onto season_team_assignment. The canister add endpoint also
+        // acts as an upsert for players already assigned to a season, so a
+        // plain membership_id/no-membership_id branch isn't needed here.
+        icp: async (ctx) => {
+          if (newTeamId === null) {
+            await removeLiveSeasonTeamAssignment(ctx, seasonId, player.club_player_id);
+          } else if (player.membership_id) {
+            await moveLiveSeasonTeamAssignment(ctx, seasonId, player.club_player_id, newTeamId);
+          } else {
+            await addLiveSeasonTeamAssignment(ctx, seasonId, newTeamId, player.club_player_id);
+          }
         },
       }),
     onSuccess: () => {
@@ -204,9 +216,9 @@ export function DraftTeamBuilder({ clubId, seasonId, teams }: DraftTeamBuilderPr
             .eq("id", player.membership_id);
           if (error) throw error;
         },
-        // NEEDS-CANISTER: see moveMut above.
-        icp: async () => {
-          throw new Error("Removing a player from the season isn't available on this backend yet.");
+        // Mapped onto season_team_assignment — see moveMut above.
+        icp: async (ctx) => {
+          await removeLiveSeasonTeamAssignment(ctx, seasonId, player.club_player_id);
         },
       }),
     onSuccess: () => {

@@ -32,9 +32,17 @@ export function AICatchUpDisclosureDialog({ open, onOpenChange, onAcknowledged }
     setSaving(true);
     try {
       if (resolveAuthBackend() === "icp") {
-        // NEEDS-CANISTER: AI chat recap has no canister counterpart (documented
-        // as out of scope). Treat the disclosure as accepted for this session
-        // without persisting anything server-side, so it never blocks chat use.
+        // Persist acceptance via the canister's per-user messaging settings
+        // (ai_catchup_enabled) — the closest canister counterpart to the
+        // Supabase disclosure-ack RPC. hideMessagePreview is preserved as-is.
+        const { getCurrentInternetIdentityConfirmed } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const { getLiveUserMessagingSettings, setLiveUserMessagingSettings } = await import("@/live/features/messaging");
+        const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+        if (!identity) throw new Error("No active Internet Identity session. Sign in again to continue.");
+        const ctx = { identity, target: getActiveIcpTarget() };
+        const current = await getLiveUserMessagingSettings(ctx).catch(() => null);
+        await setLiveUserMessagingSettings(ctx, current?.hide_message_preview ?? false, true);
         onOpenChange(false);
         onAcknowledged();
         return;

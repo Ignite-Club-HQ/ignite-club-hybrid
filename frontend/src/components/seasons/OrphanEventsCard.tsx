@@ -5,6 +5,9 @@ import { AlertTriangle, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+// Client-side: orphan-event detection (events on teams with no season link)
+// has no canister counterpart — competition_domain has no events concept at
+// all yet, so this card stays Supabase-only and renders nothing on ICP.
 
 interface Props {
   clubId: string;
@@ -19,8 +22,6 @@ interface OrphanEvent {
 }
 
 export function OrphanEventsCard({ clubId }: Props) {
-  // NEEDS-CANISTER: orphan-event detection has no canister equivalent yet;
-  // an II principal has no Supabase session so skip the RPC and render nothing.
   const isIcp = resolveAuthBackend() === "icp";
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["season-orphan-events", clubId],
