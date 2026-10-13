@@ -1,18 +1,18 @@
 ## Move everything except payments on-chain (2026-10-13)
-- [ ] Scheduled messages: manage page + photo attachments on ICP
-- [ ] Club weekly schedule broadcasts on ICP
-- [ ] Delete group chat on ICP
+- [x] Scheduled messages: manage page + photo attachments on ICP
+- [x] Club weekly schedule broadcasts on ICP
+- [x] Delete group chat on ICP
 - [x] Team creation requests on ICP
 - [x] Home team/league access requests on ICP
-- [ ] Publish chat photo to gallery on ICP
+- [x] Publish chat photo to gallery on ICP
 - [x] Monogram logo generator on ICP
-- [ ] Player list export on ICP
-- [ ] Fixture import on ICP
+- [x] Player list export on ICP
+- [x] Fixture import on ICP
 - [ ] Short invite links on ICP
-- [ ] Export data / delete account on ICP
-- [ ] Chat search (DM, club-admin, broadcast) on ICP
-- [ ] Admin pages: update reminders, backups, realtime health, AI catch-up, AI model test, video guides
-- [ ] Verify + move: vault permanent delete, role request approval, passkey settings, Drive import, legal re-acceptance
+- [x] Export data / delete account on ICP
+- [x] Chat search (DM, club-admin, broadcast) on ICP
+- [x] Admin pages: update reminders, backups, realtime health, AI catch-up, AI model test, video guides
+- [x] Verify + move: vault permanent delete, role request approval, passkey settings, Drive import, legal re-acceptance
 - [ ] Redeploy changed canisters + frontend (user-run workflows)
 
 ## ICP chat device files
