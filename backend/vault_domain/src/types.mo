@@ -83,7 +83,7 @@ module {
   // function's manifest, but kept fully on-chain: no decryption happens.
   public type Backup = {
     id : Text;
-    label : Text;
+    backup_label : Text;
     created_at_ms : Nat64;
     created_by : Principal;
     folders : [VaultFolder];
@@ -94,7 +94,7 @@ module {
   // in the snapshot over the wire.
   public type BackupSummary = {
     id : Text;
-    label : Text;
+    backup_label : Text;
     created_at_ms : Nat64;
     created_by : Principal;
     folder_count : Nat;

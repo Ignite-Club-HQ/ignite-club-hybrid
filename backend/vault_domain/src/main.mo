@@ -532,13 +532,13 @@ persistent actor class Main(governorInit : Principal) {
     id
   };
 
-  public shared ({ caller }) func create_backup(label : Text) : async { #Ok : Types.Backup; #Err : Text } {
+  public shared ({ caller }) func create_backup(backup_label : Text) : async { #Ok : Types.Backup; #Err : Text } {
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
-    if (not validLong(label, 160)) return #Err("Invalid backup label");
+    if (not validLong(backup_label, 160)) return #Err("Invalid backup label");
     let backup : Types.Backup = {
       id = freshBackupId();
-      label;
+      backup_label = backup_label;
       created_at_ms = nowMs();
       created_by = caller;
       folders;
@@ -552,7 +552,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isAppAdmin(caller)) return #Err("App admin required");
     #Ok(backups.map(func(b : Types.Backup) : Types.BackupSummary {
-      { id = b.id; label = b.label; created_at_ms = b.created_at_ms; created_by = b.created_by;
+      { id = b.id; backup_label = b.backup_label; created_at_ms = b.created_at_ms; created_by = b.created_by;
         folder_count = b.folders.size(); file_count = b.files.size() }
     }))
   };

@@ -406,6 +406,11 @@ type Main =
        Err: text;
        Ok: opt LineupSnapshot;
      }) query;
+   get_event_timer: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt EventTimer;
+     }) query;
    get_pitch_board_settings: (team_id: text) ->
     (variant {
        Err: text;
@@ -691,6 +696,11 @@ type Main =
                                      Err: text;
                                      Ok: LineupSnapshot;
                                    });
+   set_event_timer: (event_id: text, action: text, minutes_per_half: opt
+    nat16, adjust_ms: opt int64) -> (variant {
+                                      Err: text;
+                                      Ok: EventTimer;
+                                    });
    save_location: (location_label: text, address: text, lat: float64, lng:
     float64) -> (variant {
                    Err: text;
@@ -1121,6 +1131,21 @@ type AssociationEvent =
    location: opt text;
    starts_at_ms: nat64;
    title: text;
+ };
+type EventTimer = 
+ record {
+   accumulated_pause_ms: nat64;
+   current_half: nat8;
+   event_id: text;
+   half_ended_at_ms: opt nat64;
+   half_paused_at_ms: opt nat64;
+   half_started_at_ms: opt nat64;
+   is_game_finished: bool;
+   is_running: bool;
+   last_event_at_ms: nat64;
+   minutes_per_half: nat16;
+   schema_version: nat8;
+   updated_by: principal;
  };
 type ActiveGame = 
  record {

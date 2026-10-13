@@ -5,6 +5,7 @@ import Nat "mo:core/Nat";
 import Nat32 "mo:core/Nat32";
 import Nat16 "mo:core/Nat16";
 import Nat64 "mo:core/Nat64";
+import Int64 "mo:core/Int64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
@@ -83,6 +84,9 @@ persistent actor class Main(governorInit : Principal) {
   // extras, migration 20261015_000000).
   var matchCaptainAssignments : [Types.MatchCaptainAssignment];
   var matchGoalkeeperAssignments : [Types.MatchGoalkeeperAssignment];
+  // Live match timer, one row per event (events_domain extras, migration
+  // 20261016_000000). See Types.EventTimer.
+  var eventTimers : [Types.EventTimer];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -119,6 +123,20 @@ persistent actor class Main(governorInit : Principal) {
     else if (frequency == "weekly") 604_800_000
     else if (frequency == "fortnightly") 1_209_600_000
     else 2_592_000_000
+  };
+  // Mirrors frontend/src/lib/serverTimer.ts `TimerEvent`.
+  func validTimerAction(value : Text) : Bool {
+    value == "start_half" or value == "pause" or value == "resume" or value == "end_half" or
+    value == "start_half_2" or value == "end_game" or value == "adjust" or value == "set_minutes" or
+    value == "reset"
+  };
+  func defaultEventTimer(event_id : Text, minutes_per_half : Nat16, caller : Principal) : Types.EventTimer {
+    {
+      event_id; schema_version = 2; current_half = 1; minutes_per_half;
+      half_started_at_ms = null; half_paused_at_ms = null; accumulated_pause_ms = 0;
+      is_running = false; is_game_finished = false; half_ended_at_ms = null;
+      last_event_at_ms = nowMs(); updated_by = caller;
+    }
   };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
@@ -551,6 +569,81 @@ persistent actor class Main(governorInit : Principal) {
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     let value : Types.RosterEntry = { event_id; account_id; child_id }; roster := roster.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); roster := roster.concat([value]); #Ok(value)
   };
+  // Live match timer, server-anchored on this canister. Write access mirrors
+  // every other events_domain mutation keyed by event_id (set_duty,
+  // set_roster, save_lineup_snapshot, ...): the caller must manage the event
+  // (club/team admin, coach, creator, or governor) via requireManage.
+  // `minutes_per_half` is required for "start_half"/"set_minutes" and
+  // optional otherwise (kept as-is when omitted); `adjust_ms` is required
+  // for "adjust" and ignored otherwise. Reads are open to anyone who can
+  // view the event (canView), same visibility as get_lineup_snapshot.
+  public shared ({ caller }) func set_event_timer(event_id : Text, action : Text, minutes_per_half : ?Nat16, adjust_ms : ?Int64) : async { #Ok : Types.EventTimer; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    if (not validTimerAction(action)) return #Err("Invalid timer action");
+    let resolvedMinutes = switch (minutes_per_half) { case (?m) m; case null 45 };
+    if (resolvedMinutes == 0 or resolvedMinutes > 200) return #Err("Invalid minutes per half");
+    let current = switch (eventTimers.find(func(item) = item.event_id == event_id)) {
+      case (?existing) existing;
+      case null defaultEventTimer(event_id, resolvedMinutes, caller);
+    };
+    let now = nowMs();
+    let updated : Types.EventTimer = switch (action) {
+      case "start_half" {
+        { current with current_half = 1; minutes_per_half = resolvedMinutes; half_started_at_ms = ?now; half_paused_at_ms = null; accumulated_pause_ms = 0; is_running = true; is_game_finished = false; half_ended_at_ms = null; last_event_at_ms = now; updated_by = caller }
+      };
+      case "pause" {
+        if (not current.is_running) return #Err("Timer is not running");
+        { current with half_paused_at_ms = ?now; is_running = false; last_event_at_ms = now; updated_by = caller }
+      };
+      case "resume" {
+        if (current.is_running) return #Err("Timer is already running");
+        let extraPause = switch (current.half_paused_at_ms) { case (?pausedAt) if (now > pausedAt) now - pausedAt else 0; case null 0 };
+        { current with half_paused_at_ms = null; accumulated_pause_ms = current.accumulated_pause_ms + extraPause; is_running = true; last_event_at_ms = now; updated_by = caller }
+      };
+      case "end_half" {
+        { current with is_running = false; half_paused_at_ms = null; half_ended_at_ms = ?now; last_event_at_ms = now; updated_by = caller }
+      };
+      case "start_half_2" {
+        { current with current_half = 2; half_started_at_ms = ?now; half_paused_at_ms = null; accumulated_pause_ms = 0; is_running = true; is_game_finished = false; half_ended_at_ms = null; last_event_at_ms = now; updated_by = caller }
+      };
+      case "end_game" {
+        { current with is_running = false; is_game_finished = true; half_paused_at_ms = null; half_ended_at_ms = ?now; last_event_at_ms = now; updated_by = caller }
+      };
+      case "adjust" {
+        switch (adjust_ms) {
+          case null return #Err("adjust_ms required for adjust");
+          case (?delta) {
+            let nextPause : Int64 = Int64.fromNat64(current.accumulated_pause_ms) - delta;
+            let clamped : Nat64 = if (nextPause < 0) 0 else Int64.toNat64(nextPause);
+            { current with accumulated_pause_ms = clamped; last_event_at_ms = now; updated_by = caller }
+          };
+        };
+      };
+      case "set_minutes" {
+        { current with minutes_per_half = resolvedMinutes; last_event_at_ms = now; updated_by = caller }
+      };
+      case "reset" {
+        { defaultEventTimer(event_id, resolvedMinutes, caller) with last_event_at_ms = now };
+      };
+      case (_) { current };
+    };
+    eventTimers := eventTimers.filter(func(item) = item.event_id != event_id);
+    eventTimers := eventTimers.concat([updated]);
+    #Ok(updated)
+  };
+
+  public query ({ caller }) func get_event_timer(event_id : Text) : async { #Ok : ?Types.EventTimer; #Err : Text } {
+    auth(caller);
+    switch (events.find(func(item) = item.id == event_id)) {
+      case null { #Err("Event not found") };
+      case (?event) {
+        if (not canView(caller, event)) return #Err("Forbidden");
+        #Ok(eventTimers.find(func(item) = item.event_id == event_id))
+      };
+    };
+  };
+
   public shared ({ caller }) func set_recurrence(event_id : Text, frequency : Text, until_ms : Nat64) : async { #Ok : Types.Recurrence; #Err : Text } {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
