@@ -150,7 +150,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
             }
           });
         }));
-        // Closing the browser without finishing = cancelled. Small delay so a
+        // Closing the browser without finishing = cancelled. Grace period so a
         // reply arriving as the browser closes still wins.
         handles.push(await Browser.addListener("browserFinished", () => {
           setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 1500);
