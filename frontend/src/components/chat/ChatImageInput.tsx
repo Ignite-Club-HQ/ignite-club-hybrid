@@ -299,8 +299,8 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     // member is signed in with Internet Identity, bytes go on-chain. With no
     // blob store configured there is no II-safe fallback — a raw Supabase
     // Storage upload would have no auth — so fail loudly rather than
-    // silently diverting bytes to Supabase.
-    // NEEDS-CANISTER: remove the isIcp throw once the blob store is deployed.
+    // silently diverting bytes to Supabase. The blob-store path above already
+    // works end-to-end once a canister id is configured in Placement Settings.
     const blobUpload = await tryUploadMediaToBlobStore({
       storagePath: icpPath,
       file: fileToUpload,

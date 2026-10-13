@@ -23,6 +23,8 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     myTermsAcceptance: () => call(() => actor.my_terms_acceptance()),
     getTermsAcceptance: (accountId: string) => call(() => actor.get_terms_acceptance(accountId)),
     setTermsAcceptance: (termsVersion: number) => call(() => actor.set_terms_acceptance(termsVersion)),
+    setThemePreference: (theme: string | null) => call(() => actor.set_theme_preference(theme ? [theme] : [])),
+    setClubSwitcherHintSeen: () => call(() => actor.set_club_switcher_hint_seen()),
     exportState: () => call<State>(() => actor.export_state()),
     eraseAccount: (accountId: string) => call(() => actor.erase_account(accountId)),
     registerAccount: () => call(() => actor.register_account()),

@@ -1,6 +1,7 @@
 import { ReportContentDialog, type ReportReason } from "@/components/reporting/ReportContentDialog";
 
 interface ReportPhotoDialogProps {
+  conversationId?: string;
   isOpen: boolean;
   onClose: () => void;
   photoId: string;
@@ -20,6 +21,9 @@ export function ReportPhotoDialog({ isOpen, onClose, photoId, conversationId }: 
     <ReportContentDialog
       isOpen={isOpen}
       onClose={onClose}
+      subjectKind="photo"
+      subjectId={photoId}
+      conversationId={conversationId}
       subject="Photo"
       description="Help us maintain a safe community by reporting inappropriate content. All reports are reviewed and actioned within 24 hours."
       question="Why are you reporting this photo?"

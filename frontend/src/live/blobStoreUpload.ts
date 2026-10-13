@@ -44,6 +44,22 @@ function isStoreFullError(error: unknown): boolean {
   return /StoreFull/.test(error instanceof Error ? error.message : String(error));
 }
 
+/**
+ * Deletes bytes previously uploaded via `uploadBytesToBlobStore`. Used by
+ * permanent-delete flows so removing a vault item also frees the on-chain
+ * blob store space it occupied. Best-effort at call sites — a missing/stale
+ * canister id must not block the rest of a deletion.
+ */
+export async function deleteBlobFromStore(
+  target: IcpTargetConfig,
+  identity: Identity,
+  storeKey: string,
+  path: string,
+): Promise<void> {
+  const { actor } = await connectLiveBlobStore(target, identity, storeKey);
+  await unwrapCandid(actor.delete_blob(path), "Delete blob");
+}
+
 export interface BlobStoreUploadResult {
   blobRef: LiveBlobRef;
   /** Public on-chain URL serving the bytes (matches blobAssetUrl). */

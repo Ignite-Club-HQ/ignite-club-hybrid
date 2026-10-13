@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTrainingDefault, setLiveTrainingDefault } from "@/live/features/events";
 
 export type TrainingDefaultStatus = "going" | "not_going";
 
@@ -10,6 +11,12 @@ interface Args {
   /** Pass exactly one of childId or userId */
   childId?: string | null;
   userId?: string | null;
+  /**
+   * Required for the ICP path: events_domain keys training defaults by
+   * (club, team, child|self). Optional for back-compat with callers that
+   * only pass teamId — those stay Supabase-only until updated to pass it.
+   */
+  clubId?: string | null;
 }
 
 export interface TrainingDefaultRow {
@@ -27,57 +34,85 @@ export interface TrainingDefaultRow {
  * Phase 1 of recurring RSVP: parents/members can set a default answer that
  * auto-applies to new training events. Override on any single event flips
  * source from 'default' → 'user' and is sticky for that event.
+ *
+ * ICP branch: routed through events_domain's get/set_training_default
+ * (club_id, team_id, child_id?) -> optional default_rsvp string. The
+ * canister stores no auto-pause bookkeeping (auto_paused_at/reason) or row
+ * id, so those fields are synthesised client-side (id = a stable composite
+ * key, auto-pause fields always null — nothing pauses an ICP default yet).
+ * Requires clubId; without it this hook stays a no-op for II users exactly
+ * like before (see Args.clubId).
  */
-export function useTrainingDefault({ teamId, childId, userId }: Args) {
+export function useTrainingDefault({ teamId, childId, userId, clubId }: Args) {
   const qc = useQueryClient();
-  // NEEDS-CANISTER: club_domain has no recurring-default-RSVP store yet
-  // (Supabase `child_training_defaults` has no canister counterpart) —
-  // silently no-op for Internet Identity users instead of a "not available" state.
-  const isIcp = resolveAuthBackend() === "icp";
-  const enabled = !isIcp && !!teamId && (!!childId || !!userId);
+  const enabled = !!teamId && (!!childId || !!userId);
 
-  const queryKey = ["training-default", teamId, childId ?? null, userId ?? null];
+  const queryKey = ["training-default", teamId, childId ?? null, userId ?? null, clubId ?? null];
 
   const query = useQuery({
     queryKey,
     enabled,
-    queryFn: async (): Promise<TrainingDefaultRow | null> => {
-      let q = supabase
-        .from("child_training_defaults")
-        .select("id, default_status, team_id, child_id, user_id, auto_paused_at, auto_paused_reason")
-        .eq("team_id", teamId!)
-        .is("deleted_at", null);
-      q = childId ? q.eq("child_id", childId) : q.eq("user_id", userId!);
-      const { data, error } = await q.maybeSingle();
-      if (error && (error as any).code !== "PGRST116") throw error;
-      return (data as TrainingDefaultRow | null) ?? null;
-    },
+    queryFn: async (): Promise<TrainingDefaultRow | null> =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          let q = supabase
+            .from("child_training_defaults")
+            .select("id, default_status, team_id, child_id, user_id, auto_paused_at, auto_paused_reason")
+            .eq("team_id", teamId!)
+            .is("deleted_at", null);
+          q = childId ? q.eq("child_id", childId) : q.eq("user_id", userId!);
+          const { data, error } = await q.maybeSingle();
+          if (error && (error as any).code !== "PGRST116") throw error;
+          return (data as TrainingDefaultRow | null) ?? null;
+        },
+        icp: async (ctx) => {
+          if (!clubId) return null;
+          const status = await getLiveTrainingDefault(ctx, clubId, teamId!, childId ?? null);
+          const value = status[0] ?? null;
+          if (!value) return null;
+          return {
+            id: `${clubId}:${teamId}:${childId ?? userId ?? "self"}`,
+            default_status: value as TrainingDefaultStatus,
+            team_id: teamId!,
+            child_id: childId ?? null,
+            user_id: childId ? null : (userId ?? null),
+            auto_paused_at: null,
+            auto_paused_reason: null,
+          };
+        },
+      }),
     staleTime: 60_000,
   });
 
   const upsert = useMutation({
-    mutationFn: async (status: TrainingDefaultStatus) => {
-      if (isIcp) return;
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+    mutationFn: async (status: TrainingDefaultStatus) =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error("Not authenticated");
 
-      if (query.data) {
-        const { error } = await supabase
-          .from("child_training_defaults")
-          .update({ default_status: status, deleted_at: null, auto_paused_at: null, auto_paused_reason: null })
-          .eq("id", query.data.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("child_training_defaults").insert({
-          team_id: teamId!,
-          child_id: childId ?? null,
-          user_id: childId ? null : userId!,
-          default_status: status,
-          created_by: user.id,
-        });
-        if (error) throw error;
-      }
-    },
+          if (query.data) {
+            const { error } = await supabase
+              .from("child_training_defaults")
+              .update({ default_status: status, deleted_at: null, auto_paused_at: null, auto_paused_reason: null })
+              .eq("id", query.data.id);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from("child_training_defaults").insert({
+              team_id: teamId!,
+              child_id: childId ?? null,
+              user_id: childId ? null : userId!,
+              default_status: status,
+              created_by: user.id,
+            });
+            if (error) throw error;
+          }
+        },
+        icp: async (ctx) => {
+          if (!clubId) return;
+          await setLiveTrainingDefault(ctx, clubId, teamId!, childId ?? null, status);
+        },
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey });
       qc.invalidateQueries({ queryKey: ["event-rsvps"] });
@@ -89,14 +124,23 @@ export function useTrainingDefault({ teamId, childId, userId }: Args) {
   });
 
   const clear = useMutation({
-    mutationFn: async () => {
-      if (isIcp || !query.data) return;
-      const { error } = await supabase
-        .from("child_training_defaults")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", query.data.id);
-      if (error) throw error;
-    },
+    mutationFn: async () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          if (!query.data) return;
+          const { error } = await supabase
+            .from("child_training_defaults")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", query.data.id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // events_domain has no "clear" verb; an empty default_rsvp string
+          // is treated as not-set by get_training_default's string match.
+          if (!clubId) return;
+          await setLiveTrainingDefault(ctx, clubId, teamId!, childId ?? null, "");
+        },
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey }),
   });
 

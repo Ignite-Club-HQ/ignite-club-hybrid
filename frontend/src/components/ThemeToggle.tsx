@@ -78,9 +78,26 @@ export function ThemeToggle() {
       return;
     }
     
-    // NEEDS-CANISTER: identity_access has no theme_preference field — ICP
-    // accounts keep the local DOM/localStorage theme only.
     if (resolveAuthBackend() === "icp") {
+      console.log('[ThemeToggle] Saving theme to identity_access canister:', newTheme, 'for user:', currentUser.id);
+      setIsSaving(true);
+      try {
+        const [{ getCurrentInternetIdentity }, { setIcpThemePreference }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) {
+          console.warn('[ThemeToggle] Cannot save theme - no Internet Identity session');
+          return;
+        }
+        await setIcpThemePreference(identity, newTheme);
+        console.log('[ThemeToggle] Theme preference saved to canister:', newTheme);
+      } catch (err) {
+        console.error('[ThemeToggle] Exception saving theme preference to canister:', err);
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
 

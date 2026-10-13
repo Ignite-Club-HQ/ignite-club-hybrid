@@ -1,6 +1,7 @@
 import { ReportContentDialog, type ReportReason } from "@/components/reporting/ReportContentDialog";
 
 interface ReportCommentDialogProps {
+  conversationId?: string;
   isOpen: boolean;
   onClose: () => void;
   commentId: string;
@@ -19,6 +20,9 @@ export function ReportCommentDialog({ isOpen, onClose, commentId, conversationId
     <ReportContentDialog
       isOpen={isOpen}
       onClose={onClose}
+      subjectKind="comment"
+      subjectId={commentId}
+      conversationId={conversationId}
       subject="Comment"
       description="Help us maintain a safe community by reporting inappropriate comments. All reports are reviewed and actioned within 24 hours."
       question="Why are you reporting this comment?"

@@ -17,7 +17,21 @@ export interface Season {
   updated_at: string;
 }
 
-function mapLiveSeason(season: LiveSeason & { created_at_ms: bigint; updated_at_ms: bigint }): Season {
+export function mapLiveSeason(season: LiveSeason & { created_at_ms: bigint; updated_at_ms: bigint }): Season {
+  return {
+    id: season.id,
+    club_id: season.club_id,
+    name: season.name,
+    status: season.status as SeasonStatus,
+    start_date: season.start_date || null,
+    end_date: season.end_date || null,
+    archived_at: season.status === "archived" ? new Date(Number(season.updated_at_ms)).toISOString() : null,
+    created_at: new Date(Number(season.created_at_ms)).toISOString(),
+    updated_at: new Date(Number(season.updated_at_ms)).toISOString(),
+  };
+}
+
+export export function mapLiveSeason(season: LiveSeason & { created_at_ms: bigint; updated_at_ms: bigint }): Season {
   return {
     id: season.id,
     club_id: season.club_id,

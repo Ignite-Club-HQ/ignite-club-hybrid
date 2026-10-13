@@ -1932,10 +1932,6 @@ export default function ClubDetailPage() {
                     <Megaphone className="h-4 w-4 mr-2 text-primary" />
                     Broadcast message
                   </DropdownMenuItem>
-                  {/* NEEDS-CANISTER: no club-wide player/guardian roster read exists
-                      on club_domain yet, so the export is hidden for Internet
-                      Identity accounts rather than firing Supabase. */}
-                  {!isIcpAccount && (
                   <DropdownMenuItem
                     disabled={isExportingRoster}
                     onSelect={async (e) => {
@@ -1969,7 +1965,6 @@ export default function ClubDetailPage() {
                     )}
                     Export player list
                   </DropdownMenuItem>
-                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

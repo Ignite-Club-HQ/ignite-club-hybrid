@@ -111,9 +111,22 @@ export default function MemberDetailSheet({
     let cancelled = false;
     setCanDM(null);
     if (resolveAuthBackend() === "icp") {
-      // NEEDS-CANISTER: no DM-eligibility check on the messaging canister yet.
-      // Fail open — get_or_create_dm enforces on the canister side.
-      setCanDM(true);
+      (async () => {
+        try {
+          const { Principal } = await import("@icp-sdk/core/principal");
+          const allowed = await withFeatureBackend("messaging", {
+            supabase: async () => true,
+            icp: async (ctx) => {
+              const { canLiveDmUser } = await import("@/live/features/messaging");
+              return canLiveDmUser(ctx, Principal.fromText(userId));
+            },
+          });
+          if (!cancelled) setCanDM(allowed !== false);
+        } catch {
+          // Fail open — the canister enforces can_dm_user on send either way.
+          if (!cancelled) setCanDM(true);
+        }
+      })();
       return () => {
         cancelled = true;
       };

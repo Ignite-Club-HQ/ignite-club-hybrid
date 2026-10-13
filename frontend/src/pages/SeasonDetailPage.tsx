@@ -28,8 +28,18 @@ import { SeasonAnalyticsCard } from "@/components/seasons/SeasonAnalyticsCard";
 import { BulkRolloverDialog } from "@/components/seasons/BulkRolloverDialog";
 import { SeasonEoiConfigCard } from "@/components/seasons/SeasonEoiConfigCard";
 import { EoiEmbedCard } from "@/components/eoi/EoiEmbedCard";
-import { useClubSeasons } from "@/hooks/useClubSeasons";
+import { useClubSeasons, mapLiveSeason } from "@/hooks/useClubSeasons";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { 
+  getLiveClubProfile, 
+  listLiveTeams, 
+  listLiveSeasonTeamAssignment,
+  publishLiveSeason,
+  archiveLiveSeason,
+  listLiveSeasons
+} from "@/live/features/club";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 export default SupabaseSeasonDetailPage;
 
@@ -44,8 +54,7 @@ function SupabaseSeasonDetailPage() {
   const [ackReadonly, setAckReadonly] = useState(false);
   const [ackIrreversible, setAckIrreversible] = useState(false);
   const [ackBackup, setAckBackup] = useState(false);
-  // NEEDS-CANISTER: season archive/publish/notify has no canister yet — an
-  // II principal has no Supabase session, so queries/mutations below no-op.
+  
   const isIcp = resolveAuthBackend() === "icp";
 
   const resetArchiveConfirm = () => {
@@ -60,73 +69,144 @@ function SupabaseSeasonDetailPage() {
   const { data: season, isLoading: seasonLoading } = useQuery({
     queryKey: ["season", seasonId],
     queryFn: async () => {
-      if (!seasonId || isIcp) return null;
-      const { data, error } = await supabase.from("seasons").select("*").eq("id", seasonId).maybeSingle();
-      if (error) throw error;
-      return data;
+      if (!seasonId) return null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.from("seasons").select("*").eq("id", seasonId).maybeSingle();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const seasons = await listLiveSeasons(ctx, clubId!);
+          const s = seasons.find((x) => x.id === seasonId);
+          return s ? mapLiveSeason(s as any) : null;
+        },
+      });
     },
-    enabled: !!seasonId && !isIcp,
+    enabled: !!seasonId,
   });
 
-const { data: club } = useQuery({
+  const { data: club } = useQuery({
     queryKey: ["club-detail", clubId],
     queryFn: async () => {
-      if (!clubId || isIcp) return null;
-      const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
-      return data;
+      if (!clubId) return null;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase.from("clubs").select("id, name").eq("id", clubId).maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const rows = await getLiveClubProfile(ctx, clubId);
+          return rows.length ? { id: rows[0].id, name: rows[0].name } : null;
+        },
+      });
     },
-    enabled: !!clubId && !isIcp,
+    enabled: !!clubId,
   });
 
   const { data: teams = [], isLoading: teamsLoading } = useQuery({
     queryKey: ["season-teams", seasonId],
     queryFn: async () => {
-      if (!seasonId || isIcp) return [];
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name, level_age, lifecycle_status")
-        .eq("season_id", seasonId)
-        .order("name");
-      if (error) throw error;
-      return data ?? [];
+      if (!seasonId) return [];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name, level_age, lifecycle_status")
+            .eq("season_id", seasonId)
+            .order("name");
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const all = await listLiveTeams(ctx, clubId!);
+          return all
+            .filter((t) => t.season_id === seasonId)
+            .map((t) => ({
+              id: t.id,
+              name: t.name,
+              level_age: t.level_age[0] || null,
+              lifecycle_status: t.lifecycle_status,
+            }));
+        },
+      });
     },
-    enabled: !!seasonId && !isIcp,
+    enabled: !!seasonId,
   });
 
   const teamIds = teams.map((t) => t.id);
   const { data: playerCounts = {} } = useQuery({
     queryKey: ["season-team-player-counts", seasonId, teamIds.join(",")],
     queryFn: async (): Promise<Record<string, number>> => {
-      if (teamIds.length === 0 || isIcp) return {};
-      const { data, error } = await supabase
-        .from("team_memberships")
-        .select("team_id")
-        .eq("season_id", seasonId!)
-        .eq("status", "active")
-        .eq("role", "player")
-        .in("team_id", teamIds);
-      if (error) throw error;
-      const counts: Record<string, number> = {};
-      (data ?? []).forEach((row: any) => {
-        counts[row.team_id] = (counts[row.team_id] ?? 0) + 1;
+      if (teamIds.length === 0) return {};
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("team_memberships")
+            .select("team_id")
+            .eq("season_id", seasonId!)
+            .eq("status", "active")
+            .eq("role", "player")
+            .in("team_id", teamIds);
+          if (error) throw error;
+          const counts: Record<string, number> = {};
+          (data ?? []).forEach((row: any) => {
+            counts[row.team_id] = (counts[row.team_id] ?? 0) + 1;
+          });
+          return counts;
+        },
+        icp: async (ctx) => {
+          const assignments = await listLiveSeasonTeamAssignment(ctx, seasonId!);
+          const counts: Record<string, number> = {};
+          assignments.forEach((a) => {
+            counts[a.team_id] = (counts[a.team_id] ?? 0) + 1;
+          });
+          return counts;
+        },
       });
-      return counts;
     },
-    enabled: teamIds.length > 0 && !isIcp,
+    enabled: teamIds.length > 0,
   });
 
   const totalPlayers = Object.values(playerCounts).reduce((a, b) => a + b, 0);
 
   const archiveMut = useMutation({
     mutationFn: async () => {
-      if (isIcp) throw new Error("Archiving seasons is not available yet.");
-      const { error } = await supabase.rpc("archive_season", { _season_id: seasonId! });
-      if (error) throw error;
-      const { data: notified, error: notifyError } = await supabase.rpc(
-        "notify_season_archived",
-        { _season_id: seasonId! },
-      );
-      return { notified: notified ?? 0, notifyError };
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.rpc("archive_season", { _season_id: seasonId! });
+          if (error) throw error;
+          const { data: notified, error: notifyError } = await supabase.rpc(
+            "notify_season_archived",
+            { _season_id: seasonId! },
+          );
+          return { notified: notified ?? 0, notifyError };
+        },
+        icp: async (ctx) => {
+          await archiveLiveSeason(ctx, seasonId!);
+          // Fan out notification
+          const assignments = await listLiveSeasonTeamAssignment(ctx, seasonId!);
+          const userIds = Array.from(new Set(assignments.map((a) => a.member_id)));
+          let notified = 0;
+          let notifyError = null;
+          if (userIds.length > 0) {
+            try {
+              await fanOutLiveNotifications(ctx, {
+                userIds,
+                clubId: clubId!,
+                kind: "season_archived",
+                body: `The ${season?.name || "current"} season has ended and teams are now read-only.`,
+                idempotencyKeyPrefix: `archive-season-${seasonId}-${Date.now()}`,
+                relatedId: seasonId,
+              });
+              notified = userIds.length;
+            } catch (e: any) {
+              notifyError = e;
+            }
+          }
+          return { notified, notifyError };
+        },
+      });
     },
     onSuccess: ({ notified, notifyError }) => {
       if (notifyError) {
@@ -148,11 +228,31 @@ const { data: club } = useQuery({
 
   const notifyMut = useMutation({
     mutationFn: async () => {
-      if (isIcp) throw new Error("Notifying members is not available yet.");
-      const rpc = season?.status === "active" ? "notify_season_published" : "notify_season_archived";
-      const { data, error } = await supabase.rpc(rpc as any, { _season_id: seasonId! });
-      if (error) throw error;
-      return data ?? 0;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const rpc = season?.status === "active" ? "notify_season_published" : "notify_season_archived";
+          const { data, error } = await supabase.rpc(rpc as any, { _season_id: seasonId! });
+          if (error) throw error;
+          return data ?? 0;
+        },
+        icp: async (ctx) => {
+          const assignments = await listLiveSeasonTeamAssignment(ctx, seasonId!);
+          const userIds = Array.from(new Set(assignments.map((a) => a.member_id)));
+          if (userIds.length === 0) return 0;
+          const isActive = season?.status === "active";
+          await fanOutLiveNotifications(ctx, {
+            userIds,
+            clubId: clubId!,
+            kind: isActive ? "season_published" : "season_archived",
+            body: isActive 
+              ? `The ${season?.name || "new"} season is now live!`
+              : `The ${season?.name || "current"} season has ended.`,
+            idempotencyKeyPrefix: `notify-season-${seasonId}-${Date.now()}`,
+            relatedId: seasonId,
+          });
+          return userIds.length;
+        },
+      });
     },
     onSuccess: (count) => {
       toast.success(
@@ -168,16 +268,40 @@ const { data: club } = useQuery({
 
   const publishMut = useMutation({
     mutationFn: async () => {
-      if (isIcp) throw new Error("Publishing seasons is not available yet.");
-      const { error } = await supabase.rpc("publish_season", { _season_id: seasonId! });
-      if (error) throw error;
-      // Fan out push notifications to all placed players (and guardians of children).
-      // Failure here should not block the publish — surface as a soft warning instead.
-      const { data: notified, error: notifyError } = await supabase.rpc(
-        "notify_season_published",
-        { _season_id: seasonId! },
-      );
-      return { notified: notified ?? 0, notifyError };
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabase.rpc("publish_season", { _season_id: seasonId! });
+          if (error) throw error;
+          const { data: notified, error: notifyError } = await supabase.rpc(
+            "notify_season_published",
+            { _season_id: seasonId! },
+          );
+          return { notified: notified ?? 0, notifyError };
+        },
+        icp: async (ctx) => {
+          await publishLiveSeason(ctx, seasonId!);
+          const assignments = await listLiveSeasonTeamAssignment(ctx, seasonId!);
+          const userIds = Array.from(new Set(assignments.map((a) => a.member_id)));
+          let notified = 0;
+          let notifyError = null;
+          if (userIds.length > 0) {
+            try {
+              await fanOutLiveNotifications(ctx, {
+                userIds,
+                clubId: clubId!,
+                kind: "season_published",
+                body: `The ${season?.name || "new"} season is now live!`,
+                idempotencyKeyPrefix: `publish-season-${seasonId}-${Date.now()}`,
+                relatedId: seasonId,
+              });
+              notified = userIds.length;
+            } catch (e: any) {
+              notifyError = e;
+            }
+          }
+          return { notified, notifyError };
+        },
+      });
     },
     onSuccess: ({ notified, notifyError }) => {
       if (notifyError) {
@@ -228,7 +352,7 @@ const { data: club } = useQuery({
         </Badge>
       </div>
 
-      {isDraft && !isIcp && (
+      {isDraft && (
         <Card className="border-primary/40">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -270,7 +394,7 @@ const { data: club } = useQuery({
         </Card>
       )}
 
-      {(isActive || isArchived) && !isIcp && (
+      {(isActive || isArchived) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -324,10 +448,10 @@ const { data: club } = useQuery({
 
       {(isActive || isArchived) && seasonId && <SeasonAnalyticsCard seasonId={seasonId} />}
 
-{seasonId && club && season && (
+      {seasonId && club && season && (
         <>
           <SeasonEoiConfigCard seasonId={seasonId} clubName={club.name} season={season as any} />
-{seasonId && club && season && season.eoi_enabled && (
+          {season.eoi_enabled && (
             <EoiEmbedCard 
               clubId={club.id} 
               seasonId={seasonId} 
@@ -338,7 +462,7 @@ const { data: club } = useQuery({
         </>
       )}
 
-      {isActive && !isIcp && (
+      {isActive && (
         <Card className="border-destructive/30">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2 text-destructive">
@@ -461,21 +585,13 @@ const { data: club } = useQuery({
         </Card>
       )}
 
-      {isArchived && (
-        <Card>
-          <CardContent className="p-4 flex items-start gap-2 text-sm text-muted-foreground">
-            <Archive className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <span>This season is archived and read-only. All history is preserved.</span>
-          </CardContent>
-        </Card>
-      )}
-
-      {bulkRolloverOpen && priorSeasons.length > 0 && seasonId && (
+      {bulkRolloverOpen && clubId && seasonId && (
         <BulkRolloverDialog
           open={bulkRolloverOpen}
           onOpenChange={setBulkRolloverOpen}
-          sourceSeasonId={priorSeasons[0].id}
+          clubId={clubId}
           targetSeasonId={seasonId}
+          priorSeasons={priorSeasons}
         />
       )}
     </div>

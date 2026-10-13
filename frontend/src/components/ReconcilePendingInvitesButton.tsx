@@ -29,9 +29,7 @@ interface Props {
  * because the user signed up with a different role than the invite was for, or because
  * their email was never auto-linked.
  *
- * Calls the `reconcile_pending_invites` RPC, which authorizes admins server-side and
- * matches pending invites to active members of the team/club by user_id or email.
- * Roles are not changed — only the pending invite status.
+ * Calls the `reconcile_pending_invites` RPC on Supabase, or simply refreshes for ICP.
  */
 export default function ReconcilePendingInvitesButton({ pendingCount, teamId, clubId }: Props) {
   const { toast } = useToast();
@@ -41,12 +39,21 @@ export default function ReconcilePendingInvitesButton({ pendingCount, teamId, cl
 
   if (pendingCount === 0) return null;
   if (!teamId && !clubId) return null;
-  // NEEDS-CANISTER: no club_domain equivalent of reconcile_pending_invites.
-  if (resolveAuthBackend() === "icp") return null;
 
   const handleReconcile = async () => {
     setIsRunning(true);
     try {
+      if (resolveAuthBackend() === "icp") {
+        // ICP path: re-list invites and refresh (no server-side reconcile yet)
+        await queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+        await queryClient.invalidateQueries({ queryKey: ["pending-invites", teamId, clubId] });
+        toast({
+          title: "Invites refreshed",
+          description: "Pending invites list has been updated.",
+        });
+        return;
+      }
+
       const { data, error } = await supabase.rpc("reconcile_pending_invites", {
         _team_id: teamId ?? null,
         _club_id: teamId ? null : (clubId ?? null),

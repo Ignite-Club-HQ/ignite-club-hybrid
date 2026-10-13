@@ -120,6 +120,13 @@ type SeasonTeamSummary =
    team_name: text;
    updated_at_ms: nat64;
  };
+type SeasonTeamAssignment = 
+ record {
+   added_at_ms: nat64;
+   member_id: text;
+   season_id: text;
+   team_id: text;
+ };
 type SeasonPlayerStat = 
  record {
    attendance_pct: float64;
@@ -309,6 +316,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   add_season_team_assignment: (season_id: text, team_id: text, member_id:
+    text) -> (variant {
+                Err: text;
+                Ok: SeasonTeamAssignment;
+              });
    add_team_captain: (club_id: text, team_id: text, user: principal) ->
     (variant {
        Err: text;
@@ -333,6 +345,10 @@ type Main =
        Err: text;
        Ok: TeamCreationRequest;
      });
+   archive_season: (season_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Season;
+                                         });
    archive_team: (id: text) -> (variant {
                                   Err: text;
                                   Ok: ClubTeam;
@@ -455,6 +471,11 @@ type Main =
                                            Err: text;
                                            Ok;
                                          });
+   enrol_in_class: (club_id: text, term_id: text, class_id: text, member_id:
+    text) -> (variant {
+                Err: text;
+                Ok: ClassEnrolment;
+              });
    ensure_club_conversations: (club_id: text) ->
     (variant {
        Err: text;
@@ -477,6 +498,17 @@ type Main =
                           Err: text;
                           Ok: Snapshot;
                         }) query;
+   free_usage_counters: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          members: nat;
+          news_posts: nat;
+          pending_invites: nat;
+          teams: nat;
+        };
+     }) query;
    freeze_club: (club: text, rev: nat64) -> (variant {
                                                Err: text;
                                                Ok: nat64;
@@ -494,6 +526,11 @@ type Main =
                  text;
                  text;
                };
+     }) query;
+   get_club_kind: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
      }) query;
    get_club_link: (link_id: text) ->
     (variant {
@@ -533,6 +570,7 @@ type Main =
        Err: text;
        Ok: vec ClubSubscription;
      }) query;
+   get_club_theme_json: (club_id: text) -> (opt text) query;
    get_current_season: (club_id: text) ->
     (variant {
        Err: text;
@@ -555,6 +593,12 @@ type Main =
     (variant {
        Err: text;
        Ok: PendingInvite;
+     }) query;
+   get_pending_invite_label: (id: text) -> (opt text) query;
+   get_season_eoi_config: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt text;
      }) query;
    get_shell_team_by_token: (token: text) ->
     (variant {
@@ -641,6 +685,11 @@ type Main =
                            Err: text;
                            Ok: vec Child;
                          }) query;
+   list_class_enrolments: (club_id: text, term_id: opt text, class_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: vec ClassEnrolment;
+                  }) query;
    list_club_admins: (club_id: text) -> (vec principal) query;
    list_club_join_requests: (club_id: text) ->
     (variant {
@@ -711,6 +760,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec SeasonPlayerStat;
+     }) query;
+   list_season_team_assignment: (season_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec SeasonTeamAssignment;
      }) query;
    list_season_team_summary: (season_id: text) ->
     (variant {
@@ -798,6 +852,16 @@ type Main =
                          Err: text;
                          Ok;
                        });
+   move_pending_invite_team: (id: text, team_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok: PendingInvite;
+     });
+   move_season_team_assignment: (season_id: text, member_id: text,
+    new_team_id: text) -> (variant {
+                             Err: text;
+                             Ok: SeasonTeamAssignment;
+                           });
    mutate: (req: Request) -> (variant {
                                 Err: text;
                                 Ok: Mutation;
@@ -805,6 +869,10 @@ type Main =
    my_role_grants: () -> (vec RoleGrant) query;
    profile_team_history: (profile_id: text) ->
     (vec ProfileTeamHistoryEntry) query;
+   publish_season: (season_id: text) -> (variant {
+                                           Err: text;
+                                           Ok: Season;
+                                         });
    purge_expired_deletions: () -> (variant {
                                      Err: text;
                                      Ok: nat32;
@@ -839,6 +907,11 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   remove_season_team_assignment: (season_id: text, member_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    remove_team_captain: (club_id: text, team_id: text, user: principal) ->
     (variant {
        Err: text;
@@ -907,6 +980,11 @@ type Main =
                                              Err: text;
                                              Ok;
                                            });
+   rollover_season: (from_season_id: text, new_name: text, start_date: 
+    text, end_date: text) -> (variant {
+                                Err: text;
+                                Ok: Season;
+                              });
    rotate_team_invite_link: (id: text) ->
     (variant {
        Err: text;
@@ -998,6 +1076,10 @@ type Main =
        Err: text;
        Ok: ClubSettings;
      });
+   set_club_kind: (club_id: text, kind: text) -> (variant {
+                                                    Err: text;
+                                                    Ok;
+                                                  });
    set_club_logo_only_mode: (club_id: text, enabled: bool) ->
     (variant {
        Err: text;
@@ -1017,6 +1099,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ClubSettings;
+     });
+   set_club_theme_json: (club_id: text, theme_json: text) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_club_theme_palette: (club_id: text, primary: opt text, secondary:
     opt text, accent: opt text, dark_primary: opt text, dark_secondary:
@@ -1054,10 +1141,20 @@ type Main =
        Err: text;
        Ok: Child;
      });
+   set_pending_invite_label: (id: text, label: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_pii_canister: (id: principal) -> (variant {
                                            Err: text;
                                            Ok;
                                          });
+   set_season_eoi_config: (season_id: text, config_json: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_team_folder: (team_id: text, folder_id: opt text) ->
     (variant {
        Err: text;
@@ -1115,6 +1212,11 @@ type Main =
        Err: text;
        Ok: NewsPost;
      });
+   update_pending_invite_role: (id: text, role: opt text) ->
+    (variant {
+       Err: text;
+       Ok: PendingInvite;
+     });
    /// Public: aggregate record counts (shown in admin settings). Counts only —
    /// no record contents, so no PII is exposed.
    usage_stats: () ->
@@ -1128,6 +1230,10 @@ type Main =
                     Err: text;
                     Ok: Account;
                   }) query;
+   withdraw_from_class: (id: text) -> (variant {
+                                         Err: text;
+                                         Ok;
+                                       });
  };
 type Listing = 
  record {
@@ -1324,6 +1430,17 @@ type ClubBranding =
    contact_email: opt text;
    logo_url: opt text;
    name: text;
+ };
+type ClassEnrolment = 
+ record {
+   class_id: text;
+   club_id: text;
+   created_at_ms: nat64;
+   id: text;
+   member_id: text;
+   status: text;
+   term_id: text;
+   updated_at_ms: nat64;
  };
 type Child = 
  record {

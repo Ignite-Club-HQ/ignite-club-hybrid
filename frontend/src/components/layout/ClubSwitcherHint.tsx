@@ -29,9 +29,24 @@ export function markClubSwitcherHintSeen(userId: string): void {
   } catch {
     /* storage unavailable — hint simply shows again next launch */
   }
-  // NEEDS-CANISTER: identity_access profile has no club_switcher_hint_seen_at
-  // field. ICP accounts keep the local-only dismissal flag above.
-  if (resolveAuthBackend() === "icp") return;
+  if (resolveAuthBackend() === "icp") {
+    // Persist across devices via the identity_access canister; local flag
+    // above keeps the UI instant.
+    void (async () => {
+      try {
+        const [{ getCurrentInternetIdentity }, { setIcpClubSwitcherHintSeen }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityProfile"),
+        ]);
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) return;
+        await setIcpClubSwitcherHintSeen(identity);
+      } catch (err) {
+        console.warn("[ClubSwitcherHint] Failed to persist dismissal to canister:", err);
+      }
+    })();
+    return;
+  }
   // Persist across devices; local flag above keeps the UI instant.
   void supabase
     .from("profiles")
@@ -41,11 +56,22 @@ export function markClubSwitcherHintSeen(userId: string): void {
 
 /** Server-side dismissal state, so the hint stays dismissed on other devices. */
 export async function fetchClubSwitcherHintSeen(userId: string): Promise<boolean> {
-  // NEEDS-CANISTER: no canister-side dismissal state for ICP accounts yet —
-  // fall back to the local-only flag so the hint still behaves (just
-  // per-device rather than per-account).
   if (resolveAuthBackend() === "icp") {
-    return hasSeenClubSwitcherHint(userId);
+    try {
+      const [{ getCurrentInternetIdentity }, { getIcpClubSwitcherHintSeen }] = await Promise.all([
+        import("@/live/internetIdentityAuth"),
+        import("@/live/identityProfile"),
+      ]);
+      const identity = await getCurrentInternetIdentity();
+      if (!identity) return hasSeenClubSwitcherHint(userId);
+      const seen = await getIcpClubSwitcherHintSeen(identity);
+      if (seen) markLocalClubSwitcherHintSeen(userId);
+      return seen;
+    } catch {
+      // Canister/network failure — fall back to the local-only flag so the
+      // hint still behaves (just per-device rather than per-account).
+      return hasSeenClubSwitcherHint(userId);
+    }
   }
   const { data, error } = await supabase
     .from("profiles")

@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveFreeUsageCounters } from "@/live/features/club";
 
 const REFRESH_EVENT = "club-free-usage:refresh";
 
@@ -15,7 +17,6 @@ export function notifyClubFreeUsageChanged(clubId?: string | null) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(REFRESH_EVENT, { detail: { clubId: clubId ?? null } }));
 }
-
 
 export const FREE_PHOTO_UPLOADS_PER_CYCLE = 10;
 export const FREE_CHAT_PHOTOS_PER_CYCLE = 10;
@@ -87,13 +88,6 @@ export function resolveClubFreeUsage(row: Record<string, unknown>): ClubFreeUsag
   };
 }
 
-/**
- * Last-known meter snapshot persisted per club so cold-start pages (Media)
- * can paint the usage meter at its final size immediately instead of popping
- * it in ~130px tall once the RPC returns (which reads as a page "shake").
- * Display-only — never used for cap enforcement. `ignite_` prefix so
- * `clearUserScopedCaches()` sweeps it on sign-out / account switch.
- */
 export interface ClubFreeUsageSnapshot {
   isPro: boolean;
   photoUsed: number;
@@ -143,11 +137,28 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<ClubFreeUsage | null> => {
-      // NEEDS-CANISTER: the Free-tier usage meter (get_club_free_usage RPC)
-      // has no canister equivalent. Internet Identity users must never hit
-      // Supabase, so the meter stays unresolved (callers treat null as
-      // "no cap info") until a usage-counter canister exists.
-      if (resolveAuthBackend() === "icp") return null;
+      if (resolveAuthBackend() === "icp") {
+        const counters = await withFeatureBackend("membership", {
+          icp: (ctx) => getLiveFreeUsageCounters(ctx, clubId!),
+          supabase: async () => null,
+        });
+        if (!counters) return null;
+
+        // Structural counters (teams/members/invites/news) from the canister.
+        // The canister does not track cycle-based usage like photos/polls yet,
+        // so those are returned as 0/unlimited (never capped).
+        return {
+          isPro: false,
+          cycleStart: null,
+          cycleEnd: null,
+          photo: { used: 0, limit: FREE_PHOTO_UPLOADS_PER_CYCLE, atCountCap: false, atCap: false },
+          chatPhoto: { used: 0, limit: FREE_CHAT_PHOTOS_PER_CYCLE, atCap: false },
+          file: { used: 0, limit: FREE_FILE_COUNT, storageUsed: 0, storageLimit: FREE_FILE_STORAGE_BYTES, atCountCap: false, atStorageCap: false, atCap: false },
+          chatFile: { used: 0, limit: FREE_CHAT_FILE_COUNT, storageUsed: 0, storageLimit: FREE_CHAT_FILE_STORAGE_BYTES, atCountCap: false, atStorageCap: false, atCap: false },
+          poll: { used: 0, limit: FREE_POLLS_PER_CYCLE, atCap: false },
+        };
+      }
+
       const { data, error } = await supabase.rpc("get_club_free_usage", {
         _club_id: clubId!,
       });
@@ -170,9 +181,6 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     },
   });
 
-  // Refresh immediately when an upload/poll-create elsewhere in the app
-  // dispatches the global refresh event. Matches on clubId when supplied,
-  // otherwise refetches for all mounted instances.
   useEffect(() => {
     if (!enabled) return;
     const onRefresh = (e: Event) => {
@@ -187,7 +195,6 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
 
   return { usage: data ?? null, isLoading, refetch };
 }
-
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

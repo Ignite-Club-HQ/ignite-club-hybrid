@@ -33,7 +33,7 @@ import { Crown } from "lucide-react";
 import { lookupInvitableUserByEmail } from "@/lib/inviteEmailDedupe";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams } from "@/live/features/club";
+import { getLiveClubProfile, getLiveClubSettings, saveLiveTeam, listLiveTeams, getLiveClubThemeJson } from "@/live/features/club";
 import { candidOpt } from "@/live/features/candid";
 import { addLiveRoleGrant } from "@/live/features/membership";
 import { createLivePendingInvite } from "@/live/features/club";
@@ -140,45 +140,50 @@ export default function ClubSetupWizardPage() {
     queryKey: ["club", clubId, "setup", providerKey],
     queryFn: async () => {
       if (useIcp) {
-        // NEEDS-CANISTER: club_domain's ClubSettings has no per-field theme
-        // breakdown matching the Supabase HSL columns; only name/logo/theme
-        // enabled are mapped, which is enough to drive this wizard's steps.
-        const [profile, settings] = await withFeatureBackend("membership", {
+        const [profile, settings, themeJson] = await withFeatureBackend("membership", {
           icp: (ctx) => Promise.all([
             getLiveClubProfile(ctx, clubId!),
             getLiveClubSettings(ctx, clubId!),
+            getLiveClubThemeJson(ctx, clubId!),
           ]),
           supabase: async () => { throw new Error("unreachable"); },
         });
+
+        let theme: any = {};
+        if (themeJson) {
+          try { theme = JSON.parse(themeJson); } catch (e) { console.warn("Theme parse failed", e); }
+        }
+
         if (profile.length === 0) return null;
         const profileVal = profile[0];
+        const setts = settings[0];
         return {
-          kind: "club",
+          kind: setts?.kind?.[0] || "club",
           name: profileVal.name,
-          contact_email: null,
+          contact_email: setts?.contact_email?.[0] ?? null,
           logo_url: profileVal.logo_url?.[0] ?? null,
-          theme_primary_h: null,
-          theme_primary_s: null,
-          theme_primary_l: null,
-          theme_secondary_h: null,
-          theme_secondary_s: null,
-          theme_secondary_l: null,
-          theme_accent_h: null,
-          theme_accent_s: null,
-          theme_accent_l: null,
-          theme_dark_primary_h: null,
-          theme_dark_primary_s: null,
-          theme_dark_primary_l: null,
-          theme_dark_secondary_h: null,
-          theme_dark_secondary_s: null,
-          theme_dark_secondary_l: null,
-          theme_dark_accent_h: null,
-          theme_dark_accent_s: null,
-          theme_dark_accent_l: null,
-          show_logo_in_header: true,
-          show_name_in_header: true,
-          logo_only_mode: false,
-          theme_enabled: settings[0]?.theme_enabled ?? false,
+          theme_primary_h: theme.primary?.h ?? null,
+          theme_primary_s: theme.primary?.s ?? null,
+          theme_primary_l: theme.primary?.l ?? null,
+          theme_secondary_h: theme.secondary?.h ?? null,
+          theme_secondary_s: theme.secondary?.s ?? null,
+          theme_secondary_l: theme.secondary?.l ?? null,
+          theme_accent_h: theme.accent?.h ?? null,
+          theme_accent_s: theme.accent?.s ?? null,
+          theme_accent_l: theme.accent?.l ?? null,
+          theme_dark_primary_h: theme.dark_primary?.h ?? null,
+          theme_dark_primary_s: theme.dark_primary?.s ?? null,
+          theme_dark_primary_l: theme.dark_primary?.l ?? null,
+          theme_dark_secondary_h: theme.dark_secondary?.h ?? null,
+          theme_dark_secondary_s: theme.dark_secondary?.s ?? null,
+          theme_dark_secondary_l: theme.dark_secondary?.l ?? null,
+          theme_dark_accent_h: theme.dark_accent?.h ?? null,
+          theme_dark_accent_s: theme.dark_accent?.s ?? null,
+          theme_dark_accent_l: theme.dark_accent?.l ?? null,
+          show_logo_in_header: setts?.header_logo_enabled ?? true,
+          show_name_in_header: setts?.header_club_name_enabled ?? true,
+          logo_only_mode: setts?.logo_only_mode ?? false,
+          theme_enabled: setts?.theme_enabled ?? false,
           primary_sponsor_id: null,
         } as SetupClub;
       }

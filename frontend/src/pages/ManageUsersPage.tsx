@@ -457,8 +457,25 @@ function SupabaseManageUsersPage() {
 
   const deleteAccountMutation = useMutation({
     mutationFn: async ({ userId, immediate, gdprRequest = false }: { userId: string; immediate: boolean; gdprRequest?: boolean }) => {
-      // NEEDS-CANISTER: admin-delete-account not yet available on canister
-      if (resolveAuthBackend() === "icp") throw new Error("Account deletion is not yet available for Internet Identity accounts.");
+      if (resolveAuthBackend() === "icp") {
+        // identity_access.erase_account is app_admin-gated and immediate —
+        // there is no canister-side "scheduled" deletion, so any delete type
+        // selected here erases the account straight away.
+        const [{ getCurrentInternetIdentity }, { connectLiveIdentityAccessClientWithIdentity }] = await Promise.all([
+          import("@/live/internetIdentityAuth"),
+          import("@/live/identityAccess"),
+        ]);
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const identity = await getCurrentInternetIdentity();
+        if (!identity) throw new Error("You need to sign in again.");
+        const { client } = await connectLiveIdentityAccessClientWithIdentity(getActiveIcpTarget(), identity);
+        try {
+          await client.eraseAccount(userId);
+        } finally {
+          client.dispose();
+        }
+        return { success: true };
+      }
       const { data, error } = await supabase.functions.invoke('admin-delete-account', {
         body: { userId, immediate, gdprRequest }
       });

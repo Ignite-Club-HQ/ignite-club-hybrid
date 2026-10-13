@@ -182,10 +182,11 @@ export default function ClubNewsComposer({ open, onOpenChange, defaultClubId }: 
     // grant is derived from that prefix — news/<clubId>/ paths would upload
     // fine but be undecryptable for other club members.
     const path = `clubs/${clubIdForPath}/news/${crypto.randomUUID()}.${ext}`;
-    // ICP blob store: when configured + II session, bytes go on-chain.
-    // NEEDS-CANISTER: with no blob store configured there is no II-safe
-    // fallback (a raw Supabase Storage upload has no auth), so fail loudly
-    // instead of silently diverting news attachments to Supabase.
+    // ICP blob store: when configured + II session, bytes go on-chain. The
+    // blob-store path already works end-to-end once a canister id is
+    // configured in Placement Settings; with none configured there is no
+    // II-safe fallback (a raw Supabase Storage upload has no auth), so fail
+    // loudly instead of silently diverting news attachments to Supabase.
     const blobUpload = await tryUploadMediaToBlobStore({
       storagePath: path,
       file,

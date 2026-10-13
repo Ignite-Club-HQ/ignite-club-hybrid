@@ -1926,3 +1926,83 @@ export async function getLiveEventAutoReminder(ctx: FeatureBackendContext, event
   const result = await actor.get_event_auto_reminder(eventId);
   return result[0] ?? null;
 }
+
+/** Caller's favourite event titles (events_domain `list_favourite_event_titles`). */
+export async function listLiveFavouriteEventTitles(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.list_favourite_event_titles();
+}
+
+export async function addLiveFavouriteEventTitle(ctx: FeatureBackendContext, title: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.add_favourite_event_title(title), "Save favourite title");
+}
+
+export async function removeLiveFavouriteEventTitle(ctx: FeatureBackendContext, title: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.remove_favourite_event_title(title), "Remove favourite title");
+}
+
+/** Caller's saved addresses (events_domain `list_saved_locations`). */
+export async function listLiveSavedLocations(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return actor.list_saved_locations();
+}
+
+export async function saveLiveLocation(
+  ctx: FeatureBackendContext,
+  locationLabel: string,
+  address: string,
+  lat: number,
+  lng: number,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.save_location(locationLabel, address, lat, lng), "Save location");
+}
+
+export async function deleteLiveSavedLocation(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_saved_location(id), "Delete saved location");
+}
+
+/**
+ * Per-(club, team, child|self) default training RSVP ("going"/"not_going").
+ * `childId` null means the default is for the caller's own account.
+ */
+export async function getLiveTrainingDefault(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  childId?: string | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_training_default(clubId, teamId, candidOpt(childId)),
+    "Get training default",
+  );
+}
+
+export async function setLiveTrainingDefault(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  teamId: string,
+  childId: string | null | undefined,
+  defaultRsvp: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_training_default(clubId, teamId, candidOpt(childId), defaultRsvp),
+    "Set training default",
+  );
+}
+
+/** When the caller's RSVP row for an event was created (ms epoch), or null if none. */
+export async function getLiveRsvpCreatedAt(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  accountId: string,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const result = await actor.get_rsvp_created_at(eventId, accountId);
+  return result[0] ?? null;
+}

@@ -79,6 +79,10 @@ persistent actor class Main(governorInit : Principal) {
   var savedLocations : [Types.SavedLocation];
   var trainingDefaults : [Types.TrainingDefault];
   var rsvpCreatedAt : [Types.RsvpCreatedAt];
+  // Per-match captain/vice-captain + goalkeeper assignments (events_domain
+  // extras, migration 20261015_000000).
+  var matchCaptainAssignments : [Types.MatchCaptainAssignment];
+  var matchGoalkeeperAssignments : [Types.MatchGoalkeeperAssignment];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -1557,6 +1561,125 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
   };
 
+  // ---- Match captains / goalkeepers / player stats report ----
+  func validRefKind(value : Text) : Bool { value == "account" or value == "child" };
+
+  public shared ({ caller }) func set_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok : Types.MatchCaptainAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or (role != "captain" and role != "vice")) return #Err("Invalid captain assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchCaptainAssignment = { event_id; ref_kind; ref_id; role; assigned_by = caller; updated_at_ms = nowMs() };
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchCaptainAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  public shared ({ caller }) func set_match_goalkeeper(event_id : Text, ref_kind : Text, ref_id : Text, period : Text) : async { #Ok : Types.MatchGoalkeeperAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or not valid(period)) return #Err("Invalid goalkeeper assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchGoalkeeperAssignment = { event_id; ref_kind; ref_id; period; assigned_by = caller; updated_at_ms = nowMs() };
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_goalkeeper(event_id : Text, period : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_goalkeepers(event_id : Text) : async { #Ok : [Types.MatchGoalkeeperAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchGoalkeeperAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  // Folds one stat bump into rows, inserting a fresh row keyed by
+  // (ref_kind, ref_id) on first sight.
+  func bumpPlayerStat(rows : [Types.PlayerStatRow], ref_kind : Text, ref_id : Text, mvp : Nat32, captain : Nat32, vice : Nat32, gk : Nat32) : [Types.PlayerStatRow] {
+    switch (rows.find(func(r) = r.ref_kind == ref_kind and r.ref_id == ref_id)) {
+      case (?existing) {
+        rows.filter(func(r) = not (r.ref_kind == ref_kind and r.ref_id == ref_id)).concat([{
+          existing with
+          mvp_count = existing.mvp_count + mvp;
+          captain_count = existing.captain_count + captain;
+          vice_count = existing.vice_count + vice;
+          goalkeeper_count = existing.goalkeeper_count + gk;
+        }]);
+      };
+      case null { rows.concat([{ ref_kind; ref_id; mvp_count = mvp; captain_count = captain; vice_count = vice; goalkeeper_count = gk }]) };
+    };
+  };
+
+  // Aggregates MVP counts (from existing GameResult rows), captain/vice
+  // counts (MatchCaptainAssignment) and goalkeeper counts
+  // (MatchGoalkeeperAssignment) per player over every non-deleted event for
+  // club_id (optionally narrowed to team_id) whose starts_at_ms falls in
+  // [from_ms, to_ms]. Team-staff authorization reuses managesTeam (club_admin
+  // / team_admin / coach), same as create_team_training_pause.
+  public query ({ caller }) func get_player_stats_report(club_id : Text, team_id : ?Text, from_ms : Nat64, to_ms : Nat64) : async { #Ok : [Types.PlayerStatRow]; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    let teamAllowed = switch (team_id) { case (?t) managesTeam(caller, club_id, t); case null false };
+    if (not isGovernor(caller) and not hasRole(caller, "club_admin", club_id, null) and not teamAllowed) return #Err("Team staff required");
+    let matchingEvents = events.filter(func(e) = e.club_id == club_id and not e.deleted and e.starts_at_ms >= from_ms and e.starts_at_ms <= to_ms and (switch (team_id) { case (?t) e.team_id == ?t; case null true }));
+    let eventIds = matchingEvents.map(func(e) = e.id);
+    var rows : [Types.PlayerStatRow] = [];
+    for (cap in matchCaptainAssignments.values()) {
+      if (eventIds.any(func(id) = id == cap.event_id)) {
+        if (cap.role == "captain") { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 1, 0, 0) }
+        else { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 0, 1, 0) };
+      };
+    };
+    for (gk in matchGoalkeeperAssignments.values()) {
+      if (eventIds.any(func(id) = id == gk.event_id)) {
+        rows := bumpPlayerStat(rows, gk.ref_kind, gk.ref_id, 0, 0, 0, 1);
+      };
+    };
+    for (gr in gameResults.values()) {
+      switch (gr.event_id) {
+        case (?eid) {
+          if (eventIds.any(func(id) = id == eid)) {
+            switch (gr.mvp_player_id) {
+              case (?pid) { rows := bumpPlayerStat(rows, "account", pid, 1, 0, 0, 0) };
+              case null {};
+            };
+          };
+        };
+        case null {};
+      };
+    };
+    #Ok(rows)
+  };
+
   // ---- Workstream D: active game mirror (server-side push notification driver) ----
   // Shared-session model (mirrors Supabase active_games): one active row per
   // team; a null team scopes the row to the caller alone.
@@ -2088,39 +2211,39 @@ persistent actor class Main(governorInit : Principal) {
   };
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
   // Any NEW stored principal / principal-text field added to this canister must be added here.
-  public shared ({ caller }) func rekey_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
-    rekeyImpl(caller, old, new, dry_run, false)
+  public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, false)
   };
 
-  // Same as rekey_principal, but allowed when the new sign-in ID already has data:
-  // both IDs' records end up under the new one (keyed duplicates keep the new row).
-  public shared ({ caller }) func merge_principal(old : Principal, new : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
-    rekeyImpl(caller, old, new, dry_run, true)
+  // Same as rekey_principal, but allowed when the new_principal sign-in ID already has data:
+  // both IDs' records end up under the new_principal one (keyed duplicates keep the new_principal row).
+  public shared ({ caller }) func merge_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
+    rekeyImpl(caller, old, new_principal, dry_run, true)
   };
 
-  func rekeyImpl(caller : Principal, old : Principal, new : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
+  func rekeyImpl(caller : Principal, old : Principal, new_principal : Principal, dry_run : Bool, allowMerge : Bool) : { #ok : Nat; #err : Text } {
     if (not isGovernor(caller)) return #err("Forbidden");
-    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
-    if (old.equal(new)) return #err("old and new must differ");
+    if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new_principal)) return #err("old and new_principal must differ");
     if (old.equal(governor)) return #err("Cannot rekey the governor");
     let oldText = Principal.toText(old);
-    let newText = Principal.toText(new);
+    let newText = Principal.toText(new_principal);
 
-    // Conflict guard: count NON-EPHEMERAL records that already reference `new`.
+    // Conflict guard: count NON-EPHEMERAL records that already reference `new_principal`.
     // Ephemeral/excluded: eventViews (telemetry), pushReachability (push reachability ping).
     var conflicts = 0;
-    conflicts += roles.filter(func(r) = r.user.equal(new)).size();
-    conflicts += events.filter(func(e) = e.creator.equal(new)).size();
-    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new)).size();
-    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new)).size();
-    conflicts += series.filter(func(s) = s.creator.equal(new)).size();
-    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new)).size();
-    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new)).size();
-    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new)).size();
-    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new)).size();
-    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new)).size();
-    conflicts += activeGames.filter(func(g) = g.user_id.equal(new)).size();
-    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new))) 1 else 0);
+    conflicts += roles.filter(func(r) = r.user.equal(new_principal)).size();
+    conflicts += events.filter(func(e) = e.creator.equal(new_principal)).size();
+    conflicts += associationEvents.filter(func(a) = a.created_by.equal(new_principal)).size();
+    conflicts += lineupSnapshots.filter(func(s) = s.updated_by.equal(new_principal)).size();
+    conflicts += series.filter(func(s) = s.creator.equal(new_principal)).size();
+    conflicts += eventAttendance.filter(func(a) = a.marked_by.equal(new_principal)).size();
+    conflicts += eventGuests.filter(func(g) = g.added_by.equal(new_principal)).size();
+    conflicts += coachNotes.filter(func(c) = c.updated_by.equal(new_principal)).size();
+    conflicts += teamTrainingPauses.filter(func(t) = t.created_by.equal(new_principal)).size();
+    conflicts += gameResults.filter(func(g) = g.saved_by.equal(new_principal)).size();
+    conflicts += activeGames.filter(func(g) = g.user_id.equal(new_principal)).size();
+    conflicts += (if (bulkAccessPrincipals.any(func(p) = p.equal(new_principal))) 1 else 0);
     conflicts += rsvps.filter(func(r) = r.account_id == newText).size();
     conflicts += attendance.filter(func(a) = a.account_id == newText).size();
     conflicts += duties.filter(func(d) = d.account_id == newText).size();
@@ -2173,18 +2296,18 @@ persistent actor class Main(governorInit : Principal) {
     if (eventViewOldCount > 0) changed += eventViewOldCount;
 
     if (not dry_run) {
-      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new }) else r);
-      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new }) else e);
-      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new }) else a);
-      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new }) else s);
-      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new }) else s);
-      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new }) else a);
-      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new }) else g);
-      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new }) else c);
-      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new }) else t);
-      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new }) else g);
-      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new }) else g);
-      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new]);
+      if (rolesOld > 0) roles := roles.map(func(r) = if (r.user.equal(old)) ({ r with user = new_principal }) else r);
+      if (eventsOld > 0) events := events.map(func(e) = if (e.creator.equal(old)) ({ e with creator = new_principal }) else e);
+      if (assocOld > 0) associationEvents := associationEvents.map(func(a) = if (a.created_by.equal(old)) ({ a with created_by = new_principal }) else a);
+      if (lineupSnapOld > 0) lineupSnapshots := lineupSnapshots.map(func(s) = if (s.updated_by.equal(old)) ({ s with updated_by = new_principal }) else s);
+      if (seriesOld > 0) series := series.map(func(s) = if (s.creator.equal(old)) ({ s with creator = new_principal }) else s);
+      if (eventAttOld > 0) eventAttendance := eventAttendance.map(func(a) = if (a.marked_by.equal(old)) ({ a with marked_by = new_principal }) else a);
+      if (eventGuestOld > 0) eventGuests := eventGuests.map(func(g) = if (g.added_by.equal(old)) ({ g with added_by = new_principal }) else g);
+      if (coachNoteOld > 0) coachNotes := coachNotes.map(func(c) = if (c.updated_by.equal(old)) ({ c with updated_by = new_principal }) else c);
+      if (trainingPauseOld > 0) teamTrainingPauses := teamTrainingPauses.map(func(t) = if (t.created_by.equal(old)) ({ t with created_by = new_principal }) else t);
+      if (gameResultOld > 0) gameResults := gameResults.map(func(g) = if (g.saved_by.equal(old)) ({ g with saved_by = new_principal }) else g);
+      if (activeGameOld > 0) activeGames := activeGames.map(func(g) = if (g.user_id.equal(old)) ({ g with user_id = new_principal }) else g);
+      if (bulkOld) bulkAccessPrincipals := bulkAccessPrincipals.filter(func(p) = not p.equal(old)).concat([new_principal]);
       if (rsvpOld > 0) rsvps := rsvps.map(func(r) = if (r.account_id == oldText) ({ r with account_id = newText }) else r);
       if (attendanceOld > 0) attendance := attendance.map(func(a) = if (a.account_id == oldText) ({ a with account_id = newText }) else a);
       if (dutyOld > 0) duties := duties.map(func(d) = if (d.account_id == oldText) ({ d with account_id = newText }) else d);
@@ -2192,16 +2315,16 @@ persistent actor class Main(governorInit : Principal) {
       if (guardianOld > 0) childGuardians := childGuardians.map(func(c) = if (c.guardian_id == oldText) ({ c with guardian_id = newText }) else c);
 
       if (pushReachOldHas) {
-        let newHas = pushReachability.any(func(p) = p.user.equal(new));
+        let newHas = pushReachability.any(func(p) = p.user.equal(new_principal));
         if (newHas) {
           pushReachability := pushReachability.filter(func(p) = not p.user.equal(old));
         } else {
-          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new }) else p);
+          pushReachability := pushReachability.map(func(p) = if (p.user.equal(old)) ({ p with user = new_principal }) else p);
         };
       };
       if (eventViewOldCount > 0) {
-        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new))))
-          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new }) else v);
+        eventViews := eventViews.filter(func(v) = not (v.viewer.equal(old) and eventViews.any(func(w) = w.event_id == v.event_id and w.viewer.equal(new_principal))))
+          .map(func(v) = if (v.viewer.equal(old)) ({ v with viewer = new_principal }) else v);
       };
     };
 

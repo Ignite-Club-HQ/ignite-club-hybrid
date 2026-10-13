@@ -32,6 +32,16 @@ interface ReportContentDialogProps {
   detailsId: string;
   invokeName: string;
   buildBody: (reason: string, additionalDetails: string | undefined) => Record<string, unknown>;
+  /**
+   * Canister-side moderation report fields. When provided, Internet Identity
+   * accounts submit via messaging_domain's submit_content_report instead of
+   * the (Supabase-only) edge function; subjectKind/subjectId identify what is
+   * being reported (e.g. "message" / messageId) and conversationId scopes it
+   * to the chat it was reported from when known.
+   */
+  subjectKind?: string;
+  subjectId?: string;
+  conversationId?: string | null;
 }
 
 export function ReportContentDialog({
@@ -45,20 +55,20 @@ export function ReportContentDialog({
   detailsId,
   invokeName,
   buildBody,
+  subjectKind,
+  subjectId,
+  conversationId,
 }: ReportContentDialogProps) {
   const [reason, setReason] = useState("");
   const [additionalDetails, setAdditionalDetails] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // NEEDS-CANISTER: content reporting is admin moderation infra with no
-  // canister counterpart. The dialog should not even be rendered for II
-  // users — callers are expected to gate on resolveAuthBackend() — but we
-  // also no-op defensively here in case a caller forgets. The early return
-  // must sit AFTER the hooks above (Rules of Hooks); the gate value is
-  // stable per session.
-  if (resolveAuthBackend() === "icp") {
-    return null;
-  }
+  // Internet Identity accounts submit through messaging_domain's
+  // submit_content_report (see live/features/messaging.ts) when the caller
+  // supplied subjectKind/subjectId; without those this degrades to a no-op
+  // (dialog closes) rather than throwing, matching the previous defensive
+  // behaviour for any caller that forgot to pass them.
+  const isIcp = resolveAuthBackend() === "icp";
 
   const handleClose = () => {
     setReason("");
@@ -72,8 +82,32 @@ export function ReportContentDialog({
       return;
     }
 
+    const reasonLabel = reasons.find((option) => option.value === reason)?.label || reason;
+    const details = additionalDetails.trim() || undefined;
+
     setSubmitting(true);
     try {
+      if (isIcp) {
+        if (!subjectKind || !subjectId) {
+          // No canister subject identity supplied by this caller — close
+          // quietly rather than submitting a Supabase report an II account
+          // cannot be attributed to.
+          handleClose();
+          return;
+        }
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        await withFeatureBackend("messaging", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            const { submitLiveContentReport } = await import("@/live/features/messaging");
+            await submitLiveContentReport(ctx, subjectKind, subjectId, conversationId ?? null, reasonLabel, details);
+          },
+        });
+        toast.success("Report submitted successfully. Our team will review it.");
+        handleClose();
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error(`You must be logged in to report a ${subject.toLowerCase()}`);
@@ -81,10 +115,7 @@ export function ReportContentDialog({
       }
 
       const response = await supabase.functions.invoke(invokeName, {
-        body: buildBody(
-          reasons.find((option) => option.value === reason)?.label || reason,
-          additionalDetails.trim() || undefined,
-        ),
+        body: buildBody(reasonLabel, details),
       });
       if (response.error) throw new Error(response.error.message);
 
