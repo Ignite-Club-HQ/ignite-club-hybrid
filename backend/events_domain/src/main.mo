@@ -2300,13 +2300,13 @@ persistent actor class Main(governorInit : Principal) {
   };
 
   // ---- Post-game photo prompts ----
-  // Games that ended 30 min – 6 h ago get one "add your photos" alert to
+  // Games that ended 2–6 h ago get one "add your photos" alert to
   // members who RSVP'd going (or the whole team if nobody RSVP'd). The 6 h
   // window stops a first deploy from back-filling old games.
   func sweepPhotoPrompts() : async () {
     let nq = switch (notificationQueueCanister) { case null return; case (?id) id };
     let now = nowMs();
-    let minAge : Nat64 = 30 * 60_000;
+    let minAge : Nat64 = 2 * 3_600_000;
     let maxAge : Nat64 = 6 * 3_600_000;
     var sentThisRun = 0;
     for (event in events.values()) {
