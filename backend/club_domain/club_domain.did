@@ -612,6 +612,10 @@ type Main =
                                      Err: text;
                                      Ok: opt text;
                                    }) query;
+   get_my_accessibility_prefs: () -> (variant {
+                                          Err: text;
+                                          Ok: opt text;
+                                        }) query;
    get_parent_invite: (token: text) ->
     (variant {
        Err: text;
@@ -1241,6 +1245,10 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   set_accessibility_prefs: (prefs_json: text) -> (variant {
+                                                        Err: text;
+                                                        Ok;
+                                                      });
    soft_delete_club: (id: text, cascade_teams: bool) ->
     (variant {
        Err: text;
