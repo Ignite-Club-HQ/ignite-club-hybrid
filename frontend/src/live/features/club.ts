@@ -580,7 +580,7 @@ export async function createLivePendingInvite(
   },
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(
+  const result = await unwrapCandid(
     actor.create_pending_invite(
       input.kind,
       input.clubId,
@@ -595,8 +595,18 @@ export async function createLivePendingInvite(
   // field_id = "email", owner = the inviting caller). Best effort — the
   // invite itself already exists and must not fail on a PII write.
   const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
-  if (inviteId) {
+  if (inviteId && input.email) {
     await registerLivePiiText(ctx, inviteId, "email", input.email);
+    // Also index the invite by a hash of its email + club id so a later
+    // create_pending_invite call can dedupe without ever reading a plaintext
+    // email back off the canister (see lib/inviteEmailDedupe.ts).
+    try {
+      const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
+      const hash = await hashInviteEmail(input.email, input.clubId);
+      await setLivePendingInviteEmailHash(ctx, inviteId, input.clubId, hash);
+    } catch (err) {
+      console.warn("[createLivePendingInvite] email hash registration failed:", err);
+    }
   }
   return result;
 }
@@ -620,6 +630,37 @@ export async function revokeLivePendingInvite(ctx: FeatureBackendContext, invite
 export async function createLiveInviteShortCode(ctx: FeatureBackendContext, inviteId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.create_invite_short_code(inviteId), "Create invite short code");
+}
+
+/**
+ * Email-hash index for pending invites — club_domain never sees a plaintext
+ * invitee email on this path (SHA-256 of the lowercased email + club id, see
+ * lib/inviteEmailDedupe.ts), only the hash, so an ICP-routed club can still
+ * dedupe a second invite to the same address without an email-indexed table.
+ */
+export async function setLivePendingInviteEmailHash(
+  ctx: FeatureBackendContext,
+  inviteId: string,
+  clubId: string,
+  hash: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_pending_invite_email_hash(inviteId, clubId, hash),
+    "Set pending invite email hash",
+  );
+}
+
+export async function findLivePendingInviteByEmailHash(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  hash: string,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.find_pending_invite_by_email_hash(clubId, hash),
+    "Find pending invite by email hash",
+  );
 }
 
 /** Resolves a short code back to its invite id, for the /i/:code redirect route. */
@@ -648,6 +689,30 @@ export async function unlinkLiveGuardian(
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.unlink_guardian(childId, guardian), "Unlink guardian");
+}
+
+/**
+ * Guardian relationship metadata (relationship_type + is_primary) layered on
+ * top of the plain guardian link above — the canister counterpart of the
+ * Supabase `child_guardians.relationship_type`/`is_primary` columns.
+ */
+export async function getLiveGuardianRelationships(ctx: FeatureBackendContext, childId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_guardian_relationships(childId), "Get guardian relationships");
+}
+
+export async function setLiveGuardianRelationship(
+  ctx: FeatureBackendContext,
+  childId: string,
+  user: Parameters<ClubDomainActor["set_guardian_relationship"]>[1],
+  relationshipType: string,
+  isPrimary: boolean,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_guardian_relationship(childId, user, relationshipType, isPrimary),
+    "Set guardian relationship",
+  );
 }
 
 export async function adminLinkLiveChildToParent(
@@ -797,6 +862,32 @@ export async function setLiveTeamPlayerPosition(
   return unwrapCandid(
     actor.set_team_player_position(teamId, memberId, position),
     "Set team player position",
+  );
+}
+
+/**
+ * v2 player-position records: multiple preferred positions plus a jersey
+ * number per player/team, replacing the single-position v1 rows above.
+ */
+export async function getLiveTeamPlayerPositionsV2(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.get_team_player_positions_v2(teamId),
+    "Get team player positions v2",
+  );
+}
+
+export async function setLiveTeamPlayerPositionsV2(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  memberId: string,
+  positions: string[],
+  jerseyNumber: number | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_player_positions_v2(teamId, memberId, positions, candidOpt(jerseyNumber)),
+    "Set team player positions v2",
   );
 }
 

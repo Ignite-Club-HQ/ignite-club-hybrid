@@ -11,7 +11,7 @@ import { Target, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveTeamPlayerPositions, setLiveTeamPlayerPosition } from "@/live/features/club";
+import { getLiveTeamPlayerPositionsV2, setLiveTeamPlayerPositionsV2 } from "@/live/features/club";
 import { cn } from "@/lib/utils";
 
 const POSITION_LABELS: Record<string, string> = {
@@ -82,21 +82,18 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
           return data || [];
         },
         icp: async (ctx) => {
-          const positions = await getLiveTeamPlayerPositions(ctx, teamId);
-          // Canister shape is per-position rows keyed by a single member_id
-          // (member or child) with one position string — map it onto the
-          // richer Supabase row shape (preferred_positions array, jersey
-          // number) consumed below, since those fields have no canister
-          // counterpart yet.
-          // NEEDS-CANISTER: jersey_number + multi preferred_positions per player
+          const positions = await getLiveTeamPlayerPositionsV2(ctx, teamId);
+          // v2 rows carry the full preferred_positions array + jersey_number
+          // per member_id (member or child) — map onto the Supabase row
+          // shape consumed below.
           return positions.map((p) => ({
             id: `${p.team_id}:${p.member_id}`,
             team_id: p.team_id,
             user_id: p.member_id,
             child_id: null as string | null,
-            position: p.position,
-            preferred_positions: [p.position],
-            jersey_number: null as number | null,
+            position: p.positions[0] || "MID",
+            preferred_positions: p.positions,
+            jersey_number: p.jersey_number ?? null,
           }));
         },
       }),
@@ -145,9 +142,7 @@ export default function TeamPlayerPositionEditor({ teamId, members, children: te
           }
         },
         icp: async (ctx) => {
-          // NEEDS-CANISTER: jersey_number + multi preferred_positions per player — only the
-          // single primary position persists on club_domain today.
-          await setLiveTeamPlayerPosition(ctx, teamId, playerId, positions[0] || "MID");
+          await setLiveTeamPlayerPositionsV2(ctx, teamId, playerId, positions, number);
         },
       });
     },

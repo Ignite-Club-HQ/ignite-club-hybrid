@@ -137,10 +137,11 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           };
         },
         icp: async (ctx) => {
-          // NEEDS-CANISTER: points_icon_url lives on the Supabase clubs row
-          // only — the ICP branch has no custom icon yet.
           const settings = await getLiveClubPointsSettings(ctx, clubId);
-          return { name: settings?.display_name[0] || "Reward Points", iconUrl: null };
+          return {
+            name: settings?.display_name[0] || "Reward Points",
+            iconUrl: settings?.points_icon_url[0] || null,
+          };
         },
       });
       setCustomPointsName(name);
@@ -164,12 +165,9 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           return data;
         },
         icp: async (ctx) => {
-          // disable_team_pom_rewards has no canister equivalent yet (the
-          // POM toggle below is hidden for II members); map the points
-          // kill switch onto the club_points_domain settings row.
           const settings = await getLiveClubPointsSettings(ctx, clubId);
           return {
-            disable_team_pom_rewards: null,
+            disable_team_pom_rewards: settings?.disable_team_pom_rewards ?? false,
             disable_points_system: settings?.disabled ?? false,
           } as { disable_team_pom_rewards: boolean | null; disable_points_system: boolean | null };
         },
@@ -179,11 +177,29 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
   // Toggle team POM rewards setting
   const toggleTeamPomRewardsMutation = useMutation({
     mutationFn: async (disabled: boolean) => {
-      const { error } = await supabase
-        .from("club_subscriptions")
-        .update({ disable_team_pom_rewards: disabled })
-        .eq("club_id", clubId);
-      if (error) throw error;
+      await withFeatureBackend("points", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("club_subscriptions")
+            .update({ disable_team_pom_rewards: disabled })
+            .eq("club_id", clubId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // Fetch-modify-save: the canister stores every points setting on
+          // one row, so preserve the current name/icon/kill switch while
+          // toggling the team POM override lock.
+          const current = await getLiveClubPointsSettings(ctx, clubId);
+          await saveLiveClubPointsSettings(
+            ctx,
+            clubId,
+            current?.display_name[0] ?? null,
+            current?.disabled ?? false,
+            current?.points_icon_url[0] ?? null,
+            disabled,
+          );
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["club-subscription-rewards", clubId] });
@@ -208,10 +224,18 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           if (error) throw error;
         },
         icp: async (ctx) => {
-          // Fetch-modify-save: the canister stores name + kill switch as one
-          // row, so preserve the current display name while toggling.
+          // Fetch-modify-save: the canister stores every points setting as
+          // one row, so preserve the current display name/icon/team override
+          // while toggling the kill switch.
           const current = await getLiveClubPointsSettings(ctx, clubId);
-          await saveLiveClubPointsSettings(ctx, clubId, current?.display_name[0] ?? null, disabled);
+          await saveLiveClubPointsSettings(
+            ctx,
+            clubId,
+            current?.display_name[0] ?? null,
+            disabled,
+            current?.points_icon_url[0] ?? null,
+            current?.disable_team_pom_rewards ?? false,
+          );
         },
       });
     },
@@ -723,10 +747,8 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
         </div>
       </div>
 
-      {/* Team Override Settings — NEEDS-CANISTER: disable_team_pom_rewards
-          has no canister equivalent, so the lock is hidden for II members
-          rather than failing closed on tap. */}
-      {resolveAuthBackend() !== "icp" && (
+      {/* Team Override Settings — wired to club_points_domain's
+          disable_team_pom_rewards flag for Internet Identity clubs. */}
       <Card className="p-4">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
@@ -745,7 +767,6 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
           />
         </div>
       </Card>
-      )}
 
       {/* Points System Toggle */}
       <Card className="p-4 space-y-4">
@@ -801,13 +822,17 @@ export default function ClubRewardsManager({ clubId }: ClubRewardsManagerProps) 
                     .eq("id", clubId);
                   return error;
                 },
-                // ICP: icon upload is already hidden for II members, so this
-                // only ever saves the display name (the canister stores name
-                // + kill switch; preserve the current disabled state).
                 icp: async (ctx) => {
+                  // Fetch-modify-save: preserve the kill switch + team
+                  // override lock while updating the name/icon.
                   const current = await getLiveClubPointsSettings(ctx, clubId);
                   await saveLiveClubPointsSettings(
-                    ctx, clubId, customPointsName || 'Reward Points', current?.disabled ?? false,
+                    ctx,
+                    clubId,
+                    customPointsName || 'Reward Points',
+                    current?.disabled ?? false,
+                    url,
+                    current?.disable_team_pom_rewards ?? false,
                   );
                   return null;
                 },

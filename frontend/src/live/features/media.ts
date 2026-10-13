@@ -214,3 +214,8 @@ export async function listLiveGalleryChatCards(
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return actor.list_gallery_chat_cards(clubId, teamId);
 }
+
+// ---------------------------------------------------------------------------
+// Publish a chat image to the club media gallery (MessageActionSheet)
+// ---------------------------------------------------------------------------
+

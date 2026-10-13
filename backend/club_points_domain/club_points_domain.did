@@ -209,7 +209,7 @@ type Main =
                                              Err: text;
                                              Ok;
                                            });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -220,10 +220,11 @@ type Main =
        Ok;
      });
    save_club_points_settings: (club_id: text, display_name: opt text,
-    disabled: bool) -> (variant {
-                          Err: text;
-                          Ok: ClubPointsSettings;
-                        });
+    disabled: bool, points_icon_url: opt text, disable_team_pom_rewards:
+    bool) -> (variant {
+                Err: text;
+                Ok: ClubPointsSettings;
+              });
    set_club_domain_canister: (id: principal) -> (variant {
                                                    Err: text;
                                                    Ok;
@@ -273,8 +274,10 @@ type ClubReward =
 type ClubPointsSettings = 
  record {
    club_id: text;
+   disable_team_pom_rewards: bool;
    disabled: bool;
    display_name: opt text;
+   points_icon_url: opt text;
    updated_at_ms: nat64;
  };
 type ChildClubPoints = 

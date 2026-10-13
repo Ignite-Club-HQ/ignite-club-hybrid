@@ -20,7 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { linkLiveGuardian, createLivePendingInvite, getLiveTeam } from "@/live/features/club";
+import { linkLiveGuardian, setLiveGuardianRelationship, createLivePendingInvite, getLiveTeam } from "@/live/features/club";
 import { searchLiveProfiles } from "@/live/features/identityAccessClient";
 
 interface InviteOtherParentSheetProps {
@@ -135,7 +135,9 @@ export default function InviteOtherParentSheet({
         },
         icp: async (ctx) => {
           const { Principal } = await import("@icp-sdk/core/principal");
-          await linkLiveGuardian(ctx, childId, Principal.fromText(selectedUser.id));
+          const guardian = Principal.fromText(selectedUser.id);
+          await linkLiveGuardian(ctx, childId, guardian);
+          await setLiveGuardianRelationship(ctx, childId, guardian, "parent", false);
         },
       });
     },
@@ -182,11 +184,11 @@ export default function InviteOtherParentSheet({
     },
   });
 
-  /** ICP path: create the pending_invite record on club_domain. No canister
-   * accept_pending_invite method exists yet (PendingInvite has no accept
-   * flow — see club.ts), so this persists the invite for admin visibility
-   * but the recipient cannot yet self-accept via the shared link on ICP.
-   * NEEDS-CANISTER: accept_pending_invite (or equivalent) for PendingInvite. */
+  /** ICP path: create the pending_invite record on club_domain. The invite
+   * id doubles as the /join/p/<id> bearer token and is redeemed via
+   * acceptPendingLiveInvite (club.ts, backed by accept_pending_invite) on
+   * JoinTeamPage, same as team/club pending invites — the recipient can
+   * self-accept the shared link on ICP. */
   const sendInviteIcp = async (
     ctx: FeatureBackendContext,
     effectiveDelivery: "email" | "share",

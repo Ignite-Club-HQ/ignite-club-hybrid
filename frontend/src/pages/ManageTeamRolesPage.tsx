@@ -17,6 +17,7 @@ import {
   removeLiveRoleGrant,
 } from "@/live/features/membership";
 import { getLiveUserPoints, awardLivePoints, subjectForUser } from "@/live/features/points";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
@@ -171,8 +172,18 @@ function SupabaseManageTeamRolesPage() {
           icp: async (ctx) => {
             const roleValue = roleId.includes("-") ? roleId.slice(roleId.lastIndexOf("-") + 1) : roleName;
             await removeLiveRoleGrant(ctx, Principal.fromText(userId), team!.club_id, roleValue, teamId!);
-            // NEEDS-CANISTER: Team role removal notifications stay Supabase-only
-            // (no canister notification fan-out wired on this surface yet).
+            try {
+              await fanOutLiveNotifications(ctx, {
+                userIds: [userId],
+                clubId: team!.club_id,
+                kind: "membership",
+                body: `Your ${roleName} role has been removed from ${team?.name || "the team"}`,
+                idempotencyKeyPrefix: `role-removed-${teamId}-${roleValue}-${Date.now()}`,
+                relatedId: teamId,
+              });
+            } catch (e) {
+              console.warn("Failed to notify user of role removal", e);
+            }
           },
         });
         return;

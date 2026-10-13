@@ -207,8 +207,10 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   const runImport = async () => {
     setImporting(true);
     try {
-      // NEEDS-CANISTER: PlayHQ fixture materialisation (playhq-materialise-team-events)
-      // writes events via Supabase and has no events_domain counterpart.
+      // Off-chain exception (payments-like): fixture materialisation needs the
+      // server-held PlayHQ secret, so it stays on the Supabase edge function
+      // (playhq-materialise-team-events) and writes events via Supabase with
+      // no events_domain counterpart.
       assertSupabaseWritePath("events", "PlayHQ fixture import/materialisation has no events_domain counterpart");
       const { data, error } = await supabase.functions.invoke("playhq-materialise-team-events", {
         body: { team_id: teamId },

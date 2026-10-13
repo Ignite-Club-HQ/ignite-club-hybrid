@@ -25,6 +25,13 @@ type TeamSponsorAllocation =
    sponsor_id: text;
    team_id: text;
  };
+type TeamPlayerPositionAssignment = 
+ record {
+   jersey_number: opt nat16;
+   member_id: text;
+   positions: vec text;
+   team_id: text;
+ };
 type TeamPlayerPosition = 
  record {
    member_id: text;
@@ -199,6 +206,12 @@ type ProfileTeamHistoryEntry =
    team_id: text;
    team_level_age: opt text;
    team_name: text;
+ };
+type PendingInviteEmailHash = 
+ record {
+   club_id: text;
+   hash: text;
+   invite_id: text;
  };
 type PendingInvite = 
  record {
@@ -498,6 +511,11 @@ type Main =
                           Err: text;
                           Ok: Snapshot;
                         }) query;
+   find_pending_invite_by_email_hash: (club_id: text, hash: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PendingInviteEmailHash;
+     }) query;
    free_usage_counters: (club_id: text) ->
     (variant {
        Err: text;
@@ -576,6 +594,11 @@ type Main =
        Err: text;
        Ok: opt Season;
      }) query;
+   get_guardian_relationships: (child_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec GuardianMeta;
+     }) query;
    get_link: (id: text) -> (variant {
                               Err: text;
                               Ok: Listing;
@@ -627,6 +650,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec TeamPlayerPosition;
+     }) query;
+   get_team_player_positions_v2: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec TeamPlayerPositionAssignment;
      }) query;
    get_team_subscription: (team_id: text) ->
     (variant {
@@ -1116,6 +1144,11 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   set_guardian_relationship: (child_id: text, user: principal,
+    relationship_type: text, is_primary: bool) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_messaging_domain_canister: (id: principal) ->
     (variant {
        Err: text;
@@ -1141,6 +1174,11 @@ type Main =
        Err: text;
        Ok: Child;
      });
+   set_pending_invite_email_hash: (invite_id: text, club_id: text, hash:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
    set_pending_invite_label: (id: text, label: text) ->
     (variant {
        Err: text;
@@ -1165,6 +1203,11 @@ type Main =
                 Err: text;
                 Ok;
               });
+   set_team_player_positions_v2: (team_id: text, member_id: text, positions:
+    vec text, jersey_number: opt nat16) -> (variant {
+                                              Err: text;
+                                              Ok;
+                                            });
    set_team_sponsor_allocation: (sponsor_id: text, team_id: text, allocated:
     bool) -> (variant {
                 Err: text;
@@ -1277,6 +1320,13 @@ type HttpRequest =
                 };
    method: text;
    url: text;
+ };
+type GuardianMeta = 
+ record {
+   child_id: text;
+   is_primary: bool;
+   relationship_type: text;
+   user: principal;
  };
 type Guardian = 
  record {

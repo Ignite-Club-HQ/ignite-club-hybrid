@@ -503,4 +503,18 @@ module {
     created_at_ms : Nat64;
     updated_at_ms : Nat64;
   };
+
+
+  // Multi-position + jersey number per player — superset of
+  // TeamPlayerPosition (which stays for legacy single-position readers).
+  public type TeamPlayerPositionAssignment = { team_id : Text; member_id : Text; positions : [Text]; jersey_number : ?Nat16 };
+
+  // Guardian relationship metadata (relationship_type/is_primary) keyed on
+  // top of the core acl.guardians link (child, user) pair.
+  public type GuardianMeta = { child_id : Text; user : Principal; relationship_type : Text; is_primary : Bool };
+
+  // Salted-hash dedupe index for pending invite emails: the frontend hashes
+  // the email (salt + lowercase email, SHA-256) before it ever reaches the
+  // canister, so no plaintext email is required to detect a duplicate invite.
+  public type PendingInviteEmailHash = { invite_id : Text; club_id : Text; hash : Text };
 }

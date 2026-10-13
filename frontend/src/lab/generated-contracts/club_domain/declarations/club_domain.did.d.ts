@@ -192,6 +192,12 @@ export interface Draft {
 export interface Exclusion { 'club' : string, 'user' : Principal }
 export interface Family { 'account_id' : string, 'child_id' : string }
 export interface Guardian { 'child' : string, 'user' : Principal }
+export interface GuardianMeta {
+  'user' : Principal,
+  'is_primary' : boolean,
+  'relationship_type' : string,
+  'child_id' : string,
+}
 export interface HttpRequest {
   'url' : string,
   'method' : string,
@@ -440,6 +446,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'export_links' : ActorMethod<[], { 'Ok' : Snapshot } | { 'Err' : string }>,
+  'find_pending_invite_by_email_hash' : ActorMethod<
+    [string, string],
+    { 'Ok' : [] | [PendingInviteEmailHash] } |
+      { 'Err' : string }
+  >,
   'free_usage_counters' : ActorMethod<
     [string],
     {
@@ -514,6 +525,11 @@ export interface Main {
     { 'Ok' : [] | [Season] } |
       { 'Err' : string }
   >,
+  'get_guardian_relationships' : ActorMethod<
+    [string],
+    { 'Ok' : Array<GuardianMeta> } |
+      { 'Err' : string }
+  >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
   'get_my_theme_preference' : ActorMethod<
     [],
@@ -564,6 +580,11 @@ export interface Main {
   'get_team_player_positions' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamPlayerPosition> } |
+      { 'Err' : string }
+  >,
+  'get_team_player_positions_v2' : ActorMethod<
+    [string],
+    { 'Ok' : Array<TeamPlayerPositionAssignment> } |
       { 'Err' : string }
   >,
   'get_team_subscription' : ActorMethod<
@@ -1074,6 +1095,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_guardian_relationship' : ActorMethod<
+    [string, Principal, string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_messaging_domain_canister' : ActorMethod<
     [Principal],
     { 'Ok' : null } |
@@ -1099,6 +1125,11 @@ export interface Main {
     { 'Ok' : Child } |
       { 'Err' : string }
   >,
+  'set_pending_invite_email_hash' : ActorMethod<
+    [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_pending_invite_label' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -1121,6 +1152,11 @@ export interface Main {
   >,
   'set_team_player_position' : ActorMethod<
     [string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_team_player_positions_v2' : ActorMethod<
+    [string, string, Array<string>, [] | [number]],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1276,6 +1312,11 @@ export interface PendingInvite {
   'invited_by' : Principal,
   'club_id' : string,
 }
+export interface PendingInviteEmailHash {
+  'hash' : string,
+  'invite_id' : string,
+  'club_id' : string,
+}
 export interface ProfileTeamHistoryEntry {
   'season_start_date' : string,
   'season_id' : string,
@@ -1423,6 +1464,12 @@ export interface TeamPlayerPosition {
   'team_id' : string,
   'member_id' : string,
   'position' : string,
+}
+export interface TeamPlayerPositionAssignment {
+  'team_id' : string,
+  'member_id' : string,
+  'positions' : Array<string>,
+  'jersey_number' : [] | [number],
 }
 export interface TeamSponsorAllocation {
   'team_id' : string,

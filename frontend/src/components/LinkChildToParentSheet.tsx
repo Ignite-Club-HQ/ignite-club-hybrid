@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Loader2, UserCheck } from "lucide-react";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { adminLinkLiveChildToParent } from "@/live/features/club";
+import { adminLinkLiveChildToParent, setLiveGuardianRelationship } from "@/live/features/club";
 import { Principal } from "@icp-sdk/core/principal";
 
 interface LinkChildToParentSheetProps {
@@ -69,7 +69,10 @@ export default function LinkChildToParentSheet({
           if (!childId) {
             throw new Error("Linking a brand-new child requires a club_domain child record first.");
           }
-          await adminLinkLiveChildToParent(ctx, childId, Principal.fromText(parentId));
+          const parent = Principal.fromText(parentId);
+          await adminLinkLiveChildToParent(ctx, childId, parent);
+          // Admin-linked parent is treated as the primary guardian relationship.
+          await setLiveGuardianRelationship(ctx, childId, parent, "parent", true);
         },
         supabase: async () => {
           const { error } = await supabase.rpc("admin_link_child_to_parent", {

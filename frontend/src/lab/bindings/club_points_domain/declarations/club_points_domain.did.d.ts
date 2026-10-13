@@ -17,10 +17,12 @@ export interface ChildClubPoints {
   'points' : number,
 }
 export interface ClubPointsSettings {
+  'points_icon_url' : [] | [string],
   'updated_at_ms' : bigint,
   'display_name' : [] | [string],
   'disabled' : boolean,
   'club_id' : string,
+  'disable_team_pom_rewards' : boolean,
 }
 export interface ClubReward {
   'id' : string,
@@ -218,7 +220,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'save_club_points_settings' : ActorMethod<
-    [string, [] | [string], boolean],
+    [string, [] | [string], boolean, [] | [string], boolean],
     { 'Ok' : ClubPointsSettings } |
       { 'Err' : string }
   >,

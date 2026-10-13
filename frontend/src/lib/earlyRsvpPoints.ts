@@ -104,11 +104,7 @@ export async function awardEarlyRsvpPoints({
         return false; // Another request already marked it
       }
     }
-    // NEEDS-CANISTER (ICP branch): the events canister RSVP record has no
-    // early_rsvp_points_awarded flag, so the optimistic lock above cannot
-    // run. Cross-day dedup relies on award_points' scope dedup (action_type
-    // "early_rsvp" + scope_id rsvpId), which covers same-day repeats; a
-    // cancelled-and-rebooked RSVP on a later day could re-award.
+    // ICP branch: award_points_once below dedups on (club, subject, "early_rsvp", rsvpId).
 
     // Atomic points increment — child or user. Routed through the
     // club_points_domain award_points wrapper under ICP so the balance and

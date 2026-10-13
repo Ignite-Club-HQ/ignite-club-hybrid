@@ -10,7 +10,7 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { createLivePendingInvite, bulkAddLiveTeamMembers, listLivePendingInvitesByClub, createLiveInviteShortCode } from "@/live/features/club";
+import { createLivePendingInvite, bulkAddLiveTeamMembers, createLiveInviteShortCode, findLivePendingInviteByEmailHash } from "@/live/features/club";
 
 type Args = {
   supabase: any;
@@ -123,21 +123,19 @@ export function useAddPendingTeamMemberMutation({
       }
     }
 
-    // Dedupe against existing pending invites for the same email+team — the
+    // Dedupe against existing pending invites for the same email+club — the
     // ICP equivalent of the Supabase email dedupe. Account matching has no
     // ICP equivalent by design: Internet Identity accounts have no email on
-    // file, so only the pending-invite ledger can be checked.
+    // file, so only the pending-invite email-hash index can be checked
+    // (set_pending_invite_email_hash/find_pending_invite_by_email_hash —
+    // club_domain never sees the plaintext email on this index).
     const inviteEmail = customEmail.trim().toLowerCase();
     if (inviteEmail) {
-      const existing = await listLivePendingInvitesByClub(ctx, clubId);
-      const duplicate = existing.find(
-        (i) =>
-          i.status === "pending" &&
-          i.email.trim().toLowerCase() === inviteEmail &&
-          (i.team_id.length ? i.team_id[0] : null) === (teamId ?? null),
-      );
+      const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
+      const hash = await hashInviteEmail(inviteEmail, clubId);
+      const duplicate = await findLivePendingInviteByEmailHash(ctx, clubId, hash);
       if (duplicate) {
-        throw new Error(`An invite for ${inviteEmail} is already pending for this team.`);
+        throw new Error(`An invite for ${inviteEmail} is already pending for this club.`);
       }
     }
 

@@ -295,6 +295,11 @@ export const idlFactory = ({ IDL }) => {
     'schema' : IDL.Nat32,
     'clubs' : IDL.Vec(IDL.Tuple(IDL.Text, Listing)),
   });
+  const PendingInviteEmailHash = IDL.Record({
+    'hash' : IDL.Text,
+    'invite_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const ClubBranding = IDL.Record({
     'name' : IDL.Text,
     'contact_email' : IDL.Opt(IDL.Text),
@@ -314,6 +319,12 @@ export const idlFactory = ({ IDL }) => {
     'club_id' : IDL.Text,
     'expires_at_ms' : IDL.Opt(IDL.Nat64),
   });
+  const GuardianMeta = IDL.Record({
+    'user' : IDL.Principal,
+    'is_primary' : IDL.Bool,
+    'relationship_type' : IDL.Text,
+    'child_id' : IDL.Text,
+  });
   const ClubSponsor = IDL.Record({
     'id' : IDL.Text,
     'website_url' : IDL.Opt(IDL.Text),
@@ -331,6 +342,12 @@ export const idlFactory = ({ IDL }) => {
     'team_id' : IDL.Text,
     'member_id' : IDL.Text,
     'position' : IDL.Text,
+  });
+  const TeamPlayerPositionAssignment = IDL.Record({
+    'team_id' : IDL.Text,
+    'member_id' : IDL.Text,
+    'positions' : IDL.Vec(IDL.Text),
+    'jersey_number' : IDL.Opt(IDL.Nat16),
   });
   const TeamSubscription = IDL.Record({
     'max_spread_minutes' : IDL.Opt(IDL.Nat32),
@@ -710,6 +727,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Snapshot, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'find_pending_invite_by_email_hash' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(PendingInviteEmailHash),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'free_usage_counters' : IDL.Func(
         [IDL.Text],
         [
@@ -804,6 +831,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(Season), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_guardian_relationships' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(GuardianMeta), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_link' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : Listing, 'Err' : IDL.Text })],
@@ -862,6 +894,16 @@ export const idlFactory = ({ IDL }) => {
     'get_team_player_positions' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(TeamPlayerPosition), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_team_player_positions_v2' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(TeamPlayerPositionAssignment),
+            'Err' : IDL.Text,
+          }),
+        ],
         ['query'],
       ),
     'get_team_subscription' : IDL.Func(
@@ -1430,6 +1472,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'set_guardian_relationship' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_messaging_domain_canister' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1455,6 +1502,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : Child, 'Err' : IDL.Text })],
         [],
       ),
+    'set_pending_invite_email_hash' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_pending_invite_label' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -1477,6 +1529,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_team_player_position' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_team_player_positions_v2' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Text), IDL.Opt(IDL.Nat16)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
