@@ -1,3 +1,7 @@
+## ICP DM role preferences
+- [x] Read saved roles from ICP; retain Coach after saving and preserve attachment restrictions.
+- [ ] Confirm on Paul's phone — requires the updated Android app and device access.
+
 ## ICP club chat preview
 - [x] Read club/team previews directly by scope ID and retain photos when sender lookup fails; 11 tests passed.
 - [ ] Confirm Giddy Goat on Paul's phone — requires the updated Android app and device access.
