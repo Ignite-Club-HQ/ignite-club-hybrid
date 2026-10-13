@@ -84,15 +84,23 @@ export function CompetitionAdminsCard({
         // principal, not a Supabase uuid) — display principal text instead
         // of a resolved name/avatar.
         icp: async (ctx) => {
-          const grants = await listLiveCompetitionRoles(ctx, competitionId);
-          return grants
-            .filter((g) => g.role === "owner" || g.role === "admin")
-            .map((g) => ({
-              id: `${g.user.toText()}:${g.role}`,
-              user_id: g.user.toText(),
-              role: g.role,
-              profile: null,
-            })) as RoleRow[];
+          const grants = (await listLiveCompetitionRoles(ctx, competitionId)).filter(
+            (g) => g.role === "owner" || g.role === "admin",
+          );
+          const names = new Map<string, string | null>();
+          try {
+            const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+            const profiles = await listLiveProfilesByIds(ctx, grants.map((g) => g.user.toText()));
+            for (const p of profiles) names.set(p.account_id, p.display_name ?? null);
+          } catch {
+            // Names are cosmetic; fall back to the principal text.
+          }
+          return grants.map((g) => ({
+            id: `${g.user.toText()}:${g.role}`,
+            user_id: g.user.toText(),
+            role: g.role,
+            profile: names.get(g.user.toText()) ? { display_name: names.get(g.user.toText()) ?? null, avatar_url: null } : null,
+          })) as RoleRow[];
         },
       }),
   });
@@ -103,20 +111,33 @@ export function CompetitionAdminsCard({
   // club-scoped invite searches in the app).
   const isIcp = isFeatureRoutedToIcp("competitions");
 
-  // Supabase RPC search only — the canister has no profile directory to
-  // search, so ICP admins are added by pasting their principal below.
+  // Name search: Supabase RPC in email mode; the on-chain profile directory
+  // (identity_access display names) in ICP mode. Emails are never stored
+  // readable on-chain, so ICP search is by name; pasting a principal still works.
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ["competition-admin-search", competitionId, debouncedSearch],
-    enabled: !isIcp && debouncedSearch.trim().length >= 2,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("search_invitable_profiles", {
-        _query: debouncedSearch.trim(),
-        _limit: 8,
-        _club_id: organizerClubId ?? null,
-      });
-      if (error) throw error;
-      return (data ?? []).filter((p) => !existingUserIds.has(p.id));
-    },
+    queryKey: ["competition-admin-search", competitionId, debouncedSearch, isIcp],
+    enabled: debouncedSearch.trim().length >= 2,
+    queryFn: () =>
+      withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("search_invitable_profiles", {
+            _query: debouncedSearch.trim(),
+            _limit: 8,
+            _club_id: organizerClubId ?? null,
+          });
+          if (error) throw error;
+          return (data ?? [])
+            .filter((p) => !existingUserIds.has(p.id))
+            .map((p) => ({ id: p.id, display_name: p.display_name, avatar_url: p.avatar_url ?? null, masked_email: p.masked_email ?? null }));
+        },
+        icp: async (ctx) => {
+          const { searchLiveInvitableProfiles } = await import("@/live/features/membership");
+          const rows = await searchLiveInvitableProfiles(ctx, debouncedSearch.trim(), 8);
+          return rows
+            .filter((p) => !existingUserIds.has(p.id))
+            .map((p) => ({ id: p.id, display_name: p.display_name as string | null, avatar_url: null as string | null, masked_email: null as string | null }));
+        },
+      }),
   });
 
   const addByPrincipal = () => {
@@ -279,7 +300,7 @@ export function CompetitionAdminsCard({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={isIcp ? "Paste an Internet Identity principal…" : "Search club members to add as admin…"}
+              placeholder={isIcp ? "Search by name or paste a principal…" : "Search club members to add as admin…"}
               className="pl-9 pr-9"
               aria-label="Search members to add as competition admin"
             />
@@ -295,7 +316,7 @@ export function CompetitionAdminsCard({
             )}
           </div>
 
-          {isIcp ? (
+          {isIcp && looksLikePrincipal(search) && (
             <Button
               size="sm"
               variant="outline"
@@ -306,7 +327,8 @@ export function CompetitionAdminsCard({
               <ShieldPlus className="h-3.5 w-3.5" />
               Add by principal
             </Button>
-          ) : debouncedSearch.trim().length >= 2 && (
+          )}
+          {debouncedSearch.trim().length >= 2 && !(isIcp && looksLikePrincipal(debouncedSearch)) && (
             <div className="border rounded-md divide-y">
               {isSearching ? (
                 <div className="flex justify-center py-3">
@@ -350,4 +372,15 @@ export function CompetitionAdminsCard({
       </CardContent>
     </Card>
   );
+}
+
+function looksLikePrincipal(text: string): boolean {
+  const t = text.trim();
+  if (!t.includes("-") || t.length < 20) return false;
+  try {
+    Principal.fromText(t);
+    return true;
+  } catch {
+    return false;
+  }
 }
