@@ -1,5 +1,4 @@
 import { Suspense, useEffect, useState, Fragment, type ReactNode } from "react";
-import { NavigationProgress } from "@/components/NavigationProgress";
 import { restoreQueryCache, startQueryCachePersistence } from "@/lib/queryCachePersistence";
 import { installPendingSendKeeper } from "@/lib/pendingSendKeeper";
 
