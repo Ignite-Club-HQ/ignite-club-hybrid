@@ -94,11 +94,8 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const shouldStabilizeIOSLayout = isIOSEnvironment();
   const { user } = useAuth();
   const navigate = useNavigate();
-  // NEEDS-CANISTER: no canister concept of teams.club_id lookup, club
-  // sport, active live-board games, or vault_files metadata yet (storage
-  // upload itself is the allowed media-bytes exception and stays
-  // Supabase-only). Cleanly disable these metadata queries for Internet
-  // Identity accounts instead of surfacing an error.
+  // Legacy Supabase-only discovery queries stay disabled for II accounts.
+  // Document uploads use encrypted ICP storage and vault metadata below.
   const isIcp = resolveAuthBackend() === "icp";
   const queryClient = useQueryClient();
   const { hasAccess: hasProAccess } = useScheduleProAccess({ team_id: teamId ?? null, club_id: clubId ?? null } as any);
@@ -363,19 +360,13 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
   const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (isIcp) {
-      // NEEDS-CANISTER: no vault_files canister counterpart — silently
-      // no-op instead of uploading an attachment no one can reference.
-      if (docInputRef.current) docInputRef.current.value = "";
-      return;
-    }
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       toast.error("File must be less than 10MB");
       if (docInputRef.current) docInputRef.current.value = "";
       return;
     }
     // Free-tier chat-file cap check (skipped automatically for Pro clubs).
-    if (clubId) {
+    if (clubId && !isIcp) {
       try {
         const { data: usageRow } = await supabase.rpc("get_club_free_usage", { _club_id: clubId });
         const usage: any = Array.isArray(usageRow) ? usageRow[0] : usageRow;
@@ -399,6 +390,15 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
     }
     setUploading(true);
     try {
+      if (!clubId || !onAppendToken) throw new Error("Cannot attach file in this chat");
+      if (isIcp) {
+        const { uploadIcpChatDocument } = await import("./chatDocumentUpload");
+        const token = await uploadIcpChatDocument(file, clubId, teamId);
+        onAppendToken(token);
+        void queryClient.invalidateQueries({ queryKey: ["vault-files"] });
+        toast.success("File attached");
+        return;
+      }
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) throw new Error("Not authenticated");
 
@@ -830,6 +830,7 @@ export function ChatImageInput({ onImageUploaded, imageUrl, disabled, clubId, te
 
   return (
     <div className="flex shrink-0 items-center gap-0">
+      {uploading && <span role="status" className="text-xs text-muted-foreground">Uploading…</span>}
       <input
         ref={fileInputRef}
         type="file"

@@ -1,3 +1,7 @@
+## ICP chat device files
+- [x] Replace silent device-file no-op with encrypted upload, vault registration, and visible progress/error feedback.
+- [ ] Confirm on Paul's phone — requires updated Android app and device access.
+
 ## ICP DM role preferences
 - [x] Read saved roles from ICP; retain Coach after saving and preserve attachment restrictions.
 - [ ] Confirm on Paul's phone — requires the updated Android app and device access.
