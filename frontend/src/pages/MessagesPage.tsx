@@ -16,6 +16,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { softDeleteLiveGroup } from "@/live/features/messaging";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { WifiOff } from "lucide-react";
@@ -295,18 +297,26 @@ export default function MessagesPage() {
     initialized && !useIcpLab ? user?.id : null,
   );
 
-  // Delete group mutation (soft-delete so an app admin can restore later)
+  // Delete group mutation (soft-delete so an app admin can restore later).
+  // Routed through withFeatureBackend so Internet Identity (ICP-live) users
+  // hit messaging_domain.soft_delete_group instead of being blocked.
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
-      if (useIcpLab) throw new Error("Group chat deletion is unavailable in ICP lab mode.");
-      const { error } = await supabase
-        .from("chat_groups")
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user?.id ?? null,
-        } as any)
-        .eq("id", groupId);
-      if (error) throw error;
+      await withFeatureBackend("messaging", {
+        supabase: async () => {
+          const { error } = await supabase
+            .from("chat_groups")
+            .update({
+              deleted_at: new Date().toISOString(),
+              deleted_by: user?.id ?? null,
+            } as any)
+            .eq("id", groupId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await softDeleteLiveGroup(ctx, groupId);
+        },
+      });
     },
     onSuccess: () => {
       toast({ title: "Chat removed. An app admin can restore it if needed." });

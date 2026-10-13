@@ -246,17 +246,7 @@ function lookupLabel(
   }
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-
 export default function ScheduledMessagesPage() {
-  if (isFeatureRoutedToIcp("messaging")) {
-    return <IcpUnavailablePage title="Scheduled messages are unavailable in ICP lab mode" description="Message scheduling and external delivery workers are not connected to the ICP messaging service yet." />;
-  }
-  return <SupabaseScheduledMessagesPage />;
-}
-
-function SupabaseScheduledMessagesPage() {
   const navigate = useNavigate();
   const { hasAnyClubPro, isLoading: proLoading } = useUserHasAnyClubPro();
   const { activeClubFilter } = useClubTheme();
