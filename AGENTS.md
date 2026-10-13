@@ -16,7 +16,7 @@
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
-- Share helpers (`chatPollToken`, `chatEventToken`, `chatVaultLinks`) drive both chat renderers. Why: scoped vault roots must not leave empty bubbles.
+- Share helpers prevent empty vault bubbles in both renderers. Schedule dates validate Date range, not just finiteness. Why: invalid dates crash calendars.
 - Pending-send recovery is scoped to each QueryClient and reconciles previews already in fetched snapshots as well as missing previews; this prevents duplicate photo bubbles after returning to chat.
 - ICP images wait for authenticated session restoration and share account-scoped in-flight unlocks; genuine failures retry after cooldown and foreground recovery. Why: cold startup must not cache missing identity as a failure or unlock the same logo repeatedly.
 - Stored document opens and downloads must resolve authorized/decrypted URLs before hand-off, preserve the original extension/MIME, and write WebView blob bytes to native cache instead of using native HTTP downloaders. Why: raw ICP URLs contain ciphertext, not readable documents.

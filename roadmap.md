@@ -1,3 +1,7 @@
+## ICP calendar date error
+- [x] Validate timestamp ranges and cached dates before calendar formatting; 13 regression tests passed.
+- [ ] Confirm “All clubs” on Paul's phone — requires the updated Android app and device access.
+
 ## Native sign-in bridge audit
 - [x] Replace orange with Ignite green; fix provider reply origin, return link and cancellation handling; 15 tests and browser opening/retry pass.
 - [x] Fewer taps: Internet Identity opens automatically; Android return uses a package-targeted intent link; reply survives Android closing the app (cold-start launch link). 18 tests pass.
