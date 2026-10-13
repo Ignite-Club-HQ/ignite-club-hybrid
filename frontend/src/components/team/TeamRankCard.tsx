@@ -6,6 +6,8 @@ import { ChevronDown, TrendingUp } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { computeLiveTeamLeaderboard } from "@/live/features/points";
 
 interface TeamRankCardProps {
   teamId: string;
@@ -27,15 +29,18 @@ function ordinal(n: number): string {
 
 export function TeamRankCard({ teamId, clubId }: TeamRankCardProps) {
   const [open, setOpen] = useState(false);
-  // NEEDS-CANISTER: the team participation leaderboard RPC has no canister
-  // equivalent yet — an II principal has no Supabase session, so skip it and
-  // the card hides itself (it already returns null without data).
   const isIcp = resolveAuthBackend() === "icp";
 
   const { data: leaderboard } = useQuery({
     queryKey: ["team-leaderboard-rank", clubId, teamId],
     queryFn: async () => {
-      if (isIcp) return [];
+      if (isIcp) {
+        const teams = await withFeatureBackend("points", {
+          supabase: () => [],
+          icp: (ctx) => computeLiveTeamLeaderboard(ctx, clubId, "all"),
+        });
+        return teams.map((t, i) => ({ rank: i + 1, team_id: t.team_id, team_name: t.team_name, points: t.points })) as LeaderboardRow[];
+      }
       const { data, error } = await supabase.rpc("get_teams_leaderboard", {
         _club_id: clubId,
         _window: "all",
@@ -44,7 +49,7 @@ export function TeamRankCard({ teamId, clubId }: TeamRankCardProps) {
       if (error) throw error;
       return (data ?? []) as LeaderboardRow[];
     },
-    enabled: !!clubId && !!teamId && !isIcp,
+    enabled: !!clubId && !!teamId,
     staleTime: 5 * 60 * 1000,
   });
 
