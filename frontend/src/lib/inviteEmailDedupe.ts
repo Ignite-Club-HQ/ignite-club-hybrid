@@ -105,9 +105,40 @@ export async function lookupInvitableUserByEmail(opts: {
 
       return parseDedupeResponse(data);
     },
-    // NEEDS-CANISTER: club_domain has no email-indexed account lookup (and
-    // Internet Identity accounts have no email on file), so dedupe-by-email
-    // has no ICP equivalent — no-op and fall back to the normal invite path.
-    icp: async () => null,
+    // club_domain has no email-indexed account lookup (and Internet Identity
+    // accounts have no email on file), so dedupe-by-*account* still has no
+    // ICP equivalent. What it does have is an email-hash index on pending
+    // invites (set_pending_invite_email_hash/find_pending_invite_by_email_hash)
+    // — use it to report an already-pending invite for this club so callers
+    // don't create a duplicate. No club id means nothing to hash against.
+    icp: async (ctx) => {
+      if (!opts.clubId) return null;
+      const { findLivePendingInviteByEmailHash } = await import("@/live/features/club");
+      const hash = await hashInviteEmail(email, opts.clubId);
+      const found = await findLivePendingInviteByEmailHash(ctx, opts.clubId, hash);
+      if (!found) return null;
+      return {
+        user_id: found.invite_id,
+        display_name: null,
+        avatar_url: null,
+        already_in_club: true,
+        already_in_team: false,
+        already_in_mini_league: false,
+      };
+    },
   });
+}
+
+/**
+ * SHA-256 hash of the lowercased email + club id, used as the canister-side
+ * dedupe key for pending invites (club_domain never stores the plaintext
+ * email on this index — see set_pending_invite_email_hash in live/features/club.ts).
+ */
+export async function hashInviteEmail(email: string, clubId: string): Promise<string> {
+  const normalized = `${email.trim().toLowerCase()}:${clubId}`;
+  const bytes = new TextEncoder().encode(normalized);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }

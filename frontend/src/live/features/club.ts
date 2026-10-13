@@ -580,7 +580,7 @@ export async function createLivePendingInvite(
   },
 ) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const result = unwrapCandid(
+  const result = await unwrapCandid(
     actor.create_pending_invite(
       input.kind,
       input.clubId,
@@ -595,8 +595,18 @@ export async function createLivePendingInvite(
   // field_id = "email", owner = the inviting caller). Best effort — the
   // invite itself already exists and must not fail on a PII write.
   const inviteId = (result as { invite?: { id?: string } } | undefined)?.invite?.id;
-  if (inviteId) {
+  if (inviteId && input.email) {
     await registerLivePiiText(ctx, inviteId, "email", input.email);
+    // Also index the invite by a hash of its email + club id so a later
+    // create_pending_invite call can dedupe without ever reading a plaintext
+    // email back off the canister (see lib/inviteEmailDedupe.ts).
+    try {
+      const { hashInviteEmail } = await import("@/lib/inviteEmailDedupe");
+      const hash = await hashInviteEmail(input.email, input.clubId);
+      await setLivePendingInviteEmailHash(ctx, inviteId, input.clubId, hash);
+    } catch (err) {
+      console.warn("[createLivePendingInvite] email hash registration failed:", err);
+    }
   }
   return result;
 }
