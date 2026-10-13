@@ -629,7 +629,17 @@ export function AppHeader() {
   const markAllAsRead = useMutation({
     mutationFn: async () => {
       if (!user?.id) return;
-      if (resolveAuthBackend() === "icp") return;
+      if (resolveAuthBackend() === "icp") {
+        const { markAllLiveNotificationsRead } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            await markAllLiveNotificationsRead(ctx, user.id, activeClubFilter ?? null);
+          },
+        });
+        return;
+      }
 
       // Only ever flips is_read — notifications are never deleted here so the
       // user keeps their full history and can still open them later.
@@ -688,7 +698,26 @@ export function AppHeader() {
     queryKey: notificationKeys.recentFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id) return [];
-      if (resolveAuthBackend() === "icp") return [];
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveInbox } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const inbox = await withFeatureBackend("notifications", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter ?? null, 40),
+        });
+        return (inbox as any[])
+          .map((n) => ({
+            id: n.id,
+            message: n.body,
+            type: n.kind,
+            created_at: new Date(Number(n.created_at_ms)).toISOString(),
+            is_read: n.read,
+            related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
+            club_id: Array.isArray(n.club_id) ? (n.club_id[0] ?? null) : (n.club_id ?? null),
+          }))
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 40);
+      }
       let q = supabase
         .from("notifications")
         .select("id, message, type, created_at, is_read, related_id, club_id")
@@ -719,6 +748,9 @@ export function AppHeader() {
     // notifications, so a small staleTime is safe and prevents duplicate
     // fetches during rapid remounts (nav, resume, sheet toggles).
     staleTime: 30_000,
+    // ICP notification_queue has no realtime channel (useAuth.tsx) — poll
+    // the canister inbox directly so the dropdown stays fresh.
+    refetchInterval: resolveAuthBackend() === "icp" ? 30_000 : false,
   });
 
   /**
@@ -737,7 +769,15 @@ export function AppHeader() {
     queryKey: notificationKeys.clubUnreadFor(user?.id, activeClubFilter),
     queryFn: async () => {
       if (!user?.id || !activeClubFilter) return 0;
-      if (resolveAuthBackend() === "icp") return 0;
+      if (resolveAuthBackend() === "icp") {
+        const { listLiveInbox } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const inbox = await withFeatureBackend("notifications", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => listLiveInbox(ctx, user.id, activeClubFilter, 500),
+        });
+        return (inbox as any[]).filter((n) => !n.read).length;
+      }
       // Pull unread rows (capped) so we can drop DMs from senders who don't
       // share the active club — matches the popover's filtering logic.
       const { data } = await supabase
@@ -751,8 +791,9 @@ export function AppHeader() {
       return filtered.length;
     },
     enabled: !!user?.id && !!activeClubFilter,
-    // Realtime already invalidates this key when notifications change; polling
-    // is only a safety net for missed events, so 60s is plenty.
+    // Realtime already invalidates this key when notifications change (Supabase);
+    // on ICP there is no realtime channel so polling is the only signal —
+    // either way 60s is plenty.
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -763,7 +804,15 @@ export function AppHeader() {
 
   const markAsRead = useMutation({
     mutationFn: async (id: string) => {
-      if (resolveAuthBackend() === "icp") return id;
+      if (resolveAuthBackend() === "icp") {
+        const { markLiveNotificationRead } = await import("@/live/features/notifications");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        await withFeatureBackend("notifications", {
+          supabase: async () => {},
+          icp: async (ctx) => { await markLiveNotificationRead(ctx, id); },
+        });
+        return id;
+      }
       const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
@@ -829,6 +878,15 @@ export function AppHeader() {
 
   const handleNotificationClick = async (notification: typeof recentNotifications[0]) => {
     if (resolveAuthBackend() === "icp") {
+      // The canister has no per-type route metadata (chat/event containers
+      // live in Supabase-shaped tables that don't exist on-chain), so the
+      // dropdown always lands on the full inbox — but the tap still marks
+      // the item read on-chain instead of silently doing nothing.
+      if (!notification.is_read) {
+        void markAsRead.mutateAsync(notification.id).catch(() => {
+          // Silent — the read state will reconcile on next inbox refetch.
+        });
+      }
       navigate("/notifications");
       return;
     }

@@ -1732,3 +1732,27 @@ export async function setLiveClubGeneralSettings(
     "Save club settings",
   );
 }
+
+/** Best-effort liveness ping for the online-users roster; club_domain tracks last-seen per caller. */
+export async function recordLiveClubPresenceHeartbeat(ctx: FeatureBackendContext): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(actor.record_presence_heartbeat(), "Record presence heartbeat");
+}
+
+export interface LiveOnlinePresenceRow {
+  accountId: string;
+  lastSeenMs: bigint;
+}
+
+/** Accounts (principal text / account id) with a heartbeat within the last `windowSeconds`. App-admin/governor only canister-side. */
+export async function listLiveOnlinePresence(
+  ctx: FeatureBackendContext,
+  windowSeconds: number,
+): Promise<LiveOnlinePresenceRow[]> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(
+    actor.list_online_presence(BigInt(Math.trunc(windowSeconds))),
+    "List online presence",
+  );
+  return rows.map(([accountId, lastSeenMs]) => ({ accountId, lastSeenMs }));
+}

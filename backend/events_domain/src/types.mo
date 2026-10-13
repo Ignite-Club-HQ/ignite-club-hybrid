@@ -231,6 +231,29 @@ module {
   // club/team + date range.
   public type PlayerStatRow = { ref_kind : Text; ref_id : Text; mvp_count : Nat32; captain_count : Nat32; vice_count : Nat32; goalkeeper_count : Nat32 };
 
+  // ---- Live match timer (events_domain extras, migration 20261016_000000) ----
+  // Server-anchored per-event pitch timer, mirroring the shape the Supabase
+  // `pitch-timer-event`/`pitch-timer-read` edge functions maintain (see
+  // frontend/src/lib/serverTimer.ts `ServerTimer`). Keyed by event_id — one
+  // timer per event, independent of which team board is viewing it.
+  // Timestamps are canister-native Nat64 ms (unlike the Supabase ISO-string
+  // columns); the frontend ICP wrapper converts to/from ISO strings so the
+  // existing `ServerTimer` consumers are unaffected.
+  public type EventTimer = {
+    event_id : Text;
+    schema_version : Nat8;
+    current_half : Nat8;
+    minutes_per_half : Nat16;
+    half_started_at_ms : ?Nat64;
+    half_paused_at_ms : ?Nat64;
+    accumulated_pause_ms : Nat64;
+    is_running : Bool;
+    is_game_finished : Bool;
+    half_ended_at_ms : ?Nat64;
+    last_event_at_ms : Nat64;
+    updated_by : Principal;
+  };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];

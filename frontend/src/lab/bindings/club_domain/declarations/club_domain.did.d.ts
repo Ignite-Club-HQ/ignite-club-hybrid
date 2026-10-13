@@ -706,6 +706,11 @@ export interface Main {
     { 'Ok' : Array<[string, string, string]> } |
       { 'Err' : string }
   >,
+  'list_online_presence' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<[string, bigint]> } |
+      { 'Err' : string }
+  >,
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
@@ -844,6 +849,11 @@ export interface Main {
   'purge_expired_deletions' : ActorMethod<
     [],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'record_presence_heartbeat' : ActorMethod<
+    [],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<

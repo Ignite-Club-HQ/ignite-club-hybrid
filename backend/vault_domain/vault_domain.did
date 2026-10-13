@@ -59,6 +59,10 @@ type Main =
        Err: text;
        Ok;
      });
+   create_backup: (backup_label: text) -> (variant {
+                                             Err: text;
+                                             Ok: Backup;
+                                           });
    create_folder: (id: text, club: text, team: opt text, parent_id: opt text,
     name: text, restricted_roles: vec text, mini_league_id: opt text,
     sort_order: nat32, description: opt text, color: opt text) ->
@@ -68,6 +72,10 @@ type Main =
      });
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
+   delete_backup: (id: text) -> (variant {
+                                   Err: text;
+                                   Ok;
+                                 });
    delete_file_permanent: (id: text) -> (variant {
                                            Err: text;
                                            Ok;
@@ -76,6 +84,10 @@ type Main =
                                    Err: text;
                                    Ok: VaultFolder;
                                  });
+   get_backup: (id: text) -> (variant {
+                                Err: text;
+                                Ok: Backup;
+                              }) query;
    get_file: (id: text) -> (variant {
                               Err: text;
                               Ok: opt VaultFile;
@@ -94,6 +106,10 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   list_backups: () -> (variant {
+                          Err: text;
+                          Ok: vec BackupSummary;
+                        }) query;
    list_club_files: (club: text, team: opt text, mini_league_id: opt text) ->
     (variant {
        Err: text;
@@ -151,6 +167,10 @@ type Main =
        Err: text;
        Ok: VaultFile;
      });
+   restore_backup: (id: text) -> (variant {
+                                    Err: text;
+                                    Ok: nat;
+                                  });
    restore_file: (id: text) -> (variant {
                                   Err: text;
                                   Ok: VaultFile;
@@ -188,5 +208,23 @@ type BlobRef =
    canister: text;
    content_hash: text;
    path: text;
+ };
+type BackupSummary = 
+ record {
+   backup_label: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   file_count: nat;
+   folder_count: nat;
+   id: text;
+ };
+type Backup = 
+ record {
+   backup_label: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   files: vec VaultFile;
+   folders: vec VaultFolder;
+   id: text;
  };
 service : (governorInit: principal) -> Main

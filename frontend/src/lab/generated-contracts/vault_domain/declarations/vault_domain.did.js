@@ -9,22 +9,6 @@
 import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
-  const VaultFolder = IDL.Record({
-    'id' : IDL.Text,
-    'mini_league_id' : IDL.Opt(IDL.Text),
-    'club' : IDL.Text,
-    'name' : IDL.Text,
-    'color' : IDL.Opt(IDL.Text),
-    'team' : IDL.Opt(IDL.Text),
-    'restricted_roles' : IDL.Vec(IDL.Text),
-    'sort_order' : IDL.Nat32,
-    'description' : IDL.Opt(IDL.Text),
-    'created_by' : IDL.Principal,
-    'created_at_ms' : IDL.Nat64,
-    'parent_id' : IDL.Opt(IDL.Text),
-    'deleted_by' : IDL.Opt(IDL.Principal),
-    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
-  });
   const BlobRef = IDL.Record({
     'path' : IDL.Text,
     'content_hash' : IDL.Text,
@@ -47,6 +31,30 @@ export const idlFactory = ({ IDL }) => {
     'deleted_at_ms' : IDL.Opt(IDL.Nat64),
     'uploaded_by' : IDL.Principal,
   });
+  const VaultFolder = IDL.Record({
+    'id' : IDL.Text,
+    'mini_league_id' : IDL.Opt(IDL.Text),
+    'club' : IDL.Text,
+    'name' : IDL.Text,
+    'color' : IDL.Opt(IDL.Text),
+    'team' : IDL.Opt(IDL.Text),
+    'restricted_roles' : IDL.Vec(IDL.Text),
+    'sort_order' : IDL.Nat32,
+    'description' : IDL.Opt(IDL.Text),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'parent_id' : IDL.Opt(IDL.Text),
+    'deleted_by' : IDL.Opt(IDL.Principal),
+    'deleted_at_ms' : IDL.Opt(IDL.Nat64),
+  });
+  const Backup = IDL.Record({
+    'id' : IDL.Text,
+    'files' : IDL.Vec(VaultFile),
+    'backup_label' : IDL.Text,
+    'folders' : IDL.Vec(VaultFolder),
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+  });
   const PinnedVault = IDL.Record({
     'root_id' : IDL.Opt(IDL.Text),
     'root_scope' : IDL.Opt(IDL.Text),
@@ -59,6 +67,14 @@ export const idlFactory = ({ IDL }) => {
     'vault_file_id' : IDL.Opt(IDL.Text),
     'chat_type' : IDL.Text,
   });
+  const BackupSummary = IDL.Record({
+    'id' : IDL.Text,
+    'backup_label' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'file_count' : IDL.Nat,
+    'folder_count' : IDL.Nat,
+  });
   const VaultFileWithFolder = IDL.Record({
     'folder_name' : IDL.Opt(IDL.Text),
     'folder_path' : IDL.Vec(IDL.Text),
@@ -68,6 +84,11 @@ export const idlFactory = ({ IDL }) => {
     'clear_pinned_vault' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'create_backup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Backup, 'Err' : IDL.Text })],
         [],
       ),
     'create_folder' : IDL.Func(
@@ -87,6 +108,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'cycles_balance' : IDL.Func([], [IDL.Nat], ['query']),
+    'delete_backup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'delete_file_permanent' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -96,6 +122,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFolder, 'Err' : IDL.Text })],
         [],
+      ),
+    'get_backup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : Backup, 'Err' : IDL.Text })],
+        ['query'],
       ),
     'get_file' : IDL.Func(
         [IDL.Text],
@@ -116,6 +147,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Principal, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
+      ),
+    'list_backups' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(BackupSummary), 'Err' : IDL.Text })],
+        ['query'],
       ),
     'list_club_files' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
@@ -197,6 +233,11 @@ export const idlFactory = ({ IDL }) => {
     'rename_file' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : VaultFile, 'Err' : IDL.Text })],
+        [],
+      ),
+    'restore_backup' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
         [],
       ),
     'restore_file' : IDL.Func(
