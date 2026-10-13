@@ -39,6 +39,11 @@ type MiniLeagueActor = Awaited<ReturnType<typeof connectLiveMiniLeagueDomain>>["
 
 export async function listLiveMiniLeaguesByClub(ctx: FeatureBackendContext, clubId: string) {
   return batched(
+
+export async function listLivePublicMiniLeagues(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return actor.list_public_mini_leagues();
+}
     ctx, "mini:by_club", clubId, () => connectLiveMiniLeagueDomain(ctx.target, ctx.identity),
     async (actor: MiniLeagueActor, ids) =>
       groupBy(ids, await unwrapCandid(actor.list_mini_leagues_by_clubs(ids), "List mini leagues"), (r) => r.club_id),
