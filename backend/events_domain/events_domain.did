@@ -73,6 +73,15 @@ type PushReachability =
    updated_at_ms: nat64;
    user: principal;
  };
+type PlayerStatRow = 
+ record {
+   captain_count: nat32;
+   goalkeeper_count: nat32;
+   mvp_count: nat32;
+   ref_id: text;
+   ref_kind: text;
+   vice_count: nat32;
+ };
 type PlayHQMatch = 
  record {
    away_team_name: opt text;
@@ -120,6 +129,24 @@ type MiniLeagueRsvp =
    event_id: text;
    state: text;
    subject: RsvpSubject;
+   updated_at_ms: nat64;
+ };
+type MatchGoalkeeperAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   period: text;
+   ref_id: text;
+   ref_kind: text;
+   updated_at_ms: nat64;
+ };
+type MatchCaptainAssignment = 
+ record {
+   assigned_by: principal;
+   event_id: text;
+   ref_id: text;
+   ref_kind: text;
+   role: text;
    updated_at_ms: nat64;
  };
 type Main = 
@@ -384,6 +411,12 @@ type Main =
        Err: text;
        Ok: opt PitchBoardSettings;
      }) query;
+   get_player_stats_report: (club_id: text, team_id: opt text, from_ms:
+    nat64, to_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec PlayerStatRow;
+     }) query;
    get_push_reachable: ("principal": principal) ->
     (variant {
        Err: text;
@@ -477,6 +510,16 @@ type Main =
        Err: text;
        Ok: vec EventGroupPlayer;
      }) query;
+   list_match_captains: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchCaptainAssignment;
+     }) query;
+   list_match_goalkeepers: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec MatchGoalkeeperAssignment;
+     }) query;
    list_mini_league_rsvps: (event_id: text) ->
     (variant {
        Err: text;
@@ -532,11 +575,11 @@ type Main =
        Err: text;
        Ok: vec EventAttendance;
      });
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
-    (variant {
-       err: text;
-       ok: nat;
-     });
+   merge_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
    move_group_player: (from_group_id: text, to_group_id: text, account_id:
     text, team_letter: opt text) -> (variant {
                                        Err: text;
@@ -565,11 +608,11 @@ type Main =
        Err: text;
        Ok: ReminderLog;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
-    (variant {
-       err: text;
-       ok: nat;
-     });
+   rekey_principal: (old: principal, new_principal: principal, dry_run:
+    bool) -> (variant {
+                err: text;
+                ok: nat;
+              });
    removeBulkAccessPrincipal: ("principal": principal) ->
     (variant {
        Err: text;
@@ -599,6 +642,16 @@ type Main =
        Ok;
      });
    remove_group_player: (group_id: text, account_id: text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
+   remove_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok;
+              });
+   remove_match_goalkeeper: (event_id: text, period: text) ->
     (variant {
        Err: text;
        Ok;
@@ -696,6 +749,16 @@ type Main =
        Err: text;
        Ok: EventGroupDuty;
      });
+   set_match_captain: (event_id: text, ref_kind: text, ref_id: text, role:
+    text) -> (variant {
+                Err: text;
+                Ok: MatchCaptainAssignment;
+              });
+   set_match_goalkeeper: (event_id: text, ref_kind: text, ref_id: text,
+    period: text) -> (variant {
+                        Err: text;
+                        Ok: MatchGoalkeeperAssignment;
+                      });
    set_mini_league_rsvp: (event_id: text, subject: RsvpSubject, state:
     text) -> (variant {
                 Err: text;

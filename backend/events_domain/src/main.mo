@@ -1561,6 +1561,125 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(gameResults.find(func(item) = item.event_id == ?event_id))
   };
 
+  // ---- Match captains / goalkeepers / player stats report ----
+  func validRefKind(value : Text) : Bool { value == "account" or value == "child" };
+
+  public shared ({ caller }) func set_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok : Types.MatchCaptainAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or (role != "captain" and role != "vice")) return #Err("Invalid captain assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchCaptainAssignment = { event_id; ref_kind; ref_id; role; assigned_by = caller; updated_at_ms = nowMs() };
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_captain(event_id : Text, ref_kind : Text, ref_id : Text, role : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchCaptainAssignments := matchCaptainAssignments.filter(func(item) = not (item.event_id == event_id and item.ref_kind == ref_kind and item.ref_id == ref_id and item.role == role));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_captains(event_id : Text) : async { #Ok : [Types.MatchCaptainAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchCaptainAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  public shared ({ caller }) func set_match_goalkeeper(event_id : Text, ref_kind : Text, ref_id : Text, period : Text) : async { #Ok : Types.MatchGoalkeeperAssignment; #Err : Text } {
+    auth(caller);
+    if (not valid(event_id) or not validRefKind(ref_kind) or not valid(ref_id) or not valid(period)) return #Err("Invalid goalkeeper assignment");
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        let value : Types.MatchGoalkeeperAssignment = { event_id; ref_kind; ref_id; period; assigned_by = caller; updated_at_ms = nowMs() };
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period)).concat([value]);
+        #Ok(value)
+      };
+    };
+  };
+
+  public shared ({ caller }) func remove_match_goalkeeper(event_id : Text, period : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) #Err(e);
+      case (#Ok(_)) {
+        matchGoalkeeperAssignments := matchGoalkeeperAssignments.filter(func(item) = not (item.event_id == event_id and item.period == period));
+        #Ok;
+      };
+    };
+  };
+
+  public query ({ caller }) func list_match_goalkeepers(event_id : Text) : async { #Ok : [Types.MatchGoalkeeperAssignment]; #Err : Text } {
+    auth(caller);
+    #Ok(matchGoalkeeperAssignments.filter(func(item) = item.event_id == event_id))
+  };
+
+  // Folds one stat bump into rows, inserting a fresh row keyed by
+  // (ref_kind, ref_id) on first sight.
+  func bumpPlayerStat(rows : [Types.PlayerStatRow], ref_kind : Text, ref_id : Text, mvp : Nat32, captain : Nat32, vice : Nat32, gk : Nat32) : [Types.PlayerStatRow] {
+    switch (rows.find(func(r) = r.ref_kind == ref_kind and r.ref_id == ref_id)) {
+      case (?existing) {
+        rows.filter(func(r) = not (r.ref_kind == ref_kind and r.ref_id == ref_id)).concat([{
+          existing with
+          mvp_count = existing.mvp_count + mvp;
+          captain_count = existing.captain_count + captain;
+          vice_count = existing.vice_count + vice;
+          goalkeeper_count = existing.goalkeeper_count + gk;
+        }]);
+      };
+      case null { rows.concat([{ ref_kind; ref_id; mvp_count = mvp; captain_count = captain; vice_count = vice; goalkeeper_count = gk }]) };
+    };
+  };
+
+  // Aggregates MVP counts (from existing GameResult rows), captain/vice
+  // counts (MatchCaptainAssignment) and goalkeeper counts
+  // (MatchGoalkeeperAssignment) per player over every non-deleted event for
+  // club_id (optionally narrowed to team_id) whose starts_at_ms falls in
+  // [from_ms, to_ms]. Team-staff authorization reuses managesTeam (club_admin
+  // / team_admin / coach), same as create_team_training_pause.
+  public query ({ caller }) func get_player_stats_report(club_id : Text, team_id : ?Text, from_ms : Nat64, to_ms : Nat64) : async { #Ok : [Types.PlayerStatRow]; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id)) return #Err("Invalid club");
+    let teamAllowed = switch (team_id) { case (?t) managesTeam(caller, club_id, t); case null false };
+    if (not isGovernor(caller) and not hasRole(caller, "club_admin", club_id, null) and not teamAllowed) return #Err("Team staff required");
+    let matchingEvents = events.filter(func(e) = e.club_id == club_id and not e.deleted and e.starts_at_ms >= from_ms and e.starts_at_ms <= to_ms and (switch (team_id) { case (?t) e.team_id == ?t; case null true }));
+    let eventIds = matchingEvents.map(func(e) = e.id);
+    var rows : [Types.PlayerStatRow] = [];
+    for (cap in matchCaptainAssignments.values()) {
+      if (eventIds.any(func(id) = id == cap.event_id)) {
+        if (cap.role == "captain") { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 1, 0, 0) }
+        else { rows := bumpPlayerStat(rows, cap.ref_kind, cap.ref_id, 0, 0, 1, 0) };
+      };
+    };
+    for (gk in matchGoalkeeperAssignments.values()) {
+      if (eventIds.any(func(id) = id == gk.event_id)) {
+        rows := bumpPlayerStat(rows, gk.ref_kind, gk.ref_id, 0, 0, 0, 1);
+      };
+    };
+    for (gr in gameResults.values()) {
+      switch (gr.event_id) {
+        case (?eid) {
+          if (eventIds.any(func(id) = id == eid)) {
+            switch (gr.mvp_player_id) {
+              case (?pid) { rows := bumpPlayerStat(rows, "account", pid, 1, 0, 0, 0) };
+              case null {};
+            };
+          };
+        };
+        case null {};
+      };
+    };
+    #Ok(rows)
+  };
+
   // ---- Workstream D: active game mirror (server-side push notification driver) ----
   // Shared-session model (mirrors Supabase active_games): one active row per
   // team; a null team scopes the row to the caller alone.
