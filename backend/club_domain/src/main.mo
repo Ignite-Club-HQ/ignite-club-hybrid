@@ -1213,6 +1213,20 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+  // Club-staff roster read: children and role grants for one club, gated on
+  // the caller holding a staff role there (same check as has_club_staff_role).
+  // Names/PII are not resolved here — callers fetch PII separately via the
+  // vetKey-gated pii_access_control relay.
+  public query ({ caller }) func get_club_roster(club_id : Text) : async { #Ok : { children : [Types.Child]; roles : [Types.RoleGrant] }; #Err : Text } {
+    if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) {
+      return #Err("Club staff role required");
+    };
+    #Ok({
+      children = acl.children.filter(func(c) = c.club_id == ?club_id);
+      roles = acl.roles.filter(func(g) = g.club == ?club_id);
+    })
+  };
+
   // Caller-scoped: returns only the children linked to the caller's own
   // account via family links. Children without a matching record in
   // acl.children are skipped.

@@ -1315,8 +1315,31 @@ export default function HomePage() {
   });
 
   const { data: teams, error: teamsError, isLoading: teamsLoading } = useQuery({
-    queryKey: ["all-teams"],
+    queryKey: ["all-teams", resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const filterOut = /test|demo|sample/i;
+            const liveClubs = (await listLiveClubs(ctx)).filter((c) => !filterOut.test(c.name));
+            const teamsByClub = await Promise.all(
+              liveClubs.map(async (c) => {
+                const rows = await listLiveTeams(ctx, c.id);
+                return rows
+                  .filter((t) => t.deleted_at_ms.length === 0 && !filterOut.test(t.name))
+                  .map((t) => ({
+                    id: t.id,
+                    name: t.name,
+                    club_id: t.club_id,
+                    clubs: { name: c.name, sport: c.sport[0] ?? null, deleted_at: null, purged_at: null },
+                  }));
+              }),
+            );
+            return (teamsByClub.flat() as unknown as Team[]).sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, club_id, clubs!club_id!inner (name, sport, deleted_at, purged_at)")
@@ -1333,7 +1356,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Team[];
     },
-    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1880,8 +1903,31 @@ export default function HomePage() {
 
   const teamRequestMutation = useMutation({
     mutationFn: async () => {
-      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Team and league access requests are unavailable in ICP lab mode.");
+      if (resolveAuthBackend() === "icp") {
+        if (isLeagueSelected && actualLeagueId) {
+          const league = miniLeagues?.find((l) => l.id === actualLeagueId);
+          if (!league) throw new Error("League not found");
+          if (userRoles?.some(r => r.club_id === league.club_id && r.role === selectedLeagueRole)) {
+            throw new Error("You already have this role in this league");
+          }
+          await withFeatureBackend("membership", {
+            supabase: async () => { throw new Error("unreachable"); },
+            icp: (ctx) => requestLiveRole(ctx, league.club_id, selectedLeagueRole!),
+          });
+          return;
+        }
+        if (userRoles?.some(r => r.team_id === selectedTeam && r.role === selectedTeamRole)) {
+          throw new Error("You already have this role in this team");
+        }
+        const team = teams?.find((t) => t.id === selectedTeam);
+        if (!team) throw new Error("Team not found");
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: (ctx) => requestLiveRole(ctx, team.club_id, selectedTeamRole!, selectedTeam),
+        });
+        return;
+      }
       if (isLeagueSelected && actualLeagueId) {
         // Handle league join request
         const league = miniLeagues?.find((l) => l.id === actualLeagueId);
@@ -1961,13 +2007,20 @@ export default function HomePage() {
   // user is already part of. Reuses the same role_requests workflow.
   const requestAdditionalAccessMutation = useMutation({
     mutationFn: async (role: TeamRole) => {
-      if (resolveAuthBackend() === "icp") return;
       if (useIcpLab) throw new Error("Additional team access requests are unavailable in ICP lab mode.");
       if (!user || !selectedTeam) throw new Error("Missing data");
       if (userRoles?.some(r => r.team_id === selectedTeam && r.role === role)) {
         throw new Error(`You already have the ${teamRoleLabel(role)} role on this team`);
       }
       const team = teams?.find((t) => t.id === selectedTeam);
+      if (resolveAuthBackend() === "icp") {
+        if (!team) throw new Error("Team not found");
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: (ctx) => requestLiveRole(ctx, team.club_id, role, selectedTeam),
+        });
+        return;
+      }
       const { error } = await supabase.from("role_requests").insert({
         user_id: user.id,
         team_id: selectedTeam,
