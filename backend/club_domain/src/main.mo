@@ -1845,13 +1845,14 @@ persistent actor class Main(governorInit : Principal) {
       case (?existing) { return #Ok(existing.0) };
       case null {};
     };
-    let code = Text.toUppercase(await randomHex(4));
+    let code = Text.toUpper(await randomHex(4));
     inviteShortCodes := inviteShortCodes.concat([(code, invite_id)]);
     #Ok(code)
   };
 
   public query func resolve_invite_short_code(code : Text) : async { #Ok : Text; #Err : Text } {
-    switch (inviteShortCodes.find(func(e) = e.0 == code)) {
+    let wanted = Text.toUpper(code);
+    switch (inviteShortCodes.find(func(e) = e.0 == wanted)) {
       case (?entry) { #Ok(entry.1) };
       case null { #Err("Short code not found") };
     }
