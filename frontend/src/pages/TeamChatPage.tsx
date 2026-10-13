@@ -325,7 +325,7 @@ export default function TeamChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && teamId) {
-      if (useIcpLab) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
         requestAnimationFrame(() => handleJumpToMessage(mid));
         return;
       }

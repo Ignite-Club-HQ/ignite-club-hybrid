@@ -335,7 +335,7 @@ export default function GroupChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && groupId) {
-      if (useIcpLab) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
         requestAnimationFrame(() => handleJumpToMessage(mid));
         return;
       }
