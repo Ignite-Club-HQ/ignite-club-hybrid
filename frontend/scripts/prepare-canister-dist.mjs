@@ -51,7 +51,7 @@ writeFileSync(
 const callbackHosts = ["icp0.io", "raw.icp0.io", "icp.net", "raw.icp.net", "ic0.app", "raw.ic0.app"];
 writeFileSync(
   `${out}/.well-known/ii-auth-callbacks`,
-  JSON.stringify({ callbacks: callbackHosts.map((h) => `https://${frontendCanisterId}.${h}/auth`) }, null, 2) + "\n",
+  JSON.stringify({ callbacks: callbackHosts.flatMap((h) => ["/auth", "/native-sign-in.html", "/native-sign-in"].map((p) => `https://${frontendCanisterId}.${h}${p}`)) }, null, 2) + "\n",
 );
 
 const csp = [
