@@ -288,7 +288,6 @@ export function AddressAutocomplete({
   };
 
   const handleSaveAsFavorite = async () => {
-    if (icpMode) return; // saved_locations has no canister equivalent (NEEDS-CANISTER)
     if (!user || !currentAddress?.address) {
       toast.error("Please select an address first");
       return;
@@ -298,6 +297,25 @@ export function AddressAutocomplete({
       const fullAddress = [currentAddress.address, currentAddress.suburb, currentAddress.state, currentAddress.postcode]
         .filter(Boolean)
         .join(", ");
+      if (icpMode) {
+        if (favoriteLocations.some((loc) => loc.address === fullAddress)) {
+          toast.info("This location is already saved");
+          return;
+        }
+        // Coordinates are optional for saved places; the address text is what is reused.
+        const bias = biasRef.current;
+        const saved = await withFeatureBackend("events", {
+          supabase: async () => null,
+          icp: (ctx) => saveLiveLocation(ctx, currentAddress.address, fullAddress, bias?.lat ?? 0, bias?.lng ?? 0),
+        });
+        const id = (saved as { id?: string } | null)?.id;
+        setFavoriteLocations((prev) => [
+          { id, address: fullAddress, name: currentAddress.address, isFavorite: true },
+          ...prev,
+        ]);
+        toast.success("Location saved to favorites");
+        return;
+      }
       const { data, error } = await supabase
         .from('saved_locations')
         .insert({
@@ -326,16 +344,23 @@ export function AddressAutocomplete({
 
   const handleRemoveFavorite = async (e: React.MouseEvent, locationId: string) => {
     e.stopPropagation();
-    if (!user || icpMode) return;
+    if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('saved_locations')
-        .delete()
-        .eq('id', locationId)
-        .eq('user_id', user.id);
+      if (icpMode) {
+        await withFeatureBackend("events", {
+          supabase: async () => undefined,
+          icp: (ctx) => deleteLiveSavedLocation(ctx, locationId),
+        });
+      } else {
+        const { error } = await supabase
+          .from('saved_locations')
+          .delete()
+          .eq('id', locationId)
+          .eq('user_id', user.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      }
 
       setFavoriteLocations(prev => prev.filter(loc => loc.id !== locationId));
       toast.success("Location removed from favorites");
