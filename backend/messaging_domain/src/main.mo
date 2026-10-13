@@ -984,13 +984,13 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
     if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
     if (limit == 0 or limit > 100) return #Err("Invalid page size");
-    let lower_needle = Text.toLowercase(needle);
+    let lower_needle = Text.toLower(needle);
     var matches : [Types.Message] = [];
     var i = messages.size();
     while (i > 0 and matches.size() < Nat16.toNat(limit)) {
       i -= 1;
       let m = messages[i];
-      if (m.conversation_id == conversation_id and Text.contains(Text.toLowercase(m.body), #text lower_needle)) {
+      if (m.conversation_id == conversation_id and Text.contains(Text.toLower(m.body), #text lower_needle)) {
         matches := matches.concat([m]);
       };
     };
