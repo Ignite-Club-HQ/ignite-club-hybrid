@@ -853,13 +853,13 @@ persistent actor class Main(governorInit : Principal) {
     savedLocations.filter(func(item) = item.account_id == me);
   };
 
-  public shared ({ caller }) func save_location(label : Text, address : Text, lat : Float, lng : Float) : async { #Ok : Types.SavedLocation; #Err : Text } {
+  public shared ({ caller }) func save_location(location_label : Text, address : Text, lat : Float, lng : Float) : async { #Ok : Types.SavedLocation; #Err : Text } {
     auth(caller);
-    if (not valid(label) or address == "" or address.size() > 256) return #Err("Invalid location");
+    if (not valid(location_label) or address == "" or address.size() > 256) return #Err("Invalid location");
     let me = callerAccountId(caller);
     let value : Types.SavedLocation = {
       id = "loc-" # me # "-" # Nat.toText(savedLocations.size());
-      account_id = me; label; address; lat; lng; created_at_ms = nowMs();
+      account_id = me; location_label; address; lat; lng; created_at_ms = nowMs();
     };
     savedLocations := savedLocations.concat([value]);
     #Ok(value);

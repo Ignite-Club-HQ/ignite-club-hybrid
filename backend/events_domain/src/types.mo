@@ -205,7 +205,7 @@ module {
   // Per-caller shortlist of event titles for quick reuse when creating events.
   public type FavouriteEventTitle = { account_id : Text; title : Text };
   // Per-caller saved addresses for the event location autocomplete.
-  public type SavedLocation = { id : Text; account_id : Text; label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 };
+  public type SavedLocation = { id : Text; account_id : Text; location_label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 };
   // Per (caller, club, team, child) default RSVP applied to new training events in the UI.
   // child_id = null means the caller's own default (not RSVPing on behalf of a child).
   public type TrainingDefault = { account_id : Text; club_id : Text; team_id : Text; child_id : ?Text; default_rsvp : Text; updated_at_ms : Nat64 };

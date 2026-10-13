@@ -11,7 +11,7 @@
 module {
   public func migration(_ : {}) : {
     var favouriteEventTitles : [{ account_id : Text; title : Text }];
-    var savedLocations : [{ id : Text; account_id : Text; label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 }];
+    var savedLocations : [{ id : Text; account_id : Text; location_label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 }];
     var trainingDefaults : [{ account_id : Text; club_id : Text; team_id : Text; child_id : ?Text; default_rsvp : Text; updated_at_ms : Nat64 }];
     var rsvpCreatedAt : [{ event_id : Text; account_id : Text; created_at_ms : Nat64 }];
   } {
