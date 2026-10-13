@@ -616,6 +616,18 @@ export async function revokeLivePendingInvite(ctx: FeatureBackendContext, invite
   return unwrapCandid(actor.revoke_pending_invite(inviteId), "Revoke pending invite");
 }
 
+/** Creates (or returns the existing) short code for an invite, for short-link sharing. */
+export async function createLiveInviteShortCode(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_invite_short_code(inviteId), "Create invite short code");
+}
+
+/** Resolves a short code back to its invite id, for the /i/:code redirect route. */
+export async function resolveLiveInviteShortCode(ctx: FeatureBackendContext, code: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.resolve_invite_short_code(code), "Resolve invite short code");
+}
+
 /**
  * Guardian link/unlink, child-to-parent admin linking, and parent-initiated
  * child creation on a team.

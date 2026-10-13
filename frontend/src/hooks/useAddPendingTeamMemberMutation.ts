@@ -10,7 +10,7 @@ import {
 import { refreshTeamRoleChange } from "@/lab/teamMembershipCacheCompletion";
 import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
-import { createLivePendingInvite, bulkAddLiveTeamMembers, listLivePendingInvitesByClub } from "@/live/features/club";
+import { createLivePendingInvite, bulkAddLiveTeamMembers, listLivePendingInvitesByClub, createLiveInviteShortCode } from "@/live/features/club";
 
 type Args = {
   supabase: any;
@@ -150,6 +150,16 @@ export function useAddPendingTeamMemberMutation({
     });
     const link = `${window.location.origin}/join/p/${invite.id}`;
 
+    // Short invite link, same as the Supabase path's short_code: shorter,
+    // friendlier URL for sharing (email/internal still use the full link).
+    let shareLink = link;
+    try {
+      const shortCode = await createLiveInviteShortCode(ctx, invite.id);
+      shareLink = `${window.location.origin}/i/${shortCode}`;
+    } catch (err) {
+      console.warn("[ICP invite] short code creation failed:", err);
+    }
+
     // Email delivery routes through the send-email edge function, which is
     // anon-key callable so Internet Identity sessions can send too. Failure
     // degrades to manual link sharing — the link is returned either way.
@@ -185,7 +195,7 @@ export function useAddPendingTeamMemberMutation({
     }
     return {
       link,
-      shareLink: link,
+      shareLink,
       email: customEmail.trim(),
       childrenCount: 0,
       childrenNames: [] as string[],
