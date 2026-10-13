@@ -122,3 +122,12 @@
 - [x] scripts/move-account.mjs + move-account.yml workflow
 - [x] AGENTS.md rule
 - [ ] User: top up, run blockchain update, run move workflow (dry run then confirm), sign out/in on laptop
+
+## Close remaining ICP gaps except payments (2026-10-13)
+- [ ] Seasons (archive/publish/notify/compare/rollover/draft builder/EOI/orphans)
+- [ ] Team requests (non-admin) + role request approve/deny
+- [ ] Invites: edit/move pending, reconcile, second-parent, email dedupe, positions, team folders, team roles
+- [ ] Pitch board + Player of Match + event views + saved locations + favourite titles + training defaults + mini-league RSVPs
+- [ ] Stats: attendance, player stats, team leaderboards/rank, leaderboard names, points rules, Pro check on rewards
+- [ ] Chat: read receipts, desktop rail, badges, AI catch-up, vault auto-sync, queued replay, notification routing
+- [ ] Misc: content reports, theme pref, switcher hint, free-usage meter, admin delete account, associations, class enrolment, PlayHQ, club theme fields

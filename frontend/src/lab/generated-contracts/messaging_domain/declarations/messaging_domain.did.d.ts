@@ -77,6 +77,17 @@ export interface CompetitionAdmin {
   'conversation_id' : string,
   'user' : Principal,
 }
+export interface ContentReport {
+  'id' : string,
+  'status' : string,
+  'conversation_id' : [] | [string],
+  'subject_kind' : string,
+  'created_at_ms' : bigint,
+  'subject_id' : string,
+  'details' : [] | [string],
+  'reporter' : Principal,
+  'reason' : string,
+}
 export interface Conversation {
   'id' : string,
   'participants' : Array<Principal>,
@@ -326,6 +337,11 @@ export interface Main {
     { 'Ok' : Array<ClubDmSettings> } |
       { 'Err' : string }
   >,
+  'list_content_reports' : ActorMethod<
+    [[] | [string]],
+    { 'Ok' : Array<ContentReport> } |
+      { 'Err' : string }
+  >,
   'list_deleted_groups' : ActorMethod<
     [],
     { 'Ok' : Array<GroupMetadata> } |
@@ -482,9 +498,14 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'resolve_content_report' : ActorMethod<
+    [string, string],
+    { 'Ok' : ContentReport } |
+      { 'Err' : string }
+  >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'search_messages' : ActorMethod<
-    [string, string, bigint],
+    [string, string, number],
     { 'Ok' : Array<Message> } |
       { 'Err' : string }
   >,
@@ -571,6 +592,11 @@ export interface Main {
   'soft_delete_group' : ActorMethod<
     [string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'submit_content_report' : ActorMethod<
+    [string, string, [] | [string], string, [] | [string]],
+    { 'Ok' : ContentReport } |
       { 'Err' : string }
   >,
   'toggle_reaction' : ActorMethod<
@@ -748,6 +774,7 @@ export interface ScheduledMessage {
   'replayed_at_ms' : [] | [bigint],
 }
 export interface State {
+  'contentReports' : Array<ContentReport>,
   'forwardRecords' : Array<ForwardRecord>,
   'joinRequests' : Array<JoinRequest>,
   'scheduledMessages' : Array<ScheduledMessage>,

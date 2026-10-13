@@ -1286,3 +1286,90 @@ export async function searchLiveMessages(
     reactions: [],
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Content reports (moderation) — backs components/reporting/ReportContentDialog.
+// ---------------------------------------------------------------------------
+
+export interface LiveContentReport {
+  id: string;
+  reporter: string;
+  subject_kind: string;
+  subject_id: string;
+  conversation_id: string | null;
+  reason: string;
+  details: string | null;
+  created_at_ms: number;
+  status: string;
+}
+
+function mapLiveContentReport(r: {
+  id: string;
+  reporter: Principal;
+  subject_kind: string;
+  subject_id: string;
+  conversation_id: [] | [string];
+  reason: string;
+  details: [] | [string];
+  created_at_ms: bigint;
+  status: string;
+}): LiveContentReport {
+  return {
+    id: r.id,
+    reporter: r.reporter.toText(),
+    subject_kind: r.subject_kind,
+    subject_id: r.subject_id,
+    conversation_id: r.conversation_id[0] ?? null,
+    reason: r.reason,
+    details: r.details[0] ?? null,
+    created_at_ms: Number(r.created_at_ms),
+    status: r.status,
+  };
+}
+
+/** Submit a moderation report (chat message/user/club/photo/...). */
+export async function submitLiveContentReport(
+  ctx: FeatureBackendContext,
+  subjectKind: string,
+  subjectId: string,
+  conversationId: string | null,
+  reason: string,
+  details?: string | null,
+): Promise<LiveContentReport> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const report = await unwrapCandid(
+    actor.submit_content_report(
+      subjectKind,
+      subjectId,
+      candidOpt(conversationId),
+      reason,
+      candidOpt(details),
+    ),
+    "Submit content report",
+  );
+  return mapLiveContentReport(report);
+}
+
+/** Admin/governor-only: list moderation reports, optionally filtered by status. */
+export async function listLiveContentReports(
+  ctx: FeatureBackendContext,
+  status?: string | null,
+): Promise<LiveContentReport[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const reports = await unwrapCandid(
+    actor.list_content_reports(candidOpt(status)),
+    "List content reports",
+  );
+  return reports.map(mapLiveContentReport);
+}
+
+/** Admin/governor-only: move a report to "open" | "reviewed" | "dismissed". */
+export async function resolveLiveContentReport(
+  ctx: FeatureBackendContext,
+  id: string,
+  status: string,
+): Promise<LiveContentReport> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const report = await unwrapCandid(actor.resolve_content_report(id, status), "Resolve content report");
+  return mapLiveContentReport(report);
+}

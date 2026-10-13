@@ -15,6 +15,8 @@ import type { Database } from "@/integrations/supabase/types";
 import { defaultRsvpAudienceForTeam } from "@/lib/teamAgeDefaults";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { approveLiveTeamCreationRequest, listLiveTeamCreationRequests, rejectLiveTeamCreationRequest } from "@/live/features/club";
+import { saveLiveMembershipTeam, addLiveRoleGrant } from "@/live/features/membership";
+import { Principal } from "@icp-sdk/core/principal";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -89,9 +91,38 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
     mutationFn: async (request: (typeof requests)[0]) =>
       withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // NEEDS-CANISTER: team creation and role grant still have no
-          // canister counterpart. Notification is best-effort.
           await approveLiveTeamCreationRequest(ctx, request.id);
+
+          const teamId = crypto.randomUUID();
+          await saveLiveMembershipTeam(ctx, {
+            id: teamId,
+            name: request.name,
+            division: [],
+            gender: [],
+            is_active: true,
+            club_id: clubId,
+            age_group: request.level_age ? [request.level_age] : [],
+            description: [],
+            logo_url: [],
+            folder_id: [],
+            team_type: [],
+            archived: false,
+            is_shell: false,
+            shell_invited_by: [],
+            shell_contact_name: [],
+            shell_claim_token: [],
+            shell_claimed_at_ms: [],
+            shell_contact_email: [],
+            shell_claimed_by: [],
+            deleted_at_ms: [],
+            playhq_team_id: [],
+            playhq_competition_id: [],
+            playhq_auto_create_events: false,
+          } as any);
+
+          await addLiveRoleGrant(ctx, Principal.fromText(request.requested_by), clubId, "team_admin", teamId);
+
+          // Notification is best-effort.
           try {
             const { fanOutLiveNotifications } = await import("@/live/features/notifications");
             await fanOutLiveNotifications(ctx, {
@@ -100,12 +131,13 @@ export function PendingTeamRequests({ clubId }: PendingTeamRequestsProps) {
               kind: "team_approved",
               body: `Your team "${request.name}" has been approved!`,
               idempotencyKeyPrefix: `team-approval-${request.id}-${Date.now()}`,
-              // No teamId available yet as team creation is not canister-side
-              relatedId: clubId, 
+              relatedId: teamId,
             });
           } catch (e) {
             console.error("Failed to send ICP notification:", e);
           }
+
+          return { id: teamId };
         },
         supabase: async () => {
       // Create the team

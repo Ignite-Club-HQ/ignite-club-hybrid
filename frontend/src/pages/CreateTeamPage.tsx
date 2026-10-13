@@ -247,19 +247,6 @@ export default function CreateTeamPage() {
   };
 
 
-  // Non-admin team requests have no canister counterpart — hide the whole
-  // form for ICP-routed clubs rather than offering a submit that fails.
-  if (!isClubAdmin && isFeatureRoutedToIcp("membership") && !useIcpLab) {
-    return (
-      <div className="container max-w-lg mx-auto px-4 py-12 text-center space-y-3">
-        <h1 className="text-xl font-semibold">Team requests</h1>
-        <p className="text-muted-foreground">
-          Ask a club admin to create the team directly.
-        </p>
-      </div>
-    );
-  }
-
   const handleSubmit = async () => {
     const label = entityLabelLower(club);
     if (!name.trim()) {
@@ -285,19 +272,6 @@ export default function CreateTeamPage() {
       toast({
         title: "Team creation is unavailable in ICP lab mode",
         description: "No team, role, invitation, or media data has been persisted.",
-      });
-      return;
-    }
-
-    // NEEDS-CANISTER: the non-admin request flow (team_creation_requests
-    // insert + request-logo upload) has no club_domain counterpart — the
-    // canister only lists/approves/rejects requests. Fail closed so an
-    // ICP-routed club's request never lands in Supabase.
-    if (!isClubAdmin && isFeatureRoutedToIcp("membership")) {
-      toast({
-        title: "Team requests are not available yet for Internet Identity clubs",
-        description: "Ask a club admin to create the team directly.",
-        variant: "destructive",
       });
       return;
     }

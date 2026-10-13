@@ -102,6 +102,17 @@ pub struct Profile {
     pub display_name: String,
     pub avatar_ref: Option<String>,
     pub updated_at_ns: u64,
+    /// UI theme preference ("light" or "dark"); `#[serde(default)]` keeps
+    /// profiles stored before this field existed decodable as `None`
+    /// (caller falls back to the local DOM/localStorage theme).
+    #[serde(default)]
+    pub theme_preference: Option<String>,
+    /// Millisecond timestamp of when the caller dismissed the one-shot club
+    /// switcher coach-mark, so the dismissal follows the account across
+    /// devices. `#[serde(default)]` keeps older profiles decodable as
+    /// `None` (never dismissed).
+    #[serde(default)]
+    pub club_switcher_hint_seen_at: Option<u64>,
 }
 /// One row of a `search_profiles` result: the profile plus the account's
 /// first principal (needed by callers to grant roles).
@@ -261,6 +272,20 @@ fn get_profile_entry(account_id: &str) -> Option<Profile> {
 }
 fn put_profile_entry(profile: &Profile) {
     PROFILES.with(|m| m.borrow_mut().insert(profile.account_id.clone(), encode(profile)));
+}
+/// The caller's profile, or a blank default (not yet persisted) when none
+/// has been set — used by preference setters that must work before the
+/// account has ever called `set_profile` (e.g. the theme toggle on first
+/// sign-in).
+fn get_or_init_profile(account_id: &str) -> Profile {
+    get_profile_entry(account_id).unwrap_or_else(|| Profile {
+        account_id: account_id.to_string(),
+        display_name: String::new(),
+        avatar_ref: None,
+        updated_at_ns: 0,
+        theme_preference: None,
+        club_switcher_hint_seen_at: None,
+    })
 }
 fn remove_profile_entry(account_id: &str) {
     PROFILES.with(|m| m.borrow_mut().remove(&account_id.to_string()));
@@ -555,12 +580,48 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
     if avatar_ref.as_deref().is_some_and(|a| a.len() > 512) {
         return Err("Avatar reference must be at most 512 characters".into());
     }
+    let existing = get_profile_entry(&account_id);
     let profile = Profile {
         account_id: account_id.clone(),
         display_name: display_name.trim().to_string(),
         avatar_ref,
         updated_at_ns: ic_cdk::api::time(),
+        theme_preference: existing.as_ref().and_then(|p| p.theme_preference.clone()),
+        club_switcher_hint_seen_at: existing.as_ref().and_then(|p| p.club_switcher_hint_seen_at),
     };
+    put_profile_entry(&profile);
+    Ok(profile)
+}
+
+/// Sets (or clears) the caller's UI theme preference, so it follows the
+/// account across devices. Creates a blank profile entry if the caller has
+/// never called `set_profile`.
+#[ic_cdk::update]
+fn set_theme_preference(theme: Option<String>) -> Outcome<Profile> {
+    let caller = ic_cdk::api::msg_caller();
+    let account_id = account_for(caller)?.id;
+    if let Some(value) = theme.as_deref() {
+        if value != "light" && value != "dark" {
+            return Err("Theme must be \"light\" or \"dark\"".into());
+        }
+    }
+    let mut profile = get_or_init_profile(&account_id);
+    profile.theme_preference = theme;
+    profile.updated_at_ns = ic_cdk::api::time();
+    put_profile_entry(&profile);
+    Ok(profile)
+}
+
+/// Records that the caller has dismissed the club switcher coach-mark, so
+/// it stays dismissed across devices. Creates a blank profile entry if the
+/// caller has never called `set_profile`.
+#[ic_cdk::update]
+fn set_club_switcher_hint_seen() -> Outcome<Profile> {
+    let caller = ic_cdk::api::msg_caller();
+    let account_id = account_for(caller)?.id;
+    let mut profile = get_or_init_profile(&account_id);
+    profile.club_switcher_hint_seen_at = Some(ic_cdk::api::time() / 1_000_000);
+    profile.updated_at_ns = ic_cdk::api::time();
     put_profile_entry(&profile);
     Ok(profile)
 }
@@ -977,7 +1038,9 @@ fn erase_account(account_id: String) -> Outcome<()> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
     let caller_account = account_for(caller)?;
-    if caller_account.id != account_id && state.governor != caller {
+    let caller_is_app_admin =
+        account_has_role(&state, &caller_account.id, "app_admin", None, None, None);
+    if caller_account.id != account_id && state.governor != caller && !caller_is_app_admin {
         return Err("Forbidden".into());
     }
     let account = get_account(&account_id).ok_or("Unknown account")?;
@@ -1544,8 +1607,7 @@ mod tests {
             account_id: old_id.clone(),
             display_name: "Paul".into(),
             avatar_ref: None,
-            updated_at_ns: 1,
-        });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0 });
         index_principal(new, &new_id);
         let key = entitlement_key(old, "pro", "");
@@ -1596,8 +1658,7 @@ mod tests {
             account_id: account_id(new),
             display_name: "Someone".into(),
             avatar_ref: None,
-            updated_at_ns: 1,
-        });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         let mut state = empty_core_state(governor);
         assert!(rekey_principal_core(&mut state, old, new, false).is_err());
         assert!(rekey_principal_core(&mut state, governor, new, false).is_err());
@@ -2002,15 +2063,13 @@ mod tests {
             account_id: "a".into(),
             display_name: "Old".into(),
             avatar_ref: None,
-            updated_at_ns: 1,
-        }];
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None }];
         let account_id = "a".to_string();
         let replacement = Profile {
             account_id: account_id.clone(),
             display_name: "New".into(),
             avatar_ref: Some("blob:avatar-1".into()),
-            updated_at_ns: 2,
-        };
+            updated_at_ns: 2, theme_preference: None, club_switcher_hint_seen_at: None };
         // Mirror set_profile's replace-in-place logic.
         profiles.retain(|p| p.account_id != account_id);
         profiles.push(replacement.clone());
@@ -2025,14 +2084,12 @@ mod tests {
                 account_id: "user-1".into(),
                 display_name: "Gone".into(),
                 avatar_ref: None,
-                updated_at_ns: 0,
-            },
+                updated_at_ns: 0, theme_preference: None, club_switcher_hint_seen_at: None },
             Profile {
                 account_id: "user-2".into(),
                 display_name: "Stays".into(),
                 avatar_ref: None,
-                updated_at_ns: 0,
-            },
+                updated_at_ns: 0, theme_preference: None, club_switcher_hint_seen_at: None },
         ];
         profiles.retain(|profile| profile.account_id != "user-1");
         assert_eq!(profiles.len(), 1);
@@ -2090,8 +2147,7 @@ mod tests {
                 account_id: "user-1".into(),
                 display_name: "Paul".into(),
                 avatar_ref: None,
-                updated_at_ns: 7,
-            }],
+                updated_at_ns: 7, theme_preference: None, club_switcher_hint_seen_at: None }],
             roles: vec![RoleGrant {
                 account_id: "user-1".into(),
                 role: "club_admin".into(),
@@ -2178,8 +2234,7 @@ mod tests {
             account_id: "user-1".into(),
             display_name: "Gone".into(),
             avatar_ref: None,
-            updated_at_ns: 1,
-        });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         let key = entitlement_key(user, "pro", "tx-1");
         put_entitlement(
             &key,

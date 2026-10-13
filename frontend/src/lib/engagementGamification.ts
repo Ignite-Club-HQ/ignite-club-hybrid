@@ -133,7 +133,9 @@ const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * scan for a weekly_chat_streak entry inside the current ISO week —
  * race-tolerant because this path is fire-and-forget and the award itself
  * is additionally scope-deduped by award_points for same-day repeats.
- * NEEDS-CANISTER: atomic streak computation + weekly dedup.
+ * club_points_domain computes the streak and awards the weekly bonus
+ * atomically (get_engagement_streak + award_points_once), so no canister
+ * gap remains here.
  */
 export async function checkEngagementStreak({
   userId,

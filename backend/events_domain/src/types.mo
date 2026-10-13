@@ -201,6 +201,18 @@ module {
   // list_child_team_assignments can authorise on club membership.
   public type ChildTeamAssignment = { child_id : Text; team_id : Text; club_id : Text };
 
+  // ---- Favourite event titles / saved locations / training defaults / RSVP created_at (events UX extras) ----
+  // Per-caller shortlist of event titles for quick reuse when creating events.
+  public type FavouriteEventTitle = { account_id : Text; title : Text };
+  // Per-caller saved addresses for the event location autocomplete.
+  public type SavedLocation = { id : Text; account_id : Text; location_label : Text; address : Text; lat : Float; lng : Float; created_at_ms : Nat64 };
+  // Per (caller, club, team, child) default RSVP applied to new training events in the UI.
+  // child_id = null means the caller's own default (not RSVPing on behalf of a child).
+  public type TrainingDefault = { account_id : Text; club_id : Text; team_id : Text; child_id : ?Text; default_rsvp : Text; updated_at_ms : Nat64 };
+  // First-RSVP timestamp per (event, account), preserved across later status
+  // changes (set_rsvp/admin_upsert_rsvp overwrite state but not this).
+  public type RsvpCreatedAt = { event_id : Text; account_id : Text; created_at_ms : Nat64 };
+
   public type State = {
     var governor : Principal;
     var roles : [RoleGrant];
