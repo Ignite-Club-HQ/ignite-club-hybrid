@@ -57,7 +57,7 @@ export default function StartTeamPage() {
 
   const goPersonal = async () => {
     if (isIcp) {
-      toast({ title: "Personal teams are not supported for Internet Identity yet", variant: "destructive" });
+      navigate(`/clubs/__personal__/teams/new`, { replace: true });
       return;
     }
     if (!user || working) return;

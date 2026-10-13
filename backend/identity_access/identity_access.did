@@ -9,7 +9,9 @@ type Account = record {
   id : text;
   version : nat64;
   principals : vec principal;
+  status : AccountStatus;
 };
+type AccountStatus = variant { Active; Suspended };
 // A Pro entitlement granted to a principal from an IAP (App Store) receipt
 // or a governor/verifier write. `transaction_id` is the Apple transaction
 // id (or empty for non-IAP grants) and is the replay-protection key: once a
@@ -202,6 +204,8 @@ service : (Init) -> {
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
+  revoke_role : (text, text, opt text, opt text) -> (Result_2);
+  revoke_role_scoped : (text, text, opt text, opt text, opt text) -> (Result_2);
   // Case-insensitive substring search over display names — the ICP-mode
   // counterpart of the Supabase `search_invitable_profiles` RPC, used by the
   // "add an existing member" pickers. Returns at most `limit` (capped at 25)
@@ -212,6 +216,9 @@ service : (Init) -> {
   // Governor-only: sets (or rotates) the shared HMAC secret used to verify
   // `redeem_entitlement` attestations. Must match the secret held by the
   // session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
+  // Admin-gated (governor or app_admin role): suspends or reactivates an
+  // account.
+  set_account_status : (text, AccountStatus) -> (Result);
   set_attestation_secret : (blob) -> (Result_2);
   // Records that the caller has dismissed the club switcher coach-mark, so
   // it stays dismissed across devices. Creates a blank profile entry if the

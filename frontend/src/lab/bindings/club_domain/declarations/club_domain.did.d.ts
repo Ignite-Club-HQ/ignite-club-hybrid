@@ -696,6 +696,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_my_children' : ActorMethod<[], Array<Child>>,
+  'list_my_personal_teams' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
   'list_news' : ActorMethod<
     [string],
     { 'Ok' : Array<NewsPost> } |

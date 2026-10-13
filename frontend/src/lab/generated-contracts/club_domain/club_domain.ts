@@ -868,6 +868,13 @@ export interface MainInterface {
         Err: string;
     }>;
     list_my_children(): Promise<Array<Child>>;
+    list_my_personal_teams(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_news(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<NewsPost>;
@@ -2952,6 +2959,16 @@ export class Club_domain implements club_domainInterface {
     async list_my_children(): Promise<Array<Child>> {
         const result = await this.actor.list_my_children();
         return from_candid_vec_n66(result);
+    }
+    async list_my_personal_teams(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_my_personal_teams();
+        return from_candid_variant_n138(result);
     }
     async list_news(arg0: string): Promise<{
         __kind__: "Ok";

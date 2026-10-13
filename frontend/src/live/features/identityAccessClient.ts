@@ -122,7 +122,7 @@ export async function searchLiveProfilesWithPrincipals(
   ctx: FeatureBackendContext,
   query: string,
   limit: number,
-): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null }>> {
+): Promise<Array<{ accountId: string; principal: Principal; displayName: string | null; avatarUrl: string | null }>> {
   const { client } = await connectLiveIdentityAccessClientWithIdentity(ctx.target, ctx.identity);
   try {
     const rows = await client.searchProfiles(query, limit);
@@ -130,6 +130,7 @@ export async function searchLiveProfilesWithPrincipals(
       accountId: row.account_id,
       principal: row.principal,
       displayName: row.display_name,
+      avatarUrl: row.avatar_ref?.[0] || null,
     }));
   } finally {
     client.dispose();

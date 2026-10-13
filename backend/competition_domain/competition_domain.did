@@ -131,6 +131,11 @@ type Main =
                     Err: text;
                     Ok: CompetitionJoinLink;
                   });
+   create_personal_competition: (name: text, season: text) ->
+    (variant {
+       Err: text;
+       Ok: Competition;
+     });
    create_season: (competition_id: text, name: text) ->
     (variant {
        Err: text;
@@ -275,6 +280,11 @@ type Main =
        Err: text;
        Ok: vec Match;
      }) query;
+   list_my_personal_competitions: () ->
+    (variant {
+       Err: text;
+       Ok: vec Competition;
+     }) query;
    list_seasons: (competition_id: text) ->
     (variant {
        Err: text;
@@ -290,7 +300,7 @@ type Main =
        Err: text;
        Ok: TeamEntry;
      });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

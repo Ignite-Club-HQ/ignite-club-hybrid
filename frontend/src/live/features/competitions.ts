@@ -679,3 +679,25 @@ export async function listLiveCompetitionBroadcasts(ctx: FeatureBackendContext, 
   const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_competition_broadcasts(competitionId), "List broadcasts");
 }
+
+/**
+ * Personal (clubless) competitions — counterpart of create_personal_competition
+ * on Supabase (organizerClubId === PERSONAL_ORGANISER). Caller becomes the
+ * implicit organiser; listing is caller-scoped on the canister.
+ */
+export async function createLivePersonalCompetition(
+  ctx: FeatureBackendContext,
+  name: string,
+  season: string,
+) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.create_personal_competition(name, season),
+    "Create personal competition",
+  );
+}
+
+export async function listLivePersonalCompetitions(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveCompetitionDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_personal_competitions(), "List my personal competitions");
+}

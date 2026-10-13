@@ -755,6 +755,11 @@ type Main =
                 Ok: vec MemberPayment;
               }) query;
    list_my_children: () -> (vec Child) query;
+   list_my_personal_teams: () ->
+    (variant {
+       Err: text;
+       Ok: vec ClubTeam;
+     }) query;
    list_news: (club_id: text) ->
     (variant {
        Err: text;

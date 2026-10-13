@@ -275,6 +275,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : CompetitionJoinLink, 'Err' : IDL.Text })],
         [],
       ),
+    'create_personal_competition' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Competition, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_season' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Season, 'Err' : IDL.Text })],
@@ -424,6 +429,11 @@ export const idlFactory = ({ IDL }) => {
     'list_matches' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(Match), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_personal_competitions' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Competition), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_seasons' : IDL.Func(

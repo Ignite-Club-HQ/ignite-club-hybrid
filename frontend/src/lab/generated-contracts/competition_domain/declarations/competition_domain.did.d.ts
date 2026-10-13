@@ -214,6 +214,11 @@ export interface Main {
     { 'Ok' : CompetitionJoinLink } |
       { 'Err' : string }
   >,
+  'create_personal_competition' : ActorMethod<
+    [string, string],
+    { 'Ok' : Competition } |
+      { 'Err' : string }
+  >,
   'create_season' : ActorMethod<
     [string, string],
     { 'Ok' : Season } |
@@ -349,6 +354,11 @@ export interface Main {
   'list_matches' : ActorMethod<
     [string],
     { 'Ok' : Array<Match> } |
+      { 'Err' : string }
+  >,
+  'list_my_personal_competitions' : ActorMethod<
+    [],
+    { 'Ok' : Array<Competition> } |
       { 'Err' : string }
   >,
   'list_seasons' : ActorMethod<

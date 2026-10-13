@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, Loader2, Plus, X, Building2, User as UserIcon, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,7 @@ import {
   setLiveDmAttachmentsDisabled,
 } from "@/live/features/messaging";
 import { listLiveClubs } from "@/live/features/club";
-import { searchLiveProfilesWithPrincipals } from "@/live/features/identityAccessClient";
+// import { searchLiveProfilesWithPrincipals } from "@/live/features/identityAccessClient";
 
 interface DmRestriction {
   id: string;
@@ -112,11 +113,21 @@ export default function AdminDmAttachmentsPage() {
           if (restrictedUserIds.size === 0) return [] as any[];
           const { data } = await supabase
             .from("profiles")
-            .select("id, display_name, email")
+            .select("id, display_name, email, avatar_url")
             .in("id", Array.from(restrictedUserIds));
           return data || [];
         },
-        icp: async () => [] as any[],
+        icp: async (ctx) => {
+          if (restrictedUserIds.size === 0) return [];
+          const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
+          const profiles = await listLiveProfilesByIds(ctx, Array.from(restrictedUserIds));
+          return profiles.map((p) => ({
+            id: p.account_id,
+            display_name: p.display_name,
+            email: null,
+            avatar_url: p.avatar_ref?.[0] || null,
+          }));
+        },
       }),
     enabled: isAppAdmin === true && restrictedUserIds.size > 0,
   });
@@ -200,16 +211,18 @@ export default function AdminDmAttachmentsPage() {
         supabase: async () => {
           const { data } = await supabase
             .from("profiles")
-            .select("id, display_name, email")
+            .select("id, display_name, email, avatar_url")
             .or(`display_name.ilike.%${q}%,email.ilike.%${q}%`)
             .limit(20);
           return (data || []).map((u: any) => ({ id: u.id, display_name: u.display_name, email: u.email }));
         },
         icp: async (ctx) => {
+          const { searchLiveProfilesWithPrincipals } = await import("@/live/features/identityAccessClient");
           const rows = await searchLiveProfilesWithPrincipals(ctx, q, 20);
           return rows.map((r) => ({
             id: r.principal.toText(),
             display_name: r.displayName,
+            avatar_url: r.avatarUrl,
             email: null as string | null,
           }));
         },
@@ -368,11 +381,17 @@ export default function AdminDmAttachmentsPage() {
                   const isRestricted = restrictedUserIds.has(u.id);
                   return (
                     <div key={u.id} className="flex items-center justify-between p-2 rounded bg-background">
-                      <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={u.avatar_url} />
+                          <AvatarFallback>{(u.display_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{u.display_name || "(no name)"}</p>
                         {u.email && (
                           <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                         )}
+                      </div>
                       </div>
                       {isRestricted ? (
                         <Badge variant="secondary">Restricted</Badge>
@@ -406,11 +425,17 @@ export default function AdminDmAttachmentsPage() {
                   const name = profile?.display_name || knownUserNames.get(r.user_id!) || shortPrincipal(r.user_id!);
                   return (
                     <div key={r.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={profile?.avatar_url} />
+                          <AvatarFallback>{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{name}</p>
                         {profile?.email && (
                           <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
                         )}
+                      </div>
                       </div>
                       <Button
                         size="icon"
