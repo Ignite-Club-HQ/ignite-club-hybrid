@@ -294,7 +294,7 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
               ? await listLiveTeamRoleGrants(ctx, ev.team_id)
               : await listLiveRoleGrants(ctx, ev.club_id)) as unknown as Array<{ user: { toText(): string } | string }>;
             const ids = Array.from(new Set(grants.map((g) => (typeof g.user === "string" ? g.user : g.user.toText()))))
-              .filter((uid) => uid !== ev.created_by && !`principal:${uid}`.endsWith(`:${ev.created_by ?? "-"}`));
+              .filter((uid) => uid !== ev.created_by && `principal:${uid}` !== ev.created_by);
             if (ids.length === 0) throw new Error("No members to invite for this event.");
             const created = await fanOutLiveNotifications(ctx, {
               userIds: ids,
