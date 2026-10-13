@@ -1273,7 +1273,6 @@ export function EventGroupsManager({ eventId, miniLeagueId, isAdmin, playerOverr
                 onPlayerTap={handlePlayerTap}
                 onTeamTap={handleTeamTap}
                 onQuickAssignDuty={(dutyId, selectedGroup) => {
-                  if (resolveAuthBackend() === "icp") return;
                   setQuickAssignDutyId(dutyId);
                   setActiveDutiesGroup(selectedGroup);
                 }}
