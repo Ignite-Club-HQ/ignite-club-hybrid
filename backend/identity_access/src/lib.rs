@@ -1607,7 +1607,7 @@ mod tests {
             account_id: old_id.clone(),
             display_name: "Paul".into(),
             avatar_ref: None,
-            updated_at_ns: 1,, theme_preference: None, club_switcher_hint_seen_at: None });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0 });
         index_principal(new, &new_id);
         let key = entitlement_key(old, "pro", "");
@@ -1658,7 +1658,7 @@ mod tests {
             account_id: account_id(new),
             display_name: "Someone".into(),
             avatar_ref: None,
-            updated_at_ns: 1,, theme_preference: None, club_switcher_hint_seen_at: None });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         let mut state = empty_core_state(governor);
         assert!(rekey_principal_core(&mut state, old, new, false).is_err());
         assert!(rekey_principal_core(&mut state, governor, new, false).is_err());
@@ -2063,13 +2063,13 @@ mod tests {
             account_id: "a".into(),
             display_name: "Old".into(),
             avatar_ref: None,
-            updated_at_ns: 1,, theme_preference: None, club_switcher_hint_seen_at: None }];
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None }];
         let account_id = "a".to_string();
         let replacement = Profile {
             account_id: account_id.clone(),
             display_name: "New".into(),
             avatar_ref: Some("blob:avatar-1".into()),
-            updated_at_ns: 2,, theme_preference: None, club_switcher_hint_seen_at: None };
+            updated_at_ns: 2, theme_preference: None, club_switcher_hint_seen_at: None };
         // Mirror set_profile's replace-in-place logic.
         profiles.retain(|p| p.account_id != account_id);
         profiles.push(replacement.clone());
@@ -2084,12 +2084,12 @@ mod tests {
                 account_id: "user-1".into(),
                 display_name: "Gone".into(),
                 avatar_ref: None,
-                updated_at_ns: 0,, theme_preference: None, club_switcher_hint_seen_at: None },
+                updated_at_ns: 0, theme_preference: None, club_switcher_hint_seen_at: None },
             Profile {
                 account_id: "user-2".into(),
                 display_name: "Stays".into(),
                 avatar_ref: None,
-                updated_at_ns: 0,, theme_preference: None, club_switcher_hint_seen_at: None },
+                updated_at_ns: 0, theme_preference: None, club_switcher_hint_seen_at: None },
         ];
         profiles.retain(|profile| profile.account_id != "user-1");
         assert_eq!(profiles.len(), 1);
@@ -2147,7 +2147,7 @@ mod tests {
                 account_id: "user-1".into(),
                 display_name: "Paul".into(),
                 avatar_ref: None,
-                updated_at_ns: 7,, theme_preference: None, club_switcher_hint_seen_at: None }],
+                updated_at_ns: 7, theme_preference: None, club_switcher_hint_seen_at: None }],
             roles: vec![RoleGrant {
                 account_id: "user-1".into(),
                 role: "club_admin".into(),
@@ -2234,7 +2234,7 @@ mod tests {
             account_id: "user-1".into(),
             display_name: "Gone".into(),
             avatar_ref: None,
-            updated_at_ns: 1,, theme_preference: None, club_switcher_hint_seen_at: None });
+            updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
         let key = entitlement_key(user, "pro", "tx-1");
         put_entitlement(
             &key,
