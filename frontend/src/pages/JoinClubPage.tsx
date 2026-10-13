@@ -19,7 +19,7 @@ import { getLocalLabProfile } from "@/lab/fixtureDataLayer";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { acceptLiveMembershipPendingInvite } from "@/live/features/membership";
-import { getLiveClubProfile } from "@/live/features/club";
+import { getLiveClubProfile, getLivePendingInvite } from "@/live/features/club";
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 
@@ -48,11 +48,28 @@ export default function JoinClubPage() {
   const [joined, setJoined] = useState(false);
   const autoJoinAttempted = useRef(false);
 
-  // ICP: the invite token has no club name/logo embedded, so look up the
-  // club profile directly once the join mutation resolves the club id from
-  // the accepted invite — but the pre-accept card needs it too, so we fetch
-  // it from the invite's club id once we have one from the accept flow.
-  const [icpInviteClub, setIcpInviteClub] = useState<{ name: string; logoUrl: string | null } | null>(null)
+  // ICP: the invite token is the club_domain PendingInvite id (anonymous
+  // query; the id is the secret) — resolve its club for the pre-accept card.
+  const [icpInviteClub, setIcpInviteClub] = useState<{ name: string; logoUrl: string | null } | null>(null);
+  useEffect(() => {
+    if (!isIcp || !token || !user) return;
+    let cancelled = false;
+    void withFeatureBackend("membership", {
+      supabase: async () => undefined,
+      icp: async (ctx) => {
+        const invite = await getLivePendingInvite(ctx, token);
+        if (!invite?.club_id || cancelled) return;
+        const profile = await getLiveClubProfile(ctx, invite.club_id);
+        const name = profile[0]?.name;
+        if (name && !cancelled) setIcpInviteClub({ name, logoUrl: profile[0]?.logo_url?.[0] ?? null });
+      },
+    }).catch(() => {
+      // Preview is best-effort; accepting still works without it.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isIcp, token, user]);
   
   // Check if we should auto-join (returning from auth after install flow)
   const shouldAutoJoin = sessionStorage.getItem("autoJoinAfterAuth") === "true";
