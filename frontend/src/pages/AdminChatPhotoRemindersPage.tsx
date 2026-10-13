@@ -1,7 +1,6 @@
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { ArrowLeft, Save, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { toast } from "sonner";
+import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 const SETTING_KEY = "chat_photo_gallery_reminders";
 
@@ -30,26 +31,37 @@ const DEFAULTS: Settings = {
   cooldown_days: 7,
 };
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
-import { resolveAuthBackend } from "@/live/authBackendMode";
-
-export default function AdminChatPhotoRemindersPage() {
-  if (isFeatureRoutedToIcp("media")) {
-    return <IcpUnavailablePage title="Photo-reminder administration is unavailable in ICP lab mode" description="Media scanning, reminder selection, and delivery remain disabled external-worker workflows." />;
-  }
-  return <SupabaseAdminChatPhotoRemindersPage />;
+function parseSettings(raw: unknown): Settings {
+  const v = (raw ?? {}) as Partial<Settings>;
+  return {
+    enabled: typeof v.enabled === "boolean" ? v.enabled : DEFAULTS.enabled,
+    window_start_hours: Number(v.window_start_hours ?? DEFAULTS.window_start_hours),
+    window_end_hours: Number(v.window_end_hours ?? DEFAULTS.window_end_hours),
+    cooldown_days: Number(v.cooldown_days ?? DEFAULTS.cooldown_days),
+  };
 }
 
-function SupabaseAdminChatPhotoRemindersPage() {
+export default function AdminChatPhotoRemindersPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const isIcp = resolveAuthBackend() === "icp";
 
   const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
   const { data: settingRow, isLoading: settingsLoading } = useQuery({
-    queryKey: ["app_setting", SETTING_KEY],
+    queryKey: ["app_setting", SETTING_KEY, isIcp],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("admin", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const { getLiveAppSetting } = await import("@/live/features/appSettings");
+            const raw = await getLiveAppSetting(ctx, SETTING_KEY);
+            return raw ? { value: JSON.parse(raw) } : null;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("app_settings")
         .select("value")
@@ -58,7 +70,7 @@ function SupabaseAdminChatPhotoRemindersPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!isAppAdmin && resolveAuthBackend() !== "icp",
+    enabled: !!isAppAdmin,
   });
 
   const [form, setForm] = useState<Settings>(DEFAULTS);
@@ -67,13 +79,7 @@ function SupabaseAdminChatPhotoRemindersPage() {
 
   useEffect(() => {
     if (settingRow?.value) {
-      const v = settingRow.value as Partial<Settings>;
-      setForm({
-        enabled: typeof v.enabled === "boolean" ? v.enabled : DEFAULTS.enabled,
-        window_start_hours: Number(v.window_start_hours ?? DEFAULTS.window_start_hours),
-        window_end_hours: Number(v.window_end_hours ?? DEFAULTS.window_end_hours),
-        cooldown_days: Number(v.cooldown_days ?? DEFAULTS.cooldown_days),
-      });
+      setForm(parseSettings(settingRow.value));
     }
   }, [settingRow]);
 
@@ -105,17 +111,29 @@ function SupabaseAdminChatPhotoRemindersPage() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from("app_settings")
-      .update({ value: form as any, updated_at: new Date().toISOString() })
-      .eq("key", SETTING_KEY);
-    setSaving(false);
-    if (error) {
-      toast.error("Failed to save: " + error.message);
-      return;
+    try {
+      if (isIcp) {
+        await withFeatureBackend("admin", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            const { setLiveAppSetting } = await import("@/live/features/appSettings");
+            await setLiveAppSetting(ctx, SETTING_KEY, form);
+          },
+        });
+      } else {
+        const { error } = await supabase
+          .from("app_settings")
+          .update({ value: form as any, updated_at: new Date().toISOString() })
+          .eq("key", SETTING_KEY);
+        if (error) throw error;
+      }
+      toast.success("Settings saved");
+      qc.invalidateQueries({ queryKey: ["app_setting", SETTING_KEY] });
+    } catch (e) {
+      toast.error("Failed to save: " + (e as Error).message);
+    } finally {
+      setSaving(false);
     }
-    toast.success("Settings saved");
-    qc.invalidateQueries({ queryKey: ["app_setting", SETTING_KEY] });
   };
 
   const handleRunNow = async () => {
@@ -209,11 +227,16 @@ function SupabaseAdminChatPhotoRemindersPage() {
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving…" : "Save settings"}
                 </Button>
-                <Button variant="outline" onClick={handleRunNow} disabled={running}>
+                <Button variant="outline" onClick={handleRunNow} disabled={running || isIcp}>
                   <Play className="h-4 w-4 mr-2" />
                   {running ? "Running…" : "Run now"}
                 </Button>
               </div>
+              {isIcp && (
+                <p className="text-xs text-muted-foreground">
+                  "Run now" triggers the Supabase edge function and is unavailable in ICP mode.
+                </p>
+              )}
             </>
           )}
         </CardContent>
