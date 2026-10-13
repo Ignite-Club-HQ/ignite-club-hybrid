@@ -150,11 +150,20 @@ export async function getLiveEngagementStreak(
   return Number(result.Ok);
 }
 
-/** Per-club points-module settings (kill switch + display name); null when unset (defaults). */
+/**
+ * Per-club points-module settings: kill switch, display name, points icon
+ * blob ref, and the team-level Player of Match reward override lock; null
+ * when unset (defaults).
+ */
 export async function getLiveClubPointsSettings(
   ctx: FeatureBackendContext,
   clubId: string,
-): Promise<{ display_name: [] | [string]; disabled: boolean } | null> {
+): Promise<{
+  display_name: [] | [string];
+  disabled: boolean;
+  points_icon_url: [] | [string];
+  disable_team_pom_rewards: boolean;
+} | null> {
   const a = await actor(ctx);
   await unwrapCandid(a.refresh_club_roles(clubId), "Verify club membership");
   const row = await unwrapCandid(a.get_club_points_settings(clubId), "Get club points settings");
@@ -166,9 +175,20 @@ export async function saveLiveClubPointsSettings(
   clubId: string,
   displayName: string | null,
   disabled: boolean,
+  pointsIconUrl?: string | null,
+  disableTeamPomRewards?: boolean,
 ): Promise<void> {
   const a = await actor(ctx);
-  await unwrapCandid(a.save_club_points_settings(clubId, candidOpt(displayName ?? null), disabled), "Save club points settings");
+  await unwrapCandid(
+    a.save_club_points_settings(
+      clubId,
+      candidOpt(displayName ?? null),
+      disabled,
+      candidOpt(pointsIconUrl ?? null),
+      disableTeamPomRewards ?? false,
+    ),
+    "Save club points settings",
+  );
 }
 
 export async function getLiveUserPoints(

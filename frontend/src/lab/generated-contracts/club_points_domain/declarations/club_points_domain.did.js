@@ -84,10 +84,12 @@ export const idlFactory = ({ IDL }) => {
     'points' : IDL.Int32,
   });
   const ClubPointsSettings = IDL.Record({
+    'points_icon_url' : IDL.Opt(IDL.Text),
     'updated_at_ms' : IDL.Nat64,
     'display_name' : IDL.Opt(IDL.Text),
     'disabled' : IDL.Bool,
     'club_id' : IDL.Text,
+    'disable_team_pom_rewards' : IDL.Bool,
   });
   const LeaderboardEntry = IDL.Record({
     'subject_id' : IDL.Text,
@@ -295,7 +297,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'save_club_points_settings' : IDL.Func(
-        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool],
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Bool, IDL.Opt(IDL.Text), IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubPointsSettings, 'Err' : IDL.Text })],
         [],
       ),

@@ -285,14 +285,21 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(clubPointsSettings.find(func(item) = item.club_id == club_id))
   };
 
-  public shared ({ caller }) func save_club_points_settings(club_id : Text, display_name : ?Text, disabled : Bool) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
+  public shared ({ caller }) func save_club_points_settings(
+    club_id : Text,
+    display_name : ?Text,
+    disabled : Bool,
+    points_icon_url : ?Text,
+    disable_team_pom_rewards : Bool,
+  ) : async { #Ok : Types.ClubPointsSettings; #Err : Text } {
     auth(caller);
     if (not valid(club_id)) return #Err("Invalid club");
     switch (await syncClubRoles(caller, club_id)) { case (#Err(e)) return #Err(e); case (#Ok) {} };
     switch (display_name) { case (?n) { if (not valid(n)) return #Err("Invalid display name") }; case null {} };
+    switch (points_icon_url) { case (?u) { if (not valid(u)) return #Err("Invalid points icon") }; case null {} };
     if (not isClubAdminOrCoach(caller, club_id)) return #Err("Club admin or coach required");
     let ts = nowMs();
-    let row : Types.ClubPointsSettings = { club_id; display_name; disabled; updated_at_ms = ts };
+    let row : Types.ClubPointsSettings = { club_id; display_name; disabled; updated_at_ms = ts; points_icon_url; disable_team_pom_rewards };
     clubPointsSettings := clubPointsSettings.filter(func(item) = item.club_id != club_id).concat([row]);
     #Ok(row)
   };

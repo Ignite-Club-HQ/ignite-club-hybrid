@@ -22,15 +22,39 @@ export const BoardLinkCard = memo(function BoardLinkCard({
 }: BoardLinkCardProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  // NEEDS-CANISTER: live pitch-board (active_games) has no canister
-  // counterpart. Hide the card entirely for II users instead of firing
-  // Supabase.
   const isIcp = resolveAuthBackend() === "icp";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["board-link-card", gameId],
-    enabled: !!gameId && !isIcp,
+    enabled: !!gameId,
     queryFn: async () => {
+      if (isIcp) {
+        // The [board:gameId] token actually carries the team id on the ICP
+        // branch (events_domain keys the live board by team, not a row id).
+        const { getCurrentInternetIdentityConfirmed } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const { getLiveActiveGame } = await import("@/live/features/events");
+        const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+        if (!identity) return null;
+        const ctx = { identity, target: getActiveIcpTarget() };
+        const rows = (await getLiveActiveGame(ctx, gameId)) as unknown as Array<{
+          team_id?: [] | [string];
+          is_active?: boolean;
+          updated_at_ms?: bigint;
+          pitch_state_json?: string;
+          timer_state_json?: string;
+        }>;
+        if (rows.length === 0) return null;
+        const row = rows[0];
+        return {
+          id: gameId,
+          team_id: row.team_id?.[0] ?? gameId,
+          is_active: row.is_active ?? true,
+          pitch_state: row.pitch_state_json ? JSON.parse(row.pitch_state_json) : {},
+          timer_state: row.timer_state_json ? JSON.parse(row.timer_state_json) : {},
+          teams: null as unknown,
+        };
+      }
       const { data, error } = await supabase
         .from("active_games")
         .select(
@@ -93,8 +117,6 @@ export const BoardLinkCard = memo(function BoardLinkCard({
     },
     [view]
   );
-
-  if (isIcp) return null;
 
   if (isLoading) {
     // Match loaded card height (icon column + 3 text rows + p-2.5 ≈ 80px)

@@ -244,7 +244,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -258,7 +258,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean): Promise<{
+    save_club_points_settings(club_id: string, display_name: string | null, disabled: boolean, points_icon_url: string | null, disable_team_pom_rewards: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings;
     } | {
@@ -333,10 +333,12 @@ export interface HistoryPage {
     items: Array<PointsHistoryEntry>;
 }
 export interface ClubPointsSettings {
+    points_icon_url?: string;
     updated_at_ms: bigint;
     display_name?: string;
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 }
 export interface UserClubPoints {
     updated_at_ms: bigint;
@@ -654,14 +656,14 @@ export class Club_points_domain implements club_points_domainInterface {
         const result = await this.actor.removeBulkAccessPrincipal(arg0);
         return from_candid_variant_n1(result);
     }
-    async save_club_points_settings(arg0: string, arg1: string | null, arg2: boolean): Promise<{
+    async save_club_points_settings(arg0: string, arg1: string | null, arg2: boolean, arg3: string | null, arg4: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubPointsSettings;
     } | {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2);
+        const result = await this.actor.save_club_points_settings(arg0, to_candid_opt_n10(arg1), arg2, to_candid_opt_n10(arg3), arg4);
         return from_candid_variant_n43(result);
     }
     async set_club_domain_canister(arg0: Principal): Promise<{
@@ -870,21 +872,27 @@ function from_candid_record_n24(value: {
     };
 }
 function from_candid_record_n31(value: {
+    points_icon_url: [] | [string];
     updated_at_ms: bigint;
     display_name: [] | [string];
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 }): {
+    points_icon_url?: string;
     updated_at_ms: bigint;
     display_name?: string;
     disabled: boolean;
     club_id: string;
+    disable_team_pom_rewards: boolean;
 } {
     return {
+        points_icon_url: record_opt_to_undefined(from_candid_opt_n6(value.points_icon_url)),
         updated_at_ms: value.updated_at_ms,
         display_name: record_opt_to_undefined(from_candid_opt_n6(value.display_name)),
         disabled: value.disabled,
-        club_id: value.club_id
+        club_id: value.club_id,
+        disable_team_pom_rewards: value.disable_team_pom_rewards
     };
 }
 function from_candid_record_n39(value: {

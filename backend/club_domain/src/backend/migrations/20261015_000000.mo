@@ -13,6 +13,9 @@ module {
     var clubKinds : [(Text, Text)];
     var classEnrolments : [ClassEnrolment];
     var clubThemeJson : [(Text, Text)];
+    var guardianMeta : [Types.GuardianMeta];
+    var teamPlayerPositionAssignments : [Types.TeamPlayerPositionAssignment];
+    var pendingInviteEmailHashes : [Types.PendingInviteEmailHash];
   } {
     {
       var pendingInviteLabels = [];
@@ -21,6 +24,9 @@ module {
       var clubKinds = [];
       var classEnrolments = [];
       var clubThemeJson = [];
+      var guardianMeta = [];
+      var teamPlayerPositionAssignments = [];
+      var pendingInviteEmailHashes = [];
     }
   };
 };
