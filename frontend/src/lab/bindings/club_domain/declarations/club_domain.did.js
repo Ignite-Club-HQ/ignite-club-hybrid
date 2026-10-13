@@ -1031,6 +1031,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'list_my_children' : IDL.Func([], [IDL.Vec(Child)], ['query']),
+    'list_my_personal_teams' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_news' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(NewsPost), 'Err' : IDL.Text })],

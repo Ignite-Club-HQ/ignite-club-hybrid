@@ -153,6 +153,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    create_personal_competition(name: string, season: string): Promise<{
+        __kind__: "Ok";
+        Ok: Competition;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     create_season(competition_id: string, name: string): Promise<{
         __kind__: "Ok";
         Ok: Season;
@@ -360,6 +367,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_my_personal_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_seasons(competition_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<Season>;
@@ -381,7 +395,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -873,6 +887,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.create_competition_join_link(arg0, arg1, to_candid_opt_n7(arg2));
         return from_candid_variant_n25(result);
     }
+    async create_personal_competition(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: Competition;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.create_personal_competition(arg0, arg1);
+        return from_candid_variant_n22(result);
+    }
     async create_season(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
         Ok: Season;
@@ -1166,6 +1190,16 @@ export class Competition_domain implements competition_domainInterface {
     }> {
         const result = await this.actor.list_matches(arg0);
         return from_candid_variant_n55(result);
+    }
+    async list_my_personal_competitions(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Competition>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_my_personal_competitions();
+        return from_candid_variant_n52(result);
     }
     async list_seasons(arg0: string): Promise<{
         __kind__: "Ok";

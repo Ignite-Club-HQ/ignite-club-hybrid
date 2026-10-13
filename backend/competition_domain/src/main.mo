@@ -32,6 +32,7 @@ persistent actor class Main(governorInit : Principal) {
   var divisionSettings : [Types.DivisionSetting];
   var broadcasts : [Types.Broadcast];
   var clubDomainCanister : ?Principal;
+  var personalCompetitionOwners : [(Text, Principal)];
 
   public shared ({ caller }) func transfer_governorship(new_governor : Principal) : async { #Ok; #Err : Text } {
     auth(caller);
@@ -67,7 +68,10 @@ persistent actor class Main(governorInit : Principal) {
     let club_admin = competition_club != "" and roles.any(func(role) {
       role.user.equal(caller) and role.role == "club_admin" and role.competition_id == competition_club
     });
-    competition_admin or club_admin
+    // Caller-owned clubless ("personal") competitions: the creator gets the
+    // same admin rights a club_admin would have, with no club involved.
+    let personal_owner = personalCompetitionOwners.any(func(pair) = pair.0 == competition_id and pair.1.equal(caller));
+    competition_admin or club_admin or personal_owner
   };
 
   public shared ({ caller }) func grant_role(principal : Principal, role : Text, competition_id : Text, team_id : ?Text) : async { #Ok; #Err : Text } {
@@ -89,6 +93,28 @@ persistent actor class Main(governorInit : Principal) {
     let competition : Types.Competition = { id; club_id; name; season; status = "open"; description = null; visibility = "private"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
     competitions := competitions.concat([competition]);
     #Ok(competition)
+  };
+
+  // Clubless ("personal") competition — no club_domain club involved. The
+  // caller is recorded as owner and gets admin rights via
+  // canManageCompetition; club_id is "" to mark it personal everywhere a
+  // Competition is read.
+  public shared ({ caller }) func create_personal_competition(name : Text, season : Text) : async { #Ok : Types.Competition; #Err : Text } {
+    auth(caller);
+    if (not valid(name) or not valid(season)) return #Err("Invalid competition");
+    let id = "cmp-personal-" # Principal.toText(caller) # "-" # Nat.toText(competitions.size() + 1);
+    let competition : Types.Competition = { id; club_id = ""; name; season; status = "open"; description = null; visibility = "private"; points_win = 3; points_draw = 1; points_loss = 0; revision = 1 };
+    competitions := competitions.concat([competition]);
+    personalCompetitionOwners := personalCompetitionOwners.concat([(id, caller)]);
+    #Ok(competition)
+  };
+
+  // Lists the caller's own clubless competitions (owner-only; not visible
+  // via list_competitions/list_competitions_multi since those are club-scoped).
+  public query ({ caller }) func list_my_personal_competitions() : async { #Ok : [Types.Competition]; #Err : Text } {
+    auth(caller);
+    let mine = personalCompetitionOwners.filter(func(pair) = pair.1.equal(caller)).map(func(pair) = pair.0);
+    #Ok(competitions.filter(func(item) = mine.any(func(id) = id == item.id)))
   };
 
   // Competition settings (name, description, status, visibility, ladder

@@ -162,8 +162,18 @@ function SupabaseCompetitionsPage() {
             : await (async () => {
                 const clubs = await listLiveMembershipClubs(ctx);
                 const clubIds = clubs.map((c) => c.id);
-                if (clubIds.length === 0) return [];
-                return listLiveCompetitionsMulti(ctx, clubIds);
+                const clubComps = clubIds.length === 0 ? [] : await listLiveCompetitionsMulti(ctx, clubIds);
+                const { listLivePersonalCompetitions } = await import("@/live/features/competitions");
+                const personalComps = await listLivePersonalCompetitions(ctx).catch(() => []);
+                const seen = new Set(clubComps.map((c: any) => c.id));
+                const merged = [...clubComps];
+                for (const c of personalComps as any[]) {
+                  if (!seen.has(c.id)) {
+                    seen.add(c.id);
+                    merged.push(c);
+                  }
+                }
+                return merged;
               })();
           return (comps as any[]).map((c) => ({
             id: c.id,

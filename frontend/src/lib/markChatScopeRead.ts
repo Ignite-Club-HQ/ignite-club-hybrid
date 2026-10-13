@@ -127,11 +127,20 @@ export function markChatScopeNotificationsRead({
           icp: async (ctx) => {
             // On-chain chat alerts are kind "message_chat" with the
             // conversation id (== team/club/group/DM id) in `club`, falling
-            // back to `related_id`. Broadcast has no stable id here.
-            if (!scopeId) return { data: 0, error: null };
-            const { listLiveInbox, markLiveNotificationRead } = await import(
-              "@/live/features/notifications"
-            );
+            // back to `related_id`. The broadcast feed has no caller-supplied
+            // id, so resolve its fixed (find-or-create) conversation id
+            // instead of bailing out — see isIcpBroadcastChatNotification.
+            if (!scopeId && scope.kind !== "broadcast") return { data: 0, error: null };
+            const [{ listLiveInbox, markLiveNotificationRead }, { isIcpBroadcastChatNotification }] =
+              await Promise.all([
+                import("@/live/features/notifications"),
+                import("@/lib/broadcastNotificationMatch"),
+              ]);
+            let broadcastConversationId: string | null = null;
+            if (scope.kind === "broadcast") {
+              const { ensureLiveBroadcastConversation } = await import("@/live/features/messaging");
+              broadcastConversationId = await ensureLiveBroadcastConversation(ctx).catch(() => null);
+            }
             const inbox = (await listLiveInbox(ctx, userId, null, 500)) as Array<{
               id: string;
               kind: string;
@@ -139,12 +148,16 @@ export function markChatScopeNotificationsRead({
               club: string;
               related_id: [] | [string];
             }>;
-            const matches = inbox.filter(
-              (n) =>
-                !n.read &&
+            const matches = inbox.filter((n) => {
+              if (n.read) return false;
+              if (scope.kind === "broadcast") {
+                return isIcpBroadcastChatNotification(n, broadcastConversationId);
+              }
+              return (
                 n.kind === "message_chat" &&
-                ((n.club || n.related_id[0]) === scopeId || n.related_id[0] === scopeId),
-            );
+                ((n.club || n.related_id[0]) === scopeId || n.related_id[0] === scopeId)
+              );
+            });
             await Promise.allSettled(matches.map((n) => markLiveNotificationRead(ctx, n.id)));
             return { data: matches.length, error: null };
           },

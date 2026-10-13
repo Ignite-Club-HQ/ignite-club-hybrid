@@ -21,7 +21,7 @@ import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
 import { cn } from "@/lib/utils";
 import { createLocalCompetition } from "@/lab/localCompetitionService";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveCompetition } from "@/live/features/competitions";
+import { createLiveCompetition, createLivePersonalCompetition } from "@/live/features/competitions";
 import { getLiveClubProfile } from "@/live/features/club";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 
@@ -217,8 +217,21 @@ function SupabaseCreateCompetitionPage() {
     const trimmedSeason = season.trim() || null;
 
     if (isIcp && organizerClubId === PERSONAL_ORGANISER) {
-      toast({ title: "Personal competitions are not supported for Internet Identity yet", variant: "destructive" });
-      setSaving(false);
+      try {
+        const newId = await withFeatureBackend("competitions", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const created = await createLivePersonalCompetition(ctx, trimmedName, trimmedSeason ?? "");
+            return created.id;
+          },
+        });
+        setSaving(false);
+        toast({ title: "Competition created" });
+        navigate(`/competitions/${newId}`);
+      } catch (err: any) {
+        setSaving(false);
+        toast({ title: "Could not create competition", description: err?.message, variant: "destructive" });
+      }
       return;
     }
     if (organizerClubId === PERSONAL_ORGANISER) {

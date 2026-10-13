@@ -40,11 +40,30 @@ const CHALLENGE_TTL_NS: u64 = 600_000_000_000;
 const MAX_ENTITLEMENTS: usize = 100_000;
 const MAX_VERIFIERS: usize = 16;
 
+/// Account status: `Suspended` accounts are rejected by caller-authenticated
+/// self-service write paths (profile/theme/link/consent/terms — see
+/// `account_for_write`); admin-gated writes on other accounts (role grants,
+/// family links, exclusions, erase_account) still work so an admin can
+/// manage/clean up a suspended account.
+#[derive(Clone, Copy, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AccountStatus {
+    Active,
+    Suspended,
+}
+impl Default for AccountStatus {
+    fn default() -> Self {
+        AccountStatus::Active
+    }
+}
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Account {
     pub id: String,
     pub principals: Vec<Principal>,
     pub version: u64,
+    /// `#[serde(default)]` keeps accounts stored before this field existed
+    /// decodable as `Active`.
+    #[serde(default)]
+    pub status: AccountStatus,
 }
 #[derive(Clone, Debug, CandidType, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RoleGrant {
@@ -347,6 +366,21 @@ fn account_for(principal: Principal) -> Outcome<Account> {
     authenticated(principal)?;
     find_account_by_principal(principal).ok_or("Unlinked identity".into())
 }
+/// Caller-authenticated self-service writes (profile, theme preference,
+/// coach-mark dismissal, link challenges, consent, terms acceptance, self
+/// `revoke`) go through this instead of `account_for` so a `Suspended`
+/// account cannot keep mutating its own state. Admin-gated writes that act
+/// ON another account (grant/revoke_role, set_family, set_exclusion,
+/// erase_account, set_account_status itself) intentionally keep using
+/// `account_for`/`get_account` directly — an admin must still be able to
+/// manage or clean up a suspended account.
+fn account_for_write(principal: Principal) -> Outcome<Account> {
+    let account = account_for(principal)?;
+    if account.status == AccountStatus::Suspended {
+        return Err("Account suspended".into());
+    }
+    Ok(account)
+}
 fn valid_id(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 128
 }
@@ -381,6 +415,7 @@ fn ensure_account(principal: Principal) -> Outcome<String> {
         id: id.clone(),
         principals: vec![principal],
         version: 0,
+        status: AccountStatus::Active,
     });
     index_principal(principal, &id);
     Ok(id)
@@ -477,6 +512,7 @@ fn init(init: Init) {
         id: governor_id.clone(),
         principals: vec![init.governor],
         version: 0,
+        status: AccountStatus::Active,
     });
     index_principal(init.governor, &governor_id);
     let state = CoreState {
@@ -573,7 +609,7 @@ fn valid_display_name(value: &str) -> bool {
 #[ic_cdk::update]
 fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let account_id = account_for(caller)?.id;
+    let account_id = account_for_write(caller)?.id;
     if !valid_display_name(&display_name) {
         return Err("Display name must be 1-80 characters".into());
     }
@@ -599,7 +635,7 @@ fn set_profile(display_name: String, avatar_ref: Option<String>) -> Outcome<Prof
 #[ic_cdk::update]
 fn set_theme_preference(theme: Option<String>) -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let account_id = account_for(caller)?.id;
+    let account_id = account_for_write(caller)?.id;
     if let Some(value) = theme.as_deref() {
         if value != "light" && value != "dark" {
             return Err("Theme must be \"light\" or \"dark\"".into());
@@ -618,7 +654,7 @@ fn set_theme_preference(theme: Option<String>) -> Outcome<Profile> {
 #[ic_cdk::update]
 fn set_club_switcher_hint_seen() -> Outcome<Profile> {
     let caller = ic_cdk::api::msg_caller();
-    let account_id = account_for(caller)?.id;
+    let account_id = account_for_write(caller)?.id;
     let mut profile = get_or_init_profile(&account_id);
     profile.club_switcher_hint_seen_at = Some(ic_cdk::api::time() / 1_000_000);
     profile.updated_at_ns = ic_cdk::api::time();
@@ -793,7 +829,7 @@ fn get_privacy_consent(account_id: String, purpose: String) -> Outcome<bool> {
 fn begin_link(target: Principal) -> Outcome<LinkChallenge> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account = account_for(caller)?;
+    let account = account_for_write(caller)?;
     authenticated(target)?;
     if find_account_by_principal(target).is_some() {
         return Err("Target identity already assigned".into());
@@ -867,7 +903,7 @@ fn accept_link(id: u64) -> Outcome<Account> {
 #[ic_cdk::update]
 fn revoke(principal: Principal, expected_version: u64) -> Outcome<Account> {
     let caller = ic_cdk::api::msg_caller();
-    let current = account_for(caller)?;
+    let current = account_for_write(caller)?;
     if !current.principals.contains(&principal) || current.principals.len() == 1 {
         return Err("Cannot revoke missing or last identity".into());
     }
@@ -976,7 +1012,7 @@ fn set_privacy_consent(
 fn set_terms_acceptance(terms_version: u32) -> Outcome<TermsAcceptance> {
     let caller = ic_cdk::api::msg_caller();
     let mut state = state();
-    let account_id = account_for(caller)?.id;
+    let account_id = account_for_write(caller)?.id;
     if terms_version == 0 {
         return Err("terms_version must be positive".into());
     }
@@ -1241,6 +1277,69 @@ fn grant_role_scoped(
     Ok(())
 }
 
+/// Mirrors `grant_role`'s auth (governor-only).
+#[ic_cdk::update]
+fn revoke_role(account_id: String, role: String, club: Option<String>, team: Option<String>) -> Outcome<()> {
+    revoke_role_scoped(account_id, role, None, club, team)
+}
+
+/// Mirrors `grant_role_scoped`'s auth (governor-only).
+#[ic_cdk::update]
+fn revoke_role_scoped(
+    account_id: String,
+    role: String,
+    site_id: Option<String>,
+    club: Option<String>,
+    team: Option<String>,
+) -> Outcome<()> {
+    let caller = ic_cdk::api::msg_caller();
+    let mut state = state();
+    require_governor(&state, caller)?;
+    if !valid_id(&account_id)
+        || !valid_id(&role)
+        || site_id.as_ref().is_some_and(|v| !valid_id(v))
+        || club.as_ref().is_some_and(|v| !valid_id(v))
+        || team.as_ref().is_some_and(|v| !valid_id(v))
+    {
+        return Err("Invalid role fields".into());
+    }
+    let before = state.roles.len();
+    state.roles.retain(|item| {
+        !(item.account_id == account_id
+            && item.role == role
+            && item.site_id == site_id
+            && item.club == club
+            && item.team == team)
+    });
+    if state.roles.len() == before {
+        return Err("Role grant not found".into());
+    }
+    store(&state);
+    Ok(())
+}
+
+/// Admin-gated (governor or an account holding the `app_admin` role):
+/// suspends or reactivates an account. `Suspended` accounts are rejected by
+/// `account_for_write`-gated self-service writes (see its doc comment);
+/// admin-gated writes on their behalf keep working.
+#[ic_cdk::update]
+fn set_account_status(account_id: String, status: AccountStatus) -> Outcome<Account> {
+    let caller = ic_cdk::api::msg_caller();
+    let state = state();
+    let caller_account = account_for(caller)?;
+    let is_app_admin = account_has_role(&state, &caller_account.id, "app_admin", None, None, None);
+    if state.governor != caller && !is_app_admin {
+        return Err("Forbidden".into());
+    }
+    let mut account = get_account(&account_id).ok_or("Unknown account")?;
+    if status == AccountStatus::Suspended && account.principals.contains(&state.governor) {
+        return Err("Governor account cannot be suspended".into());
+    }
+    account.status = status;
+    put_account(&account);
+    Ok(account)
+}
+
 #[ic_cdk::update]
 fn set_family(account_id: String, child_id: String) -> Outcome<()> {
     let caller = ic_cdk::api::msg_caller();
@@ -1480,7 +1579,7 @@ fn set_entitlement(
     source: String,
 ) -> Outcome<Entitlement> {
     let caller = ic_cdk::api::msg_caller();
-    let mut state = state();
+    let state = state();
     if state.governor != caller && !state.verifiers.contains(&caller) {
         return Err("Forbidden".into());
     }
@@ -1601,14 +1700,14 @@ mod tests {
         let new = principal(41);
         let old_id = account_id(old);
         let new_id = account_id(new);
-        put_account(&Account { id: old_id.clone(), principals: vec![old], version: 3 });
+        put_account(&Account { id: old_id.clone(), principals: vec![old], version: 3, status: AccountStatus::Active });
         index_principal(old, &old_id);
         put_profile_entry(&Profile {
             account_id: old_id.clone(),
             display_name: "Paul".into(),
             avatar_ref: None,
             updated_at_ns: 1, theme_preference: None, club_switcher_hint_seen_at: None });
-        put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0 });
+        put_account(&Account { id: new_id.clone(), principals: vec![new], version: 0, status: AccountStatus::Active });
         index_principal(new, &new_id);
         let key = entitlement_key(old, "pro", "");
         put_entitlement(&key, &Entitlement {
@@ -1650,9 +1749,9 @@ mod tests {
         let governor = principal(1);
         let old = principal(50);
         let new = principal(51);
-        put_account(&Account { id: account_id(old), principals: vec![old], version: 0 });
+        put_account(&Account { id: account_id(old), principals: vec![old], version: 0, status: AccountStatus::Active });
         index_principal(old, &account_id(old));
-        put_account(&Account { id: account_id(new), principals: vec![new], version: 0 });
+        put_account(&Account { id: account_id(new), principals: vec![new], version: 0, status: AccountStatus::Active });
         index_principal(new, &account_id(new));
         put_profile_entry(&Profile {
             account_id: account_id(new),
@@ -1674,6 +1773,7 @@ mod tests {
             id: "account-1".into(),
             principals: vec![principal(2)],
             version: 0,
+            status: AccountStatus::Active,
         });
         let mut state = empty_core_state(governor);
         state.roles.push(RoleGrant {
@@ -1729,6 +1829,7 @@ mod tests {
             id: "acc-1".into(),
             principals: vec![principal(2)],
             version: 0,
+            status: AccountStatus::Active,
         });
         let mut state = empty_core_state(governor);
         state.roles.push(RoleGrant {
@@ -1869,6 +1970,7 @@ mod tests {
             id: "user-1".into(),
             principals: vec![principal(2)],
             version: 0,
+            status: AccountStatus::Active,
         });
         let mut state = empty_core_state(governor);
         state.privacy_consents.push(PrivacyConsent {
@@ -1896,6 +1998,7 @@ mod tests {
                 id: "user-1".into(),
                 principals: vec![principal(2)],
                 version: 0,
+                status: AccountStatus::Active,
             }],
             roles: vec![RoleGrant {
                 account_id: "user-1".into(),
@@ -1972,6 +2075,7 @@ mod tests {
                 id: "user-1".into(),
                 principals: vec![target],
                 version: 0,
+                status: AccountStatus::Active,
             }],
             roles: vec![],
             families: vec![],
@@ -2142,6 +2246,7 @@ mod tests {
                 id: "user-1".into(),
                 principals: vec![user],
                 version: 3,
+                status: AccountStatus::Active,
             }],
             profiles: vec![Profile {
                 account_id: "user-1".into(),
@@ -2228,6 +2333,7 @@ mod tests {
             id: "user-1".into(),
             principals: vec![user],
             version: 1,
+            status: AccountStatus::Active,
         });
         index_principal(user, "user-1");
         put_profile_entry(&Profile {

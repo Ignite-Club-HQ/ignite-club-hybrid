@@ -1,5 +1,5 @@
 import type { FeatureBackendContext } from "../featureRouter";
-import { getLiveClubProfile, getLiveTeam } from "./club";
+import { getLiveClubProfile, getLiveTeam, listLivePersonalTeams } from "./club";
 import { listLiveEvents, listLiveMyRsvps } from "./events";
 import { getLiveMyRoleGrants, listLiveChildren } from "./membership";
 import { resolveLivePiiTextBatch } from "./vault";
@@ -196,8 +196,17 @@ export async function fetchLiveHomeFeed(
       }
     }),
   );
+  // Personal (club-less) ICP teams have no club_domain role grant to surface
+  // them, so they are fetched separately and merged in directly (no club
+  // tombstone check applies — they have no club).
+  const personalTeams = await listLivePersonalTeams(ctx).catch(() => []);
+  for (const team of personalTeams) {
+    if (!team.deleted_at_ms?.length) activeTeamIds.add(team.id);
+  }
+  const mergedTeamIds = [...new Set([...raw.teamIds, ...personalTeams.map((t) => t.id)])];
+
   const memberships: LiveHomeMemberships = {
-    teamIds: raw.teamIds.filter((id) => activeTeamIds.has(id)),
+    teamIds: mergedTeamIds.filter((id) => activeTeamIds.has(id)),
     clubIds: raw.clubIds.filter((id) => activeClubIds.has(id)),
     clubAdminClubIds: raw.clubAdminClubIds.filter((id) => activeClubIds.has(id)),
     leagueAdminClubIds: raw.leagueAdminClubIds.filter((id) => activeClubIds.has(id)),

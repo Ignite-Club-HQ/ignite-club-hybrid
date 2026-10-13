@@ -10,8 +10,13 @@ import { IDL } from '@icp-sdk/core/candid';
 
 export const idlFactory = ({ IDL }) => {
   const Init = IDL.Record({ 'governor' : IDL.Principal });
+  const AccountStatus = IDL.Variant({
+    'Active' : IDL.Null,
+    'Suspended' : IDL.Null,
+  });
   const Account = IDL.Record({
     'id' : IDL.Text,
+    'status' : AccountStatus,
     'version' : IDL.Nat64,
     'principals' : IDL.Vec(IDL.Principal),
   });
@@ -218,7 +223,24 @@ export const idlFactory = ({ IDL }) => {
       ),
     'remove_verifier' : IDL.Func([IDL.Principal], [Result_2], []),
     'revoke' : IDL.Func([IDL.Principal, IDL.Nat64], [Result], []),
+    'revoke_role' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
+        [Result_2],
+        [],
+      ),
+    'revoke_role_scoped' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+        ],
+        [Result_2],
+        [],
+      ),
     'search_profiles' : IDL.Func([IDL.Text, IDL.Nat16], [Result_14], ['query']),
+    'set_account_status' : IDL.Func([IDL.Text, AccountStatus], [Result], []),
     'set_attestation_secret' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result_2], []),
     'set_club_switcher_hint_seen' : IDL.Func([], [Result_9], []),
     'set_entitlement' : IDL.Func(

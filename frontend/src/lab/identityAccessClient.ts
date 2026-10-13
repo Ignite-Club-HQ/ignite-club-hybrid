@@ -36,6 +36,10 @@ export function createIdentityAccessClient(actor: _SERVICE) {
     revoke: (principal: Parameters<_SERVICE['revoke']>[0], expectedVersion: bigint) => call(() => actor.revoke(principal, expectedVersion)),
     grantRole: (accountId: string, role: string, club?: string, team?: string, siteId?: string) =>
       call(() => actor.grant_role_scoped(accountId, role, siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [])),
+    revokeRole: (accountId: string, role: string, club?: string, team?: string, siteId?: string) =>
+      call(() => actor.revoke_role_scoped(accountId, role, siteId ? [siteId] : [], club ? [club] : [], team ? [team] : [])),
+    setAccountStatus: (accountId: string, status: "Active" | "Suspended") =>
+      call(() => actor.set_account_status(accountId, status === "Active" ? { Active: null } : { Suspended: null })),
     setFamily: (accountId: string, childId: string) => call(() => actor.set_family(accountId, childId)),
     setExclusion: (accountId: string, club: string, team?: string, siteId?: string) =>
       call(() => actor.set_exclusion_scoped(accountId, siteId ? [siteId] : [], club, team ? [team] : [])),

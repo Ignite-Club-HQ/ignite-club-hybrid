@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -102,33 +103,96 @@ export default function ManageUsersPage() {
   return <SupabaseManageUsersPage />;
 }
 
-/** Read-only identity_access directory; account status and role mutations remain unavailable pending parity. */
+const ASSIGNABLE_ROLES = ["app_admin", "club_admin", "team_member", "guardian"];
+
 function IcpLabManageUsersPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const persona = user?.id?.startsWith("icp-") ? user.id.slice(4) : "member";
   const [fallbackUsers] = useState(() => getLocalLabUserDirectory());
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, "Active" | "Suspended">>({});
+  const [pendingAccountId, setPendingAccountId] = useState<string | null>(null);
+  const [roleToAssign, setRoleToAssign] = useState<Record<string, string>>({});
+  const directoryQueryKey = ["icp-user-directory", persona];
   const { data: directory, error, isLoading } = useQuery({
-    queryKey: ["icp-user-directory", persona],
+    queryKey: directoryQueryKey,
     queryFn: async () => {
       try {
         const connection = await connectLocalIdentityAccessClient(persona);
         const state = await connection.client.exportState();
+        const rolesByAccount = new Map<string, typeof state.roles>();
+        state.roles.forEach((grant) => {
+          const existing = rolesByAccount.get(grant.account_id) ?? [];
+          existing.push(grant);
+          rolesByAccount.set(grant.account_id, existing);
+        });
         return {
           source: "icp" as const,
           users: state.accounts.map((account) => ({
             id: account.id,
             display_name: account.id,
             email: account.principals[0]?.toText() ?? "synthetic-principal",
+            roles: rolesByAccount.get(account.id) ?? [],
           })),
         };
       } catch (error) {
         if (!(error instanceof Error) || !/not configured/i.test(error.message)) throw error;
-        return { source: "fixture" as const, users: fallbackUsers };
+        return { source: "fixture" as const, users: fallbackUsers.map((u) => ({ ...u, roles: [] as any[] })) };
       }
     },
   });
-  const users = directory?.users ?? fallbackUsers;
+  const users = directory?.users ?? fallbackUsers.map((u) => ({ ...u, roles: [] as any[] }));
+  const isLive = directory?.source === "icp";
+
+  const refreshDirectory = () => queryClient.invalidateQueries({ queryKey: directoryQueryKey });
+
+  const handleToggleStatus = async (accountId: string, currentStatus: "Active" | "Suspended") => {
+    const nextStatus = currentStatus === "Active" ? "Suspended" : "Active";
+    setPendingAccountId(accountId);
+    try {
+      const { setLiveAccountStatus } = await import("@/live/features/identityAccessAdmin");
+      await setLiveAccountStatus(accountId, nextStatus);
+      setStatusOverrides((prev) => ({ ...prev, [accountId]: nextStatus }));
+      toast.success(nextStatus === "Suspended" ? "Account suspended" : "Account reactivated");
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update account status");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
+
+  const handleGrantRole = async (accountId: string) => {
+    const role = roleToAssign[accountId];
+    if (!role) return;
+    setPendingAccountId(accountId);
+    try {
+      const { grantLiveRole } = await import("@/live/features/identityAccessAdmin");
+      await grantLiveRole(accountId, role);
+      toast.success(`Granted ${role}`);
+      setRoleToAssign((prev) => ({ ...prev, [accountId]: "" }));
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to grant role");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
+
+  const handleRevokeRole = async (accountId: string, role: string, club?: string, team?: string, siteId?: string) => {
+    setPendingAccountId(accountId);
+    try {
+      const { revokeLiveRole } = await import("@/live/features/identityAccessAdmin");
+      await revokeLiveRole(accountId, role, club, team, siteId);
+      toast.success(`Revoked ${role}`);
+      refreshDirectory();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to revoke role");
+    } finally {
+      setPendingAccountId(null);
+    }
+  };
 
   return (
     <div className="container max-w-3xl mx-auto px-4 py-6 space-y-4">
@@ -138,27 +202,85 @@ function IcpLabManageUsersPage() {
         </Button>
         <h1 className="text-lg font-bold">Users</h1>
       </div>
-      <p className="text-sm text-muted-foreground">
-        {resolveAuthBackend() === "icp" ? "Loaded from the Internet Identity canisters. Account status changes, bans, and role edits are disabled." : directory?.source === "icp"
-          ? "Loaded from the local identity_access canister. Account status changes, bans, and role edits are disabled."
-          : "The local identity_access canister is not configured. Showing a synthetic read-only preview; no Supabase request was made."}
-      </p>
       {isLoading && <Skeleton className="h-10 w-full" />}
       {error && <p className="text-sm text-destructive">{error instanceof Error ? error.message : "Unable to load users."}</p>}
       <div className="space-y-2">
-        {users.map((profile) => (
-          <Card key={profile.id}>
-            <CardContent className="flex items-center gap-3 p-4">
-              <Avatar>
-                <AvatarFallback>{(profile.display_name ?? "?").slice(0, 1)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{profile.display_name}</p>
-                <p className="text-xs text-muted-foreground">{profile.email}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {users.map((profile) => {
+          const status = statusOverrides[profile.id] ?? "Active";
+          const isPending = pendingAccountId === profile.id;
+          return (
+            <Card key={profile.id}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarFallback>{(profile.display_name ?? "?").slice(0, 1)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{profile.display_name}</p>
+                      <Badge variant={status === "Active" ? "secondary" : "destructive"}>{status}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{profile.email}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={status === "Active" ? "destructive" : "outline"}
+                    disabled={!isLive || isPending}
+                    onClick={() => handleToggleStatus(profile.id, status)}
+                  >
+                    {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : status === "Active" ? "Suspend" : "Reactivate"}
+                  </Button>
+                </div>
+
+                {profile.roles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {profile.roles.map((grant: any, idx: number) => (
+                      <Badge key={idx} variant="outline" className="flex items-center gap-1">
+                        {grant.role}
+                        {grant.club?.[0] ? `:${grant.club[0]}` : ""}
+                        {grant.team?.[0] ? `/${grant.team[0]}` : ""}
+                        <button
+                          type="button"
+                          aria-label={`Revoke ${grant.role}`}
+                          disabled={!isLive || isPending}
+                          onClick={() => handleRevokeRole(profile.id, grant.role, grant.club?.[0], grant.team?.[0], grant.site_id?.[0])}
+                          className="ml-1 disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={roleToAssign[profile.id] ?? ""}
+                    onValueChange={(value) => setRoleToAssign((prev) => ({ ...prev, [profile.id]: value }))}
+                    disabled={!isLive || isPending}
+                  >
+                    <SelectTrigger className="h-8 w-[180px]">
+                      <SelectValue placeholder="Assign role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSIGNABLE_ROLES.map((role) => (
+                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!isLive || isPending || !roleToAssign[profile.id]}
+                    onClick={() => handleGrantRole(profile.id)}
+                  >
+                    Grant
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

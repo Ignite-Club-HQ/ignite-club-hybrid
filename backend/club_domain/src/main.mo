@@ -512,17 +512,39 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(null)
   };
 
+  // Caller-owned clubless ("personal") team: club_id "" marks it personal,
+  // authorized via personalTeamOwners instead of club acl roles.
+  func isPersonalTeamOwner(caller : Principal, team_id : Text) : Bool {
+    personalTeamOwners.any(func(pair) = pair.0 == team_id and pair.1.equal(caller))
+  };
+
   public shared ({ caller }) func save_team(team : Types.ClubTeam) : async { #Ok : Types.ClubTeam; #Err : Text } {
     auth(caller);
-    if (not isAdmin(caller, team.club_id)) return #Err("Club admin required");
     let isNew = not teams.any(func(t) = t.id == team.id);
+    if (team.club_id == "") {
+      if (not (isGovernor(caller) or isNew or isPersonalTeamOwner(caller, team.id))) return #Err("Team owner required");
+    } else if (not isAdmin(caller, team.club_id)) {
+      return #Err("Club admin required");
+    };
     teams := teams.filter(func(t) = t.id != team.id);
     teams := teams.concat([team]);
-    if (isNew) {
+    if (team.club_id == "") {
+      if (isNew and not isPersonalTeamOwner(caller, team.id)) {
+        personalTeamOwners := personalTeamOwners.concat([(team.id, caller)]);
+      };
+    } else if (isNew) {
       // Provision the team chat on the messaging canister (best-effort).
       ignore fanOutEnsureConversation(team.club_id, ?team.id, teamChatParticipants(team.club_id, team.id));
     };
     #Ok(team)
+  };
+
+  // Lists the caller's own clubless teams (owner-only; not reachable via
+  // list_teams/list_teams_multi, which are club-scoped).
+  public query ({ caller }) func list_my_personal_teams() : async { #Ok : [Types.ClubTeam]; #Err : Text } {
+    auth(caller);
+    let mine = personalTeamOwners.filter(func(pair) = pair.1.equal(caller)).map(func(pair) = pair.0);
+    #Ok(teams.filter(func(t) = mine.any(func(id) = id == t.id)))
   };
 
   public query func get_team(id : Text) : async { #Ok : ?Types.ClubTeam; #Err : Text } {
@@ -562,6 +584,7 @@ persistent actor class Main(governorInit : Principal) {
   // (name/description/color only), so the read is unauthenticated like
   // list_teams; writes are club-admin gated via the folder's owning club.
   var teamFolders : [Types.TeamFolder];
+  var personalTeamOwners : [(Text, Principal)];
 
   public shared ({ caller }) func save_team_folder(folder : Types.TeamFolder) : async { #Ok : Types.TeamFolder; #Err : Text } {
     auth(caller);

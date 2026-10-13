@@ -1767,3 +1767,13 @@ export async function saveLiveAccessibilityPrefs(ctx: FeatureBackendContext, pre
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   await unwrapCandid(actor.set_accessibility_prefs(prefsJson), "Save accessibility prefs");
 }
+
+/**
+ * Personal (clubless) teams — caller is the implicit owner (save_team with
+ * club_id ""), counterpart of the Supabase "shell club" personal-team flow.
+ * Listing is caller-scoped on the canister (no club_id to filter by).
+ */
+export async function listLivePersonalTeams(ctx: FeatureBackendContext): Promise<LiveClubTeam[]> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_personal_teams(), "List my personal teams");
+}

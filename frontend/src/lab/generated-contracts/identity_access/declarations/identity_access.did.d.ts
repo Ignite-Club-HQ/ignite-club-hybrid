@@ -19,9 +19,12 @@ export interface Access {
 }
 export interface Account {
   'id' : string,
+  'status' : AccountStatus,
   'version' : bigint,
   'principals' : Array<Principal>,
 }
+export type AccountStatus = { 'Active' : null } |
+  { 'Suspended' : null };
 /**
  * A Pro entitlement granted to a principal from an IAP (App Store) receipt
  * or a governor/verifier write. `transaction_id` is the Apple transaction
@@ -290,6 +293,14 @@ export interface _SERVICE {
    */
   'remove_verifier' : ActorMethod<[Principal], Result_2>,
   'revoke' : ActorMethod<[Principal, bigint], Result>,
+  'revoke_role' : ActorMethod<
+    [string, string, [] | [string], [] | [string]],
+    Result_2
+  >,
+  'revoke_role_scoped' : ActorMethod<
+    [string, string, [] | [string], [] | [string], [] | [string]],
+    Result_2
+  >,
   /**
    * Case-insensitive substring search over display names — the ICP-mode
    * counterpart of the Supabase `search_invitable_profiles` RPC, used by the
@@ -303,7 +314,10 @@ export interface _SERVICE {
    * Governor-only: sets (or rotates) the shared HMAC secret used to verify
    * `redeem_entitlement` attestations. Must match the secret held by the
    * session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
+   * Admin-gated (governor or app_admin role): suspends or reactivates an
+   * account.
    */
+  'set_account_status' : ActorMethod<[string, AccountStatus], Result>,
   'set_attestation_secret' : ActorMethod<[Uint8Array], Result_2>,
   /**
    * Records that the caller has dismissed the club switcher coach-mark, so
