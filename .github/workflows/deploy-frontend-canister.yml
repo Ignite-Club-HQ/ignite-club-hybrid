@@ -59,35 +59,11 @@ jobs:
           rm -rf ../deploy/frontend/dist
           cp -r dist-canister ../deploy/frontend/dist
 
-      # Keep the previous deploys' hashed JS/CSS files on the canister for 14
-      # days. Each deploy otherwise deletes them, and any tab still open on the
-      # old version fails to load the next screen's code and reloads the page.
-      - name: Restore previous asset files
-        uses: actions/cache/restore@v4
-        with:
-          path: .asset-history
-          key: frontend-asset-history-${{ github.run_id }}
-          restore-keys: frontend-asset-history-
-
-      - name: Carry previous asset files into this deploy
-        run: |
-          set -euo pipefail
-          mkdir -p .asset-history deploy/frontend/dist/assets
-          # Prune files no deploy has shipped for 2 days (keeps the upload small).
-          find .asset-history -type f -mtime +2 -delete || true
-          # Older files fill gaps only — never overwrite this build's files.
-          cp -n .asset-history/* deploy/frontend/dist/assets/ 2>/dev/null || true
-          # Record this build's files (fresh mtime) for future deploys.
-          cp -p deploy/frontend/dist/assets/* .asset-history/ 2>/dev/null || true
-          touch $(ls -d frontend/dist-canister/assets/* | sed 's#frontend/dist-canister/assets/#.asset-history/#') 2>/dev/null || true
-          echo "Assets in this deploy: $(ls deploy/frontend/dist/assets | wc -l)"
-
-      - name: Save asset history
-        uses: actions/cache/save@v4
-        with:
-          path: .asset-history
-          key: frontend-asset-history-${{ github.run_id }}
-
+      # No asset-history carry-over: it re-stamped old files on every deploy so
+      # they never aged out and the upload grew to ~34k files (one build is ~600).
+      # Tabs left open on an old version recover via lazyWithRetry's reload.
+      - name: Report upload size
+        run: echo "Files in this deploy: $(find deploy/frontend/dist -type f | wc -l)"
 
       - name: Restore deployer identity
         env:
@@ -136,9 +112,7 @@ jobs:
           # stay fast. One catch: an upgrade copies every stored file through a
           # single message, and the canister once held ~21k files, which hit the
           # instruction limit. If that happens, fall back to a one-time
-          # reinstall (wipe + full upload) to clear the backlog; the 2-day
-          # asset-history prune then keeps the file count small so later
-          # upgrades stay incremental.
+          # reinstall (wipe + upload of the current ~600 files) to clear it.
           if ! icp deploy -e ic frontend --yes --cycles 1000000000000; then
             echo "::warning::Upgrade failed (likely stored-file backlog) — retrying with reinstall."
             icp deploy -e ic frontend --mode reinstall --yes --cycles 1000000000000
