@@ -102,6 +102,39 @@ function SupabaseAssociationDetailPage() {
     queryKey: ["association-rollup", id, clubIds.length],
     enabled: !!id && clubIds.length > 0,
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        return withFeatureBackend("membership", {
+          supabase: async () => ({ teams: 0, upcomingEvents: 0, members: 0 }),
+          icp: async (ctx) => {
+            const [{ listLiveTeams }, { listLiveEvents }, { listLiveRoleGrants }] = await Promise.all([
+              import("@/live/features/club"),
+              import("@/live/features/events"),
+              import("@/live/features/membership"),
+            ]);
+            const now = Date.now();
+            const weekOut = now + 7 * 24 * 60 * 60 * 1000;
+            const perClub = await Promise.all(
+              clubIds.map(async (cid) => {
+                const [teams, events, grants] = await Promise.all([
+                  listLiveTeams(ctx, cid).catch(() => []),
+                  listLiveEvents(ctx, cid).catch(() => []),
+                  listLiveRoleGrants(ctx, cid).catch(() => []),
+                ]);
+                const upcoming = events.filter((e) => {
+                  const t = Number(e.starts_at_ms);
+                  return t >= now && t <= weekOut;
+                }).length;
+                return { teams: teams.length, upcoming, members: grants.map((g) => String(g.account_id)) };
+              }),
+            );
+            return {
+              teams: perClub.reduce((n, c) => n + c.teams, 0),
+              upcomingEvents: perClub.reduce((n, c) => n + c.upcoming, 0),
+              members: new Set(perClub.flatMap((c) => c.members)).size,
+            };
+          },
+        });
+      }
       const [teamsRes, eventsRes, membersRes] = await Promise.all([
         supabase.from("teams").select("id", { count: "exact", head: true }).in("club_id", clubIds),
         supabase
