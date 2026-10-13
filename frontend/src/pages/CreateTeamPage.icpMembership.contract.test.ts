@@ -15,8 +15,8 @@ describe("CreateTeamPage ICP membership wiring", () => {
     );
   });
 
-  it("keeps email invites Supabase-only and surfaces a clear message when membership is ICP-routed", () => {
-    expect(source).toContain("Email invites for team admins aren't available for Internet Identity accounts yet.");
+  it("routes email invites through createLivePendingInvite when membership is ICP-routed", () => {
+    expect(source).toContain("createLivePendingInvite(ctx, {");
     expect(source).toContain("adminAssignment?.type === 'email_invite' && adminAssignment.inviteEmail && adminAssignment.inviteName && membershipOnIcp");
   });
 
