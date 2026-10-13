@@ -73,10 +73,23 @@ persistent actor class Main(governorInit : Principal) {
   var clubDomainCanister : ?Principal;
   // Scheduled RSVP reminders (hours before start); swept by _reminderTimer.
   var autoReminders : [{ event_id : Text; hours_before : Nat16; sent : Bool }];
+  // Per-caller favourite event titles / saved locations / training defaults /
+  // RSVP created_at preservation (events UX extras, migration 20261015_000000).
+  var favouriteEventTitles : [Types.FavouriteEventTitle];
+  var savedLocations : [Types.SavedLocation];
+  var trainingDefaults : [Types.TrainingDefault];
+  var rsvpCreatedAt : [Types.RsvpCreatedAt];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
+  // Records the first-RSVP timestamp for (event_id, account_id) if absent;
+  // no-op on later status changes so created_at_ms survives updates.
+  func recordRsvpCreatedAt(event_id : Text, account_id : Text) {
+    if (not rsvpCreatedAt.any(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      rsvpCreatedAt := rsvpCreatedAt.concat([{ event_id; account_id; created_at_ms = nowMs() }]);
+    };
+  };
   // Mirrors the Supabase event_type enum so canister events round-trip with
   // the app's existing type handling.
   func validEventType(value : Text) : Bool {

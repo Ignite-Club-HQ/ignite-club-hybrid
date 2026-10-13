@@ -95,45 +95,68 @@ export default function PlayerOfMatchSelector({
     } catch {}
   };
 
-  // Fetch current player of match
+  // Fetch current player of match. Supabase keeps a dedicated
+  // `player_of_match` row; ICP has no such record shape, so the MVP fields
+  // on events_domain's `game_results` row (set via save_game_result) double
+  // as the player-of-match record.
   const { data: playerOfMatch, isLoading } = useQuery({
     queryKey: ["player-of-match", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("player_of_match")
-        .select("*")
-        .eq("event_id", eventId)
-        .maybeSingle();
+    queryFn: async () =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("player_of_match")
+            .select("*")
+            .eq("event_id", eventId)
+            .maybeSingle();
 
-      if (error) throw error;
-      if (!data) return null;
+          if (error) throw error;
+          if (!data) return null;
 
-      // Fetch related profile / child separately. The previous inline
-      // `children:child_id(...)` embed was silently returning null because
-      // PostgREST treated `child_id` as a table name, not an FK column hint,
-      // so the card rendered an empty name + "?" avatar.
-      let profile: any = null;
-      let child: any = null;
-      if (data.user_id) {
-        const { data: p } = await selectCachedProfileById(data.user_id);
-        profile = p || profileFallbacks.get(data.user_id) || null;
-      }
-      if (data.child_id) {
-        const { data: c } = await supabase
-          .from("children")
-          .select("id, name")
-          .eq("id", data.child_id)
-          .maybeSingle();
-        child = c || (childNameFallbacks.has(data.child_id)
-          ? { id: data.child_id, name: childNameFallbacks.get(data.child_id)! }
-          : null);
-      }
+          // Fetch related profile / child separately. The previous inline
+          // `children:child_id(...)` embed was silently returning null because
+          // PostgREST treated `child_id` as a table name, not an FK column hint,
+          // so the card rendered an empty name + "?" avatar.
+          let profile: any = null;
+          let child: any = null;
+          if (data.user_id) {
+            const { data: p } = await selectCachedProfileById(data.user_id);
+            profile = p || profileFallbacks.get(data.user_id) || null;
+          }
+          if (data.child_id) {
+            const { data: c } = await supabase
+              .from("children")
+              .select("id, name")
+              .eq("id", data.child_id)
+              .maybeSingle();
+            child = c || (childNameFallbacks.has(data.child_id)
+              ? { id: data.child_id, name: childNameFallbacks.get(data.child_id)! }
+              : null);
+          }
 
-      return { ...data, profiles: profile, children: child };
-    },
-    // player_of_match record is Supabase-only (NEEDS-CANISTER: no POM record
-    // shape on events_domain) — skip the read for II principals.
-    enabled: resolveAuthBackend() !== "icp",
+          return { ...data, profiles: profile, children: child };
+        },
+        icp: async (ctx) => {
+          const result = await getLiveGameResult(ctx, eventId);
+          const row = result.length > 0 ? (result[0] as any) : null;
+          const mvpRef: string | null = row?.mvp_player_id?.length ? row.mvp_player_id[0] : null;
+          if (!mvpRef) return null;
+          const isChild = mvpRef.startsWith("child:");
+          const rawId = isChild ? mvpRef.slice(6) : mvpRef.startsWith("user:") ? mvpRef.slice(5) : mvpRef;
+          const name = (row?.mvp_player_name?.length ? row.mvp_player_name[0] : null) || "Unknown player";
+
+          return {
+            id: eventId,
+            event_id: eventId,
+            user_id: isChild ? null : rawId,
+            child_id: isChild ? rawId : null,
+            points: 0,
+            points_awarded: false,
+            profiles: isChild ? null : { display_name: name, avatar_url: null },
+            children: isChild ? { id: rawId, name } : null,
+          } as any;
+        },
+      }),
   });
 
   const playerOfMatchDisplay = useMemo(() => {
