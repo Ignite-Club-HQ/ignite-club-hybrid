@@ -276,6 +276,7 @@ async function provisionInternetIdentityAccount(identity: Identity, principal: s
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   await client.registerAccount();
+  markAccountProvisioned(principal, target);
 }
 
 let activeClient: InternetIdentityAuthClient | undefined;
