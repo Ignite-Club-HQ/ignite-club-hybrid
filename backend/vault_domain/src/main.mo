@@ -610,8 +610,8 @@ persistent actor class Main(governorInit : Principal) {
   public shared ({ caller }) func rekey_principal(old : Principal, new_principal : Principal, dry_run : Bool) : async { #ok : Nat; #err : Text } {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
-    if (old.equal(Principal.anonymous()) or new.equal(Principal.anonymous())) return #err("Invalid principal");
-    if (old.equal(new)) return #err("old and new principal must differ");
+    if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
+    if (old.equal(new_principal)) return #err("old and new_principal principal must differ");
     if (isGovernor(old)) return #err("Cannot rekey the governor");
 
     func optEq(p : ?Principal, target : Principal) : Bool {
@@ -619,24 +619,24 @@ persistent actor class Main(governorInit : Principal) {
     };
 
     var conflicts = 0;
-    conflicts += roles.filter(func(r : Types.RoleGrant) : Bool = r.user.equal(new)).size();
-    conflicts += folders.filter(func(f : Types.VaultFolder) : Bool = f.created_by.equal(new) or optEq(f.deleted_by, new)).size();
-    conflicts += files.filter(func(f : Types.VaultFile) : Bool = f.uploaded_by.equal(new) or optEq(f.deleted_by, new)).size();
-    conflicts += pinned_vaults.filter(func(p : Types.PinnedVault) : Bool = p.set_by.equal(new)).size();
-    conflicts += backups.filter(func(b : Types.Backup) : Bool = b.created_by.equal(new)).size();
+    conflicts += roles.filter(func(r : Types.RoleGrant) : Bool = r.user.equal(new_principal)).size();
+    conflicts += folders.filter(func(f : Types.VaultFolder) : Bool = f.created_by.equal(new_principal) or optEq(f.deleted_by, new_principal)).size();
+    conflicts += files.filter(func(f : Types.VaultFile) : Bool = f.uploaded_by.equal(new_principal) or optEq(f.deleted_by, new_principal)).size();
+    conflicts += pinned_vaults.filter(func(p : Types.PinnedVault) : Bool = p.set_by.equal(new_principal)).size();
+    conflicts += backups.filter(func(b : Types.Backup) : Bool = b.created_by.equal(new_principal)).size();
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in vault_domain");
 
     var changed = 0;
 
     let newRoles = roles.map(func(r : Types.RoleGrant) : Types.RoleGrant {
-      if (r.user.equal(old)) { changed += 1; { r with user = new } } else { r }
+      if (r.user.equal(old)) { changed += 1; { r with user = new_principal } } else { r }
     });
 
     let newFolders = folders.map(func(f : Types.VaultFolder) : Types.VaultFolder {
       var out = f;
       var touched = false;
-      if (out.created_by.equal(old)) { out := { out with created_by = new }; touched := true };
-      if (optEq(out.deleted_by, old)) { out := { out with deleted_by = ?new }; touched := true };
+      if (out.created_by.equal(old)) { out := { out with created_by = new_principal }; touched := true };
+      if (optEq(out.deleted_by, old)) { out := { out with deleted_by = ?new_principal }; touched := true };
       if (touched) { changed += 1 };
       out
     });
@@ -644,18 +644,18 @@ persistent actor class Main(governorInit : Principal) {
     let newFiles = files.map(func(f : Types.VaultFile) : Types.VaultFile {
       var out = f;
       var touched = false;
-      if (out.uploaded_by.equal(old)) { out := { out with uploaded_by = new }; touched := true };
-      if (optEq(out.deleted_by, old)) { out := { out with deleted_by = ?new }; touched := true };
+      if (out.uploaded_by.equal(old)) { out := { out with uploaded_by = new_principal }; touched := true };
+      if (optEq(out.deleted_by, old)) { out := { out with deleted_by = ?new_principal }; touched := true };
       if (touched) { changed += 1 };
       out
     });
 
     let newPinned = pinned_vaults.map(func(p : Types.PinnedVault) : Types.PinnedVault {
-      if (p.set_by.equal(old)) { changed += 1; { p with set_by = new } } else { p }
+      if (p.set_by.equal(old)) { changed += 1; { p with set_by = new_principal } } else { p }
     });
 
     let newBackups = backups.map(func(b : Types.Backup) : Types.Backup {
-      if (b.created_by.equal(old)) { changed += 1; { b with created_by = new } } else { b }
+      if (b.created_by.equal(old)) { changed += 1; { b with created_by = new_principal } } else { b }
     });
 
     if (not dry_run) {
