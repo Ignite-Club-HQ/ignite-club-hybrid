@@ -638,3 +638,25 @@ export async function clearLivePinnedVault(
   const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.clear_pinned_vault(chatType, chatId), "Unpin vault");
 }
+
+// ---- On-chain vault metadata backups (app admin only; blob refs, never plaintext) ----
+export async function createLiveVaultBackup(ctx: FeatureBackendContext, label: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_backup(label), "Create backup");
+}
+export async function listLiveVaultBackups(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_backups(), "List backups");
+}
+export async function getLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_backup(id), "Get backup");
+}
+export async function restoreLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.restore_backup(id), "Restore backup");
+}
+export async function deleteLiveVaultBackup(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveVaultDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_backup(id), "Delete backup");
+}
