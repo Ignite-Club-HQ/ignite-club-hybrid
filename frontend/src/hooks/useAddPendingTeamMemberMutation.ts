@@ -106,7 +106,7 @@ export function useAddPendingTeamMemberMutation({
           email: "",
           childrenCount: 0,
           childrenNames: [] as string[],
-          secondParentLink: null,
+          secondParentLink: null as string | null,
           secondParentEmail: "",
           secondParentName: "",
           secondParentAddedDirectly: false,
