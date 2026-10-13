@@ -76,11 +76,10 @@ export function useAddPendingTeamMemberMutation({
    * `bulk_add_team_members` (role grant) for an existing-user match, or
    * `create_pending_invite` for a fresh invite. Invite email delivery works
    * here too (the send-email edge function is anon-key callable). Second-
-   * parent linking has no club_domain counterpart and in-app notifications
-   * stay Supabase-only (push/notifications table), so those stay
-   * skipped/omitted on this path.
-   * NEEDS-CANISTER: second-parent invite composition + in-app notification
-   * write for pending/bulk team-member adds.
+   * parent linking uses `create_pending_invite` with kind "guardian" against
+   * the first existing child id, so the invite itself always lands on the
+   * canister. In-app notifications stay Supabase-only (push/notifications
+   * table), so those stay skipped/omitted on this path.
    */
   const mutationIcp = async (ctx: FeatureBackendContext) => {
     if (!nameInput.trim()) throw new Error("Please enter a name");
@@ -191,19 +190,46 @@ export function useAddPendingTeamMemberMutation({
         console.warn("[ICP invite] email send threw:", err);
       }
     }
+    // Second-parent invite: club_domain has no dedicated "second parent" op,
+    // but a "guardian" kind pending invite against the (first) child id is
+    // the closest real equivalent — it lands a real, acceptable invite on
+    // the canister instead of silently dropping the second parent.
+    let secondParentLink: string | null = null;
+    let secondParentStatus: "skipped" | "invited" | "failed" = "skipped";
+    let secondParentFailure: string | null = null;
+    const secondParentEmailTrimmed = secondParentEmail.trim().toLowerCase();
+    if (secondParentEmailTrimmed) {
+      try {
+        const { createLivePendingInvite: createLiveGuardianInvite } = await import("@/live/features/club");
+        const childId = singleChildren.find((c) => c.existingChildId)?.existingChildId || null;
+        const { invite: guardianInvite } = await createLiveGuardianInvite(ctx, {
+          kind: "guardian",
+          clubId,
+          email: secondParentEmailTrimmed,
+          childId,
+        });
+        secondParentLink = `${window.location.origin}/join/p/${guardianInvite.id}`;
+        secondParentStatus = "invited";
+      } catch (err) {
+        console.warn("[ICP invite] second parent guardian invite failed:", err);
+        secondParentFailure = secondParentName.trim() || secondParentEmailTrimmed;
+        secondParentStatus = "failed";
+      }
+    }
+
     return {
       link,
       shareLink,
       email: customEmail.trim(),
       childrenCount: 0,
       childrenNames: [] as string[],
-      secondParentLink: null,
-      secondParentEmail: "",
-      secondParentName: "",
+      secondParentLink,
+      secondParentEmail: secondParentStatus === "invited" ? secondParentEmailTrimmed : "",
+      secondParentName: secondParentStatus === "invited" ? secondParentName.trim() : "",
       secondParentAddedDirectly: false,
-      secondParentStatus: "skipped" as const,
+      secondParentStatus,
       secondParentLabel: null as string | null,
-      secondParentFailure: null as string | null,
+      secondParentFailure,
     };
   };
 
