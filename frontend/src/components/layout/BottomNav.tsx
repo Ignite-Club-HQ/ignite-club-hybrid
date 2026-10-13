@@ -57,11 +57,20 @@ export function BottomNav() {
   // suppressed scopes (see useSuppressedChatScopes below) from the total.
   const { data: counts } = useUnreadMessageCounts(user?.id);
 
-  // NEEDS-CANISTER: broadcast club scoping and DM club scoping below have no
-  // messaging_domain equivalent yet (no per-club broadcast notification rows,
-  // no principal->club role lookup for DM peers) — skip those two
-  // Supabase-only reads when messaging is ICP-routed. Group->club mapping IS
-  // wired for ICP via getLiveGroupMetadata below.
+  // Broadcast club scoping (ICP): the canister has no per-club broadcast
+  // notification row, but the global broadcast conversation lands in
+  // `counts.groups` (fetchIcpUnreadMessageCounts maps any non-dm/team/club
+  // kind to "groups"), and its clubId (always absent for the platform-wide
+  // feed, present for any future per-club broadcast conversation) is read
+  // via getLiveGroupMetadata into groupClubMap below — so club attribution
+  // for broadcasts falls out of the existing group->club mapping with no
+  // extra query needed.
+  // DM club scoping (ICP): resolved by calling the club_domain membership
+  // wrapper (listLiveRoleGrants) for the active club and checking whether
+  // the DM peer's principal holds a role there. That call is club-admin
+  // gated canister-side, so non-admin members fall back to counting their
+  // unread DMs under every club filter they view (documented below) rather
+  // than silently dropping the badge.
   const messagingOnIcp = isFeatureRoutedToIcp("messaging");
 
   // Secondary lookup: which chat groups belong to the active club. Cached
@@ -129,7 +138,7 @@ export function BottomNav() {
   // only count broadcasts belonging to that club — otherwise another club's
   // announcement inflates a badge with no matching row in the filtered inbox.
   const { data: clubBroadcastUnread = 0 } = useQuery({
-    queryKey: ["bottomnav-club-broadcast-unread", user?.id, activeClubFilter],
+    queryKey: ["bottomnav-club-broadcast-unread", user?.id, activeClubFilter, messagingOnIcp],
     enabled: !!user?.id && !!activeClubFilter && !messagingOnIcp,
     staleTime: 60 * 1000,
     queryFn: async () => {
@@ -144,6 +153,11 @@ export function BottomNav() {
       return count ?? 0;
     },
   });
+  // ICP: broadcast conversations carry their clubId through groupClubMap
+  // (see comment above), so a club-scoped broadcast group is already folded
+  // into clubMessagesCount's `groups` sum below — no separate query needed,
+  // and this Supabase-only count stays 0 (counts.broadcast is also always 0
+  // on ICP, so the Math.min guard below is a no-op there).
 
   // DM unreads are only counted under a club filter when the other participant
   // holds a role in that club — otherwise the badge shows a number with no
@@ -152,10 +166,45 @@ export function BottomNav() {
     ? Object.entries(counts.dms).filter(([, n]) => (n || 0) > 0).map(([id]) => id)
     : [];
   const { data: clubScopedDmIds } = useQuery({
-    queryKey: ["bottomnav-club-scoped-dms", user?.id, activeClubFilter, unreadDmConversationIds.sort().join(",")],
-    enabled: !!user?.id && !!activeClubFilter && unreadDmConversationIds.length > 0 && !messagingOnIcp,
+    queryKey: ["bottomnav-club-scoped-dms", user?.id, activeClubFilter, unreadDmConversationIds.sort().join(","), messagingOnIcp],
+    enabled: !!user?.id && !!activeClubFilter && unreadDmConversationIds.length > 0,
     staleTime: 60 * 1000,
     queryFn: async () => {
+      if (messagingOnIcp) {
+        const [{ icpCtx }, messaging, membership] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/messaging"),
+          import("@/live/features/membership"),
+        ]);
+        const ctx = await icpCtx();
+        const myPrincipal = ctx.identity.getPrincipal().toText();
+        const peerByConv = new Map<string, string>();
+        await Promise.all(unreadDmConversationIds.map(async (id) => {
+          try {
+            const meta = await messaging.getLiveGroupMetadata(ctx, id);
+            const other = meta.members.map((p) => p.toText()).find((p) => p !== myPrincipal);
+            if (other) peerByConv.set(id, other);
+          } catch {
+            // Best-effort: a DM whose metadata can't be read is left out of
+            // the club-scoped set (never throws, never blocks the badge).
+          }
+        }));
+        try {
+          // club_domain `list_role_grants` is club-admin gated, so this
+          // throws for a regular member viewing their own club filter.
+          const grants = (await membership.listLiveRoleGrants(ctx, activeClubFilter!)) as Array<{ account_id: string }>;
+          const inClub = new Set(grants.map((g) => g.account_id));
+          return Array.from(peerByConv.entries())
+            .filter(([, principal]) => inClub.has(principal))
+            .map(([cid]) => cid);
+        } catch {
+          // Documented fallback: without admin access to the club's role
+          // grants there is no cheap way to resolve a DM peer's clubs on
+          // ICP, so every unread DM is counted under every club filter the
+          // member views rather than dropped from the badge entirely.
+          return Array.from(peerByConv.keys());
+        }
+      }
       const { data: convs } = await supabase
         .from("direct_conversations")
         .select("id, participant_1, participant_2")
