@@ -10,6 +10,22 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface Backup {
+  'id' : string,
+  'files' : Array<VaultFile>,
+  'backup_label' : string,
+  'folders' : Array<VaultFolder>,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+}
+export interface BackupSummary {
+  'id' : string,
+  'backup_label' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'file_count' : bigint,
+  'folder_count' : bigint,
+}
 export interface BlobRef {
   'path' : string,
   'content_hash' : string,
@@ -19,6 +35,11 @@ export interface Main {
   'clear_pinned_vault' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'create_backup' : ActorMethod<
+    [string],
+    { 'Ok' : Backup } |
       { 'Err' : string }
   >,
   'create_folder' : ActorMethod<
@@ -41,6 +62,7 @@ export interface Main {
    * / Public: remaining cycles (shown in admin settings).
    */
   'cycles_balance' : ActorMethod<[], bigint>,
+  'delete_backup' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'delete_file_permanent' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -51,6 +73,7 @@ export interface Main {
     { 'Ok' : VaultFolder } |
       { 'Err' : string }
   >,
+  'get_backup' : ActorMethod<[string], { 'Ok' : Backup } | { 'Err' : string }>,
   'get_file' : ActorMethod<
     [string],
     { 'Ok' : [] | [VaultFile] } |
@@ -69,6 +92,11 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, [] | [string], [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'list_backups' : ActorMethod<
+    [],
+    { 'Ok' : Array<BackupSummary> } |
       { 'Err' : string }
   >,
   'list_club_files' : ActorMethod<
@@ -136,6 +164,11 @@ export interface Main {
   'rename_file' : ActorMethod<
     [string, string],
     { 'Ok' : VaultFile } |
+      { 'Err' : string }
+  >,
+  'restore_backup' : ActorMethod<
+    [string],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'restore_file' : ActorMethod<

@@ -623,6 +623,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += folders.filter(func(f : Types.VaultFolder) : Bool = f.created_by.equal(new) or optEq(f.deleted_by, new)).size();
     conflicts += files.filter(func(f : Types.VaultFile) : Bool = f.uploaded_by.equal(new) or optEq(f.deleted_by, new)).size();
     conflicts += pinned_vaults.filter(func(p : Types.PinnedVault) : Bool = p.set_by.equal(new)).size();
+    conflicts += backups.filter(func(b : Types.Backup) : Bool = b.created_by.equal(new)).size();
     if (conflicts > 0) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in vault_domain");
 
     var changed = 0;
@@ -653,11 +654,16 @@ persistent actor class Main(governorInit : Principal) {
       if (p.set_by.equal(old)) { changed += 1; { p with set_by = new } } else { p }
     });
 
+    let newBackups = backups.map(func(b : Types.Backup) : Types.Backup {
+      if (b.created_by.equal(old)) { changed += 1; { b with created_by = new } } else { b }
+    });
+
     if (not dry_run) {
       roles := newRoles;
       folders := newFolders;
       files := newFiles;
       pinned_vaults := newPinned;
+      backups := newBackups;
     };
 
     #ok(changed)

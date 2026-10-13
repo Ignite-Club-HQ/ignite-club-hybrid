@@ -581,7 +581,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not validTimerAction(action)) return #Err("Invalid timer action");
-    let resolvedMinutes = switch (minutes_per_half) { case (?m) m; case null 45 };
+    let resolvedMinutes = switch (minutes_per_half) { case (?m) m; case null (45 : Nat16) };
     if (resolvedMinutes == 0 or resolvedMinutes > 200) return #Err("Invalid minutes per half");
     let current = switch (eventTimers.find(func(item) = item.event_id == event_id)) {
       case (?existing) existing;
@@ -598,7 +598,7 @@ persistent actor class Main(governorInit : Principal) {
       };
       case "resume" {
         if (current.is_running) return #Err("Timer is already running");
-        let extraPause = switch (current.half_paused_at_ms) { case (?pausedAt) if (now > pausedAt) now - pausedAt else 0; case null 0 };
+        let extraPause = switch (current.half_paused_at_ms) { case (?pausedAt) if (now > pausedAt) now - pausedAt else (0 : Nat64); case null (0 : Nat64) };
         { current with half_paused_at_ms = null; accumulated_pause_ms = current.accumulated_pause_ms + extraPause; is_running = true; last_event_at_ms = now; updated_by = caller }
       };
       case "end_half" {

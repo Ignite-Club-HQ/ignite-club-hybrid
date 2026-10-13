@@ -226,6 +226,20 @@ export const idlFactory = ({ IDL }) => {
     'is_active' : IDL.Bool,
     'pitch_state_json' : IDL.Text,
   });
+  const EventTimer = IDL.Record({
+    'updated_by' : IDL.Principal,
+    'half_paused_at_ms' : IDL.Opt(IDL.Nat64),
+    'last_event_at_ms' : IDL.Nat64,
+    'accumulated_pause_ms' : IDL.Nat64,
+    'is_game_finished' : IDL.Bool,
+    'schema_version' : IDL.Nat8,
+    'half_ended_at_ms' : IDL.Opt(IDL.Nat64),
+    'current_half' : IDL.Nat8,
+    'minutes_per_half' : IDL.Nat16,
+    'event_id' : IDL.Text,
+    'is_running' : IDL.Bool,
+    'half_started_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const GameResult = IDL.Record({
     'id' : IDL.Text,
     'saved_by' : IDL.Principal,
@@ -682,6 +696,11 @@ export const idlFactory = ({ IDL }) => {
     'get_event_rosters' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(RosterEntry), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_event_timer' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(EventTimer), 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_event_view_count' : IDL.Func(
@@ -1146,6 +1165,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Text),
         ],
         [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_event_timer' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Nat16), IDL.Opt(IDL.Int64)],
+        [IDL.Variant({ 'Ok' : EventTimer, 'Err' : IDL.Text })],
         [],
       ),
     'set_group_duty' : IDL.Func(

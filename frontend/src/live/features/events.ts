@@ -276,6 +276,37 @@ export async function setLiveEventAttendance(
 }
 
 /**
+ * Server-anchored live match timer, one per event (events_domain
+ * set_event_timer/get_event_timer). Counterpart of the Supabase
+ * pitch-timer-event/pitch-timer-read edge functions for ICP-mode callers —
+ * see frontend/src/lib/serverTimer.ts for the shared `ServerTimer` shape the
+ * ICP branch converts to/from.
+ */
+export async function getLiveEventTimer(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_timer(eventId), "Get event timer");
+}
+
+export async function setLiveEventTimer(
+  ctx: FeatureBackendContext,
+  eventId: string,
+  action: string,
+  minutesPerHalf?: number | null,
+  adjustMs?: number | bigint | null,
+) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_event_timer(
+      eventId,
+      action,
+      candidOpt(minutesPerHalf ?? null),
+      candidOpt(adjustMs === null || adjustMs === undefined ? null : BigInt(adjustMs)),
+    ),
+    "Set event timer",
+  );
+}
+
+/**
  * Canonical per-event roster read (accounts + linked children) used for
  * guardian/attendance rosters. Counterpart of the Supabase
  * `get_targeted_event_attendance_roster` / `club_scoped_child_guardians`

@@ -146,6 +146,20 @@ export interface EventSeries {
   'location' : [] | [string],
   'event_type' : string,
 }
+export interface EventTimer {
+  'updated_by' : Principal,
+  'half_paused_at_ms' : [] | [bigint],
+  'last_event_at_ms' : bigint,
+  'accumulated_pause_ms' : bigint,
+  'is_game_finished' : boolean,
+  'schema_version' : number,
+  'half_ended_at_ms' : [] | [bigint],
+  'current_half' : number,
+  'minutes_per_half' : number,
+  'event_id' : string,
+  'is_running' : boolean,
+  'half_started_at_ms' : [] | [bigint],
+}
 export interface EventView {
   'viewed_at_ms' : bigint,
   'event_id' : string,
@@ -514,6 +528,11 @@ export interface Main {
   'get_event_rosters' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<RosterEntry> } |
+      { 'Err' : string }
+  >,
+  'get_event_timer' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [EventTimer] } |
       { 'Err' : string }
   >,
   'get_event_view_count' : ActorMethod<
@@ -908,6 +927,11 @@ export interface Main {
       [] | [string],
     ],
     { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'set_event_timer' : ActorMethod<
+    [string, string, [] | [number], [] | [bigint]],
+    { 'Ok' : EventTimer } |
       { 'Err' : string }
   >,
   'set_group_duty' : ActorMethod<
