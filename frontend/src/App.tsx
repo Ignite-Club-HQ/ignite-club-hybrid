@@ -475,20 +475,19 @@ const App = () => {
   // start, instead of flashing the Supabase form and then swapping.
   if (!placementReady) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-background">
-        <div className="flex flex-col items-center gap-5">
-          <img
-            src="/icon-512.png"
-            alt="Ignite logo"
-            className="h-24 w-24 rounded-3xl shadow-md"
-          />
-          <div className="text-center text-2xl font-bold tracking-tight text-foreground">
-            Ignite <span className="text-gradient-emerald">Club HQ</span>
-          </div>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background">
+        <img
+          src="/icon-512.png"
+          alt="Ignite logo"
+          className="h-24 w-24 rounded-3xl shadow-md"
+        />
+        <div className="text-center text-2xl font-bold tracking-tight text-foreground">
+          Ignite Club HQ
         </div>
-        <p className="animate-pulse text-sm text-muted-foreground" role="status">
-          Loading…
-        </p>
+        <div className="flex items-center gap-2" role="status">
+          <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
