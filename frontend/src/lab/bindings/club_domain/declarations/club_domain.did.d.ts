@@ -314,6 +314,11 @@ export interface Main {
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
+  'create_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'create_news_post' : ActorMethod<
     [
       string,
@@ -796,6 +801,11 @@ export interface Main {
   'resend_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
+      { 'Err' : string }
+  >,
+  'resolve_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'restore_club' : ActorMethod<

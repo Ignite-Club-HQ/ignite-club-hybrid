@@ -380,6 +380,11 @@ type Main =
                            Err: text;
                            Ok: ClubProfile;
                          });
+   create_invite_short_code: (invite_id: text) ->
+    (variant {
+       Err: text;
+       Ok: text;
+     });
    create_news_post: (club_id: text, title: text, body: text, status: 
     text, target_team_ids: opt vec text, is_important: bool, image_url:
     opt text, attachments: vec NewsAttachment) ->
@@ -867,6 +872,11 @@ type Main =
              payload: InvitePayload;
            };
      });
+   resolve_invite_short_code: (code: text) ->
+    (variant {
+       Err: text;
+       Ok: text;
+     }) query;
    restore_club: (id: text, cascade_teams: bool) ->
     (variant {
        Err: text;

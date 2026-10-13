@@ -554,6 +554,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : ClubProfile, 'Err' : IDL.Text })],
         [],
       ),
+    'create_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_news_post' : IDL.Func(
         [
           IDL.Text,
@@ -1127,6 +1132,11 @@ export const idlFactory = ({ IDL }) => {
           }),
         ],
         [],
+      ),
+    'resolve_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        ['query'],
       ),
     'restore_club' : IDL.Func(
         [IDL.Text, IDL.Bool],
