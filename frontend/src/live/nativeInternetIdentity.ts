@@ -153,7 +153,9 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
         // Closing the browser without finishing = cancelled. Grace period so a
         // reply arriving as the browser closes still wins.
         handles.push(await Browser.addListener("browserFinished", () => {
-          setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 1500);
+          // Android closes the browser as it hands the reply to the app; the
+          // reply can land a few seconds later on a busy phone.
+          setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 6000);
         }));
         // Both return/cancellation listeners must exist before opening the browser.
         await Browser.open({ url, presentationStyle: "popover" });
