@@ -46,6 +46,7 @@ import { markLongPressOnboardingCompleted, claimFirstBubbleHint } from "@/hooks/
 import { scrollMessageIntoLowerThird } from "@/lib/scrollMessageIntoLowerThird";
 import { POLL_TOKEN_PATTERN } from "@/lib/chatPollToken";
 import { EVENT_TOKEN_PATTERN, EVENT_URL_PATTERN } from "@/lib/chatEventToken";
+import { isVaultOnlyMessage } from "@/lib/chatVaultLinks";
 
 
 interface Reaction {
@@ -888,9 +889,9 @@ function ChatMessageInner({
     .trim();
   const isCardOnlyMessage =
     !imageUrl &&
-    !visibleCaptionText &&
+    (!visibleCaptionText || isVaultOnlyMessage(displayText)) &&
     !forwardedFromUserId &&
-    CARD_TOKEN_REGEX.test(displayText);
+    (isVaultOnlyMessage(displayText) || CARD_TOKEN_REGEX.test(displayText));
 
   // NOTE: We intentionally do NOT apply an entrance animation here. When an
   // optimistic `temp-…` row is replaced by the realtime row with the real

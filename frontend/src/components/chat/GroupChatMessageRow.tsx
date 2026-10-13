@@ -1,4 +1,5 @@
 import { EVENT_TOKEN_PATTERN, EVENT_URL_PATTERN } from "@/lib/chatEventToken";
+import { isVaultOnlyMessage } from "@/lib/chatVaultLinks";
 import { memo, useState, useRef, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -399,9 +400,9 @@ export const GroupChatMessageRow = memo(function GroupChatMessageRow({
     .trim();
   const isCardOnlyMessage =
     !msg.image_url &&
-    !visibleCaptionText &&
+    (!visibleCaptionText || isVaultOnlyMessage(msg.text)) &&
     !msg.forwarded_from_user_id &&
-    (new RegExp(EVENT_TOKEN_PATTERN, "i").test(msg.text || "") || /\[(event|poll|board|vault|vaultfolder|vaultroot|gallery|galleryprompt|news):[0-9a-f-]{36}(?::(?:team|club))?\]/i.test(msg.text || ""));
+    (isVaultOnlyMessage(msg.text) || new RegExp(EVENT_TOKEN_PATTERN, "i").test(msg.text || "") || /\[(event|poll|board|vault|vaultfolder|vaultroot|gallery|galleryprompt|news):[0-9a-f-]{36}(?::(?:team|club))?\]/i.test(msg.text || ""));
 
   // System messages (e.g. "Alex joined as Coach") render as a centered grey pill,
   // WhatsApp-style: no avatar, no actions, no reactions.
