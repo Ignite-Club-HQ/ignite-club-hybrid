@@ -3810,7 +3810,7 @@ persistent actor class Main(governorInit : Principal) {
   // which merges into the existing row and never touches the Pro flags.
   public query func get_team_subscription(team_id : Text) : async { #Ok : ?Types.TeamSubscription; #Err : Text } {
     for (s in teamSubscriptions.values()) {
-      if (s.team_id == team_id) return #Ok(?s);
+      if (s.team_id == team_id) return #Ok(?effectiveTeamSub(s));
     };
     #Ok(null)
   };
@@ -3822,7 +3822,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public query func get_team_subscriptions(team_ids : [Text]) : async { #Ok : [Types.TeamSubscription]; #Err : Text } {
     if (team_ids.size() > 500) return #Err("Too many ids");
-    #Ok(teamSubscriptions.filter(func(s) = team_ids.any(func(i) = i == s.team_id)))
+    #Ok(teamSubscriptions.filter(func(s) = team_ids.any(func(i) = i == s.team_id)).map<Types.TeamSubscription, Types.TeamSubscription>(effectiveTeamSub))
   };
 
   public shared ({ caller }) func save_team_subscription(item : Types.TeamSubscription) : async { #Ok : Types.TeamSubscription; #Err : Text } {
@@ -3885,6 +3885,120 @@ persistent actor class Main(governorInit : Principal) {
     teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != team_id);
     teamSubscriptions := teamSubscriptions.concat([merged]);
     #Ok(merged)
+  };
+
+  // ---- Promo codes (promo_codes parity) ----
+  // Management is platform-only (governor or app_admin) so a club cannot mint
+  // itself free Pro. Redemption is team-admin gated and is the only path that
+  // lets a non-platform caller set a team's Pro flags. Promo-granted Pro
+  // expires: get_team_subscription(s) mask the flags once the redemption's
+  // expiry passes (admin overrides are never masked).
+  var promoCodes : [Types.PromoCode];
+  var promoRedemptions : [Types.PromoRedemption];
+
+  func activePromoExpiry(team_id : Text) : ?Nat64 {
+    var latest : ?Nat64 = null;
+    for (r in promoRedemptions.values()) {
+      if (r.target_id == team_id) {
+        switch (latest) { case (?l) { if (r.expires_at_ms > l) latest := ?r.expires_at_ms }; case null { latest := ?r.expires_at_ms } };
+      };
+    };
+    latest
+  };
+
+  func effectiveTeamSub(s : Types.TeamSubscription) : Types.TeamSubscription {
+    switch (activePromoExpiry(s.team_id)) {
+      case (?exp) { if (exp < nowMs()) { { s with is_pro = false; is_pro_football = false } } else s };
+      case null s;
+    }
+  };
+
+  public shared query ({ caller }) func list_promo_codes() : async { #Ok : [Types.PromoCode]; #Err : Text } {
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    #Ok(promoCodes)
+  };
+
+  public shared ({ caller }) func create_promo_code(
+    code : Text, access_level : Text, scope_type : Text, club_id : ?Text, storage_gb : ?Nat32, expires_at_ms : ?Nat64,
+  ) : async { #Ok : Types.PromoCode; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    let normalized = Text.toUpper(Text.trim(code, #char ' '));
+    if (normalized.size() < 3 or normalized.size() > 40) return #Err("Code must be 3-40 characters");
+    if (not (access_level == "pro" or access_level == "pro_football" or access_level == "storage")) return #Err("Invalid access level");
+    if (not (scope_type == "team" or scope_type == "club")) return #Err("Invalid scope");
+    if (access_level == "storage" and storage_gb == null) return #Err("Storage amount required");
+    if (promoCodes.any(func(p) = p.code == normalized)) return #Err("duplicate: Code already exists");
+    if (promoCodes.size() >= 5000) return #Err("Too many promo codes");
+    let item : Types.PromoCode = {
+      id = "promo-" # Nat64.toText(nowNs());
+      code = normalized; access_level; scope_type; club_id; storage_gb; expires_at_ms;
+      is_active = true; uses_count = 0; created_by = caller; created_at_ms = nowMs();
+    };
+    promoCodes := promoCodes.concat([item]);
+    #Ok(item)
+  };
+
+  public shared ({ caller }) func set_promo_code_active(id : Text, is_active : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    if (not promoCodes.any(func(p) = p.id == id)) return #Err("Promo code not found");
+    promoCodes := promoCodes.map<Types.PromoCode, Types.PromoCode>(func(p) = if (p.id == id) { { p with is_active } } else p);
+    #Ok
+  };
+
+  public shared ({ caller }) func delete_promo_code(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("Platform admin required");
+    promoCodes := promoCodes.filter(func(p) = p.id != id);
+    #Ok
+  };
+
+  /// Redeems a team promo code for `tier` ("pro" | "pro_football").
+  /// Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
+  public shared ({ caller }) func redeem_team_promo_code(code : Text, team_id : Text, tier : Text, is_annual : Bool) : async { #Ok : Nat64; #Err : Text } {
+    auth(caller);
+    let team = switch (teams.find(func(t) = t.id == team_id and t.deleted_at_ms == null)) {
+      case null return #Err("Team not found");
+      case (?t) t;
+    };
+    if (not (canManageTeam(caller, team.club_id, ?team_id) or isAdmin(caller, team.club_id) or isGovernor(caller))) return #Err("Team admin required");
+    let wanted = Text.toUpper(Text.trim(code, #char ' '));
+    let promo = switch (promoCodes.find(func(p) = p.code == wanted and p.is_active)) {
+      case null return #Err("Invalid or inactive promo code");
+      case (?p) p;
+    };
+    let now = nowMs();
+    switch (promo.expires_at_ms) { case (?e) { if (e < now) return #Err("This promo code has expired") }; case null {} };
+    if (promo.scope_type != "team") return #Err("This promo code is for club subscriptions only. Please use a team promo code.");
+    switch (promo.club_id) { case (?c) { if (c != team.club_id) return #Err("This promo code is restricted to a different club.") }; case null {} };
+    if (tier == "pro_football" and promo.access_level == "pro") return #Err("This promo code is for Pro plan only. Please select the Pro plan or use a Pro Football code.");
+    if (tier == "pro" and promo.access_level == "pro_football") return #Err("This promo code is for Pro Football plan only. Please select the Pro Football plan or use a Pro code.");
+    if (not (tier == "pro" or tier == "pro_football")) return #Err("Invalid tier");
+    if (promo.access_level == "storage") return #Err("This is a storage promo code");
+    let day : Nat64 = 86_400_000;
+    let expiry : Nat64 = switch (promo.expires_at_ms) { case (?e) e; case null now + (if is_annual 365 * day else 30 * day) };
+    let base : Types.TeamSubscription = switch (teamSubscriptions.find(func(s) = s.team_id == team_id)) {
+      case (?s) s;
+      case null ({
+        team_id; is_pro = false; is_pro_football = false; is_trial = false;
+        trial_ends_at_ms = null; cancelled_at_ms = null;
+        admin_pro_override = false; admin_pro_football_override = false;
+        disable_auto_subs = false; rotation_speed = (1 : Nat32);
+        disable_position_swaps = false; disable_batch_subs = false;
+        rotate_gk_at_halftime = true; minutes_per_half = null;
+        max_spread_minutes = null; team_size = null;
+        formation = null; show_lineup_picker = false;
+        disable_team_pom_rewards = false;
+      });
+    };
+    let merged : Types.TeamSubscription = { base with is_pro = true; is_pro_football = tier == "pro_football" or base.is_pro_football; cancelled_at_ms = null };
+    teamSubscriptions := teamSubscriptions.filter(func(s) = s.team_id != team_id).concat([merged]);
+    promoRedemptions := promoRedemptions.filter(func(r) = r.target_id != team_id).concat([{
+      promo_id = promo.id; target_id = team_id; redeemed_by = caller; redeemed_at_ms = now; expires_at_ms = expiry;
+    }]);
+    promoCodes := promoCodes.map<Types.PromoCode, Types.PromoCode>(func(p) = if (p.id == promo.id) { { p with uses_count = p.uses_count + 1 } } else p);
+    #Ok(expiry)
   };
 
   // ---- Global app config (app_settings parity for pre-auth boot reads) ----
