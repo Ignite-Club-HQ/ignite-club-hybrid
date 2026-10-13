@@ -44,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { mark as coldMark, snapshotStages } from "@/lib/coldStartMarks";
 import { logScheduleOpenLatency, resetScheduleOpenLog } from "@/lib/scheduleOpenLatency";
 import { format, parseISO, startOfDay, isSameDay, subHours } from "date-fns";
+import { hasValidScheduleDate, scheduleTimestampDate } from "@/lib/scheduleDates";
 import { getSportEmoji } from "@/lib/sportEmojis";
 import { useClubTheme } from "@/hooks/useClubTheme";
 import { EventsHeaderSponsorStrip } from "@/components/events/EventsHeaderSponsorStrip";
@@ -736,19 +737,17 @@ export default function EventsPage() {
               const rows = rowsByClub[clubIndex];
               for (const ev of rows as any[]) {
                 if (ev.deleted) continue;
-                const startMs = Number(ev.starts_at_ms);
-                const endMs = Number(ev.ends_at_ms);
                 // Skip rows with missing/invalid timestamps — formatting an
                 // Invalid Date throws RangeError and blanks the whole page.
-                if (!Number.isFinite(startMs)) continue;
-                const start = new Date(startMs);
+                const start = scheduleTimestampDate(ev.starts_at_ms);
+                if (!start) continue;
                 if (start < thirtyDaysAgo || start > upperBound) continue;
                 if (filter !== "all" && ev.event_type !== filter) continue;
                 const teamId = (ev.team_id?.[0] ?? null) as string | null;
                 // Club-wide events (no team) show to every club member; team
                 // events show to that team's members and club admins.
                 if (teamId && !teamIds.includes(teamId) && !(userMemberships?.clubAdminClubIds ?? []).includes(clubId)) continue;
-                const end = new Date(Number.isFinite(endMs) ? endMs : startMs);
+                const end = scheduleTimestampDate(ev.ends_at_ms) ?? start;
                 all.push({
                   id: ev.id,
                   title: ev.title,
@@ -772,9 +771,7 @@ export default function EventsPage() {
                   start_time: format(start, "HH:mm"),
                   end_time: format(end, "HH:mm"),
                   description: ev.description ?? "",
-                  updated_at: new Date(
-                    Number.isFinite(Number(ev.updated_at_ms)) ? Number(ev.updated_at_ms) : startMs,
-                  ).toISOString(),
+                  updated_at: (scheduleTimestampDate(ev.updated_at_ms) ?? start).toISOString(),
                 } as Event);
               }
             }
@@ -956,7 +953,10 @@ export default function EventsPage() {
   }, [isOnline, eventsScopeKey, user?.id]);
 
   // Never let a failed/never-resolving network query blank out cached data.
-  const events: Event[] | undefined = eventsData ?? offlineCachedEvents ?? undefined;
+  const events = useMemo(
+    () => (eventsData ?? offlineCachedEvents)?.filter(hasValidScheduleDate),
+    [eventsData, offlineCachedEvents],
+  );
   const showingOfflineCache = !isOnline && !eventsData && !!offlineCachedEvents;
   const offlineNoCache = !isOnline && !events;
 
