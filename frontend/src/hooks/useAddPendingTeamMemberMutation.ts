@@ -106,7 +106,7 @@ export function useAddPendingTeamMemberMutation({
           email: "",
           childrenCount: 0,
           childrenNames: [] as string[],
-          secondParentLink: null as unknown as string,
+          secondParentLink: null as string | null,
           secondParentEmail: "",
           secondParentName: "",
           secondParentAddedDirectly: false,
@@ -234,7 +234,7 @@ export function useAddPendingTeamMemberMutation({
   };
 
   return useMutation({
-    mutationFn: async () => withFeatureBackend("membership", {
+    mutationFn: async () => withFeatureBackend<any>("membership", {
       icp: mutationIcp,
       supabase: async () => {
       if (!nameInput.trim()) throw new Error("Please enter a name");
