@@ -109,8 +109,8 @@ persistent actor class Main(governorInit : Principal) {
   // The wire shapes below mirror the `mo:llm` library's chat.mo exactly
   // (same variant tags / field names), so they interop with the real
   // canister without taking the mops dependency.
-  let LLM_CANISTER_ID = "w36hm-eqaaa-aaaal-qr76a-cai";
-  let LLM_MODEL = "llama3.1:8b";
+  transient let LLM_CANISTER_ID = "w36hm-eqaaa-aaaal-qr76a-cai";
+  transient let LLM_MODEL = "llama3.1:8b";
 
   type LlmChatMessage = {
     #user : { content : Text };
@@ -129,14 +129,14 @@ persistent actor class Main(governorInit : Principal) {
   // Per-caller recap rate limit (1 per 20s). Transient: abuse protection only,
   // resetting on upgrade is fine and avoids needing a migration for it.
   transient var lastRecapAtByCaller : [(Principal, Nat64)] = [];
-  let RECAP_RATE_LIMIT_MS : Nat64 = 20_000;
+  transient let RECAP_RATE_LIMIT_MS : Nat64 = 20_000;
 
   func checkAndMarkRecapRateLimit(caller : Principal) : Bool {
     let now = nowMs();
     switch (lastRecapAtByCaller.find(func((p, _) : (Principal, Nat64)) : Bool = p.equal(caller))) {
       case (?(_, last)) {
         if (now < last + RECAP_RATE_LIMIT_MS) return false;
-        lastRecapAtByCaller := lastRecapAtByCaller.map(func((p, t) : (Principal, Nat64)) : (Principal, Nat64) = if (p.equal(caller)) (p, now) else (p, t));
+        lastRecapAtByCaller := lastRecapAtByCaller.map<(Principal, Nat64), (Principal, Nat64)>(func(entry) = if (entry.0.equal(caller)) (entry.0, now) else entry);
       };
       case null {
         lastRecapAtByCaller := lastRecapAtByCaller.concat([(caller, now)]);
@@ -147,7 +147,7 @@ persistent actor class Main(governorInit : Principal) {
 
   // Shared recap instruction: concise bullet recap, action items, and open
   // questions — never invent facts not present in the transcript.
-  let RECAP_SYSTEM_PROMPT = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply ONLY with concise markdown bullet points covering: (1) a short recap of what happened, (2) any action items (who needs to do what), (3) any open questions. Use only information present in the transcript — never invent names, dates, or facts that are not there. If a section has nothing to report, omit it.";
+  transient let RECAP_SYSTEM_PROMPT = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply ONLY with concise markdown bullet points covering: (1) a short recap of what happened, (2) any action items (who needs to do what), (3) any open questions. Use only information present in the transcript — never invent names, dates, or facts that are not there. If a section has nothing to report, omit it.";
 
   func runRecapCompletion(transcript : Text) : async { #Ok : Text; #Err : Text } {
     if (transcript == "") return #Err("No new messages to recap");
@@ -2284,9 +2284,10 @@ persistent actor class Main(governorInit : Principal) {
       case null {};
     };
     if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
+    let SEVEN_DAYS_MS : Nat64 = 7 * 24 * 3600 * 1000;
     let effectiveSince = switch (since_ms) {
       case (?s) { s };
-      case null { let now = nowMs(); if (now > 7 * 24 * 3600 * 1000) now - (7 * 24 * 3600 * 1000) else 0 };
+      case null { let now : Nat64 = nowMs(); if (now > SEVEN_DAYS_MS) (now - SEVEN_DAYS_MS) else (0 : Nat64) };
     };
     let transcript = buildRecapTranscript(scope_id, effectiveSince);
     if (transcript == "") return #Err("No new messages to recap");

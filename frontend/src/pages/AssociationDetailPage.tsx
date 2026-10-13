@@ -32,7 +32,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: assoc, isLoading } = useQuery({
     queryKey: ["association", id],
-    enabled: !!id && !isIcpPageMode(),
+    enabled: !!id,
     queryFn: async () => {
       if (isIcpPageMode()) {
         const [profile, kind] = await withFeatureBackend("membership", {
@@ -57,7 +57,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: isAdmin = false } = useQuery({
     queryKey: ["assoc-isadmin", id, user?.id],
-    enabled: !!id && !!user && !isIcpPageMode(),
+    enabled: !!id && !!user,
     queryFn: async () => {
       if (isIcpPageMode()) {
         const grants = await withFeatureBackend("membership", {
@@ -76,8 +76,14 @@ function SupabaseAssociationDetailPage() {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["association-clubs", id],
-    enabled: !!id && !isIcpPageMode(),
+    enabled: !!id,
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // club_domain has no parent-org/association link field yet — member
+        // clubs can't be enumerated on the canister, so this surfaces as
+        // "no clubs linked" rather than throwing.
+        return [];
+      }
       const { data } = await supabase
         .from("clubs")
         .select("id, name, logo_url, city, kind")
@@ -91,7 +97,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: rollup } = useQuery({
     queryKey: ["association-rollup", id, clubIds.length],
-    enabled: !!id && clubIds.length > 0 && !isIcpPageMode(),
+    enabled: !!id && clubIds.length > 0,
     queryFn: async () => {
       const [teamsRes, eventsRes, membersRes] = await Promise.all([
         supabase.from("teams").select("id", { count: "exact", head: true }).in("club_id", clubIds),
@@ -218,8 +224,13 @@ function LinkClubForm({ associationId }: { associationId: string }) {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["link-club-search", search, associationId],
-    enabled: open && !isIcpPageMode(),
+    enabled: open,
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // club_domain has no parent-org/association link field yet, so
+        // unaffiliated-club search can't be powered from the canister.
+        return [];
+      }
       let q = supabase
         .from("clubs")
         .select("id, name, city")
@@ -234,7 +245,11 @@ function LinkClubForm({ associationId }: { associationId: string }) {
   });
 
   const link = async () => {
-    if (!clubId || isIcpPageMode()) return;
+    if (!clubId) return;
+    if (isIcpPageMode()) {
+      toast({ title: "Not available on ICP yet", description: "Linking clubs to an association isn't supported on the ICP canister yet." });
+      return;
+    }
     setSaving(true);
     const { error } = await supabase.from("clubs").update({ parent_org_id: associationId }).eq("id", clubId);
     setSaving(false);
@@ -285,7 +300,10 @@ function UnlinkClubButton({ clubId, associationId }: { clubId: string; associati
   const qc = useQueryClient();
   const { toast } = useToast();
   const unlink = async () => {
-    if (isIcpPageMode()) return;
+    if (isIcpPageMode()) {
+      toast({ title: "Not available on ICP yet", description: "Unlinking clubs from an association isn't supported on the ICP canister yet." });
+      return;
+    }
     const ok = window.confirm("Remove this club from the association?");
     if (!ok) return;
     const { error } = await supabase.from("clubs").update({ parent_org_id: null }).eq("id", clubId);
