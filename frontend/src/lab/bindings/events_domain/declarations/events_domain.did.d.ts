@@ -820,6 +820,10 @@ export interface Main {
     { 'Ok' : Array<string> } |
       { 'Err' : string }
   >,
+  /**
+   * / App admins: run the photo-prompt sweep now (also runs every 15 min).
+   */
+  'run_photo_prompts' : ActorMethod<[], { 'Ok' : bigint } | { 'Err' : string }>,
   'save_game_player_stats' : ActorMethod<
     [string, string, Array<GamePlayerStatInput>],
     { 'Ok' : Array<GamePlayerStat> } |

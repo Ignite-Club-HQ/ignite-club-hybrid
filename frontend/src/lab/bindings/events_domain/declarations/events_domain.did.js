@@ -1051,6 +1051,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Text), 'Err' : IDL.Text })],
         [],
       ),
+    'run_photo_prompts' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'save_game_player_stats' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(GamePlayerStatInput)],
         [IDL.Variant({ 'Ok' : IDL.Vec(GamePlayerStat), 'Err' : IDL.Text })],

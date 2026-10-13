@@ -671,6 +671,11 @@ type Main =
                                  Err: text;
                                  Ok: vec text;
                                });
+   /// App admins: run the photo-prompt sweep now (also runs every 15 min).
+   run_photo_prompts: () -> (variant {
+                               Err: text;
+                               Ok: nat;
+                             });
    save_game_player_stats: (event_id: text, team_id: text, stats:
     vec GamePlayerStatInput) -> (variant {
                                    Err: text;
