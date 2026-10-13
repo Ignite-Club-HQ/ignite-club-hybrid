@@ -740,6 +740,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'search_messages' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'send_message' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Opt(Attachment), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : Message, 'Err' : IDL.Text })],

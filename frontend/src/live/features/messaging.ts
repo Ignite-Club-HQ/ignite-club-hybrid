@@ -1249,3 +1249,40 @@ export async function joinLiveOpenGroup(ctx: FeatureBackendContext, conversation
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.join_open_group(conversationId), "Join group");
 }
+
+export interface LiveSearchedMessage {
+  id: string;
+  text: string;
+  author_id: string;
+  created_at: string;
+  reply_to_id: string | null;
+  profiles: null;
+  reactions: [];
+}
+
+/**
+ * Case-insensitive substring search over a conversation's canister-stored
+ * messages, mapped to the same shape `searchChatHistory` returns for the
+ * Supabase-backed chat pages (see chatHistorySearchFetcher.ts).
+ */
+export async function searchLiveMessages(
+  ctx: FeatureBackendContext,
+  conversationId: string,
+  query: string,
+  limit: number,
+): Promise<LiveSearchedMessage[]> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const matches = await unwrapCandid(
+    actor.search_messages(conversationId, query, limit),
+    "Search messages",
+  );
+  return matches.map((m) => ({
+    id: m.id,
+    text: m.body,
+    author_id: m.sender.toText(),
+    created_at: new Date(Number(m.created_at_ms)).toISOString(),
+    reply_to_id: m.reply_to_id[0] ?? null,
+    profiles: null,
+    reactions: [],
+  }));
+}

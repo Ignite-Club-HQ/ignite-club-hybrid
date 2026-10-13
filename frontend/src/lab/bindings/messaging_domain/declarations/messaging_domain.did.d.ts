@@ -483,6 +483,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'search_messages' : ActorMethod<
+    [string, string, number],
+    { 'Ok' : Array<Message> } |
+      { 'Err' : string }
+  >,
   'send_message' : ActorMethod<
     [string, string, string, [] | [Attachment], [] | [string]],
     { 'Ok' : Message } |

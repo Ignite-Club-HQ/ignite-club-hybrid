@@ -977,6 +977,25 @@ persistent actor class Main(governorInit : Principal) {
   };
 
 
+  // Case-insensitive substring search over a conversation's message bodies,
+  // newest matches first. Mirrors the Supabase chat-history search used by
+  // chatHistorySearchFetcher.ts so ICP-routed threads get the same feature.
+  public query ({ caller }) func search_messages(conversation_id : Text, needle : Text, limit : Nat16) : async { #Ok : [Types.Message]; #Err : Text } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let lower_needle = Text.toLowercase(needle);
+    var matches : [Types.Message] = [];
+    var i = messages.size();
+    while (i > 0 and matches.size() < Nat16.toNat(limit)) {
+      i -= 1;
+      let m = messages[i];
+      if (m.conversation_id == conversation_id and Text.contains(Text.toLowercase(m.body), #text lower_needle)) {
+        matches := matches.concat([m]);
+      };
+    };
+    #Ok(matches)
+  };
+
   // Full reaction rows (user + emoji) for a conversation so clients can
   // render "who reacted" and restore reactions on refetch. list_messages_page
   // intentionally stays lightweight; reactions are fetched alongside it.
