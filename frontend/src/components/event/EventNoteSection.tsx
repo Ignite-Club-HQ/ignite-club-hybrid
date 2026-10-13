@@ -12,6 +12,7 @@ import { friendlyMutationError } from "@/lib/friendlyMutationError";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveCoachNote, setLiveCoachNote } from "@/live/features/events";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 interface EventNoteSectionProps {
   eventId: string;
@@ -112,13 +113,40 @@ export function EventNoteSection({
         supabase: () => false,
         icp: async (ctx) => {
           await setLiveCoachNote(ctx, eventId, trimmed);
+          if (!isClear) {
+            try {
+              const { getLiveEventRosterDetailed, listLiveEvents } = await import("@/live/features/events");
+              const [roster, events] = await Promise.all([
+                getLiveEventRosterDetailed(ctx, eventId),
+                listLiveEvents(ctx),
+              ]);
+              const attendeeIds = Array.from(
+                new Set(
+                  ((roster as any)?.rsvps ?? [])
+                    .map((r: any) => r?.rsvp?.account_id)
+                    .filter((v: unknown): v is string => typeof v === "string" && v.length > 0),
+                ),
+              );
+              const clubId = (events as any[]).find((e) => e?.id === eventId)?.club_id ?? eventId;
+              if (attendeeIds.length) {
+                await fanOutLiveNotifications(ctx, {
+                  userIds: attendeeIds,
+                  clubId,
+                  kind: "event_note",
+                  body: trimmed,
+                  idempotencyKeyPrefix: `event-note-${eventId}-${Date.now()}`,
+                  relatedId: eventId,
+                });
+              }
+            } catch (err) {
+              console.error("fanOutLiveNotifications (event note) failed", err);
+            }
+          }
           return true;
         },
       });
       if (savedOnIcp) {
         queryClient.invalidateQueries({ queryKey: ["live-coach-note", eventId] });
-        // Push notifications on note changes stay Supabase-only (push
-        // delivery infra); ICP-routed notes are saved but do not notify.
         return { isClear };
       }
 

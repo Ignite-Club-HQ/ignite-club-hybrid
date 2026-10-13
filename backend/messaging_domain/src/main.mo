@@ -102,6 +102,76 @@ persistent actor class Main(governorInit : Principal) {
     };
   };
 
+  // ===================== On-chain LLM canister (chat recap) =====================
+  // DFINITY's free, key-free LLM canister on mainnet. Inference runs on ICP
+  // nodes — no HTTPS outcall, no API key. See
+  // https://docs.internetcomputer.org/guides/backends/ai-inference/.
+  // The wire shapes below mirror the `mo:llm` library's chat.mo exactly
+  // (same variant tags / field names), so they interop with the real
+  // canister without taking the mops dependency.
+  let LLM_CANISTER_ID = "w36hm-eqaaa-aaaal-qr76a-cai";
+  let LLM_MODEL = "llama3.1:8b";
+
+  type LlmChatMessage = {
+    #user : { content : Text };
+    #system_ : { content : Text };
+    #assistant : { content : ?Text; tool_calls : [LlmToolCall] };
+    #tool : { content : Text; tool_call_id : Text };
+  };
+  type LlmToolCallArgument = { name : Text; value : Text };
+  type LlmToolCall = { id : Text; function : { name : Text; arguments : [LlmToolCallArgument] } };
+  type LlmRequest = { model : Text; messages : [LlmChatMessage]; tools : ?[{ #function : { name : Text; description : ?Text; parameters : ?{ type_ : Text; properties : ?[{ type_ : Text; name : Text; description : ?Text; enum_ : ?[Text] }]; required : ?[Text] } } }] };
+  type LlmResponse = { message : { content : ?Text; tool_calls : [LlmToolCall] } };
+  type LlmCanisterRef = actor { v1_chat : (LlmRequest) -> async LlmResponse };
+
+  func llmCanister() : LlmCanisterRef { actor (LLM_CANISTER_ID) : LlmCanisterRef };
+
+  // Per-caller recap rate limit (1 per 20s). Transient: abuse protection only,
+  // resetting on upgrade is fine and avoids needing a migration for it.
+  transient var lastRecapAtByCaller : [(Principal, Nat64)] = [];
+  let RECAP_RATE_LIMIT_MS : Nat64 = 20_000;
+
+  func checkAndMarkRecapRateLimit(caller : Principal) : Bool {
+    let now = nowMs();
+    switch (lastRecapAtByCaller.find(func((p, _) : (Principal, Nat64)) : Bool = p.equal(caller))) {
+      case (?(_, last)) {
+        if (now < last + RECAP_RATE_LIMIT_MS) return false;
+        lastRecapAtByCaller := lastRecapAtByCaller.map(func((p, t) : (Principal, Nat64)) : (Principal, Nat64) = if (p.equal(caller)) (p, now) else (p, t));
+      };
+      case null {
+        lastRecapAtByCaller := lastRecapAtByCaller.concat([(caller, now)]);
+      };
+    };
+    true
+  };
+
+  // Shared recap instruction: concise bullet recap, action items, and open
+  // questions — never invent facts not present in the transcript.
+  let RECAP_SYSTEM_PROMPT = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply ONLY with concise markdown bullet points covering: (1) a short recap of what happened, (2) any action items (who needs to do what), (3) any open questions. Use only information present in the transcript — never invent names, dates, or facts that are not there. If a section has nothing to report, omit it.";
+
+  func runRecapCompletion(transcript : Text) : async { #Ok : Text; #Err : Text } {
+    if (transcript == "") return #Err("No new messages to recap");
+    let request : LlmRequest = {
+      model = LLM_MODEL;
+      messages = [
+        #system_({ content = RECAP_SYSTEM_PROMPT }),
+        #user({ content = transcript }),
+      ];
+      tools = null;
+    };
+    try {
+      let response = await (with timeout = 300) llmCanister().v1_chat(request);
+      switch (response.message.content) {
+        case (?text) { if (text == "") #Err("Recap model returned an empty response") else #Ok(truncateText(text, 4000)) };
+        case null { #Err("Recap model returned no content") };
+      }
+    } catch (e) {
+      // Outcall-style failures (traps, cross-subnet timeouts) surface as
+      // catchable errors — never trap the caller's request.
+      #Err("Recap request failed: " # Error.message(e))
+    }
+  };
+
   // Platform -> minimum required version/build, set by the governor. Read by
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).

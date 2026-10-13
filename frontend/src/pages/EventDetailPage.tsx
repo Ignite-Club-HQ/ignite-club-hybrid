@@ -74,6 +74,7 @@ import {
 import { hasGameBoardSupport } from "@/lib/sportDetection";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import {
   getLiveEventRoster,
   getLiveEventRosterDetailed,
@@ -84,6 +85,7 @@ import {
   listLiveChildTeamAssignments,
   isLiveTeamMember,
   checkLiveEventMembership,
+  getLiveCoachNote,
 } from "@/live/features/events";
 import { getLiveMyRoleGrants, listLiveRoleGrants } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
@@ -232,6 +234,29 @@ export default function EventDetailPage() {
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
     refetchOnReconnect: "always",
+  });
+
+  // ICP event mapping: coach notes live on events_domain (get_coach_note),
+  // not on the canister Event record toEventDetailShape() maps — fetch
+  // separately and fold into the Supabase-shaped fields EventNoteSection reads.
+  const isIcpEventsRouted = isFeatureRoutedToIcp("events");
+  const { data: icpCoachNoteForEvent } = useQuery({
+    queryKey: ["event-detail-coach-note", id],
+    enabled: isIcpEventsRouted && !!id,
+    queryFn: () =>
+      withFeatureBackend("events", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const result = await getLiveCoachNote(ctx, id!);
+          const raw = result && result.length ? result[0] : null;
+          if (!raw) return null;
+          return {
+            coach_note: raw.note,
+            coach_note_author: raw.updated_by.toText(),
+            coach_note_updated_at: new Date(Number(raw.updated_at_ms)).toISOString(),
+          };
+        },
+      }),
   });
 
   // Watchdog: after an Android WebView background freeze the event fetch can
@@ -1880,9 +1905,9 @@ export default function EventDetailPage() {
       {/* Event Note (coach/admin pinned info, notifies attendees) */}
       <EventNoteSection
         eventId={id!}
-        note={(event as any).coach_note}
-        noteUpdatedAt={(event as any).coach_note_updated_at}
-        noteAuthor={(event as any).coach_note_author}
+        note={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note : (event as any).coach_note}
+        noteUpdatedAt={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note_updated_at : (event as any).coach_note_updated_at}
+        noteAuthor={icpCoachNoteForEvent ? icpCoachNoteForEvent.coach_note_author : (event as any).coach_note_author}
         canEdit={canManageEvent}
       />
 
