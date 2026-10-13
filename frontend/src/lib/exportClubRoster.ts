@@ -68,7 +68,7 @@ async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> 
         playerType: "Junior",
         yearOfBirth: "",
         teamName: team.name ?? "",
-        ageGroup: team.division ?? "",
+        ageGroup: (Array.isArray(team.division) ? team.division[0] : team.division) ?? "",
         parents: "",
       });
     }
@@ -86,7 +86,7 @@ async function fetchClubRosterRowsIcp(clubId: string): Promise<ClubRosterRow[]> 
       playerType: "Adult",
       yearOfBirth: "",
       teamName: team.name ?? "",
-      ageGroup: team.division ?? "",
+      ageGroup: (Array.isArray(team.division) ? team.division[0] : team.division) ?? "",
       parents: "",
     });
   }

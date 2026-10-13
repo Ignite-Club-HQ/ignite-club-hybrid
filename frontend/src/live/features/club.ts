@@ -1346,5 +1346,21 @@ export async function getLiveClubRoster(
   clubId: string,
 ): Promise<LiveClubRoster> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  return unwrapCandid(actor.get_club_roster(clubId), "Load club roster");
+  const raw = await unwrapCandid(actor.get_club_roster(clubId), "Load club roster");
+  const one = <T,>(v: unknown): T | undefined =>
+    (Array.isArray(v) ? (v[0] as T | undefined) : ((v ?? undefined) as T | undefined));
+  return {
+    children: raw.children.map((c) => ({
+      id: c.id,
+      teams: [...c.teams],
+      club_id: one<string>(c.club_id),
+      parent: one<Principal>(c.parent),
+    })),
+    roles: raw.roles.map((r) => ({
+      club: one<string>(r.club),
+      role: r.role,
+      team: one<string>(r.team),
+      user: r.user,
+    })),
+  };
 }
