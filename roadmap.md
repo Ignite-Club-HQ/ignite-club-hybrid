@@ -1,6 +1,7 @@
 ## Native sign-in bridge audit
 - [x] Replace orange with Ignite green; fix provider reply origin, return link and cancellation handling; 15 tests and browser opening/retry pass.
 - [x] Fewer taps: Internet Identity opens automatically; Android return uses a package-targeted intent link; reply survives Android closing the app (cold-start launch link). 18 tests pass.
+- [x] No pop-ups: bridge sends the page to Internet Identity and back (redirect), return address allow-listed; app waits 6s before calling it cancelled. 6 bridge tests pass.
 - [ ] Live canister still serves the old orange page (verified 2026-10-12) — "Deploy web app (ICP frontend canister)" GitHub workflow must run; then new Android build + phone confirmation.
 
 ## Android status bar
