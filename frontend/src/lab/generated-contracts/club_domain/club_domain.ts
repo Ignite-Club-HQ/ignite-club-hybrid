@@ -810,6 +810,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_association_clubs(association_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     list_child_guardians(child_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -1025,6 +1032,13 @@ export interface MainInterface {
     list_teams_multi(club_ids: Array<string>): Promise<{
         __kind__: "Ok";
         Ok: Array<ClubTeam>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_unaffiliated_clubs(search: string, limit: number): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
     } | {
         __kind__: "Err";
         Err: string;
@@ -1413,6 +1427,13 @@ export interface MainInterface {
     set_club_logo_only_mode(club_id: string, enabled: boolean): Promise<{
         __kind__: "Ok";
         Ok: ClubSettings;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_club_parent_org(club_id: string, parent_id: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2872,6 +2893,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.list_all_sponsors();
         return from_candid_variant_n153(result);
     }
+    async list_association_clubs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_association_clubs(arg0);
+        return from_candid_variant_n103(result);
+    }
     async list_child_guardians(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Array<Principal>;
@@ -3189,6 +3220,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.list_teams_multi(arg0);
         return from_candid_variant_n138(result);
+    }
+    async list_unaffiliated_clubs(arg0: string, arg1: number): Promise<{
+        __kind__: "Ok";
+        Ok: Array<ClubProfile>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_unaffiliated_clubs(arg0, arg1);
+        return from_candid_variant_n103(result);
     }
     async list_user_club_roles(arg0: Principal, arg1: string): Promise<Array<[string, string | null]>> {
         const result = await this.actor.list_user_club_roles(arg0, arg1);
@@ -3744,6 +3785,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.set_club_logo_only_mode(arg0, arg1);
         return from_candid_variant_n39(result);
+    }
+    async set_club_parent_org(arg0: string, arg1: string | null): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_parent_org(arg0, to_candid_opt_n17(arg1));
+        return from_candid_variant_n18(result);
     }
     async set_club_switcher_hint(arg0: string, arg1: string | null): Promise<{
         __kind__: "Ok";

@@ -714,6 +714,11 @@ type Main =
                                Err: text;
                                Ok: vec ClubSponsor;
                              }) query;
+   list_association_clubs: (association_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     }) query;
    list_child_guardians: (child_id: text) ->
     (variant {
        Err: text;
@@ -877,6 +882,11 @@ type Main =
        Err: text;
        Ok: vec ClubTeam;
      }) query;
+   list_unaffiliated_clubs: (search: text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
+     }) query;
    list_user_club_roles: (user: principal, club_id: text) ->
     (vec record {
            text;
@@ -888,7 +898,7 @@ type Main =
                     Err: text;
                     Ok: MemberPayment;
                   });
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -948,7 +958,7 @@ type Main =
      });
    /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
    /// Any NEW stored principal / principal-text field added to this canister must be added here.
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -1150,6 +1160,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ClubSettings;
+     });
+   set_club_parent_org: (club_id: text, parent_id: opt text) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_club_switcher_hint: (club_id: text, hint: opt text) ->
     (variant {

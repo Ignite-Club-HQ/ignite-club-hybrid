@@ -654,6 +654,11 @@ export interface Main {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_association_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_child_guardians' : ActorMethod<
     [string],
     { 'Ok' : Array<Principal> } |
@@ -809,6 +814,11 @@ export interface Main {
   'list_teams_multi' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'list_unaffiliated_clubs' : ActorMethod<
+    [string, number],
+    { 'Ok' : Array<ClubProfile> } |
       { 'Err' : string }
   >,
   'list_user_club_roles' : ActorMethod<
@@ -1097,6 +1107,11 @@ export interface Main {
   'set_club_logo_only_mode' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_parent_org' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_switcher_hint' : ActorMethod<

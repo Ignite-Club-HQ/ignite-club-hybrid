@@ -1621,6 +1621,25 @@ export async function setLiveClubKind(ctx: FeatureBackendContext, clubId: string
   return unwrapCandid(actor.set_club_kind(clubId, kind), "Set club kind");
 }
 
+/** Link (associationId) or unlink (null) a club to/from an association. */
+export async function setLiveClubParentOrg(ctx: FeatureBackendContext, clubId: string, associationId: string | null) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_club_parent_org(clubId, associationId ? [associationId] : []),
+    "Set club association",
+  );
+}
+
+export async function listLiveAssociationClubs(ctx: FeatureBackendContext, associationId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_association_clubs(associationId), "List association clubs");
+}
+
+export async function listLiveUnaffiliatedClubs(ctx: FeatureBackendContext, search: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_unaffiliated_clubs(search, 50), "List unaffiliated clubs");
+}
+
 // ---------------------------------------------------------------------------
 // Class enrolment (club terms + classes) — canister counterpart of the
 // Supabase `class_enrolments` table.
