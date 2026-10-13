@@ -611,7 +611,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not isGovernor(caller)) return #err("Forbidden");
     if (old.equal(Principal.anonymous()) or new_principal.equal(Principal.anonymous())) return #err("Invalid principal");
-    if (old.equal(new_principal)) return #err("old and new_principal principal must differ");
+    if (old.equal(new_principal)) return #err("old and new principal must differ");
     if (isGovernor(old)) return #err("Cannot rekey the governor");
 
     func optEq(p : ?Principal, target : Principal) : Bool {
