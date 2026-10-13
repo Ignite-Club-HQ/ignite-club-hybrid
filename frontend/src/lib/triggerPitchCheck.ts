@@ -28,6 +28,17 @@ export async function triggerPitchCheck(source: string, dedupeKey?: string): Pro
     // Push fan-out is an approved Supabase exception, but Internet Identity
     // users have no Supabase session — skip silently for them. Check the
     // auth backend explicitly rather than relying on session absence.
+    //
+    // This helper only knows `source`/`dedupeKey` (no teamId/clubId/message),
+    // so it cannot itself call fanOutLiveNotifications. The real ICP delivery
+    // for pitch-board alerts (substitution/halftime/full-time) happens at the
+    // call sites that have that context — see
+    // GlobalSubMonitor.triggerImmediatePitchCheck, which fans out via
+    // notification_queue.fan_out directly instead of poking this edge
+    // function. The one caller of this file for a live board
+    // (useAutoSubScheduler's "pitch-board-pending-sub") still goes through
+    // GlobalSubMonitor's own triggerImmediatePitchCheck in parallel for the
+    // actual ICP alert, so no alert is lost — this call is just a no-op there.
     if (resolveAuthBackend() === "icp") return;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;

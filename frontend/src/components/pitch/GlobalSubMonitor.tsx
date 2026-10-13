@@ -33,6 +33,19 @@ import {
 } from "./autoSubHelpers";
 import { acknowledgeHalftimePrompt, canShowHalftimePrompt, getHalftimePromptAckKey } from "./halftimePromptAck";
 
+// Team ids are canister-generated as "team-<club_id>-<n>-<ns>" (see
+// live/features/events.ts clubIdFromTeamId); recovering the club id here lets
+// ICP alert fan-out avoid threading clubId through every pitch-board caller.
+function teamIdToClubId(teamId: string): string | null {
+  if (!teamId.startsWith("team-")) return null;
+  const rest = teamId.slice(5);
+  const last = rest.lastIndexOf("-");
+  if (last <= 0) return null;
+  const secondLast = rest.lastIndexOf("-", last - 1);
+  if (secondLast <= 0) return null;
+  return rest.slice(0, secondLast);
+}
+
 const TIMER_STATE_KEY = TIMER_STORAGE_KEY;
 const getPitchStateKeyForTeam = getPitchStateKey;
 const MAX_CLIENT_EXTRAPOLATION_SECS = MAX_EXTRAPOLATION_SECS;
@@ -146,8 +159,44 @@ export default function GlobalSubMonitor() {
   const finishedSyncHandledRef = useRef<string | null>(null);
   const immediateCheckRef = useRef<{ key: string; at: number } | null>(null);
 
-  const triggerImmediatePitchCheck = useCallback(async (source: string, dedupeKey?: string) => {
-    if (resolveAuthBackend() === "icp") return; // background push sync is Supabase-only; local pitch board still runs
+  const triggerImmediatePitchCheck = useCallback(async (
+    source: string,
+    dedupeKey?: string,
+    icpAlert?: { teamId: string | null; message: string },
+  ) => {
+    if (resolveAuthBackend() === "icp") {
+      // The `check-pending-subs` cron/edge function has no ICP equivalent, so
+      // the client fans the alert out itself via notification_queue. Parity
+      // gap: club_domain exposes no "list team staff" query callable from the
+      // browser, so only the caller (the coach running this board) is
+      // notified here — not the full team-staff list the Supabase cron
+      // reaches. Kept behind pitchBoardNotificationsEnabled like the
+      // Supabase path.
+      if (icpAlert && user?.id && pitchBoardNotificationsEnabled) {
+        try {
+          const clubId = icpAlert.teamId ? teamIdToClubId(icpAlert.teamId) : null;
+          if (clubId) {
+            const { withFeatureBackend } = await import("@/live/featureRouter");
+            const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            await withFeatureBackend("notifications", {
+              supabase: async () => {},
+              icp: async (ctx) =>
+                fanOutLiveNotifications(ctx, {
+                  userIds: [user.id],
+                  clubId,
+                  kind: "pitch_board",
+                  body: icpAlert.message,
+                  idempotencyKeyPrefix: `pitch-board-${dedupeKey ?? source}`,
+                  relatedId: icpAlert.teamId,
+                }),
+            });
+          }
+        } catch (error) {
+          console.warn("[SYNC] ICP pitch board fan-out failed:", error);
+        }
+      }
+      return; // background DB sync stays Supabase-only; local pitch board still runs
+    }
     const now = Date.now();
     if (dedupeKey && immediateCheckRef.current?.key === dedupeKey && (now - immediateCheckRef.current.at) < 4000) {
       return;
@@ -168,7 +217,7 @@ export default function GlobalSubMonitor() {
     } catch (error) {
       console.error('[SYNC] Error triggering immediate pitch check:', error);
     }
-  }, []);
+  }, [user?.id, pitchBoardNotificationsEnabled]);
 
   // Sync game state to database for server-side push notifications
   const syncToDatabase = useCallback(async () => {
@@ -362,7 +411,7 @@ export default function GlobalSubMonitor() {
           }
 
           finishedSyncHandledRef.current = finishedSyncKey;
-          await triggerImmediatePitchCheck('client-full-time-sync', `full-time-${finishedSyncKey}`);
+          await triggerImmediatePitchCheck('client-full-time-sync', `full-time-${finishedSyncKey}`, { teamId, message: `${teamId ? '' : ''}Full Time${syncedTimerState.teamName ? ` — ${syncedTimerState.teamName}` : ''}` });
           setSyncStatus({ status: "synced", lastSyncTime: Date.now() });
           return;
         }
@@ -536,11 +585,38 @@ export default function GlobalSubMonitor() {
   }, [triggerImmediatePitchCheck, user?.id]);
 
   // Create database notification which triggers server-side push via database trigger
-  const createPitchBoardNotification = useCallback(async (type: string, message: string) => {
+  const createPitchBoardNotification = useCallback(async (type: string, message: string, teamId?: string | null) => {
     if (!user?.id) return;
-    if (resolveAuthBackend() === "icp") return;
     if (!pitchBoardNotificationsEnabled) return; // Check preference
-    
+
+    if (resolveAuthBackend() === "icp") {
+      // Same parity gap as triggerImmediatePitchCheck above: fan out via
+      // notification_queue to the caller only (no browser-callable "list
+      // team staff" query exists on club_domain yet).
+      try {
+        const clubId = teamId ? teamIdToClubId(teamId) : null;
+        if (clubId) {
+          const { withFeatureBackend } = await import("@/live/featureRouter");
+          const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+          await withFeatureBackend("notifications", {
+            supabase: async () => {},
+            icp: async (ctx) =>
+              fanOutLiveNotifications(ctx, {
+                userIds: [user.id],
+                clubId,
+                kind: type || "pitch_board",
+                body: message,
+                idempotencyKeyPrefix: `pitch-board-${type}-${Date.now()}`,
+                relatedId: teamId ?? null,
+              }),
+          });
+        }
+      } catch (error) {
+        console.log("ICP notification creation failed:", error);
+      }
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('notifications')
@@ -836,7 +912,7 @@ export default function GlobalSubMonitor() {
 
           void (async () => {
             await syncToDatabase();
-            await triggerImmediatePitchCheck('client-halftime-sync', subKey);
+            await triggerImmediatePitchCheck('client-halftime-sync', subKey, { teamId: timerState.teamId || pitchState.teamId || null, message: `Half Time${timerState.teamName ? ` — ${timerState.teamName}` : ''}` });
           })();
 
           setCurrentPlayers(nextPitchState.players);
@@ -855,7 +931,7 @@ export default function GlobalSubMonitor() {
 
           void (async () => {
             await syncToDatabase();
-            await triggerImmediatePitchCheck('client-halftime-sync', subKey);
+            await triggerImmediatePitchCheck('client-halftime-sync', subKey, { teamId: timerState.teamId || pitchState.teamId || null, message: `Half Time${timerState.teamName ? ` — ${timerState.teamName}` : ''}` });
           })();
 
           setCurrentPlayers(nextPitchState.players);
@@ -935,7 +1011,7 @@ export default function GlobalSubMonitor() {
         // fires right away instead of waiting for the next background cycle.
         void (async () => {
           await syncToDatabase();
-          await triggerImmediatePitchCheck('client-pending-sub-sync', subKey);
+          await triggerImmediatePitchCheck('client-pending-sub-sync', subKey, { teamId: timerState.teamId || pitchState.teamId || null, message: notificationBody });
         })();
 
         setCurrentPlayers(activePitchState.players);
