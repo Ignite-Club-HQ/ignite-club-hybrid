@@ -20,11 +20,13 @@ export default function AdminPage() {
 
 // ICP-mode admin landing. Admin rights come from the canisters via
 // useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
-// admin sees the real tooling. Only tools whose pages work against the live
-// canisters are listed — billing, AI, backups, temp-password and
-// native-storage tooling are Supabase-only (NEEDS-CANISTER), Active
-// Games has no canister holding live coaching-board state yet, and the
-// App Settings page shows only the canister-backed global settings.
+// admin sees the real tooling below (user management, feedback, sponsor
+// analytics, notification preferences, chat virt debug, deleted chats, DM
+// attachments, ads, infrastructure/placement settings). Billing, AI,
+// backups, temp-password and native-storage tooling stay Supabase-only
+// because they have no canister counterpart; Active Games (pitch boards)
+// has no canister holding live coaching-board state either (active_games is
+// a Supabase table), so neither is listed here.
 function IcpAdminPage() {
   const navigate = useNavigate();
   const { isAppAdmin, isLoading } = useIsAppAdmin();

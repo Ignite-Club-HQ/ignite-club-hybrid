@@ -214,3 +214,43 @@ export async function listLiveGalleryChatCards(
   const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
   return actor.list_gallery_chat_cards(clubId, teamId);
 }
+
+// ---------------------------------------------------------------------------
+// Publish a chat image to the club media gallery (MessageActionSheet)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registers an already-hosted chat image as a media_metadata asset, reusing
+ * the same register_asset + set_asset_scope pair the Media page upload flow
+ * uses (see registerLiveAsset/setLiveAssetScope above). The image's bytes
+ * already live at `imageUrl` (chat upload already happened), so this call
+ * only creates the gallery-visible metadata record — no blob re-upload.
+ */
+export async function publishLiveChatImageToGallery(
+  ctx: FeatureBackendContext,
+  input: {
+    clubId: string;
+    teamId?: string | null;
+    imageUrl: string;
+    caption?: string | null;
+  },
+) {
+  const mimeMatch = /\.(jpe?g|png|gif|webp|heic)(?:\?|$)/i.exec(input.imageUrl);
+  const mime = mimeMatch ? `image/${mimeMatch[1].toLowerCase().replace("jpg", "jpeg")}` : "image/jpeg";
+  const asset = await registerLiveAssetRecord(ctx, {
+    clubId: input.clubId,
+    kind: "photo",
+    mime,
+    checksum: input.imageUrl,
+    storagePath: input.imageUrl,
+    visibility: "team",
+    contentLength: 0,
+    teamId: input.teamId ?? null,
+    caption: input.caption ?? null,
+  });
+  const { actor } = await connectLiveMediaMetadata(ctx.target, ctx.identity);
+  return setLiveAssetScopeWithActor(actor, asset.id, {
+    teamId: input.teamId ?? null,
+    caption: input.caption ?? null,
+  });
+}

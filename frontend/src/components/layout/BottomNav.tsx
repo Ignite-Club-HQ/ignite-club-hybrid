@@ -57,19 +57,39 @@ export function BottomNav() {
   // suppressed scopes (see useSuppressedChatScopes below) from the total.
   const { data: counts } = useUnreadMessageCounts(user?.id);
 
-  // NEEDS-CANISTER: per-club badge breakdown (group->club mapping, broadcast
-  // club scoping, DM club scoping) has no messaging_domain equivalent yet —
-  // skip these Supabase-only reads when messaging is ICP-routed so they don't
-  // run against principal ids that have no matching Supabase rows.
+  // NEEDS-CANISTER: broadcast club scoping and DM club scoping below have no
+  // messaging_domain equivalent yet (no per-club broadcast notification rows,
+  // no principal->club role lookup for DM peers) — skip those two
+  // Supabase-only reads when messaging is ICP-routed. Group->club mapping IS
+  // wired for ICP via getLiveGroupMetadata below.
   const messagingOnIcp = isFeatureRoutedToIcp("messaging");
 
   // Secondary lookup: which chat groups belong to the active club. Cached
   // separately so it doesn't piggy-back on every unread refetch.
   const groupIds = counts ? Object.keys(counts.groups) : [];
   const { data: groupClubMap = {} as Record<string, { club_id: string | null; team_id: string | null }> } = useQuery({
-    queryKey: ["chat-groups-club-map", groupIds.sort().join(",")],
+    queryKey: ["chat-groups-club-map", groupIds.sort().join(","), messagingOnIcp],
     queryFn: async () => {
       if (groupIds.length === 0) return {};
+      if (messagingOnIcp) {
+        const [{ icpCtx }, messaging] = await Promise.all([
+          import("@/lib/icpClubTeamLookup"),
+          import("@/live/features/messaging"),
+        ]);
+        const ctx = await icpCtx();
+        const map: Record<string, { club_id: string | null; team_id: string | null }> = {};
+        await Promise.all(groupIds.map(async (id) => {
+          try {
+            const meta = await messaging.getLiveGroupMetadata(ctx, id);
+            map[id] = { club_id: meta.clubId, team_id: meta.teamId };
+          } catch {
+            // Best-effort: a group whose metadata can't be read is omitted
+            // from the club map, so its unread count is simply not folded
+            // into any club's badge (never throws, never blocks the nav).
+          }
+        }));
+        return map;
+      }
       const { data } = await supabase
         .from("chat_groups")
         .select("id, club_id, team_id")
@@ -78,7 +98,7 @@ export function BottomNav() {
       data?.forEach((g) => { map[g.id] = { club_id: g.club_id, team_id: g.team_id }; });
       return map;
     },
-    enabled: groupIds.length > 0 && !messagingOnIcp,
+    enabled: groupIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
