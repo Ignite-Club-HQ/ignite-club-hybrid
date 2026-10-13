@@ -130,7 +130,7 @@ export function EventNoteSection({
               const clubId = (events as any[]).find((e) => e?.id === eventId)?.club_id ?? eventId;
               if (attendeeIds.length) {
                 await fanOutLiveNotifications(ctx, {
-                  userIds: attendeeIds,
+                  userIds: attendeeIds as string[],
                   clubId,
                   kind: "event_note",
                   body: trimmed,

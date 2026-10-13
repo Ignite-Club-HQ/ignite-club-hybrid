@@ -321,7 +321,7 @@ function SupabaseClubAdminChatPage() {
             const { listLiveProfilesByIds } = await import("@/live/features/identityAccessClient");
             const [profile] = await listLiveProfilesByIds(ctx, [memberId]);
             return profile
-              ? { id: memberId, display_name: profile.display_name, avatar_url: profile.avatar_url }
+              ? { id: memberId, display_name: profile.display_name, avatar_url: (profile as any).avatar_ref?.[0] ?? (profile as any).avatar_url ?? null }
               : null;
           },
         });
