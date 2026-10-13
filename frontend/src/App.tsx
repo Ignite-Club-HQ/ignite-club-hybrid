@@ -41,8 +41,6 @@ import { StatusBarManager } from "@/components/StatusBarManager";
 import { NotifDebugOverlay } from "@/components/NotifDebugOverlay";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { DevRibbon } from "@/components/DevRibbon";
-import { IcpNavActivityTracker } from "@/components/IcpNavActivityTracker";
-import { IcpPendingBar } from "@/components/IcpPendingBar";
 import { IcsPreviewFallbackDialog } from "@/components/IcsPreviewFallbackDialog";
 import { Loader2 } from "lucide-react";
 import { AppSplash } from "@/components/AppSplash";
@@ -488,14 +486,12 @@ const App = () => {
         <ClubThemeProvider>
           <TooltipProvider>
           <DevRibbon />
-          <IcpPendingBar />
           <Toaster />
           <Sonner />
           <IcsPreviewFallbackDialog />
           <NotifDebugOverlay />
           <BrowserRouter>
             <AppNavigatorBridge />
-            <IcpNavActivityTracker />
             <ScrollToTop />
             <PWAPendingInviteHandler />
 
