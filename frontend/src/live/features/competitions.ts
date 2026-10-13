@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- untyped Candid/Supabase payloads at this boundary */
 import { connectLiveCompetitionDomain } from "../domains";
 import type { FeatureBackendContext } from "../featureRouter";
 import { candidOpt, toNat64, unwrapCandid } from "./candid";
