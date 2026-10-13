@@ -19,7 +19,6 @@ import { icpCtx } from "@/lib/icpClubTeamLookup";
 // claim_eoi_by_token (idempotent for the same caller, so it doubles as the
 // initial fetch); preference edits/confirm already route through
 // useMyEois.ts. Club/team lookups below use the club_domain wrappers.
-const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";
 import { EOI_STATUS_LABELS } from "@/lib/eoiUtils";
@@ -89,18 +88,36 @@ function SupabaseEoiCompletePage() {
     queryKey: ["eoi-by-token", token],
     queryFn: async (): Promise<EoiSubmission | null> => {
       if (!token) return null;
-      const { data, error } = await supabase.rpc("get_eoi_by_claim_token", { _token: token });
-      if (error) throw error;
-      return (data as EoiSubmission) ?? null;
+      return withFeatureBackend("competitions", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("get_eoi_by_claim_token", { _token: token });
+          if (error) throw error;
+          return (data as EoiSubmission) ?? null;
+        },
+        // claim_eoi_by_token is idempotent for the same caller, so it also
+        // serves as the initial fetch on first load.
+        icp: async (ctx) => mapLiveEoiSubmission(await claimLiveEoiByToken(ctx, token)) as EoiSubmission,
+      });
     },
-    enabled: !!token && !!user && !isIcpPageMode(),
+    enabled: !!token && !!user,
   });
 
   // Auto-claim on first visit
   useEffect(() => {
     if (!token || !user || !eoi) return;
-    if (eoi.parent_user_id === user.id) return;
-    claim.mutate(token, { onSuccess: () => refetch() });
+    let cancelled = false;
+    (async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { identity } = await icpCtx();
+        if (eoi.parent_user_id === identity.getPrincipal().toText()) return;
+      } else if (eoi.parent_user_id === user.id) {
+        return;
+      }
+      if (!cancelled) claim.mutate(token, { onSuccess: () => refetch() });
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, user?.id, eoi?.id]);
 
@@ -115,28 +132,48 @@ function SupabaseEoiCompletePage() {
     queryKey: ["eoi-club", eoi?.club_id],
     queryFn: async () => {
       if (!eoi?.club_id) return null;
-      const { data } = await supabase
-        .from("clubs")
-        .select("id, name, logo_url")
-        .eq("id", eoi.club_id)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("clubs")
+            .select("id, name, logo_url")
+            .eq("id", eoi.club_id)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const result = await getLiveClubProfile(ctx, eoi.club_id);
+          const profile: any = Array.isArray(result) ? result[0] : result;
+          if (!profile) return null;
+          return { id: profile.id, name: profile.name, logo_url: profile.logo_url ?? null };
+        },
+      });
     },
-    enabled: !!eoi?.club_id && !isIcpPageMode(),
+    enabled: !!eoi?.club_id,
   });
 
   const { data: team } = useQuery({
     queryKey: ["eoi-team", eoi?.assigned_team_id],
     queryFn: async () => {
       if (!eoi?.assigned_team_id) return null;
-      const { data } = await supabase
-        .from("teams")
-        .select("id, name, level_age")
-        .eq("id", eoi.assigned_team_id)
-        .maybeSingle();
-      return data;
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("teams")
+            .select("id, name, level_age")
+            .eq("id", eoi.assigned_team_id)
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const result = await getLiveTeam(ctx, eoi.assigned_team_id!);
+          const t: any = Array.isArray(result) ? result[0] : result;
+          if (!t) return null;
+          return { id: t.id, name: t.name, level_age: t.level_age ?? null };
+        },
+      });
     },
-    enabled: !!eoi?.assigned_team_id && !isIcpPageMode(),
+    enabled: !!eoi?.assigned_team_id,
   });
 
   if (authLoading || isLoading) {

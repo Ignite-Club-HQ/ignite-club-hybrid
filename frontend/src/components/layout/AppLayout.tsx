@@ -18,6 +18,7 @@ import { NativeNotificationPrompt } from "@/components/NativeNotificationPrompt"
 const PendingInviteWelcomeDialog = lazyWithRetry(() => import("@/components/PendingInviteWelcomeDialog").then(m => ({ default: m.PendingInviteWelcomeDialog })));
 import { useAdMobInit } from "@/hooks/useAdMob";
 import { useActivityTracking } from "@/hooks/useActivityTracking";
+import { useClubDomainPresenceHeartbeat } from "@/hooks/useClubDomainPresenceHeartbeat";
 import igniteIcon from "@/assets/ignite-icon.png";
 import { Capacitor } from "@capacitor/core";
 import { mark as coldMark } from "@/lib/coldStartMarks";
@@ -33,6 +34,7 @@ export function AppLayout() {
   useAdMobInit();
   useActivityTracking();
   useTrackPresence(user?.id);
+  useClubDomainPresenceHeartbeat(user?.id);
   // Retroactively reconcile pre-tombstone inbox snapshots (runs once per user).
   useEffect(() => {
     sweepStaleDeletedTeams(user?.id);
