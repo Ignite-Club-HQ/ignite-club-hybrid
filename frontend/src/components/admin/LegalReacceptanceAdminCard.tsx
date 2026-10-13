@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import {
   LEGAL_REACCEPTANCE_CONFIRM_PHRASE,
   LEGAL_REACCEPTANCE_KEY,
@@ -52,7 +53,38 @@ export function LegalReacceptanceAdminCard() {
   const apply = async (required: boolean) => {
     setSaving(true);
     try {
-      // icp-guard: allow app-admin legal tooling stays Supabase-only by design
+      if (resolveAuthBackend() === "icp") {
+        if (required && (phrase.trim() !== LEGAL_REACCEPTANCE_CONFIRM_PHRASE || !version.trim())) {
+          throw new Error("Enter a version label and the exact confirmation phrase.");
+        }
+        const [{ withFeatureBackend }, { setLiveAppSetting }] = await Promise.all([
+          import("@/live/featureRouter"),
+          import("@/live/features/appSettings"),
+        ]);
+        const value = required
+          ? {
+              required: true,
+              version: version.trim(),
+              effective_at: new Date().toISOString(),
+              summary: summary.trim() || null,
+            }
+          : { required: false, version: null, effective_at: null, summary: null };
+        await withFeatureBackend("admin", {
+          supabase: async () => {},
+          icp: async (ctx) => setLiveAppSetting(ctx, LEGAL_REACCEPTANCE_KEY, value),
+        });
+        await queryClient.invalidateQueries({ queryKey: ["app-setting", LEGAL_REACCEPTANCE_KEY] });
+        toast({
+          title: required
+            ? "Re-acceptance required for all users"
+            : "Re-acceptance requirement turned off",
+        });
+        setDialogOpen(false);
+        setPhrase("");
+        setVersion("");
+        setSummary("");
+        return;
+      }
       const { error } = await supabase.rpc("set_legal_reacceptance" as never, {
         _required: required,
         _confirmation: required ? phrase.trim() : null,

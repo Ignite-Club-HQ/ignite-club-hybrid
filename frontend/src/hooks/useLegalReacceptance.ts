@@ -43,6 +43,16 @@ function parseSetting(value: unknown): LegalReacceptanceSetting {
 }
 
 export async function fetchLegalReacceptanceSetting(): Promise<LegalReacceptanceSetting> {
+  if (resolveAuthBackend() === "icp") {
+    const { readLiveAppConfig } = await import("@/live/appConfig");
+    const raw = await readLiveAppConfig(LEGAL_REACCEPTANCE_KEY);
+    if (raw == null) return parseSetting(null);
+    try {
+      return parseSetting(JSON.parse(raw));
+    } catch {
+      return parseSetting(null);
+    }
+  }
   const { data, error } = await supabase
     .from("app_settings")
     .select("value")
