@@ -1,3 +1,4 @@
+import type { Json } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
@@ -858,7 +859,7 @@ export default function EventDetailPage() {
         if (!timer) return null;
         const state = icpTimerToServerTimer(timer as never);
         if (!state.half_started_at || state.is_game_finished) return null;
-        return { id: id!, is_active: true, pitch_state: null, timer_state: state };
+        return { id: id!, is_active: true, pitch_state: null, timer_state: state as unknown as Json };
       },
     }),
     enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
