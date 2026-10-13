@@ -68,9 +68,22 @@ export interface PrivacyConsent {
 }
 export interface Profile {
   'account_id' : string,
+  /**
+   * Millisecond timestamp of when the caller dismissed the one-shot club
+   * switcher coach-mark, so the dismissal follows the account across
+   * devices. `#[serde(default)]` keeps older profiles decodable as
+   * `None` (never dismissed).
+   */
+  'club_switcher_hint_seen_at' : [] | [bigint],
   'avatar_ref' : [] | [string],
   'updated_at_ns' : bigint,
   'display_name' : string,
+  /**
+   * UI theme preference ("light" or "dark"); `#[serde(default)]` keeps
+   * profiles stored before this field existed decodable as `None`
+   * (caller falls back to the local DOM/localStorage theme).
+   */
+  'theme_preference' : [] | [string],
 }
 /**
  * One row of a `search_profiles` result: the profile plus the account's
@@ -92,11 +105,13 @@ export type Result_11 = { 'Ok' : Array<RoleGrant> } |
   { 'Err' : string };
 export type Result_12 = { 'Ok' : Entitlement } |
   { 'Err' : string };
-export type Result_13 = { 'Ok' : Array<ProfileSearchResult> } |
+export type Result_13 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_14 = { 'Ok' : PrivacyConsent } |
+export type Result_14 = { 'Ok' : Array<ProfileSearchResult> } |
   { 'Err' : string };
-export type Result_15 = { 'Ok' : TermsAcceptance } |
+export type Result_15 = { 'Ok' : PrivacyConsent } |
+  { 'Err' : string };
+export type Result_16 = { 'Ok' : TermsAcceptance } |
   { 'Err' : string };
 export type Result_2 = { 'Ok' : null } |
   { 'Err' : string };
@@ -113,8 +128,6 @@ export type Result_7 = { 'Ok' : Array<ExternalSiteBinding> } |
 export type Result_8 = { 'Ok' : Array<Entitlement> } |
   { 'Err' : string };
 export type Result_9 = { 'Ok' : Profile } |
-  { 'Err' : string };
-export type Result_rekey = { 'Ok' : bigint } |
   { 'Err' : string };
 export interface RoleGrant {
   'account_id' : string,
@@ -139,6 +152,10 @@ export interface State {
    * empty.
    */
   'attestation_secret' : Uint8Array,
+  /**
+   * Empty on schema-5+ slim blobs (accounts live in their own stable map);
+   * `#[serde(default)]` keeps those decodable through the legacy shape.
+   */
   'accounts' : Array<Account>,
   'governor' : Principal,
   'exclusions' : Array<Exclusion>,
@@ -189,6 +206,9 @@ export interface _SERVICE {
   'begin_link' : ActorMethod<[Principal], Result_3>,
   'bind_external_site' : ActorMethod<[string, string, string], Result_4>,
   'check_field_access' : ActorMethod<[string, string], Result_5>,
+  /**
+   * Public: remaining cycles (shown in admin settings).
+   */
   'cycles_balance' : ActorMethod<[], bigint>,
   'erase_account' : ActorMethod<[string], Result_2>,
   'export_state' : ActorMethod<[], Result_6>,
@@ -255,12 +275,16 @@ export interface _SERVICE {
   >,
   'register_account' : ActorMethod<[], Result>,
   /**
-   * Governor-only: moves one user's sign-in ID to a new one (dry run first).
+   * Governor-only: moves one user's sign-in ID (`old`) to a new one (`new`).
+   * Everything here except entitlements and link challenges is keyed by
+   * account_id, so the move links `new` to the old account (same account_id,
+   * so profile, roles, families, consents and terms follow) and unlinks
+   * `old`. A bare account auto-created for `new` at sign-in is removed first;
+   * any real data on it (profile, roles, ...) refuses the move. Returns the
+   * number of records changed (or that would change when `dry_run`).
+   * Any NEW stored principal / principal-text field must be added here.
    */
-  'rekey_principal' : ActorMethod<
-    [Principal, Principal, boolean],
-    Result_rekey
-  >,
+  'rekey_principal' : ActorMethod<[Principal, Principal, boolean], Result_13>,
   /**
    * Governor-only: revokes a verifier principal.
    */
@@ -274,13 +298,19 @@ export interface _SERVICE {
    * can grant roles without a second lookup. Profiles without an account or
    * with a blank name are skipped.
    */
-  'search_profiles' : ActorMethod<[string, number], Result_13>,
+  'search_profiles' : ActorMethod<[string, number], Result_14>,
   /**
    * Governor-only: sets (or rotates) the shared HMAC secret used to verify
    * `redeem_entitlement` attestations. Must match the secret held by the
    * session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
    */
   'set_attestation_secret' : ActorMethod<[Uint8Array], Result_2>,
+  /**
+   * Records that the caller has dismissed the club switcher coach-mark, so
+   * it stays dismissed across devices. Creates a blank profile entry if the
+   * caller has never called `set_profile`.
+   */
+  'set_club_switcher_hint_seen' : ActorMethod<[], Result_9>,
   /**
    * Governor- or verifier-only: records a Pro entitlement for an arbitrary
    * principal. Used by a trusted server-side writer; client-submitted IAP
@@ -296,7 +326,7 @@ export interface _SERVICE {
     Result_2
   >,
   'set_family' : ActorMethod<[string, string], Result_2>,
-  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_14>,
+  'set_privacy_consent' : ActorMethod<[string, string, boolean], Result_15>,
   /**
    * Sets (or replaces) the caller's profile. The account must already exist —
    * sign-in provisioning calls register_account first.
@@ -308,7 +338,13 @@ export interface _SERVICE {
    * caller's currently recorded version is rejected, so a stale client can
    * never roll the recorded acceptance backwards.
    */
-  'set_terms_acceptance' : ActorMethod<[number], Result_15>,
+  'set_terms_acceptance' : ActorMethod<[number], Result_16>,
+  /**
+   * Sets (or clears) the caller's UI theme preference, so it follows the
+   * account across devices. Creates a blank profile entry if the caller has
+   * never called `set_profile`.
+   */
+  'set_theme_preference' : ActorMethod<[[] | [string]], Result_9>,
   'whoami' : ActorMethod<[], Result>,
 }
 export declare const idlFactory: IDL.InterfaceFactory;
