@@ -46,6 +46,11 @@ export async function listLiveMiniLeaguesByClub(ctx: FeatureBackendContext, club
   );
 }
 
+export async function listLivePublicMiniLeagues(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
+  return actor.list_public_mini_leagues();
+}
+
 export async function listMyLiveMiniLeagues(ctx: FeatureBackendContext) {
   const { actor } = await connectLiveMiniLeagueDomain(ctx.target, ctx.identity);
   return actor.my_leagues();

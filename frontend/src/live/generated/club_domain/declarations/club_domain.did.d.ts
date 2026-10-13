@@ -614,6 +614,16 @@ export interface Main {
     { 'Ok' : Array<PendingInvite> } |
       { 'Err' : string }
   >,
+  'create_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
+  'resolve_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'list_removed_members' : ActorMethod<
     [string],
     { 'Ok' : Array<RemovedMember> } |

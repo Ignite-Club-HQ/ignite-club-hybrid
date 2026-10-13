@@ -68,9 +68,9 @@ type RealtimeStatsResponse =
   | { supported: true; concurrent_connections: number; messages_per_sec?: number; channel_joins_per_sec?: number; window_seconds: number; fetched_at: string }
   | { supported: false; reason: string };
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { IcpRealtimeHealthPanel } from "@/components/admin/IcpRealtimeHealthPanel";
 
 export default function RealtimeHealthPage() {
   const useIcpLab = isFeatureRoutedToIcp("admin");
@@ -78,7 +78,7 @@ export default function RealtimeHealthPage() {
   // Supabase auth, and the presence probe below would otherwise open an
   // unauthenticated `app-presence` channel against Supabase.
   if (useIcpLab || resolveAuthBackend() === "icp") {
-    return <IcpUnavailablePage title="Realtime health monitoring is unavailable in ICP lab mode" description="This dashboard monitors Supabase realtime infrastructure and has no equivalent ICP service contract." />;
+    return <IcpRealtimeHealthPanel />;
   }
   return <SupabaseRealtimeHealthPage />;
 }

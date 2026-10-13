@@ -908,6 +908,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'create_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
+    'resolve_invite_short_code' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_removed_members' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(RemovedMember), 'Err' : IDL.Text })],

@@ -9,11 +9,9 @@ const promoParentConvenience = "";
 const promoClubAdmin = "";
 const promoSponsorValue = "";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Navigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 const VIDEO_GUIDE_CONTENT = `# Ignite Sports Club App - Complete Video Recording Guide
 
@@ -1598,21 +1596,7 @@ const VideoGuideDownloadPage = () => {
 // Wrapper component with admin protection
 const VideoGuideDownloadPageProtected = () => {
   const { user, loading: authLoading } = useAuth();
-
-  const { data: isAppAdmin, isLoading: roleLoading } = useQuery({
-    queryKey: ["is-app-admin-video-guide", user?.id],
-    queryFn: async () => {
-      if (!user?.id) return false;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "app_admin")
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user?.id,
-  });
+  const { isAppAdmin, isLoading: roleLoading } = useIsAppAdmin();
 
   if (authLoading || roleLoading) {
     return (
@@ -1642,22 +1626,5 @@ const VideoGuideDownloadPageProtected = () => {
 };
 
 export default function VideoGuideDownloadPageRoute() {
-  const useIcpLab = resolveAuthBackend() === "icp";
-  if (useIcpLab) {
-    return (
-      <div className="container max-w-2xl mx-auto px-4 py-10">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-6 space-y-3 text-center">
-            <FileText className="h-10 w-10 mx-auto text-muted-foreground" />
-            <h1 className="text-lg font-semibold">Administrative video guides are unavailable in ICP lab mode</h1>
-            <p className="text-sm text-muted-foreground">
-              Supabase administrator authorization and guide export are not enabled for local ICP identities.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return <VideoGuideDownloadPageProtected />;
 }

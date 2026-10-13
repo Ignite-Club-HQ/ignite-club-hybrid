@@ -307,7 +307,7 @@ type Main =
      }) query;
    my_availability: () -> (vec MiniLeagueSessionAvailability) query;
    my_leagues: () -> (vec MiniLeague) query;
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

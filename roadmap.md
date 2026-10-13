@@ -2,8 +2,8 @@
 - [ ] Scheduled messages: manage page + photo attachments on ICP
 - [ ] Club weekly schedule broadcasts on ICP
 - [ ] Delete group chat on ICP
-- [ ] Team creation requests on ICP
-- [ ] Home team/league access requests on ICP (currently silent no-op)
+- [x] Team creation requests on ICP
+- [x] Home team/league access requests on ICP
 - [ ] Publish chat photo to gallery on ICP
 - [x] Monogram logo generator on ICP
 - [ ] Player list export on ICP

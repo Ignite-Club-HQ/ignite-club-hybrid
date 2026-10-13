@@ -306,7 +306,7 @@ export interface MainInterface {
     }>;
     my_availability(): Promise<Array<MiniLeagueSessionAvailability>>;
     my_leagues(): Promise<Array<MiniLeague>>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {

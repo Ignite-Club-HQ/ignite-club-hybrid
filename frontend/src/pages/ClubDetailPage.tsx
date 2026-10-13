@@ -167,10 +167,6 @@ export default function ClubDetailPage() {
   const handleBroadcastTeamSchedule = async (e: React.MouseEvent, teamId: string, teamName: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (useIcpLab) {
-      toast({ title: "Schedule broadcasts are unavailable in ICP lab mode", variant: "destructive" });
-      return;
-    }
     if (!id || broadcastingTeamId) return;
     setBroadcastingTeamId(teamId);
     const res: { ok: true } | { ok: false; error: string } = await sendScheduleBroadcast(id, teamId);

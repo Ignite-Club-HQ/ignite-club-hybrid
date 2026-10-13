@@ -51,7 +51,7 @@ import {
 } from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, listLivePublicMiniLeagues } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
@@ -1384,9 +1384,17 @@ export default function HomePage() {
         // (list_mini_leagues_by_club) and per-caller (my_leagues) listings,
         // not a global cross-club directory with joined club metadata. Leave
         // empty under ICP until a club directory canister can supply this.
-        icp: async () => [] as MiniLeague[],
+        icp: async (ctx) => {
+          const rows = await listLivePublicMiniLeagues(ctx);
+          return rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            club_id: r.club_id,
+            clubs: { name: "Loading...", sport: null },
+          })) as MiniLeague[];
+        },
       }),
-    enabled: !!user && teamDialogOpen && resolveAuthBackend() !== "icp",
+    enabled: !!user && teamDialogOpen,
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
@@ -1894,7 +1902,7 @@ export default function HomePage() {
       if (error) throw error;
       return (data || []).map(r => r.role as TeamRole);
     },
-    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember && resolveAuthBackend() !== "icp",
+    enabled: !!user?.id && !!selectedTeam && isAlreadyTeamMember,
     staleTime: 30_000,
   });
 

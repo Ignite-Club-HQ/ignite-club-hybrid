@@ -465,7 +465,7 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -519,7 +519,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -562,6 +562,11 @@ type Main =
                                             Err: text;
                                             Ok: Message;
                                           });
+   search_messages: (conversation_id: text, needle: text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok: vec Message;
+     }) query;
    set_club_ai_catch_up: (club_id: text, ai_catch_up_enabled: bool) ->
     (variant {
        Err: text;
