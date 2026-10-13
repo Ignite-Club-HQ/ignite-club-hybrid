@@ -589,7 +589,13 @@ export default function HomePage() {
         return fixtureData.getLocalLabHomeSnapshot(user.id);
       }
       return withFeatureBackend("home", {
-        // NEEDS-CANISTER: presence, rewards, subscriptions, pitch-boards have no canister shape yet
+        // Memberships + Next Up events only — see fetchLiveHomeFeed. Team
+        // subscriptions (Pro Football) and the recently-used pitch-board list
+        // below have their own per-query ICP/Supabase branches; rewards route
+        // through the "points" feature's existing canister wrapper
+        // (fetchAvailableHomeRewardsForBackend -> listLiveClubRewards), and
+        // chat presence already has a canister wrapper (livePresenceHeartbeat)
+        // used elsewhere — neither is part of this consolidated query.
         supabase: fetchHomeFromSupabase,
         icp: (ctx) => fetchLiveHomeFeed(ctx),
       });
@@ -1690,8 +1696,27 @@ export default function HomePage() {
     placeholderData: (prev) => prev,
   });
   const { data: recentlyUsedGames } = useQuery({
-    queryKey: ["recently-used-pitch-boards", user?.id],
+    queryKey: ["recently-used-pitch-boards", user?.id, resolveAuthBackend() === "icp" ? allEvents : null],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        // No pitch-board state canister exists yet (active_games is
+        // Supabase-only), so there is no real "last opened" timestamp to
+        // read. Reuse the home feed's own events_domain data (already fetched
+        // via fetchLiveHomeFeed/listLiveEvents) as a stand-in signal: the
+        // most recently scheduled games' teams sort to the top, same as the
+        // Supabase branch's intent of surfacing teams the user is actively
+        // using.
+        const games = (allEvents || []).filter((e) => e.type === "game" && e.team_id);
+        const seen = new Set<string>();
+        const result: { team_id: string; updated_at: string }[] = [];
+        for (const game of games) {
+          if (!game.team_id || seen.has(game.team_id)) continue;
+          seen.add(game.team_id);
+          result.push({ team_id: game.team_id, updated_at: game.event_date });
+          if (result.length >= 10) break;
+        }
+        return result;
+      }
       const { data, error } = await supabase
         .from("active_games")
         .select("team_id, updated_at")
@@ -1699,11 +1724,11 @@ export default function HomePage() {
         .not("team_id", "is", null)
         .order("updated_at", { ascending: false })
         .limit(10);
-      
+
       if (error) throw error;
       return data;
     },
-    enabled: !!user && resolveAuthBackend() !== "icp",
+    enabled: !!user,
     staleTime: 2 * 60 * 1000,
     placeholderData: (prev) => prev,
   });

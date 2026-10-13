@@ -190,9 +190,10 @@ function SupabaseVaultPage() {
           let teams = liveTeams.map((team: any) => ({
             id: team.id,
             name: team.name,
-            // NEEDS-CANISTER: the vault_domain/club_domain canisters have no
-            // team-level folder concept, so this always reads null.
-            folder_id: null as string | null,
+            // club_domain's Team record carries folder_id directly (set via
+            // set_team_folder) — no separate join needed like Supabase's
+            // teams.folder_id column.
+            folder_id: (team.folder_id as string | undefined) ?? null,
           }));
 
           if (!isClubAdmin) {
