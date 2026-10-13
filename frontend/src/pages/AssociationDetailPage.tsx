@@ -32,7 +32,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: assoc, isLoading } = useQuery({
     queryKey: ["association", id],
-    enabled: !!id && !isIcpPageMode(),
+    enabled: !!id,
     queryFn: async () => {
       if (isIcpPageMode()) {
         const [profile, kind] = await withFeatureBackend("membership", {
@@ -57,7 +57,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: isAdmin = false } = useQuery({
     queryKey: ["assoc-isadmin", id, user?.id],
-    enabled: !!id && !!user && !isIcpPageMode(),
+    enabled: !!id && !!user,
     queryFn: async () => {
       if (isIcpPageMode()) {
         const grants = await withFeatureBackend("membership", {
@@ -76,8 +76,14 @@ function SupabaseAssociationDetailPage() {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["association-clubs", id],
-    enabled: !!id && !isIcpPageMode(),
+    enabled: !!id,
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // club_domain has no parent-org/association link field yet — member
+        // clubs can't be enumerated on the canister, so this surfaces as
+        // "no clubs linked" rather than throwing.
+        return [];
+      }
       const { data } = await supabase
         .from("clubs")
         .select("id, name, logo_url, city, kind")
@@ -91,7 +97,7 @@ function SupabaseAssociationDetailPage() {
 
   const { data: rollup } = useQuery({
     queryKey: ["association-rollup", id, clubIds.length],
-    enabled: !!id && clubIds.length > 0 && !isIcpPageMode(),
+    enabled: !!id && clubIds.length > 0,
     queryFn: async () => {
       const [teamsRes, eventsRes, membersRes] = await Promise.all([
         supabase.from("teams").select("id", { count: "exact", head: true }).in("club_id", clubIds),
@@ -218,8 +224,13 @@ function LinkClubForm({ associationId }: { associationId: string }) {
 
   const { data: clubs = [] } = useQuery({
     queryKey: ["link-club-search", search, associationId],
-    enabled: open && !isIcpPageMode(),
+    enabled: open,
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // club_domain has no parent-org/association link field yet, so
+        // unaffiliated-club search can't be powered from the canister.
+        return [];
+      }
       let q = supabase
         .from("clubs")
         .select("id, name, city")
@@ -234,7 +245,11 @@ function LinkClubForm({ associationId }: { associationId: string }) {
   });
 
   const link = async () => {
-    if (!clubId || isIcpPageMode()) return;
+    if (!clubId) return;
+    if (isIcpPageMode()) {
+      toast({ title: "Not available on ICP yet", description: "Linking clubs to an association isn't supported on the ICP canister yet." });
+      return;
+    }
     setSaving(true);
     const { error } = await supabase.from("clubs").update({ parent_org_id: associationId }).eq("id", clubId);
     setSaving(false);
@@ -285,7 +300,10 @@ function UnlinkClubButton({ clubId, associationId }: { clubId: string; associati
   const qc = useQueryClient();
   const { toast } = useToast();
   const unlink = async () => {
-    if (isIcpPageMode()) return;
+    if (isIcpPageMode()) {
+      toast({ title: "Not available on ICP yet", description: "Unlinking clubs from an association isn't supported on the ICP canister yet." });
+      return;
+    }
     const ok = window.confirm("Remove this club from the association?");
     if (!ok) return;
     const { error } = await supabase.from("clubs").update({ parent_org_id: null }).eq("id", clubId);
@@ -314,6 +332,12 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   const { data: history = [] } = useQuery({
     queryKey: ["association-broadcasts", associationId],
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // Association-level broadcasts fan out to each club's chats on the
+        // canister (no separate association_broadcasts table there), so
+        // there's no cross-club history to read back yet.
+        return [];
+      }
       const { data } = await supabase
         .from("association_broadcasts")
         .select("*")
@@ -322,7 +346,6 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
         .limit(20);
       return data ?? [];
     },
-    enabled: !isIcpPageMode(),
   });
 
   const toggleClub = (cid: string) => {
@@ -334,8 +357,46 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   };
 
   const send = async () => {
-    if (!message.trim() || isIcpPageMode()) return;
+    if (!message.trim()) return;
     setSending(true);
+    if (isIcpPageMode()) {
+      try {
+        const targetClubs = clubs.filter((c: any) => selectedClubIds.size === 0 || selectedClubIds.has(c.id));
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { broadcastLiveAnnouncement } = await import("@/live/features/messaging");
+        const { listLiveTeams } = await import("@/live/features/club");
+        const body = message.trim();
+        let teamCount = 0;
+        let clubCount = 0;
+        await withFeatureBackend("messaging", {
+          icp: async (ctx) => {
+            for (const c of targetClubs) {
+              const teams = await listLiveTeams(ctx, c.id);
+              const teamIds = teams.map((t: any) => t.id);
+              const result = await broadcastLiveAnnouncement(ctx, {
+                clubId: c.id,
+                teamIds,
+                includeClubChat: true,
+                body,
+                idempotencyKey: crypto.randomUUID(),
+              });
+              teamCount += teamIds.length - (result.skipped?.length ?? 0);
+              clubCount += 1;
+            }
+          },
+          supabase: async () => { throw new Error("unreachable"); },
+        });
+        toast({ title: `Sent to ${teamCount} team${teamCount === 1 ? "" : "s"} across ${clubCount} club${clubCount === 1 ? "" : "s"}` });
+        setMessage("");
+        setSelectedClubIds(new Set());
+        qc.invalidateQueries({ queryKey: ["association-broadcasts", associationId] });
+      } catch (e) {
+        toast({ title: "Could not send broadcast", description: e instanceof Error ? e.message : "Send failed", variant: "destructive" });
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     const { data, error } = await supabase.functions.invoke("send-association-broadcast", {
       body: {
         association_id: associationId,

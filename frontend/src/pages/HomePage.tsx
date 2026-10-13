@@ -1296,9 +1296,19 @@ export default function HomePage() {
           icp: async (ctx) => {
             const rows = await listLiveClubs(ctx);
             const filterOut = /test|demo|sample/i;
-            return rows
-              .filter((c) => !filterOut.test(c.name))
-              .map((c) => ({ id: c.id, name: c.name, sport: c.sport[0] ?? null, class_mode_enabled: false }))
+            const filtered = rows.filter((c) => !filterOut.test(c.name));
+            const classModeFlags = await Promise.all(
+              filtered.map(async (c) => {
+                try {
+                  const settings: any = await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, c.id);
+                  return Boolean(settings?.class_mode_enabled);
+                } catch {
+                  return false;
+                }
+              }),
+            );
+            return filtered
+              .map((c, i) => ({ id: c.id, name: c.name, sport: c.sport[0] ?? null, class_mode_enabled: classModeFlags[i] }))
               .sort((a, b) => a.name.localeCompare(b.name)) as Club[];
           },
         });

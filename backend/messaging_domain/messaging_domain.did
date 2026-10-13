@@ -296,7 +296,7 @@ type Main =
        Err: text;
        Ok: Message;
      });
-   generate_chat_recap: (conversation_id: text, since_ms: nat64) ->
+   generate_chat_recap: (scope_id: text, since_ms: opt nat64) ->
     (variant {
        Err: text;
        Ok: text;
@@ -652,6 +652,11 @@ type Main =
     (variant {
        Err: text;
        Ok: ContentReport;
+     });
+   summarize_transcript: (scope_id: text, transcript: text) ->
+    (variant {
+       Err: text;
+       Ok: text;
      });
    toggle_reaction: (message_id: text, emoji: text) ->
     (variant {

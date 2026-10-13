@@ -434,10 +434,25 @@ export default function DirectMessagePage() {
     queryKey: ["dm-shared-club", user?.id, otherUserId],
     queryFn: async () => {
       if (!user?.id || !otherUserId) return null;
-      // Provisional: user_roles is a Supabase-only table keyed by uuid; there
-      // is no canister equivalent, so ICP-mode users just get an empty vault
-      // / event picker here instead of a failing uuid query.
-      if (resolveAuthBackend() === "icp") return null;
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => null,
+          icp: async (ctx) => {
+            const { listLiveClubs } = await import("@/live/features/club");
+            const { listLiveRoleGrants } = await import("@/live/features/membership");
+            const { normalizeAccountId } = await import("@/live/messagingCandidates");
+            const myId = normalizeAccountId(user.id);
+            const theirId = normalizeAccountId(otherUserId);
+            const clubs = await listLiveClubs(ctx);
+            for (const club of clubs) {
+              const grants = await listLiveRoleGrants(ctx, club.id);
+              const accountIds = new Set(grants.map((g: any) => normalizeAccountId(g.account_id)));
+              if (accountIds.has(myId) && accountIds.has(theirId)) return club.id;
+            }
+            return null;
+          },
+        });
+      }
       const [mine, theirs] = await Promise.all([
         supabase.from("user_roles").select("club_id").eq("user_id", user.id).not("club_id", "is", null),
         supabase.from("user_roles").select("club_id").eq("user_id", otherUserId).not("club_id", "is", null),

@@ -102,6 +102,76 @@ persistent actor class Main(governorInit : Principal) {
     };
   };
 
+  // ===================== On-chain LLM canister (chat recap) =====================
+  // DFINITY's free, key-free LLM canister on mainnet. Inference runs on ICP
+  // nodes — no HTTPS outcall, no API key. See
+  // https://docs.internetcomputer.org/guides/backends/ai-inference/.
+  // The wire shapes below mirror the `mo:llm` library's chat.mo exactly
+  // (same variant tags / field names), so they interop with the real
+  // canister without taking the mops dependency.
+  transient let LLM_CANISTER_ID = "w36hm-eqaaa-aaaal-qr76a-cai";
+  transient let LLM_MODEL = "llama3.1:8b";
+
+  type LlmChatMessage = {
+    #user : { content : Text };
+    #system_ : { content : Text };
+    #assistant : { content : ?Text; tool_calls : [LlmToolCall] };
+    #tool : { content : Text; tool_call_id : Text };
+  };
+  type LlmToolCallArgument = { name : Text; value : Text };
+  type LlmToolCall = { id : Text; function : { name : Text; arguments : [LlmToolCallArgument] } };
+  type LlmRequest = { model : Text; messages : [LlmChatMessage]; tools : ?[{ #function : { name : Text; description : ?Text; parameters : ?{ type_ : Text; properties : ?[{ type_ : Text; name : Text; description : ?Text; enum_ : ?[Text] }]; required : ?[Text] } } }] };
+  type LlmResponse = { message : { content : ?Text; tool_calls : [LlmToolCall] } };
+  type LlmCanisterRef = actor { v1_chat : (LlmRequest) -> async LlmResponse };
+
+  func llmCanister() : LlmCanisterRef { actor (LLM_CANISTER_ID) : LlmCanisterRef };
+
+  // Per-caller recap rate limit (1 per 20s). Transient: abuse protection only,
+  // resetting on upgrade is fine and avoids needing a migration for it.
+  transient var lastRecapAtByCaller : [(Principal, Nat64)] = [];
+  transient let RECAP_RATE_LIMIT_MS : Nat64 = 20_000;
+
+  func checkAndMarkRecapRateLimit(caller : Principal) : Bool {
+    let now = nowMs();
+    switch (lastRecapAtByCaller.find(func((p, _) : (Principal, Nat64)) : Bool = p.equal(caller))) {
+      case (?(_, last)) {
+        if (now < last + RECAP_RATE_LIMIT_MS) return false;
+        lastRecapAtByCaller := lastRecapAtByCaller.map<(Principal, Nat64), (Principal, Nat64)>(func(entry) = if (entry.0.equal(caller)) (entry.0, now) else entry);
+      };
+      case null {
+        lastRecapAtByCaller := lastRecapAtByCaller.concat([(caller, now)]);
+      };
+    };
+    true
+  };
+
+  // Shared recap instruction: concise bullet recap, action items, and open
+  // questions — never invent facts not present in the transcript.
+  transient let RECAP_SYSTEM_PROMPT = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply ONLY with concise markdown bullet points covering: (1) a short recap of what happened, (2) any action items (who needs to do what), (3) any open questions. Use only information present in the transcript — never invent names, dates, or facts that are not there. If a section has nothing to report, omit it.";
+
+  func runRecapCompletion(transcript : Text) : async { #Ok : Text; #Err : Text } {
+    if (transcript == "") return #Err("No new messages to recap");
+    let request : LlmRequest = {
+      model = LLM_MODEL;
+      messages = [
+        #system_({ content = RECAP_SYSTEM_PROMPT }),
+        #user({ content = transcript }),
+      ];
+      tools = null;
+    };
+    try {
+      let response = await (with timeout = 300) llmCanister().v1_chat(request);
+      switch (response.message.content) {
+        case (?text) { if (text == "") #Err("Recap model returned an empty response") else #Ok(truncateText(text, 4000)) };
+        case null { #Err("Recap model returned no content") };
+      }
+    } catch (e) {
+      // Outcall-style failures (traps, cross-subnet timeouts) surface as
+      // catchable errors — never trap the caller's request.
+      #Err("Recap request failed: " # Error.message(e))
+    }
+  };
+
   // Platform -> minimum required version/build, set by the governor. Read by
   // the native force-update prompt (NativeAppUpdatePrompt parity with the
   // public-minimum-app-version edge function).
@@ -2166,80 +2236,77 @@ persistent actor class Main(governorInit : Principal) {
     null
   };
 
-  public shared ({ caller }) func generate_chat_recap(conversation_id : Text, since_ms : Nat64) : async { #Ok : Text; #Err : Text } {
-    auth(caller);
-    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+  // Builds the transcript text for a conversation: newest messages first up
+  // to ~80 messages / ~6000 chars, then reversed to chronological order for
+  // the prompt (recency cap keeps the LLM call small and fast).
+  func buildRecapTranscript(conversation_id : Text, since_ms : Nat64) : Text {
+    let MAX_MESSAGES = 80;
+    let MAX_CHARS = 6000;
+    var picked : [Types.Message] = [];
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id and m.created_at_ms > since_ms) {
+        picked := picked.concat([m]);
+      };
+    };
+    // Newest first, capped, then reversed back to chronological order.
+    let sorted = picked.sort(func(a, b) = Nat64.compare(b.created_at_ms, a.created_at_ms));
+    let cap = if (sorted.size() < MAX_MESSAGES) sorted.size() else MAX_MESSAGES;
+    let newest = Array.tabulate<Types.Message>(cap, func(i) = sorted[i]);
+    let chronological = Array.tabulate<Types.Message>(cap, func(i) = newest[cap - 1 - i]);
+    var transcript = "";
+    for (m in chronological.values()) {
+      let line = Principal.toText(m.sender) # ": " # truncateText(m.body, 400) # "\n";
+      if (transcript.size() + line.size() <= MAX_CHARS) {
+        transcript := transcript # line;
+      };
+    };
+    transcript
+  };
+
+  // Caller must be a member of the conversation (reuses the same read-access
+  // check as the rest of the messaging surface) and have AI catch-up enabled.
+  func authorizeRecapCaller(caller : Principal, conversation_id : Text) : ?Text {
+    if (not canReadTeamMessages(caller, conversation_id)) return ?"Conversation access forbidden";
     let settings = userMessagingSettings.find(func(s) = s.user.equal(caller));
     let catchupEnabled = switch (settings) { case (?s) { s.ai_catchup_enabled }; case null { false } };
-    if (not catchupEnabled and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return #Err("AI catch-up is disabled for this member");
-    let config = switch (recapConfig) {
-      case null { return #Err("Recap not configured") };
-      case (?c) { c };
+    if (not catchupEnabled and not isGovernor(caller) and not hasRole(caller, "app_admin", null, null)) return ?"AI catch-up is disabled for this member";
+    null
+  };
+
+  // Generates a chat recap for `scope_id` (a conversation id) from messages
+  // stored on this canister since `since_ms` (defaults to 7 days back when
+  // omitted). Uses DFINITY's free on-chain LLM canister — no HTTPS outcall,
+  // no API key, no third-party data sharing.
+  public shared ({ caller }) func generate_chat_recap(scope_id : Text, since_ms : ?Nat64) : async { #Ok : Text; #Err : Text } {
+    auth(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) {
+      case (?err) { return #Err(err) };
+      case null {};
     };
-
-    var transcript = "";
-    var count = 0;
-    for (m in messages.values()) {
-      if (m.conversation_id == conversation_id and m.created_at_ms > since_ms and count < 50) {
-        transcript := transcript # Principal.toText(m.sender) # ": " # truncateText(m.body, 280) # "\n";
-        count += 1;
-      };
+    if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
+    let SEVEN_DAYS_MS : Nat64 = 7 * 24 * 3600 * 1000;
+    let effectiveSince = switch (since_ms) {
+      case (?s) { s };
+      case null { let now : Nat64 = nowMs(); if (now > SEVEN_DAYS_MS) (now - SEVEN_DAYS_MS) else (0 : Nat64) };
     };
-    if (count == 0) return #Err("No new messages to recap");
+    let transcript = buildRecapTranscript(scope_id, effectiveSince);
+    if (transcript == "") return #Err("No new messages to recap");
+    await runRecapCompletion(transcript)
+  };
 
-    let instruction = "You are summarising a club team group chat for a member who has been away. Read the transcript and reply with a brief bullet-point catch-up: key decisions, upcoming events with dates/times, and anything that needs the reader's action. Be concise.\n\n";
-    let payload = "{"
-      # "\"model\":\"" # jsonEscape(config.model) # "\","
-      # "\"messages\":[{\"role\":\"user\",\"content\":\"" # jsonEscape(instruction # transcript) # "\"}]"
-      # "}";
-
-    let request : IC.HttpRequestArgs = {
-      url = config.endpoint_url;
-      // Sized for response headers + body; a recap is short prose.
-      max_response_bytes = ?(32_000 : Nat64);
-      headers = [
-        { name = "Content-Type"; value = "application/json" },
-        { name = "Authorization"; value = "Bearer " # config.api_key },
-        // Lets the endpoint dedupe retries for the same recap request.
-        { name = "Idempotency-Key"; value = conversation_id # "-" # Nat64.toText(since_ms) },
-      ];
-      body = ?Text.encodeUtf8(payload);
-      method = #post;
-      transform = ?{
-        function = recapTransform;
-        context = Blob.fromArray([]);
-      };
-      // Non-replicated: this POST is a paid, non-idempotent AI request.
-      // Replicated mode would fire one paid request per subnet node (~13
-      // duplicate charges per recap); a single node sends it instead, at
-      // the documented cost of trusting that node's response.
-      is_replicated = ?false;
+  // Variant for scopes whose message bodies are client-encrypted (PII), where
+  // this canister cannot read plaintext: the caller supplies an
+  // already-decrypted transcript. Same membership + rate-limit gating as
+  // generate_chat_recap.
+  public shared ({ caller }) func summarize_transcript(scope_id : Text, transcript : Text) : async { #Ok : Text; #Err : Text } {
+    auth(caller);
+    switch (authorizeRecapCaller(caller, scope_id)) {
+      case (?err) { return #Err(err) };
+      case null {};
     };
-
-    try {
-      let response = await Call.httpRequest(request);
-      if (response.status < 200 or response.status >= 300) {
-        return #Err("Recap endpoint returned status " # Nat.toText(response.status));
-      };
-      let bodyText = switch (Text.decodeUtf8(response.body)) {
-        case (?t) { t };
-        case null { return #Err("Recap response was not valid UTF-8") };
-      };
-      switch (findJsonStringValue(bodyText, "summary")) {
-        case (?summary) { #Ok(truncateText(summary, 4000)) };
-        case null {
-          switch (findJsonStringValue(bodyText, "text")) {
-            case (?text) { #Ok(truncateText(text, 4000)) };
-            // Tolerant fallback: surface the raw body so a differently
-            // shaped endpoint still yields something readable.
-            case null { #Ok(truncateText(bodyText, 2000)) };
-          }
-        };
-      }
-    } catch (e) {
-      // Outcall timeouts and rejects surface as catchable errors — never trap.
-      #Err("Recap request failed: " # Error.message(e))
-    }
+    if (transcript == "") return #Err("No new messages to recap");
+    if (not checkAndMarkRecapRateLimit(caller)) return #Err("Please wait a moment before requesting another recap");
+    await runRecapCompletion(truncateText(transcript, 6000))
   };
 
   // ===================== Presence (online count) =====================
