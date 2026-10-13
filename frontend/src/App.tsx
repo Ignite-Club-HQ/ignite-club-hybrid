@@ -46,6 +46,7 @@ import { IcpNavActivityTracker } from "@/components/IcpNavActivityTracker";
 import { IcpPendingBar } from "@/components/IcpPendingBar";
 import { IcsPreviewFallbackDialog } from "@/components/IcsPreviewFallbackDialog";
 import { Loader2 } from "lucide-react";
+import { AppSplash } from "@/components/AppSplash";
 
 // OAuth callback capture is now handled in main.tsx (runs earlier)
 
