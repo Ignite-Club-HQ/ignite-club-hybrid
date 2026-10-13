@@ -29,6 +29,14 @@ export function makeVaultRootToken(scope: VaultRootScope, id: string): string {
   return `[vaultroot:${scope}:${id}]`;
 }
 
+/** A vault card needs no separate text bubble when there is no caption. */
+export function isVaultOnlyMessage(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const pattern = `${VAULT_FILE_TOKEN_RE.source}|${VAULT_FOLDER_TOKEN_RE.source}|${VAULT_ROOT_TOKEN_RE.source}`;
+  return new RegExp(pattern, "i").test(text) &&
+    !text.replace(new RegExp(pattern, "gi"), "").trim();
+}
+
 export function extractVaultFileIds(text: string | null | undefined): string[] {
   if (!text) return [];
   const ids = new Set<string>();
