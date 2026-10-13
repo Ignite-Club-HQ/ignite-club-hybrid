@@ -489,6 +489,19 @@ export function useEventDutyMutations(params: UseEventDutyMutationsArgs) {
       // set-duty write as claiming (provisional — verify against the live
       // canister post-deploy). Unassigning (userId === null) has no canister
       // shape, so it always stays on Supabase.
+      if (!userId && isFeatureRoutedToIcp("events")) {
+        // Unassign on-chain: remove the current assignee's duty row.
+        const duty = duties?.find((candidate) => candidate.id === selectedDutyId);
+        const prev = duty?.assigned_to ? String(duty.assigned_to) : null;
+        if (!id) throw new Error("Missing event ID");
+        if (prev) {
+          await withFeatureBackend("events", {
+            supabase: async () => undefined,
+            icp: async (ctx) => { await removeLiveEventDuty(ctx, id, prev); },
+          });
+        }
+        return;
+      }
       const assignedOnIcp = userId
         ? await withFeatureBackend("events", {
             supabase: () => false,

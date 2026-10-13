@@ -97,6 +97,7 @@ import {
   listLiveCompetitions,
   listLiveCompetitionEntries,
   listLiveCompetitionMatches,
+  listLiveCompetitionBroadcasts,
 } from "@/live/features/competitions";
 import type { EngagementBenchmarks as IcpEngagementBenchmarks, EngagementDayPoint } from "@/lab/bindings/insights_domain/declarations/insights_domain.did.js";
 
@@ -1789,7 +1790,42 @@ function CompetitionPanel({ competitions, range }: { competitions: { id: string;
   const { data: stats } = useQuery({
     queryKey: ["competition-engagement", compIds, range.start.toISOString(), range.end.toISOString()],
     queryFn: async () => {
-      if (isFeatureRoutedToIcp("competitions") && compIds.length > 0) {
+      if (isFeatureRoutedToIcp("competitions")) {
+        if (compIds.length === 0) return { activeTeams: 0, totalMatches: 0, resultsEntered: 0, broadcasts: 0 };
+        const startMs = range.start.getTime();
+        const endMs = range.end.getTime();
+        const perComp = await withFeatureBackend("competitions", {
+          supabase: async () => [],
+          icp: (ctx) =>
+            Promise.all(
+              compIds.map(async (id) => {
+                const [compMatches, compEntries, compBroadcasts] = await Promise.all([
+                  listLiveCompetitionMatches(ctx, id),
+                  listLiveCompetitionEntries(ctx, id),
+                  listLiveCompetitionBroadcasts(ctx, id).catch(() => []),
+                ]);
+                return {
+                  activeTeams: compEntries.filter(
+                    (e: any) => e.status === "accepted" || e.status === "registered",
+                  ).length,
+                  totalMatches: compMatches.length,
+                  resultsEntered: compMatches.filter((m: any) => m.status === "completed").length,
+                  broadcasts: compBroadcasts.filter((b: any) => {
+                    const t = Number(b.created_at_ms);
+                    return t >= startMs && t <= endMs;
+                  }).length,
+                };
+              }),
+            ),
+        });
+        return {
+          activeTeams: perComp.reduce((n, c) => n + c.activeTeams, 0),
+          totalMatches: perComp.reduce((n, c) => n + c.totalMatches, 0),
+          resultsEntered: perComp.reduce((n, c) => n + c.resultsEntered, 0),
+          broadcasts: perComp.reduce((n, c) => n + c.broadcasts, 0),
+        };
+      }
+      if (false as boolean) {
         // ICP: fixtures/results and active entries come from the competition
         // canister. Broadcasts stay on Supabase — the send path
         // (send-competition-broadcast edge function) writes there in both
