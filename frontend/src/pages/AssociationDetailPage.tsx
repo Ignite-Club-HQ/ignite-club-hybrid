@@ -332,6 +332,12 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   const { data: history = [] } = useQuery({
     queryKey: ["association-broadcasts", associationId],
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        // Association-level broadcasts fan out to each club's chats on the
+        // canister (no separate association_broadcasts table there), so
+        // there's no cross-club history to read back yet.
+        return [];
+      }
       const { data } = await supabase
         .from("association_broadcasts")
         .select("*")
@@ -340,7 +346,6 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
         .limit(20);
       return data ?? [];
     },
-    enabled: !isIcpPageMode(),
   });
 
   const toggleClub = (cid: string) => {
@@ -352,8 +357,46 @@ function BroadcastsPanel({ associationId, clubs }: { associationId: string; club
   };
 
   const send = async () => {
-    if (!message.trim() || isIcpPageMode()) return;
+    if (!message.trim()) return;
     setSending(true);
+    if (isIcpPageMode()) {
+      try {
+        const targetClubs = clubs.filter((c: any) => selectedClubIds.size === 0 || selectedClubIds.has(c.id));
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const { broadcastLiveAnnouncement } = await import("@/live/features/messaging");
+        const { listLiveTeams } = await import("@/live/features/club");
+        const body = message.trim();
+        let teamCount = 0;
+        let clubCount = 0;
+        await withFeatureBackend("messaging", {
+          icp: async (ctx) => {
+            for (const c of targetClubs) {
+              const teams = await listLiveTeams(ctx, c.id);
+              const teamIds = teams.map((t: any) => t.id);
+              const result = await broadcastLiveAnnouncement(ctx, {
+                clubId: c.id,
+                teamIds,
+                includeClubChat: true,
+                body,
+                idempotencyKey: crypto.randomUUID(),
+              });
+              teamCount += teamIds.length - (result.skipped?.length ?? 0);
+              clubCount += 1;
+            }
+          },
+          supabase: async () => { throw new Error("unreachable"); },
+        });
+        toast({ title: `Sent to ${teamCount} team${teamCount === 1 ? "" : "s"} across ${clubCount} club${clubCount === 1 ? "" : "s"}` });
+        setMessage("");
+        setSelectedClubIds(new Set());
+        qc.invalidateQueries({ queryKey: ["association-broadcasts", associationId] });
+      } catch (e) {
+        toast({ title: "Could not send broadcast", description: e instanceof Error ? e.message : "Send failed", variant: "destructive" });
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
     const { data, error } = await supabase.functions.invoke("send-association-broadcast", {
       body: {
         association_id: associationId,
