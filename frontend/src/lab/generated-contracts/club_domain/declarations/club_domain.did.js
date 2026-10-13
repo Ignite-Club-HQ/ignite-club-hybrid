@@ -710,6 +710,19 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_roster' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'children' : IDL.Vec(Child),
+              'roles' : IDL.Vec(RoleGrant),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_club_settings' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSettings), 'Err' : IDL.Text })],

@@ -10,6 +10,7 @@ vi.mock("@/live/targetRegistry", () => ({
     host: "https://icp-api.io",
     canisterIds: { club_points_domain: "aaaaa-aa", events_domain: "bbbbb-bb" },
   }),
+  registerIcpEngineResolver: () => {},
 }));
 
 const cyclesBalance = vi.hoisted(() => vi.fn());

@@ -441,6 +441,11 @@ export interface Main {
     { 'Ok' : Array<ClubProfile> } |
       { 'Err' : string }
   >,
+  'get_club_roster' : ActorMethod<
+    [string],
+    { 'Ok' : { 'children' : Array<Child>, 'roles' : Array<RoleGrant> } } |
+      { 'Err' : string }
+  >,
   'get_club_settings' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSettings] } |
