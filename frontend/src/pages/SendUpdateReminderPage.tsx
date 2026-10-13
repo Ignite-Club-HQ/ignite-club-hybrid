@@ -32,15 +32,147 @@ interface UserWithVersion {
   buildNumber: string | null;
 }
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveClubs } from "@/live/features/club";
+import { listLiveRoleGrants } from "@/live/features/membership";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
+import { batchRecipientIds } from "@/live/features/notificationBatching";
 
 export default function SendUpdateReminderPage() {
   const useIcpLab = isFeatureRoutedToIcp("notifications");
   if (useIcpLab) {
-    return <IcpUnavailablePage title="Update reminders are unavailable in ICP lab mode" description="Recipient selection and reminder delivery are not connected to ICP and approved external-worker services yet." />;
+    return <IcpSendUpdateReminderPage />;
   }
   return <SupabaseSendUpdateReminderPage />;
+}
+
+function IcpSendUpdateReminderPage() {
+  const navigate = useNavigate();
+  const [selectedClubId, setSelectedClubId] = useState<string>("all");
+  const [body, setBody] = useState(
+    "A new version of the app is available. Please update to continue using all features.",
+  );
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const { data: clubs, isLoading: clubsLoading } = useQuery({
+    queryKey: ["icp-admin-clubs-list"],
+    queryFn: () =>
+      withFeatureBackend("notifications", {
+        supabase: async () => {
+          throw new Error("ICP-only page");
+        },
+        icp: async (ctx) => {
+          const out: Array<{ id: string; name: string }> = [];
+          let cursor: string | null = null;
+          for (;;) {
+            const page: Array<{ id: string; name: string }> = await listLiveClubs(ctx, cursor, 100);
+            out.push(...page.map((c) => ({ id: c.id, name: c.name })));
+            if (page.length < 100) break;
+            cursor = page[page.length - 1].id;
+          }
+          return out;
+        },
+      }),
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      return withFeatureBackend("notifications", {
+        supabase: async () => {
+          throw new Error("ICP-only page");
+        },
+        icp: async (ctx) => {
+          const clubIds = selectedClubId === "all" ? (clubs ?? []).map((c) => c.id) : [selectedClubId];
+          let totalRecipients = 0;
+          const prefix = `update-reminder-${Date.now()}`;
+          for (const clubId of clubIds) {
+            // list_role_grants returns one row per (account, role, team) —
+            // dedupe to unique account ids before fanning out so a member
+            // with several roles in the same club is notified once.
+            const grants = await listLiveRoleGrants(ctx, clubId);
+            const recipientIds = Array.from(new Set(grants.map((g: { account_id: string }) => g.account_id)));
+            const batches = batchRecipientIds(recipientIds);
+            for (let i = 0; i < batches.length; i++) {
+              await fanOutLiveNotifications(ctx, {
+                userIds: batches[i],
+                clubId,
+                kind: "update_reminder",
+                body,
+                idempotencyKeyPrefix: `${prefix}-${clubId}-${i}`,
+              });
+              totalRecipients += batches[i].length;
+            }
+          }
+          return totalRecipients;
+        },
+      });
+    },
+    onSuccess: (count) => {
+      setLastResult(`Sent to ${count} recipient${count === 1 ? "" : "s"}.`);
+      toast.success(`Update reminder sent to ${count} recipient${count === 1 ? "" : "s"}.`);
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to send notifications");
+    },
+  });
+
+  return (
+    <div className="py-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">Send Update Reminder</h1>
+          <p className="text-sm text-muted-foreground">
+            Notify club members via the on-chain notification queue
+          </p>
+        </div>
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Recipients
+          </CardTitle>
+          <CardDescription>
+            Unique accounts are gathered from every selected club's role grants, then fanned out in
+            batches of {500}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Club</label>
+            <Select value={selectedClubId} onValueChange={setSelectedClubId} disabled={clubsLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="All clubs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All clubs</SelectItem>
+                {clubs?.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Message</Label>
+            <Input value={body} onChange={(e) => setBody(e.target.value)} />
+          </div>
+          <Button
+            className="gap-1.5"
+            disabled={sendMutation.isPending || !body.trim()}
+            onClick={() => sendMutation.mutate()}
+          >
+            <Send className="h-4 w-4" />
+            {sendMutation.isPending ? "Sending..." : "Send Update Reminder"}
+          </Button>
+          {lastResult && <p className="text-sm text-muted-foreground">{lastResult}</p>}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function SupabaseSendUpdateReminderPage() {

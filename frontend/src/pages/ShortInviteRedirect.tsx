@@ -3,24 +3,65 @@ import { useParams, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import igniteIcon from "@/assets/ignite-icon.png";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 
 export default function ShortInviteRedirect() {
   const useIcpLab = resolveAuthBackend() === "icp";
-  if (useIcpLab) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <img src={igniteIcon} alt="" className="h-14 w-14" />
-        <h1 className="text-lg font-semibold">Short invite links are unavailable in ICP lab mode</h1>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          Invite-code resolution is not connected to the ICP identity service. No invite was opened.
-        </p>
-      </div>
-    );
+  return useIcpLab ? <IcpShortInviteRedirect /> : <SupabaseShortInviteRedirect />;
+}
+
+function IcpShortInviteRedirect() {
+  const { code } = useParams<{ code: string }>();
+  const [inviteId, setInviteId] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    setInviteId(null);
+    setNotFound(false);
+
+    if (!code) {
+      setNotFound(true);
+      return;
+    }
+
+    const resolvingCode = code;
+    let cancelled = false;
+
+    const resolve = async () => {
+      try {
+        const [{ AnonymousIdentity }, { getActiveIcpTarget }, { resolveLiveInviteShortCode }] = await Promise.all([
+          import("@icp-sdk/core/agent"),
+          import("@/live/targetRegistry"),
+          import("@/live/features/club"),
+        ]);
+        const id = await resolveLiveInviteShortCode(
+          { identity: new AnonymousIdentity(), target: getActiveIcpTarget() },
+          resolvingCode,
+        );
+        if (cancelled || resolvingCode !== code) return;
+        setInviteId(id);
+      } catch {
+        if (cancelled || resolvingCode !== code) return;
+        setNotFound(true);
+      }
+    };
+
+    resolve();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  if (notFound) {
+    return <Navigate to="/auth" replace />;
   }
 
-  return <SupabaseShortInviteRedirect />;
+  if (inviteId) {
+    return <Navigate to={`/join/p/${encodeURIComponent(inviteId)}`} replace />;
+  }
+
+  return <InviteLoadingScreen />;
 }
 
 function SupabaseShortInviteRedirect() {
@@ -77,6 +118,10 @@ function SupabaseShortInviteRedirect() {
     return <Navigate to={`/join/p/${encodeURIComponent(inviteToken)}`} replace />;
   }
 
+  return <InviteLoadingScreen />;
+}
+
+function InviteLoadingScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
       <img src={igniteIcon} alt="Ignite" className="h-32 w-32 rounded-[2rem]" />

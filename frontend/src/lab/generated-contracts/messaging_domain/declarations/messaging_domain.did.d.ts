@@ -484,7 +484,7 @@ export interface Main {
   >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
   'search_messages' : ActorMethod<
-    [string, string, number],
+    [string, string, bigint],
     { 'Ok' : Array<Message> } |
       { 'Err' : string }
   >,

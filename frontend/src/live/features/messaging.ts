@@ -1273,7 +1273,7 @@ export async function searchLiveMessages(
 ): Promise<LiveSearchedMessage[]> {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   const matches = await unwrapCandid(
-    actor.search_messages(conversationId, query, limit),
+    actor.search_messages(conversationId, query, BigInt(limit)),
     "Search messages",
   );
   return matches.map((m) => ({

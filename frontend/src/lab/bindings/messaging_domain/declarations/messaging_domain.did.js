@@ -741,7 +741,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'search_messages' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Nat16],
+        [IDL.Text, IDL.Text, IDL.Nat],
         [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
         ['query'],
       ),

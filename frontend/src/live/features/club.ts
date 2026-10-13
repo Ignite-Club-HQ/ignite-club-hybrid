@@ -616,6 +616,18 @@ export async function revokeLivePendingInvite(ctx: FeatureBackendContext, invite
   return unwrapCandid(actor.revoke_pending_invite(inviteId), "Revoke pending invite");
 }
 
+/** Creates (or returns the existing) short code for an invite, for short-link sharing. */
+export async function createLiveInviteShortCode(ctx: FeatureBackendContext, inviteId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.create_invite_short_code(inviteId), "Create invite short code");
+}
+
+/** Resolves a short code back to its invite id, for the /i/:code redirect route. */
+export async function resolveLiveInviteShortCode(ctx: FeatureBackendContext, code: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.resolve_invite_short_code(code), "Resolve invite short code");
+}
+
 /**
  * Guardian link/unlink, child-to-parent admin linking, and parent-initiated
  * child creation on a team.
@@ -1327,39 +1339,40 @@ export async function setLiveNewsPostTarget(
 export interface LiveClubRosterChild {
   id: string;
   teams: string[];
-  clubId: string | null;
-  parent: Principal | null;
+  club_id?: string;
+  parent?: Principal;
 }
 
 export interface LiveClubRoster {
   children: LiveClubRosterChild[];
-  roles: Array<{ club: string | null; role: string; team: string | null; user: Principal }>;
+  roles: Array<{ club?: string; role: string; team?: string; user: Principal }>;
 }
 
 /**
- * Club-wide roster for the player-list export: club-scoped role grants
- * (adult players hold the `player` role) plus the children assigned to the
- * club's teams. Club-admin gated canister-side (`list_role_grants`); children
- * are filtered client-side to this club since `list_children` has no
- * club-scoped variant yet.
+ * Club-wide roster for the player-list export and schedule broadcasts:
+ * children on the club's teams plus club-scoped role grants. Staff-gated
+ * canister-side (club_domain get_club_roster).
  */
 export async function getLiveClubRoster(
   ctx: FeatureBackendContext,
   clubId: string,
 ): Promise<LiveClubRoster> {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
-  const [roles, teams] = await Promise.all([
-    unwrapCandid(actor.list_role_grants(clubId), "List role grants"),
-    unwrapCandid(actor.list_teams(clubId), "List teams"),
-  ]);
-  const teamIds = new Set(teams.map((t) => t.id));
-  // NEEDS-CANISTER: no club-scoped children read exists yet — `list_children`
-  // / `list_my_children` are caller-scoped. Until a `list_club_children`
-  // query ships, derive the set from children attached to this club's teams
-  // via the role-grant/guardian data we already have access to; for now this
-  // returns no children and callers should treat it as "none readable yet"
-  // rather than fail the export.
-  const children: LiveClubRosterChild[] = [];
-  void teamIds;
-  return { children, roles };
+  const raw = await unwrapCandid(actor.get_club_roster(clubId), "Load club roster");
+  const one = <T,>(v: unknown): T | undefined =>
+    (Array.isArray(v) ? (v[0] as T | undefined) : ((v ?? undefined) as T | undefined));
+  return {
+    children: raw.children.map((c) => ({
+      id: c.id,
+      teams: [...c.teams],
+      club_id: one<string>(c.club_id),
+      parent: one<Principal>(c.parent),
+    })),
+    roles: raw.roles.map((r) => ({
+      club: one<string>(r.club),
+      role: r.role,
+      team: one<string>(r.team),
+      user: r.user,
+    })),
+  };
 }

@@ -747,7 +747,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    search_messages(conversation_id: string, needle: string, limit: number): Promise<{
+    search_messages(conversation_id: string, needle: string, limit: bigint): Promise<{
         __kind__: "Ok";
         Ok: Array<Message>;
     } | {
@@ -1815,7 +1815,7 @@ export class Messaging_domain implements messaging_domainInterface {
         const result = await this.actor.restore_group(arg0);
         return from_candid_variant_n1(result);
     }
-    async search_messages(arg0: string, arg1: string, arg2: number): Promise<{
+    async search_messages(arg0: string, arg1: string, arg2: bigint): Promise<{
         __kind__: "Ok";
         Ok: Array<Message>;
     } | {

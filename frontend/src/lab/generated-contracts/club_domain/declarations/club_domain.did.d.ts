@@ -314,6 +314,11 @@ export interface Main {
     { 'Ok' : ClubProfile } |
       { 'Err' : string }
   >,
+  'create_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'create_news_post' : ActorMethod<
     [
       string,
@@ -439,6 +444,11 @@ export interface Main {
   'get_club_profiles' : ActorMethod<
     [Array<string>],
     { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
+  'get_club_roster' : ActorMethod<
+    [string],
+    { 'Ok' : { 'children' : Array<Child>, 'roles' : Array<RoleGrant> } } |
       { 'Err' : string }
   >,
   'get_club_settings' : ActorMethod<
@@ -791,6 +801,11 @@ export interface Main {
   'resend_pending_invite' : ActorMethod<
     [string],
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
+      { 'Err' : string }
+  >,
+  'resolve_invite_short_code' : ActorMethod<
+    [string],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'restore_club' : ActorMethod<

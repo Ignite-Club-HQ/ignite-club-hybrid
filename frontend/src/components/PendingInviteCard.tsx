@@ -47,7 +47,7 @@ import { formatDistanceToNow } from "date-fns";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { revokeLivePendingInvite } from "@/live/features/club";
+import { revokeLivePendingInvite, createLiveInviteShortCode } from "@/live/features/club";
 
 interface PendingInviteCardProps {
   invite: {
@@ -156,13 +156,27 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
         .single();
       return data;
     },
-    // NEEDS-CANISTER: invite tokens / short codes — the club canister invite record has no token shape.
     enabled: !!invite.id && !isIcp,
     staleTime: 1000 * 60 * 5,
   });
 
+  // ICP mode: the canister invite record has no token/metadata shape, but it
+  // does support a short invite code — fetch/create it so sharing still works.
+  const { data: icpShortCode } = useQuery({
+    queryKey: [...membershipKeys.pendingInviteToken(invite.id), "icp-short-code"],
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => null,
+        icp: (ctx) => createLiveInviteShortCode(ctx, invite.id),
+      }),
+    enabled: !!invite.id && isIcp,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const pendingInviteToken = pendingInviteData?.invite_token;
-  const pendingShortCode = (pendingInviteData as any)?.short_code as string | null;
+  const pendingShortCode = isIcp
+    ? (icpShortCode ?? null)
+    : ((pendingInviteData as any)?.short_code as string | null);
   const inviteMetadata = pendingInviteData?.metadata as { children?: { name: string }[]; customMessage?: string } | null;
 
   // Use short URL for sharing, full URL for emails/internal
