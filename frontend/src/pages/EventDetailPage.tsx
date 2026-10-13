@@ -180,7 +180,7 @@ export default function EventDetailPage() {
         const sinceMs = Date.now() - REMINDER_COOLDOWN_MS;
         const log = await withFeatureBackend("events", {
           supabase: async () => [] as any[],
-          icp: async (ctx) => (await import("@/live/features/events")).getLiveReminderLog(ctx, id!) as Promise<any[]>,
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveReminders(ctx, id!) as unknown as Promise<any[]>,
         }).catch(() => [] as any[]);
         const map = new Map<string, string>();
         for (const r of [...log].sort((a, b) => Number(b.sent_at_ms) - Number(a.sent_at_ms))) {
