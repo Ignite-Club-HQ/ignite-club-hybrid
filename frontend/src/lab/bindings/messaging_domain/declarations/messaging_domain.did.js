@@ -62,6 +62,17 @@ export const idlFactory = ({ IDL }) => {
     'sequence' : IDL.Nat64,
     'idempotency_key' : IDL.Text,
   });
+  const ContentReport = IDL.Record({
+    'id' : IDL.Text,
+    'status' : IDL.Text,
+    'conversation_id' : IDL.Opt(IDL.Text),
+    'subject_kind' : IDL.Text,
+    'created_at_ms' : IDL.Nat64,
+    'subject_id' : IDL.Text,
+    'details' : IDL.Opt(IDL.Text),
+    'reporter' : IDL.Principal,
+    'reason' : IDL.Text,
+  });
   const ForwardRecord = IDL.Record({
     'to_conversation_id' : IDL.Text,
     'original_sender' : IDL.Principal,
@@ -173,6 +184,7 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Principal,
   });
   const State = IDL.Record({
+    'contentReports' : IDL.Vec(ContentReport),
     'forwardRecords' : IDL.Vec(ForwardRecord),
     'joinRequests' : IDL.Vec(JoinRequest),
     'scheduledMessages' : IDL.Vec(ScheduledMessage),
@@ -550,6 +562,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubDmSettings), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_content_reports' : IDL.Func(
+        [IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ContentReport), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_deleted_groups' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(GroupMetadata), 'Err' : IDL.Text })],
@@ -735,13 +752,18 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'resolve_content_report' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : ContentReport, 'Err' : IDL.Text })],
+        [],
+      ),
     'restore_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'search_messages' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Nat],
+        [IDL.Text, IDL.Text, IDL.Nat16],
         [IDL.Variant({ 'Ok' : IDL.Vec(Message), 'Err' : IDL.Text })],
         ['query'],
       ),
@@ -828,6 +850,11 @@ export const idlFactory = ({ IDL }) => {
     'soft_delete_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'submit_content_report' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : ContentReport, 'Err' : IDL.Text })],
         [],
       ),
     'toggle_reaction' : IDL.Func(
