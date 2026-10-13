@@ -504,19 +504,19 @@ export async function updateLiveGroup(
 }
 
 /**
- * AI catch-up recap for a conversation — the canister makes an HTTPS
- * outcall to the configured LLM endpoint (see set_recap_config). Caller
+ * AI catch-up recap for a conversation — messaging_domain asks DFINITY's
+ * free on-chain LLM canister (no HTTPS outcall, no API key). Caller
  * needs message-read access and ai_catchup_enabled in their messaging
  * settings (governor/app_admin bypass).
  */
 export async function generateLiveChatRecap(
   ctx: FeatureBackendContext,
   conversationId: string,
-  sinceMs: bigint,
+  sinceMs: bigint | null,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(
-    actor.generate_chat_recap(conversationId, sinceMs),
+    actor.generate_chat_recap(conversationId, sinceMs === null ? [] : [sinceMs]),
     "Generate chat recap",
   );
 }
