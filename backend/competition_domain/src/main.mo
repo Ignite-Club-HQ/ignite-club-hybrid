@@ -7,6 +7,10 @@ import Nat64 "mo:core/Nat64";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
+import Random "mo:core/Random";
+import Text "mo:core/Text";
+import Nat8 "mo:core/Nat8";
+import Iter "mo:core/Iter";
 import Types "types";
 
 persistent actor class Main(governorInit : Principal) {
@@ -29,6 +33,60 @@ persistent actor class Main(governorInit : Principal) {
   var competitionInvites : [Types.CompetitionInvite];
   var competitionJoinLinks : [Types.CompetitionJoinLink];
   var eoiSubmissions : [Types.EoiSubmission];
+
+  func eoiHex(b : Blob) : Text {
+    let digits = "0123456789abcdef".chars().toArray();
+    var out = "";
+    for (byte in b.vals()) {
+      let n = byte.toNat();
+      out #= Text.fromChar(digits[n / 16]) # Text.fromChar(digits[n % 16]);
+    };
+    out
+  };
+
+  func eoiClip(t : Text, max : Nat) : Text { if (t.size() > max) "" else t };
+
+  // Public (anonymous allowed) expression-of-interest submission — parity
+  // with the Supabase anon insert on eoi_submissions. Size-capped and
+  // capped per season to bound spam; club/season existence is checked by
+  // the frontend against club_domain's public EOI config before submit.
+  public shared func submit_public_eoi(
+    club_id : Text, season_id : Text, parent_name : Text, parent_email : Text,
+    parent_mobile : ?Text, player_name : Text, player_dob : ?Text, player_gender : ?Text,
+    preferred_teammates : ?Text, preferred_position : ?Text, skill_level : ?Nat16,
+    training_days : [Text], game_days : [Text], notes : ?Text, source : Text,
+  ) : async { #Ok : Text; #Err : Text } {
+    let pn = eoiClip(parent_name.trim(#char ' '), 120);
+    let pe = eoiClip(parent_email.trim(#char ' ').toLower(), 200);
+    let pl = eoiClip(player_name.trim(#char ' '), 120);
+    if (club_id == "" or season_id == "" or pn == "" or pl == "" or not pe.contains(#char '@')) return #Err("Missing required fields");
+    if (training_days.size() > 7 or game_days.size() > 7) return #Err("Invalid days");
+    let small = func(o : ?Text) : ?Text = switch (o) { case (?t) { let c = eoiClip(t, 1000); if (c == "") null else ?c }; case null null };
+    if (eoiSubmissions.filter(func(e) = e.season_id == season_id).size() >= 5000) return #Err("This form is full");
+    let dup = eoiSubmissions.find(func(e) = e.season_id == season_id and e.parent_email == pe and e.player_name.toLower() == pl.toLower());
+    if (dup != null) return #Err("An expression of interest for this player was already submitted");
+    let rnd = await Random.blob();
+    let hex = eoiHex(rnd);
+    let now = nowMs();
+    let id = "eoi-" # Text.fromIter(hex.chars().take(16));
+    let entry : Types.EoiSubmission = {
+      id; club_id; season_id;
+      claim_token = hex;
+      status = "submitted";
+      source = if (source == "embed") "website" else if (source == "app") "app" else "website";
+      parent_name = pn; parent_email = pe; parent_mobile = small(parent_mobile); parent_user_id = null;
+      player_name = pl; player_dob = small(player_dob); player_gender = small(player_gender);
+      age_group = null; preferred_position = small(preferred_position); preferred_teammates = small(preferred_teammates);
+      skill_level; returning_player = false; game_days; training_days;
+      extra_notes = null; notes = small(notes); child_id = null; assigned_team_id = null;
+      invite_sent_count = 0; invite_sent_at_ms = null;
+      submitted_at_ms = now; created_at_ms = now; updated_at_ms = now;
+      allocated_at_ms = null; confirmed_at_ms = null; registered_at_ms = null; withdrawn_at_ms = null;
+      claimed_at_ms = null; parent_confirmed_at_ms = null; revision = 0;
+    };
+    eoiSubmissions := eoiSubmissions.concat([entry]);
+    #Ok(id)
+  };
   var divisionSettings : [Types.DivisionSetting];
   var broadcasts : [Types.Broadcast];
   var clubDomainCanister : ?Principal;

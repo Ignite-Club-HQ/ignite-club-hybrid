@@ -114,6 +114,15 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
             eoi_ask_position: askPos,
           });
           await setLiveSeasonEoiConfig(ctx, seasonId, configJson);
+          // Website-safe copy for the public form (never includes the
+          // private blob's webhook token).
+          const { connectLiveClubDomain } = await import("@/live/domains");
+          const { unwrapCandid } = await import("@/live/features/candid");
+          const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+          await unwrapCandid(
+            actor.set_season_public_eoi_config(seasonId, finalSlug ? [finalSlug] : [], configJson),
+            "Save public form settings",
+          );
         },
       }),
     onSuccess: () => {

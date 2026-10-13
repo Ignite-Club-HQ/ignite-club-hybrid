@@ -564,6 +564,22 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_public_eoi_config' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : [] | [
+          {
+            'club_logo_url' : [] | [string],
+            'season_id' : string,
+            'season_name' : string,
+            'config_json' : [] | [string],
+            'club_name' : string,
+            'club_id' : string,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
   'get_season_eoi_config' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
@@ -704,6 +720,11 @@ export interface Main {
   'list_my_personal_teams' : ActorMethod<
     [],
     { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'list_my_removed_clubs' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubProfile> } |
       { 'Err' : string }
   >,
   'list_news' : ActorMethod<
@@ -1199,6 +1220,11 @@ export interface Main {
   >,
   'set_season_eoi_config' : ActorMethod<
     [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_season_public_eoi_config' : ActorMethod<
+    [string, [] | [string], string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,

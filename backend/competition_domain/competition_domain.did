@@ -300,7 +300,7 @@ type Main =
        Err: text;
        Ok: TeamEntry;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -369,6 +369,15 @@ type Main =
                  Err: text;
                  Ok: Season;
                });
+   submit_public_eoi: (club_id: text, season_id: text, parent_name: text,
+    parent_email: text, parent_mobile: opt text, player_name: text,
+    player_dob: opt text, player_gender: opt text, preferred_teammates:
+    opt text, preferred_position: opt text, skill_level: opt nat16,
+    training_days: vec text, game_days: vec text, notes: opt text, source:
+    text) -> (variant {
+                Err: text;
+                Ok: text;
+              });
    suggest_eoi_teams: (season_id: text) ->
     (variant {
        Err: text;

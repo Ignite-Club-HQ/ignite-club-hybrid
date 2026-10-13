@@ -76,6 +76,23 @@ export default function ClubsPage() {
   const { data: removedClubs } = useQuery({
     queryKey: ["removed-clubs", user?.id],
     queryFn: async () => {
+      if (useIcpLab) {
+        const rows = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => (await import("@/live/features/club")).listLiveMyRemovedClubs(ctx),
+        });
+        const o = (v: any) => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+        return (rows as any[])
+          .map((c) => ({
+            id: c.id as string,
+            name: c.name as string,
+            logo_url: o(c.logo_url) as string | null,
+            sport: null,
+            deleted_at: new Date(Number(o(c.deleted_at_ms) ?? 0)).toISOString(),
+            created_by: null,
+          }))
+          .sort((a, b) => b.deleted_at.localeCompare(a.deleted_at));
+      }
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from("clubs")
@@ -88,16 +105,27 @@ export default function ClubsPage() {
       if (error) throw error;
       return data as { id: string; name: string; logo_url: string | null; sport: string | null; deleted_at: string; created_by: string | null }[];
     },
-    // Soft-deleted clubs are tracked in Supabase only; no canister shape yet.
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   const handleRestore = async (clubId: string) => {
     setRestoringId(clubId);
-    const { error } = await supabase
-      .from("clubs")
-      .update({ deleted_at: null, deleted_by: null } as any)
-      .eq("id", clubId);
+    let error: { message: string } | null = null;
+    if (useIcpLab) {
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => { await (await import("@/live/features/club")).restoreLiveClub(ctx, clubId, true); },
+        });
+      } catch (e) {
+        error = { message: e instanceof Error ? e.message : "Unknown error" };
+      }
+    } else {
+      ({ error } = await supabase
+        .from("clubs")
+        .update({ deleted_at: null, deleted_by: null } as any)
+        .eq("id", clubId));
+    }
     setRestoringId(null);
     if (error) {
       toast({ title: "Error", description: "Failed to restore club.", variant: "destructive" });
@@ -112,7 +140,20 @@ export default function ClubsPage() {
   const handleHardDelete = async () => {
     if (!purgeTarget || purgeConfirmText.trim() !== purgeTarget.name) return;
     setPurging(true);
-    const { error } = await supabase.rpc("hard_delete_club" as any, { _club_id: purgeTarget.id });
+    let error: { message: string } | null = null;
+    if (useIcpLab) {
+      const targetId = purgeTarget.id;
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => { await (await import("@/live/features/club")).deleteLiveClubPermanent(ctx, targetId); },
+        });
+      } catch (e) {
+        error = { message: e instanceof Error ? e.message : "Unknown error" };
+      }
+    } else {
+      ({ error } = await supabase.rpc("hard_delete_club" as any, { _club_id: purgeTarget.id }));
+    }
     setPurging(false);
     if (error) {
       toast({ title: "Couldn't delete", description: error.message, variant: "destructive" });

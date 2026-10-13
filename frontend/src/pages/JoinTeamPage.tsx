@@ -1294,10 +1294,40 @@ function SupabaseJoinTeamPage() {
     }
 
     // Handle child auto-creation for regular team invites with metadata.
-    // Kept Supabase-only by design (children/child_team_assignments/
-    // child_guardians have no canister shape yet) even when the invite
-    // itself was accepted via the club_domain canister above.
-    if (!isPendingInvite && teamInvite?.metadata && rolesToAdd.includes("parent")) {
+    // ICP: create the child on club_domain (name on pii_access_control).
+    if (!isPendingInvite && teamInvite?.metadata && rolesToAdd.includes("parent") && isFeatureRoutedToIcp("membership")) {
+      const childMeta = teamInvite.metadata as { child_name?: string };
+      const childName = childMeta.child_name?.trim();
+      if (childName && invite.team_id) {
+        try {
+          await withFeatureBackend("membership", {
+            supabase: async () => undefined,
+            icp: async (ctx) => {
+              const [{ icpGetTeam }, club, vault] = await Promise.all([
+                import("@/lib/icpClubTeamLookup"),
+                import("@/live/features/club"),
+                import("@/live/features/vault"),
+              ]);
+              const team = await icpGetTeam(invite.team_id!);
+              const clubId = (team as any)?.club_id as string | undefined;
+              if (!clubId) throw new Error("Team not found");
+              const me = ctx.identity.getPrincipal();
+              const child = await club.createLiveChildForParentOnTeam(ctx, clubId, invite.team_id!, me);
+              const childId = (child as any).id as string;
+              await vault.registerLiveChildNamePii(ctx, childId, childName, me);
+              await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
+            },
+          });
+        } catch (e) {
+          console.error("[JoinTeam] ICP child auto-create failed", e);
+          toast({
+            title: "Joined, but your child wasn't added",
+            description: "Add them from the team page.",
+            variant: "destructive",
+          });
+        }
+      }
+    } else if (!isPendingInvite && teamInvite?.metadata && rolesToAdd.includes("parent")) {
       const childMeta = teamInvite.metadata as { child_name?: string; child_year_of_birth?: number };
       if (childMeta.child_name) {
         console.log("[JoinTeam] Auto-creating child from invite metadata:", childMeta.child_name);

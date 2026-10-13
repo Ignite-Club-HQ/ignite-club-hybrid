@@ -377,7 +377,8 @@ export default function TeamChatPage() {
     teamId,
     userId: user?.id,
     clubId: team?.club_id,
-    enabled: authReady && !!user?.id && !useIcpLab,
+    // ICP accounts resolve admin status from club_domain grants inside the hook.
+    enabled: authReady && !!user?.id,
   });
 
   const [pinVaultSheetOpen, setPinVaultSheetOpen] = useState(false);
@@ -388,11 +389,22 @@ export default function TeamChatPage() {
   const handleMemberProfileTap = useCallback(async (memberUserId: string, displayName: string, avatarUrl?: string | null) => {
     if (!teamId || !isAdmin || memberUserId === user?.id) return;
 
-    const { data: roles, error } = await supabase
-      .from("user_roles")
-      .select("id, role")
-      .eq("user_id", memberUserId)
-      .eq("team_id", teamId);
+    let roles: { id: string; role: string }[] | null = null;
+    let error: unknown = null;
+    if (resolveAuthBackend() === "icp") {
+      try {
+        const { listIcpTeamMemberRoles } = await import("@/lib/icpTeamMemberRoles");
+        roles = await listIcpTeamMemberRoles(teamId, memberUserId);
+      } catch (e) {
+        error = e;
+      }
+    } else {
+      ({ data: roles, error } = await supabase
+        .from("user_roles")
+        .select("id, role")
+        .eq("user_id", memberUserId)
+        .eq("team_id", teamId));
+    }
 
     if (error) {
       toast.error("Failed to load member roles");
@@ -410,11 +422,18 @@ export default function TeamChatPage() {
   const handleRemoveRoleFromSelectedMember = useCallback(async (roleItem: { id: string; role: string }) => {
     if (!teamId) return;
 
-    // Provisional: user_roles is a Supabase-only table with no membership.ts
-    // canister equivalent for role removal yet — block the action for
-    // Internet Identity accounts instead of firing a failing uuid query.
     if (resolveAuthBackend() === "icp") {
-      toast.error("Member management isn't available for Internet Identity accounts yet");
+      if (!selectedMember || !team?.club_id) return;
+      try {
+        const { removeIcpTeamRoles } = await import("@/lib/icpTeamMemberRoles");
+        await removeIcpTeamRoles(team.club_id, teamId, selectedMember.userId, [roleItem.role]);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to remove role");
+        return;
+      }
+      toast.success("Role removed");
+      refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
+      setSelectedMember(null);
       return;
     }
 
@@ -432,16 +451,23 @@ export default function TeamChatPage() {
     queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
     refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
     setSelectedMember(null);
-  }, [teamId, queryClient]);
+  }, [teamId, queryClient, selectedMember, team?.club_id]);
 
   const handleRemoveSelectedMemberFromTeam = useCallback(async () => {
     if (!teamId || !selectedMember) return;
 
-    // Provisional: no canister shape for member removal (remove_team_member
-    // is a Supabase-only rpc) — block the action for Internet Identity
-    // accounts instead of firing a failing uuid-keyed rpc.
     if (resolveAuthBackend() === "icp") {
-      toast.error("Member management isn't available for Internet Identity accounts yet");
+      if (!team?.club_id) return;
+      try {
+        const { removeIcpTeamRoles } = await import("@/lib/icpTeamMemberRoles");
+        await removeIcpTeamRoles(team.club_id, teamId, selectedMember.userId, selectedMember.roles.map((r) => r.role));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to remove member");
+        return;
+      }
+      toast.success("Member removed from team");
+      refreshChatManagedTeamMembership(queryClient, teamId, "team", teamId);
+      setSelectedMember(null);
       return;
     }
 
@@ -461,7 +487,7 @@ export default function TeamChatPage() {
     queryClient.invalidateQueries({ queryKey: ["team-messages", teamId] });
     refreshChatRemovedTeamMember(queryClient, teamId, "team", teamId);
     setSelectedMember(null);
-  }, [teamId, selectedMember, queryClient]);
+  }, [teamId, selectedMember, queryClient, team?.club_id]);
 
   // Force a fresh fetch whenever we land on this team chat. Push notifications
   // and inbox taps can land here while react-query still has stale data —

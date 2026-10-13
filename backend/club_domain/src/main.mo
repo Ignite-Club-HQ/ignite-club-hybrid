@@ -1152,6 +1152,63 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  func eoiSlug(t : Text) : Text {
+    var out = "";
+    var dash = false;
+    for (c in t.toLower().chars()) {
+      if ((c >= 'a' and c <= 'z') or (c >= '0' and c <= '9')) { out #= Text.fromChar(c); dash := false }
+      else if (not dash and out.size() > 0) { out #= "-"; dash := true };
+    };
+    if (dash) Text.fromIter(out.chars().take(out.size() - 1)) else out
+  };
+
+  // Public (anonymous) EOI form config. Only the website-safe copy written
+  // via set_season_public_eoi_config is returned — never the private config
+  // blob (it holds the webhook token). Season matches by id, stored public
+  // slug, or slugified name.
+  func eoiPublicKey(id : Text) : Text { id # "\u{1F}public" };
+  func eoiSlugKey(id : Text) : Text { id # "\u{1F}slug" };
+  func eoiLookup(k : Text) : ?Text {
+    switch (seasonEoiConfig.find(func((kk, _)) = kk == k)) { case (?(_, v)) ?v; case null null }
+  };
+
+  public query func get_public_eoi_config(club_slug : Text, season_slug : Text) : async { #Ok : ?{ season_id : Text; season_name : Text; club_id : Text; club_name : Text; club_logo_url : ?Text; config_json : ?Text }; #Err : Text } {
+    switch (profiles.find(func(p) = (p.slug == club_slug or p.id == club_slug) and p.deleted_at_ms == null)) {
+      case null #Ok(null);
+      case (?club) {
+        switch (seasons.find(func(s) = s.club_id == club.id and (s.id == season_slug or eoiLookup(eoiSlugKey(s.id)) == ?season_slug or eoiSlug(s.name) == season_slug))) {
+          case null #Ok(null);
+          case (?season) {
+            #Ok(?{
+              season_id = season.id; season_name = season.name; club_id = club.id; club_name = club.name;
+              club_logo_url = club.logo_url;
+              config_json = eoiLookup(eoiPublicKey(season.id));
+            })
+          };
+        }
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_season_public_eoi_config(season_id : Text, slug : ?Text, public_json : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (seasons.find(func(s) = s.id == season_id)) {
+      case null { #Err("Season not found") };
+      case (?season) {
+        if (not isAdmin(caller, season.club_id)) return #Err("Club admin required");
+        if (public_json.size() > 16_384) return #Err("Config too large");
+        let pk = eoiPublicKey(season_id);
+        let sk = eoiSlugKey(season_id);
+        seasonEoiConfig := seasonEoiConfig.filter(func((k, _)) = k != pk and k != sk).concat([(pk, public_json)]);
+        switch (slug) {
+          case (?sl) { if (sl.size() > 0 and sl.size() <= 120) seasonEoiConfig := seasonEoiConfig.concat([(sk, sl)]) };
+          case null {};
+        };
+        #Ok
+      };
+    }
+  };
+
   public shared ({ caller }) func set_season_eoi_config(season_id : Text, config_json : Text) : async { #Ok; #Err : Text } {
     auth(caller);
     switch (seasons.find(func(s) = s.id == season_id)) {
@@ -1945,6 +2002,13 @@ persistent actor class Main(governorInit : Principal) {
   // it, so browse/roster surfaces stop listing them consistently with the
   // club. Teams already soft-deleted independently are left untouched
   // (their own deleted_at_ms is preserved rather than overwritten).
+  // Clubs the caller administers that were soft-deleted within 30 days.
+  public query ({ caller }) func list_my_removed_clubs() : async { #Ok : [Types.ClubProfile]; #Err : Text } {
+    auth(caller);
+    let cutoff : Nat64 = nowMs() - 30 * 24 * 60 * 60 * 1000;
+    #Ok(profiles.filter(func(p) = switch (p.deleted_at_ms) { case (?d) d >= cutoff and isAdmin(caller, p.id); case null false }))
+  };
+
   public shared ({ caller }) func soft_delete_club(id : Text, cascade_teams : Bool) : async { #Ok : Types.ClubProfile; #Err : Text } {
     auth(caller);
     if (not isAdmin(caller, id)) return #Err("Club admin required");

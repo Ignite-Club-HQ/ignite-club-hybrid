@@ -620,11 +620,17 @@ export function ChatParticipantsList({
 
   const handleMemberTap = async (member: Member) => {
     if (!isCurrentUserAdmin || !effectiveTeamId) return;
-    const { data: roles } = await supabase
-      .from("user_roles")
-      .select("id, role")
-      .eq("user_id", member.id)
-      .eq("team_id", effectiveTeamId);
+    let roles: { id: string; role: string }[] | null = null;
+    if (useIcpLab) {
+      const { listIcpTeamMemberRoles } = await import("@/lib/icpTeamMemberRoles");
+      roles = await listIcpTeamMemberRoles(effectiveTeamId, member.id).catch(() => []);
+    } else {
+      ({ data: roles } = await supabase
+        .from("user_roles")
+        .select("id, role")
+        .eq("user_id", member.id)
+        .eq("team_id", effectiveTeamId));
+    }
     // Note: do NOT call onBeforeNavigate here — MemberDetailSheet is rendered
     // inside this component, so closing the parent ChatDetailsSheet would
     // unmount it before it can open.
