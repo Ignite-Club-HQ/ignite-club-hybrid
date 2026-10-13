@@ -495,7 +495,6 @@ const App = () => {
           <IcsPreviewFallbackDialog />
           <NotifDebugOverlay />
           <BrowserRouter>
-            <NavigationProgress />
             <AppNavigatorBridge />
             <IcpNavActivityTracker />
             <ScrollToTop />
