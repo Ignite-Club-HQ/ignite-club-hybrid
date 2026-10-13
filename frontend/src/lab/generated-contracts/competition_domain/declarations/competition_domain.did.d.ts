@@ -446,6 +446,27 @@ export interface Main {
     { 'Ok' : Season } |
       { 'Err' : string }
   >,
+  'submit_public_eoi' : ActorMethod<
+    [
+      string,
+      string,
+      string,
+      string,
+      [] | [string],
+      string,
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [string],
+      [] | [number],
+      Array<string>,
+      Array<string>,
+      [] | [string],
+      string,
+    ],
+    { 'Ok' : string } |
+      { 'Err' : string }
+  >,
   'suggest_eoi_teams' : ActorMethod<
     [string],
     { 'Ok' : Array<EoiTeamSuggestion> } |

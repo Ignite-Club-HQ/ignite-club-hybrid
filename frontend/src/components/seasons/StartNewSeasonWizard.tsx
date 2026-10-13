@@ -18,8 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { Season } from "@/hooks/useClubSeasons";
-import { withFeatureBackend } from "@/live/featureRouter";
-import { createLiveSeason, duplicateLiveSeason, setLiveSeasonStatus } from "@/live/features/competitions";
+import { withFeatureBackend, type FeatureBackendContext } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { ReturningMembersStep } from "./ReturningMembersStep";
 import { SeasonInviteStep } from "./SeasonInviteStep";
 
@@ -76,7 +76,8 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           // revision counter this club-based flow has no equivalent for —
           // using 0 here is unverified; confirm against the live schema
           // post-deploy.
-          await setLiveSeasonStatus(ctx, currentSeason.id, "archived", 0);
+          const { archiveLiveSeason } = await import("@/live/features/club");
+          await archiveLiveSeason(ctx, currentSeason.id);
         },
       });
     },
@@ -101,8 +102,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
             // unverified; confirm against the live schema post-deploy.
             // The canister duplicates entries only; staff copying has no
             // canister shape (copyStaff is ignored on this branch).
-            const season = await duplicateLiveSeason(ctx, clubId, currentSeason.name, seasonName.trim());
-            return season.competition_id;
+            return createClubSeasonOnChain(ctx, clubId, seasonName.trim());
           },
         });
       }
@@ -121,8 +121,7 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
           // competition id, but this club-based flow has no competition
           // concept — using clubId as the identifier is unverified; confirm
           // against the live schema post-deploy.
-          const created = await createLiveSeason(ctx, clubId, seasonName.trim());
-          return created.competition_id;
+          return createClubSeasonOnChain(ctx, clubId, seasonName.trim());
         },
       });
     },
@@ -142,7 +141,8 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         icp: async (ctx) => {
           // Provisional mapping: see createMut/archiveMut above re: season
           // identity and revision — unverified until deploy.
-          await setLiveSeasonStatus(ctx, id, "published", 0);
+          const { publishLiveSeason } = await import("@/live/features/club");
+          await publishLiveSeason(ctx, id);
         },
       });
     },
@@ -160,6 +160,20 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
         .map((id) => ({ club_player_id: id, team_id: assignments[id] ?? null }))
         .filter((a) => !!a.team_id);
       if (placed.length === 0) return 0;
+      if (isFeatureRoutedToIcp("competitions") || isFeatureRoutedToIcp("membership")) {
+        return withFeatureBackend("membership", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const { addLiveSeasonTeamAssignment } = await import("@/live/features/club");
+            let n = 0;
+            for (const a of placed) {
+              await addLiveSeasonTeamAssignment(ctx, targetId, a.team_id as string, a.club_player_id);
+              n += 1;
+            }
+            return n;
+          },
+        });
+      }
       const { data, error } = await supabase.rpc("carry_over_players_to_teams", {
         _target_season_id: targetId,
         _assignments: placed,
@@ -395,4 +409,21 @@ export function StartNewSeasonWizard({ clubId, open, onOpenChange, currentSeason
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Club seasons live on club_domain (same store the ICP Seasons pages read). */
+async function createClubSeasonOnChain(ctx: FeatureBackendContext, clubId: string, name: string): Promise<string> {
+  const { saveLiveSeason } = await import("@/live/features/club");
+  const now = BigInt(Date.now());
+  const saved = (await saveLiveSeason(ctx, {
+    id: crypto.randomUUID(),
+    club_id: clubId,
+    name,
+    start_date: "",
+    end_date: "",
+    status: "draft",
+    created_at_ms: now,
+    updated_at_ms: now,
+  } as any)) as any;
+  return (saved?.id as string) ?? "";
 }

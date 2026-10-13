@@ -469,6 +469,11 @@ export async function restoreLiveClub(
   return unwrapCandid(actor.restore_club(clubId, cascadeTeams), "Restore club");
 }
 
+export async function listLiveMyRemovedClubs(ctx: FeatureBackendContext) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_my_removed_clubs(), "List removed clubs");
+}
+
 export async function deleteLiveClubPermanent(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.delete_club_permanent(clubId), "Permanently delete club");

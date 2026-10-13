@@ -628,6 +628,20 @@ type Main =
        Ok: PendingInvite;
      }) query;
    get_pending_invite_label: (id: text) -> (opt text) query;
+   get_public_eoi_config: (club_slug: text, season_slug: text) ->
+    (variant {
+       Err: text;
+       Ok:
+        opt
+         record {
+           club_id: text;
+           club_logo_url: opt text;
+           club_name: text;
+           config_json: opt text;
+           season_id: text;
+           season_name: text;
+         };
+     }) query;
    get_season_eoi_config: (season_id: text) ->
     (variant {
        Err: text;
@@ -764,6 +778,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec ClubTeam;
+     }) query;
+   list_my_removed_clubs: () ->
+    (variant {
+       Err: text;
+       Ok: vec ClubProfile;
      }) query;
    list_news: (club_id: text) ->
     (variant {
@@ -1246,6 +1265,11 @@ type Main =
        Err: text;
        Ok;
      });
+   set_season_public_eoi_config: (season_id: text, slug: opt text,
+    public_json: text) -> (variant {
+                             Err: text;
+                             Ok;
+                           });
    set_team_folder: (team_id: text, folder_id: opt text) ->
     (variant {
        Err: text;

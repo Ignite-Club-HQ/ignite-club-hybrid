@@ -33,27 +33,6 @@ type EoiConfig = {
 };
 
 export default function PublicEoiFormPage() {
-  const useIcpLab = isFeatureRoutedToIcp("membership");
-  if (useIcpLab) {
-    return (
-      <div className="container max-w-md mx-auto px-4 py-6 space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>ICP Lab Association</CardTitle>
-            <CardDescription>ICP Test Club — synthetic expression-of-interest form</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-center">
-            <ClipboardList className="h-10 w-10 mx-auto text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Showing a synthetic ICP lab EOI configuration. Submitting an expression of interest is disabled until an
-              ICP domain service is connected.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return <SupabasePublicEoiFormPage />;
 }
 
@@ -86,6 +65,17 @@ function SupabasePublicEoiFormPage() {
   useEffect(() => {
     if (!clubSlug || !seasonSlug) return;
     (async () => {
+      if (isFeatureRoutedToIcp("membership")) {
+        const row = await loadIcpPublicEoiConfig(clubSlug, seasonSlug).catch((e) => {
+          console.error(e);
+          toast.error("Could not load form");
+          return null;
+        });
+        setConfig(row);
+        if (row) document.title = `EOI · ${row.club_name}`;
+        setLoading(false);
+        return;
+      }
       const { data, error } = await supabase.rpc("get_public_eoi_config", {
         _club_slug: clubSlug,
         _season_slug: seasonSlug,
@@ -136,6 +126,43 @@ function SupabasePublicEoiFormPage() {
     }
 
     setSubmitting(true);
+    if (isFeatureRoutedToIcp("membership")) {
+      try {
+        const isEmbed = typeof window !== "undefined" && window.parent !== window;
+        await submitIcpPublicEoi({
+          club_id: config.club_id,
+          season_id: config.season_id,
+          parent_name: parentName,
+          parent_email: parentEmail,
+          parent_mobile: parentMobile.trim() || null,
+          player_name: playerName,
+          player_dob: playerDob || null,
+          player_gender: playerGender || null,
+          preferred_teammates: preferredTeammates.trim() || null,
+          preferred_position: preferredPosition.trim() || null,
+          skill_level: skillLevel,
+          training_days: trainingDays,
+          game_days: gameDays,
+          notes: notes.trim() || null,
+          source: isEmbed ? "embed" : "website",
+        });
+      } catch (err) {
+        setSubmitting(false);
+        toast.error(err instanceof Error ? err.message : "Submission failed. Please try again.");
+        return;
+      }
+      setSubmitting(false);
+      if (config.thank_you_redirect_url) {
+        try {
+          window.location.href = new URL(config.thank_you_redirect_url).toString();
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      setSubmitted(true);
+      return;
+    }
     const { data: inserted, error } = await supabase
       .from("eoi_submissions")
       .insert({
@@ -529,5 +556,72 @@ function SupabasePublicEoiFormPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+// ---- ICP (anonymous) data path: club_domain public config + competition_domain submit.
+async function anonActors() {
+  const [{ AnonymousIdentity }, domains, { getActiveIcpTarget }] = await Promise.all([
+    import("@icp-sdk/core/agent"),
+    import("@/live/domains"),
+    import("@/live/targetRegistry"),
+  ]);
+  const target = getActiveIcpTarget();
+  const identity = new AnonymousIdentity();
+  return { target, identity, domains };
+}
+
+async function loadIcpPublicEoiConfig(clubSlug: string, seasonSlug: string): Promise<EoiConfig | null> {
+  const { target, identity, domains } = await anonActors();
+  const { unwrapCandid } = await import("@/live/features/candid");
+  const { actor } = await domains.connectLiveClubDomain(target, identity);
+  const res = (await unwrapCandid(actor.get_public_eoi_config(clubSlug, seasonSlug), "Load form")) as any;
+  const row = Array.isArray(res) ? res[0] : res;
+  if (!row) return null;
+  const rawJson = Array.isArray(row.config_json) ? row.config_json[0] : row.config_json;
+  let c: Record<string, any> = {};
+  try { c = rawJson ? JSON.parse(rawJson) : {}; } catch { c = {}; }
+  const now = Date.now();
+  const opens = c.eoi_opens_at ? Date.parse(c.eoi_opens_at) : null;
+  const closes = c.eoi_closes_at ? Date.parse(c.eoi_closes_at) : null;
+  const isOpen = !!c.eoi_enabled && (opens == null || opens <= now) && (closes == null || closes >= now);
+  return {
+    season_id: row.season_id,
+    season_name: row.season_name,
+    club_id: row.club_id,
+    club_name: row.club_name,
+    club_logo_url: (Array.isArray(row.club_logo_url) ? row.club_logo_url[0] : row.club_logo_url) ?? null,
+    is_open: isOpen,
+    opens_at: c.eoi_opens_at ?? null,
+    closes_at: c.eoi_closes_at ?? null,
+    welcome_message: c.eoi_welcome_message ?? null,
+    thank_you_message: c.eoi_thank_you_message ?? null,
+    thank_you_redirect_url: c.eoi_thank_you_redirect_url ?? null,
+    require_dob: !!c.eoi_require_dob,
+    require_gender: !!c.eoi_require_gender,
+    ask_preferences: !!c.eoi_ask_preferences,
+    ask_availability: !!c.eoi_ask_availability,
+    ask_skill_level: !!c.eoi_ask_skill_level,
+    ask_position: !!c.eoi_ask_position,
+  };
+}
+
+async function submitIcpPublicEoi(f: {
+  club_id: string; season_id: string; parent_name: string; parent_email: string; parent_mobile: string | null;
+  player_name: string; player_dob: string | null; player_gender: string | null; preferred_teammates: string | null;
+  preferred_position: string | null; skill_level: number | null; training_days: string[]; game_days: string[];
+  notes: string | null; source: string;
+}) {
+  const { target, identity, domains } = await anonActors();
+  const { unwrapCandid } = await import("@/live/features/candid");
+  const { actor } = await domains.connectLiveCompetitionDomain(target, identity);
+  const o = (v: string | null) => (v ? [v] : []) as [] | [string];
+  await unwrapCandid(
+    actor.submit_public_eoi(
+      f.club_id, f.season_id, f.parent_name, f.parent_email, o(f.parent_mobile), f.player_name,
+      o(f.player_dob), o(f.player_gender), o(f.preferred_teammates), o(f.preferred_position),
+      f.skill_level == null ? [] : [f.skill_level], f.training_days, f.game_days, o(f.notes), f.source,
+    ),
+    "Submit",
   );
 }

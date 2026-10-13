@@ -172,10 +172,23 @@ export default function EventDetailPage() {
   const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const { data: recentReminderMap } = useQuery({
     queryKey: eventKeys.recentReminders(id),
-    enabled: !!id && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && !useIcpLab,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const sinceMs = Date.now() - REMINDER_COOLDOWN_MS;
+        const log = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveReminders(ctx, id!) as unknown as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        const map = new Map<string, string>();
+        for (const r of [...log].sort((a, b) => Number(b.sent_at_ms) - Number(a.sent_at_ms))) {
+          const t = Number(r.sent_at_ms);
+          if (t >= sinceMs && !map.has(String(r.recipient))) map.set(String(r.recipient), new Date(t).toISOString());
+        }
+        return map;
+      }
       const since = new Date(Date.now() - REMINDER_COOLDOWN_MS).toISOString();
       const { data, error } = await supabase
         .from("notifications")
@@ -1579,8 +1592,16 @@ export default function EventDetailPage() {
   const isGameEvent = event?.type === "game" && !!event?.team_id;
   const { data: matchCaptainRow } = useQuery({
     queryKey: ["match-captain", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchCaptains(ctx, id!) as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        const c = rows.find((r) => r.role === "captain");
+        return c ? { user_id: c.ref_kind === "child" ? null : c.ref_id, child_id: c.ref_kind === "child" ? c.ref_id : null } : null;
+      }
       const { data, error } = await supabase
         .from("match_captains")
         .select("user_id, child_id")
@@ -1592,8 +1613,17 @@ export default function EventDetailPage() {
   });
   const { data: potmRow } = useQuery({
     queryKey: ["player-of-match", id, "marker"],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const res = await withFeatureBackend("events", {
+          supabase: async () => null as any,
+          icp: async (ctx) => (await import("@/live/features/events")).getLiveGameResult(ctx, id!) as Promise<any>,
+        }).catch(() => null);
+        const r = Array.isArray(res) ? res[0] : res;
+        const mvp = r ? (Array.isArray(r.mvp_player_id) ? r.mvp_player_id[0] : r.mvp_player_id) : null;
+        return mvp ? { user_id: mvp as string, child_id: mvp as string } : null;
+      }
       const { data, error } = await supabase
         .from("player_of_match")
         .select("user_id, child_id")
@@ -1605,8 +1635,15 @@ export default function EventDetailPage() {
   });
   const { data: goalkeeperRows = [] } = useQuery({
     queryKey: ["match-goalkeepers", id],
-    enabled: !!id && isGameEvent && !useIcpLab && !isIcpAuthBackend,
+    enabled: !!id && isGameEvent && !useIcpLab,
     queryFn: async () => {
+      if (isIcpAuthBackend) {
+        const rows = await withFeatureBackend("events", {
+          supabase: async () => [] as any[],
+          icp: async (ctx) => (await import("@/live/features/events")).listLiveMatchGoalkeepers(ctx, id!) as Promise<any[]>,
+        }).catch(() => [] as any[]);
+        return rows.map((g) => ({ user_id: g.ref_kind === "child" ? null : g.ref_id, child_id: g.ref_kind === "child" ? g.ref_id : null }));
+      }
       const { data, error } = await supabase
         .from("match_goalkeepers" as any)
         .select("user_id, child_id")

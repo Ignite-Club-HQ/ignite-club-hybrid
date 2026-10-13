@@ -878,6 +878,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(IDL.Text)],
         ['query'],
       ),
+    'get_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Opt(
+              IDL.Record({
+                'club_logo_url' : IDL.Opt(IDL.Text),
+                'season_id' : IDL.Text,
+                'season_name' : IDL.Text,
+                'config_json' : IDL.Opt(IDL.Text),
+                'club_name' : IDL.Text,
+                'club_id' : IDL.Text,
+              })
+            ),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'get_season_eoi_config' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Text), 'Err' : IDL.Text })],
@@ -1039,6 +1058,11 @@ export const idlFactory = ({ IDL }) => {
     'list_my_personal_teams' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_my_removed_clubs' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_news' : IDL.Func(
@@ -1581,6 +1605,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_season_eoi_config' : IDL.Func(
         [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_season_public_eoi_config' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text), IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

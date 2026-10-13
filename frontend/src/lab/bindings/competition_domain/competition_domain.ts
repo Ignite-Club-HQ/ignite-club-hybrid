@@ -493,6 +493,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    submit_public_eoi(club_id: string, season_id: string, parent_name: string, parent_email: string, parent_mobile: string | null, player_name: string, player_dob: string | null, player_gender: string | null, preferred_teammates: string | null, preferred_position: string | null, skill_level: number | null, training_days: Array<string>, game_days: Array<string>, notes: string | null, source: string): Promise<{
+        __kind__: "Ok";
+        Ok: string;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     suggest_eoi_teams(season_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<EoiTeamSuggestion>;
@@ -1371,6 +1378,16 @@ export class Competition_domain implements competition_domainInterface {
         const result = await this.actor.set_season_status(arg0, arg1, arg2);
         return from_candid_variant_n28(result);
     }
+    async submit_public_eoi(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string | null, arg5: string, arg6: string | null, arg7: string | null, arg8: string | null, arg9: string | null, arg10: number | null, arg11: Array<string>, arg12: Array<string>, arg13: string | null, arg14: string): Promise<{
+        __kind__: "Ok";
+        Ok: string;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.submit_public_eoi(arg0, arg1, arg2, arg3, to_candid_opt_n7(arg4), arg5, to_candid_opt_n7(arg6), to_candid_opt_n7(arg7), to_candid_opt_n7(arg8), to_candid_opt_n7(arg9), to_candid_opt_n61(arg10), arg11, arg12, to_candid_opt_n7(arg13), arg14);
+        return from_candid_variant_n20(result);
+    }
     async suggest_eoi_teams(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: Array<EoiTeamSuggestion>;
@@ -1379,7 +1396,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.suggest_eoi_teams(arg0);
-        return from_candid_variant_n61(result);
+        return from_candid_variant_n62(result);
     }
     async sync_my_competition_access(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1409,7 +1426,7 @@ export class Competition_domain implements competition_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.trim_rounds(arg0, arg1);
-        return from_candid_variant_n62(result);
+        return from_candid_variant_n63(result);
     }
     async update_competition_settings(arg0: string, arg1: string, arg2: string | null, arg3: string, arg4: string, arg5: number, arg6: number, arg7: number): Promise<{
         __kind__: "Ok";
@@ -1448,7 +1465,7 @@ export class Competition_domain implements competition_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n7(arg3), to_candid_opt_n63(arg4), to_candid_opt_n7(arg5), to_candid_opt_n7(arg6), to_candid_opt_n64(arg7), to_candid_opt_n64(arg8), to_candid_opt_n64(arg9), to_candid_opt_n7(arg10), arg11);
+        const result = await this.actor.update_match_details(arg0, arg1, arg2, to_candid_opt_n7(arg3), to_candid_opt_n64(arg4), to_candid_opt_n7(arg5), to_candid_opt_n7(arg6), to_candid_opt_n61(arg7), to_candid_opt_n61(arg8), to_candid_opt_n61(arg9), to_candid_opt_n7(arg10), arg11);
         return from_candid_variant_n57(result);
     }
 }
@@ -2434,7 +2451,7 @@ function from_candid_variant_n60(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n61(value: {
+function from_candid_variant_n62(value: {
     Ok: Array<_EoiTeamSuggestion>;
 } | {
     Err: string;
@@ -2453,7 +2470,7 @@ function from_candid_variant_n61(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n62(value: {
+function from_candid_variant_n63(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -2512,10 +2529,10 @@ function from_candid_vec_n39(value: Array<_Competition>): Array<Competition> {
 function from_candid_vec_n40(value: Array<_RoleGrant>): Array<RoleGrant> {
     return value.map((x)=>from_candid_RoleGrant_n9(x));
 }
-function to_candid_opt_n63(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n61(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n64(value: number | null): [] | [number] {
+function to_candid_opt_n64(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_opt_n7(value: string | null): [] | [string] {
