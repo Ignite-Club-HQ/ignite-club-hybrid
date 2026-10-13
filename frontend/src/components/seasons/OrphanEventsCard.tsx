@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveTeams } from "@/live/features/club";
+import { listLiveSeasonTeamAssignment, listLiveSeasons, listLiveTeams } from "@/live/features/club";
 import { listLiveEvents } from "@/live/features/events";
 
 interface Props {
@@ -32,9 +32,8 @@ export function OrphanEventsCard({ clubId }: Props) {
           if (error) throw error;
           return (data ?? []) as OrphanEvent[];
         },
-        // Canister teams carry no season link at all, so every active team
-        // counts as "not linked to a season" here — surface their events as
-        // orphans the same way the Supabase RPC does for unlinked teams.
+        // Canister teams carry no season_id; a team counts as linked when any
+        // of the club's seasons has a season_team_assignment for it.
         icp: async (ctx) => {
           const teams = (await listLiveTeams(ctx, clubId)) as Array<{
             id: string;
@@ -43,8 +42,15 @@ export function OrphanEventsCard({ clubId }: Props) {
             archived: boolean;
             deleted_at_ms: [] | [bigint];
           }>;
+          const seasons = (await listLiveSeasons(ctx, clubId).catch(() => [])) as Array<{ id: string }>;
+          const assignmentLists = await Promise.all(
+            seasons.map((s) =>
+              (listLiveSeasonTeamAssignment(ctx, s.id) as Promise<Array<{ team_id: string }>>).catch(() => []),
+            ),
+          );
+          const linkedTeamIds = new Set(assignmentLists.flat().map((a) => a.team_id));
           const activeTeams = teams.filter(
-            (t) => t.is_active && !t.archived && t.deleted_at_ms.length === 0,
+            (t) => t.is_active && !t.archived && t.deleted_at_ms.length === 0 && !linkedTeamIds.has(t.id),
           );
           if (activeTeams.length === 0) return [];
           const teamNameById = new Map(activeTeams.map((t) => [t.id, t.name]));
