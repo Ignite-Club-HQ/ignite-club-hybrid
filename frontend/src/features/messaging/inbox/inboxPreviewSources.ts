@@ -12,7 +12,7 @@ import { getCurrentInternetIdentity } from "@/live/internetIdentityAuth";
 import { getActiveIcpTarget } from "@/live/targetRegistry";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { getLiveMyRoleGrants, listLiveMembershipClubs, listLiveMembershipTeams } from "@/live/features/membership";
-import { listLiveLatestMessagesPage, recentLiveConversations } from "@/live/features/messaging";
+import { listLiveLatestMessagesPage } from "@/live/features/messaging";
 import { resolveInboxAuthorNames, toInboxPreviewMessage } from "./inboxPreviewHydration";
 
 async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
@@ -34,28 +34,23 @@ async function getIcpFeatureBackendContext(): Promise<FeatureBackendContext> {
 async function fetchIcpLatestMessagesByScope(
   ctx: FeatureBackendContext,
   scopeIds: ReadonlySet<string>,
-  kind: "club" | "team",
 ): Promise<Record<string, InboxPreview>> {
   if (scopeIds.size === 0) return {};
-  const principal = ctx.identity.getPrincipal();
-  const conversations = await recentLiveConversations(ctx, principal, 100);
-  const relevant = conversations.filter(
-    (conversation: any) => conversation.kind === kind && scopeIds.has(conversation.conversation_id),
-  );
-  if (relevant.length === 0) return {};
+  // Read known member scopes directly: legacy club chats have inferred kinds,
+  // and the recent rail is capped. Message reads enforce canister access.
 
   const latestByScope = new Map<string, { body: string; createdAtMs: number; sender: any; imageUrl: string | null }>();
   await Promise.all(
-    relevant.map(async (conversation: any) => {
+    Array.from(scopeIds).map(async (scopeId) => {
       try {
         // Newest-first read: the newest message is page[0]. (The old forward
         // read cursored on the sequence number, which the canister treats as
         // a different cursor, so it returned nothing and previews vanished.)
-        const page: any = await listLiveLatestMessagesPage(ctx, conversation.conversation_id, null, 1);
+        const page: any = await listLiveLatestMessagesPage(ctx, scopeId, null, 1);
         const message = page.messages?.[0];
         if (!message) return;
         const attachment = message.attachment?.[0] ?? null;
-        latestByScope.set(conversation.conversation_id, {
+        latestByScope.set(scopeId, {
           body: (message.body ?? "").trim(),
           createdAtMs: Number(message.created_at_ms),
           sender: message.sender,
@@ -70,10 +65,11 @@ async function fetchIcpLatestMessagesByScope(
   const senderIds = Array.from(new Set(
     Array.from(latestByScope.values()).map((entry) => entry.sender.toText()),
   ));
-  const profiles = senderIds.length > 0 ? await listLiveProfilesByIds(ctx, senderIds) : [];
+  // Missing sender names must not discard successfully fetched photos.
+  const profiles = senderIds.length > 0 ? await listLiveProfilesByIds(ctx, senderIds).catch(() => []) : [];
   const nameByPrincipal: Record<string, string> = {};
   for (const profile of profiles as any[]) {
-    const principalText = profile.principal?.toText?.() ?? profile.id;
+    const principalText = profile.account_id ?? profile.principal?.toText?.() ?? profile.id;
     if (principalText && profile.display_name) nameByPrincipal[principalText] = profile.display_name;
   }
 
@@ -149,7 +145,7 @@ export async function fetchMemberClubsWithMessages(
         logo_url: club.logo_url?.[0] ?? null,
         sport: null,
       }));
-    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)), "club");
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(clubs.map((c) => c.id)));
     return { clubs, latestMessages };
   }
   if (useIcpLab) {
@@ -256,7 +252,7 @@ export async function fetchTeamsWithMessages(
         });
       }
     }
-    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)), "team");
+    const latestMessages = await fetchIcpLatestMessagesByScope(ctx, new Set(teams.map((t) => t.id)));
     return { teams, latestMessages };
   }
   if (useIcpLab) {

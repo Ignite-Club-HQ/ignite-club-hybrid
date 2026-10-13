@@ -22,7 +22,7 @@
 - Stored document opens and downloads must resolve authorized/decrypted URLs before hand-off, preserve the original extension/MIME, and write WebView blob bytes to native cache instead of using native HTTP downloaders. Why: raw ICP URLs contain ciphertext, not readable documents.
 - ICP reward writes verify caller roles against governor-configured club_domain; catalog/settings reads refresh the caller's role mirror first. Why: creating a club must not require a separate manual points-service role grant.
 - ICP profile batching resolves missing caller profiles through get_profile, not only principal-derived UUIDs; linked or moved accounts may keep their original account ID.
-- ICP media retains batched avatar references and uses shared AvatarImage; upload previews reuse the signed-in photo. Why: initials-only rendering discarded photos.
+- ICP media uses shared AvatarImage and uploader photos. Inbox club/team previews read known scope IDs, not the capped recent rail. Why: legacy kinds hid photos.
 - Club setup progress reads the active membership backend and determines saved branding from stored palettes/logo, independently of entitlement; sponsor/theme saves invalidate its query. Why: free clubs must not lose acknowledgement of saved setup, and ICP has no Supabase rows.
 - ICP login presentation lives in IcpSignInScreen; AuthPage retains provider invocation and redirect resolution so visual changes cannot alter identity or invite/session semantics.
 - Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.

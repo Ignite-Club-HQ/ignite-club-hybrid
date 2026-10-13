@@ -1,3 +1,7 @@
+## ICP club chat preview
+- [x] Read club/team previews directly by scope ID and retain photos when sender lookup fails; 11 tests passed.
+- [ ] Confirm Giddy Goat on Paul's phone — requires the updated Android app and device access.
+
 ## ICP Messages DMs filter
 - [x] Keep DMs reachable under All, including no existing direct conversations and small inboxes.
 - [ ] Confirm on Paul's phone — requires the updated Android app and device access.
