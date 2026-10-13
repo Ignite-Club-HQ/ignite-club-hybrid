@@ -6,10 +6,18 @@ import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { Principal } from "@icp-sdk/core/principal";
+import { withFeatureBackend } from "@/live/featureRouter";
+import {
+  getLiveTeam,
+  listLiveTeamRoleGrants,
+  listLiveRoleRequests,
+  approveLiveRoleRequest,
+  rejectLiveRoleRequest,
+  removeLiveRoleGrant,
+} from "@/live/features/membership";
+import { getLiveUserPoints, awardLivePoints, subjectForUser } from "@/live/features/points";
 
-// NEEDS-CANISTER: team role management UI is not yet wired to the membership
-// canister wrappers — in ICP mode every query/mutation here is disabled so no
-// II principal reaches Supabase from this page.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -59,6 +67,22 @@ function SupabaseManageTeamRolesPage() {
   const { data: team, isLoading: loadingTeam, fetchStatus: teamFetchStatus } = useQuery({
     queryKey: ["team", teamId],
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const row = await getLiveTeam(ctx, teamId!);
+            const t = row.length ? row[0] : null;
+            if (!t) return null;
+            return {
+              id: t.id,
+              club_id: t.club_id,
+              name: t.name,
+              clubs: { name: null, bot_user_id: null },
+            } as any;
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("teams")
         .select("*, clubs!club_id (name, bot_user_id)")
@@ -67,12 +91,26 @@ function SupabaseManageTeamRolesPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   const { data: roles, isLoading: loadingRoles } = useQuery({
     queryKey: membershipKeys.teamRoles(teamId),
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await listLiveTeamRoleGrants(ctx, teamId!);
+            return (grants as any[]).map((g) => ({
+              id: `${g.account_id}-${g.role}`,
+              role: g.role,
+              user_id: g.account_id,
+              profiles: { id: g.account_id, display_name: g.account_id, avatar_url: null },
+            }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("user_roles")
         .select("*, profiles (id, display_name, avatar_url)")
@@ -80,50 +118,75 @@ function SupabaseManageTeamRolesPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId,
   });
 
   const { data: requests } = useQuery({
     queryKey: ["team-role-requests", teamId],
     queryFn: async () => {
+      if (isIcpPageMode()) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            if (!team?.club_id) return [];
+            const rows = await listLiveRoleRequests(ctx, team.club_id);
+            return (rows as any[])
+              .filter((r) => r.status === "pending" && (r.team?.[0] ?? null) === teamId)
+              .map((r) => ({
+                id: r.id,
+                user_id: r.account_id,
+                team_id: teamId,
+                role: r.role,
+                status: r.status,
+                requester: { id: r.account_id, display_name: r.account_id, avatar_url: null },
+              }));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("role_requests")
         .select("*")
         .eq("team_id", teamId!)
         .eq("status", "pending");
       if (error) throw error;
-      
+
       // Fetch profiles separately
       if (!data || data.length === 0) return [];
       const userIds = data.map(r => r.user_id);
       const { data: profiles } = await selectCachedProfilesByIds(userIds);
-      
+
       return data.map(req => ({
         ...req,
         requester: profiles?.find(p => p.id === req.user_id) || null
       }));
     },
-    enabled: !!teamId && !isIcpPageMode(),
+    enabled: !!teamId && !!(isIcpPageMode() ? team?.club_id : true),
   });
 
   const deleteRoleMutation = useMutation({
     mutationFn: async ({ roleId, userId, roleName, userName }: { roleId: string; userId: string; roleName: string; userName: string }) => {
-      if (isIcpPageMode()) return;
+      if (isIcpPageMode()) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const roleValue = roleId.includes("-") ? roleId.slice(roleId.lastIndexOf("-") + 1) : roleName;
+            await removeLiveRoleGrant(ctx, Principal.fromText(userId), team!.club_id, roleValue, teamId!);
+            // NEEDS-CANISTER: Team role removal notifications stay Supabase-only
+            // (no canister notification fan-out wired on this surface yet).
+          },
+        });
+        return;
+      }
       const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
       if (error) throw error;
-      
+
       // Send notification to the user about role removal
-      const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      if (resolveAuthBackend() === "icp") {
-        // NEEDS-CANISTER: Team role removal notifications stay Supabase-only
-      } else {
-        await supabase.from("notifications").insert({
-          user_id: userId,
-          type: "membership",
-          message: `Your ${roleName} role has been removed from ${team?.name || "the team"}`,
-          related_id: teamId,
-        });
-      }
+      await supabase.from("notifications").insert({
+        user_id: userId,
+        type: "membership",
+        message: `Your ${roleName} role has been removed from ${team?.name || "the team"}`,
+        related_id: teamId,
+      });
     },
     onSuccess: () => {
       if (teamId) refreshTeamRoleChange(queryClient, teamId);
@@ -133,7 +196,28 @@ function SupabaseManageTeamRolesPage() {
 
   const resetPointsMutation = useMutation({
     mutationFn: async (userId: string) => {
-      if (isIcpPageMode()) return;
+      if (isIcpPageMode()) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const clubId = team?.club_id;
+            if (!clubId) throw new Error("Team has no club");
+            const currentPoints = await getLiveUserPoints(ctx, clubId, userId);
+            if (currentPoints > 0) {
+              await awardLivePoints(
+                ctx,
+                clubId,
+                subjectForUser(userId),
+                "admin_reset",
+                `reset-${teamId}-${Date.now()}`,
+                -currentPoints,
+                "Points reset by team admin",
+              );
+            }
+          },
+        });
+        return;
+      }
       // Per-club balance: only reset points for THIS team's club.
       const { data: t } = await supabase
         .from("teams").select("club_id").eq("id", teamId!).maybeSingle();
@@ -160,7 +244,19 @@ function SupabaseManageTeamRolesPage() {
 
   const handleRequestMutation = useMutation({
     mutationFn: async ({ requestId, approved }: { requestId: string; approved: boolean; request: any }) => {
-      if (isIcpPageMode()) return;
+      if (isIcpPageMode()) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            if (approved) {
+              await approveLiveRoleRequest(ctx, requestId);
+            } else {
+              await rejectLiveRoleRequest(ctx, requestId);
+            }
+          },
+        });
+        return;
+      }
       const rpcName = approved ? "approve_role_request" : "deny_role_request";
       const { error } = await supabase.rpc(rpcName, { p_request_id: requestId });
       if (error) throw error;

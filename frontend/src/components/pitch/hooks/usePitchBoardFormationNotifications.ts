@@ -1,6 +1,9 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeamRoleGrants } from "@/live/features/membership";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 import type { Player } from "../types";
 import type { PitchPosition } from "../PositionBadge";
 
@@ -71,9 +74,41 @@ export function usePitchBoardFormationNotifications({
     changeDetails?: FormationChangeDetails,
   ) => {
     if (!userId || readOnly || isGameFinished()) return;
-    // NEEDS-CANISTER: reads user_roles/duties and calls the notify_formation_change
-    // RPC; no events_domain equivalent, and no Supabase session under ICP.
-    if (resolveAuthBackend() === "icp") return;
+
+    // ICP: team role grants (club_domain) stand in for user_roles/duties;
+    // event-group (mini-league) match duties have no canister equivalent yet,
+    // so only regular team boards notify under ICP.
+    if (resolveAuthBackend() === "icp") {
+      if (teamId.startsWith("event-group-")) return;
+      try {
+        await withFeatureBackend("membership", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            const grants = await listLiveTeamRoleGrants(ctx, teamId);
+            const recipientIds = new Set<string>([userId]);
+            (grants as Array<{ role: string; account_id: string }>).forEach((grant) => {
+              if ((grant.role === "coach" || grant.role === "team_admin") && grant.account_id) {
+                recipientIds.add(grant.account_id);
+              }
+            });
+            const recipientArray = Array.from(recipientIds);
+            await fanOutLiveNotifications(ctx, {
+              userIds: recipientArray,
+              // clubId: this hook isn't passed the club id, so the team id is
+              // used as the fan-out grouping key (teams are club-scoped anyway).
+              clubId: teamId,
+              kind: "formation_change",
+              body: buildFormationNotificationMessage(changeType, detail, changeDetails),
+              idempotencyKeyPrefix: `formation-${teamId}-${Date.now()}`,
+              relatedId: teamId,
+            });
+          },
+        });
+      } catch (error) {
+        console.error("Failed to send ICP formation change notification:", error);
+      }
+      return;
+    }
 
     try {
       const recipientIds = new Set<string>([userId]);
