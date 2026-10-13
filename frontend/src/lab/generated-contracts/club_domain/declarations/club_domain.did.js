@@ -985,6 +985,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubSponsor), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_association_clubs' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_child_guardians' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
@@ -1169,6 +1174,11 @@ export const idlFactory = ({ IDL }) => {
     'list_teams_multi' : IDL.Func(
         [IDL.Vec(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Vec(ClubTeam), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_unaffiliated_clubs' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ClubProfile), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_user_club_roles' : IDL.Func(
@@ -1479,6 +1489,11 @@ export const idlFactory = ({ IDL }) => {
     'set_club_logo_only_mode' : IDL.Func(
         [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : ClubSettings, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_parent_org' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_switcher_hint' : IDL.Func(
