@@ -95,6 +95,8 @@ interface Notification {
   id: string;
   user_id: string;
   type: string;
+  club?: string | null;
+  idempotency_key?: string | null;
   message: string;
   read: boolean;
   created_at: string;
@@ -792,6 +794,28 @@ export default function NotificationsPage() {
     // Mark as read first
     if (!notification.read) {
       markAsRead.mutate(notification.id);
+    }
+
+    // Internet Identity: route via the on-chain notification fields.
+    if (resolveAuthBackend() === "icp") {
+      try {
+        const { getIcpNotificationRoute } = await import("@/lib/icpNotificationRoute");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const to = await withFeatureBackend("notifications", {
+          supabase: async () => "/notifications",
+          icp: (ctx) =>
+            getIcpNotificationRoute(ctx, {
+              kind: notification.type,
+              relatedId: notification.related_id ?? null,
+              club: notification.club ?? null,
+              messageId: notification.idempotency_key ?? null,
+            }),
+        });
+        if (to !== "/notifications") navigate(to);
+      } catch {
+        /* stay on the inbox */
+      }
+      return;
     }
 
     // Navigate based on notification type

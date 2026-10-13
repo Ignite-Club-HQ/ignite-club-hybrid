@@ -657,6 +657,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_my_accessibility_prefs(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_my_theme_preference(): Promise<{
         __kind__: "Ok";
         Ok: string | null;
@@ -1343,6 +1350,13 @@ export interface MainInterface {
     send_fee_reminders(club_id: string, payment_period: string, payment_type: string, message: string): Promise<{
         __kind__: "Ok";
         Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    set_accessibility_prefs(prefs_json: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2617,6 +2631,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.get_link(arg0);
         return from_candid_variant_n70(result);
     }
+    async get_my_accessibility_prefs(): Promise<{
+        __kind__: "Ok";
+        Ok: string | null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_my_accessibility_prefs();
+        return from_candid_variant_n98(result);
+    }
     async get_my_theme_preference(): Promise<{
         __kind__: "Ok";
         Ok: string | null;
@@ -3623,6 +3647,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.send_fee_reminders(arg0, arg1, arg2, arg3);
         return from_candid_variant_n234(result);
+    }
+    async set_accessibility_prefs(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_accessibility_prefs(arg0);
+        return from_candid_variant_n18(result);
     }
     async set_app_config(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";

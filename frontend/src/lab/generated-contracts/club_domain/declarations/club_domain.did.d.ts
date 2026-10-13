@@ -543,6 +543,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_my_accessibility_prefs' : ActorMethod<
+    [],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'get_my_theme_preference' : ActorMethod<
     [],
     { 'Ok' : [] | [string] } |
@@ -1047,6 +1052,11 @@ export interface Main {
   'send_fee_reminders' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'set_accessibility_prefs' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_app_config' : ActorMethod<

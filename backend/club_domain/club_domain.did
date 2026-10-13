@@ -608,6 +608,11 @@ type Main =
                               Err: text;
                               Ok: Listing;
                             }) query;
+   get_my_accessibility_prefs: () ->
+    (variant {
+       Err: text;
+       Ok: opt text;
+     }) query;
    get_my_theme_preference: () -> (variant {
                                      Err: text;
                                      Ok: opt text;
@@ -1101,6 +1106,10 @@ type Main =
                                Err: text;
                                Ok: nat16;
                              });
+   set_accessibility_prefs: (prefs_json: text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    set_app_config: (key: text, value: text) -> (variant {
                                                   Err: text;
                                                   Ok;

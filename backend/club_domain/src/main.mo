@@ -99,6 +99,9 @@ persistent actor class Main(governorInit : Principal) {
   var teamCaptains : [Types.TeamCaptain];
   var clubJoinRequests : [Types.ClubJoinRequest];
   var themePrefs : [(Principal, Text)];
+  // Per-user accessibility preferences (textScale/highContrast/reduceMotion/
+  // boldText) serialized as JSON, mirroring themePrefs. Added 20261017_000000.
+  var accessibilityPrefs : [(Principal, Text)];
   // Caller-recorded presence heartbeat: principal text -> last-seen ms
   // (Time.now() / 1_000_000). Written by record_presence_heartbeat on every
   // app foreground/interval tick; read by list_online_presence (governor or
@@ -3014,6 +3017,24 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func get_my_theme_preference() : async { #Ok : ?Text; #Err : Text } {
     auth(caller);
     switch (themePrefs.find(func(entry) = entry.0.equal(caller))) {
+      case (?entry) #Ok(?entry.1);
+      case null #Ok(null);
+    }
+  };
+
+  // ---- Per-user accessibility preferences (JSON blob: textScale/
+  // highContrast/reduceMotion/boldText). Same shape as theme preference. ----
+
+  public shared ({ caller }) func set_accessibility_prefs(prefs_json : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    accessibilityPrefs := accessibilityPrefs.filter(func(entry) = not entry.0.equal(caller));
+    accessibilityPrefs := accessibilityPrefs.concat([(caller, prefs_json)]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_my_accessibility_prefs() : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    switch (accessibilityPrefs.find(func(entry) = entry.0.equal(caller))) {
       case (?entry) #Ok(?entry.1);
       case null #Ok(null);
     }
