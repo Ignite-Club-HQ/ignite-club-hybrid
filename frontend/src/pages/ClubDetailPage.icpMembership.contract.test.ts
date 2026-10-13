@@ -17,7 +17,8 @@ describe("ClubDetailPage ICP membership wiring", () => {
     expect(source).toContain('supabase.from("role_requests").insert({');
   });
 
-  it("keeps the ICP lab short-circuit ahead of the ICP-account branch for role requests", () => {
-    expect(source).toContain('if (useIcpLab) throw new Error("Club role requests are unavailable in ICP lab mode.");');
+  it("does not block Internet Identity users from club role requests or schedule broadcasts", () => {
+    expect(source).not.toContain("Club role requests are unavailable in ICP lab mode.");
+    expect(source).not.toContain("Schedule broadcasts are unavailable in ICP lab mode");
   });
 });
