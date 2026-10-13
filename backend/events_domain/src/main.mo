@@ -435,6 +435,7 @@ persistent actor class Main(governorInit : Principal) {
       case (#Ok(_)) {};
     };
     if (not valid(account_id) or not valid(state) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
     let value : Types.Rsvp = { event_id; account_id; child_id = null; state; notes; has_paid = null; source = "member"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); rsvps := rsvps.concat([value]); #Ok(value)
   };
@@ -786,6 +787,7 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
     if (not valid(account_id) or not validRsvpStatus(status) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
     let value : Types.Rsvp = { event_id; account_id; child_id; state = status; notes; has_paid = null; source = "admin"; updated_at_ms = nowMs() };
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == child_id));
     rsvps := rsvps.concat([value]);
@@ -807,6 +809,92 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  };
+
+  // ---- RSVP created_at (preserved across status changes) ----
+  public query ({ caller }) func get_rsvp_created_at(event_id : Text, account_id : Text) : async ?Nat64 {
+    auth(caller);
+    switch (rsvpCreatedAt.find(func(item) = item.event_id == event_id and item.account_id == account_id)) {
+      case null null;
+      case (?item) ?item.created_at_ms;
+    };
+  };
+
+  // ---- Favourite event titles (per-caller shortlist for CreateEventPage) ----
+  func callerAccountId(caller : Principal) : Text { Principal.toText(caller) };
+
+  public query ({ caller }) func list_favourite_event_titles() : async [Text] {
+    auth(caller);
+    let me = callerAccountId(caller);
+    favouriteEventTitles.filter(func(item) = item.account_id == me).map(func(item) = item.title);
+  };
+
+  public shared ({ caller }) func add_favourite_event_title(title : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(title)) return #Err("Invalid title");
+    let me = callerAccountId(caller);
+    if (not favouriteEventTitles.any(func(item) = item.account_id == me and item.title == title)) {
+      favouriteEventTitles := favouriteEventTitles.concat([{ account_id = me; title }]);
+    };
+    #Ok;
+  };
+
+  public shared ({ caller }) func remove_favourite_event_title(title : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    let me = callerAccountId(caller);
+    favouriteEventTitles := favouriteEventTitles.filter(func(item) = not (item.account_id == me and item.title == title));
+    #Ok;
+  };
+
+  // ---- Saved locations (per-caller addresses for AddressAutocomplete) ----
+  public query ({ caller }) func list_saved_locations() : async [Types.SavedLocation] {
+    auth(caller);
+    let me = callerAccountId(caller);
+    savedLocations.filter(func(item) = item.account_id == me);
+  };
+
+  public shared ({ caller }) func save_location(label : Text, address : Text, lat : Float, lng : Float) : async { #Ok : Types.SavedLocation; #Err : Text } {
+    auth(caller);
+    if (not valid(label) or address == "" or address.size() > 256) return #Err("Invalid location");
+    let me = callerAccountId(caller);
+    let value : Types.SavedLocation = {
+      id = "loc-" # me # "-" # Nat.toText(savedLocations.size());
+      account_id = me; label; address; lat; lng; created_at_ms = nowMs();
+    };
+    savedLocations := savedLocations.concat([value]);
+    #Ok(value);
+  };
+
+  public shared ({ caller }) func delete_saved_location(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    let me = callerAccountId(caller);
+    switch (savedLocations.find(func(item) = item.id == id and item.account_id == me)) {
+      case null { #Err("Saved location not found") };
+      case (?_) { savedLocations := savedLocations.filter(func(item) = item.id != id); #Ok };
+    };
+  };
+
+  // ---- Training default RSVP (per caller + club + team + optional child) ----
+  // Applied by the UI when listing/creating new training events; child_id =
+  // null is the caller's own default (not RSVPing on behalf of a child).
+  public query ({ caller }) func get_training_default(club_id : Text, team_id : Text, child_id : ?Text) : async { #Ok : ?Text; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id)) return #Err("Invalid training default lookup");
+    let me = callerAccountId(caller);
+    switch (trainingDefaults.find(func(item) = item.account_id == me and item.club_id == club_id and item.team_id == team_id and item.child_id == child_id)) {
+      case null { #Ok(null) };
+      case (?item) { #Ok(?item.default_rsvp) };
+    };
+  };
+
+  public shared ({ caller }) func set_training_default(club_id : Text, team_id : Text, child_id : ?Text, default_rsvp : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not validRsvpStatus(default_rsvp)) return #Err("Invalid training default");
+    let me = callerAccountId(caller);
+    let value : Types.TrainingDefault = { account_id = me; club_id; team_id; child_id; default_rsvp; updated_at_ms = nowMs() };
+    trainingDefaults := trainingDefaults.filter(func(item) = not (item.account_id == me and item.club_id == club_id and item.team_id == team_id and item.child_id == child_id));
+    trainingDefaults := trainingDefaults.concat([value]);
+    #Ok;
   };
 
   // ---- (1) Soft delete: event + series (cascades occurrences) ----

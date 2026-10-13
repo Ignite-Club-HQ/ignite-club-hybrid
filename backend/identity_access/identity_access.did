@@ -54,9 +54,18 @@ type PrivacyConsent = record {
 };
 type Profile = record {
   account_id : text;
+  // Millisecond timestamp of when the caller dismissed the one-shot club
+  // switcher coach-mark, so the dismissal follows the account across
+  // devices. `#[serde(default)]` keeps older profiles decodable as
+  // `None` (never dismissed).
+  club_switcher_hint_seen_at : opt nat64;
   avatar_ref : opt text;
   updated_at_ns : nat64;
   display_name : text;
+  // UI theme preference ("light" or "dark"); `#[serde(default)]` keeps
+  // profiles stored before this field existed decodable as `None`
+  // (caller falls back to the local DOM/localStorage theme).
+  theme_preference : opt text;
 };
 // One row of a `search_profiles` result: the profile plus the account's
 // first principal (needed by callers to grant roles).
@@ -71,9 +80,10 @@ type Result_1 = variant { Ok : Access; Err : text };
 type Result_10 = variant { Ok : opt TermsAcceptance; Err : text };
 type Result_11 = variant { Ok : vec RoleGrant; Err : text };
 type Result_12 = variant { Ok : Entitlement; Err : text };
-type Result_13 = variant { Ok : vec ProfileSearchResult; Err : text };
-type Result_14 = variant { Ok : PrivacyConsent; Err : text };
-type Result_15 = variant { Ok : TermsAcceptance; Err : text };
+type Result_13 = variant { Ok : nat64; Err : text };
+type Result_14 = variant { Ok : vec ProfileSearchResult; Err : text };
+type Result_15 = variant { Ok : PrivacyConsent; Err : text };
+type Result_16 = variant { Ok : TermsAcceptance; Err : text };
 type Result_2 = variant { Ok; Err : text };
 type Result_3 = variant { Ok : LinkChallenge; Err : text };
 type Result_4 = variant { Ok : ExternalSiteBinding; Err : text };
@@ -82,7 +92,6 @@ type Result_6 = variant { Ok : State; Err : text };
 type Result_7 = variant { Ok : vec ExternalSiteBinding; Err : text };
 type Result_8 = variant { Ok : vec Entitlement; Err : text };
 type Result_9 = variant { Ok : Profile; Err : text };
-type Result_rekey = variant { Ok : nat64; Err : text };
 type RoleGrant = record {
   account_id : text;
   club : opt text;
@@ -102,6 +111,8 @@ type State = record {
   // governor calls `set_attestation_secret`; redemption is rejected while
   // empty.
   attestation_secret : blob;
+  // Empty on schema-5+ slim blobs (accounts live in their own stable map);
+  // `#[serde(default)]` keeps those decodable through the legacy shape.
   accounts : vec Account;
   governor : principal;
   exclusions : vec Exclusion;
@@ -128,7 +139,6 @@ type TermsAcceptance = record {
   accepted_at_ms : nat64;
 };
 service : (Init) -> {
-  cycles_balance : () -> (nat) query;
   accept_link : (nat64) -> (Result);
   access : (opt text, opt text, opt text) -> (Result_1) query;
   access_scoped : (opt text, opt text, opt text, opt text) -> (Result_1) query;
@@ -139,6 +149,8 @@ service : (Init) -> {
   begin_link : (principal) -> (Result_3);
   bind_external_site : (text, text, text) -> (Result_4);
   check_field_access : (text, text) -> (Result_5) query;
+  // Public: remaining cycles (shown in admin settings).
+  cycles_balance : () -> (nat) query;
   erase_account : (text) -> (Result_2);
   export_state : () -> (Result_6) query;
   get_external_bindings : (text) -> (Result_7) query;
@@ -177,9 +189,16 @@ service : (Init) -> {
   // replay the signature because it is bound to the principal that produced
   // it (changing the principal changes the signed message).
   redeem_entitlement : (text, text, nat64, text, text) -> (Result_12);
-  // Governor-only: moves one user's sign-in ID to a new one (dry run first).
-  rekey_principal : (principal, principal, bool) -> (Result_rekey);
   register_account : () -> (Result);
+  // Governor-only: moves one user's sign-in ID (`old`) to a new one (`new`).
+  // Everything here except entitlements and link challenges is keyed by
+  // account_id, so the move links `new` to the old account (same account_id,
+  // so profile, roles, families, consents and terms follow) and unlinks
+  // `old`. A bare account auto-created for `new` at sign-in is removed first;
+  // any real data on it (profile, roles, ...) refuses the move. Returns the
+  // number of records changed (or that would change when `dry_run`).
+  // Any NEW stored principal / principal-text field must be added here.
+  rekey_principal : (principal, principal, bool) -> (Result_13);
   // Governor-only: revokes a verifier principal.
   remove_verifier : (principal) -> (Result_2);
   revoke : (principal, nat64) -> (Result);
@@ -189,11 +208,15 @@ service : (Init) -> {
   // matches; each result carries the account's first principal so the caller
   // can grant roles without a second lookup. Profiles without an account or
   // with a blank name are skipped.
-  search_profiles : (text, nat16) -> (Result_13) query;
+  search_profiles : (text, nat16) -> (Result_14) query;
   // Governor-only: sets (or rotates) the shared HMAC secret used to verify
   // `redeem_entitlement` attestations. Must match the secret held by the
   // session-free IAP verification endpoint (`APPLE_ATTESTATION_HMAC_SECRET`).
   set_attestation_secret : (blob) -> (Result_2);
+  // Records that the caller has dismissed the club switcher coach-mark, so
+  // it stays dismissed across devices. Creates a blank profile entry if the
+  // caller has never called `set_profile`.
+  set_club_switcher_hint_seen : () -> (Result_9);
   // Governor- or verifier-only: records a Pro entitlement for an arbitrary
   // principal. Used by a trusted server-side writer; client-submitted IAP
   // receipts instead go through `redeem_entitlement` below.
@@ -201,7 +224,7 @@ service : (Init) -> {
   set_exclusion : (text, text, opt text) -> (Result_2);
   set_exclusion_scoped : (text, opt text, text, opt text) -> (Result_2);
   set_family : (text, text) -> (Result_2);
-  set_privacy_consent : (text, text, bool) -> (Result_14);
+  set_privacy_consent : (text, text, bool) -> (Result_15);
   // Sets (or replaces) the caller's profile. The account must already exist —
   // sign-in provisioning calls register_account first.
   set_profile : (text, opt text) -> (Result_9);
@@ -209,6 +232,10 @@ service : (Init) -> {
   // version. Monotonic per-account: a version lower than (or equal to) the
   // caller's currently recorded version is rejected, so a stale client can
   // never roll the recorded acceptance backwards.
-  set_terms_acceptance : (nat32) -> (Result_15);
+  set_terms_acceptance : (nat32) -> (Result_16);
+  // Sets (or clears) the caller's UI theme preference, so it follows the
+  // account across devices. Creates a blank profile entry if the caller has
+  // never called `set_profile`.
+  set_theme_preference : (opt text) -> (Result_9);
   whoami : () -> (Result) query;
 }

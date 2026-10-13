@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,7 +30,7 @@ import { recordPointsHistory } from "@/lib/pointsHistory";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { awardLivePoints, subjectForChild, subjectForUser } from "@/live/features/points";
 import { fanOutLiveNotifications } from "@/live/features/notifications";
-import { getLiveEventChild } from "@/live/features/events";
+import { getLiveEventChild, getLiveGameResult, saveLiveGameResult } from "@/live/features/events";
 import { resolveLivePiiTextBatch } from "@/live/features/vault";
 
 interface PlayerOfMatchSelectorProps {
@@ -241,22 +240,49 @@ export default function PlayerOfMatchSelector({
       const rewardToUse = activePomReward;
       const pointsToAward = rewardToUse?.points_required || 0;
 
-      // Insert player of match record. NEEDS-CANISTER: the player_of_match
-      // record has no canister shape — under ICP the record write is skipped
-      // while points + notifications still flow through the routed canister
-      // paths below.
-      if (resolveAuthBackend() !== "icp") {
-        const { error: pomError } = await supabase.from("player_of_match").insert({
-          event_id: eventId,
-          user_id: userId || null,
-          child_id: childId || null,
-          awarded_by: user!.id,
-          points_awarded: pointsToAward > 0,
-          points: pointsToAward,
-        } as any);
+      // Record the award. Supabase keeps a dedicated `player_of_match` row;
+      // ICP has no such record shape, so the MVP fields on events_domain's
+      // `game_results` row double as the player-of-match record — re-saved
+      // on top of whatever game data already exists for this event so the
+      // score/stats aren't clobbered.
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error: pomError } = await supabase.from("player_of_match").insert({
+            event_id: eventId,
+            user_id: userId || null,
+            child_id: childId || null,
+            awarded_by: user!.id,
+            points_awarded: pointsToAward > 0,
+            points: pointsToAward,
+          } as any);
 
-        if (pomError) throw pomError;
-      }
+          if (pomError) throw pomError;
+        },
+        icp: async (ctx) => {
+          const existing = await getLiveGameResult(ctx, eventId);
+          const prior = existing.length > 0 ? (existing[0] as any) : null;
+          const mvpPlayerId = userId ? `user:${userId}` : childId ? `child:${childId}` : null;
+          const mvpPlayerName = userId
+            ? profileFallbacks.get(userId)?.display_name ?? "Player"
+            : childId
+              ? childNameFallbacks.get(childId) ?? "Player"
+              : null;
+
+          await saveLiveGameResult(ctx, {
+            teamId: teamId ?? `club-${clubId}`,
+            eventId,
+            sport: prior?.sport ?? "soccer",
+            homeLabel: prior?.home_label ?? "Home",
+            awayLabel: prior?.away_label ?? "Away",
+            homeScore: Number(prior?.home_score ?? 0),
+            awayScore: Number(prior?.away_score ?? 0),
+            periodScoresJson: prior?.period_scores_json ?? "[]",
+            playerStatsJson: prior?.player_stats_json ?? "[]",
+            mvpPlayerId,
+            mvpPlayerName,
+          });
+        },
+      });
 
       // Only award points if there's a reward configured
       if (pointsToAward > 0) {
@@ -511,15 +537,37 @@ export default function PlayerOfMatchSelector({
 
       const pointsToDeduct = Number((playerOfMatch as any).points) || 0;
 
-      // Delete the POM row FIRST so a points-side failure can't leave the
+      // Clear the POM record FIRST so a points-side failure can't leave the
       // award visible while points are already deducted (which previously
       // caused "Failed to remove" loops + double-deductions on retry).
-      const { error: deleteError } = await supabase
-        .from("player_of_match")
-        .delete()
-        .eq("id", playerOfMatch.id);
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error: deleteError } = await supabase
+            .from("player_of_match")
+            .delete()
+            .eq("id", playerOfMatch.id);
 
-      if (deleteError) throw deleteError;
+          if (deleteError) throw deleteError;
+        },
+        icp: async (ctx) => {
+          const existing = await getLiveGameResult(ctx, eventId);
+          const prior = existing.length > 0 ? (existing[0] as any) : null;
+          if (!prior) return;
+          await saveLiveGameResult(ctx, {
+            teamId: teamId ?? `club-${clubId}`,
+            eventId,
+            sport: prior.sport,
+            homeLabel: prior.home_label,
+            awayLabel: prior.away_label,
+            homeScore: Number(prior.home_score ?? 0),
+            awayScore: Number(prior.away_score ?? 0),
+            periodScoresJson: prior.period_scores_json,
+            playerStatsJson: prior.player_stats_json,
+            mvpPlayerId: null,
+            mvpPlayerName: null,
+          });
+        },
+      });
 
       // Best-effort points deduction + history. Failures here are logged
       // but don't roll back the removal (the award is already gone in UI).

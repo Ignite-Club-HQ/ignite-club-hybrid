@@ -12,7 +12,6 @@ import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { resolveLiveProAccess } from "@/live/features/proAccess";
-import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabRewards } from "@/lab/fixtureDataLayer";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
