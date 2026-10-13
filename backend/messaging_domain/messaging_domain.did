@@ -49,6 +49,7 @@ type State =
    clubDmSettings: vec ClubDmSettings;
    clubMemberships: vec ClubMembership;
    competitionAdmins: vec CompetitionAdmin;
+   contentReports: vec ContentReport;
    conversations: vec Conversation;
    dmAttachmentsDisabled: vec principal;
    dmLinks: vec DmLink;
@@ -386,6 +387,11 @@ type Main =
        Err: text;
        Ok: vec ClubDmSettings;
      }) query;
+   list_content_reports: (status: opt text) ->
+    (variant {
+       Err: text;
+       Ok: vec ContentReport;
+     }) query;
    list_deleted_groups: () ->
     (variant {
        Err: text;
@@ -465,7 +471,7 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -519,7 +525,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -543,11 +549,16 @@ type Main =
                                                      Err: text;
                                                      Ok;
                                                    });
+   resolve_content_report: (id: text, status: text) ->
+    (variant {
+       Err: text;
+       Ok: ContentReport;
+     });
    restore_group: (conversation_id: text) -> (variant {
                                                 Err: text;
                                                 Ok;
                                               });
-   search_messages: (conversation_id: text, needle: text, limit: nat) ->
+   search_messages: (conversation_id: text, needle: text, limit: nat16) ->
     (variant {
        Err: text;
        Ok: vec Message;
@@ -636,6 +647,12 @@ type Main =
                                                     Err: text;
                                                     Ok;
                                                   });
+   submit_content_report: (subject_kind: text, subject_id: text,
+    conversation_id: opt text, reason: text, details: opt text) ->
+    (variant {
+       Err: text;
+       Ok: ContentReport;
+     });
    toggle_reaction: (message_id: text, emoji: text) ->
     (variant {
        Err: text;
@@ -788,6 +805,18 @@ type Conversation =
    next_sequence: nat64;
    participants: vec principal;
    team_id: opt text;
+ };
+type ContentReport = 
+ record {
+   conversation_id: opt text;
+   created_at_ms: nat64;
+   details: opt text;
+   id: text;
+   reason: text;
+   reporter: principal;
+   status: text;
+   subject_id: text;
+   subject_kind: text;
  };
 type CompetitionAdmin = 
  record {
