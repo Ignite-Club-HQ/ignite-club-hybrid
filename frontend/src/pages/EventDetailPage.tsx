@@ -859,7 +859,14 @@ export default function EventDetailPage() {
         if (!timer) return null;
         const state = icpTimerToServerTimer(timer as never);
         if (!state.half_started_at || state.is_game_finished) return null;
-        return { id: id!, is_active: true, pitch_state: null, timer_state: state as unknown as Json };
+        // Pitch positions come from the coach's on-chain active-game sync.
+        let pitchState: Json = null;
+        try {
+          const { getLiveActiveGame } = await import("@/live/features/events");
+          const game = (await getLiveActiveGame(ctx, event!.team_id!))[0];
+          if (game?.pitch_state_json) pitchState = JSON.parse(game.pitch_state_json) as Json;
+        } catch { /* timer-only view */ }
+        return { id: id!, is_active: true, pitch_state: pitchState, timer_state: state as unknown as Json };
       },
     }),
     enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
