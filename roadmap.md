@@ -1,3 +1,20 @@
+## Move everything except payments on-chain (2026-10-13)
+- [ ] Scheduled messages: manage page + photo attachments on ICP
+- [ ] Club weekly schedule broadcasts on ICP
+- [ ] Delete group chat on ICP
+- [ ] Team creation requests on ICP
+- [ ] Home team/league access requests on ICP (currently silent no-op)
+- [ ] Publish chat photo to gallery on ICP
+- [ ] Monogram logo generator on ICP
+- [ ] Player list export on ICP
+- [ ] Fixture import on ICP
+- [ ] Short invite links on ICP
+- [ ] Export data / delete account on ICP
+- [ ] Chat search (DM, club-admin, broadcast) on ICP
+- [ ] Admin pages: update reminders, backups, realtime health, AI catch-up, AI model test, video guides
+- [ ] Verify + move: vault permanent delete, role request approval, passkey settings, Drive import, legal re-acceptance
+- [ ] Redeploy changed canisters + frontend (user-run workflows)
+
 ## ICP chat device files
 - [x] Replace silent device-file no-op with encrypted upload, vault registration, and visible progress/error feedback.
 - [ ] Confirm on Paul's phone — requires updated Android app and device access.
