@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+it("submits non-admin team requests through requestLiveTeamCreation on ICP", () => {
+    expect(source).toContain("requestLiveTeamCreation(");
+  });
+
 
 const source = readFileSync(resolve(process.cwd(), "src/pages/CreateTeamPage.tsx"), "utf8");
 

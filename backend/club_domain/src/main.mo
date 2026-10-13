@@ -92,6 +92,8 @@ persistent actor class Main(governorInit : Principal) {
   var teamInvites : [Types.TeamInvite];
   var teamInviteLinks : [Types.TeamInviteLink];
   var pendingInvites : [Types.PendingInvite];
+  // (code, invite_id) — short share-link codes, lazily created, stable once minted.
+  var inviteShortCodes : [(Text, Text)];
   var teamCreationRequests : [Types.TeamCreationRequest];
   var teamPlayerPositions : [Types.TeamPlayerPosition];
   var teamCaptains : [Types.TeamCaptain];
@@ -1828,6 +1830,31 @@ persistent actor class Main(governorInit : Principal) {
   public query ({ caller }) func list_pending_invites_by_club(club_id : Text) : async { #Ok : [Types.PendingInvite]; #Err : Text } {
     if (not isAdmin(caller, club_id)) return #Err("Club admin required");
     #Ok(pendingInvites.filter(func(i) = i.club_id == club_id))
+  };
+
+  // Short invite links: an 8-char hex code resolving to a PendingInvite id,
+  // so share links can be short (e.g. example.com/i/AB12CD34) instead of
+  // embedding the full invite id. Idempotent per invite_id.
+  public shared ({ caller }) func create_invite_short_code(invite_id : Text) : async { #Ok : Text; #Err : Text } {
+    auth(caller);
+    switch (pendingInvites.find(func(i) = i.id == invite_id)) {
+      case null { return #Err("Invite not found") };
+      case (?invite) { if (not isAdmin(caller, invite.club_id)) return #Err("Club admin required") };
+    };
+    switch (inviteShortCodes.find(func(e) = e.1 == invite_id)) {
+      case (?existing) { return #Ok(existing.0) };
+      case null {};
+    };
+    let code = Text.toUppercase(await randomHex(4));
+    inviteShortCodes := inviteShortCodes.concat([(code, invite_id)]);
+    #Ok(code)
+  };
+
+  public query func resolve_invite_short_code(code : Text) : async { #Ok : Text; #Err : Text } {
+    switch (inviteShortCodes.find(func(e) = e.0 == code)) {
+      case (?entry) { #Ok(entry.1) };
+      case null { #Err("Short code not found") };
+    }
   };
 
   // Invite preview for the join page: the invite id itself is the bearer

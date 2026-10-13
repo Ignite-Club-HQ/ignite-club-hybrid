@@ -51,7 +51,7 @@ import {
 } from "@/live/features/proAccess";
 import { getLiveClubPointsSettings } from "@/live/features/points";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
+import { listMyLiveMiniLeagues, listLiveMiniLeaguesByClub, listLivePublicMiniLeagues } from "@/live/features/miniLeagues";
 import {
   fetchLiveHomeChildren,
   fetchLiveHomeFeed,
