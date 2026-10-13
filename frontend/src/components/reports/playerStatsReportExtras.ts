@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveTeam } from "@/live/features/club";
+import {
+  listLiveEvents,
+  getLiveGameResult,
+  getLivePlayerStatsReport,
+} from "@/live/features/events";
 
 /**
  * Match-level context + per-player honours for the Player Stats report.
@@ -133,7 +140,16 @@ function normalisePeriods(raw: unknown): Array<{ home: number; away: number }> {
     .filter((p) => Number.isFinite(p.home) && Number.isFinite(p.away));
 }
 
-export async function fetchReportExtras(
+/**
+ * ICP counterpart of fetchReportExtras. Honours (captain/vice/MVP/goalkeeper
+ * counts) come straight from events_domain.get_player_stats_report, which
+ * aggregates GameResult/MatchCaptainAssignment/MatchGoalkeeperAssignment over
+ * the requested date range — a canister-native version of the Supabase
+ * match_captains/player_of_match/match_goalkeepers joins above. Per-match
+ * score detail is reconstructed from list_events + get_game_result since
+ * there is no canister-side join for that.
+ */
+async function fetchReportExtrasIcp(
   teamId: string,
   opts: { eventId?: string; dateRange?: { from: Date; to: Date } },
 ): Promise<ReportExtras> {
@@ -144,9 +160,120 @@ export async function fetchReportExtras(
     totals: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 },
   };
 
-  // NEEDS-CANISTER: player-stats reporting has no canister yet — an II
-  // principal has no Supabase session, so return the empty report shape.
-  if (resolveAuthBackend() === "icp") return empty;
+  return withFeatureBackend("events", {
+    supabase: async () => empty,
+    icp: async (ctx) => {
+      const teamRows = await getLiveTeam(ctx, teamId);
+      const team = teamRows[0];
+      if (!team) return empty;
+
+      const allEvents = await listLiveEvents(ctx, null, teamId);
+      const games = (allEvents ?? []).filter((e: any) => e.event_type === "game" && !e.deleted);
+
+      let fromMs: number;
+      let toMs: number;
+      let scopedEvents = games;
+      if (opts.eventId) {
+        scopedEvents = games.filter((e: any) => e.id === opts.eventId);
+        if (scopedEvents.length === 0) return empty;
+        fromMs = Number(scopedEvents[0].starts_at_ms);
+        toMs = fromMs;
+      } else if (opts.dateRange) {
+        fromMs = opts.dateRange.from.getTime();
+        toMs = opts.dateRange.to.getTime();
+        scopedEvents = games.filter((e: any) => {
+          const ms = Number(e.starts_at_ms);
+          return ms >= fromMs && ms <= toMs;
+        });
+      } else {
+        return empty;
+      }
+      if (scopedEvents.length === 0) return empty;
+
+      const statRows = await getLivePlayerStatsReport(ctx, team.club_id, teamId, fromMs, toMs);
+      const honours: Record<PlayerKey, PlayerHonours> = {};
+      (statRows ?? []).forEach((row: any) => {
+        const key = playerKey(row.ref_kind === "account" ? row.ref_id : null, row.ref_kind === "child" ? row.ref_id : null);
+        if (!key) return;
+        honours[key] = {
+          captain: Number(row.captain_count) || 0,
+          pom: Number(row.mvp_count) || 0,
+          gkMatches: Number(row.goalkeeper_count) || 0,
+          gkAppointed: Number(row.goalkeeper_count) || 0,
+          gkSeconds: 0,
+        };
+      });
+
+      const matches: ReportMatch[] = [];
+      const scorersByPlayer: Record<string, ScorerAgg> = {};
+      for (const event of scopedEvents as any[]) {
+        const result = await getLiveGameResult(ctx, event.id);
+        const gr = result && result.length ? result[0] : null;
+        const homeScore = gr ? Number(gr.home_score) : null;
+        const awayScore = gr ? Number(gr.away_score) : null;
+        const outcome =
+          homeScore == null || awayScore == null
+            ? null
+            : homeScore > awayScore
+              ? "W"
+              : homeScore < awayScore
+                ? "L"
+                : "D";
+        matches.push({
+          eventId: event.id,
+          title: event.title,
+          eventDate: new Date(Number(event.starts_at_ms)).toISOString(),
+          opponent: event.opponent?.[0] ?? gr?.away_label ?? null,
+          homeLabel: (gr?.home_label as string | undefined) ?? null,
+          awayLabel: (gr?.away_label as string | undefined) ?? null,
+          homeScore,
+          awayScore,
+          result: outcome as ReportMatch["result"],
+          periodScores: [],
+          captainNames: [],
+          pomNames: gr?.mvp_player_name?.[0] ? [gr.mvp_player_name[0]] : [],
+          goalkeeperNames: [],
+          playerGoals: 0,
+          scorers: [],
+        });
+      }
+
+      const scored = matches.filter((m) => m.result !== null);
+      const totals = {
+        played: scored.length,
+        won: scored.filter((m) => m.result === "W").length,
+        drawn: scored.filter((m) => m.result === "D").length,
+        lost: scored.filter((m) => m.result === "L").length,
+        goalsFor: scored.reduce((sum, m) => sum + (m.homeScore ?? 0), 0),
+        goalsAgainst: scored.reduce((sum, m) => sum + (m.awayScore ?? 0), 0),
+        goalDifference: 0,
+      };
+      totals.goalDifference = totals.goalsFor - totals.goalsAgainst;
+
+      return { matches, honours, scorersByPlayer, totals };
+    },
+  });
+}
+
+export async function fetchReportExtras(
+  teamId: string,
+  opts: { eventId?: string; dateRange?: { from: Date; to: Date } },
+): Promise<ReportExtras> {
+  if (resolveAuthBackend() === "icp") return fetchReportExtrasIcp(teamId, opts);
+  return fetchReportExtrasSupabase(teamId, opts);
+}
+
+async function fetchReportExtrasSupabase(
+  teamId: string,
+  opts: { eventId?: string; dateRange?: { from: Date; to: Date } },
+): Promise<ReportExtras> {
+  const empty: ReportExtras = {
+    matches: [],
+    honours: {},
+    scorersByPlayer: {},
+    totals: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 },
+  };
+
 
   let eventsQuery = supabase
     .from("events")

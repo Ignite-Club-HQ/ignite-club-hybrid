@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Player } from "@/components/pitch/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveActiveGame } from "@/live/features/events";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 
@@ -49,12 +51,29 @@ export function useRemoteFillInSync(teamId: string | null | undefined, enabled: 
       setRemoteFillIns([]);
       return;
     }
-    // NEEDS-CANISTER: live pitch-board fill-in sync has no canister
-    // counterpart (active_games is a Supabase-only realtime feature). No-op
-    // for II users rather than firing Supabase.
+    // ICP: active_games has no realtime subscription on the canister, so poll
+    // getLiveActiveGame every 5s instead of a Supabase realtime channel.
     if (resolveAuthBackend() === "icp") {
-      setRemoteFillIns([]);
-      return;
+      let cancelled = false;
+      const poll = async () => {
+        try {
+          const row = await withFeatureBackend("events", {
+            supabase: async () => null,
+            icp: (ctx) => getLiveActiveGame(ctx, teamId),
+          });
+          if (cancelled) return;
+          const r = Array.isArray(row) ? row[0] : row;
+          applyRow(r as { pitch_state: unknown; timer_state?: unknown; updated_at?: string | null } | null | undefined);
+        } catch (err) {
+          console.warn("[RemoteFillInSync] ICP poll error", err);
+        }
+      };
+      poll();
+      const interval = setInterval(poll, 5000);
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+      };
     }
 
     let cancelled = false;

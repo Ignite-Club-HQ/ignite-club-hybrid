@@ -60,7 +60,7 @@ export function DesktopMessagesRail() {
       if (!identity) return [];
       const ctx = { identity, target: getActiveIcpTarget() };
       const conversations = await recentLiveConversations(ctx, identity.getPrincipal(), 12);
-      return (conversations as Array<{ conversation_id: string; kind: string; title: string; last_message_preview: string; last_activity_ms: bigint }>).map((c) => ({
+      return (conversations as unknown as Array<{ conversation_id: string; kind: string; title: string; last_message_preview: string; last_activity_ms: bigint }>).map((c) => ({
         id: c.conversation_id,
         kind: (c.kind === "dm" ? "dm" : c.kind === "team" ? "team" : c.kind === "club" ? "club" : "group") as RailItem["kind"],
         title: c.title || "Chat",

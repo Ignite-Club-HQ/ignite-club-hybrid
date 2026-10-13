@@ -17,9 +17,14 @@ import { useClubTheme } from "@/hooks/useClubTheme";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeams } from "@/live/features/club";
+import { listLiveEvents } from "@/live/features/events";
 
-// NEEDS-CANISTER: player-stats reporting has no canister shape yet — in ICP
-// mode every query on this page is disabled so no II principal reaches Supabase.
+// Player-stats reporting is backed canister-side by events_domain's
+// get_player_stats_report (see playerStatsReportExtras.ts); team/game
+// listing below now dispatches through withFeatureBackend instead of
+// disabling ICP sessions outright.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import PlayerStatsReportView from "@/components/reports/PlayerStatsReportView";
 
@@ -72,7 +77,29 @@ function SupabasePlayerStatsReportPage() {
   // Fetch teams the user can report on, strictly scoped to the active club filter.
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ["admin-coach-teams", user?.id, activeClubFilter],
-    queryFn: async () => {
+    queryFn: () => withFeatureBackend("events", {
+      icp: async (ctx) => {
+        // ICP club membership is pinned to a single active club; canister
+        // role-gating happens server-side on the report query itself, so
+        // every team in the active club is listed here.
+        if (!activeClubFilter) return [] as Team[];
+        const rows = await listLiveTeams(ctx, activeClubFilter);
+        const allTeams: Team[] = (rows ?? []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          logo_url: t.logo_url ?? null,
+          club_id: t.club_id,
+          clubs: null,
+        }));
+        allTeams.sort((a, b) => a.name.localeCompare(b.name));
+        return lockedTeamId ? allTeams.filter((t) => t.id === lockedTeamId) : allTeams;
+      },
+      supabase: () => fetchSupabaseTeams(),
+    }),
+    enabled: !!user,
+  });
+
+  async function fetchSupabaseTeams(): Promise<Team[]> {
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("team_id, club_id, role")
@@ -134,9 +161,7 @@ function SupabasePlayerStatsReportPage() {
         return allTeams.filter((t) => t.id === lockedTeamId);
       }
       return allTeams;
-    },
-    enabled: !!user && !isIcpPageMode(),
-  });
+  }
 
   // If the active club changes, drop a selection that no longer belongs to it.
   useEffect(() => {

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveTeamRoleGrants } from "@/live/features/membership";
+import { fanOutLiveNotifications } from "@/live/features/notifications";
 import {
   enabledRoleListFromFlags,
   loadPitchNotifyFlags,
@@ -46,11 +49,41 @@ export function usePitchBoardEventLink({
 
       // Only send email notifications when linking (not unlinking) and event is different
       if (!eventId || eventId === previousLinkedEventId || !userId) return;
-      // NEEDS-CANISTER: this notification fan-out reads event_group_duties /
-      // user_roles / duties and calls the send_pitch_board_notification_email_rpc
-      // Supabase RPC — none of which have an events_domain equivalent, and II
-      // sessions have no Supabase session to authenticate the RPC with anyway.
-      if (resolveAuthBackend() === "icp") return;
+      // ICP: no email RPC equivalent, but in-app notifications can go out via
+      // the notification fan-out wrapper using team role grants as the
+      // recipient list (event-group mini-league duties have no canister
+      // mapping yet, so only regular team boards notify here).
+      if (resolveAuthBackend() === "icp") {
+        if (!teamId.startsWith("event-group-")) {
+          try {
+            await withFeatureBackend("membership", {
+              supabase: async () => {},
+              icp: async (ctx) => {
+                const grants = await listLiveTeamRoleGrants(ctx, teamId);
+                const ids = new Set<string>();
+                (grants as Array<{ role: string; account_id: string }>).forEach((grant) => {
+                  if ((grant.role === "coach" || grant.role === "team_admin") && grant.account_id && grant.account_id !== userId) {
+                    ids.add(grant.account_id);
+                  }
+                });
+                const recipientUserIds = Array.from(ids);
+                if (recipientUserIds.length === 0) return;
+                await fanOutLiveNotifications(ctx, {
+                  userIds: recipientUserIds,
+                  clubId: teamId,
+                  kind: "game_linked",
+                  body: `The pitch board has been linked to a game`,
+                  idempotencyKeyPrefix: `pitch-link-${teamId}-${eventId}`,
+                  relatedId: eventId,
+                });
+              },
+            });
+          } catch (error) {
+            console.error("[PitchBoard] Error sending ICP game linked notifications:", error);
+          }
+        }
+        return;
+      }
 
       try {
         const isEventGroup = teamId.startsWith("event-group-");

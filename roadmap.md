@@ -124,10 +124,9 @@
 - [ ] User: top up, run blockchain update, run move workflow (dry run then confirm), sign out/in on laptop
 
 ## Close remaining ICP gaps except payments (2026-10-13)
-- [ ] Seasons (archive/publish/notify/compare/rollover/draft builder/EOI/orphans)
-- [ ] Team requests (non-admin) + role request approve/deny
-- [ ] Invites: edit/move pending, reconcile, second-parent, email dedupe, positions, team folders, team roles
-- [ ] Pitch board + Player of Match + event views + saved locations + favourite titles + training defaults + mini-league RSVPs
-- [ ] Stats: attendance, player stats, team leaderboards/rank, leaderboard names, points rules, Pro check on rewards
-- [ ] Chat: read receipts, desktop rail, badges, AI catch-up, vault auto-sync, queued replay, notification routing
-- [ ] Misc: content reports, theme pref, switcher hint, free-usage meter, admin delete account, associations, class enrolment, PlayHQ, club theme fields
+- [x] Seasons, team/role requests, invite edit/move, folders, classes, associations, club theme, free usage
+- [x] Events: POM, captains, goalkeepers, player stats, event views, favourites, mini-league RSVPs, pitch board save/unlink
+- [x] Chat: read receipts, AI catch-up, queued replay, content reports, desktop rail
+- [x] Stats/rewards: team leaderboards, real Pro check, points switch; account: theme, switcher hint, admin delete; vault delete + auto-copy
+- [ ] Leftovers still marked in code: saved places, live pitch board view/alerts, per-club badges, notification chat routing/club switch, gallery publish from chat, early-RSVP points, team role notifications, positions jersey/multi, second-parent invites, guardian fields, invite email dedupe, home invite lookup, team carousel fields, rewards manager icon/team overrides, PlayHQ
+- [ ] User: redeploy club, events, messaging, identity canisters + frontend canister + Android build

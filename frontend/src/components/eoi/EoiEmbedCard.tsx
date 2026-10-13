@@ -46,7 +46,7 @@ export function EoiEmbedCard({ clubId, seasonId, seasonSlug, clubSlug }: EoiEmbe
         // SeasonEoiConfigCard (set_season_eoi_config), under a
         // `webhookToken` key rather than a dedicated column.
         icp: async (ctx) => {
-          const raw = (await getLiveSeasonEoiConfig(ctx, seasonId)) as string | null;
+          const rawOpt = (await getLiveSeasonEoiConfig(ctx, seasonId)) as unknown; const raw = (Array.isArray(rawOpt) ? (rawOpt[0] ?? null) : rawOpt) as string | null;
           let config: Record<string, unknown> = {};
           if (raw) {
             try {
