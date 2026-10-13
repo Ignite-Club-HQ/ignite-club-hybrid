@@ -714,6 +714,8 @@ export function AppHeader() {
             is_read: n.read,
             related_id: Array.isArray(n.related_id) ? (n.related_id[0] ?? null) : null,
             club_id: Array.isArray(n.club_id) ? (n.club_id[0] ?? null) : (n.club_id ?? null),
+            club: Array.isArray(n.club) ? (n.club[0] ?? null) : (n.club ?? null),
+            idempotency_key: n.idempotency_key ?? null,
           }))
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 40);
@@ -887,7 +889,23 @@ export function AppHeader() {
           // Silent — the read state will reconcile on next inbox refetch.
         });
       }
-      navigate("/notifications");
+      try {
+        const { getIcpNotificationRoute } = await import("@/lib/icpNotificationRoute");
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        const to = await withFeatureBackend("notifications", {
+          supabase: async () => "/notifications",
+          icp: (ctx) =>
+            getIcpNotificationRoute(ctx, {
+              kind: notification.type,
+              relatedId: notification.related_id ?? null,
+              club: (notification as any).club ?? null,
+              messageId: (notification as any).idempotency_key ?? null,
+            }),
+        });
+        navigateWithFreshJump(to);
+      } catch {
+        navigate("/notifications");
+      }
       return;
     }
     try {

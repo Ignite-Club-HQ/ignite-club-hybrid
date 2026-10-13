@@ -1756,3 +1756,14 @@ export async function listLiveOnlinePresence(
   );
   return rows.map(([accountId, lastSeenMs]) => ({ accountId, lastSeenMs }));
 }
+
+export async function getLiveAccessibilityPrefs(ctx: FeatureBackendContext): Promise<string | null> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  const result = await unwrapCandid(actor.get_my_accessibility_prefs(), "Get accessibility prefs");
+  return result.length ? result[0] : null;
+}
+
+export async function saveLiveAccessibilityPrefs(ctx: FeatureBackendContext, prefsJson: string): Promise<void> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  await unwrapCandid(actor.set_accessibility_prefs(prefsJson), "Save accessibility prefs");
+}
