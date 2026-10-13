@@ -2127,3 +2127,10 @@ export async function getLiveRsvpCreatedAt(
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return await actor.get_rsvp_created_at(eventId, accountId);
 }
+
+/** App admins: run the on-chain post-game photo prompt sweep now (it also runs every 15 minutes). */
+export async function runLivePhotoPrompts(ctx: FeatureBackendContext): Promise<number> {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const sent = await unwrapCandid(actor.run_photo_prompts(), "Run photo prompts");
+  return Number(sent);
+}

@@ -92,6 +92,20 @@ export async function getIcpNotificationRoute(
     case "rsvp_update":
     case "rsvp_updated":
       return `/events/${relatedId}`;
+    case "photo_prompt_reminder": {
+      // related_id is the game event id — open that team's gallery with the
+      // upload sheet, matching the Supabase tap handler.
+      try {
+        const { listLiveEvents } = await import("@/live/features/events");
+        const events = (await listLiveEvents(ctx)) as Array<{ id?: string; team_id?: [] | [string] }>;
+        const ev = (events ?? []).find((e) => e?.id === relatedId);
+        const team = ev && Array.isArray(ev.team_id) && ev.team_id.length > 0 ? ev.team_id[0] : null;
+        if (team) return `/media?team=${team}&event=${relatedId}&upload=1`;
+      } catch {
+        // fall through to the plain upload sheet
+      }
+      return "/media?upload=1";
+    }
     case "club_news":
       return `/news/${relatedId}`;
     case "club_join":

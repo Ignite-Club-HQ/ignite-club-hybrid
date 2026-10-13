@@ -7,8 +7,8 @@ Audit date: 2026-10-14. Rule: in ICP mode everything except payments runs on-cha
 - Email delivery, phone push delivery (queued on-chain, delivered by worker)
 - PlayHQ import/stats, Google Drive linking, address search/maps
 - Password / forgot-password / passkey settings
-- Post-game photo prompts worker
-- Competition-admin search by email (paste II principal instead)
+- ~~Post-game photo prompts worker~~ — moved on-chain (events_domain sweep, migration 20261020_000000; needs events_domain redeploy)
+- Competition-admin search: ICP now searches by name (on-chain profiles); email search stays off-chain because emails are never stored readable on-chain
 
 ## Open gaps (2026-10-14 deep audit)
 | # | Area | Location | Status |

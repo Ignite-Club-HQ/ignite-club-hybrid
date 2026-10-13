@@ -87,6 +87,9 @@ persistent actor class Main(governorInit : Principal) {
   // Live match timer, one row per event (events_domain extras, migration
   // 20261016_000000). See Types.EventTimer.
   var eventTimers : [Types.EventTimer];
+  // Game event ids that already received the post-game photo prompt
+  // (migration 20261020_000000); swept by _reminderTimer.
+  var photoPromptsSent : [Text];
 
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
@@ -2296,7 +2299,54 @@ persistent actor class Main(governorInit : Principal) {
     autoReminders := autoReminders.map(func(r) { if (r.event_id == event_id) { { r with sent = true } } else r });
   };
 
-  transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders() });
+  // ---- Post-game photo prompts ----
+  // Games that ended 2–6 h ago get one "add your photos" alert to
+  // members who RSVP'd going (or the whole team if nobody RSVP'd). The 6 h
+  // window stops a first deploy from back-filling old games.
+  func sweepPhotoPrompts() : async () {
+    let nq = switch (notificationQueueCanister) { case null return; case (?id) id };
+    let now = nowMs();
+    let minAge : Nat64 = 2 * 3_600_000;
+    let maxAge : Nat64 = 6 * 3_600_000;
+    var sentThisRun = 0;
+    for (event in events.values()) {
+      if (sentThisRun < 20 and event.event_type == "game" and not event.deleted and not event.cancelled and event.team_id != null and event.ends_at_ms + minAge <= now and event.ends_at_ms + maxAge > now and photoPromptsSent.find(func(id) = id == event.id) == null) {
+        photoPromptsSent := photoPromptsSent.concat([event.id]);
+        sentThisRun += 1;
+        var recipients : [Text] = [];
+        for (r in rsvps.values()) {
+          if (r.event_id == event.id and r.state == "going" and recipients.size() < 500 and recipients.find(func(x) = x == r.account_id) == null) recipients := recipients.concat([r.account_id]);
+        };
+        if (recipients.size() == 0) {
+          for (grant in roles.values()) {
+            if (grant.club_id == event.club_id and grant.team_id == event.team_id and recipients.size() < 500) {
+              let a = grant.user.toText();
+              if (recipients.find(func(x) = x == a) == null) recipients := recipients.concat([a]);
+            };
+          };
+        };
+        if (recipients.size() > 0) {
+          let queue : actor {
+            fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text };
+          } = actor (Principal.toText(nq));
+          try {
+            ignore await queue.fan_out(recipients, event.club_id, "photo_prompt_reminder", "Got photos from \"" # event.title # "\"? Add them to the team gallery.", "photo-prompt-" # event.id, ?event.id);
+          } catch (_) {};
+        };
+      };
+    };
+    if (photoPromptsSent.size() > 5000) photoPromptsSent := photoPromptsSent.sliceToArray(photoPromptsSent.size() - 5000, photoPromptsSent.size());
+  };
+
+  /// App admins: run the photo-prompt sweep now (also runs every 15 min).
+  public shared ({ caller }) func run_photo_prompts() : async { #Ok : Nat; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor required");
+    let before = photoPromptsSent.size();
+    await sweepPhotoPrompts();
+    #Ok(if (photoPromptsSent.size() >= before) photoPromptsSent.size() - before else 0)
+  };
+
+  transient let _reminderTimer = Timer.recurringTimer<system>(#seconds(900), func() : async () { await sweepAutoReminders(); await sweepPhotoPrompts() });
 
   public query ({ caller }) func export_state() : async { #Ok : { schema : Nat32; governor : Principal; roles : [Types.RoleGrant]; events : [Types.Event]; rsvps : [Types.Rsvp]; attendance : [Types.Attendance]; lineups : [Types.LineupEntry]; lineupSnapshots : [Types.LineupSnapshot]; duties : [Types.Duty]; roster : [Types.RosterEntry]; recurrences : [Types.Recurrence]; series : [Types.EventSeries]; eventAttendance : [Types.EventAttendance]; eventGuests : [Types.EventGuest]; children : [Types.Child]; childGuardians : [Types.ChildGuardian]; coachNotes : [Types.CoachNote]; eventViews : [Types.EventView]; reminderLogs : [Types.ReminderLog]; pushReachability : [Types.PushReachability]; eventGroups : [Types.EventGroup]; eventGroupPlayers : [Types.EventGroupPlayer]; eventGroupDuties : [Types.EventGroupDuty]; teamTrainingPauses : [Types.TeamTrainingPause]; openDuties : [Types.OpenDuty]; miniLeagueRsvps : [Types.MiniLeagueRsvp]; childTeamAssignments : [Types.ChildTeamAssignment] }; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor required");
