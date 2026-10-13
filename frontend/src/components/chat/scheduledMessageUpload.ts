@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { compressImage as compressImageFile } from "@/lib/imageCompression";
 import { mimeToExtension } from "@/lib/binaryUtils";
 import {
@@ -7,7 +8,6 @@ import {
   appendDimensionsToUrl,
   setCachedImageAspectRatio,
 } from "@/lib/chatImageAspectCache";
-
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -17,9 +17,16 @@ export interface ScheduledUploadTarget {
 }
 
 /**
- * Upload an image attachment for a scheduled message into the chat-attachments
- * bucket. Mirrors the path layout used by ChatImageInput so the worker can
- * reuse the resulting public URL when the message is delivered.
+ * Upload an image attachment for a scheduled message.
+ *
+ * Supabase accounts upload into the chat-attachments bucket, mirroring the
+ * path layout used by ChatImageInput so the worker can reuse the resulting
+ * public URL when the message is delivered.
+ *
+ * Internet Identity accounts upload encrypted bytes to the media_blob_store
+ * canister (same IBE-encrypt + pii_access_control registration flow as
+ * ChatImageInput's uploadBlob) — there is no Supabase session to authorize a
+ * Storage upload, and the bytes must never leave the device unencrypted.
  */
 export async function uploadScheduledImage(
   file: File,
@@ -28,19 +35,9 @@ export async function uploadScheduledImage(
   if (!file.type.startsWith("image/")) {
     throw new Error("Please select an image file");
   }
-  // Scheduled-message image uploads go to Supabase Storage; there is no
-  // canister/media counterpart for scheduled-send attachments yet.
-  // NEEDS-CANISTER: media_metadata (or messaging_domain) scheduled-attachment upload path.
-  if (isFeatureRoutedToIcp("messaging")) {
-    throw new Error("Scheduled message attachments aren't available yet on the Internet Identity messaging backend.");
-  }
-
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
     throw new Error("Image must be less than 10MB");
   }
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
 
   let toUpload: File = file;
   let contentType = file.type || "image/jpeg";
@@ -54,22 +51,49 @@ export async function uploadScheduledImage(
 
   const ext = mimeToExtension(contentType);
   const ts = Date.now();
-  let path: string;
-  if (target.clubId && target.teamId) {
-    path = `clubs/${target.clubId}/teams/${target.teamId}/${user.id}/scheduled-${ts}.${ext}`;
-  } else if (target.clubId) {
-    path = `clubs/${target.clubId}/${user.id}/scheduled-${ts}.${ext}`;
+
+  let publicUrl: string;
+
+  if (isFeatureRoutedToIcp("messaging")) {
+    const rand = Math.random().toString(36).slice(2, 8);
+    let icpPath: string;
+    if (target.clubId && target.teamId) {
+      icpPath = `clubs/${target.clubId}/teams/${target.teamId}/scheduled/${ts}-${rand}.${ext}`;
+    } else if (target.clubId) {
+      icpPath = `clubs/${target.clubId}/scheduled/${ts}-${rand}.${ext}`;
+    } else {
+      icpPath = `general/scheduled/${ts}-${rand}.${ext}`;
+    }
+    const blobUpload = await tryUploadMediaToBlobStore({
+      storagePath: icpPath,
+      file: toUpload,
+      mime: contentType,
+    });
+    if (!blobUpload) {
+      throw new Error("Media uploads are not available yet for Internet Identity accounts");
+    }
+    publicUrl = blobUpload.url;
   } else {
-    path = `general/${user.id}/scheduled-${ts}.${ext}`;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    let path: string;
+    if (target.clubId && target.teamId) {
+      path = `clubs/${target.clubId}/teams/${target.teamId}/${user.id}/scheduled-${ts}.${ext}`;
+    } else if (target.clubId) {
+      path = `clubs/${target.clubId}/${user.id}/scheduled-${ts}.${ext}`;
+    } else {
+      path = `general/${user.id}/scheduled-${ts}.${ext}`;
+    }
+
+    const { error } = await supabase.storage
+      .from("chat-attachments")
+      .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" });
+    if (error) throw new Error(error.message || "Upload failed");
+
+    const { data } = supabase.storage.from("chat-attachments").getPublicUrl(path);
+    publicUrl = data.publicUrl;
   }
-
-  const { error } = await supabase.storage
-    .from("chat-attachments")
-    .upload(path, toUpload, { contentType, upsert: false, cacheControl: "31536000" });
-  if (error) throw new Error(error.message || "Upload failed");
-
-  const { data } = supabase.storage.from("chat-attachments").getPublicUrl(path);
-  let publicUrl = data.publicUrl;
 
   try {
     const dims = await measureImageDimensions(toUpload);
@@ -83,4 +107,3 @@ export async function uploadScheduledImage(
 
   return publicUrl;
 }
-

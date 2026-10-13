@@ -728,6 +728,21 @@ export type LiveTeamCreationRequest = Extract<
   { Ok: unknown[] }
 >["Ok"][number];
 
+/** Non-admin self-service team creation request (approved/rejected by a club admin). */
+export async function requestLiveTeamCreation(
+  ctx: FeatureBackendContext,
+  clubId: string,
+  name: string,
+  division?: string | null,
+  ageGroup?: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.request_team_creation(clubId, name, candidOpt(division), candidOpt(ageGroup)),
+    "Request team creation",
+  );
+}
+
 export async function listLiveTeamCreationRequests(ctx: FeatureBackendContext, clubId: string) {
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_team_creation_requests(clubId), "List team creation requests");

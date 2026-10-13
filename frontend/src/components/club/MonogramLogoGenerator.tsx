@@ -92,36 +92,35 @@ export function MonogramLogoGenerator({
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Fail closed for ICP-routed clubs: the logo upload and clubs.logo_url
-      // write below are Supabase-only and this generator is currently unused
-      // in production — if it is ever wired up, route it through the blob
-      // store + club_domain instead.
-      const { resolveAuthBackend } = await import("@/live/authBackendMode");
-      if (resolveAuthBackend() === "icp") {
-        throw new Error("Monogram logos are not available for Internet Identity clubs yet.");
-      }
       drawToCanvas();
       const blob = await new Promise<Blob | null>((resolve) =>
         canvasRef.current!.toBlob((b) => resolve(b), "image/png", 0.95),
       );
       if (!blob) throw new Error("Could not render monogram");
 
-      const fileName = `${clubId}/monogram-${Date.now()}.png`;
-      const { error: upErr } = await supabase.storage
-        .from("club-logos")
-        .upload(fileName, blob, { upsert: true, contentType: "image/png" });
-      if (upErr) throw upErr;
+      const { resolveAuthBackend } = await import("@/live/authBackendMode");
+      let logoUrl: string;
+      if (resolveAuthBackend() === "icp") {
+        const { saveIcpMonogramLogo } = await import("./monogramLogoIcpUpload");
+        logoUrl = await saveIcpMonogramLogo(clubId, blob);
+      } else {
+        const fileName = `${clubId}/monogram-${Date.now()}.png`;
+        const { error: upErr } = await supabase.storage
+          .from("club-logos")
+          .upload(fileName, blob, { upsert: true, contentType: "image/png" });
+        if (upErr) throw upErr;
 
-      const { data: urlData } = supabase.storage
-        .from("club-logos")
-        .getPublicUrl(fileName);
-      const logoUrl = urlData.publicUrl;
+        const { data: urlData } = supabase.storage
+          .from("club-logos")
+          .getPublicUrl(fileName);
+        logoUrl = urlData.publicUrl;
 
-      const { error: updErr } = await supabase
-        .from("clubs")
-        .update({ logo_url: logoUrl })
-        .eq("id", clubId);
-      if (updErr) throw updErr;
+        const { error: updErr } = await supabase
+          .from("clubs")
+          .update({ logo_url: logoUrl })
+          .eq("id", clubId);
+        if (updErr) throw updErr;
+      }
 
       toast.success("Monogram logo saved", {
         description: "You can replace it with a real logo anytime.",

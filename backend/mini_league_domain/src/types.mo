@@ -25,6 +25,14 @@ module {
     updated_at_ms : Nat64;
   };
 
+  // Public directory summary: no PII (no created_by/admin lists), only
+  // fields needed to show a "pick a mini-league" list on the home page.
+  public type PublicMiniLeagueSummary = {
+    id : Text;
+    name : Text;
+    club_id : Text;
+  };
+
   // Mirrors public.mini_league_sessions (14 cols).
   public type MiniLeagueSession = {
     id : Text;

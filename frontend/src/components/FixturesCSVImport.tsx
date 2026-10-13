@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { FixturePreviewEditor } from "@/components/FixturePreviewEditor";
 import { DriblImportMapper, isDriblFormat, parseDriblRows } from "@/components/DriblImportMapper";
 import { validateFixtureImportAuthorization } from "@/lib/fixtureImportAuthorization";
+import { buildLiveFixtureEventInput } from "@/lib/fixtureLiveEventMapping";
 import ExcelJS from "exceljs";
 
 interface Team {
@@ -629,11 +630,25 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         };
       });
 
-      const { error: insertError } = await supabase
-        .from('events')
-        .insert(eventsToInsert);
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      const { createLiveEvent } = await import("@/live/features/events");
 
-      if (insertError) throw insertError;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error: insertError } = await supabase
+            .from('events')
+            .insert(eventsToInsert);
+          if (insertError) throw insertError;
+        },
+        // ICP: create one events_domain event per fixture row, mapping the
+        // same fields the Supabase insert above writes (title/opponent,
+        // start/end window, location, team).
+        icp: async (ctx) => {
+          for (const fixture of fixturesToInsert) {
+            await createLiveEvent(ctx, buildLiveFixtureEventInput(fixture, clubId, teamId));
+          }
+        },
+      });
 
       toast({
         title: "Fixtures imported",
