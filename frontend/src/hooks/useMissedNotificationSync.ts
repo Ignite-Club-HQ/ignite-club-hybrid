@@ -1,6 +1,5 @@
 import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { resolveAuthBackend } from "@/live/authBackendMode";
 import { navigateApp } from "@/lib/appNavigator";
 
 const LAST_SYNC_KEY = "notifications-last-sync";
@@ -139,7 +138,6 @@ export function useMissedNotificationSync(userId: string | undefined) {
    */
   const syncMissedNotifications = useCallback(async (forceShow = false) => {
     if (!userId) return;
-    if (resolveAuthBackend() === "icp") return;
     if (isShowing.current) return;
 
     try {
@@ -161,14 +159,43 @@ export function useMissedNotificationSync(userId: string | undefined) {
       const twoHoursAgo = new Date();
       twoHoursAgo.setHours(twoHoursAgo.getHours() - 2);
 
-      const { data: unreadNotifications, error } = await supabase
-        .from("notifications")
-        .select("id, message, type, created_at")
-        .eq("user_id", userId)
-        .eq("is_read", false)
-        .gte("created_at", twoHoursAgo.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(10);
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      const { data: unreadNotifications, error } = await withFeatureBackend<{
+        data: MissedNotification[] | null;
+        error: unknown;
+      }>("notifications", {
+        supabase: async () =>
+          supabase
+            .from("notifications")
+            .select("id, message, type, created_at")
+            .eq("user_id", userId)
+            .eq("is_read", false)
+            .gte("created_at", twoHoursAgo.toISOString())
+            .order("created_at", { ascending: false })
+            .limit(10),
+        icp: async (ctx) => {
+          const { listLiveInbox } = await import("@/live/features/notifications");
+          const inbox = (await listLiveInbox(ctx, userId, null, 100)) as Array<{
+            id: string;
+            kind: string;
+            body: string;
+            read: boolean;
+            created_at_ms: bigint;
+          }>;
+          const cutoff = twoHoursAgo.getTime();
+          const data = inbox
+            .filter((n) => !n.read && Number(n.created_at_ms) >= cutoff)
+            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))
+            .slice(0, 10)
+            .map((n) => ({
+              id: n.id,
+              message: n.body,
+              type: n.kind,
+              created_at: new Date(Number(n.created_at_ms)).toISOString(),
+            }));
+          return { data, error: null };
+        },
+      });
 
       if (error) {
         console.error("[NotificationSync] Error fetching notifications:", error);
@@ -247,7 +274,6 @@ export function useMissedNotificationSync(userId: string | undefined) {
   // Sync on mount and when app becomes visible
   useEffect(() => {
     if (!userId) return;
-    if (resolveAuthBackend() === "icp") return;
 
     // Sync after a short delay on mount
     const mountTimer = setTimeout(() => syncMissedNotifications(false), 3000);

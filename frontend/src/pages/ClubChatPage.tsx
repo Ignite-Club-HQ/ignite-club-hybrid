@@ -337,6 +337,10 @@ export default function ClubChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && clubId) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
+        requestAnimationFrame(() => handleJumpToMessage(mid));
+        return;
+      }
       try {
         const ctx = await fetchMessagesAround({
           table: "club_messages",

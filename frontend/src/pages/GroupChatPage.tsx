@@ -1,3 +1,4 @@
+import { resolveAuthBackend } from "@/live/authBackendMode";
 import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, Suspense } from "react";
 import { resolveChatUploadUrl } from "@/lib/pendingChatUploads";
 import { useChatLoadingLatch } from "@/hooks/useChatLoadingLatch";
@@ -335,7 +336,7 @@ export default function GroupChatPage() {
     setSearchQuery("");
     setSearchOpen(false);
     if (target?.created_at && groupId) {
-      if (useIcpLab) {
+      if (useIcpLab || resolveAuthBackend() === "icp") {
         requestAnimationFrame(() => handleJumpToMessage(mid));
         return;
       }
