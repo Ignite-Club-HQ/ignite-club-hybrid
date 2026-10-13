@@ -356,3 +356,135 @@ export function shouldAcceptServerSnapshot(
   return { accept: false, reason: "older-event" };
 }
 
+
+// ---- Internet Identity (events_domain) timer -------------------------------
+// The canister keys timers by event id; the pitch board is team-scoped, so we
+// resolve the team's game event closest to now (within 12h) and cache it.
+const ICP_EVENT_WINDOW_MS = 12 * 60 * 60 * 1000;
+const icpEventCache = new Map<string, { eventId: string | null; at: number }>();
+
+async function icpFeatureCtx() {
+  const { withFeatureBackend } = await import("@/live/featureRouter");
+  return withFeatureBackend;
+}
+
+async function resolveIcpTimerEventId(teamId: string | null): Promise<string | null> {
+  if (!teamId) return null;
+  const cached = icpEventCache.get(teamId);
+  if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.eventId;
+  const withFeatureBackend = await icpFeatureCtx();
+  const eventId = await withFeatureBackend("events", {
+    supabase: async () => null,
+    icp: async (ctx) => {
+      const { listLiveEvents } = await import("@/live/features/events");
+      const rows = (await listLiveEvents(ctx, null, teamId)) as unknown as Array<Record<string, unknown>>;
+      const now = Date.now();
+      let best: { id: string; d: number } | null = null;
+      for (const r of rows) {
+        const type = String(r.event_type ?? r.type ?? "");
+        if (type && type !== "game") continue;
+        const startRaw = r.starts_at_ms ?? r.start_ms;
+        const start = typeof startRaw === "bigint" ? Number(startRaw) : Number(startRaw);
+        if (!Number.isFinite(start)) continue;
+        const d = Math.abs(start - now);
+        if (d > ICP_EVENT_WINDOW_MS) continue;
+        if (!best || d < best.d) best = { id: String(r.id), d };
+      }
+      return best?.id ?? null;
+    },
+  }).catch(() => null);
+  icpEventCache.set(teamId, { eventId, at: Date.now() });
+  return eventId;
+}
+
+type IcpEventTimer = {
+  current_half: number;
+  minutes_per_half: number;
+  half_started_at_ms?: bigint | [] | [bigint];
+  half_paused_at_ms?: bigint | [] | [bigint];
+  half_ended_at_ms?: bigint | [] | [bigint];
+  accumulated_pause_ms: bigint;
+  is_running: boolean;
+  is_game_finished: boolean;
+  last_event_at_ms: bigint;
+};
+
+function optMs(v: unknown): string | null {
+  const raw = Array.isArray(v) ? v[0] : v;
+  if (raw === undefined || raw === null) return null;
+  return new Date(Number(raw)).toISOString();
+}
+
+export function icpTimerToServerTimer(t: IcpEventTimer): ServerTimer {
+  return {
+    schema_version: 2,
+    current_half: t.current_half === 2 ? 2 : 1,
+    minutes_per_half: Number(t.minutes_per_half),
+    half_started_at: optMs(t.half_started_at_ms),
+    half_paused_at: optMs(t.half_paused_at_ms),
+    accumulated_pause_ms: Number(t.accumulated_pause_ms),
+    is_running: t.is_running,
+    is_game_finished: t.is_game_finished,
+    half_ended_at: optMs(t.half_ended_at_ms),
+    last_event_at: new Date(Number(t.last_event_at_ms)).toISOString(),
+  };
+}
+
+async function sendIcpTimerEvent(
+  teamId: string | null,
+  event: TimerEvent,
+  minutesPerHalf?: number,
+  payload?: Record<string, unknown>,
+): Promise<TimerEventResponse> {
+  const eventId = await resolveIcpTimerEventId(teamId);
+  if (!eventId) throw new Error("server-timer-not-applicable");
+  const withFeatureBackend = await icpFeatureCtx();
+  const adjust = payload && typeof payload.delta_ms === "number" ? payload.delta_ms
+    : payload && typeof payload.delta_seconds === "number" ? payload.delta_seconds * 1000 : null;
+  const timer = await withFeatureBackend("events", {
+    supabase: async () => null,
+    icp: async (ctx) => {
+      const { setLiveEventTimer } = await import("@/live/features/events");
+      return setLiveEventTimer(ctx, eventId, event, minutesPerHalf ?? null, adjust);
+    },
+  });
+  if (!timer) throw new Error("server-timer-not-applicable");
+  const state = icpTimerToServerTimer(timer as unknown as IcpEventTimer);
+  const nowMs = Date.now();
+  return {
+    ok: true,
+    row_id: eventId,
+    timer_state: state,
+    elapsed_seconds: deriveElapsedSeconds(state, nowMs),
+    server_now: new Date(nowMs).toISOString(),
+  };
+}
+
+async function readIcpTimer(teamId: string | null, empty: TimerReadResponse): Promise<TimerReadResponse> {
+  try {
+    const eventId = await resolveIcpTimerEventId(teamId);
+    if (!eventId) return empty;
+    const withFeatureBackend = await icpFeatureCtx();
+    const raw = await withFeatureBackend("events", {
+      supabase: async () => null,
+      icp: async (ctx) => {
+        const { getLiveEventTimer } = await import("@/live/features/events");
+        return getLiveEventTimer(ctx, eventId);
+      },
+    });
+    const timer = (Array.isArray(raw) ? raw[0] : raw) as IcpEventTimer | null | undefined;
+    if (!timer) return empty;
+    const state = icpTimerToServerTimer(timer);
+    const nowMs = Date.now();
+    return {
+      found: true,
+      row_id: eventId,
+      team_id: teamId,
+      timer_state: state,
+      elapsed_seconds: deriveElapsedSeconds(state, nowMs),
+      server_now: new Date(nowMs).toISOString(),
+    };
+  } catch {
+    return empty;
+  }
+}
