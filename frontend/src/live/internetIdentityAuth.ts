@@ -233,11 +233,36 @@ async function startRedirectSignIn(target: IcpTargetConfig, returnTo?: string): 
   return new Promise<never>(() => undefined);
 }
 
+// registerAccount is idempotent canister-side, but it is a paid update call
+// (~1–2s on the sign-in critical path). Once it has succeeded for a principal
+// on a target, skip it on later sign-ins/resumes so returning members get in
+// as fast as a Supabase session resume.
+const PROVISIONED_KEY_PREFIX = "ignite_ii_provisioned_v1:";
+
+function provisionedKey(principal: string, target: IcpTargetConfig): string {
+  return `${PROVISIONED_KEY_PREFIX}${target.alias}:${principal}`;
+}
+
+function isAccountProvisioned(principal: string, target: IcpTargetConfig): boolean {
+  try {
+    return localStorage.getItem(provisionedKey(principal, target)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markAccountProvisioned(principal: string, target: IcpTargetConfig): void {
+  try {
+    localStorage.setItem(provisionedKey(principal, target), "1");
+  } catch { /* storage full/blocked: next sign-in just re-registers */ }
+}
+
 async function provisionInternetIdentityAccount(identity: Identity, principal: string, target: IcpTargetConfig): Promise<void> {
   if (accountProvisionerOverride) {
     await accountProvisionerOverride(identity, principal, target);
     return;
   }
+  if (isAccountProvisioned(principal, target)) return;
 
   const { connectLiveIdentityAccessClientWithIdentity, isLiveIdentityAccessConfigured } = await import("./identityAccess");
   if (!isLiveIdentityAccessConfigured(target)) {
@@ -251,6 +276,7 @@ async function provisionInternetIdentityAccount(identity: Identity, principal: s
   }
   const { client } = await connectLiveIdentityAccessClientWithIdentity(target, identity);
   await client.registerAccount();
+  markAccountProvisioned(principal, target);
 }
 
 let activeClient: InternetIdentityAuthClient | undefined;
