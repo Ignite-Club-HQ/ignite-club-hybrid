@@ -259,6 +259,11 @@ export interface Main {
     { 'Ok' : EventGuest } |
       { 'Err' : string }
   >,
+  'add_favourite_event_title' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'add_group_player' : ActorMethod<
     [string, string, [] | [string]],
     { 'Ok' : EventGroupPlayer } |
@@ -412,6 +417,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_saved_location' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_series' : ActorMethod<
     [string, bigint],
     { 'Ok' : number } |
@@ -541,6 +551,12 @@ export interface Main {
     { 'Ok' : { 'sent_at_ms' : [] | [bigint], 'recipients_count' : number } } |
       { 'Err' : string }
   >,
+  'get_rsvp_created_at' : ActorMethod<[string, string], [] | [bigint]>,
+  'get_training_default' : ActorMethod<
+    [string, string, [] | [string]],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
@@ -599,6 +615,7 @@ export interface Main {
     { 'Ok' : Array<Event> } |
       { 'Err' : string }
   >,
+  'list_favourite_event_titles' : ActorMethod<[], Array<string>>,
   'list_game_player_stats' : ActorMethod<
     [string],
     { 'Ok' : Array<GamePlayerStat> } |
@@ -644,6 +661,7 @@ export interface Main {
     { 'Ok' : Array<ReminderLog> } |
       { 'Err' : string }
   >,
+  'list_saved_locations' : ActorMethod<[], Array<SavedLocation>>,
   'list_series' : ActorMethod<
     [[] | [string], [] | [string]],
     Array<EventSeries>
@@ -733,6 +751,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_favourite_event_title' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'remove_group_duty' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -791,6 +814,11 @@ export interface Main {
       Array<LineupPlayer>,
     ],
     { 'Ok' : LineupSnapshot } |
+      { 'Err' : string }
+  >,
+  'save_location' : ActorMethod<
+    [string, string, number, number],
+    { 'Ok' : SavedLocation } |
       { 'Err' : string }
   >,
   'save_pitch_board_settings' : ActorMethod<
@@ -905,6 +933,11 @@ export interface Main {
   'set_series_cancelled' : ActorMethod<
     [string, boolean, bigint],
     { 'Ok' : number } |
+      { 'Err' : string }
+  >,
+  'set_training_default' : ActorMethod<
+    [string, string, [] | [string], string],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'soft_delete_series' : ActorMethod<
@@ -1051,6 +1084,15 @@ export interface Rsvp {
 export type RsvpSubject = { 'account' : string } |
   { 'mini_league_player' : string };
 export interface RsvpWithChild { 'child' : [] | [Child], 'rsvp' : Rsvp }
+export interface SavedLocation {
+  'id' : string,
+  'lat' : number,
+  'lng' : number,
+  'account_id' : string,
+  'location_label' : string,
+  'created_at_ms' : bigint,
+  'address' : string,
+}
 export interface TeamTrainingPause {
   'id' : string,
   'team_id' : string,

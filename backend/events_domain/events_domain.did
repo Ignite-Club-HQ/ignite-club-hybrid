@@ -9,6 +9,16 @@ type TeamTrainingPause =
    starts_at_ms: nat64;
    team_id: text;
  };
+type SavedLocation = 
+ record {
+   account_id: text;
+   address: text;
+   created_at_ms: nat64;
+   id: text;
+   lat: float64;
+   lng: float64;
+   location_label: text;
+ };
 type RsvpWithChild = 
  record {
    child: opt Child;
@@ -124,6 +134,10 @@ type Main =
        Err: text;
        Ok: EventGuest;
      });
+   add_favourite_event_title: (title: text) -> (variant {
+                                                  Err: text;
+                                                  Ok;
+                                                });
    add_group_player: (group_id: text, account_id: text, team_letter:
     opt text) -> (variant {
                     Err: text;
@@ -250,6 +264,10 @@ type Main =
                                               Err: text;
                                               Ok;
                                             });
+   delete_saved_location: (id: text) -> (variant {
+                                           Err: text;
+                                           Ok;
+                                         });
    delete_series: (id: text, from_ms: nat64) ->
     (variant {
        Err: text;
@@ -379,6 +397,13 @@ type Main =
              sent_at_ms: opt nat64;
            };
      }) query;
+   get_rsvp_created_at: (event_id: text, account_id: text) ->
+    (opt nat64) query;
+   get_training_default: (club_id: text, team_id: text, child_id:
+    opt text) -> (variant {
+                    Err: text;
+                    Ok: opt text;
+                  }) query;
    grant_role: ("principal": principal, role: text, club_id: text, team_id:
     opt text) -> (variant {
                     Err: text;
@@ -436,6 +461,7 @@ type Main =
        Err: text;
        Ok: vec Event;
      }) query;
+   list_favourite_event_titles: () -> (vec text) query;
    list_game_player_stats: (event_id: text) ->
     (variant {
        Err: text;
@@ -481,6 +507,7 @@ type Main =
        Err: text;
        Ok: vec ReminderLog;
      }) query;
+   list_saved_locations: () -> (vec SavedLocation) query;
    list_series: (club_id: opt text, team_id: opt text) ->
     (vec EventSeries) query;
    list_series_occurrences: (series_id: text) ->
@@ -505,7 +532,7 @@ type Main =
        Err: text;
        Ok: vec EventAttendance;
      });
-   merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -538,7 +565,7 @@ type Main =
        Err: text;
        Ok: ReminderLog;
      });
-   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -562,6 +589,10 @@ type Main =
                                         Err: text;
                                         Ok;
                                       });
+   remove_favourite_event_title: (title: text) -> (variant {
+                                                     Err: text;
+                                                     Ok;
+                                                   });
    remove_group_duty: (group_id: text, duty: text) ->
     (variant {
        Err: text;
@@ -607,6 +638,11 @@ type Main =
                                      Err: text;
                                      Ok: LineupSnapshot;
                                    });
+   save_location: (location_label: text, address: text, lat: float64, lng:
+    float64) -> (variant {
+                   Err: text;
+                   Ok: SavedLocation;
+                 });
    save_pitch_board_settings: (team_id: text, rotation_speed: nat16,
     disable_position_swaps: bool, disable_batch_subs: bool,
     rotate_gk_at_halftime: bool, minutes_per_half: nat16, max_spread_minutes:
@@ -704,6 +740,11 @@ type Main =
                  Err: text;
                  Ok: nat32;
                });
+   set_training_default: (club_id: text, team_id: text, child_id: opt text,
+    default_rsvp: text) -> (variant {
+                              Err: text;
+                              Ok;
+                            });
    soft_delete_series: (id: text) -> (variant {
                                         Err: text;
                                         Ok: EventSeries;
