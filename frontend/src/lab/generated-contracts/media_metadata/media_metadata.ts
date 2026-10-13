@@ -138,7 +138,7 @@ export interface MainInterface {
     list_comments(asset_id: string): Promise<Array<Comment>>;
     list_gallery_chat_cards(club_id: string, team_id: string): Promise<Array<GalleryChatCard>>;
     list_reactions(asset_id: string): Promise<Array<Reaction>>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -152,7 +152,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {

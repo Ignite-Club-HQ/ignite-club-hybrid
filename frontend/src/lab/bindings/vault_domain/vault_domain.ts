@@ -220,7 +220,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {

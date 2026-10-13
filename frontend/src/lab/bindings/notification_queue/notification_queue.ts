@@ -168,7 +168,7 @@ export interface MainInterface {
     mark_failed(id: string, error: string): Promise<ScheduledResult>;
     mark_read(id: string): Promise<Result>;
     mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -185,7 +185,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {

@@ -112,7 +112,7 @@ export interface media_blob_storeInterface {
     get_usage(): Promise<Usage>;
     health(): Promise<Health>;
     http_request(request: HttpRequest): Promise<HttpResponse>;
-    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -120,7 +120,7 @@ export interface media_blob_storeInterface {
         err: string;
     }>;
     put_chunk(upload_id: string, index: number, data: Uint8Array): Promise<Result>;
-    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
