@@ -77,8 +77,13 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
   }
 
   const accept = (key: Ed25519KeyIdentityT, params: URLSearchParams): Identity => {
-    if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled.");
-    const chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
+    if (params.get("cancel") === "1") throw new Error("Sign-in was cancelled in the browser.");
+    let chain: DelegationChainT;
+    try {
+      chain = DelegationChain.fromJSON(fromB64url(params.get("d") ?? ""));
+    } catch (e) {
+      throw new Error(`Sign-in reply couldn't be read (${e instanceof Error ? e.message : "unknown"}). Please try again.`);
+    }
     if (!isDelegationValid(chain)) throw new Error("Sign-in reply has expired.");
     const id = DelegationIdentity.fromDelegation(key, chain);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ key: key.toJSON(), chain: chain.toJSON() }));
@@ -156,12 +161,13 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
           handles.forEach((h) => void h.remove());
           fn();
         };
+        let seen = "";
         const register = async () => {
         handles.push(await App.addListener("appUrlOpen", ({ url: back }) => {
           if (!isNativeIiCallback(back)) return;
           const params = readNativeIiReply(back);
           // Ignore unrelated/stale returns without cancelling this sign-in.
-          if (params.get("n") !== nonce) return;
+          if (params.get("n") !== nonce) { seen = "a reply for an older sign-in attempt"; return; }
           void Browser.close().catch(() => undefined);
           finish(() => {
             try {
@@ -177,7 +183,11 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
         handles.push(await Browser.addListener("browserFinished", () => {
           // Android closes the browser as it hands the reply to the app; the
           // reply can land a few seconds later on a busy phone.
-          setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 20000);
+          setTimeout(() => finish(() => reject(new Error(
+            seen
+              ? `Sign-in didn't finish: the app got ${seen}. Please try again.`
+              : "Sign-in didn't come back to the app. If the browser showed \"You're signed in\", tap Open Ignite there next time.",
+          ))), 20000);
         }));
         // Both return/cancellation listeners must exist before opening the browser.
         await Browser.open({ url, presentationStyle: "popover" });
