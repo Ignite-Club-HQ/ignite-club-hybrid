@@ -70,6 +70,43 @@ export function SeasonEoiConfigCard({ seasonId, clubName, season }: Props) {
     setAskPos(season.eoi_ask_position);
   }, [seasonId, season]);
 
+  // ICP: older saves only wrote the private blob. Re-publish the
+  // website-safe copy once per session so the public form works without
+  // the admin having to press Save again.
+  useEffect(() => {
+    if (!season.eoi_enabled || !season.eoi_slug) return;
+    const key = `eoi-public-sync:${seasonId}`;
+    try { if (sessionStorage.getItem(key)) return; } catch { /* ignore */ }
+    void withFeatureBackend("competitions", {
+      supabase: async () => undefined,
+      icp: async (ctx) => {
+        const configJson = JSON.stringify({
+          eoi_enabled: season.eoi_enabled,
+          eoi_slug: season.eoi_slug,
+          eoi_opens_at: season.eoi_opens_at,
+          eoi_closes_at: season.eoi_closes_at,
+          eoi_welcome_message: season.eoi_welcome_message,
+          eoi_thank_you_message: season.eoi_thank_you_message,
+          eoi_thank_you_redirect_url: season.eoi_thank_you_redirect_url,
+          eoi_require_dob: season.eoi_require_dob,
+          eoi_require_gender: season.eoi_require_gender,
+          eoi_ask_preferences: season.eoi_ask_preferences,
+          eoi_ask_availability: season.eoi_ask_availability,
+          eoi_ask_skill_level: season.eoi_ask_skill_level,
+          eoi_ask_position: season.eoi_ask_position,
+        });
+        const { connectLiveClubDomain } = await import("@/live/domains");
+        const { unwrapCandid } = await import("@/live/features/candid");
+        const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+        await unwrapCandid(
+          actor.set_season_public_eoi_config(seasonId, [season.eoi_slug!], configJson),
+          "Sync public form settings",
+        );
+        try { sessionStorage.setItem(key, "1"); } catch { /* ignore */ }
+      },
+    }).catch(() => undefined);
+  }, [seasonId, season]);
+
   const saveMut = useMutation({
     mutationFn: async () =>
       withFeatureBackend("competitions", {
