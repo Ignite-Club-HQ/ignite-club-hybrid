@@ -79,10 +79,13 @@ function SupabaseAssociationDetailPage() {
     enabled: !!id,
     queryFn: async () => {
       if (isIcpPageMode()) {
-        // club_domain has no parent-org/association link field yet — member
-        // clubs can't be enumerated on the canister, so this surfaces as
-        // "no clubs linked" rather than throwing.
-        return [];
+        const rows = await withFeatureBackend("membership", {
+          icp: async (ctx) => (await import("@/live/features/club")).listLiveAssociationClubs(ctx, id!),
+          supabase: async () => [],
+        });
+        return rows
+          .map((c) => ({ id: c.id, name: c.name, logo_url: c.logo_url?.[0] ?? null, city: null, kind: "full" }))
+          .sort((a, b) => a.name.localeCompare(b.name));
       }
       const { data } = await supabase
         .from("clubs")
@@ -227,9 +230,13 @@ function LinkClubForm({ associationId }: { associationId: string }) {
     enabled: open,
     queryFn: async () => {
       if (isIcpPageMode()) {
-        // club_domain has no parent-org/association link field yet, so
-        // unaffiliated-club search can't be powered from the canister.
-        return [];
+        const rows = await withFeatureBackend("membership", {
+          icp: async (ctx) => (await import("@/live/features/club")).listLiveUnaffiliatedClubs(ctx, search.trim()),
+          supabase: async () => [],
+        });
+        return rows
+          .map((c) => ({ id: c.id, name: c.name, city: null }))
+          .sort((a, b) => a.name.localeCompare(b.name));
       }
       let q = supabase
         .from("clubs")
@@ -246,12 +253,20 @@ function LinkClubForm({ associationId }: { associationId: string }) {
 
   const link = async () => {
     if (!clubId) return;
-    if (isIcpPageMode()) {
-      toast({ title: "Not available on ICP yet", description: "Linking clubs to an association isn't supported on the ICP canister yet." });
-      return;
-    }
     setSaving(true);
-    const { error } = await supabase.from("clubs").update({ parent_org_id: associationId }).eq("id", clubId);
+    let error: { message: string } | null = null;
+    if (isIcpPageMode()) {
+      try {
+        await withFeatureBackend("membership", {
+          icp: async (ctx) => (await import("@/live/features/club")).setLiveClubParentOrg(ctx, clubId, associationId),
+          supabase: async () => {},
+        });
+      } catch (e) {
+        error = { message: e instanceof Error ? e.message : "Unknown error" };
+      }
+    } else {
+      ({ error } = await supabase.from("clubs").update({ parent_org_id: associationId }).eq("id", clubId));
+    }
     setSaving(false);
     if (error) {
       toast({ title: "Could not link club", description: error.message, variant: "destructive" });
@@ -300,13 +315,21 @@ function UnlinkClubButton({ clubId, associationId }: { clubId: string; associati
   const qc = useQueryClient();
   const { toast } = useToast();
   const unlink = async () => {
-    if (isIcpPageMode()) {
-      toast({ title: "Not available on ICP yet", description: "Unlinking clubs from an association isn't supported on the ICP canister yet." });
-      return;
-    }
     const ok = window.confirm("Remove this club from the association?");
     if (!ok) return;
-    const { error } = await supabase.from("clubs").update({ parent_org_id: null }).eq("id", clubId);
+    let error: { message: string } | null = null;
+    if (isIcpPageMode()) {
+      try {
+        await withFeatureBackend("membership", {
+          icp: async (ctx) => (await import("@/live/features/club")).setLiveClubParentOrg(ctx, clubId, null),
+          supabase: async () => {},
+        });
+      } catch (e) {
+        error = { message: e instanceof Error ? e.message : "Unknown error" };
+      }
+    } else {
+      ({ error } = await supabase.from("clubs").update({ parent_org_id: null }).eq("id", clubId));
+    }
     if (error) {
       toast({ title: "Could not unlink", description: error.message, variant: "destructive" });
       return;
