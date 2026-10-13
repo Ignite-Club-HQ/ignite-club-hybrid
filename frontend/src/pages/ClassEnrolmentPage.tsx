@@ -65,7 +65,7 @@ function SupabaseClassEnrolmentPage() {
   const { data: club } = useQuery({
     queryKey: ["club", clubId],
     queryFn: async () => {
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("clubs")
@@ -89,7 +89,7 @@ function SupabaseClassEnrolmentPage() {
   const { data: terms = [], isLoading: termsLoading } = useQuery({
     queryKey: ["terms", clubId, "active"],
     queryFn: async () => {
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("terms")
@@ -125,7 +125,7 @@ function SupabaseClassEnrolmentPage() {
   const { data: classes = [], isLoading: classesLoading } = useQuery({
     queryKey: ["club-classes", clubId],
     queryFn: async () => {
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("teams")
@@ -149,19 +149,19 @@ function SupabaseClassEnrolmentPage() {
           }>;
         },
         icp: async (ctx) => {
-          const rows = await listLiveTeams(ctx, clubId!);
+          const rows: any[] = await listLiveTeams(ctx, clubId!);
           return rows
-            .filter((r) => !r.is_archived && r.class_day[0])
+            .filter((r) => !r.archived && r.class_day?.[0])
             .map((r) => ({
               id: r.id,
               name: r.name,
               class_day: r.class_day[0] || null,
-              class_time: r.class_time[0] || null,
-              class_duration_minutes: r.class_duration_minutes[0] ? Number(r.class_duration_minutes[0]) : null,
-              class_capacity: r.class_capacity[0] ? Number(r.class_capacity[0]) : null,
-              level_age: r.level_age[0] || null,
-              logo_url: r.logo_url[0] || null,
-              team_type: (r.team_type as TeamType) || "mixed",
+              class_time: r.class_time?.[0] || null,
+              class_duration_minutes: r.class_duration_minutes?.[0] ? Number(r.class_duration_minutes[0]) : null,
+              class_capacity: r.class_capacity?.[0] ? Number(r.class_capacity[0]) : null,
+              level_age: r.level_age?.[0] || null,
+              logo_url: r.logo_url?.[0] || null,
+              team_type: ((r.team_type?.[0] ?? r.team_type) as unknown as TeamType) || "mixed",
             }));
         },
       });
@@ -210,7 +210,7 @@ function SupabaseClassEnrolmentPage() {
     queryKey: ["class-enrolments-children", termId, user?.id, childIds],
     queryFn: async () => {
       if (!termId || childIds.length === 0) return [];
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("class_enrolments")
@@ -221,7 +221,7 @@ function SupabaseClassEnrolmentPage() {
           return data;
         },
         icp: async (ctx) => {
-          const rows = await listLiveClassEnrolments(ctx, clubId!, termId);
+          const rows: any[] = await listLiveClassEnrolments(ctx, clubId!, termId);
           return rows.filter(r => r.child_id[0] && childIds.includes(r.child_id[0])).map(r => ({
             id: r.id,
             team_id: r.class_id,
@@ -241,7 +241,7 @@ function SupabaseClassEnrolmentPage() {
     queryKey: ["class-enrolments-self", termId, user?.id],
     queryFn: async () => {
       if (!termId || !user) return [];
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("class_enrolments")
@@ -252,7 +252,7 @@ function SupabaseClassEnrolmentPage() {
           return data;
         },
         icp: async (ctx) => {
-          const rows = await listLiveClassEnrolments(ctx, clubId!, termId);
+          const rows: any[] = await listLiveClassEnrolments(ctx, clubId!, termId);
           return rows.filter(r => r.member_id === user.id).map(r => ({
             id: r.id,
             team_id: r.class_id,
@@ -278,7 +278,7 @@ function SupabaseClassEnrolmentPage() {
       const classIds = classes.map((c) => c.id);
       if (classIds.length === 0) return {};
 
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { data, error } = await supabase
             .from("class_enrolments")
@@ -295,7 +295,7 @@ function SupabaseClassEnrolmentPage() {
           return counts;
         },
         icp: async (ctx) => {
-          const rows = await listLiveClassEnrolments(ctx, clubId!, termId);
+          const rows: any[] = await listLiveClassEnrolments(ctx, clubId!, termId);
           const counts: Record<string, number> = {};
           rows.filter(r => r.status === "enrolled").forEach(r => {
             counts[r.class_id] = (counts[r.class_id] || 0) + 1;
@@ -312,7 +312,7 @@ function SupabaseClassEnrolmentPage() {
     mutationFn: async ({ childId, teamId }: { childId: string; teamId: string }) => {
       if (!termId) throw new Error("No term selected");
 
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const cls = classes.find((c) => c.id === teamId);
           const currentCount = enrolmentCounts[teamId] || 0;
@@ -376,7 +376,7 @@ function SupabaseClassEnrolmentPage() {
     mutationFn: async ({ teamId }: { teamId: string }) => {
       if (!termId || !user) throw new Error("No term selected or not logged in");
 
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const cls = classes.find((c) => c.id === teamId);
           const currentCount = enrolmentCounts[teamId] || 0;
@@ -437,7 +437,7 @@ function SupabaseClassEnrolmentPage() {
   // Withdraw mutation
   const withdrawMutation = useMutation({
     mutationFn: async (enrolmentId: string) => {
-      return withFeatureBackend("club", {
+      return withFeatureBackend("membership", {
         supabase: async () => {
           const { error } = await supabase
             .from("class_enrolments")

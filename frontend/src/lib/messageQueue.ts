@@ -89,11 +89,24 @@ async function sendQueuedMessage(message: QueuedMessage): Promise<boolean> {
     // of writing into a database ICP users' data never lands in. The
     // message stays queued and is dropped after MAX_RETRIES like any other
     // send failure.
-    // NEEDS-CANISTER: generic queued-message replay (idempotent send for
-    // team/club/group/broadcast/dm/club_admin types) on messaging_domain.
+    // ICP: replay via sendLiveMessage against the conversation id captured
+    // at queue time (targetId already IS the conversation id canister-side
+    // for every one of these types).
     if (isFeatureRoutedToIcp("messaging")) {
-      console.warn("[messageQueue] messaging is routed to ICP; skipping Supabase replay for", message.type);
-      return false;
+      try {
+        const { getCurrentInternetIdentityConfirmed } = await import("@/live/internetIdentityAuth");
+        const { getActiveIcpTarget } = await import("@/live/targetRegistry");
+        const { sendLiveMessage } = await import("@/live/features/messaging");
+        const identity = await getCurrentInternetIdentityConfirmed(3, 1000);
+        if (!identity) return false;
+        const ctx = { identity, target: getActiveIcpTarget() };
+        const attachment = message.imageUrl ? { kind: "image", refId: message.id, url: message.imageUrl } : null;
+        await sendLiveMessage(ctx, message.targetId, message.text, message.id, attachment, message.replyToId ?? null);
+        return true;
+      } catch (err) {
+        console.error("[messageQueue] ICP replay failed", err);
+        return false;
+      }
     }
 
     let error;

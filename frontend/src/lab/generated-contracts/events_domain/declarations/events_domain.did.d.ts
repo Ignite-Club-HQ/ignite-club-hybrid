@@ -541,6 +541,11 @@ export interface Main {
     { 'Ok' : [] | [PitchBoardSettings] } |
       { 'Err' : string }
   >,
+  'get_player_stats_report' : ActorMethod<
+    [string, [] | [string], bigint, bigint],
+    { 'Ok' : Array<PlayerStatRow> } |
+      { 'Err' : string }
+  >,
   'get_push_reachable' : ActorMethod<
     [Principal],
     { 'Ok' : [] | [boolean] } |
@@ -629,6 +634,16 @@ export interface Main {
   'list_group_players' : ActorMethod<
     [string],
     { 'Ok' : Array<EventGroupPlayer> } |
+      { 'Err' : string }
+  >,
+  'list_match_captains' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchCaptainAssignment> } |
+      { 'Err' : string }
+  >,
+  'list_match_goalkeepers' : ActorMethod<
+    [string],
+    { 'Ok' : Array<MatchGoalkeeperAssignment> } |
       { 'Err' : string }
   >,
   'list_mini_league_rsvps' : ActorMethod<
@@ -766,6 +781,16 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'remove_match_captain' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'remove_match_goalkeeper' : ActorMethod<
+    [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'rename_event_group' : ActorMethod<
     [string, string],
     { 'Ok' : EventGroup } |
@@ -890,6 +915,16 @@ export interface Main {
     { 'Ok' : EventGroupDuty } |
       { 'Err' : string }
   >,
+  'set_match_captain' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : MatchCaptainAssignment } |
+      { 'Err' : string }
+  >,
+  'set_match_goalkeeper' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : MatchGoalkeeperAssignment } |
+      { 'Err' : string }
+  >,
   'set_mini_league_rsvp' : ActorMethod<
     [string, RsvpSubject, string],
     { 'Ok' : MiniLeagueRsvp } |
@@ -1000,6 +1035,22 @@ export interface Main {
     { 'children' : bigint, 'events' : bigint, 'rsvps' : bigint }
   >,
 }
+export interface MatchCaptainAssignment {
+  'role' : string,
+  'updated_at_ms' : bigint,
+  'assigned_by' : Principal,
+  'ref_kind' : string,
+  'event_id' : string,
+  'ref_id' : string,
+}
+export interface MatchGoalkeeperAssignment {
+  'period' : string,
+  'updated_at_ms' : bigint,
+  'assigned_by' : Principal,
+  'ref_kind' : string,
+  'event_id' : string,
+  'ref_id' : string,
+}
 export interface MiniLeagueRsvp {
   'subject' : RsvpSubject,
   'updated_at_ms' : bigint,
@@ -1042,6 +1093,14 @@ export interface PlayHQMatch {
   'external_home_team_id' : [] | [string],
   'away_team_name' : [] | [string],
   'home_team_name' : [] | [string],
+}
+export interface PlayerStatRow {
+  'ref_kind' : string,
+  'mvp_count' : number,
+  'goalkeeper_count' : number,
+  'captain_count' : number,
+  'vice_count' : number,
+  'ref_id' : string,
 }
 export interface PushReachability {
   'user' : Principal,

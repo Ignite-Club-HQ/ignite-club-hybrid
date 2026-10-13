@@ -15,6 +15,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSeasonTeamAssignment } from "@/live/features/club";
 
 export interface ReturningPlayer {
   club_player_id: string;
@@ -52,21 +54,40 @@ export function ReturningMembersStep({
   onAssignmentsChange,
 }: Props) {
   const [filter, setFilter] = useState("");
-  // NEEDS-CANISTER: season rollover has no canister yet — an II principal
-  // has no Supabase session, so skip both RPCs and show the empty state.
   const isIcp = resolveAuthBackend() === "icp";
 
   const { data: players = [], isLoading } = useQuery({
     queryKey: ["returning-players", sourceSeasonId],
-    queryFn: async (): Promise<ReturningPlayer[]> => {
-      if (isIcp) return [];
-      const { data, error } = await supabase.rpc("get_returning_players", {
-        _source_season_id: sourceSeasonId,
-      });
-      if (error) throw error;
-      return (data ?? []) as ReturningPlayer[];
-    },
-    enabled: !isIcp,
+    queryFn: async (): Promise<ReturningPlayer[]> =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase.rpc("get_returning_players", {
+            _source_season_id: sourceSeasonId,
+          });
+          if (error) throw error;
+          return (data ?? []) as ReturningPlayer[];
+        },
+        // Mapped onto season_team_assignment. The canister record has no
+        // display name / DOB / previous team name (those live on club-wide
+        // member and team records this component has no ids for), so this
+        // shows the raw member id as a placeholder until a richer lookup is
+        // wired through.
+        icp: async (ctx) => {
+          const assignments = (await listLiveSeasonTeamAssignment(ctx, sourceSeasonId)) as Array<{
+            member_id: string;
+            team_id: string;
+          }>;
+          return assignments.map((a): ReturningPlayer => ({
+            club_player_id: a.member_id,
+            display_name: a.member_id,
+            date_of_birth: null,
+            age_years: null,
+            previous_team_id: a.team_id,
+            previous_team_name: a.team_id,
+            membership_role: "player",
+          }));
+        },
+      }),
   });
 
   const { data: targetTeams = [] } = useQuery({

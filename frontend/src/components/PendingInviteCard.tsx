@@ -203,8 +203,8 @@ export default function PendingInviteCard({ invite, teamId, clubId, isAdmin = tr
           icp: async (ctx) => {
             const teams = await listLiveTeams(ctx, clubId!);
             return teams
-              .filter((t) => !t.is_archived && t.id !== teamId)
-              .map((t) => ({ id: t.id, name: t.name, is_archived: t.is_archived }));
+              .filter((t: any) => !t.archived && t.id !== teamId)
+              .map((t: any) => ({ id: t.id, name: t.name, is_archived: Boolean(t.archived) }));
           },
         });
       }

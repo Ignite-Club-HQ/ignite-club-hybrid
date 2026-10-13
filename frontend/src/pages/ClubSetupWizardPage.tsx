@@ -151,14 +151,14 @@ export default function ClubSetupWizardPage() {
 
         let theme: any = {};
         if (themeJson) {
-          try { theme = JSON.parse(themeJson); } catch (e) { console.warn("Theme parse failed", e); }
+          try { theme = JSON.parse(Array.isArray(themeJson) ? (themeJson[0] ?? "{}") : (themeJson as string)); } catch (e) { console.warn("Theme parse failed", e); }
         }
 
         if (profile.length === 0) return null;
         const profileVal = profile[0];
         const setts = settings[0];
         return {
-          kind: setts?.kind?.[0] || "club",
+          kind: (setts as any)?.kind?.[0] || "club",
           name: profileVal.name,
           contact_email: setts?.contact_email?.[0] ?? null,
           logo_url: profileVal.logo_url?.[0] ?? null,
