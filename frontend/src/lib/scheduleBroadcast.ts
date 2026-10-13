@@ -22,11 +22,11 @@ export async function sendScheduleBroadcast(
   try {
     // Internet Identity sessions are canister-authenticated — there is no
     // Supabase session to refresh or to attribute this row to, and Supabase
-    // RLS would reject the insert outright. Subscribers on the ICP path
-    // already poll for updates (see subscribeToScheduleBroadcasts below), so
-    // there's nothing to bump here.
+    // RLS would reject the insert outright. Fan out a notification to every
+    // role-grant principal on the club/team instead of writing a
+    // schedule_broadcasts row.
     if (resolveAuthBackend() === "icp") {
-      return { ok: true };
+      return sendScheduleBroadcastIcp(clubId, teamId ?? null);
     }
     const userId = await ensureFreshSession();
     const { error } = await supabase.from("schedule_broadcasts").insert({
@@ -82,4 +82,53 @@ export function subscribeToScheduleBroadcasts(
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+/**
+ * Internet Identity branch: fans out a schedule-refresh notification to the
+ * unique set of role-grant principals for the club (or just the team, when
+ * scoped). All ICP modules load lazily so the agent/candid SDK never lands
+ * in a Supabase account's entry chunk.
+ */
+async function sendScheduleBroadcastIcp(
+  clubId: string,
+  teamId: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const [{ getCurrentInternetIdentity }, { getActiveIcpTarget }, membership, notifications] =
+      await Promise.all([
+        import("@/live/internetIdentityAuth"),
+        import("@/live/targetRegistry"),
+        import("@/live/features/membership"),
+        import("@/live/features/notifications"),
+      ]);
+    const identity = await getCurrentInternetIdentity();
+    if (!identity) return { ok: false, error: "Internet Identity session required" };
+    const ctx = { identity, target: getActiveIcpTarget() };
+
+    const grants = teamId
+      ? await membership.listLiveTeamRoleGrants(ctx, teamId)
+      : await membership.listLiveRoleGrants(ctx, clubId);
+    const opt = (v: unknown): string | null => (Array.isArray(v) ? (v[0] as string) ?? null : (v as string | null));
+    const userIds = [
+      ...new Set(
+        (grants as Array<{ user: { toText: () => string }; team?: unknown }>)
+          .filter((g) => !teamId || opt(g.team) === teamId)
+          .map((g) => g.user.toText()),
+      ),
+    ];
+    if (userIds.length === 0) return { ok: true };
+
+    await notifications.fanOutLiveNotifications(ctx, {
+      userIds,
+      clubId,
+      kind: "schedule_refresh",
+      body: "The schedule has been updated.",
+      idempotencyKeyPrefix: `schedule-broadcast-${clubId}-${teamId ?? "club"}-${Date.now()}`,
+      relatedId: teamId,
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+  }
 }
