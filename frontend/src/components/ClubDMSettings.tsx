@@ -16,7 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveClubDmAllowedRoles, setLiveClubDmSettings } from "@/live/features/messaging";
+import { getLiveClubDmSettings, setLiveClubDmAllowedRoles, setLiveClubDmSettings } from "@/live/features/messaging";
 
 interface ClubDMSettingsProps {
   clubId: string;
@@ -41,9 +41,18 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
   const [roleToAdd, setRoleToAdd] = useState<string>("");
 
   // Fetch current DM settings
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, isError, refetch } = useQuery({
     queryKey: ["club-dm-settings", clubId],
-    queryFn: async () => {
+    queryFn: () => withFeatureBackend("messaging", {
+      icp: async (ctx) => {
+        const saved = await getLiveClubDmSettings(ctx, clubId);
+        return {
+          club_id: clubId,
+          dm_enabled: !saved.dm_disabled,
+          allowed_roles: saved.allowed_roles,
+        };
+      },
+      supabase: async () => {
       const { data, error } = await supabase
         .from("club_dm_settings")
         .select("*")
@@ -59,7 +68,8 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
         dm_enabled: true,
         allowed_roles: DEFAULT_ROLES,
       };
-    },
+      },
+    }),
   });
 
   // Upsert settings mutation
@@ -81,15 +91,22 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
           if (error) throw error;
         },
         icp: async (ctx) => {
-          await setLiveClubDmSettings(ctx, clubId, !dmEnabled, false);
           if (newSettings.allowed_roles) {
             await setLiveClubDmAllowedRoles(ctx, clubId, allowedRoles);
           }
+          if (newSettings.dm_enabled !== undefined) {
+            const current = await getLiveClubDmSettings(ctx, clubId);
+            await setLiveClubDmSettings(ctx, clubId, !dmEnabled, current.attachments_disabled);
+          }
         },
       });
+      return { club_id: clubId, dm_enabled: dmEnabled, allowed_roles: allowedRoles };
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["club-dm-settings", clubId], saved);
       queryClient.invalidateQueries({ queryKey: ["club-dm-settings", clubId] });
+      queryClient.invalidateQueries({ queryKey: ["can-send-dms"] });
+      setRoleToAdd("");
       toast.success("DM settings updated");
     },
     onError: (error: Error) => {
@@ -113,7 +130,6 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
     updateSettingsMutation.mutate({
       allowed_roles: [...currentRoles, roleToAdd],
     });
-    setRoleToAdd("");
   };
 
   const handleRemoveRole = (role: string) => {
@@ -149,6 +165,17 @@ export function ClubDMSettings({ clubId }: ClubDMSettingsProps) {
           <div className="flex justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="py-6 space-y-3">
+          <p className="text-destructive">Could not load DM settings.</p>
+          <Button variant="outline" onClick={() => refetch()}>Retry</Button>
         </CardContent>
       </Card>
     );
