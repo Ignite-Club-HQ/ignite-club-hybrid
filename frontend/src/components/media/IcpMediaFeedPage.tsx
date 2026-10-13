@@ -23,7 +23,7 @@ import { listLiveCompetitions } from "@/live/features/competitions";
 import { getLiveMyRoleGrants, listLiveMembershipClubs } from "@/live/features/membership";
 import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ClubTeamFilter } from "@/components/ClubTeamFilter";
@@ -39,6 +39,7 @@ import { MediaSponsorTile } from "@/components/media/MediaSponsorTile";
 import { IcpUploadPhotoSheet, type IcpPendingUploadPreview } from "@/components/media/IcpUploadPhotoSheet";
 import { localUploadPreviews } from "@/components/media/localUploadPreviews";
 import { formatTimeShort } from "@/lib/formatTimeShort";
+import { mediaProfileDirectory } from "./mediaProfileDirectory";
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -74,6 +75,7 @@ interface LiveMediaPost {
   representativeAssetId: string;
   ownerId: string;
   ownerName: string;
+  ownerAvatarUrl: string | null;
   clubId: string;
   clubName: string;
   teamId: string | null;
@@ -308,6 +310,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
         representativeAssetId: first.id,
         ownerId,
         ownerName: "Member",
+        ownerAvatarUrl: null,
         clubId: first.club_id,
         clubName: clubNameById.get(first.club_id) ?? "Club",
         teamId,
@@ -324,7 +327,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     }),
   );
 
-  // Display names for uploaders, reactors and commenters, looked up in one
+  // Profiles for uploaders, reactors and commenters, looked up in one
   // batch once every id is known.
   const nameIds = new Set<string>();
   for (const post of posts) {
@@ -332,20 +335,22 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     post.reactions.forEach((r) => nameIds.add(r.user_id));
     post.comments.forEach((c) => nameIds.add(c.user_id));
   }
-  const profileNameById = new Map<string, string>();
+  let profileById = mediaProfileDirectory([]);
   try {
     const profiles = (await listLiveProfilesByIds(ctx, [...nameIds])) as unknown as {
       account_id: string;
       display_name: string;
+      avatar_ref: [] | [string];
     }[];
-    for (const p of profiles) if (p.display_name) profileNameById.set(p.account_id, p.display_name);
+    profileById = mediaProfileDirectory(profiles);
   } catch {
     // Names fall back to "Member".
   }
   for (const post of posts) {
-    post.ownerName = profileNameById.get(post.ownerId) ?? "Member";
-    for (const r of post.reactions) r.profiles.display_name = profileNameById.get(r.user_id) ?? null;
-    for (const c of post.comments) c.profiles.display_name = profileNameById.get(c.user_id) ?? null;
+    post.ownerName = profileById.get(post.ownerId)?.display_name ?? "Member";
+    post.ownerAvatarUrl = profileById.get(post.ownerId)?.avatar_url ?? null;
+    for (const r of post.reactions) r.profiles = profileById.get(r.user_id) ?? { display_name: null, avatar_url: null };
+    for (const c of post.comments) c.profiles = profileById.get(c.user_id) ?? { display_name: null, avatar_url: null };
   }
 
   posts.sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -524,11 +529,14 @@ export function IcpMediaFeedPage() {
       })
       .map((post) => ({
         ...post,
+        ownerAvatarUrl: (post.ownerId === user?.id || post.ownerId === principal)
+          ? profile?.avatar_url ?? post.ownerAvatarUrl
+          : post.ownerAvatarUrl,
         assets: post.assets.map((a) =>
           resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
         ),
       }));
-  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls]);
+  }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
 
   // Read comments from the freshest feed copy, not the snapshot taken when
   // the sheet opened, and keep just-sent comments until the canister has them.
@@ -653,6 +661,7 @@ export function IcpMediaFeedPage() {
             <div key={pending.src} className="relative overflow-hidden rounded-xl border bg-card">
               <div className="flex items-center gap-3 px-3 py-2.5">
                 <Avatar className="h-9 w-9">
+                  <AvatarImage src={profile?.avatar_url || undefined} alt={profile?.display_name || "You"} className="object-cover" />
                   <AvatarFallback>
                     {(profile?.display_name || "You").slice(0, 2).toUpperCase()}
                   </AvatarFallback>
@@ -676,6 +685,7 @@ export function IcpMediaFeedPage() {
               <article className="overflow-hidden rounded-xl border border-border bg-card">
                 <div className="flex items-center gap-3 px-3 py-2.5">
                   <Avatar className="h-9 w-9">
+                    <AvatarImage src={post.ownerAvatarUrl || undefined} alt={post.ownerName} className="object-cover" />
                     <AvatarFallback>{((post.ownerId === user?.id || post.ownerId === principal) ? profile?.display_name || post.ownerName : post.ownerName).slice(0, 2).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
@@ -790,6 +800,11 @@ export function IcpMediaFeedPage() {
             : null
         }
         teamName={commentPost ? subtitleFor(commentPost) : null}
+        uploaderAvatar={commentPost
+          ? (commentPost.ownerId === principal || commentPost.ownerId === user?.id)
+            ? profile?.avatar_url ?? commentPost.ownerAvatarUrl
+            : commentPost.ownerAvatarUrl
+          : null}
         teamId={commentPost?.teamId}
         clubId={commentPost?.clubId}
         miniLeagueId={commentPost?.miniLeagueId}
