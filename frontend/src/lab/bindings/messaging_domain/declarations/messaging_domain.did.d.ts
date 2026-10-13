@@ -254,7 +254,7 @@ export interface Main {
       { 'Err' : string }
   >,
   'generate_chat_recap' : ActorMethod<
-    [string, bigint],
+    [string, [] | [bigint]],
     { 'Ok' : string } |
       { 'Err' : string }
   >,
@@ -597,6 +597,11 @@ export interface Main {
   'submit_content_report' : ActorMethod<
     [string, string, [] | [string], string, [] | [string]],
     { 'Ok' : ContentReport } |
+      { 'Err' : string }
+  >,
+  'summarize_transcript' : ActorMethod<
+    [string, string],
+    { 'Ok' : string } |
       { 'Err' : string }
   >,
   'toggle_reaction' : ActorMethod<

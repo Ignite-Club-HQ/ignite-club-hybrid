@@ -458,7 +458,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'generate_chat_recap' : IDL.Func(
-        [IDL.Text, IDL.Nat64],
+        [IDL.Text, IDL.Opt(IDL.Nat64)],
         [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
@@ -855,6 +855,11 @@ export const idlFactory = ({ IDL }) => {
     'submit_content_report' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ContentReport, 'Err' : IDL.Text })],
+        [],
+      ),
+    'summarize_transcript' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
     'toggle_reaction' : IDL.Func(
