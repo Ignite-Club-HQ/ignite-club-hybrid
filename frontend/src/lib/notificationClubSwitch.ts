@@ -443,12 +443,10 @@ export async function resolveClubIdForChatTarget(
         const meta = await getLiveGroupMetadata(ctx, targetId).catch(() => null);
         return meta?.clubId ?? null;
       }
-      // NEEDS-CANISTER: club_admin threads encode clubId + member in their id
-      // (liveClubAdminThreadId), but both segments can themselves contain
-      // hyphens, so splitting the id back apart is not reliably reversible.
-      // No canister wrapper exposes the authoritative split yet — navigate
-      // without the extra club-filter sync for this kind on II.
-      return null;
+      // club_admin thread ids are `club-admin-<clubUuid>-<member>`; the club id
+      // is a fixed-shape UUID, so it can be read back unambiguously.
+      const m = /^club-admin-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-/i.exec(targetId);
+      return m ? m[1] : null;
     }
     if (kind === "team") {
       const { data } = await supabase.from("teams").select("club_id").eq("id", targetId).maybeSingle();

@@ -118,21 +118,69 @@ export default function HomeInviteFlow({ open, onOpenChange }: HomeInviteFlowPro
         .map((r: any) => r.competition_id)
         .filter(Boolean) as string[];
 
-      // NEEDS-CANISTER: club_domain has no team/club directory lookup by id
-      // set, and competitions reads below have no competition_domain
-      // equivalent for this combined invite-target shape. ICP-routed
-      // sessions see no invite targets rather than a partial result.
+      // club_domain has no combined team/club directory lookup, so the ICP
+      // branches below fetch teams/clubs individually via the batched
+      // getLiveTeam/getLiveClubProfile wrappers (coalesced into one round
+      // trip per batching.ts). Competitions reads still have no
+      // competition_domain equivalent for this combined invite-target shape,
+      // so ICP-routed sessions see no competition invite targets.
       const icpRoutedForInvites = isFeatureRoutedToIcp("membership") || isFeatureRoutedToIcp("competitions");
       const [teamsRes, clubsRes, clubLeaguesRes, scopedLeaguesRes, orgCompsRes, scopedCompsRes] = await Promise.all([
-        teamIds.length && !icpRoutedForInvites
-          ? supabase
-              .from("teams")
-              .select("id, name, club_id, is_archived, clubs!club_id(id, name)")
-              .in("id", teamIds)
-              .eq("is_archived", false)
+        teamIds.length
+          ? withFeatureBackend("membership", {
+              supabase: async () => {
+                const { data } = await supabase
+                  .from("teams")
+                  .select("id, name, club_id, is_archived, clubs!club_id(id, name)")
+                  .in("id", teamIds)
+                  .eq("is_archived", false);
+                return { data };
+              },
+              icp: async (ctx) => {
+                const { getLiveTeam, getLiveClubProfile } = await import("@/live/features/club");
+                const teamOpts = await Promise.all(teamIds.map((id) => getLiveTeam(ctx, id)));
+                const teams = teamOpts
+                  .map((opt) => (opt.length ? opt[0] : null))
+                  .filter((t): t is NonNullable<typeof t> => !!t && t.is_active);
+                const clubIds = [...new Set(teams.map((t: any) => t.club_id).filter(Boolean))] as string[];
+                const clubProfiles = clubIds.length
+                  ? await Promise.all(clubIds.map((id) => getLiveClubProfile(ctx, id)))
+                  : [];
+                const clubNameMap = new Map<string, string>();
+                clubProfiles.forEach((opt, i) => {
+                  if (opt.length) clubNameMap.set(clubIds[i], opt[0].name);
+                });
+                return {
+                  data: teams.map((t: any) => ({
+                    id: t.id,
+                    name: t.name,
+                    club_id: t.club_id,
+                    is_archived: !t.is_active,
+                    clubs: clubNameMap.has(t.club_id)
+                      ? { id: t.club_id, name: clubNameMap.get(t.club_id) }
+                      : null,
+                  })),
+                };
+              },
+            })
           : Promise.resolve({ data: [] as any[] }),
-        allClubIds.length && !icpRoutedForInvites
-          ? supabase.from("clubs").select("id, name").in("id", allClubIds)
+        allClubIds.length
+          ? withFeatureBackend("membership", {
+              supabase: async () => {
+                const { data } = await supabase.from("clubs").select("id, name").in("id", allClubIds);
+                return { data };
+              },
+              icp: async (ctx) => {
+                const { getLiveClubProfile } = await import("@/live/features/club");
+                const profiles = await Promise.all(allClubIds.map((id) => getLiveClubProfile(ctx, id)));
+                return {
+                  data: profiles
+                    .map((opt) => (opt.length ? opt[0] : null))
+                    .filter((c): c is NonNullable<typeof c> => !!c)
+                    .map((c) => ({ id: c.id, name: c.name })),
+                };
+              },
+            })
           : Promise.resolve({ data: [] as any[] }),
         leagueAdminClubIds.length
           ? withFeatureBackend("mini_leagues", {

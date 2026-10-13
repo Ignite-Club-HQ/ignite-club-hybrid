@@ -115,7 +115,8 @@ export async function lookupInvitableUserByEmail(opts: {
       if (!opts.clubId) return null;
       const { findLivePendingInviteByEmailHash } = await import("@/live/features/club");
       const hash = await hashInviteEmail(email, opts.clubId);
-      const found = await findLivePendingInviteByEmailHash(ctx, opts.clubId, hash);
+      const foundOpt = await findLivePendingInviteByEmailHash(ctx, opts.clubId, hash);
+      const found = Array.isArray(foundOpt) ? foundOpt[0] : foundOpt;
       if (!found) return null;
       return {
         user_id: found.invite_id,
