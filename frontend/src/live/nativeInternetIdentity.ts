@@ -111,6 +111,25 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
 
   const valid = () => !!held && isDelegationValid(held.chain);
 
+  // Late replies: the sign-in screen may already have given up (the browser
+  // closed before Android delivered the reply, or the person tapped "Open
+  // Ignite" later). Any reply matching the saved pending sign-in still counts:
+  // store it and reload so the app starts signed in.
+  let waiting = false;
+  void App.addListener("appUrlOpen", ({ url: back }) => {
+    if (waiting || !isNativeIiCallback(back)) return;
+    try {
+      const raw = localStorage.getItem(PENDING_KEY);
+      const pending = raw ? JSON.parse(raw) as { key: unknown; nonce: string; at: number } : null;
+      if (!pending || Date.now() - pending.at > PENDING_TTL_MS) return;
+      const params = readNativeIiReply(back);
+      if (params.get("n") !== pending.nonce || !params.get("d")) return;
+      void Browser.close().catch(() => undefined);
+      accept(Ed25519KeyIdentity.fromJSON(JSON.stringify(pending.key)), params);
+      window.location.reload();
+    } catch { /* ignore malformed replies */ }
+  }).catch(() => undefined);
+
   return {
     isAuthenticated: valid,
     async getIdentity() {
@@ -126,12 +145,14 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
         `${BRIDGE_ORIGIN}/native-sign-in.html#pk=${toHex(key.getPublicKey().toDer())}` +
         `&n=${nonce}&cb=${encodeURIComponent(NATIVE_II_CALLBACK)}`;
 
+      waiting = true;
       const identity = await new Promise<Identity>((resolve, reject) => {
         let done = false;
         const handles: Array<{ remove: () => Promise<void> }> = [];
         const finish = (fn: () => void) => {
           if (done) return;
           done = true;
+          waiting = false;
           handles.forEach((h) => void h.remove());
           fn();
         };
@@ -156,7 +177,7 @@ export async function createNativeAuthClient(): Promise<InternetIdentityAuthClie
         handles.push(await Browser.addListener("browserFinished", () => {
           // Android closes the browser as it hands the reply to the app; the
           // reply can land a few seconds later on a busy phone.
-          setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 6000);
+          setTimeout(() => finish(() => reject(new Error("Sign-in was cancelled."))), 20000);
         }));
         // Both return/cancellation listeners must exist before opening the browser.
         await Browser.open({ url, presentationStyle: "popover" });
