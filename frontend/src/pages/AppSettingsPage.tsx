@@ -626,14 +626,17 @@ function SupabaseAppSettingsPage() {
 // ICP-mode App Settings. Only the backend-agnostic global settings live on
 // the canisters (club_domain app_config): club-creation lock, chat
 // virtualisation kill-switch, basic-mode chunk size and the welcome DM text.
-// Photo prompts, notification prefetch, free-club polling, AI recap and
-// legal reacceptance are Supabase/worker-backed by design and are not shown.
+// plus AI recap, free-club polling, notification prefetch and legal
+// re-acceptance. Photo prompts stay worker-backed by design.
 // Writes require the governor or an app-admin role, enforced canister-side.
 interface IcpAppSettings {
   clubCreationLocked: boolean;
   chatVirtEnabled: boolean;
   chatBasicChunkSize: number;
   welcomeMessage: string;
+  chatRecapEnabled: boolean;
+  freeClubPolling: boolean;
+  notificationPrefetch: boolean;
 }
 
 const ICP_SETTINGS_QUERY_KEY = ["icp-app-settings"] as const;
@@ -651,11 +654,14 @@ function IcpAppSettingsPage() {
         // Unreachable: this page only renders when the auth backend is ICP.
         supabase: async () => null,
         icp: async (ctx): Promise<IcpAppSettings> => {
-          const [lock, virt, chunk, welcome] = await Promise.all([
+          const [lock, virt, chunk, welcome, recap, polling, prefetch] = await Promise.all([
             getLiveAppSetting(ctx, "club_creation_locked"),
             getLiveAppSetting(ctx, "chat_virtualization_enabled"),
             getLiveAppSetting(ctx, "chat_basic_chunk_size"),
             getLiveAppSetting(ctx, WELCOME_DM_SETTING_KEY),
+            getLiveAppSetting(ctx, "chat_recap_enabled"),
+            getLiveAppSetting(ctx, "free_club_polling_enabled"),
+            getLiveAppSetting(ctx, "notification_prefetch_enabled"),
           ]);
           const chunkN = decodeAppSettingNumber(chunk, 100);
           return {
@@ -663,6 +669,9 @@ function IcpAppSettingsPage() {
             chatVirtEnabled: decodeAppSettingBool(virt, true),
             chatBasicChunkSize: Math.min(500, Math.max(10, Math.floor(chunkN))),
             welcomeMessage: decodeAppSettingString(welcome, DEFAULT_WELCOME_DM_MESSAGE),
+            chatRecapEnabled: decodeAppSettingBool(recap, true),
+            freeClubPolling: decodeAppSettingBool(polling, false),
+            notificationPrefetch: decodeAppSettingBool(prefetch, true),
           };
         },
       }),
@@ -923,6 +932,37 @@ function IcpAppSettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {([
+          ["chat_recap_enabled", settings?.chatRecapEnabled ?? true, "AI Chat Recap", "Master switch for AI chat recaps (runs on the free on-chain model). When OFF, no one can generate a recap."],
+          ["free_club_polling_enabled", settings?.freeClubPolling ?? false, "Free-club polling", "When ON, free-tier clubs check for new messages less often to save resources. Pro clubs are unaffected."],
+          ["notification_prefetch_enabled", settings?.notificationPrefetch ?? true, "Notification prefetch", "When ON, phones pre-load the chat when an alert arrives so it opens faster. Turn OFF if it causes problems."],
+        ] as const).map(([key, on, title, desc]) => (
+          <Card key={key}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                {title}
+              </CardTitle>
+              <CardDescription>{desc}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`icp-${key}`} className="text-base font-medium">
+                  {on ? "On" : "Off"}
+                </Label>
+                <Switch
+                  id={`icp-${key}`}
+                  checked={on}
+                  onCheckedChange={() => updateSettingMutation.mutate({ key, value: !on })}
+                  disabled={updateSettingMutation.isPending}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        <LegalReacceptanceAdminCard />
 
         <div className="text-center text-sm text-muted-foreground pt-4">
           <p>Current status: {isClubCreationLocked ? "Only app admins can create clubs" : "Anyone can create clubs"}</p>
