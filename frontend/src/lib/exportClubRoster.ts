@@ -193,7 +193,7 @@ export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow
       playerType: "Junior",
       yearOfBirth: child.year_of_birth ? String(child.year_of_birth) : "",
       teamName: team.name ?? "",
-      ageGroup: team.division ?? "",
+      ageGroup: team.level_age ?? "",
       parents: (guardiansByChild.get(child.id) || []).join("; "),
     });
   }
@@ -210,7 +210,7 @@ export async function fetchClubRosterRows(clubId: string): Promise<ClubRosterRow
       playerType: "Adult",
       yearOfBirth: "",
       teamName: team.name ?? "",
-      ageGroup: team.division ?? "",
+      ageGroup: team.level_age ?? "",
       parents: "",
     });
   }
