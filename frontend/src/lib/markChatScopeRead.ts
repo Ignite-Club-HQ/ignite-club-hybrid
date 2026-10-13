@@ -114,13 +114,41 @@ export function markChatScopeNotificationsRead({
         scope.kind === "dm" ? scope.conversationId :
         null;
 
-      const { data: affected, error } = await (supabase as any).rpc(
-        "mark_chat_scope_notifications_read",
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      const { data: affected, error } = await withFeatureBackend<{ data: unknown; error: unknown }>(
+        "notifications",
         {
-          _user_id: userId,
-          _scope_kind: scope.kind,
-          _scope_id: scopeId,
-        }
+          supabase: async () =>
+            (supabase as any).rpc("mark_chat_scope_notifications_read", {
+              _user_id: userId,
+              _scope_kind: scope.kind,
+              _scope_id: scopeId,
+            }),
+          icp: async (ctx) => {
+            // On-chain chat alerts are kind "message_chat" with the
+            // conversation id (== team/club/group/DM id) in `club`, falling
+            // back to `related_id`. Broadcast has no stable id here.
+            if (!scopeId) return { data: 0, error: null };
+            const { listLiveInbox, markLiveNotificationRead } = await import(
+              "@/live/features/notifications"
+            );
+            const inbox = (await listLiveInbox(ctx, userId, null, 500)) as Array<{
+              id: string;
+              kind: string;
+              read: boolean;
+              club: string;
+              related_id: [] | [string];
+            }>;
+            const matches = inbox.filter(
+              (n) =>
+                !n.read &&
+                n.kind === "message_chat" &&
+                ((n.club || n.related_id[0]) === scopeId || n.related_id[0] === scopeId),
+            );
+            await Promise.allSettled(matches.map((n) => markLiveNotificationRead(ctx, n.id)));
+            return { data: matches.length, error: null };
+          },
+        },
       );
 
       if (error) {
