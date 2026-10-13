@@ -76,6 +76,23 @@ module {
   // --- Pinned messages ---
   public type PinnedMessage = { id : Text; conversation_id : Text; message_id : Text; pinned_by : Principal; created_at_ms : Nat64 };
 
+  // Content moderation reports (ReportContentDialog). subject_kind is a free
+  // text label the frontend chose at report time ("message" | "club" | "user"
+  // | "photo" | ...); subject_id/conversation_id let admins jump to the
+  // reported content. Admin-readable via list_content_reports (app_admin or
+  // governor only).
+  public type ContentReport = {
+    id : Text;
+    reporter : Principal;
+    subject_kind : Text;
+    subject_id : Text;
+    conversation_id : ?Text;
+    reason : Text;
+    details : ?Text;
+    created_at_ms : Nat64;
+    status : Text; // "open" | "reviewed" | "dismissed"
+  };
+
   public type State = {
     schema : Nat32;
     governor : Principal;
@@ -102,6 +119,7 @@ module {
     userMessagingSettings : [UserMessagingSettings];
     typingPings : [TypingPing];
     pinnedMessages : [PinnedMessage];
+    contentReports : [ContentReport];
   };
 
   // --- Group management (roles, bulk membership, soft-delete, join requests) ---

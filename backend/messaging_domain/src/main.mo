@@ -64,6 +64,7 @@ persistent actor class Main(governorInit : Principal) {
   var blockedUsers : [Types.BlockedUser];
   var typingPings : [Types.TypingPing];
   var pinnedMessages : [Types.PinnedMessage];
+  var contentReports : [Types.ContentReport];
   var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
@@ -1060,7 +1061,7 @@ persistent actor class Main(governorInit : Principal) {
 
   public query ({ caller }) func export_state() : async { #Ok : Types.State; #Err : Text } {
     if (not isGovernor(caller) and not hasBulkAccess(caller)) return #Err("Governor only");
-    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages })
+    #Ok({ schema = 4; governor; roles; conversations; messages; receipts; unread; groupMetadata; clubMemberships; competitionAdmins; dmAttachmentsDisabled; groupRoles; joinRequests; polls; pollVotes; mutePreferences; dmLinks; forwardRecords; scheduledMessages; attachmentMetadata; reactions; clubDmSettings; userMessagingSettings; typingPings; pinnedMessages; contentReports })
   };
 
   func validKind(kind : Text) : Bool {
@@ -2639,6 +2640,63 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(pinnedMessages.filter(func(p) = p.conversation_id == conversation_id))
   };
 
+  // ===================== Content reports (moderation) =====================
+  // Generic report store backing ReportContentDialog for any reportable
+  // surface (chat message, user, club, photo, ...). subject_kind/subject_id
+  // are opaque to this canister; admins resolve them client-side. Listing and
+  // resolution are app_admin/governor only — reporters cannot read others'
+  // reports.
+
+  public shared ({ caller }) func submit_content_report(
+    subject_kind : Text,
+    subject_id : Text,
+    conversation_id : ?Text,
+    reason : Text,
+    details : ?Text,
+  ) : async { #Ok : Types.ContentReport; #Err : Text } {
+    auth(caller);
+    if (subject_kind.size() == 0 or subject_id.size() == 0 or reason.size() == 0) return #Err("Missing required fields");
+    if (reason.size() > 200) return #Err("Reason too long");
+    switch (details) {
+      case (?d) { if (d.size() > 1000) return #Err("Details too long") };
+      case null {};
+    };
+    let report : Types.ContentReport = {
+      id = "report-" # Nat64.toText(Nat64.fromIntWrap(Time.now())) # "-" # Nat.toText(contentReports.size());
+      reporter = caller;
+      subject_kind;
+      subject_id;
+      conversation_id;
+      reason;
+      details;
+      created_at_ms = nowMs();
+      status = "open";
+    };
+    contentReports := contentReports.concat([report]);
+    #Ok(report)
+  };
+
+  public query ({ caller }) func list_content_reports(status : ?Text) : async { #Ok : [Types.ContentReport]; #Err : Text } {
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    switch (status) {
+      case null { #Ok(contentReports) };
+      case (?s) { #Ok(contentReports.filter(func(r) = r.status == s)) };
+    }
+  };
+
+  public shared ({ caller }) func resolve_content_report(id : Text, status : Text) : async { #Ok : Types.ContentReport; #Err : Text } {
+    if (not (isGovernor(caller) or hasRole(caller, "app_admin", null, null))) return #Err("App admin required");
+    if (status != "open" and status != "reviewed" and status != "dismissed") return #Err("Invalid status");
+    var found : ?Types.ContentReport = null;
+    contentReports := contentReports.map(func(r) {
+      if (r.id == id) { let updated = { r with status }; found := ?updated; updated } else { r }
+    });
+    switch (found) {
+      case (?r) { #Ok(r) };
+      case null { #Err("Report not found") };
+    }
+  };
+
   // ===================== User blocking =====================
 
   public shared ({ caller }) func block_user(user : Principal) : async { #Ok; #Err : Text } {
@@ -2712,6 +2770,7 @@ persistent actor class Main(governorInit : Principal) {
     conflicts += userMessagingSettings.filter(func(u) = u.user.equal(new)).size();
     conflicts += blockedUsers.filter(func(b) = b.blocker.equal(new) or b.blocked.equal(new)).size();
     conflicts += pinnedMessages.filter(func(p) = p.pinned_by.equal(new)).size();
+    conflicts += contentReports.filter(func(r) = r.reporter.equal(new)).size();
     if (conflicts > 0 and not allowMerge) return #err("New sign-in ID already has " # Nat.toText(conflicts) # " record(s) in messaging_domain");
 
     var changed = 0;

@@ -26,6 +26,7 @@ import { EventViewMemberRow } from "@/components/EventViewMemberRow";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveReminderLog, isLiveReachable, recordLiveReminderSent } from "@/live/features/events";
+import { useEventViewsAdmin } from "@/hooks/useEventViews";
 
 interface AttendanceCounts {
   going: number;
@@ -92,21 +93,9 @@ export function AttendanceSection({
   const [sendingForUser, setSendingForUser] = useState<string | null>(null);
   const [viewsDialogOpen, setViewsDialogOpen] = useState(false);
 
-  // Lightweight view-count fetch; only when admin (others don't need it)
-  const { data: eventViews } = useQuery({
-    queryKey: ["event-views-summary", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_views")
-        .select("user_id, viewed_at")
-        .eq("event_id", eventId);
-      if (error) throw error;
-      return data || [];
-    },
-    // NEEDS-CANISTER: events_domain has no event_views equivalent.
-    enabled: isAdmin && !isFeatureRoutedToIcp("events"),
-    staleTime: 30_000,
-  });
+  // Lightweight view-count fetch; only when admin (others don't need it).
+  // Backed by events_domain's own EventView rows on the ICP branch.
+  const { data: eventViews } = useEventViewsAdmin(eventId, isAdmin);
 
   const addressableMemberIds = useMemo(
     () => addressableMembers ? new Set(addressableMembers.map((m) => m.id)) : null,
