@@ -207,6 +207,7 @@ export interface Main {
     { 'Ok' : Array<MiniLeaguePlayer> } |
       { 'Err' : string }
   >,
+  'list_public_mini_leagues' : ActorMethod<[], Array<PublicMiniLeagueSummary>>,
   'list_session_availability' : ActorMethod<
     [string],
     { 'Ok' : Array<MiniLeagueSessionAvailability> } |
@@ -419,6 +420,11 @@ export interface PlayerGuardianStatus {
   'pending' : boolean,
   'parent_linked' : boolean,
   'guardian_count' : bigint,
+}
+export interface PublicMiniLeagueSummary {
+  'id' : string,
+  'name' : string,
+  'club_id' : string,
 }
 export interface _SERVICE extends Main {}
 export declare const idlFactory: IDL.InterfaceFactory;

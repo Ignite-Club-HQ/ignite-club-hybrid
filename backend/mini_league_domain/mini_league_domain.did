@@ -1,3 +1,9 @@
+type PublicMiniLeagueSummary = 
+ record {
+   club_id: text;
+   id: text;
+   name: text;
+ };
 type PlayerGuardianStatus = 
  record {
    guardian_count: nat;
@@ -295,6 +301,7 @@ type Main =
        Err: text;
        Ok: vec MiniLeaguePlayer;
      }) query;
+   list_public_mini_leagues: () -> (vec PublicMiniLeagueSummary) query;
    list_session_availability: (session_id: text) ->
     (variant {
        Err: text;

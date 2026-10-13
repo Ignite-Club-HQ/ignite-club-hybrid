@@ -290,6 +290,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    list_public_mini_leagues(): Promise<Array<PublicMiniLeagueSummary>>;
     list_session_availability(session_id: string): Promise<{
         __kind__: "Ok";
         Ok: Array<MiniLeagueSessionAvailability>;
@@ -405,6 +406,45 @@ export interface MainInterface {
         Err: string;
     }>;
 }
+export interface PlayerGuardianStatus {
+    pending: boolean;
+    parent_linked: boolean;
+    guardian_count: bigint;
+}
+export interface MiniLeagueAdmin {
+    id: string;
+    mini_league_id: string;
+    user_id: Principal;
+    created_at_ms: bigint;
+    granted_by?: Principal;
+}
+export interface MiniLeagueInvite {
+    player_id?: string;
+    status: string;
+    claimed_by?: Principal;
+    token: string;
+    mini_league_id: string;
+    claimed_at_ms?: bigint;
+    created_by: Principal;
+    created_at_ms: bigint;
+    label_text?: string;
+}
+export interface MiniLeagueSession {
+    id: string;
+    status: string;
+    postcode?: string;
+    mini_league_id: string;
+    linked_event_id?: string;
+    team_size_override?: number;
+    updated_at_ms: bigint;
+    created_by: Principal;
+    end_time?: string;
+    created_at_ms: bigint;
+    start_time: string;
+    address?: string;
+    location_name?: string;
+    session_date: string;
+}
 export interface MiniLeaguePlayer {
     id: string;
     claimed_by?: Principal;
@@ -417,20 +457,6 @@ export interface MiniLeaguePlayer {
     parent_user_id?: string;
     notes?: string;
 }
-export interface PlayerGuardianStatus {
-    pending: boolean;
-    parent_linked: boolean;
-    guardian_count: bigint;
-}
-export interface MiniLeagueSessionAvailability {
-    id: string;
-    player_id: string;
-    status: string;
-    session_id: string;
-    marked_by?: Principal;
-    updated_at_ms: bigint;
-    created_at_ms: bigint;
-}
 export interface MiniLeagueGroup {
     id: string;
     linked_event_id?: string;
@@ -442,6 +468,20 @@ export interface MiniLeagueGroup {
     ability_band?: string;
     display_order: number;
     target_size: number;
+}
+export interface MiniLeagueSessionAvailability {
+    id: string;
+    player_id: string;
+    status: string;
+    session_id: string;
+    marked_by?: Principal;
+    updated_at_ms: bigint;
+    created_at_ms: bigint;
+}
+export interface PublicMiniLeagueSummary {
+    id: string;
+    name: string;
+    club_id: string;
 }
 export interface MiniLeague {
     id: string;
@@ -464,24 +504,6 @@ export interface ClaimedInvite {
     mini_league_id: string;
     club_id: string;
 }
-export interface MiniLeagueAdmin {
-    id: string;
-    mini_league_id: string;
-    user_id: Principal;
-    created_at_ms: bigint;
-    granted_by?: Principal;
-}
-export interface MiniLeagueInvite {
-    player_id?: string;
-    status: string;
-    claimed_by?: Principal;
-    token: string;
-    mini_league_id: string;
-    claimed_at_ms?: bigint;
-    created_by: Principal;
-    created_at_ms: bigint;
-    label_text?: string;
-}
 export interface MiniLeagueJoinLink {
     token: string;
     mini_league_id: string;
@@ -502,22 +524,6 @@ export interface MiniLeagueGroupDuty {
     assigned_to?: string;
     group_id: string;
     points?: number;
-}
-export interface MiniLeagueSession {
-    id: string;
-    status: string;
-    postcode?: string;
-    mini_league_id: string;
-    linked_event_id?: string;
-    team_size_override?: number;
-    updated_at_ms: bigint;
-    created_by: Principal;
-    end_time?: string;
-    created_at_ms: bigint;
-    start_time: string;
-    address?: string;
-    location_name?: string;
-    session_date: string;
 }
 export interface mini_league_domainInterface extends MainInterface {
 }
@@ -854,6 +860,10 @@ export class Mini_league_domain implements mini_league_domainInterface {
     }> {
         const result = await this.actor.list_players(arg0);
         return from_candid_variant_n53(result);
+    }
+    async list_public_mini_leagues(): Promise<Array<PublicMiniLeagueSummary>> {
+        const result = await this.actor.list_public_mini_leagues();
+        return result;
     }
     async list_session_availability(arg0: string): Promise<{
         __kind__: "Ok";

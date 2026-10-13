@@ -129,6 +129,11 @@ export const idlFactory = ({ IDL }) => {
     'parent_linked' : IDL.Bool,
     'guardian_count' : IDL.Nat,
   });
+  const PublicMiniLeagueSummary = IDL.Record({
+    'id' : IDL.Text,
+    'name' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
   const Main = IDL.Service({
     'add_admin' : IDL.Func(
         [IDL.Text, IDL.Principal],
@@ -350,6 +355,11 @@ export const idlFactory = ({ IDL }) => {
     'list_players' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(MiniLeaguePlayer), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_public_mini_leagues' : IDL.Func(
+        [],
+        [IDL.Vec(PublicMiniLeagueSummary)],
         ['query'],
       ),
     'list_session_availability' : IDL.Func(
