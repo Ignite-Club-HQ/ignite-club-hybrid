@@ -16,13 +16,13 @@
 - Frontend/live-architecture rules: frontend/AGENTS.md. Canister/Motoko rules: backend/AGENTS.md.
 - Native II: use id.ai/authorize and its reply origin; register callbacks before Browser.open, nonce-scope cancellation. Why: legacy-host redirects drop replies.
 - Android bars: use StatusBarBackdrop after SystemBars icon styling (which resets the background); honour its remaining CSS top inset without a forced floor (native padding already reserves it). Both Codemagic Android workflows run scripts/configure-android-status-bar.py; preserve keyboard handling.
-- Poll attachment recognition shares `chatPollToken` across chat content, card-only detection and inbox previews; this preserves opaque backend IDs consistently.
-- Event attachment recognition shares `chatEventToken` across chat content, card-only detection and inbox previews; this prevents ICP event IDs being exposed as raw text.
+- Poll/event recognition shares `chatPollToken`/`chatEventToken` across chat content, card-only detection and inbox previews; this preserves opaque backend IDs.
 - Pending-send recovery is scoped to each QueryClient and reconciles previews already in fetched snapshots as well as missing previews; this prevents duplicate photo bubbles after returning to chat.
 - ICP images wait for authenticated session restoration and share account-scoped in-flight unlocks; genuine failures retry after cooldown and foreground recovery. Why: cold startup must not cache missing identity as a failure or unlock the same logo repeatedly.
 - Stored document opens and downloads must resolve authorized/decrypted URLs before hand-off, preserve the original extension/MIME, and write WebView blob bytes to native cache instead of using native HTTP downloaders. Why: raw ICP URLs contain ciphertext, not readable documents.
 - ICP reward writes verify caller roles against governor-configured club_domain; catalog/settings reads refresh the caller's role mirror first. Why: creating a club must not require a separate manual points-service role grant.
 - ICP profile batching resolves missing caller profiles through get_profile, not only principal-derived UUIDs; linked or moved accounts may keep their original account ID.
+- ICP media retains batched avatar references and uses shared AvatarImage; upload previews reuse the signed-in photo. Why: initials-only rendering discarded photos.
 - Club setup progress reads the active membership backend and determines saved branding from stored palettes/logo, independently of entitlement; sponsor/theme saves invalidate its query. Why: free clubs must not lose acknowledgement of saved setup, and ICP has no Supabase rows.
 - ICP login presentation lives in IcpSignInScreen; AuthPage retains provider invocation and redirect resolution so visual changes cannot alter identity or invite/session semantics.
 - Sign-in footers and profile policy links share legalLinks destinations; open separately to preserve drafts and invite URLs, and reuse destinations for internal legal pages.
