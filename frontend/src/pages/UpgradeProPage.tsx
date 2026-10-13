@@ -45,6 +45,7 @@ import {
   mapLiveTeamSubscriptionToRow,
 } from "@/live/features/proAccess";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { redeemLiveTeamPromoCode } from "@/live/features/promoCodes";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 
@@ -298,8 +299,13 @@ function SupabaseUpgradeProPage() {
 
   const applyPromoMutation = useMutation({
     mutationFn: async ({ code, tier, isAnnual }: { code: string; tier: "pro" | "pro_football"; isAnnual: boolean }) => {
-      // NEEDS-CANISTER: promo codes live in Supabase only.
-      if (isIcp) throw new Error("Promo codes are not available yet for Internet Identity teams.");
+      if (isIcp) {
+        await withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("Promo codes are unavailable right now. Please try again."); },
+          icp: (ctx) => redeemLiveTeamPromoCode(ctx, { code, teamId: teamId!, tier, isAnnual }),
+        });
+        return tier;
+      }
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")

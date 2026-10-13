@@ -36,21 +36,23 @@ import { getCachedRoles } from "@/lib/rolesCache";
 type ScopeType = "club" | "team";
 type PromoType = "subscription" | "storage";
 
-import { IcpUnavailablePage } from "@/components/IcpUnavailablePage";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { listLiveClubs } from "@/live/features/club";
+import { createLivePromoCode, deleteLivePromoCode, listLivePromoCodes, setLivePromoCodeActive } from "@/live/features/promoCodes";
+import { listLiveProfilesByIds } from "@/live/features/identityAccessClient";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { membershipKeys } from "@/lab/membershipQueryKeys";
 
 export default function ManagePromoCodesPage() {
-  const useIcpLab = isFeatureRoutedToIcp("admin");
-  if (useIcpLab) {
-    return <IcpUnavailablePage title="Promo-code administration is unavailable in ICP lab mode" description="Promo codes remain part of the disabled external billing boundary." />;
-  }
   return <SupabaseManagePromoCodesPage />;
 }
 
 function SupabaseManagePromoCodesPage() {
   const { user } = useAuth();
+  const isIcp = isFeatureRoutedToIcp("admin") || resolveAuthBackend() === "icp";
+  const { isAppAdmin: icpAppAdmin } = useIsAppAdmin();
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -69,6 +71,7 @@ function SupabaseManagePromoCodesPage() {
   const { data: userRoles } = useQuery({
     queryKey: membershipKeys.userRolesFor(user?.id),
     queryFn: async () => {
+      if (isIcp) return [];
       const cached = getCachedRoles();
       if (cached) return cached;
       
@@ -82,8 +85,9 @@ function SupabaseManagePromoCodesPage() {
   });
 
   const isAppAdmin = useMemo(() => {
+    if (isIcp) return icpAppAdmin;
     return userRoles?.some(r => r.role === "app_admin") || false;
-  }, [userRoles]);
+  }, [userRoles, isIcp, icpAppAdmin]);
 
   const isClubAdmin = useMemo(() => {
     return userRoles?.some(r => r.role === "club_admin") || false;
@@ -93,8 +97,26 @@ function SupabaseManagePromoCodesPage() {
 
   // Fetch all clubs for the dropdown
   const { data: clubs } = useQuery({
-    queryKey: ["all-clubs"],
+    queryKey: ["all-clubs", isIcp],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("admin", {
+          supabase: async () => [] as { id: string; name: string }[],
+          icp: async (ctx) => {
+            const out: { id: string; name: string }[] = [];
+            let cursor: string | null = null;
+            for (let page = 0; page < 40; page++) {
+              const res = await listLiveClubs(ctx, cursor, 100) as unknown as { items?: Array<{ id: string; name: string }>; next_cursor?: [] | [string] } | Array<{ id: string; name: string }>;
+              const items = Array.isArray(res) ? res : res.items ?? [];
+              out.push(...items.map((c) => ({ id: c.id, name: c.name })));
+              const next = Array.isArray(res) ? null : res.next_cursor?.[0] ?? null;
+              if (!next || items.length === 0) break;
+              cursor = next;
+            }
+            return out.sort((a, b) => a.name.localeCompare(b.name));
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name")
@@ -106,8 +128,24 @@ function SupabaseManagePromoCodesPage() {
   });
 
   const { data: promoCodes, isLoading } = useQuery({
-    queryKey: ["promo-codes"],
+    queryKey: ["promo-codes", isIcp],
     queryFn: async () => {
+      if (isIcp) {
+        return withFeatureBackend("admin", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const rows = await listLivePromoCodes(ctx);
+            const clubMap = new Map((clubs ?? []).map((c) => [c.id, c]));
+            const profiles = await listLiveProfilesByIds(ctx, [...new Set(rows.map((r) => r.created_by))]).catch(() => []);
+            const profileMap = new Map((profiles as Array<{ id?: string; user_id?: string; display_name?: string }>).map((p) => [p.id ?? p.user_id ?? "", p]));
+            return rows.map((r) => ({
+              ...r,
+              clubs: r.club_id ? { id: r.club_id, name: clubMap.get(r.club_id)?.name ?? "Club" } : null,
+              creator_profile: profileMap.has(r.created_by) ? { display_name: profileMap.get(r.created_by)?.display_name ?? null } : null,
+            })) as any[];
+          },
+        });
+      }
       // Fetch promo codes with club relationship only (created_by references auth.users, not profiles)
       const { data, error } = await supabase
         .from("promo_codes")
@@ -149,6 +187,19 @@ function SupabaseManagePromoCodesPage() {
       promoType: string;
       storageGb: number | null;
     }) => {
+      if (isIcp) {
+        return withFeatureBackend("admin", {
+          supabase: async () => { throw new Error("Unavailable"); },
+          icp: (ctx) => createLivePromoCode(ctx, {
+            code,
+            accessLevel: promoType === "storage" ? "storage" : accessLevel,
+            scopeType,
+            clubId: clubId ?? null,
+            storageGb: promoType === "storage" ? (storageGb ?? null) : null,
+            expiresAt: expiresAt ?? null,
+          }),
+        });
+      }
       const { error } = await supabase.from("promo_codes").insert({
         code: code.toUpperCase().trim(),
         created_by: user!.id,
@@ -179,6 +230,9 @@ function SupabaseManagePromoCodesPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      if (isIcp) {
+        return withFeatureBackend("admin", { supabase: async () => {}, icp: (ctx) => setLivePromoCodeActive(ctx, id, isActive) });
+      }
       const { error } = await supabase
         .from("promo_codes")
         .update({ is_active: isActive })
@@ -192,6 +246,9 @@ function SupabaseManagePromoCodesPage() {
 
   const deletePromoMutation = useMutation({
     mutationFn: async (id: string) => {
+      if (isIcp) {
+        return withFeatureBackend("admin", { supabase: async () => {}, icp: (ctx) => deleteLivePromoCode(ctx, id) });
+      }
       const { error } = await supabase.from("promo_codes").delete().eq("id", id);
       if (error) throw error;
     },
