@@ -130,6 +130,7 @@ persistent actor class Main(governorInit : Principal) {
   var guardianMeta : [Types.GuardianMeta];
   var teamPlayerPositionAssignments : [Types.TeamPlayerPositionAssignment];
   var pendingInviteEmailHashes : [Types.PendingInviteEmailHash];
+  var clubGeneralSettings : [Types.ClubGeneralSettings];
 
   // Global app-wide config key/value store (app_settings parity for values
   // that must be readable pre-auth, e.g. the backend routing config). Values
@@ -1223,6 +1224,39 @@ persistent actor class Main(governorInit : Principal) {
     if (theme_json.size() > 65_536) return #Err("Theme JSON too large");
     clubThemeJson := clubThemeJson.filter(func((k, _)) = k != club_id).concat([(club_id, theme_json)]);
     #Ok
+  };
+
+  // ---- Per-club general settings (class/term mode, default guest policy,
+  // events sponsor strip) — readable by club members, writable by club
+  // staff/admin. ----
+
+  public query ({ caller }) func get_club_general_settings(club_id : Text) : async { #Ok : Types.ClubGeneralSettings; #Err : Text } {
+    auth(caller);
+    if (not isMember(caller, club_id)) return #Err("Club membership required");
+    switch (clubGeneralSettings.find(func(s) = s.club_id == club_id)) {
+      case (?s) #Ok(s);
+      case null #Ok({
+        club_id;
+        class_mode_enabled = false;
+        allow_guests_default = false;
+        max_guests_per_member_default = 0;
+        events_sponsor_strip_enabled = true;
+      });
+    }
+  };
+
+  public shared ({ caller }) func set_club_general_settings(
+    club_id : Text,
+    class_mode_enabled : Bool,
+    allow_guests_default : Bool,
+    max_guests_per_member_default : Nat,
+    events_sponsor_strip_enabled : Bool,
+  ) : async { #Ok : Types.ClubGeneralSettings; #Err : Text } {
+    auth(caller);
+    if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
+    let updated : Types.ClubGeneralSettings = { club_id; class_mode_enabled; allow_guests_default; max_guests_per_member_default; events_sponsor_strip_enabled };
+    clubGeneralSettings := clubGeneralSettings.filter(func(s) = s.club_id != club_id).concat([updated]);
+    #Ok(updated)
   };
 
   // ---- Free-tier usage counters: cheap counts an admin UI can compare

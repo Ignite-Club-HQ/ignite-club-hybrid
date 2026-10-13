@@ -537,6 +537,11 @@ type Main =
        Err: text;
        Ok: ClubBranding;
      }) query;
+   get_club_general_settings: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: ClubGeneralSettings;
+     }) query;
    get_club_home_countries: (ids: vec text) ->
     (variant {
        Err: text;
@@ -1088,6 +1093,13 @@ type Main =
                                                   Err: text;
                                                   Ok;
                                                 });
+   set_club_general_settings: (club_id: text, class_mode_enabled: bool,
+    allow_guests_default: bool, max_guests_per_member_default: nat,
+    events_sponsor_strip_enabled: bool) ->
+    (variant {
+       Err: text;
+       Ok: ClubGeneralSettings;
+     });
    set_club_header_toggles: (club_id: text, header_logo_enabled: bool,
     header_club_name_enabled: bool) ->
     (variant {
@@ -1474,6 +1486,14 @@ type ClubJoinRequest =
    id: text;
    status: text;
    user: principal;
+ };
+type ClubGeneralSettings = 
+ record {
+   allow_guests_default: bool;
+   class_mode_enabled: bool;
+   club_id: text;
+   events_sponsor_strip_enabled: bool;
+   max_guests_per_member_default: nat;
  };
 type ClubBranding = 
  record {

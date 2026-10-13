@@ -213,7 +213,7 @@ export default function ClubUpgradePage() {
               id: p.id,
               name: p.name,
               sport: p.sport[0] ?? null,
-              class_mode_enabled: false,
+              class_mode_enabled: (await (await import("@/live/features/club")).getLiveClubGeneralSettings(ctx, p.id))?.classModeEnabled ?? false,
             };
           },
         });

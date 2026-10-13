@@ -26,7 +26,8 @@ import { isCachedAppAdmin } from "@/lib/rolesCache";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { resolveAuthBackend } from "@/live/authBackendMode";
-import { createLiveClub } from "@/live/features/club";
+import { createLiveClub, getLiveClubProfile, saveLiveClubProfile, setLiveClubGeneralSettings } from "@/live/features/club";
+import { tryUploadMediaToBlobStore } from "@/live/mediaUpload";
 import { slugifyClubName } from "@/lib/eoiUtils";
 import { ISO_COUNTRY_CODES, countryName } from "@/lib/countries";
 import { getCurrentCountry } from "@/live/userCountry";
@@ -193,8 +194,6 @@ export default function CreateClubPage() {
     try {
       const clubId = await withFeatureBackend("membership", {
         icp: async (ctx) => {
-          // Class-mode and logo upload still have no club_domain counterpart
-          // on this path (NEEDS-CANISTER); sport now persists via create_club.
           const profile = await createLiveClub(
             ctx,
             crypto.randomUUID(),
@@ -204,6 +203,34 @@ export default function CreateClubPage() {
             sport || null,
             homeCountry,
           );
+          try {
+            await setLiveClubGeneralSettings(ctx, profile.id, {
+              classModeEnabled: isClassModeSport(sport),
+              allowGuestsDefault: false,
+              maxGuestsPerMemberDefault: 2,
+              eventsSponsorStripEnabled: false,
+            });
+          } catch (err) {
+            console.warn("[CreateClub] class mode setting failed", err);
+          }
+          if (logoFile) {
+            try {
+              const { compressImage } = await import("@/lib/imageCompression");
+              const compressed = await compressImage(logoFile);
+              const ext = (compressed.file.name.split(".").pop() || "jpg").toLowerCase();
+              const upload = await tryUploadMediaToBlobStore({
+                storagePath: `club-logos/${profile.id}/${Date.now()}.${ext}`,
+                file: compressed.file,
+                mime: compressed.file.type || logoFile.type || "image/jpeg",
+              });
+              if (upload) {
+                const current = (await getLiveClubProfile(ctx, profile.id))[0] ?? profile;
+                await saveLiveClubProfile(ctx, { ...current, logo_url: [upload.url] });
+              }
+            } catch (err) {
+              console.warn("[CreateClub] logo upload failed", err);
+            }
+          }
           try {
             const { ensureLiveDefaultClubChats } = await import("@/live/defaultClubChats");
             await ensureLiveDefaultClubChats(ctx, profile.id, { force: true });

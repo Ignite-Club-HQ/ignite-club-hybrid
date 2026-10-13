@@ -305,6 +305,13 @@ export const idlFactory = ({ IDL }) => {
     'contact_email' : IDL.Opt(IDL.Text),
     'logo_url' : IDL.Opt(IDL.Text),
   });
+  const ClubGeneralSettings = IDL.Record({
+    'class_mode_enabled' : IDL.Bool,
+    'allow_guests_default' : IDL.Bool,
+    'events_sponsor_strip_enabled' : IDL.Bool,
+    'max_guests_per_member_default' : IDL.Nat,
+    'club_id' : IDL.Text,
+  });
   const ClubSubscription = IDL.Record({
     'activated_at_ms' : IDL.Opt(IDL.Nat64),
     'trial_ends_at_ms' : IDL.Opt(IDL.Nat64),
@@ -761,6 +768,11 @@ export const idlFactory = ({ IDL }) => {
     'get_club_branding' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : ClubBranding, 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'get_club_general_settings' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : ClubGeneralSettings, 'Err' : IDL.Text })],
         ['query'],
       ),
     'get_club_home_countries' : IDL.Func(
@@ -1407,6 +1419,11 @@ export const idlFactory = ({ IDL }) => {
     'set_app_config' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_club_general_settings' : IDL.Func(
+        [IDL.Text, IDL.Bool, IDL.Bool, IDL.Nat, IDL.Bool],
+        [IDL.Variant({ 'Ok' : ClubGeneralSettings, 'Err' : IDL.Text })],
         [],
       ),
     'set_club_header_toggles' : IDL.Func(
