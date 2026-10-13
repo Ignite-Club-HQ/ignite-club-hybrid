@@ -1046,6 +1046,16 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'list_online_presence' : IDL.Func(
+        [IDL.Nat],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Int)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'list_pending_invites_by_club' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
@@ -1213,6 +1223,11 @@ export const idlFactory = ({ IDL }) => {
     'purge_expired_deletions' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        [],
+      ),
+    'record_presence_heartbeat' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'reject_club_join_request' : IDL.Func(

@@ -769,6 +769,14 @@ type Main =
                  text;
                };
      }) query;
+   list_online_presence: (window_seconds: nat) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 int;
+               };
+     }) query;
    list_pending_invites_by_club: (club_id: text) ->
     (variant {
        Err: text;
@@ -870,7 +878,7 @@ type Main =
                     Err: text;
                     Ok: MemberPayment;
                   });
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -910,6 +918,10 @@ type Main =
                                      Err: text;
                                      Ok: nat32;
                                    });
+   record_presence_heartbeat: () -> (variant {
+                                       Err: text;
+                                       Ok;
+                                     });
    reject_club_join_request: (id: text) ->
     (variant {
        Err: text;
@@ -926,7 +938,7 @@ type Main =
      });
    /// Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
    /// Any NEW stored principal / principal-text field added to this canister must be added here.
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;

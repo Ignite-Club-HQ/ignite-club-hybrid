@@ -10,12 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { claimLiveEoiByToken, mapLiveEoiSubmission } from "@/live/features/competitions";
+import { getLiveClubProfile, getLiveTeam } from "@/live/features/club";
+import { icpCtx } from "@/lib/icpClubTeamLookup";
 
-// Client-side: the EOI claim/confirm flow (magic-link claim token, parent
-// confirmation, team allocation) has no canister counterpart — EOI config is
-// now stored as an opaque JSON blob via set/get_season_eoi_config, but there
-// is no per-submission claim record on the canister side. In ICP mode every
-// query here is disabled so no II principal reaches Supabase.
+// EOI claim-by-token is backed canister-side by competition_domain's
+// claim_eoi_by_token (idempotent for the same caller, so it doubles as the
+// initial fetch); preference edits/confirm already route through
+// useMyEois.ts. Club/team lookups below use the club_domain wrappers.
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
 import { useAuth } from "@/hooks/useAuth";
 import { useClaimEoi, useConfirmEoi, useUpdateMyEoi, type EoiSubmission } from "@/hooks/useMyEois";

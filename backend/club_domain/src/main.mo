@@ -99,6 +99,12 @@ persistent actor class Main(governorInit : Principal) {
   var teamCaptains : [Types.TeamCaptain];
   var clubJoinRequests : [Types.ClubJoinRequest];
   var themePrefs : [(Principal, Text)];
+  // Caller-recorded presence heartbeat: principal text -> last-seen ms
+  // (Time.now() / 1_000_000). Written by record_presence_heartbeat on every
+  // app foreground/interval tick; read by list_online_presence (governor or
+  // app_admin only) to back the admin "Online Users" page now that ICP
+  // accounts have no Supabase realtime presence channel.
+  var presenceLastSeen : [(Text, Int)];
   var clubTerms : [Types.ClubTerm];
   var removedMembers : [Types.RemovedMember];
   var memberPayments : [Types.MemberPayment];
@@ -3011,6 +3017,31 @@ persistent actor class Main(governorInit : Principal) {
       case (?entry) #Ok(?entry.1);
       case null #Ok(null);
     }
+  };
+
+  // ---- Presence heartbeat (Online Users admin page, ICP) ----
+  // Caller records their own last-seen timestamp; any authenticated
+  // principal may call this for themselves (self-reported, like
+  // set_theme_preference). Pruned lazily on write to bound growth.
+  public shared ({ caller }) func record_presence_heartbeat() : async { #Ok; #Err : Text } {
+    auth(caller);
+    let callerText = Principal.toText(caller);
+    let nowMs : Int = Time.now() / 1_000_000;
+    // Prune entries older than 24h on every write so the list can't grow
+    // unbounded across the lifetime of the canister.
+    let cutoff : Int = nowMs - 86_400_000;
+    presenceLastSeen := presenceLastSeen.filter(func(entry) = entry.1 >= cutoff and entry.0 != callerText);
+    presenceLastSeen := presenceLastSeen.concat([(callerText, nowMs)]);
+    #Ok
+  };
+
+  // Governor or app_admin only. Returns (principal_text, last_seen_ms) for
+  // everyone seen within the last `window_seconds`.
+  public query ({ caller }) func list_online_presence(window_seconds : Nat) : async { #Ok : [(Text, Int)]; #Err : Text } {
+    if (not (isGovernor(caller) or isAppAdmin(caller))) return #Err("App admin required");
+    let nowMs : Int = Time.now() / 1_000_000;
+    let cutoff : Int = nowMs - (window_seconds * 1000);
+    #Ok(presenceLastSeen.filter(func(entry) = entry.1 >= cutoff));
   };
 
   // ---- Club branding + PlayHQ config (Phase 2 of the NEEDS-CANISTER
