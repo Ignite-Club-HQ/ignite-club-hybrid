@@ -629,11 +629,41 @@ export function FixturesCSVImport({ clubId, clubName = '', teamId, teams = [], o
         };
       });
 
-      const { error: insertError } = await supabase
-        .from('events')
-        .insert(eventsToInsert);
+      const { withFeatureBackend } = await import("@/live/featureRouter");
+      const { createLiveEvent } = await import("@/live/features/events");
 
-      if (insertError) throw insertError;
+      await withFeatureBackend("events", {
+        supabase: async () => {
+          const { error: insertError } = await supabase
+            .from('events')
+            .insert(eventsToInsert);
+          if (insertError) throw insertError;
+        },
+        // ICP: create one events_domain event per fixture row, mapping the
+        // same fields the Supabase insert above writes (title/opponent,
+        // start/end window, location, team).
+        icp: async (ctx) => {
+          // 2-hour default window: fixtures only carry a kickoff time, no
+          // explicit end, matching the Supabase row's single start_time.
+          const DEFAULT_GAME_DURATION_MS = 2 * 60 * 60 * 1000;
+          for (const fixture of fixturesToInsert) {
+            const startsAt = new Date(`${fixture.date}T${fixture.time}`);
+            const endsAt = new Date(startsAt.getTime() + DEFAULT_GAME_DURATION_MS);
+            await createLiveEvent(ctx, {
+              clubId,
+              teamId: fixture.teamId || teamId || null,
+              title: fixture.title,
+              description: fixture.description || "",
+              eventType: "game",
+              location: fixture.address || null,
+              opponent: fixture.opponent || null,
+              address: fixture.address || null,
+              startsAtMs: startsAt,
+              endsAtMs: endsAt,
+            });
+          }
+        },
+      });
 
       toast({
         title: "Fixtures imported",
