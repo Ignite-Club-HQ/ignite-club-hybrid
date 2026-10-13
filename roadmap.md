@@ -1,3 +1,7 @@
+## ICP Messages DMs filter
+- [x] Keep DMs reachable under All, including no existing direct conversations and small inboxes.
+- [ ] Confirm on Paul's phone — requires the updated Android app and device access.
+
 ## ICP calendar date error
 - [x] Validate timestamp ranges and cached dates before calendar formatting; 13 regression tests passed.
 - [ ] Confirm “All clubs” on Paul's phone — requires the updated Android app and device access.
