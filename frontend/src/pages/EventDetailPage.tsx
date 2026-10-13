@@ -1,3 +1,4 @@
+import type { Json } from "@/integrations/supabase/types";
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDeleteEvent } from "@/hooks/useDeleteEvent";
@@ -839,16 +840,29 @@ export default function EventDetailPage() {
   // Check if a game is currently in progress (for read-only spectator mode)
   const { data: activeGameSummary } = useQuery({
     queryKey: ["active-game-summary", id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("game_summaries")
-        .select("id, is_active, pitch_state, timer_state")
-        .eq("event_id", id!)
-        .eq("is_active", true)
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && !isIcpAuthBackend && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
+    queryFn: async () => withFeatureBackend("events", {
+      supabase: async () => {
+        const { data } = await supabase
+          .from("game_summaries")
+          .select("id, is_active, pitch_state, timer_state")
+          .eq("event_id", id!)
+          .eq("is_active", true)
+          .maybeSingle();
+        return data;
+      },
+      // ICP: the on-chain match timer is the "game in progress" signal.
+      icp: async (ctx) => {
+        const { getLiveEventTimer } = await import("@/live/features/events");
+        const { icpTimerToServerTimer } = await import("@/lib/serverTimer");
+        const raw = await getLiveEventTimer(ctx, id!);
+        const timer = Array.isArray(raw) ? raw[0] : raw;
+        if (!timer) return null;
+        const state = icpTimerToServerTimer(timer as never);
+        if (!state.half_started_at || state.is_game_finished) return null;
+        return { id: id!, is_active: true, pitch_state: null, timer_state: state as unknown as Json };
+      },
+    }),
+    enabled: !!id && !!isTeamMember && !canAccessPitchBoard && !useIcpLab && event?.type === 'game' && !!isSoccerClub && hasProFootball === true,
     refetchInterval: 30000, // Poll every 30s to detect game start
   });
 
