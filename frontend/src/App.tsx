@@ -46,6 +46,7 @@ import { IcpNavActivityTracker } from "@/components/IcpNavActivityTracker";
 import { IcpPendingBar } from "@/components/IcpPendingBar";
 import { IcsPreviewFallbackDialog } from "@/components/IcsPreviewFallbackDialog";
 import { Loader2 } from "lucide-react";
+import { AppSplash } from "@/components/AppSplash";
 
 // OAuth callback capture is now handled in main.tsx (runs earlier)
 
@@ -474,22 +475,7 @@ const App = () => {
   // screen matches Admin → Infrastructure / Placement Settings from the
   // start, instead of flashing the Supabase form and then swapping.
   if (!placementReady) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background">
-        <img
-          src="/icon-512.png"
-          alt="Ignite logo"
-          className="h-24 w-24 rounded-3xl shadow-md"
-        />
-        <div className="text-center text-2xl font-bold tracking-tight text-foreground">
-          Ignite Club HQ
-        </div>
-        <div className="flex items-center gap-2" role="status">
-          <Loader2 className="h-5 w-5 animate-spin text-primary" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <AppSplash />;
   }
 
   const useIcpAuth = useIcpAuthScreen();

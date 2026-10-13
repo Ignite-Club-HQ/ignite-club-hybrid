@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useOptionalAuth } from "@/hooks/useAuth";
+import { AppSplash } from "@/components/AppSplash";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -258,9 +259,5 @@ export function ClubBackendEnforcement({ children }: { children?: ReactNode }) {
   if (!user || settled || !hasClubPins()) {
     return <>{children}</>;
   }
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="animate-pulse text-2xl font-bold text-gradient-emerald">Ignite</div>
-    </div>
-  );
+  return <AppSplash message="Signing you in..." />;
 }
