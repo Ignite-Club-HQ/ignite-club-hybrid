@@ -38,6 +38,7 @@ import {
 } from "@/lab/hybridHomeRsvpRepository";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveTeam, listLiveClubs, listLiveTeams } from "@/live/features/club";
+import { requestLiveRole } from "@/live/features/membership";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { isLiveAppAdmin } from "@/live/features/insights";
 import {
@@ -1281,8 +1282,21 @@ export default function HomePage() {
 
   // Only fetch all clubs/teams/leagues when join dialogs are open (lazy loading)
   const { data: clubs, error: clubsError, isLoading: clubsLoading } = useQuery({
-    queryKey: ["all-clubs"],
+    queryKey: ["all-clubs", resolveAuthBackend()],
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const rows = await listLiveClubs(ctx);
+            const filterOut = /test|demo|sample/i;
+            return rows
+              .filter((c) => !filterOut.test(c.name))
+              .map((c) => ({ id: c.id, name: c.name, sport: c.sport[0] ?? null, class_mode_enabled: false }))
+              .sort((a, b) => a.name.localeCompare(b.name)) as Club[];
+          },
+        });
+      }
       const { data, error } = await supabase
         .from("clubs")
         .select("id, name, sport, class_mode_enabled")
@@ -1295,7 +1309,7 @@ export default function HomePage() {
       if (error) throw error;
       return data as Club[];
     },
-    enabled: !!user && (teamDialogOpen || !!activeClubFilter) && resolveAuthBackend() !== "icp",
+    enabled: !!user && (teamDialogOpen || !!activeClubFilter),
     staleTime: 1000 * 60 * 5,
     placeholderData: (prev) => prev,
   });
