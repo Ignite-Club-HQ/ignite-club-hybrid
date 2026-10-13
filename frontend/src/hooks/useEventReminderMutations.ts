@@ -280,8 +280,36 @@ export function useEventReminderMutations(params: UseEventReminderMutationsArgs)
   // Resend event invites to members who haven't been notified yet
   const resendInvitesMutation = useMutation({
     mutationFn: async () => {
-      if (resolveAuthBackend() === "icp") return 0;
       if (!event || !id) throw new Error("No event");
+      if (resolveAuthBackend() === "icp") {
+        // Audience = team (or whole club) role grants. A stable per-event
+        // idempotency prefix makes notification_queue skip recipients who
+        // were already invited, so only new members get the invite.
+        return withFeatureBackend("membership", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const { listLiveTeamRoleGrants, listLiveRoleGrants } = await import("@/live/features/membership");
+            const ev = event as unknown as { team_id?: string | null; club_id: string; created_by?: string };
+            const grants = (ev.team_id
+              ? await listLiveTeamRoleGrants(ctx, ev.team_id)
+              : await listLiveRoleGrants(ctx, ev.club_id)) as unknown as Array<{ user: { toText(): string } | string }>;
+            const ids = Array.from(new Set(grants.map((g) => (typeof g.user === "string" ? g.user : g.user.toText()))))
+              .filter((uid) => uid !== ev.created_by && !`principal:${uid}`.endsWith(`:${ev.created_by ?? "-"}`));
+            if (ids.length === 0) throw new Error("No members to invite for this event.");
+            const created = await fanOutLiveNotifications(ctx, {
+              userIds: ids,
+              clubId: ev.club_id,
+              kind: "event_invite",
+              body: `You've been invited to: ${event.title}`,
+              idempotencyKeyPrefix: `event-invite-${id}`,
+              relatedId: id,
+            });
+            const count = Number(created ?? 0);
+            if (count === 0) throw new Error("All members have already been notified about this event!");
+            return count;
+          },
+        });
+      }
 
       // Shared recipient policy (same audience as bulk reminders)
       const resolved = await resolveEventRecipients(
