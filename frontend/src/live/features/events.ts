@@ -2094,6 +2094,5 @@ export async function getLiveRsvpCreatedAt(
   accountId: string,
 ) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
-  const result = await actor.get_rsvp_created_at(eventId, accountId);
-  return result[0] ?? null;
+  return await actor.get_rsvp_created_at(eventId, accountId);
 }

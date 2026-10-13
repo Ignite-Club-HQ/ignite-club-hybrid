@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveSavedLocations, saveLiveLocation, deleteLiveSavedLocation } from "@/live/features/events";
 import { photonAutocomplete, photonReverse, type PhotonPlace } from "@/lib/photonGeocoder";
 
 export interface SavedLocation {
@@ -96,11 +98,29 @@ export function AddressAutocomplete({
 
   // Fetch user's saved favorite locations
   useEffect(() => {
-    // saved_locations is Supabase-only (NEEDS-CANISTER: no saved-places
-    // shape) — never read it for II principals.
-    if (!user || icpMode) return;
-    
+    if (!user) return;
+
     const fetchFavorites = async () => {
+      if (icpMode) {
+        try {
+          const rows = await withFeatureBackend("events", {
+            supabase: async () => [],
+            icp: (ctx) => listLiveSavedLocations(ctx),
+          });
+          setFavoriteLocations(
+            rows.map((loc) => ({
+              id: loc.id,
+              address: loc.address,
+              name: loc.location_label,
+              isFavorite: true,
+            })),
+          );
+        } catch (err) {
+          console.error("Error fetching saved locations:", err);
+        }
+        return;
+      }
+
       const { data, error } = await supabase
         .from('saved_locations')
         .select('*')
@@ -116,7 +136,7 @@ export function AddressAutocomplete({
     };
     
     fetchFavorites();
-  }, [user]);
+  }, [user, icpMode]);
 
   useEffect(() => {
     if (debounceRef.current) {

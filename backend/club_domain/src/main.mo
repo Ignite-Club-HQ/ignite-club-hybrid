@@ -2188,6 +2188,23 @@ persistent actor class Main(governorInit : Principal) {
     }
   };
 
+  // ---- Pending invite email-hash dedupe index ----
+  // The frontend hashes the invite email (salt + lowercase email, SHA-256)
+  // client-side; the canister never sees plaintext. Staff of the invite's
+  // own club may record/query the hash to detect duplicate invites.
+
+  public shared ({ caller }) func set_pending_invite_email_hash(invite_id : Text, club_id : Text, hash : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
+    pendingInviteEmailHashes := pendingInviteEmailHashes.filter(func(h) = h.invite_id != invite_id).concat([{ invite_id; club_id; hash }]);
+    #Ok
+  };
+
+  public query ({ caller }) func find_pending_invite_by_email_hash(club_id : Text, hash : Text) : async { #Ok : ?Types.PendingInviteEmailHash; #Err : Text } {
+    if (not acl.roles.any(func(grant) = grant.user.equal(caller) and grant.club == ?club_id)) return #Err("Club staff required");
+    #Ok(pendingInviteEmailHashes.find(func(h) = h.club_id == club_id and h.hash == hash))
+  };
+
   // Invite preview for the join page: the invite id itself is the bearer
   // token (random 128-bit ids, sent only to the invited email address /
   // share channel), so this is intentionally anonymous — the same trust
@@ -2335,7 +2352,26 @@ persistent actor class Main(governorInit : Principal) {
     auth(caller);
     if (not (canManageChild(caller, child_id) or caller.equal(user))) return #Err("Forbidden");
     acl := { acl with guardians = acl.guardians.filter(func(g) = not (g.child == child_id and g.user.equal(user))) };
+    guardianMeta := guardianMeta.filter(func(m) = not (m.child_id == child_id and m.user.equal(user)));
     #Ok
+  };
+
+  // ---- Guardian relationship metadata (relationship_type/is_primary), layered
+  // on top of the core acl.guardians (child, user) link. Settable by the
+  // guardian themselves or club staff managing the child; unlink_guardian
+  // prunes the matching entry so it never outlives the underlying link.
+  public shared ({ caller }) func set_guardian_relationship(child_id : Text, user : Principal, relationship_type : Text, is_primary : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not (caller.equal(user) or canManageChild(caller, child_id))) return #Err("Forbidden");
+    if (not acl.guardians.any(func(g) = g.child == child_id and g.user.equal(user))) return #Err("Not a guardian of this child");
+    let entry : Types.GuardianMeta = { child_id; user; relationship_type; is_primary };
+    guardianMeta := guardianMeta.filter(func(m) = not (m.child_id == child_id and m.user.equal(user))).concat([entry]);
+    #Ok
+  };
+
+  public query ({ caller }) func get_guardian_relationships(child_id : Text) : async { #Ok : [Types.GuardianMeta]; #Err : Text } {
+    if (not (acl.guardians.any(func(g) = g.child == child_id and g.user.equal(caller)) or canManageChild(caller, child_id))) return #Err("Forbidden");
+    #Ok(guardianMeta.filter(func(m) = m.child_id == child_id))
   };
 
   public shared ({ caller }) func admin_link_child_to_parent(child_id : Text, parent : Principal) : async { #Ok : Types.Child; #Err : Text } {
@@ -2660,6 +2696,31 @@ persistent actor class Main(governorInit : Principal) {
         if (not canManageTeam(caller, team.club, ?team_id)) return #Err("Team or club admin required");
         teamPlayerPositions := teamPlayerPositions.filter(func(p) = not (p.team_id == team_id and p.member_id == member_id));
         teamPlayerPositions := teamPlayerPositions.concat([{ team_id; member_id; position }]);
+        #Ok
+      };
+    }
+  };
+
+  // ---- Team player positions v2 (multi-position + jersey number) ----
+
+  public query ({ caller }) func get_team_player_positions_v2(team_id : Text) : async { #Ok : [Types.TeamPlayerPositionAssignment]; #Err : Text } {
+    switch (acl.teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not isMember(caller, team.club)) return #Err("Forbidden");
+        #Ok(teamPlayerPositionAssignments.filter(func(a) = a.team_id == team_id))
+      };
+    }
+  };
+
+  public shared ({ caller }) func set_team_player_positions_v2(team_id : Text, member_id : Text, positions : [Text], jersey_number : ?Nat16) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (acl.teams.find(func(t) = t.id == team_id)) {
+      case null { #Err("Team not found") };
+      case (?team) {
+        if (not canManageTeam(caller, team.club, ?team_id)) return #Err("Team or club admin required");
+        teamPlayerPositionAssignments := teamPlayerPositionAssignments.filter(func(a) = not (a.team_id == team_id and a.member_id == member_id));
+        teamPlayerPositionAssignments := teamPlayerPositionAssignments.concat([{ team_id; member_id; positions; jersey_number }]);
         #Ok
       };
     }
