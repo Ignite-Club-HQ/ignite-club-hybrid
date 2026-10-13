@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveSeasonTeamAssignment } from "@/live/features/club";
+import { listLiveSeasonTeamAssignment, listLiveTeams } from "@/live/features/club";
 
 export interface ReturningPlayer {
   club_player_id: string;
@@ -36,6 +36,8 @@ interface TargetTeam {
 interface Props {
   sourceSeasonId: string;
   targetSeasonId: string | null;
+  /** Club owning the seasons — needed for ICP team lookups. */
+  clubId?: string;
   selectedIds: Set<string>;
   onChange: (ids: Set<string>) => void;
   /** club_player_id -> target team id (or null = unassigned) */
@@ -48,6 +50,7 @@ const UNASSIGNED = "__unassigned__";
 export function ReturningMembersStep({
   sourceSeasonId,
   targetSeasonId,
+  clubId,
   selectedIds,
   onChange,
   assignments,
@@ -67,23 +70,38 @@ export function ReturningMembersStep({
           if (error) throw error;
           return (data ?? []) as ReturningPlayer[];
         },
-        // Mapped onto season_team_assignment. The canister record has no
-        // display name / DOB / previous team name (those live on club-wide
-        // member and team records this component has no ids for), so this
-        // shows the raw member id as a placeholder until a richer lookup is
-        // wired through.
+        // Mapped onto season_team_assignment; names come from PII child-name
+        // records (children) or identity_access profiles (adults), team names
+        // from the club's team list.
         icp: async (ctx) => {
           const assignments = (await listLiveSeasonTeamAssignment(ctx, sourceSeasonId)) as Array<{
             member_id: string;
             team_id: string;
           }>;
+          if (assignments.length === 0) return [];
+          const memberIds = Array.from(new Set(assignments.map((a) => a.member_id)));
+          const [{ resolveLivePiiTextBatch }, { listLiveProfilesByIds }] = await Promise.all([
+            import("@/live/features/vault"),
+            import("@/live/features/identityAccessClient"),
+          ]);
+          const [childNames, profiles, teams] = await Promise.all([
+            resolveLivePiiTextBatch(ctx, memberIds, "name", "season_rollover", "Show returning player names").catch(
+              () => new Map<string, string>(),
+            ),
+            listLiveProfilesByIds(ctx, memberIds).catch(() => []),
+            clubId ? listLiveTeams(ctx, clubId).catch(() => []) : Promise.resolve([]),
+          ]);
+          const profileNames = new Map(
+            (profiles as Array<{ account_id: string; display_name?: string }>).map((p) => [p.account_id, p.display_name ?? ""]),
+          );
+          const teamNames = new Map((teams as Array<{ id: string; name: string }>).map((t) => [t.id, t.name]));
           return assignments.map((a): ReturningPlayer => ({
             club_player_id: a.member_id,
-            display_name: a.member_id,
+            display_name: childNames.get(a.member_id) || profileNames.get(a.member_id) || "Member",
             date_of_birth: null,
             age_years: null,
             previous_team_id: a.team_id,
-            previous_team_name: a.team_id,
+            previous_team_name: teamNames.get(a.team_id) ?? "Team",
             membership_role: "player",
           }));
         },
@@ -91,19 +109,36 @@ export function ReturningMembersStep({
   });
 
   const { data: targetTeams = [] } = useQuery({
-    queryKey: ["season-target-teams", targetSeasonId],
-    enabled: !!targetSeasonId && !isIcp,
-    queryFn: async (): Promise<TargetTeam[]> => {
-      if (isIcp) return [];
-      const { data, error } = await supabase
-        .from("teams")
-        .select("id, name")
-        .eq("season_id", targetSeasonId!)
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as TargetTeam[];
-    },
+    queryKey: ["season-target-teams", targetSeasonId, clubId, isIcp],
+    enabled: !!targetSeasonId && (isIcp ? !!clubId : true),
+    queryFn: async (): Promise<TargetTeam[]> =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name")
+            .eq("season_id", targetSeasonId!)
+            .is("deleted_at", null)
+            .order("name");
+          if (error) throw error;
+          return (data ?? []) as TargetTeam[];
+        },
+        // Canister teams have no season_id (they aren't season-scoped), so
+        // the target-season team picker just lists the club's active teams.
+        icp: async (ctx) => {
+          const teams = (await listLiveTeams(ctx, clubId!)) as Array<{
+            id: string;
+            name: string;
+            is_active: boolean;
+            archived: boolean;
+            deleted_at_ms: [] | [bigint];
+          }>;
+          return teams
+            .filter((t) => t.is_active && !t.archived && t.deleted_at_ms.length === 0)
+            .map((t) => ({ id: t.id, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        },
+      }),
   });
 
   // Seed default assignments: same-named team in the new season, else unassigned.
