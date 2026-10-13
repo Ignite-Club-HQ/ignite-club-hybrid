@@ -15,7 +15,7 @@ const REPORT_REASONS: readonly ReportReason[] = [
   { value: "other", label: "Other" },
 ];
 
-export function ReportPhotoDialog({ isOpen, onClose, photoId }: ReportPhotoDialogProps) {
+export function ReportPhotoDialog({ isOpen, onClose, photoId, conversationId }: ReportPhotoDialogProps) {
   return (
     <ReportContentDialog
       isOpen={isOpen}

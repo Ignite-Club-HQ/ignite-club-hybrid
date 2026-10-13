@@ -118,6 +118,15 @@ persistent actor class Main(governorInit : Principal) {
   var piiCanister : ?Principal;
   var clubSubscriptions : [Types.ClubSubscription];
   var teamSubscriptions : [Types.TeamSubscription];
+  // New state added 20261015_000000: pending-invite labels, season EOI
+  // config blobs, season team assignments, club association-kind flags,
+  // class enrolments, and per-club theme JSON blobs.
+  var pendingInviteLabels : [(Text, Text)];
+  var seasonEoiConfig : [(Text, Text)];
+  var seasonTeamAssignments : [Types.SeasonTeamAssignment];
+  var clubKinds : [(Text, Text)];
+  var classEnrolments : [Types.ClassEnrolment];
+  var clubThemeJson : [(Text, Text)];
 
   // Global app-wide config key/value store (app_settings parity for values
   // that must be readable pre-auth, e.g. the backend routing config). Values

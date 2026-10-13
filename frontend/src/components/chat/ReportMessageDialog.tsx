@@ -20,6 +20,7 @@ export function ReportMessageDialog({
   onClose,
   messageId,
   messageType,
+  conversationId,
 }: ReportMessageDialogProps) {
   return (
     <ReportContentDialog

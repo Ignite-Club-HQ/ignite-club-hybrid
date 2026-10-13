@@ -483,4 +483,24 @@ module {
     games_played : Nat32;
     updated_at_ms : Nat64;
   };
+
+  // Season team assignment — a draft membership of a club member on a team
+  // scoped to a season, distinct from AccountRole (permanent club/team role
+  // grants). Lets draft planning and season rollover move members between
+  // teams for an upcoming season without touching live ACL roles.
+  public type SeasonTeamAssignment = { season_id : Text; team_id : Text; member_id : Text; added_at_ms : Nat64 };
+
+  // Class/term enrolment record — a member's enrolment status in a class
+  // within a ClubTerm. class_id is a free-form identifier (the Supabase
+  // classes.id text), distinct from team_id.
+  public type ClassEnrolment = {
+    id : Text;
+    club_id : Text;
+    term_id : Text;
+    class_id : Text;
+    member_id : Text;
+    status : Text; // "enrolled" | "withdrawn"
+    created_at_ms : Nat64;
+    updated_at_ms : Nat64;
+  };
 }

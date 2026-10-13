@@ -14,7 +14,7 @@ const REPORT_REASONS: readonly ReportReason[] = [
   { value: "other", label: "Other" },
 ];
 
-export function ReportCommentDialog({ isOpen, onClose, commentId }: ReportCommentDialogProps) {
+export function ReportCommentDialog({ isOpen, onClose, commentId, conversationId }: ReportCommentDialogProps) {
   return (
     <ReportContentDialog
       isOpen={isOpen}

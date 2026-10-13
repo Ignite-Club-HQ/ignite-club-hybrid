@@ -115,3 +115,63 @@ describe("myLiveUnreadCounts", () => {
     await expect(myLiveUnreadCounts(ctx)).resolves.toEqual([]);
   });
 });
+
+describe("submitLiveContentReport", () => {
+  const mocks_report = vi.hoisted(() => ({
+    submit_content_report: vi.fn(),
+  }));
+
+  vi.mock("../domains", () => ({
+    connectLiveMessagingDomain: vi.fn(async () => ({
+      actor: {
+        ...mocks,
+        submit_content_report: mocks_report.submit_content_report,
+      },
+    })),
+  }));
+
+  it("submits a report and maps the response", async () => {
+    const reportDate = 1700000000000n;
+    mocks_report.submit_content_report.mockResolvedValueOnce({
+      Ok: {
+        id: "report-1",
+        reporter: other,
+        subject_kind: "message",
+        subject_id: "msg-123",
+        conversation_id: ["conv-456"],
+        reason: "Spam",
+        details: ["extra info"],
+        created_at_ms: reportDate,
+        status: "pending",
+      },
+    });
+
+    const result = await submitLiveContentReport(
+      ctx,
+      "message",
+      "msg-123",
+      "conv-456",
+      "Spam",
+      "extra info"
+    );
+
+    expect(result).toEqual({
+      id: "report-1",
+      reporter: "aaaaa-aa",
+      subject_kind: "message",
+      subject_id: "msg-123",
+      conversation_id: "conv-456",
+      reason: "Spam",
+      details: "extra info",
+      created_at_ms: Number(reportDate),
+      status: "pending",
+    });
+    expect(mocks_report.submit_content_report).toHaveBeenCalledWith(
+      "message",
+      "msg-123",
+      ["conv-456"],
+      "Spam",
+      ["extra info"]
+    );
+  });
+});
