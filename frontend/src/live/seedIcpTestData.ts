@@ -110,13 +110,19 @@ const LINES = [
 const LONG =
   "Quick update for the season: we'll keep training on Tuesdays and Thursdays. Please arrive 10 minutes early so we can start on time, bring a full water bottle, shin pads and a jumper as it's getting cold. If your child can't make it, please RSVP in the app so coaches can plan drills. Thanks for all your support so far!";
 
+const seedFailures: string[] = [];
+function noteFail(what: string, e: unknown) {
+  console.warn("[seed]", what, e);
+  seedFailures.push(`${what}: ${e instanceof Error ? e.message : String(e)}`);
+}
+
 async function pool<T>(items: T[], size: number, fn: (item: T, i: number) => Promise<void>) {
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(size, items.length) }, async () => {
       while (next < items.length) {
         const i = next++;
-        await fn(items[i], i).catch((e) => console.warn("[seed] step failed", e));
+        await fn(items[i], i).catch((e) => noteFail("event", e));
       }
     }),
   );
@@ -141,7 +147,8 @@ function makePhoto(label: string, hue: number): Promise<File> {
   );
 }
 
-export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: string }> {
+export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: string; failures: string[]; total: number }> {
+  seedFailures.length = 0;
   const ctx = await icpCtx();
   const me: Principal = ctx.identity.getPrincipal();
   const step = opts.onProgress;
@@ -184,7 +191,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
     const { ensureLiveDefaultClubChats } = await import("./defaultClubChats");
     await ensureLiveDefaultClubChats(ctx, clubId, { force: true });
   } catch (e) {
-    console.warn("[seed] default chats failed", e);
+    noteFail("default chats", e);
   }
 
   // Events: one training + one game per team per week for 4 weeks.
@@ -235,7 +242,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   await Promise.all(
     chats.map(async (c) => {
       for (const m of msgs.filter((x) => x.convo === c.id)) {
-        await sendLiveMessage(ctx, m.convo, m.body, crypto.randomUUID()).catch((e) => console.warn("[seed] msg", e));
+        await sendLiveMessage(ctx, m.convo, m.body, crypto.randomUUID()).catch((e) => noteFail("message", e));
         step("Sending chat messages", ++mDone, msgs.length);
       }
     }),
@@ -258,7 +265,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
         caption: real ? (i % 2 ? "Great game today!" : "Training session") : `Synthetic photo ${i + 1}`, albumId: null,
       }).catch(() => {});
     } catch (e) {
-      console.warn("[seed] photo failed", e);
+      noteFail("photo", e);
     }
   }
   // Vault files (club-level, staff lock like the vault upload screen).
@@ -274,9 +281,13 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
       if (!up) throw new Error("Media upload canisters are not configured");
       await registerLiveVaultFile(ctx, crypto.randomUUID(), "", clubId, null, f.name, up.url, file.size, file.type, false, up.blobRef as any);
     } catch (e) {
-      console.warn("[seed] file failed", e);
+      noteFail("file", e);
     }
   }
   step("Done", 1, 1);
-  return { clubId };
+  const total = events.length + msgs.length + opts.photos + fileCount;
+  if (seedFailures.length >= total && total > 0) {
+    throw new Error(`Nothing was added. First problem — ${seedFailures[0]}`);
+  }
+  return { clubId, failures: [...seedFailures], total };
 }
