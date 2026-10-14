@@ -300,6 +300,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     assetViews.set(asset.id, {
       id: asset.id,
       url: sourceUrl ? LOADING_PHOTO_URL : UNAVAILABLE_PHOTO_URL,
+      loading: !!sourceUrl,
       isVideo,
       sourceUrl,
     });
