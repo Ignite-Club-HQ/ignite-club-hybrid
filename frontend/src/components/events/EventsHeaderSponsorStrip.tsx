@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubSettings, getLiveClubSubscription, listLiveSponsors } from "@/live/features/club";
 import { getLiveMyRoleGrants } from "@/live/features/membership";
-import { resolveAuthBackend } from "@/live/authBackendMode";
+import { getLiveAdSetting, listLiveActiveAds } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
@@ -211,17 +211,21 @@ export function EventsHeaderSponsorStrip({
     queryKey: ["app-ad-settings", "events"],
     enabled: !!clubId && isProClub === false,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      // App-wide ads are Supabase-only by design (ad management lives there);
-      // in ICP mode the free-club ad slot is simply off.
-      if (resolveAuthBackend() === "icp") return { is_enabled: false };
-      const { data } = await supabase
-        .from("app_ad_settings")
-        .select("is_enabled")
-        .eq("location", "events")
-        .maybeSingle();
-      return data;
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("app_ad_settings")
+            .select("is_enabled")
+            .eq("location", "events")
+            .maybeSingle();
+          return data;
+        },
+        icp: async (ctx) => {
+          const s = await getLiveAdSetting(ctx, "events");
+          return s ? { is_enabled: s.is_enabled } : null;
+        },
+      }),
   });
   const freePlacementEnabled = !!placementSettings?.is_enabled;
 
@@ -229,14 +233,29 @@ export function EventsHeaderSponsorStrip({
     queryKey: ["events-header-app-ads"],
     enabled: !!clubId && isProClub === false && freePlacementEnabled,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("app_ads")
-        .select("id, name, image_url, link_url, ad_type, logo_url, headline")
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      return (data || []) as AppAdLite[];
-    },
+    queryFn: async () =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data } = await supabase
+            .from("app_ads")
+            .select("id, name, image_url, link_url, ad_type, logo_url, headline")
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+          return (data || []) as AppAdLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveActiveAds(ctx)).map(
+            (a): AppAdLite => ({
+              id: a.id,
+              name: a.name,
+              image_url: a.image_url[0] ?? null,
+              link_url: a.link_url[0] ?? null,
+              ad_type: a.ad_type as AppAdLite["ad_type"],
+              logo_url: a.logo_url[0] ?? null,
+              headline: a.headline[0] ?? null,
+            }),
+          ),
+      }),
   });
 
   const activeSponsor = useTieredSponsorSlot(sponsors, isProClub === true);
