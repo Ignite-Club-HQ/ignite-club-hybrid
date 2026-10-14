@@ -157,6 +157,7 @@ export function useAddPendingTeamMemberMutation({
       console.warn("[ICP invite] short code creation failed:", err);
     }
 
+    // icp-guard: allow email delivery stays off-chain by design (send-email)
     // Email delivery routes through the send-email edge function, which is
     // anon-key callable so Internet Identity sessions can send too. Failure
     // degrades to manual link sharing — the link is returned either way.
