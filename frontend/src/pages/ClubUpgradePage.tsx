@@ -51,6 +51,7 @@ import { getLiveMyRoleGrants } from "@/live/features/membership";
 import { getLiveClubProfile, getLiveClubSubscription, listLiveTeams } from "@/live/features/club";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLocalLabClubDetail, getLocalLabTeamList } from "@/lab/fixtureDataLayer";
+import { useInAppPurchase } from "@/hooks/useInAppPurchase";
 
 
 const PRO_FEATURES = [
@@ -130,6 +131,7 @@ export default function ClubUpgradePage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [teamSelectOpen, setTeamSelectOpen] = useState(false);
   const { showIfDesktop, dialog: desktopUpgradeDialog } = useDesktopUpgradeGate();
+  const { purchaseProduct } = useInAppPurchase();
 
 
   useEffect(() => {
