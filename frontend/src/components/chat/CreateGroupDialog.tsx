@@ -313,6 +313,34 @@ export default function CreateGroupDialog({
   const { data: adminMiniLeagues = [] } = useQuery({
     queryKey: ["admin-mini-leagues-for-groups", user?.id, activeClubFilter],
     queryFn: async () => {
+      // ICP mode: resolve admin clubs, Pro status and leagues on-chain.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        const [{ getLiveMyRoleGrants }, { isLiveClubPro }, { listLiveMiniLeaguesByClub }] = await Promise.all([
+          import("@/live/features/membership"),
+          import("@/live/features/club"),
+          import("@/live/features/miniLeagues"),
+        ]);
+        const grants = ((await getLiveMyRoleGrants(ctx).catch(() => [])) ?? []) as any[];
+        let ids = Array.from(
+          new Set(
+            grants
+              .filter((g) => ["club_admin", "app_admin", "committee_member", "coach", "team_admin"].includes(g.role))
+              .map((g) => (Array.isArray(g.club) ? g.club[0] : g.club))
+              .filter((x): x is string => !!x),
+          ),
+        );
+        if (activeClubFilter) ids = ids.filter((id) => id === activeClubFilter);
+        const out: any[] = [];
+        for (const cid of ids) {
+          if (!(await isLiveClubPro(ctx, cid).catch(() => false))) continue;
+          const leagues = ((await listLiveMiniLeaguesByClub(ctx, cid).catch(() => [])) ?? []) as any[];
+          const clubName = await lookup.icpGetClubName(cid).catch(() => null);
+          for (const l of leagues) out.push({ id: l.id, name: l.name, club_id: cid, clubs: { name: clubName } });
+        }
+        return out;
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("club_id")
