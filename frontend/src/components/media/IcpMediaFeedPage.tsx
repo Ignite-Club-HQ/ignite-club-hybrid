@@ -48,6 +48,9 @@ import { mediaProfileDirectory } from "./mediaProfileDirectory";
 interface LiveAssetView {
   id: string;
   url: string;
+  /** True while the encrypted blob is still being fetched/decrypted — the UI
+   * shows a pulsing skeleton instead of a flat grey image. */
+  loading: boolean;
   isVideo: boolean;
   /** Encrypted photo-store address; unlocked in the background. */
   sourceUrl?: string | null;
