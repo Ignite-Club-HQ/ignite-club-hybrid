@@ -206,6 +206,11 @@ export interface Main {
    */
   'cycles_balance' : ActorMethod<[], bigint>,
   'delete_ad' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'delete_feedback' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'get_ad_setting' : ActorMethod<[string], [] | [AppAdSetting]>,
   'get_benchmarks' : ActorMethod<
     [Array<string>],
@@ -220,6 +225,11 @@ export interface Main {
   'get_sponsor_performance' : ActorMethod<
     [string, string],
     { 'Ok' : SponsorPerformance } |
+      { 'Err' : string }
+  >,
+  'grant_app_admin' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'grant_role' : ActorMethod<
@@ -240,6 +250,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_ads' : ActorMethod<[], { 'Ok' : Array<AppAd> } | { 'Err' : string }>,
+  'list_app_admins' : ActorMethod<
+    [],
+    { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
   'list_audit_logs' : ActorMethod<
     [[] | [Principal], [] | [string], [] | [string], number, number],
     { 'Ok' : { 'total' : number, 'items' : Array<AuditLog> } } |
@@ -344,6 +359,11 @@ export interface Main {
   'resolve_admin_alert' : ActorMethod<
     [string],
     { 'Ok' : AdminAlert } |
+      { 'Err' : string }
+  >,
+  'revoke_app_admin' : ActorMethod<
+    [Principal],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_ad_active' : ActorMethod<

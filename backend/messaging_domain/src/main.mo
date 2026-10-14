@@ -66,6 +66,8 @@ persistent actor class Main(governorInit : Principal) {
   var pinnedMessages : [Types.PinnedMessage];
   var contentReports : [Types.ContentReport];
   var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
+  // Cooldown log for run_chat_photo_gallery_reminders (admin "run now").
+  var chatPhotoReminderLog : [Types.ChatPhotoReminderLog];
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
