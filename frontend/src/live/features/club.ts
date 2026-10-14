@@ -283,7 +283,7 @@ export async function listLiveSponsors(ctx: FeatureBackendContext, clubId: strin
  */
 export async function isLiveClubPro(ctx: FeatureBackendContext, clubId: string): Promise<boolean> {
   const sub = await getLiveClubSubscription(ctx, clubId).catch(() => null);
-  if (sub?.is_pro || sub?.admin_pro_override) return true;
+  if (sub?.is_pro || sub?.admin_pro_override || sub?.is_pro_football || sub?.admin_pro_football_override) return true;
   const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
   const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText(), ctx.target).catch(() => null);
   return !!summary?.isPro;

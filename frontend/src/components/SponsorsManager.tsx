@@ -339,7 +339,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       supabase: async () => {
         const { error } = await supabase
           .from("sponsors")
-          .update({ [field]: value })
+          .update(field === "is_active" ? { is_active: value } : { is_team_only: value })
           .eq("id", id);
         if (error) throw error;
       },

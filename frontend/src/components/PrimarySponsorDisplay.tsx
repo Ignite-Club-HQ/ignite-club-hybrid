@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
 import { SponsorTier, TIER_CONFIG } from "@/lib/sponsorTiers";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listAllLiveSponsors } from "@/live/features/club";
 
 interface Sponsor {
   id: string;

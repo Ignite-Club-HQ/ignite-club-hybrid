@@ -134,3 +134,9 @@
 - [x] Stats/rewards: team leaderboards, real Pro check, points switch; account: theme, switcher hint, admin delete; vault delete + auto-copy
 - [ ] Leftovers still marked in code: saved places, live pitch board view/alerts, per-club badges, notification chat routing/club switch, gallery publish from chat, early-RSVP points, team role notifications, positions jersey/multi, second-parent invites, guardian fields, invite email dedupe, home invite lookup, team carousel fields, rewards manager icon/team overrides, PlayHQ
 - [ ] User: redeploy club, events, messaging, identity canisters + frontend canister + Android build
+
+## ICP sponsor display (2026-10-14)
+- [x] Sponsor banner missing imports (crashed silently in both modes)
+- [x] Sponsor switches save on-chain + instant flip
+- [x] Club Pro check counts Pro Football
+- [ ] User verifies after website redeploy + Codemagic build (needs club Pro recorded on-chain)
