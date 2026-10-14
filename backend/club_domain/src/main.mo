@@ -4280,4 +4280,78 @@ persistent actor class Main(governorInit : Principal) {
     body #= "}";
     jsonResponse(200, body)
   };
+
+  // ---- Pitch board: named formation library + alert role switches ----
+  type PitchFormation = {
+    id : Text;
+    team_id : Text;
+    club_id : Text;
+    name : Text;
+    team_size : Nat32;
+    formation_json : Text;
+    drawing_json : ?Text;
+    created_by : Principal;
+    created_at_ms : Nat64;
+  };
+  type PitchNotifyFlags = { team_id : Text; coach : Bool; team_admin : Bool; subs_manager : Bool };
+  var pitchFormations : [PitchFormation];
+  var pitchNotifyFlags : [PitchNotifyFlags];
+
+  func teamClub(team_id : Text) : ?Text {
+    switch (teams.find(func(t) = t.id == team_id)) { case (?t) ?t.club_id; case null null }
+  };
+
+  public shared query ({ caller }) func list_pitch_formations(team_id : Text) : async { #Ok : [PitchFormation]; #Err : Text } {
+    let club = switch (teamClub(team_id)) { case (?c) c; case null return #Err("Team not found") };
+    if (not (isMember(caller, club) or isGovernor(caller))) return #Err("Team member required");
+    #Ok(pitchFormations.filter(func(f) = f.team_id == team_id))
+  };
+
+  public shared ({ caller }) func save_pitch_formation(team_id : Text, name : Text, team_size : Nat32, formation_json : Text, drawing_json : ?Text) : async { #Ok : PitchFormation; #Err : Text } {
+    auth(caller);
+    let club = switch (teamClub(team_id)) { case (?c) c; case null return #Err("Team not found") };
+    if (not canManageTeam(caller, club, ?team_id)) return #Err("Coach or team admin required");
+    let trimmed = Text.trim(name, #char ' ');
+    if (trimmed.size() == 0 or name.size() > 120) return #Err("Name must be 1-120 characters");
+    let drawingSize = switch (drawing_json) { case (?d) d.size(); case null 0 };
+    if (formation_json.size() + drawingSize > 1_500_000) return #Err("Formation is too large to save");
+    let now = nowNs();
+    let f : PitchFormation = {
+      id = "pf-" # team_id # "-" # Nat.toText(pitchFormations.size() + 1) # "-" # Nat64.toText(now % 1_000_000_000);
+      team_id; club_id = club; name = trimmed; team_size; formation_json; drawing_json;
+      created_by = caller; created_at_ms = now / 1_000_000;
+    };
+    pitchFormations := pitchFormations.concat([f]);
+    #Ok(f)
+  };
+
+  public shared ({ caller }) func delete_pitch_formation(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (pitchFormations.find(func(f) = f.id == id)) {
+      case null { #Err("Formation not found") };
+      case (?f) {
+        if (not (f.created_by.equal(caller) or canManageTeam(caller, f.club_id, ?f.team_id))) return #Err("Not allowed");
+        pitchFormations := pitchFormations.filter(func(x) = x.id != id);
+        #Ok
+      };
+    }
+  };
+
+  public shared query ({ caller }) func get_team_pitch_notify(team_id : Text) : async { #Ok : PitchNotifyFlags; #Err : Text } {
+    let club = switch (teamClub(team_id)) { case (?c) c; case null return #Err("Team not found") };
+    if (not (isMember(caller, club) or isGovernor(caller))) return #Err("Team member required");
+    switch (pitchNotifyFlags.find(func(f) = f.team_id == team_id)) {
+      case (?f) #Ok(f);
+      case null #Ok({ team_id; coach = true; team_admin = true; subs_manager = true });
+    }
+  };
+
+  public shared ({ caller }) func set_team_pitch_notify(team_id : Text, coach : Bool, team_admin : Bool, subs_manager : Bool) : async { #Ok : PitchNotifyFlags; #Err : Text } {
+    auth(caller);
+    let club = switch (teamClub(team_id)) { case (?c) c; case null return #Err("Team not found") };
+    if (not canManageTeam(caller, club, ?team_id)) return #Err("Coach or team admin required");
+    let f : PitchNotifyFlags = { team_id; coach; team_admin; subs_manager };
+    pitchNotifyFlags := pitchNotifyFlags.filter(func(x) = x.team_id != team_id).concat([f]);
+    #Ok(f)
+  };
 }
