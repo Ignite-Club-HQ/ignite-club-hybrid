@@ -1,3 +1,7 @@
+## Supabase role requests
+- [ ] Verify fresh sorted reads, request dates and scoped requester names; retain genuine old requests.
+- [ ] Confirm Paul's phone screen after frontend deployment — external Supabase session/device access required.
+
 ## Move everything except payments on-chain (2026-10-13)
 - [x] Scheduled messages: manage page + photo attachments on ICP
 - [x] Club weekly schedule broadcasts on ICP
