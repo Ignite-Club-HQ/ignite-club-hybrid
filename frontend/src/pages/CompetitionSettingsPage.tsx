@@ -382,7 +382,7 @@ function SupabaseCompetitionSettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("competitions")
-        .select("*, clubs:club_id(kind)")
+        .select("*, clubs:organizer_club_id(kind)")
         .eq("id", id!)
         .maybeSingle();
       if (error) throw error;
