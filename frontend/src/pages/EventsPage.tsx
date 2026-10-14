@@ -545,6 +545,18 @@ export default function EventsPage() {
         isAppAdmin,
       };
     },
+    // Last-known memberships let the schedule query start immediately; the
+    // fresh copy replaces them in the background.
+    initialData: () => {
+      if (useIcpLab || !user?.id) return undefined;
+      try {
+        const raw = localStorage.getItem(`ignite_schedule_memberships_v1:${user.id}`);
+        return raw ? JSON.parse(raw) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    initialDataUpdatedAt: 0,
     enabled: !!user || useIcpLab,
     // Roles + memberships change rarely; 30min stale eliminates the repeat
     // waterfall on tab focus / navigation returns.
@@ -942,15 +954,16 @@ export default function EventsPage() {
   // gates the events query) may never resolve. Rather than sit on a spinner
   // forever, read the user-scoped schedule cache directly and render it.
   const { isOnline } = useOnlineStatus();
+  // Also used online: last visit's schedule paints instantly while the
+  // fresh one loads in the background (replaced as soon as it arrives).
   const offlineCachedEvents = useMemo(() => {
-    if (isOnline) return null;
     try {
       return (getCachedEventsList(eventsScopeKey, user?.id) as Event[] | null) ?? null;
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline, eventsScopeKey, user?.id]);
+  }, [eventsScopeKey, user?.id]);
 
   // Never let a failed/never-resolving network query blank out cached data.
   const events = useMemo(
