@@ -2344,7 +2344,7 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(playhqTeamSyncs.find(func(s) = s.team_id == team_id))
   };
 
-  var playhqSweepCursor : Nat = 0;
+  transient var playhqSweepCursor : Nat = 0;
   func sweepPlayhqAutoSync() : async () {
     if (playHQConfig == null) return;
     let autos = playhqTeamSyncs.filter(func(s) = s.auto);
