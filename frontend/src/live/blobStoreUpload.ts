@@ -40,6 +40,55 @@ export async function getLiveBlobStoreUsage(target: IcpTargetConfig, identity: I
   return actor.get_usage();
 }
 
+const FREE_LIMIT_MESSAGES: Record<string, string> = {
+  gallery_photo: "You've used your 10 free photo uploads this cycle. Upgrade to Pro for unlimited uploads.",
+  chat_photo: "You've used your 10 free chat photos this cycle. Upgrade to Pro for unlimited chat photos.",
+  chat_file: "Your club has used its free chat file allowance (10 files / 25 MB) this cycle. Upgrade to Pro for unlimited chat attachments.",
+  vault: "Your club has used its free vault allowance (10 files / 25 MB) this cycle. Upgrade to Pro for unlimited vault storage.",
+};
+
+/** Free-plan cap rejection from the canister, mapped to the Supabase wording. */
+export function freeLimitMessage(error: unknown): string | null {
+  const m = /FreeLimitReached:(\w+)/.exec(error instanceof Error ? error.message : String(error));
+  return m ? FREE_LIMIT_MESSAGES[m[1]] ?? "Free plan upload limit reached. Upgrade to Pro." : null;
+}
+
+export interface ClubMediaUsage {
+  category: string;
+  count: number;
+  bytes: number;
+  countLimit: number;
+  bytesLimit: number | null;
+}
+
+/** Free-plan media usage for a club this cycle, summed across photo stores. */
+export async function getLiveClubMediaUsage(
+  target: IcpTargetConfig,
+  identity: Identity,
+  clubId: string,
+): Promise<Record<string, ClubMediaUsage>> {
+  const out: Record<string, ClubMediaUsage> = {};
+  for (const key of listBlobStoreKeys(target)) {
+    try {
+      const { actor } = await connectLiveBlobStore(target, identity, key);
+      const rows = await actor.get_club_media_usage(clubId);
+      for (const r of rows) {
+        const prev = out[r.category];
+        out[r.category] = {
+          category: r.category,
+          count: (prev?.count ?? 0) + Number(r.count),
+          bytes: (prev?.bytes ?? 0) + Number(r.bytes),
+          countLimit: Number(r.count_limit),
+          bytesLimit: r.bytes_limit.length ? Number(r.bytes_limit[0]) : null,
+        };
+      }
+    } catch {
+      // Store not upgraded yet / unreachable — skip it.
+    }
+  }
+  return out;
+}
+
 function isStoreFullError(error: unknown): boolean {
   return /StoreFull/.test(error instanceof Error ? error.message : String(error));
 }
@@ -87,6 +136,8 @@ export async function uploadBytesToBlobStore(
     try {
       return await uploadToStore(target, identity, key, path, bytes, mime);
     } catch (error) {
+      const friendly = freeLimitMessage(error);
+      if (friendly) throw new Error(friendly);
       if (!isStoreFullError(error)) throw error;
       fullStores.set(target.canisterIds[key], Date.now());
       lastError = error;

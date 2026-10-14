@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveFreeUsageCounters } from "@/live/features/club";
+import { isLiveClubPro } from "@/live/features/club";
+import { getLiveClubMediaUsage } from "@/live/blobStoreUpload";
 
 const REFRESH_EVENT = "club-free-usage:refresh";
 
@@ -138,23 +139,41 @@ export function useClubFreeUsage(clubId: string | null | undefined) {
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<ClubFreeUsage | null> => {
       if (resolveAuthBackend() === "icp") {
-        const counters = await withFeatureBackend("membership", {
-          icp: (ctx) => getLiveFreeUsageCounters(ctx, clubId!),
+        const live = await withFeatureBackend("membership", {
+          icp: async (ctx) => {
+            const [isPro, media] = await Promise.all([
+              isLiveClubPro(ctx, clubId!).catch(() => false),
+              getLiveClubMediaUsage(ctx.target, ctx.identity, clubId!),
+            ]);
+            return { isPro, media };
+          },
           supabase: async () => null,
         });
-        if (!counters) return null;
+        if (!live) return null;
 
-        // Structural counters (teams/members/invites/news) from the canister.
-        // The canister does not track cycle-based usage like photos/polls yet,
-        // so those are returned as 0/unlimited (never capped).
+        // Media caps are enforced by the photo-store canister per 30-day
+        // cycle; polls are not capped on-chain.
+        const { isPro, media } = live;
+        const count = (c: string) => (isPro ? 0 : media[c]?.count ?? 0);
+        const bytes = (c: string) => (isPro ? 0 : media[c]?.bytes ?? 0);
+        const photoUsed = count("gallery_photo");
+        const chatPhotoUsed = count("chat_photo");
+        const fileUsed = count("vault");
+        const fileBytes = bytes("vault");
+        const chatFileUsed = count("chat_file");
+        const chatFileBytes = bytes("chat_file");
+        const fileCountCap = fileUsed >= FREE_FILE_COUNT;
+        const fileStoreCap = fileBytes >= FREE_FILE_STORAGE_BYTES;
+        const chatFileCountCap = chatFileUsed >= FREE_CHAT_FILE_COUNT;
+        const chatFileStoreCap = chatFileBytes >= FREE_CHAT_FILE_STORAGE_BYTES;
         return {
-          isPro: false,
+          isPro,
           cycleStart: null,
           cycleEnd: null,
-          photo: { used: 0, limit: FREE_PHOTO_UPLOADS_PER_CYCLE, atCountCap: false, atCap: false },
-          chatPhoto: { used: 0, limit: FREE_CHAT_PHOTOS_PER_CYCLE, atCap: false },
-          file: { used: 0, limit: FREE_FILE_COUNT, storageUsed: 0, storageLimit: FREE_FILE_STORAGE_BYTES, atCountCap: false, atStorageCap: false, atCap: false },
-          chatFile: { used: 0, limit: FREE_CHAT_FILE_COUNT, storageUsed: 0, storageLimit: FREE_CHAT_FILE_STORAGE_BYTES, atCountCap: false, atStorageCap: false, atCap: false },
+          photo: { used: photoUsed, limit: FREE_PHOTO_UPLOADS_PER_CYCLE, atCountCap: photoUsed >= FREE_PHOTO_UPLOADS_PER_CYCLE, atCap: photoUsed >= FREE_PHOTO_UPLOADS_PER_CYCLE },
+          chatPhoto: { used: chatPhotoUsed, limit: FREE_CHAT_PHOTOS_PER_CYCLE, atCap: chatPhotoUsed >= FREE_CHAT_PHOTOS_PER_CYCLE },
+          file: { used: fileUsed, limit: FREE_FILE_COUNT, storageUsed: fileBytes, storageLimit: FREE_FILE_STORAGE_BYTES, atCountCap: fileCountCap, atStorageCap: fileStoreCap, atCap: fileCountCap || fileStoreCap },
+          chatFile: { used: chatFileUsed, limit: FREE_CHAT_FILE_COUNT, storageUsed: chatFileBytes, storageLimit: FREE_CHAT_FILE_STORAGE_BYTES, atCountCap: chatFileCountCap, atStorageCap: chatFileStoreCap, atCap: chatFileCountCap || chatFileStoreCap },
           poll: { used: 0, limit: FREE_POLLS_PER_CYCLE, atCap: false },
         };
       }

@@ -19,6 +19,14 @@ type Result =
    Err: text;
    Ok;
  };
+type MediaUsage = 
+ record {
+   bytes: nat64;
+   bytes_limit: opt nat64;
+   category: text;
+   count: nat;
+   count_limit: nat;
+ };
 type HttpResponse = 
  record {
    body: blob;
@@ -57,6 +65,7 @@ service : {
   cycles_balance: () -> (nat) query;
   delete_blob: (path: text) -> (Result);
   finalize_upload: (upload_id: text) -> (ResultFinalized);
+  get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;
   get_content_hash: (path: text) -> (opt text) query;
   get_usage: () -> (Usage) query;
   health: () -> (Health) query;

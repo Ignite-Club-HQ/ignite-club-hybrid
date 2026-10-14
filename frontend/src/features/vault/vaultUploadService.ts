@@ -107,7 +107,8 @@ export async function uploadVaultItem(
     }
     const blobUpload = dependencies.tryBlobUpload
       ? await dependencies.tryBlobUpload({
-          storagePath,
+          // "vault/" segment lets the canister apply the vault free-plan cap.
+          storagePath: storagePath.replace(/^(clubs\/[^/]+\/)/, "$1vault/"),
           file: options.file,
           mime: options.file.type || "application/octet-stream",
           lock: "own",

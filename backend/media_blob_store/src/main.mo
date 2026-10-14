@@ -9,6 +9,9 @@ import Runtime "mo:core/Runtime";
 import Nat8 "mo:core/Nat8";
 import Sha256 "mo:sha2/Sha256";
 import Text "mo:core/Text";
+import Time "mo:core/Time";
+import Int "mo:core/Int";
+import Iter "mo:core/Iter";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -93,6 +96,95 @@ persistent actor MediaBlobStore {
   // Sharding (migration 20261012): running byte total and capacity limit.
   var total_bytes : Nat64;
   var capacity_limit_bytes : Nat64;
+  // Free-plan media caps (migration 20261014): per club, per 30-day cycle,
+  // per category upload counters. Pro clubs (club_domain subscription) skip.
+  var free_media_usage : [FreeUsageRow];
+
+  type FreeUsageRow = { club_id : Text; cycle : Nat; category : Text; count : Nat; bytes : Nat64 };
+  type MediaUsage = { category : Text; count : Nat; bytes : Nat64; count_limit : Nat; bytes_limit : ?Nat64 };
+
+  // ==================== Free-plan caps ====================
+  // Mirrors the Supabase free tier (useClubFreeUsage constants).
+  transient let CYCLE_NS : Nat = 30 * 86_400 * 1_000_000_000;
+  transient let FREE_FILE_BYTES : Nat64 = 26_214_400; // 25 MB
+
+  func currentCycle() : Nat { Int.abs(Time.now()) / CYCLE_NS };
+
+  func pathSegments(path : Text) : [Text] { Iter.toArray(Text.split(path, #char '/')) };
+
+  /// null = not capped (non-club path or exempt branding asset).
+  func categoryForPath(path : Text) : ?Text {
+    let segs = pathSegments(path);
+    if (segs.size() < 3 or segs[0] != "clubs") return null;
+    let exempt = ["logos", "sponsors", "rewards", "qr-codes", "points-icon"];
+    for (seg in segs.values()) {
+      if (exempt.any(func(e) { e == seg })) return null;
+    };
+    if (segs[2] == "vault") return ?"vault";
+    var inChat = false;
+    var prev = "";
+    for (seg in segs.values()) {
+      if (prev == "chat" and seg == "files") return ?"chat_file";
+      if (seg == "chat" or seg == "scheduled") inChat := true;
+      prev := seg;
+    };
+    if (inChat) ?"chat_photo" else ?"gallery_photo"
+  };
+
+  func limitsFor(category : Text) : (Nat, ?Nat64) {
+    if (category == "vault" or category == "chat_file") (10, ?FREE_FILE_BYTES) else (10, null)
+  };
+
+  func usageFor(clubId : Text, cycle : Nat, category : Text) : (Nat, Nat64) {
+    switch (Array.find<FreeUsageRow>(free_media_usage, func(r) { r.club_id == clubId and r.cycle == cycle and r.category == category })) {
+      case (?r) { (r.count, r.bytes) };
+      case null { (0, 0) };
+    }
+  };
+
+  func recordUsage(clubId : Text, category : Text, size : Nat64) {
+    let cycle = currentCycle();
+    let (count, bytes) = usageFor(clubId, cycle, category);
+    let kept = free_media_usage.filter(func(r) {
+      r.cycle == cycle and not (r.club_id == clubId and r.category == category)
+    });
+    free_media_usage := kept.concat([{ club_id = clubId; cycle; category; count = count + 1; bytes = bytes + size }]);
+  };
+
+  func clubIsPro(clubId : Text) : async Bool {
+    let ?cid = club_domain_canister else return false;
+    let clubDomain : actor {
+      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool }; #Err : Text };
+    } = actor (Principal.toText(cid));
+    try {
+      switch (await clubDomain.get_club_subscription(clubId)) {
+        case (#Ok(?sub)) { sub.is_pro or sub.admin_pro_override or sub.is_pro_football or sub.admin_pro_football_override or sub.is_trial };
+        case _ { false };
+      }
+    } catch (_) { false }
+  };
+
+  /// Returns an error message when a free club is over its cap.
+  func checkFreeCap(path : Text, size : Nat64) : async ?Text {
+    let ?category = categoryForPath(path) else return null;
+    let ?clubId = clubIdFromPath(path) else return null;
+    let (countLimit, bytesLimit) = limitsFor(category);
+    let (count, bytes) = usageFor(clubId, currentCycle(), category);
+    let overCount = count + 1 > countLimit;
+    let overBytes = switch (bytesLimit) { case (?l) { bytes + size > l }; case null { false } };
+    if (not overCount and not overBytes) return null;
+    if (await clubIsPro(clubId)) return null;
+    ?("FreeLimitReached:" # category)
+  };
+
+  public query func get_club_media_usage(club_id : Text) : async [MediaUsage] {
+    let cycle = currentCycle();
+    ["gallery_photo", "chat_photo", "chat_file", "vault"].map(func(category) {
+      let (count, bytes) = usageFor(club_id, cycle, category);
+      let (count_limit, bytes_limit) = limitsFor(category);
+      { category; count; bytes; count_limit; bytes_limit }
+    })
+  };
 
   // ==================== Helpers ====================
 
@@ -152,6 +244,12 @@ persistent actor MediaBlobStore {
     // Sharding: refuse new bytes past the threshold so the app moves on to
     // the next photo store. Existing blobs stay readable forever.
     if (total_bytes + total_size > acceptThreshold()) return #Err("StoreFull");
+    if (not isGovernor<system>(caller)) {
+      switch (await checkFreeCap(path, total_size)) {
+        case (?msg) { return #Err(msg) };
+        case null {};
+      };
+    };
     switch (findBlob(path)) {
       case (?existing) {
         if (not existing.owner.equal(caller) and not isGovernor<system>(caller)) {
@@ -229,6 +327,10 @@ persistent actor MediaBlobStore {
         };
         blobs := blobs.filter(func(item) { item.path != upload.path }).concat([record]);
         total_bytes += Nat.toNat64(assembled.size());
+        switch (categoryForPath(upload.path), clubIdFromPath(upload.path)) {
+          case (?category, ?clubId) { recordUsage(clubId, category, upload.total_size) };
+          case _ {};
+        };
         pending_uploads := pending_uploads.filter(func(item) { item.id != upload_id });
         #Ok({
           path = upload.path;
