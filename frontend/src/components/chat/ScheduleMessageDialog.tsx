@@ -25,6 +25,7 @@ import {
   useUpdateScheduledMessage,
 } from "@/hooks/useScheduledMessages";
 import { ScheduleImageField } from "./ScheduleImageField";
+import { isIcpBulkMediaStorageDisabled } from "@/live/mediaUpload";
 import { ScheduleRecurrenceField } from "./ScheduleRecurrenceField";
 import { useScheduleProAccess } from "@/hooks/useScheduleProAccess";
 import { ProFeatureLock } from "@/components/subscription/ProFeatureLock";
@@ -238,12 +239,14 @@ export function ScheduleMessageDialog({
             />
           </div>
 
-          <ScheduleImageField
-            value={imageUrl}
-            onChange={setImageUrl}
-            uploadTarget={uploadTarget}
-            disabled={isSaving}
-          />
+          {!isIcpBulkMediaStorageDisabled() && (
+            <ScheduleImageField
+              value={imageUrl}
+              onChange={setImageUrl}
+              uploadTarget={uploadTarget}
+              disabled={isSaving}
+            />
+          )}
 
           <div className="grid grid-cols-3 gap-2">
             {QUICK_PRESETS.map((p) => {
