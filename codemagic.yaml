@@ -107,8 +107,10 @@ workflows:
     environment:
       node: 22
       java: 21
-      android_signing:
-        - ignite_upload
+      # Play Console only accepts the ORIGINAL upload key (CM_KEYSTORE in the
+      # android_release group). Do not re-add android_signing: the Codemagic-
+      # generated "ignite_upload" key has a different fingerprint and Play
+      # rejects it ("signed with the wrong key").
       groups:
         - android_release
     scripts:
@@ -160,18 +162,22 @@ workflows:
       - name: Decode signing and Firebase files
         working_directory: frontend/android
         script: |
-          # Signing key, two supported sources:
-          #  1. Codemagic's built-in keystore generator (UI -> Code signing ->
-          #     Android -> Generate keystore). Injects CM_KEYSTORE_PATH etc.
-          #  2. Manual: CM_KEYSTORE = base64 of a .jks file (needs Java to make).
-          if [ -n "$CM_KEYSTORE_PATH" ] && [ -f "$CM_KEYSTORE_PATH" ]; then
-            cp "$CM_KEYSTORE_PATH" app/upload-keystore.jks
-          elif [ -n "$CM_KEYSTORE" ]; then
-            printf '%s' "$CM_KEYSTORE" | tr -d ' \r\n' | base64 --decode > app/upload-keystore.jks
-          else
-            echo "No signing key found. In Codemagic, open the app -> Code signing -> Android -> Generate keystore (no Java needed), or set CM_KEYSTORE to the base64 of a .jks file."
+          # Signing key: the original upload keystore from the android_release
+          # group (CM_KEYSTORE = base64 .jks). This is the key Play Console has
+          # on file; any other key is rejected at upload.
+          if [ -z "$CM_KEYSTORE" ]; then
+            echo "CM_KEYSTORE is missing from the android_release group. Play Console only accepts the original upload key."
             exit 1
           fi
+          printf '%s' "$CM_KEYSTORE" | tr -d ' \r\n' | base64 --decode > app/upload-keystore.jks
+          # Fail here, before a 20-minute build, if the key is not the one Play expects.
+          EXPECTED_SHA1_PREFIX="33:46:AD:FC"
+          SHA1=$(keytool -list -v -keystore app/upload-keystore.jks -storepass "$CM_KEYSTORE_PASSWORD" -alias "$CM_KEY_ALIAS" 2>/dev/null | sed -n 's/.*SHA1: *//p' | head -n1)
+          echo "Upload key SHA1: ${SHA1:-unreadable}"
+          case "$SHA1" in
+            "$EXPECTED_SHA1_PREFIX"*) echo "Upload key matches Play Console." ;;
+            *) echo "This key is not the one Play Console expects (SHA1 should start $EXPECTED_SHA1_PREFIX). Check CM_KEYSTORE / CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS in the android_release group."; exit 1 ;;
+          esac
           printf '%s' "$GOOGLE_SERVICES_JSON" | sed 's/^[[:space:]]*//' | head -c1 | grep -q '{' && printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json || printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d ' \r\n' | base64 --decode > app/google-services.json
       - name: Configure signing
         working_directory: frontend/android
@@ -195,7 +201,7 @@ workflows:
                       storeFile file('upload-keystore.jks')
                       storePassword System.getenv('CM_KEYSTORE_PASSWORD')
                       keyAlias System.getenv('CM_KEY_ALIAS')
-                      keyPassword System.getenv('CM_KEYSTORE_PASSWORD')
+                      keyPassword (System.getenv('CM_KEY_PASSWORD') ?: System.getenv('CM_KEYSTORE_PASSWORD'))
                   }
               }
               buildTypes {
