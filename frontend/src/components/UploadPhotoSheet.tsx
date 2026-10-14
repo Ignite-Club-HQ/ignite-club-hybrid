@@ -812,7 +812,12 @@ export function UploadPhotoSheet({
       return;
     }
 
-
+    // Per-file cap (matches chat): 10 MB after compression.
+    const tooBig = selectedPhotos.find(p => p.file.size > 10 * 1024 * 1024);
+    if (tooBig) {
+      toast.error(`"${tooBig.file.name}" is larger than 10 MB. Please choose a smaller file.`);
+      return;
+    }
 
     // Free-tier cap check (Pro returns isPro=true and bypasses).
     try {

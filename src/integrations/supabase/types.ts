@@ -11310,6 +11310,7 @@ export type Database = {
           team_msgs: number
         }[]
       }
+      club_is_paid: { Args: { _club_id: string }; Returns: boolean }
       club_news_competition_ids: {
         Args: { _club_id: string }
         Returns: string[]
@@ -12375,6 +12376,13 @@ export type Database = {
           team_id: string
         }[]
       }
+      list_expired_free_media: {
+        Args: { _limit?: number }
+        Returns: {
+          bucket_id: string
+          name: string
+        }[]
+      }
       list_leaderboard_teams: {
         Args: { _club_id: string }
         Returns: {
@@ -12564,6 +12572,7 @@ export type Database = {
         Returns: Json
       }
       publish_season: { Args: { _season_id: string }; Returns: undefined }
+      purge_expired_free_media_rows: { Args: never; Returns: number }
       purge_old_client_perf_log: { Args: never; Returns: undefined }
       push_delivery_cron_failures: {
         Args: { p_limit?: number }
