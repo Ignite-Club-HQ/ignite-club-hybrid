@@ -162,7 +162,21 @@ const MERGED_EVENTS_CAP = 100;
 export async function fetchLiveHomeFeed(
   ctx: FeatureBackendContext,
 ): Promise<{ memberships: LiveHomeMemberships; events: LiveHomeEvent[] }> {
+  // Personal teams don't depend on grants — start them in parallel.
+  const personalTeamsPromise = listLivePersonalTeams(ctx).catch(() => []);
   const raw = deriveLiveMemberships(await getLiveMyRoleGrants(ctx));
+  // Memoise per-open lookups so tombstone checks and card-name lookups share
+  // one canister call per club/team instead of repeating them.
+  const clubCache = new Map<string, ReturnType<typeof getLiveClubProfile>>();
+  const teamCache = new Map<string, ReturnType<typeof getLiveTeam>>();
+  const clubProfile = (id: string) => {
+    if (!clubCache.has(id)) clubCache.set(id, getLiveClubProfile(ctx, id));
+    return clubCache.get(id)!;
+  };
+  const teamRecord = (id: string) => {
+    if (!teamCache.has(id)) teamCache.set(id, getLiveTeam(ctx, id));
+    return teamCache.get(id)!;
+  };
 
   // Drop soft-deleted clubs/teams. Grants survive the tombstone (mirroring
   // Supabase's orphan user_roles rows), so cross-check every club/team
@@ -175,10 +189,16 @@ export async function fetchLiveHomeFeed(
     ...raw.leagueAdminClubIds,
     ...raw.roles.map((r) => r.club_id).filter((id): id is string => !!id),
   ])];
+  // Start event reads for every candidate scope now, in parallel with the
+  // tombstone checks; results for inactive scopes are simply discarded.
+  const eventPromises = new Map<string, Promise<LiveEvent[]>>();
+  for (const clubId of raw.clubIds) eventPromises.set(`c:${clubId}`, listLiveEvents(ctx, clubId, null));
+  for (const teamId of raw.teamIds) eventPromises.set(`t:${teamId}`, listLiveEvents(ctx, null, teamId));
+  for (const p of eventPromises.values()) p.catch(() => {});
   const activeClubIds = new Set<string>();
   await Promise.all(
     candidateClubIds.map(async (clubId) => {
-      const profile = await getLiveClubProfile(ctx, clubId);
+      const profile = await clubProfile(clubId);
       const club = profile[0];
       if (club && club.deleted_at_ms.length === 0) activeClubIds.add(clubId);
     }),
@@ -186,7 +206,7 @@ export async function fetchLiveHomeFeed(
   const activeTeamIds = new Set<string>();
   await Promise.all(
     raw.teamIds.map(async (teamId) => {
-      const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+      const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
         club_id: string;
         deleted_at_ms: [] | [bigint];
       }>;
@@ -199,7 +219,7 @@ export async function fetchLiveHomeFeed(
   // Personal (club-less) ICP teams have no club_domain role grant to surface
   // them, so they are fetched separately and merged in directly (no club
   // tombstone check applies — they have no club).
-  const personalTeams = await listLivePersonalTeams(ctx).catch(() => []);
+  const personalTeams = await personalTeamsPromise;
   for (const team of personalTeams) {
     if (!team.deleted_at_ms?.length) activeTeamIds.add(team.id);
   }
@@ -219,8 +239,8 @@ export async function fetchLiveHomeFeed(
   };
 
   const eventResults = await Promise.all([
-    ...memberships.clubIds.map((clubId) => listLiveEvents(ctx, clubId, null)),
-    ...memberships.teamIds.map((teamId) => listLiveEvents(ctx, null, teamId)),
+    ...memberships.clubIds.map((clubId) => eventPromises.get(`c:${clubId}`) ?? listLiveEvents(ctx, clubId, null)),
+    ...memberships.teamIds.map((teamId) => eventPromises.get(`t:${teamId}`) ?? listLiveEvents(ctx, null, teamId)),
   ]);
 
   const mergedById = new Map<string, LiveEvent>();
@@ -234,10 +254,11 @@ export async function fetchLiveHomeFeed(
   // Club names for the carousel cards. Best effort per club: a missing
   // profile falls back to an empty name rather than failing the whole feed.
   const clubNameById = new Map<string, string>();
-  await Promise.all(
+  const teamNameById = new Map<string, string>();
+  const clubNamesDone = Promise.all(
     [...new Set(merged.map((event) => event.club_id))].map(async (clubId) => {
       try {
-        const profile = await getLiveClubProfile(ctx, clubId);
+        const profile = await clubProfile(clubId);
         const name = profile[0]?.name;
         if (name) clubNameById.set(clubId, name);
       } catch {
@@ -249,12 +270,11 @@ export async function fetchLiveHomeFeed(
   // Team names for the carousel cards — the Next Up card uses the team name
   // as its primary title, so without this every ICP game renders nameless.
   // Best effort per team, same contract as the club-name lookup above.
-  const teamNameById = new Map<string, string>();
-  await Promise.all(
+  await Promise.all([clubNamesDone, Promise.all(
     [...new Set(merged.map((event) => event.team_id[0]).filter((id): id is string => !!id))].map(
       async (teamId) => {
         try {
-          const teamOpt = (await getLiveTeam(ctx, teamId)) as unknown as Array<{
+          const teamOpt = (await teamRecord(teamId)) as unknown as Array<{
             name: string;
           }>;
           const name = teamOpt[0]?.name;
@@ -264,7 +284,7 @@ export async function fetchLiveHomeFeed(
         }
       },
     ),
-  );
+  )]);
 
   // Only events this user is actually part of: club-level roles (club admin,
   // competition admin) must not surface other teams' games. listLiveEvents by
