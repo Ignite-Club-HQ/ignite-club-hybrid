@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoading } from "@/components/ui/page-loading";
 import { LegalReacceptanceAdminCard } from "@/components/admin/LegalReacceptanceAdminCard";
+import { PlayHQKeyAdminCard } from "@/components/admin/PlayHQKeyAdminCard";
 
 import { resolveLocalAuthMode } from "@/lab/localRuntimeMode";
 import { getLocalLabAppSettings } from "@/lab/fixtureDataLayer";
@@ -1001,6 +1002,8 @@ function IcpAppSettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        <PlayHQKeyAdminCard />
 
 
         <div className="text-center text-sm text-muted-foreground pt-4">
