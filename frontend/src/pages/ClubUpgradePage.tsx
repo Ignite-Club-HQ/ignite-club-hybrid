@@ -413,7 +413,7 @@ export default function ClubUpgradePage() {
       isAnnual: boolean;
     }) => {
       // NEEDS-CANISTER: promo codes not yet on canister
-      if (isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
+      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Promo codes are not yet available for Internet Identity accounts.");
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")
@@ -516,7 +516,7 @@ export default function ClubUpgradePage() {
   const cancelTrialMutation = useMutation({
     mutationFn: async () => {
       // NEEDS-CANISTER: cancel-subscription not yet available on canister
-      if (isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
+      if (useIcpLab || isFeatureRoutedToIcp("membership")) throw new Error("Subscription management is not yet available for Internet Identity accounts.");
       const { data, error } = await supabase.functions.invoke('cancel-subscription', {
         body: { subscription_type: 'club', entity_id: clubId },
       });
