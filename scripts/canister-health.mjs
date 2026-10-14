@@ -24,20 +24,32 @@ const root = process.env.GITHUB_WORKSPACE || join(dirname(fileURLToPath(import.m
 const idsPath = join(root, "deploy/mainnet/.icp/data/mappings/ic.ids.json");
 const ids = JSON.parse(readFileSync(idsPath, "utf8"));
 
+// icp CLI output varies: "Cycles: 1_234_567_890", "Balance: 3.21 TCycles",
+// "Memory size: 12_345_678" or "12.3 MB". Handle all of them.
+function num(s) {
+  return parseFloat(String(s).replace(/[_,]/g, ""));
+}
+const SCALE = { "": 1, K: 1e3, M: 1e6, B: 1e9, G: 1e9, T: 1e12 };
+
+function lineFor(text, re) {
+  return text.split("\n").find((l) => re.test(l)) ?? "";
+}
+
 function parseBytes(text) {
-  // Matches "Memory Size: 12.34 MB" style lines, any unit.
-  const m = text.match(/memory[^\n]*?([\d.]+)\s*(B|KB|MB|GB|TB)/i);
+  const line = lineFor(text, /memory/i);
+  const m = line.match(/([\d][\d_.,]*)\s*(B|KB|KiB|MB|MiB|GB|GiB|TB|bytes)?\b/i);
   if (!m) return null;
-  const n = parseFloat(m[1]);
-  const unit = m[2].toUpperCase();
-  const factor = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }[unit];
-  return n * factor;
+  const u = (m[2] ?? "B").toUpperCase().replace("IB", "B").replace("BYTES", "B");
+  const f = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12 }[u] ?? 1;
+  return num(m[1]) * f;
 }
 
 function parseCyclesT(text) {
-  // Matches "Balance: 3.21 TCycles" / "3.21 T" style lines.
-  const m = text.match(/([\d.]+)\s*T\s*(?:Cycles)?/i);
-  return m ? parseFloat(m[1]) : null;
+  const line = lineFor(text, /cycles|balance/i);
+  const m = line.match(/([\d][\d_.,]*)\s*([KMBGT])?\s*(?:cycles|C)?/i);
+  if (!m) return null;
+  const raw = num(m[1]) * (SCALE[(m[2] ?? "").toUpperCase()] ?? 1);
+  return raw / 1e12;
 }
 
 const rows = [];
@@ -52,6 +64,7 @@ for (const [name, id] of Object.entries(ids)) {
     });
   } catch (err) {
     out = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+    console.log(`--- ${name}: status query failed ---\n${out.trim()}`);
     rows.push({ name, id, balanceT: null, memoryGB: null, note: "status query failed" });
     problems++;
     continue;
@@ -60,6 +73,12 @@ for (const [name, id] of Object.entries(ids)) {
   const bytes = parseBytes(out);
   const memoryGB = bytes == null ? null : bytes / 1e9;
   let note = "";
+  if (balanceT == null || memoryGB == null) {
+    // Show the raw output so the format can be read from the log.
+    console.log(`--- ${name}: could not read status output ---\n${out.trim()}`);
+    note = "could not read status";
+    problems++;
+  }
   if (balanceT != null && balanceT < LOW_BALANCE_T) {
     note = `LOW CYCLES — top up (under ${LOW_BALANCE_T}T)`;
     problems++;
