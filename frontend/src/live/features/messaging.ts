@@ -82,6 +82,22 @@ export async function listLiveMessagesPage(
  * null means nothing older remains. This is what a chat screen wants on open;
  * `listLiveMessagesPage` pages forward from the OLDEST message instead.
  */
+// open_conversation returns the newest page plus its reactions and the
+// conversation's pins in one call. The chat page still asks for reactions and
+// pins separately, so those calls take the bundled copy once (if fresh)
+// instead of making their own round trips. null = unknown, false = canister
+// predates open_conversation (fall back to separate calls).
+let openConversationSupported: boolean | null = null;
+const OPEN_BUNDLE_TTL_MS = 10_000;
+const openBundleCache = new Map<string, { at: number; reactions: LiveReaction[] | null; pins: any[] | null }>();
+function takeBundled<K extends "reactions" | "pins">(conversationId: string, key: K) {
+  const entry = openBundleCache.get(conversationId);
+  if (!entry || Date.now() - entry.at > OPEN_BUNDLE_TTL_MS) return null;
+  const value = entry[key];
+  entry[key] = null as any;
+  return value;
+}
+
 export async function listLiveLatestMessagesPage(
   ctx: FeatureBackendContext,
   conversationId: string,
@@ -89,6 +105,29 @@ export async function listLiveLatestMessagesPage(
   limit: number,
 ) {
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  if (before === null && openConversationSupported !== false) {
+    try {
+      const bundle = await unwrapCandid(
+        (actor as any).open_conversation(conversationId, limit),
+        "Open conversation",
+      ) as any;
+      openConversationSupported = true;
+      const pins = Array.isArray(bundle.pins) && bundle.pins.length > 0 ? bundle.pins[0] : null;
+      openBundleCache.set(conversationId, {
+        at: Date.now(),
+        reactions: bundle.reactions as LiveReaction[],
+        pins: pins as any[] | null,
+      });
+      return bundle.page;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/has no (?:query |update |)method|IC0536|IC0504|is not a function/i.test(message)) {
+        openConversationSupported = false;
+      } else {
+        throw err;
+      }
+    }
+  }
   try {
     return await unwrapCandid(
       actor.list_latest_messages_page(
@@ -829,6 +868,8 @@ export async function listLiveReactions(
   ctx: FeatureBackendContext,
   conversationId: string,
 ): Promise<LiveReaction[]> {
+  const bundled = takeBundled(conversationId, "reactions");
+  if (bundled) return bundled as LiveReaction[];
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_reactions(conversationId), "List reactions");
 }
@@ -1052,6 +1093,8 @@ export async function listLivePinnedMessages(
   ctx: FeatureBackendContext,
   conversationId: string,
 ): Promise<LivePinnedMessage[]> {
+  const bundledPins = takeBundled(conversationId, "pins");
+  if (bundledPins) return bundledPins.map(toLivePinnedMessage);
   const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
   const raw = await unwrapCandid(
     actor.list_pinned_messages(conversationId),
