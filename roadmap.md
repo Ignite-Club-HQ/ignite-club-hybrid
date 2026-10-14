@@ -1,5 +1,5 @@
 ## Supabase role requests
-- [ ] Verify fresh sorted reads, request dates and scoped requester names; retain genuine old requests.
+- [x] Fresh sorted reads and dates implemented; scoped profile policy installed with no new security warnings; 21 regression tests and preview checks pass. Genuine old requests retained.
 - [ ] Confirm Paul's phone screen after frontend deployment — external Supabase session/device access required.
 
 ## Move everything except payments on-chain (2026-10-13)
