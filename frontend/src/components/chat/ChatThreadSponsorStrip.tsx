@@ -180,16 +180,30 @@ export function ChatThreadSponsorStrip({ clubId }: ChatThreadSponsorStripProps) 
     queryKey: ["chat-thread-strip-sponsors", clubId],
     enabled: clubEnabled && placementEnabled && isProClub === true,
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", clubId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data || []) as SponsorLite[];
-    },
+    queryFn: async () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", clubId!)
+            .eq("is_active", true)
+            .order("name");
+          if (error) throw error;
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveSponsors(ctx, clubId!))
+            .filter((r) => r.is_active && !r.is_team_only)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((r): SponsorLite => ({
+              id: r.id,
+              name: r.name,
+              logo_url: r.logo_url[0] ?? null,
+              website_url: r.website_url[0] ?? null,
+              tier: r.tier as SponsorTier,
+            })),
+      }),
   });
 
   // 4b. Free path — fetch active app ads

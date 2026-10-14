@@ -113,7 +113,7 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
   const { data: clubFlag, isSuccess: clubFlagOk } = useQuery({
     queryKey: ["media-header-sponsors-enabled", clubId],
     enabled: !!clubId && isProClub === true,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     queryFn: async () => {
       const enabled = await withFeatureBackend("membership", {
         supabase: async () => {

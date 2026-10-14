@@ -86,7 +86,7 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
   const { data: clubFlag } = useQuery({
     queryKey: ["club-media-sponsors-enabled", resolvedClubId],
     enabled: !!resolvedClubId,
-    staleTime: 5 * 60_000,
+    staleTime: 0,
     queryFn: async () => {
       const enabled = await withFeatureBackend("membership", {
         supabase: async () => {
