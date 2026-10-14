@@ -130,6 +130,17 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
     queryFn: async () => {
+      if (resolveAuthBackend() === "icp") {
+        const { withFeatureBackend } = await import("@/live/featureRouter");
+        return withFeatureBackend("messaging", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { getLiveUserMessagingSettings } = await import("@/live/features/messaging");
+            const settings = await getLiveUserMessagingSettings(ctx);
+            return settings.ai_catchup_enabled === false;
+          },
+        });
+      }
       const { data } = await supabase
         .from("profiles")
         .select("ai_catch_up_enabled")
