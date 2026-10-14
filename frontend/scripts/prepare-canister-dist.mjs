@@ -38,6 +38,7 @@ writeFileSync(
         // one person gets the same principal on the app and the website.
         "https://igniteclubhq.com",
         "https://ignite-club-heart.lovable.app",
+        "https://pjx2u-tiaaa-aaaac-qhj3a-cai.icp0.io",
       ],
     },
     null,
