@@ -90,3 +90,20 @@ export async function redeemLiveTeamPromoCode(
   );
   return msToIso(expiry);
 }
+
+/** Storage add-on GB granted on-chain for a club (storage promo redemptions). */
+export async function getLiveClubStoragePurchasedGb(ctx: FeatureBackendContext, clubId: string): Promise<number> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return Number(await unwrapCandid(actor.get_club_storage_purchased(clubId), "Load club storage"));
+}
+
+/** Redeems a storage promo code for a club; returns the new add-on total (GB). */
+export async function redeemLiveClubStoragePromoCode(
+  ctx: FeatureBackendContext,
+  input: { code: string; clubId: string },
+): Promise<number> {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return Number(
+    await unwrapCandid(actor.redeem_club_storage_promo_code(input.code, input.clubId), "Redeem promo code"),
+  );
+}

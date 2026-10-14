@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { getLiveClubStoragePurchasedGb } from "@/live/features/promoCodes";
 
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
@@ -131,10 +133,14 @@ export async function fetchVaultStorageSubscription(
   // Defense-in-depth: VaultPage only calls this repository from Supabase-only
   // query paths today, but guard here too so an II principal can never fire
   // this Supabase read if a future caller forgets to route around it.
-  // NEEDS-CANISTER: no club storage-purchase equivalent exists on any
-  // canister yet, so ICP callers get the "no purchased storage" default.
+  // ICP: storage add-ons granted by on-chain storage promo redemptions
+  // (club_domain). Paid storage downgrades don't exist on-chain.
   if (resolveAuthBackend() === "icp") {
-    return { storage_purchased_gb: 0, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
+    const gb = await withFeatureBackend("club", {
+      supabase: async () => 0,
+      icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
+    }).catch(() => 0);
+    return { storage_purchased_gb: gb, scheduled_storage_downgrade_gb: null, storage_downgrade_at: null };
   }
   const { data } = await client
     .from("club_subscriptions")
