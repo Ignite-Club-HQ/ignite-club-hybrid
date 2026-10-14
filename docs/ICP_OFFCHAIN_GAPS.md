@@ -3,7 +3,7 @@
 Audit date: 2026-10-14. Rule: in ICP mode everything except payments runs on-chain.
 
 ## Intentionally off-chain (by decision)
-- Payments (Stripe, promo codes, storage purchases; only iOS IAP verification path)
+- Payments (Stripe card payments, storage purchases; only iOS IAP verification path). Promo codes moved on-chain 2026-10-14 (club_domain create/list/toggle/delete_promo_code, redeem_team_promo_code; migration 20261021). Paid-status records (team/club subscriptions) were already on club_domain.
 - Email delivery, phone push delivery (queued on-chain, delivered by worker)
 - PlayHQ import/stats, Google Drive linking, address search/maps
 - Password / forgot-password / passkey settings
