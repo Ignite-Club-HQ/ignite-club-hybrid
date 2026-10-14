@@ -569,6 +569,15 @@ export default function EventsPage() {
   // Teams the user can filter the schedule by — names for memberships.teamIds,
   // optionally narrowed to the current club filter. Reuses membership team IDs
   // so we don't re-run the roles + children waterfall.
+  useEffect(() => {
+    if (useIcpLab || !user?.id || !userMemberships) return;
+    try {
+      localStorage.setItem(`ignite_schedule_memberships_v1:${user.id}`, JSON.stringify(userMemberships));
+    } catch {
+      /* snapshot is only a speed-up */
+    }
+  }, [useIcpLab, user?.id, userMemberships]);
+
   const { data: userTeams } = useQuery({
     queryKey: ["user-teams-for-filter", useIcpLab ? "icp" : "supabase", user?.id, localIcpPersona, clubFilter, userMemberships?.teamIds],
     queryFn: async () => {
