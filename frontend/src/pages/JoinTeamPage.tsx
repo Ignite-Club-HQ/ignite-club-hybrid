@@ -291,7 +291,9 @@ function SupabaseJoinTeamPage() {
       }
       return data === true;
     },
-    enabled: !!token && isPendingInvite && !user,
+    // ICP pending invites (pinv-/join-link tokens) have no Supabase row, so
+    // the check would be meaningless there — skip the off-chain lookup.
+    enabled: !!token && isPendingInvite && !user && resolveAuthBackend() !== "icp" && !token.startsWith("pinv-"),
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
