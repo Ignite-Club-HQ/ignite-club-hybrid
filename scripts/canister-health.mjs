@@ -18,7 +18,9 @@ import { dirname, join } from "node:path";
 const LOW_BALANCE_T = 1;
 const WARN_MEMORY_GB = 3;
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// The workflow copies this script outside the checkout, so prefer the
+// checkout path from GITHUB_WORKSPACE when it's set.
+const root = process.env.GITHUB_WORKSPACE || join(dirname(fileURLToPath(import.meta.url)), "..");
 const idsPath = join(root, "deploy/mainnet/.icp/data/mappings/ic.ids.json");
 const ids = JSON.parse(readFileSync(idsPath, "utf8"));
 
