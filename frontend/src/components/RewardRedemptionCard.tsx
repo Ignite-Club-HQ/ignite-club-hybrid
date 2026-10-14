@@ -43,7 +43,7 @@ import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { redeemLiveReward, fulfillLiveRedemption, subjectForChild, subjectForUser } from "@/live/features/points";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
-import { isFeatureRoutedToIcp } from "@/live/featureRouter";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
 import { getLiveChildPointsBatch } from "@/live/features/points";
 import { fetchLiveHomeChildren } from "@/live/features/homeFeed";
 import {
