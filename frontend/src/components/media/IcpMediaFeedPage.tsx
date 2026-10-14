@@ -48,6 +48,9 @@ import { mediaProfileDirectory } from "./mediaProfileDirectory";
 interface LiveAssetView {
   id: string;
   url: string;
+  /** True while the encrypted blob is still being fetched/decrypted — the UI
+   * shows a pulsing skeleton instead of a flat grey image. */
+  loading: boolean;
   isVideo: boolean;
   /** Encrypted photo-store address; unlocked in the background. */
   sourceUrl?: string | null;
@@ -300,6 +303,7 @@ async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaF
     assetViews.set(asset.id, {
       id: asset.id,
       url: sourceUrl ? LOADING_PHOTO_URL : UNAVAILABLE_PHOTO_URL,
+      loading: !!sourceUrl,
       isVideo,
       sourceUrl,
     });
@@ -592,7 +596,7 @@ export function IcpMediaFeedPage() {
           ? profile?.avatar_url ?? post.ownerAvatarUrl
           : post.ownerAvatarUrl,
         assets: post.assets.map((a) =>
-          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id] } : a,
+          resolvedUrls[a.id] ? { ...a, url: resolvedUrls[a.id], loading: false } : a,
         ),
       }));
   }, [feedQuery.data?.posts, selectedClubId, selectedTeamId, resolvedUrls, user?.id, principal, profile?.avatar_url]);
@@ -763,7 +767,13 @@ export function IcpMediaFeedPage() {
                   onTouchCancel={cancelLongPress}
                 >
                   <AlbumCarousel
-                    photos={post.assets.map((asset) => ({ id: asset.id, file_url: asset.url }))}
+                    photos={post.assets.map((asset) => ({
+                      id: asset.id,
+                      // Still-unlocked photos pass no URL so the carousel's
+                      // LazyImage renders its pulsing skeleton until the
+                      // decrypted bytes arrive.
+                      file_url: asset.loading ? null : asset.url,
+                    }))}
                     onTap={(i) => openPostLightbox(post, i)}
                     priority={index < 2}
                   />
