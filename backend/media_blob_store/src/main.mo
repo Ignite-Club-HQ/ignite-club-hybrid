@@ -11,6 +11,7 @@ import Sha256 "mo:sha2/Sha256";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
 import Int "mo:core/Int";
+import Iter "mo:core/Iter";
 
 // media_blob_store — on-chain store for encrypted media bytes.
 //
@@ -104,12 +105,12 @@ persistent actor MediaBlobStore {
 
   // ==================== Free-plan caps ====================
   // Mirrors the Supabase free tier (useClubFreeUsage constants).
-  let CYCLE_NS : Nat = 30 * 86_400 * 1_000_000_000;
-  let FREE_FILE_BYTES : Nat64 = 26_214_400; // 25 MB
+  transient let CYCLE_NS : Nat = 30 * 86_400 * 1_000_000_000;
+  transient let FREE_FILE_BYTES : Nat64 = 26_214_400; // 25 MB
 
   func currentCycle() : Nat { Int.abs(Time.now()) / CYCLE_NS };
 
-  func pathSegments(path : Text) : [Text] { Text.split(path, #char '/').toArray() };
+  func pathSegments(path : Text) : [Text] { Iter.toArray(Text.split(path, #char '/')) };
 
   /// null = not capped (non-club path or exempt branding asset).
   func categoryForPath(path : Text) : ?Text {

@@ -1,0 +1,86 @@
+type Usage = 
+ record {
+   accepting_uploads: bool;
+   capacity_limit_bytes: nat64;
+   total_bytes: nat64;
+ };
+type ResultUploadId = 
+ variant {
+   Err: text;
+   Ok: text;
+ };
+type ResultFinalized = 
+ variant {
+   Err: text;
+   Ok: FinalizedBlob;
+ };
+type Result = 
+ variant {
+   Err: text;
+   Ok;
+ };
+type MediaUsage = 
+ record {
+   bytes: nat64;
+   bytes_limit: opt nat64;
+   category: text;
+   count: nat;
+   count_limit: nat;
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   status_code: nat16;
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   method: text;
+   url: text;
+ };
+type Health = 
+ record {
+   blob_count: nat64;
+   total_bytes: nat64;
+   version: text;
+ };
+type HeaderField = 
+ record {
+   text;
+   text;
+ };
+type FinalizedBlob = 
+ record {
+   content_hash: text;
+   content_length: nat64;
+   path: text;
+ };
+service : {
+  abort_upload: (upload_id: text) -> (Result);
+  begin_upload: (path: text, mime: text, total_size: nat64, chunk_count:
+   nat32) -> (ResultUploadId);
+  /// Public: remaining cycles (shown in admin settings).
+  cycles_balance: () -> (nat) query;
+  delete_blob: (path: text) -> (Result);
+  finalize_upload: (upload_id: text) -> (ResultFinalized);
+  get_club_media_usage: (club_id: text) -> (vec MediaUsage) query;
+  get_content_hash: (path: text) -> (opt text) query;
+  get_usage: () -> (Usage) query;
+  health: () -> (Health) query;
+  http_request: (request: HttpRequest) -> (HttpResponse) query;
+  merge_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  put_chunk: (upload_id: text, index: nat32, data: blob) -> (Result);
+  rekey_principal: (old: principal, new: principal, dry_run: bool) ->
+   (variant {
+      err: text;
+      ok: nat;
+    });
+  set_capacity_limit: (limit_bytes: nat64) -> (Result);
+  set_club_domain_canister: (canister_id: principal) -> (Result);
+}
