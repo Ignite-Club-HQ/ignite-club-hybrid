@@ -194,6 +194,18 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_auto_create_events:
               patch.playhq_auto_create_events ?? liveTeam.playhq_auto_create_events,
           });
+          // Keep the events service's 6-hourly auto-sync list in step.
+          const competitionId =
+            patch.playhq_competition_id !== undefined ? patch.playhq_competition_id : liveTeam.playhq_competition_id[0] ?? null;
+          const playhqTeamId =
+            patch.playhq_team_id !== undefined ? patch.playhq_team_id : liveTeam.playhq_team_id[0] ?? null;
+          const auto = patch.playhq_auto_create_events ?? liveTeam.playhq_auto_create_events;
+          await setLivePlayHQTeamSync(ctx, { clubId, teamId, competitionId, playhqTeamId, auto });
+          if (patch.playhq_auto_create_events === true && competitionId && playhqTeamId) {
+            await importLivePlayHQTeamFixtures(ctx, { clubId, teamId, competitionId, playhqTeamId })
+              .then((r) => toast.success(`Imported: ${r.created} new, ${r.updated} updated, ${r.cancelled} cancelled`))
+              .catch((e) => toast.error(e?.message ?? "Import failed"));
+          }
         },
       });
     },
