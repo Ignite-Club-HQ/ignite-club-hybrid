@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useToast } from "@/hooks/use-toast";
 import { Player, TeamSize, getPositionFromCoords } from "@/components/pitch/types";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 // Minimal structural surface this hook needs from the Supabase client, so the
 // caller can pass its existing client instance without this module adding
@@ -56,16 +57,37 @@ export function usePitchBoardFormationLibrary({
   // Fetch saved formations - lazy load only when save/load dialog is opened
   const { data: savedFormations, isLoading: loadingFormations } = useQuery({
     queryKey: ["pitch-formations", teamId],
-    queryFn: async () => {
-      const { data, error } = await supabaseClient
-        .from("pitch_formations")
-        .select("*, profiles:created_by(display_name)")
-        .eq("team_id", teamId)
-        .order("created_at", { ascending: false });
+    queryFn: () =>
+      withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabaseClient
+            .from("pitch_formations")
+            .select("*, profiles:created_by(display_name)")
+            .eq("team_id", teamId)
+            .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data;
-    },
+          if (error) throw error;
+          return data;
+        },
+        // ICP: named formations live on club_domain; reshape to the same row.
+        icp: async (ctx) => {
+          const { listLivePitchFormations } = await import("@/live/features/club");
+          const rows = await listLivePitchFormations(ctx, teamId);
+          return rows
+            .map((f) => ({
+              id: f.id,
+              team_id: f.team_id,
+              name: f.name,
+              team_size: Number(f.team_size),
+              formation_data: JSON.parse(f.formation_json),
+              drawing_data: f.drawing_json[0] ?? null,
+              created_by: f.created_by.toText(),
+              created_at: new Date(Number(f.created_at_ms)).toISOString(),
+              profiles: null,
+            }))
+            .sort((a, b) => b.created_at.localeCompare(a.created_at));
+        },
+      }),
     enabled: saveDialogOpen || loadDialogOpen, // Only fetch when dialogs are open
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
@@ -87,16 +109,23 @@ export function usePitchBoardFormationLibrary({
 
       const drawingData = fabricCanvas ? JSON.stringify(fabricCanvas.toJSON()) : null;
 
-      const { error } = await supabaseClient.from("pitch_formations").insert({
-        team_id: teamId,
-        name,
-        team_size: parseInt(teamSize),
-        formation_data: formationData,
-        drawing_data: drawingData,
-        created_by: userId,
-      } as never);
-
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabaseClient.from("pitch_formations").insert({
+            team_id: teamId,
+            name,
+            team_size: parseInt(teamSize),
+            formation_data: formationData,
+            drawing_data: drawingData,
+            created_by: userId,
+          } as never);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { saveLivePitchFormation } = await import("@/live/features/club");
+          await saveLivePitchFormation(ctx, teamId, name, parseInt(teamSize), JSON.stringify(formationData), drawingData);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pitch-formations", teamId] });
@@ -112,12 +141,19 @@ export function usePitchBoardFormationLibrary({
   // Delete formation mutation
   const deleteFormationMutation = useMutation({
     mutationFn: async (formationId: string) => {
-      const { error } = await supabaseClient
-        .from("pitch_formations")
-        .delete()
-        .eq("id", formationId);
-
-      if (error) throw error;
+      await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { error } = await supabaseClient
+            .from("pitch_formations")
+            .delete()
+            .eq("id", formationId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const { deleteLivePitchFormation } = await import("@/live/features/club");
+          await deleteLivePitchFormation(ctx, formationId);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pitch-formations", teamId] });

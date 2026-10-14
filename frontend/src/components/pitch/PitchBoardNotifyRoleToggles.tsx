@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
+import { withFeatureBackend } from "@/live/featureRouter";
 
 interface Props {
   teamId: string;
@@ -38,8 +39,8 @@ const LABELS: Record<RoleKey, { title: string; desc: string }> = {
 export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
   // Mini-league/event-group boards don't use these team-scoped flags.
   const isMiniLeague = !teamId || teamId.startsWith("event-group-");
-  // ICP: push/email notifications are out of scope and the pitch_notify_*
-  // flags have no canister representation — hide the section entirely.
+  // ICP: the switches live on club_domain (get/set_team_pitch_notify) and
+  // gate the client-side on-chain alert fan-out in GlobalSubMonitor.
   const isIcp = resolveAuthBackend() === "icp";
 
   const [values, setValues] = useState<Record<RoleKey, boolean>>({
@@ -50,9 +51,26 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (isMiniLeague || isIcp) return;
+    if (isMiniLeague) return;
     let cancelled = false;
     (async () => {
+      if (isIcp) {
+        try {
+          const f = await withFeatureBackend("membership", {
+            supabase: async () => null,
+            icp: async (ctx) => {
+              const { getLiveTeamPitchNotify } = await import("@/live/features/club");
+              return getLiveTeamPitchNotify(ctx, teamId);
+            },
+          });
+          if (cancelled) return;
+          if (f) setValues({ coach: f.coach, team_admin: f.team_admin, subs_manager: f.subs_manager });
+        } catch (e) {
+          console.error("Failed to load pitch notify flags", e);
+        }
+        if (!cancelled) setLoaded(true);
+        return;
+      }
       const { data } = await supabase
         .from("team_subscriptions")
         .select("pitch_notify_coach, pitch_notify_team_admin, pitch_notify_subs_manager")
@@ -71,11 +89,22 @@ export function PitchBoardNotifyRoleToggles({ teamId, readOnly }: Props) {
     };
   }, [teamId, isMiniLeague, isIcp]);
 
-  if (isMiniLeague || isIcp) return null;
+  if (isMiniLeague) return null;
 
   const update = async (key: RoleKey, next: boolean) => {
-    setValues((p) => ({ ...p, [key]: next }));
+    const nextValues = { ...values, [key]: next };
+    setValues(nextValues);
     try {
+      if (isIcp) {
+        await withFeatureBackend("membership", {
+          supabase: async () => undefined,
+          icp: async (ctx) => {
+            const { setLiveTeamPitchNotify } = await import("@/live/features/club");
+            await setLiveTeamPitchNotify(ctx, teamId, nextValues);
+          },
+        });
+        return;
+      }
       const { error } = await supabase
         .from("team_subscriptions")
         .upsert({ team_id: teamId, [COLS[key]]: next } as never, { onConflict: "team_id" });

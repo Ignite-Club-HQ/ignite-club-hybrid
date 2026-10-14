@@ -221,6 +221,25 @@ type ProfileTeamHistoryEntry =
    team_level_age: opt text;
    team_name: text;
  };
+type PitchNotifyFlags = 
+ record {
+   coach: bool;
+   subs_manager: bool;
+   team_admin: bool;
+   team_id: text;
+ };
+type PitchFormation = 
+ record {
+   club_id: text;
+   created_at_ms: nat64;
+   created_by: principal;
+   drawing_json: opt text;
+   formation_json: text;
+   id: text;
+   name: text;
+   team_id: text;
+   team_size: nat32;
+ };
 type PendingInviteEmailHash = 
  record {
    club_id: text;
@@ -492,6 +511,10 @@ type Main =
                                             Err: text;
                                             Ok;
                                           });
+   delete_pitch_formation: (id: text) -> (variant {
+                                            Err: text;
+                                            Ok;
+                                          });
    delete_promo_code: (id: text) -> (variant {
                                        Err: text;
                                        Ok;
@@ -699,6 +722,11 @@ type Main =
        Err: text;
        Ok: TeamInviteLink;
      }) query;
+   get_team_pitch_notify: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PitchNotifyFlags;
+     }) query;
    get_team_player_positions: (team_id: text) ->
     (variant {
        Err: text;
@@ -844,6 +872,11 @@ type Main =
     (variant {
        Err: text;
        Ok: vec PendingInvite;
+     }) query;
+   list_pitch_formations: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec PitchFormation;
      }) query;
    list_promo_codes: () -> (variant {
                               Err: text;
@@ -1139,6 +1172,12 @@ type Main =
                                           Err: text;
                                           Ok: ClubTerm;
                                         });
+   save_pitch_formation: (team_id: text, name: text, team_size: nat32,
+    formation_json: text, drawing_json: opt text) ->
+    (variant {
+       Err: text;
+       Ok: PitchFormation;
+     });
    save_season: (season: Season) -> (variant {
                                        Err: text;
                                        Ok: Season;
@@ -1326,6 +1365,11 @@ type Main =
        Err: text;
        Ok: ClubTeam;
      });
+   set_team_pitch_notify: (team_id: text, coach: bool, team_admin: bool,
+    subs_manager: bool) -> (variant {
+                              Err: text;
+                              Ok: PitchNotifyFlags;
+                            });
    set_team_player_position: (team_id: text, member_id: text, position:
     text) -> (variant {
                 Err: text;
