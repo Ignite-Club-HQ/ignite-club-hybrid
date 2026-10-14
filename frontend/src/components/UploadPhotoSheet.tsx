@@ -821,7 +821,7 @@ export function UploadPhotoSheet({
       });
       const usage = Array.isArray(usageRow) ? usageRow[0] : usageRow;
       if (usage && !usage.is_pro) {
-        const FREE_PHOTOS = 20;
+        const FREE_PHOTOS = 10;
         const usedCount = Number(usage.photo_uploads_this_cycle ?? 0);
         if (usedCount + selectedPhotos.length > FREE_PHOTOS) {
           toast.error(
