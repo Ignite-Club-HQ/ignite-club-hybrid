@@ -40,6 +40,7 @@ persistent actor class Main(governorInit : Principal) {
   var lineups : [Types.LineupEntry];
   var lineupSnapshots : [Types.LineupSnapshot];
   var duties : [Types.Duty];
+  var eventSponsors : [(Text, [Text])];
   var roster : [Types.RosterEntry];
   var recurrences : [Types.Recurrence];
   var series : [Types.EventSeries];
@@ -554,6 +555,18 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  };
+  // Event sponsor links (event_sponsors parity): which club sponsors are
+  // attached to a specific event. Manager-gated like set_duty.
+  public shared ({ caller }) func set_event_sponsors(event_id : Text, sponsor_ids : [Text]) : async { #Ok; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) { case (#Err(e)) return #Err(e); case (#Ok(_)) {} };
+    eventSponsors := eventSponsors.filter(func((id, _)) = id != event_id).concat([(event_id, sponsor_ids)]);
+    #Ok
+  };
+  public query ({ caller }) func get_event_sponsors(event_id : Text) : async { #Ok : [Text]; #Err : Text } {
+    auth(caller);
+    switch (eventSponsors.find(func((id, _)) = id == event_id)) { case (?(_, ids)) #Ok(ids); case null #Ok([]) };
   };
   public shared ({ caller }) func complete_duty(event_id : Text, account_id : Text) : async { #Ok : Types.Duty; #Err : Text } {
     auth(caller);
