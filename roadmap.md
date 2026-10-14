@@ -146,3 +146,9 @@
 - [x] SponsorOrAdCarousel (home/events/messages/event-detail/schedule) gate reads getLiveAdSetting
 - [x] MediaHeaderSponsorStrip, ChatThreadSponsorStrip, EventsHeaderSponsorStrip: Pro check, placement gate and ads now ICP-routed (events strip no longer hard-off in ICP)
 - [ ] User verifies after website redeploy + Codemagic build (needs house ads enabled in insights_domain by an app admin)
+
+## Event sponsors + media Pro check on-chain (2026-10-14)
+- [x] events_domain: new set_event_sponsors/get_event_sponsors (manager-gated like set_duty); did + bindings updated, drift check passes
+- [x] EventSponsorSelector routes list/read/save via withFeatureBackend("events")
+- [x] MediaPage Pro check: ICP branch uses isLiveClubPro per candidate club (was fail-closed)
+- [ ] User: redeploy events_domain canister (Deploy ICP canisters workflow) + website canister + Codemagic Android build, then verify event sponsor picker and media page in ICP mode
