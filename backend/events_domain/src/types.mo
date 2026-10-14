@@ -292,4 +292,12 @@ module {
     home_team_name : ?Text;
     away_team_name : ?Text;
   };
+
+  // ---- PlayHQ team fixture import (playhq-materialise-team-events parity) ----
+  public type PlayHQTeamSync = {
+    club_id : Text; team_id : Text; competition_id : Text; playhq_team_id : Text;
+    auto : Bool; updated_by : Principal; last_synced_at_ms : ?Nat64; last_error : ?Text;
+  };
+  public type PlayHQEventLink = { event_id : Text; team_id : Text; playhq_game_id : Text };
+  public type PlayHQImportResult = { created : Nat32; updated : Nat32; cancelled : Nat32 };
 }
