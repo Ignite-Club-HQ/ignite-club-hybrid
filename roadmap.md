@@ -1,3 +1,7 @@
+## Supabase role requests
+- [x] Fresh sorted reads and dates implemented; scoped profile policy installed with no new security warnings; 21 regression tests and preview checks pass. Genuine old requests retained.
+- [ ] Confirm Paul's phone screen after frontend deployment — external Supabase session/device access required.
+
 ## Move everything except payments on-chain (2026-10-13)
 - [x] Scheduled messages: manage page + photo attachments on ICP
 - [x] Club weekly schedule broadcasts on ICP

@@ -20,7 +20,7 @@ import { getLiveUserPoints, awardLivePoints, subjectForUser } from "@/live/featu
 import { fanOutLiveNotifications } from "@/live/features/notifications";
 
 const isIcpPageMode = () => resolveAuthBackend() === "icp";
-import { selectCachedProfilesByIds } from "@/lib/profileCache";
+import { listSupabaseRoleRequests } from "@/features/membership/roleRequestRepository";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { RoleRequestsList } from "@/components/members/RoleRequestsList";
@@ -122,7 +122,7 @@ function SupabaseManageTeamRolesPage() {
     enabled: !!teamId,
   });
 
-  const { data: requests } = useQuery({
+  const { data: requests, isPending: loadingRequests, error: requestError } = useQuery({
     queryKey: ["team-role-requests", teamId],
     queryFn: async () => {
       if (isIcpPageMode()) {
@@ -144,24 +144,13 @@ function SupabaseManageTeamRolesPage() {
           },
         });
       }
-      const { data, error } = await supabase
-        .from("role_requests")
-        .select("*")
-        .eq("team_id", teamId!)
-        .eq("status", "pending");
-      if (error) throw error;
-
-      // Fetch profiles separately
-      if (!data || data.length === 0) return [];
-      const userIds = data.map(r => r.user_id);
-      const { data: profiles } = await selectCachedProfilesByIds(userIds);
-
-      return data.map(req => ({
-        ...req,
-        requester: profiles?.find(p => p.id === req.user_id) || null
-      }));
+      if (!teamId) return [];
+      return listSupabaseRoleRequests({ teamId });
     },
     enabled: !!teamId && !!(isIcpPageMode() ? team?.club_id : true),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const deleteRoleMutation = useMutation({
@@ -369,6 +358,8 @@ function SupabaseManageTeamRolesPage() {
         requests={
           <RoleRequestsList
             requests={requests}
+            isLoading={loadingRequests}
+            error={requestError}
             isProcessing={handleRequestMutation.isPending}
             onApprove={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: true, request })}
             onDeny={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: false, request })}
