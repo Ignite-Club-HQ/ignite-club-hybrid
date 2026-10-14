@@ -34,3 +34,9 @@ HomePage, ClubDetailPage, CompetitionDetailPage, CreateTeamPage, DirectMessagePa
 - Association club linking/unlinking + rollup (club_domain set_club_parent_org, migration 20261019)
 - Duty unassign on-chain; engagement Competitions card on-chain
 - App settings: AI recap, free-club polling, notification prefetch, legal re-acceptance on-chain
+
+
+## PlayHQ (2026-10-14)
+- Moved on-chain: team fixture import (events_domain import_playhq_team_fixtures, HTTPS outcall; creates/updates/cancels game events), auto-sync every 6 h (set_playhq_team_sync + recurring timer), PlayHQ key setup in the Internet Identity app settings page (governor only; get_playhq_config_status never returns the key). Migration events_domain 20261022.
+- Limits: start times without an explicit offset use Australian/NZ zone offsets with approximate DST rules; games default to 90 minutes; JSON parsing is tolerant/flat (unusual payload shapes may import nothing — the call reports "No fixtures found").
+- Still off-chain: association-linked PlayHQ competitions (mirrored ladder/fixtures/results on the association page) and PlayHQ player stats/claims (hidden in ICP mode).
