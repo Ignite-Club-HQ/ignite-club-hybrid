@@ -287,6 +287,21 @@ export const idlFactory = ({ IDL }) => {
     'vice_count' : IDL.Nat32,
     'ref_id' : IDL.Text,
   });
+  const PlayHQTeamSync = IDL.Record({
+    'last_error' : IDL.Opt(IDL.Text),
+    'updated_by' : IDL.Principal,
+    'playhq_team_id' : IDL.Text,
+    'auto' : IDL.Bool,
+    'last_synced_at_ms' : IDL.Opt(IDL.Nat64),
+    'team_id' : IDL.Text,
+    'competition_id' : IDL.Text,
+    'club_id' : IDL.Text,
+  });
+  const PlayHQImportResult = IDL.Record({
+    'created' : IDL.Nat32,
+    'cancelled' : IDL.Nat32,
+    'updated' : IDL.Nat32,
+  });
   const AssociationEvent = IDL.Record({
     'id' : IDL.Text,
     'title' : IDL.Text,
@@ -733,6 +748,25 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(PlayerStatRow), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_playhq_config_status' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'base_url' : IDL.Opt(IDL.Text),
+              'updated_at_ms' : IDL.Opt(IDL.Nat64),
+              'configured' : IDL.Bool,
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
+    'get_playhq_team_sync' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Opt(PlayHQTeamSync), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_push_reachable' : IDL.Func(
         [IDL.Principal],
         [IDL.Variant({ 'Ok' : IDL.Opt(IDL.Bool), 'Err' : IDL.Text })],
@@ -764,6 +798,11 @@ export const idlFactory = ({ IDL }) => {
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'import_playhq_team_fixtures' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : PlayHQImportResult, 'Err' : IDL.Text })],
         [],
       ),
     'is_guardian_of' : IDL.Func(
@@ -1204,6 +1243,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_playhq_config' : IDL.Func(
         [IDL.Opt(PlayHQConfig)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_playhq_team_sync' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text), IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
