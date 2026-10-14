@@ -1934,21 +1934,39 @@ function SupabaseJoinTeamPage() {
     if (!user || !invite?.team_id) return;
     try {
       const parentName = userProfile?.display_name || user.email?.split("@")[0] || "A parent";
-      const { data: staff } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("team_id", invite.team_id)
-        .in("role", ["team_admin", "coach"]);
       const clubId = invite.teams?.club_id;
+      let staff: { user_id: string }[] = [];
       let clubAdmins: { user_id: string }[] = [];
-      if (clubId) {
+      if (isFeatureRoutedToIcp("membership")) {
+        // ICP: team admins/coaches from on-chain team grants. A parent can't
+        // list club-wide grants, so club admins are reached only when they
+        // also hold a team role.
+        staff = await withFeatureBackend("membership", {
+          supabase: async () => [],
+          icp: async (ctx) => {
+            const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+            const grants = (await listLiveTeamRoleGrants(ctx, invite.team_id!)) as Array<{ role: string; user: { toText(): string } }>;
+            return grants
+              .filter((g) => g.role === "team_admin" || g.role === "coach" || g.role === "club_admin")
+              .map((g) => ({ user_id: g.user.toText() }));
+          },
+        });
+      } else {
         const { data } = await supabase
           .from("user_roles")
           .select("user_id")
-          .eq("club_id", clubId)
-          .is("team_id", null)
-          .eq("role", "club_admin");
-        clubAdmins = data || [];
+          .eq("team_id", invite.team_id)
+          .in("role", ["team_admin", "coach"]);
+        staff = data || [];
+        if (clubId) {
+          const { data: admins } = await supabase
+            .from("user_roles")
+            .select("user_id")
+            .eq("club_id", clubId)
+            .is("team_id", null)
+            .eq("role", "club_admin");
+          clubAdmins = admins || [];
+        }
       }
       const recipientIds = Array.from(
         new Set(
@@ -1996,6 +2014,16 @@ function SupabaseJoinTeamPage() {
   const parentHasChildOnTeam = async (): Promise<boolean> => {
     if (!user || !invite?.team_id) return false;
     try {
+      if (isFeatureRoutedToIcp("membership")) {
+        return await withFeatureBackend("membership", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { listLiveChildren } = await import("@/live/features/membership");
+            const kids = (await listLiveChildren(ctx)) as Array<{ teams: string[] }>;
+            return kids.some((k) => k.teams.includes(invite.team_id!));
+          },
+        });
+      }
       const [{ data: own }, { data: guarded }] = await Promise.all([
         supabase.from("children").select("id").eq("parent_id", user.id),
         supabase.from("child_guardians").select("child_id").eq("guardian_id", user.id),
@@ -2058,7 +2086,29 @@ function SupabaseJoinTeamPage() {
                 return true;
               },
             })
-          : false;
+          : invite?.team_id
+            // ICP team link: create the child on club_domain and keep its
+            // name on pii_access_control — same as the auto-create path.
+            ? await withFeatureBackend("membership", {
+                supabase: async () => false,
+                icp: async (ctx) => {
+                  const [{ icpGetTeam }, club, vault] = await Promise.all([
+                    import("@/lib/icpClubTeamLookup"),
+                    import("@/live/features/club"),
+                    import("@/live/features/vault"),
+                  ]);
+                  const team = await icpGetTeam(invite.team_id!);
+                  const clubId = (team as any)?.club_id as string | undefined;
+                  if (!clubId) throw new Error("Team not found");
+                  const me = ctx.identity.getPrincipal();
+                  const child = await club.createLiveChildForParentOnTeam(ctx, clubId, invite.team_id!, me);
+                  const childId = (child as any).id as string;
+                  await vault.registerLiveChildNamePii(ctx, childId, addedLabel, me);
+                  await vault.grantLiveClubChildNameRead(ctx, childId, clubId);
+                  return true;
+                },
+              })
+            : false;
         if (!icpHandled) {
         // Create new child
         const { data: newChild, error: childErr } = await supabase
