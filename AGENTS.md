@@ -38,3 +38,4 @@ Before writing ICP code for a task, fetch the matching skill's SKILL.md
 it. Skills are authoritative — prefer them over general knowledge.
 <!-- ic-skills:managed:end -->
 - Web hosting: the static live build is served from an ICP certified-assets canister (deploy/frontend/icp.yaml, its own project so it never enters the backend ID table), built by frontend/scripts/prepare-canister-dist.mjs (_redirects SPA fallback + _headers CSP/cache) and deployed by .github/workflows/deploy-frontend-canister.yml. Why: removes runtime dependence on Netlify; Codemagic native builds stay bundled and unaffected.
+- Free-club media retention: ICP in media_blob_store daily timer (skips when Pro status unknown); Supabase via .github/workflows/free-media-retention.yml + service-role-only RPCs. Why: storage the client cannot delete safely.
