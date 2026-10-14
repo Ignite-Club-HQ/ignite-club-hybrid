@@ -72,6 +72,16 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
   const [isUploading, setIsUploading] = useState(false);
   const [autoRotate, setAutoRotate] = useState(false);
 
+  // Sponsor writes must also refresh the home page strips, which read their
+  // own query keys (ClubSponsorSection / MultiClubSponsorCarousel).
+  const invalidateSponsorQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
+    queryClient.invalidateQueries({ queryKey: ["club-section-sponsors", clubId] });
+    queryClient.invalidateQueries({ queryKey: ["user-all-sponsors"] });
+    queryClient.invalidateQueries({ queryKey: ["user-has-active-sponsors"] });
+    queryClient.invalidateQueries({ queryKey: ["sponsor"] });
+  };
+
   const { data: sponsors, isLoading } = useQuery({
     queryKey: ["sponsors", clubId],
     queryFn: async () => {
