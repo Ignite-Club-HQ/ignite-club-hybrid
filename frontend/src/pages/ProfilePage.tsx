@@ -593,14 +593,64 @@ export default function ProfilePage() {
         subscription: subscriptions?.find(s => s.club_id === club.id) || null
       }));
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
     staleTime: 0,
   });
 
   // Fetch upgradable teams
   const { data: upgradableTeams } = useQuery({
-    queryKey: ["upgradable-teams", user?.id, activeClubFilter],
+    queryKey: ["upgradable-teams", user?.id, activeClubFilter, providerKey],
     queryFn: async () => {
+      if (useIcpLab || isIcpRouted) {
+        return withFeatureBackend("membership", {
+          supabase: async () => { throw new Error("unreachable"); },
+          icp: async (ctx) => {
+            const grants = await getLiveMyRoleGrants(ctx);
+            const directTeamIds = [...new Set(
+              grants
+                .filter((g) => (g.role === "team_admin" || g.role === "coach") && g.team[0])
+                .map((g) => g.team[0]!),
+            )];
+            const adminClubIds = [...new Set(
+              grants
+                .filter((g) => g.role === "club_admin" && g.club[0])
+                .map((g) => g.club[0]!),
+            )];
+            const teamIds = new Set(directTeamIds);
+            for (const cid of adminClubIds) {
+              const teams = (await listLiveTeams(ctx, cid).catch(() => [])) as unknown as {
+                id: string;
+                deleted_at_ms?: unknown[];
+              }[];
+              for (const t of teams) if (!(t.deleted_at_ms ?? []).length) teamIds.add(t.id);
+            }
+            const out: Record<string, unknown>[] = [];
+            for (const tid of teamIds) {
+              const teamOpt = (await getLiveTeam(ctx, tid).catch(() => [])) as unknown as any[];
+              const t = Array.isArray(teamOpt) ? teamOpt[0] : teamOpt;
+              if (!t || (t.deleted_at_ms ?? []).length) continue;
+              if (activeClubFilter && t.club_id !== activeClubFilter) continue;
+              const [clubSub, teamSub, clubProfileRow] = await Promise.all([
+                t.club_id ? getLiveClubSubscription(ctx, t.club_id).catch(() => null) : null,
+                getLiveTeamSubscription(ctx, tid).catch(() => null),
+                t.club_id ? getLiveClubProfile(ctx, t.club_id).catch(() => []) : [],
+              ]);
+              const cp = Array.isArray(clubProfileRow) && clubProfileRow.length ? clubProfileRow[0] : null;
+              out.push({
+                id: t.id,
+                name: t.name,
+                club_id: t.club_id,
+                is_pro: teamSub?.is_pro ?? false,
+                pro_expires_at: null,
+                clubs: { name: cp?.name ?? "", sport: cp?.sport?.[0] ?? null },
+                team_subscriptions: teamSub ? [teamSub] : [],
+                clubSubscription: clubSub,
+              });
+            }
+            return out;
+          },
+        });
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role, team_id, club_id")
