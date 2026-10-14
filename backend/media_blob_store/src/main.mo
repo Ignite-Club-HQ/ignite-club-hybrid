@@ -154,11 +154,11 @@ persistent actor MediaBlobStore {
   func clubIsPro(clubId : Text) : async Bool {
     let ?cid = club_domain_canister else return false;
     let clubDomain : actor {
-      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_trial : Bool }; #Err : Text };
+      get_club_subscription : shared query Text -> async { #Ok : ?{ is_pro : Bool; admin_pro_override : Bool; is_pro_football : Bool; admin_pro_football_override : Bool; is_trial : Bool }; #Err : Text };
     } = actor (Principal.toText(cid));
     try {
       switch (await clubDomain.get_club_subscription(clubId)) {
-        case (#Ok(?sub)) { sub.is_pro or sub.admin_pro_override or sub.is_trial };
+        case (#Ok(?sub)) { sub.is_pro or sub.admin_pro_override or sub.is_pro_football or sub.admin_pro_football_override or sub.is_trial };
         case _ { false };
       }
     } catch (_) { false }

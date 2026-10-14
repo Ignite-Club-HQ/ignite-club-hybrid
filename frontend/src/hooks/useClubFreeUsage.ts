@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveFreeUsageCounters, isLiveClubPro } from "@/live/features/club";
+import { isLiveClubPro } from "@/live/features/club";
 import { getLiveClubMediaUsage } from "@/live/blobStoreUpload";
 
 const REFRESH_EVENT = "club-free-usage:refresh";
