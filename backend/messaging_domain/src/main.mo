@@ -1190,6 +1190,58 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(result)
   };
 
+  // One round trip for a chat screen opening: the newest message page, the
+  // reactions on those messages, and the conversation's pins. Pins are null
+  // when the caller may read messages but not pins (anonymous / no
+  // conversation access); clients then fall back to list_pinned_messages.
+  public query ({ caller }) func open_conversation(conversation_id : Text, limit : Nat16) : async {
+    #Ok : { page : Types.MessagePage; reactions : [Types.Reaction]; pins : ?[Types.PinnedMessage] };
+    #Err : Text;
+  } {
+    if (not canReadTeamMessages(caller, conversation_id)) return #Err("Conversation access forbidden");
+    if (limit == 0 or limit > 100) return #Err("Invalid page size");
+    let latest = conversationLatestSequence(conversation_id);
+    var matching : Nat = 0;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id) { matching += 1 };
+    };
+    let limit_n = Nat16.toNat(limit);
+    let skip = if (matching > limit_n) { matching - limit_n } else { 0 };
+    var page_messages : [Types.Message] = [];
+    var seen : Nat = 0;
+    var oldest_in_page : Nat64 = 0;
+    var oldest_set = false;
+    for (m in messages.values()) {
+      if (m.conversation_id == conversation_id) {
+        if (seen >= skip) {
+          page_messages := page_messages.concat([m]);
+          if (not oldest_set or m.sequence < oldest_in_page) {
+            oldest_in_page := m.sequence;
+            oldest_set := true;
+          };
+        };
+        seen += 1;
+      };
+    };
+    var page_reactions : [Types.Reaction] = [];
+    for (r in reactions.values()) {
+      if (page_messages.find(func(m : Types.Message) : Bool { m.id == r.message_id }) != null) {
+        page_reactions := page_reactions.concat([r]);
+      };
+    };
+    let pins : ?[Types.PinnedMessage] = if (caller.equal(Principal.anonymous()) or not canAccessConversation(caller, conversation_id)) {
+      null
+    } else {
+      ?pinnedMessages.filter(func(p) = p.conversation_id == conversation_id)
+    };
+    let next_seq : ?Nat64 = if (skip > 0 and oldest_set) ?oldest_in_page else null;
+    #Ok({
+      page = { messages = page_messages; next_sequence = next_seq; latest_sequence = latest };
+      reactions = page_reactions;
+      pins;
+    })
+  };
+
   public query ({ caller }) func unread_count(conversation_id : Text) : async { #Ok : Types.Unread; #Err : Text } {
     if (not canAccessConversation(caller, conversation_id)) return #Err("Conversation access forbidden");
     #Ok(unreadFor(caller, conversation_id))

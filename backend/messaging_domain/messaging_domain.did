@@ -487,6 +487,16 @@ type Main =
        Err: text;
        Ok: nat64;
      }) query;
+   open_conversation: (conversation_id: text, limit: nat16) ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          page: MessagePage;
+          pins: opt vec PinnedMessage;
+          reactions: vec Reaction;
+        };
+     }) query;
    pin_message: (conversation_id: text, message_id: text) ->
     (variant {
        Err: text;
