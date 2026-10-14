@@ -217,7 +217,19 @@ async function sendFcm(projectId, oauth, token, n) {
       message: {
         token,
         notification: { title: titleFor(n), body: n.body },
-        data: { kind: n.kind, url: urlFor(n), notification_id: n.id },
+        data: {
+          kind: n.kind,
+          url: urlFor(n),
+          notification_id: n.id,
+          // Chat taps: lets the app's pendingChatJump fallback scroll to the
+          // exact message even if the URL search params get stripped.
+          ...(n.kind === "message_chat"
+            ? {
+                conversation_id: n.related_id?.[0] ?? n.club ?? "",
+                message_id: n.idempotency_key?.[0] ?? "",
+              }
+            : {}),
+        },
         android: { priority: "HIGH" },
         apns: { headers: { "apns-priority": "10" } },
       },
