@@ -211,9 +211,30 @@ workflows:
               buildTypes {
                   release {
                       signingConfig signingConfigs.release
+                      // Play Console flags un-obfuscated DEX code; R8 shrinks
+                      // and obfuscates while the keep rules below protect
+                      // everything the web layer reaches by reflection.
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                   }
               }
           }
+          EOF
+          cat >> app/proguard-rules.pro <<'EOF'
+
+          # Capacitor bridge + plugins are discovered by reflection/annotations.
+          -keep class com.getcapacitor.** { *; }
+          -keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+          -keep class * extends com.getcapacitor.Plugin { *; }
+          -keepclassmembers class * { @com.getcapacitor.PluginMethod public *; @android.webkit.JavascriptInterface <methods>; }
+          -keep class com.capacitorjs.** { *; }
+          -keep class io.ionic.** { *; }
+          -keep class ee.forgr.** { *; }
+          -keep class com.google.firebase.** { *; }
+          -keep class com.android.billingclient.** { *; }
+          -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+          -dontwarn **
           EOF
       - name: Build release AAB
         working_directory: frontend/android
