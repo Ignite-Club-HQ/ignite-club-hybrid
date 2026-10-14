@@ -73,6 +73,9 @@ export function useUserHasAnyAICatchUpClub(scopedClubId?: string | null) {
     placeholderData: (prev) => prev,
     queryFn: async () => {
       if (!isAICatchUpAllowlisted(user?.id)) return false;
+      if (resolveAuthBackend() === "icp") {
+        return hasAnyLiveAICatchUpClub(scopedClubId);
+      }
 
       const { data: roles } = await supabase
         .from("user_roles")
