@@ -497,9 +497,9 @@ export default function ProfilePage() {
   const displayedRank = selectedSeasonId !== "all" ? seasonRankData : rankData;
 
   const { data: upgradableClubs } = useQuery({
-    queryKey: ["upgradable-clubs", user?.id, activeClubFilter, providerKey],
+    queryKey: ["upgradable-clubs", user?.id, activeClubFilter, useIcpLab, isIcpAuth],
     queryFn: async () => {
-      if (useIcpLab || isIcpRouted) {
+      if (useIcpLab || isIcpAuth) {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
@@ -599,9 +599,9 @@ export default function ProfilePage() {
 
   // Fetch upgradable teams
   const { data: upgradableTeams } = useQuery({
-    queryKey: ["upgradable-teams", user?.id, activeClubFilter, providerKey],
+    queryKey: ["upgradable-teams", user?.id, activeClubFilter, useIcpLab, isIcpAuth],
     queryFn: async () => {
-      if (useIcpLab || isIcpRouted) {
+      if (useIcpLab || isIcpAuth) {
         return withFeatureBackend("membership", {
           supabase: async () => { throw new Error("unreachable"); },
           icp: async (ctx) => {
