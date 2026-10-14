@@ -218,35 +218,54 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
     step("Creating events", ++evDone, events.length);
   });
 
-  // Chats.
-  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
-  const convo = async (teamId: string | null) => {
-    const r: any = await actor.ensure_conversation(clubId, candidOpt(teamId), [me]);
-    if ("Err" in r) throw new Error(r.Err);
-    return r.Ok.id as string;
-  };
-  const chats: Array<{ id: string; count: number }> = [
-    { id: await convo(null), count: opts.clubChatMessages },
-    ...(await Promise.all(teamIds.map(async (t) => ({ id: await convo(t), count: opts.messagesPerTeamChat })))),
-  ];
-  const msgs = chats.flatMap((c) =>
-    Array.from({ length: c.count }, (_, i) => ({
-      convo: c.id,
-      body: real
-        ? (i === 6 ? LONG : lines[(i + c.id.length) % lines.length])
-        : i % 25 === 0 ? `${LONG} (#${i + 1})` : `${LINES[i % LINES.length]} (#${i + 1})`,
-    })),
-  );
-  let mDone = 0;
-  // Sequential per chat keeps message order; chats run in parallel.
-  await Promise.all(
-    chats.map(async (c) => {
-      for (const m of msgs.filter((x) => x.convo === c.id)) {
-        await sendLiveMessage(ctx, m.convo, m.body, crypto.randomUUID()).catch((e) => noteFail("message", e));
-        step("Sending chat messages", ++mDone, msgs.length);
+  // Chats. Each stage is isolated so a chat failure can't skip photos/files.
+  let msgs: Array<{ convo: string; body: string }> = [];
+  let mOk = 0;
+  try {
+    const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+    const convo = async (teamId: string | null) => {
+      const r: any = await actor.ensure_conversation(clubId, candidOpt(teamId), [me]);
+      if ("Err" in r) throw new Error(r.Err);
+      return r.Ok.id as string;
+    };
+    const chats: Array<{ id: string; count: number }> = [];
+    for (const t of [null, ...teamIds]) {
+      try {
+        chats.push({ id: await convo(t), count: t ? opts.messagesPerTeamChat : opts.clubChatMessages });
+      } catch (e) {
+        noteFail(t ? "team chat" : "club chat", e);
       }
-    }),
-  );
+    }
+    // Also post a few lines into the club's group chats (Coaches, Team Admins…).
+    try {
+      const { listLiveGroupsByClub } = await import("./features/messaging");
+      const groups = await listLiveGroupsByClub(ctx, clubId);
+      for (const g of groups.filter((x: any) => !x.teamId)) chats.push({ id: g.conversationId, count: 5 });
+    } catch (e) {
+      noteFail("group chats", e);
+    }
+    msgs = chats.flatMap((c) =>
+      Array.from({ length: c.count }, (_, i) => ({
+        convo: c.id,
+        body: real
+          ? (i === 6 ? LONG : lines[(i + c.id.length) % lines.length])
+          : i % 25 === 0 ? `${LONG} (#${i + 1})` : `${LINES[i % LINES.length]} (#${i + 1})`,
+      })),
+    );
+    let mDone = 0;
+    await Promise.all(
+      chats.map(async (c) => {
+        for (const m of msgs.filter((x) => x.convo === c.id)) {
+          await sendLiveMessage(ctx, m.convo, m.body, crypto.randomUUID())
+            .then(() => { mOk++; })
+            .catch((e) => noteFail("message", e));
+          step("Sending chat messages", ++mDone, msgs.length);
+        }
+      }),
+    );
+  } catch (e) {
+    noteFail("chats", e);
+  }
 
   // Photos.
   for (let i = 0; i < opts.photos; i++) {
