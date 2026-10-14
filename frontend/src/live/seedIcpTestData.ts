@@ -11,12 +11,17 @@ import { addLiveRoleGrant } from "./features/membership";
 import { sendLiveMessage } from "./features/messaging";
 import { createLiveEvent } from "./features/events";
 import { registerLiveAsset, setLiveAssetScope } from "./features/media";
+import { registerLiveVaultFile } from "./features/vault";
 import { tryUploadMediaToBlobStore } from "./mediaUpload";
 import { connectLiveMessagingDomain } from "./domains";
 import { icpCtx } from "@/lib/icpClubTeamLookup";
 
 export interface SeedOptions {
   clubName: string;
+  /** Fill this existing club instead of creating a new one. */
+  existingClubId?: string | null;
+  /** Vault files (small PDFs/CSVs) to upload. */
+  files?: number;
   messagesPerTeamChat: number;
   clubChatMessages: number;
   photos: number;
@@ -24,6 +29,66 @@ export interface SeedOptions {
 }
 
 const TEAMS = ["U8 Rockets", "U10 Hawks", "U12 Lions"];
+const REAL_TEAMS = ["U12 Riverdogs", "U14 Riverdogs"];
+const OPPONENTS = ["Eagles", "Sharks", "Falcons", "Tigers", "Panthers", "Wolves", "Stingrays", "Bulldogs"];
+const REAL_LINES = [
+  "Hi everyone, welcome to the new season! 🎉",
+  "Training moved to the back oval tonight, front one is being re-turfed.",
+  "Can someone bring the oranges for Saturday? 🍊",
+  "I can do oranges this week.",
+  "Thanks Sarah!",
+  "Kick-off is 9am, please be there by 8:30 for warm up.",
+  "Great win today team, so proud of the effort in the second half 💪",
+  "Who has the spare goalie gloves? Left them at training I think.",
+  "Found them, they're in the kit bag.",
+  "Reminder: registration fees are due by the end of the month.",
+  "Photos from Saturday are up in the gallery 📸",
+  "Is training still on with this rain?",
+  "Yes, still on unless there's lightning. We'll message if it's cancelled.",
+  "Running 10 mins late, sorry!",
+  "No worries 👍",
+  "BBQ roster for the home game is in the vault, please pop your name down.",
+  "Can we carpool to the away game? We have 2 spare seats.",
+  "We'd love a lift, thank you!",
+  "Uniform pickup is Thursday 5-6pm at the clubrooms.",
+  "Does anyone know if the canteen takes card?",
+  "Yes it does now 🙌",
+  "Coach here: we'll work on passing drills this week, bring a ball each if you can.",
+  "Happy birthday Liam! 🎂",
+  "Lost property: blue drink bottle with a dinosaur sticker.",
+  "That's ours! Thanks, will grab it Tuesday.",
+  "Fixture for the next round is out, we're away at Glenelg.",
+  "Please RSVP for Saturday so we know numbers.",
+  "End of season presentation night is booked for the 14th 🏆",
+];
+const FILES: Array<{ name: string; kind: "pdf" | "csv"; title: string; lines: string[] }> = [
+  { name: "Season Fixture.pdf", kind: "pdf", title: "Riverdogs Season Fixture", lines: ["Round 1 - Home vs Eagles - 9:00am", "Round 2 - Away at Sharks - 10:30am", "Round 3 - Home vs Falcons - 9:00am", "Round 4 - Away at Tigers - 8:30am"] },
+  { name: "Code of Conduct.pdf", kind: "pdf", title: "Club Code of Conduct", lines: ["Respect players, coaches, referees and parents.", "Encourage effort over results.", "No abuse of officials.", "Have fun!"] },
+  { name: "Canteen Roster.csv", kind: "csv", title: "", lines: ["Date,Family,Shift", "Sat wk1,Smith,8-10am", "Sat wk1,Nguyen,10-12pm", "Sat wk2,Patel,8-10am", "Sat wk2,O'Brien,10-12pm"] },
+  { name: "Committee Minutes.pdf", kind: "pdf", title: "Committee Meeting Minutes", lines: ["Attendees: President, Treasurer, Secretary", "Ground lights repaired before round 3.", "New goals ordered for juniors.", "Next meeting first Monday of the month."] },
+  { name: "Player Contacts.csv", kind: "csv", title: "", lines: ["Player,Team,Guardian", "Ava,U12,Mia (parent)", "Noah,U12,Jack (parent)", "Leo,U14,Emma (parent)", "Zoe,U14,Liam (parent)"] },
+  { name: "First Aid Guide.pdf", kind: "pdf", title: "First Aid Quick Guide", lines: ["Kit is stored in the clubroom cupboard.", "Ice packs are in the canteen freezer.", "Call 000 in an emergency.", "Log every injury with the team manager."] },
+];
+
+/** Minimal valid single-page PDF with a title and lines of text. */
+function makePdf(title: string, lines: string[]): Blob {
+  const esc = (t: string) => t.replace(/[\\()]/g, (c) => "\\" + c).replace(/[^\x20-\x7e]/g, "");
+  const text = [`BT /F1 20 Tf 60 760 Td (${esc(title)}) Tj ET`, ...lines.map((l, i) => `BT /F1 12 Tf 60 ${720 - i * 22} Td (${esc(l)}) Tj ET`)].join("\n");
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let out = "%PDF-1.4\n";
+  const offs: number[] = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([out], { type: "application/pdf" });
+}
 const ADDRESSES = [
   "Adelaide Oval, War Memorial Dr, North Adelaide SA 5006",
   "Unley Oval, Trevelyan St, Unley SA 5061",
@@ -81,24 +146,32 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   const me: Principal = ctx.identity.getPrincipal();
   const step = opts.onProgress;
 
-  step("Creating club", 0, 1);
-  const club = await createLiveClub(
-    ctx,
-    crypto.randomUUID(),
-    opts.clubName,
-    `${opts.clubName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`,
-    "Synthetic club for testing",
-    "soccer",
-    "AU",
-  );
-  const clubId = club.id as string;
+  const real = !!opts.existingClubId;
+  const teamNames = real ? REAL_TEAMS : TEAMS;
+  const lines = real ? REAL_LINES : LINES;
+  let clubId: string;
+  if (opts.existingClubId) {
+    clubId = opts.existingClubId;
+  } else {
+    step("Creating club", 0, 1);
+    const club = await createLiveClub(
+      ctx,
+      crypto.randomUUID(),
+      opts.clubName,
+      `${opts.clubName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`,
+      "Synthetic club for testing",
+      "soccer",
+      "AU",
+    );
+    clubId = club.id as string;
+  }
 
   const teamIds: string[] = [];
-  for (let i = 0; i < TEAMS.length; i++) {
-    step("Creating teams", i, TEAMS.length);
+  for (let i = 0; i < teamNames.length; i++) {
+    step("Creating teams", i, teamNames.length);
     const team = await saveLiveTeam(ctx, {
-      id: crypto.randomUUID(), club_id: clubId, name: TEAMS[i],
-      age_group: candidOpt(TEAMS[i].split(" ")[0]), description: candidOpt(null), logo_url: candidOpt(null),
+      id: crypto.randomUUID(), club_id: clubId, name: teamNames[i],
+      age_group: candidOpt(teamNames[i].split(" ")[0]), description: candidOpt(null), logo_url: candidOpt(null),
       division: [], gender: [], team_type: [], folder_id: [], is_active: true, archived: false,
       deleted_at_ms: [], is_shell: false, shell_invited_by: [], shell_contact_name: [], shell_contact_email: [],
       shell_claim_token: [], shell_claimed_at_ms: [], shell_claimed_by: [], playhq_team_id: [],
@@ -128,10 +201,10 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   await pool(events, 6, async (e) => {
     await createLiveEvent(ctx, {
       clubId, teamId: e.teamId,
-      title: e.game ? `Game vs Opponent ${e.k}` : "Training",
+      title: e.game ? `Game vs ${real ? OPPONENTS[(e.k + e.teamId.length) % OPPONENTS.length] : `Opponent ${e.k}`}` : "Training",
       description: e.game ? "Arrive 30 minutes before kick-off." : " ",
       eventType: e.game ? "game" : "training",
-      location: null, opponent: e.game ? `Opponent ${e.k}` : null,
+      location: null, opponent: e.game ? (real ? OPPONENTS[(e.k + e.teamId.length) % OPPONENTS.length] : `Opponent ${e.k}`) : null,
       address: ADDRESSES[e.k % ADDRESSES.length], miniLeagueId: null,
       startsAtMs: e.start.getTime(), endsAtMs: e.start.getTime() + 3_600_000,
     } as any);
@@ -152,7 +225,9 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   const msgs = chats.flatMap((c) =>
     Array.from({ length: c.count }, (_, i) => ({
       convo: c.id,
-      body: i % 25 === 0 ? `${LONG} (#${i + 1})` : `${LINES[i % LINES.length]} (#${i + 1})`,
+      body: real
+        ? (i === 6 ? LONG : lines[(i + c.id.length) % lines.length])
+        : i % 25 === 0 ? `${LONG} (#${i + 1})` : `${LINES[i % LINES.length]} (#${i + 1})`,
     })),
   );
   let mDone = 0;
@@ -170,7 +245,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   for (let i = 0; i < opts.photos; i++) {
     step("Uploading photos", i, opts.photos);
     try {
-      const file = await makePhoto(`Test photo ${i + 1}`, (i * 47) % 360);
+      const file = await makePhoto(real ? (i % 2 ? `Match day vs ${OPPONENTS[i % OPPONENTS.length]}` : `Training ${i + 1}`) : `Test photo ${i + 1}`, (i * 47) % 360);
       const storagePath = `clubs/${clubId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
       const up = await tryUploadMediaToBlobStore({ storagePath, file, mime: "image/jpeg" });
       if (!up) throw new Error("Media upload canisters are not configured");
@@ -180,10 +255,26 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
       });
       await setLiveAssetScope(ctx, asset.id, {
         teamId: teamIds[i % teamIds.length], miniLeagueId: null, competitionId: null, eventId: null,
-        caption: `Synthetic photo ${i + 1}`, albumId: null,
+        caption: real ? (i % 2 ? "Great game today!" : "Training session") : `Synthetic photo ${i + 1}`, albumId: null,
       }).catch(() => {});
     } catch (e) {
       console.warn("[seed] photo failed", e);
+    }
+  }
+  // Vault files (club-level, staff lock like the vault upload screen).
+  const fileCount = Math.min(opts.files ?? 0, FILES.length);
+  for (let i = 0; i < fileCount; i++) {
+    step("Uploading files", i, fileCount);
+    try {
+      const f = FILES[i];
+      const blob = f.kind === "pdf" ? makePdf(f.title, f.lines) : new Blob([f.lines.join("\n")], { type: "text/csv" });
+      const file = new File([blob], f.name, { type: blob.type });
+      const storagePath = `clubs/${clubId}/vault/${Date.now()}-${f.name.replace(/[^A-Za-z0-9.]+/g, "_")}`;
+      const up = await tryUploadMediaToBlobStore({ storagePath, file, mime: file.type, lock: "own" });
+      if (!up) throw new Error("Media upload canisters are not configured");
+      await registerLiveVaultFile(ctx, crypto.randomUUID(), "", clubId, null, f.name, up.url, file.size, file.type, false, up.blobRef as any);
+    } catch (e) {
+      console.warn("[seed] file failed", e);
     }
   }
   step("Done", 1, 1);
