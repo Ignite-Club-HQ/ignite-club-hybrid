@@ -11,6 +11,7 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Timer "mo:core/Timer";
 import Call "mo:ic/Call";
@@ -2112,7 +2113,7 @@ persistent actor class Main(governorInit : Principal) {
     while (i < from + len) {
       let c = cs[i];
       if (c < '0' or c > '9') return null;
-      v := v * 10 + (Nat32.toNat(c.toNat32()) - 48);
+      v := v * 10 + (Nat32.toNat(Char.toNat32(c)) - 48);
       i += 1;
     };
     ?v
