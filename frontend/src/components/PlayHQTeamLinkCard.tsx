@@ -8,10 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Trophy, Loader2, Unlink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { assertSupabaseWritePath } from "@/live/featureGuards";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubProfile, getLiveTeam, saveLiveTeam } from "@/live/features/club";
-import { listLivePlayHQCompetitions, listLivePlayHQFixtures } from "@/live/features/events";
+import { listLivePlayHQCompetitions, listLivePlayHQFixtures, importLivePlayHQTeamFixtures, setLivePlayHQTeamSync } from "@/live/features/events";
 
 interface Props {
   teamId: string;
@@ -195,6 +194,18 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
             playhq_auto_create_events:
               patch.playhq_auto_create_events ?? liveTeam.playhq_auto_create_events,
           });
+          // Keep the events service's 6-hourly auto-sync list in step.
+          const competitionId =
+            patch.playhq_competition_id !== undefined ? patch.playhq_competition_id : liveTeam.playhq_competition_id[0] ?? null;
+          const playhqTeamId =
+            patch.playhq_team_id !== undefined ? patch.playhq_team_id : liveTeam.playhq_team_id[0] ?? null;
+          const auto = patch.playhq_auto_create_events ?? liveTeam.playhq_auto_create_events;
+          await setLivePlayHQTeamSync(ctx, { clubId, teamId, competitionId, playhqTeamId, auto });
+          if (patch.playhq_auto_create_events === true && competitionId && playhqTeamId) {
+            await importLivePlayHQTeamFixtures(ctx, { clubId, teamId, competitionId, playhqTeamId })
+              .then((r) => toast.success(`Imported: ${r.created} new, ${r.updated} updated, ${r.cancelled} cancelled`))
+              .catch((e) => toast.error(e?.message ?? "Import failed"));
+          }
         },
       });
     },
@@ -207,17 +218,22 @@ export function PlayHQTeamLinkCard({ teamId, clubId }: Props) {
   const runImport = async () => {
     setImporting(true);
     try {
-      // Off-chain exception (payments-like): fixture materialisation needs the
-      // server-held PlayHQ secret, so it stays on the Supabase edge function
-      // (playhq-materialise-team-events) and writes events via Supabase with
-      // no events_domain counterpart.
-      assertSupabaseWritePath("events", "PlayHQ fixture import/materialisation has no events_domain counterpart");
-      const { data, error } = await supabase.functions.invoke("playhq-materialise-team-events", {
-        body: { team_id: teamId },
+      const r = await withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase.functions.invoke("playhq-materialise-team-events", {
+            body: { team_id: teamId },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
+          return data as { created: number; updated: number; cancelled: number };
+        },
+        icp: (ctx) => {
+          if (!team?.playhq_competition_id || !team?.playhq_team_id) throw new Error("Pick a PlayHQ competition and team first");
+          return importLivePlayHQTeamFixtures(ctx, {
+            clubId, teamId, competitionId: team.playhq_competition_id, playhqTeamId: team.playhq_team_id,
+          });
+        },
       });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      const r = data as { created: number; updated: number; cancelled: number };
       toast.success(`Imported: ${r.created} new, ${r.updated} updated, ${r.cancelled} cancelled`);
       qc.invalidateQueries({ queryKey: ["events"] });
     } catch (e: any) {

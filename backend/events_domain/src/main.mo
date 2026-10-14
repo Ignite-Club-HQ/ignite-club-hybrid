@@ -11,6 +11,7 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Blob "mo:core/Blob";
+import Char "mo:core/Char";
 import Error "mo:core/Error";
 import Timer "mo:core/Timer";
 import Call "mo:ic/Call";
@@ -65,6 +66,8 @@ persistent actor class Main(governorInit : Principal) {
   var gameResults : [Types.GameResult];
   var activeGames : [Types.ActiveGame];
   var playHQConfig : ?Types.PlayHQConfig;
+  var playhqTeamSyncs : [Types.PlayHQTeamSync];
+  var playhqEventLinks : [Types.PlayHQEventLink];
   // Governor-set notification_queue canister id for the event-reminder
   // fan-out hook. Fail-closed while unset, mirrors messaging_domain/club_domain.
   var notificationQueueCanister : ?Principal;
@@ -2088,6 +2091,277 @@ persistent actor class Main(governorInit : Principal) {
       };
     }
   };
+
+  // ---- PlayHQ team fixture import (on-chain playhq-materialise-team-events) ----
+  // Reads the competition fixture via HTTPS outcall and mirrors the linked
+  // team's games as "game" events: new games are created, changed games are
+  // updated, and future games that vanished from (or were cancelled in) the
+  // feed are cancelled. Teams with auto-sync on are re-imported every 6 h.
+
+  public query ({ caller }) func get_playhq_config_status() : async { #Ok : { configured : Bool; base_url : ?Text; updated_at_ms : ?Nat64 }; #Err : Text } {
+    if (not isGovernor(caller)) return #Err("Governor only");
+    switch (playHQConfig) {
+      case null #Ok({ configured = false; base_url = null; updated_at_ms = null });
+      case (?c) #Ok({ configured = true; base_url = ?c.base_url; updated_at_ms = ?c.updated_at_ms });
+    }
+  };
+
+  func digitsToInt(cs : [Char], from : Nat, len : Nat) : ?Int {
+    if (from + len > cs.size()) return null;
+    var v : Int = 0;
+    var i = from;
+    while (i < from + len) {
+      let c = cs[i];
+      if (c < '0' or c > '9') return null;
+      v := v * 10 + (Nat32.toNat(Char.toNat32(c)) - 48);
+      i += 1;
+    };
+    ?v
+  };
+
+  // Howard Hinnant's days_from_civil (proleptic Gregorian, UTC).
+  func daysFromCivil(y0 : Int, m : Int, d : Int) : Int {
+    let y = if (m <= 2) y0 - 1 else y0;
+    let era = (if (y >= 0) y else y - 399) / 400;
+    let yoe = y - era * 400;
+    let mp = if (m > 2) m - 3 else m + 9;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+  };
+
+  func firstSunday(y : Int, m : Int) : Int {
+    let wd = (daysFromCivil(y, m, 1) + 4) % 7; // 0 = Sunday
+    1 + (7 - wd) % 7
+  };
+
+  // Offset (minutes east of UTC) for a local wall-clock date in an
+  // Australian/NZ zone. DST approximated as first Sunday Oct → first Sunday Apr.
+  func zoneOffsetMin(tz : Text, y : Int, m : Int, d : Int) : Int {
+    let lower = Text.toLower(tz);
+    let dst = if (m >= 11 or m <= 3) true else if (m == 10) d >= firstSunday(y, 10) else if (m == 4) d < firstSunday(y, 4) else false;
+    if (Text.contains(lower, #text "perth")) 480
+    else if (Text.contains(lower, #text "darwin")) 570
+    else if (Text.contains(lower, #text "adelaide") or Text.contains(lower, #text "broken_hill")) (if dst 630 else 570)
+    else if (Text.contains(lower, #text "brisbane") or Text.contains(lower, #text "lindeman")) 600
+    else if (Text.contains(lower, #text "auckland")) (if dst 780 else 720)
+    else (if dst 660 else 600)
+  };
+
+  // "YYYY-MM-DD" + optional "THH:MM[:SS][.fff][Z|±HH:MM]". Without an offset
+  // the wall clock is interpreted in `tz`.
+  func parsePlayhqTime(text : Text, tz : Text) : ?Nat64 {
+    let cs = Text.toArray(text);
+    let y = switch (digitsToInt(cs, 0, 4)) { case (?v) v; case null return null };
+    let mo = switch (digitsToInt(cs, 5, 2)) { case (?v) v; case null return null };
+    let d = switch (digitsToInt(cs, 8, 2)) { case (?v) v; case null return null };
+    var h : Int = 0; var mi : Int = 0; var sec : Int = 0;
+    var i = 10;
+    if (cs.size() > 11 and (cs[10] == 'T' or cs[10] == ' ')) {
+      h := switch (digitsToInt(cs, 11, 2)) { case (?v) v; case null 0 };
+      mi := switch (digitsToInt(cs, 14, 2)) { case (?v) v; case null 0 };
+      i := 16;
+      if (cs.size() > 18 and cs[16] == ':') { sec := switch (digitsToInt(cs, 17, 2)) { case (?v) v; case null 0 }; i := 19 };
+      while (i < cs.size() and (cs[i] == '.' or (cs[i] >= '0' and cs[i] <= '9'))) { i += 1 };
+    };
+    if (mo < 1 or mo > 12 or d < 1 or d > 31 or h > 23 or mi > 59) return null;
+    var offsetMin : Int = zoneOffsetMin(tz, y, mo, d);
+    if (i < cs.size()) {
+      if (cs[i] == 'Z') { offsetMin := 0 }
+      else if (cs[i] == '+' or cs[i] == '-') {
+        let oh = switch (digitsToInt(cs, i + 1, 2)) { case (?v) v; case null 0 };
+        let om = if (i + 4 < cs.size() and cs[i + 3] == ':') (switch (digitsToInt(cs, i + 4, 2)) { case (?v) v; case null 0 }) else (switch (digitsToInt(cs, i + 3, 2)) { case (?v) v; case null 0 });
+        offsetMin := (if (cs[i] == '-') -1 else 1) * (oh * 60 + om);
+      };
+    };
+    let ms = ((daysFromCivil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec) - offsetMin * 60) * 1000;
+    if (ms <= 0) null else ?Nat64.fromNat(Int.abs(ms))
+  };
+
+  type PlayhqGame = { game_id : Text; starts_ms : Nat64; venue : ?Text; opponent : Text; is_home : Bool; cancelled : Bool };
+
+  func firstStr(obj : Text, keys : [Text]) : ?Text {
+    for (k in keys.values()) {
+      switch (findJsonStringValue(obj, k)) { case (?v) { if (v != "") return ?v }; case null {} };
+    };
+    null
+  };
+
+  func parsePlayhqGames(body : Text, playhq_team_id : Text) : [PlayhqGame] {
+    var arr = extractJsonArray(body, "matches");
+    if (arr == "") arr := extractJsonArray(body, "games");
+    if (arr == "") arr := extractJsonArray(body, "data");
+    let objs = splitJsonObjects(if (arr == "") body else arr);
+    var out : [PlayhqGame] = [];
+    for (obj in objs.values()) {
+      var homeId : ?Text = null; var awayId : ?Text = null;
+      var homeName = ""; var awayName = "";
+      let homeObj = extractJsonObject(obj, "homeTeam");
+      let awayObj = extractJsonObject(obj, "awayTeam");
+      if (homeObj != "" or awayObj != "") {
+        homeId := findJsonStringValue(homeObj, "id");
+        awayId := findJsonStringValue(awayObj, "id");
+        homeName := switch (findJsonStringValue(homeObj, "name")) { case (?v) v; case null "" };
+        awayName := switch (findJsonStringValue(awayObj, "name")) { case (?v) v; case null "" };
+      } else {
+        let teamObjs = splitJsonObjects(extractJsonArray(obj, "teams"));
+        for (t in teamObjs.values()) {
+          let tid = findJsonStringValue(t, "id");
+          let tname = switch (findJsonStringValue(t, "name")) { case (?v) v; case null "" };
+          if (Text.contains(t, #text "\"isHomeTeam\":true") and homeId == null) { homeId := tid; homeName := tname }
+          else if (awayId == null) { awayId := tid; awayName := tname }
+          else { homeId := tid; homeName := tname };
+        };
+      };
+      let isHome = homeId == ?playhq_team_id;
+      let isAway = awayId == ?playhq_team_id;
+      let gameId = switch (findJsonStringValue(obj, "id")) { case (?v) v; case null "" };
+      if ((isHome or isAway) and gameId != "") {
+        let opponent = if (isHome) awayName else homeName;
+        let schedule = extractJsonObject(obj, "schedule");
+        let tz = switch (firstStr(if (schedule == "") obj else schedule, ["timezone", "timeZone"])) { case (?v) v; case null "Australia/Sydney" };
+        let iso : ?Text = switch (firstStr(obj, ["startTime", "startDateTime", "dateTime", "scheduledStartTime", "startsAt"])) {
+          case (?v) ?v;
+          case null {
+            let src = if (schedule == "") obj else schedule;
+            switch (findJsonStringValue(src, "date")) {
+              case (?date) ?(date # "T" # (switch (findJsonStringValue(src, "time")) { case (?t) t; case null "00:00:00" }));
+              case null null;
+            }
+          };
+        };
+        let startsOpt = switch (iso) { case (?t) parsePlayhqTime(t, tz); case null null };
+        let status = Text.toUpper(switch (findJsonStringValue(obj, "status")) { case (?v) v; case null "" });
+        let cancelled = Text.contains(status, #text "CANCEL") or Text.contains(status, #text "POSTPON") or Text.contains(status, #text "ABANDON");
+        let venueObj = extractJsonObject(obj, "venue");
+        let venue = if (venueObj == "") null else findJsonStringValue(venueObj, "name");
+        switch (startsOpt) {
+          case (?starts) { if (opponent != "") out := out.concat([{ game_id = gameId; starts_ms = starts; venue; opponent; is_home = isHome; cancelled }]) };
+          case null {};
+        };
+      };
+    };
+    out
+  };
+
+  func clip(t : Text, max : Nat) : Text {
+    if (t.size() <= max) t else Text.fromArray(Array.tabulate<Char>(max, func(i) = Text.toArray(t)[i]))
+  };
+
+  func importPlayhqTeam(club_id : Text, team_id : Text, competition_id : Text, playhq_team_id : Text, actor_ : Principal) : async* { #Ok : Types.PlayHQImportResult; #Err : Text } {
+    let body = switch (await* playhqHttpGet("/v1/competitions/" # competition_id # "/fixture")) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(b)) b;
+    };
+    let games = parsePlayhqGames(body, playhq_team_id);
+    if (games.size() == 0) return #Err("No fixtures found for this team in PlayHQ yet");
+    let now = nowMs();
+    let duration : Nat64 = 90 * 60_000;
+    var created : Nat32 = 0; var updated : Nat32 = 0; var cancelledN : Nat32 = 0;
+    for (g in games.values()) {
+      let title = clip((if (g.is_home) "vs " else "@ ") # g.opponent, 120);
+      let location = switch (g.venue) { case (?v) ?clip(v, 120); case null null };
+      let opponent = ?clip(g.opponent, 120);
+      switch (playhqEventLinks.find(func(l) = l.team_id == team_id and l.playhq_game_id == g.game_id)) {
+        case (?link) {
+          switch (events.find(func(e) = e.id == link.event_id)) {
+            case (?e) {
+              if (not e.deleted and (e.starts_at_ms != g.starts_ms or e.location != location or e.opponent != opponent or e.cancelled != g.cancelled or e.title != title)) {
+                if (g.cancelled and not e.cancelled) cancelledN += 1 else updated += 1;
+                events := events.map<Types.Event, Types.Event>(func(x) = if (x.id == e.id) { { x with title; starts_at_ms = g.starts_ms; ends_at_ms = g.starts_ms + duration; location; opponent; cancelled = g.cancelled; revision = x.revision + 1; updated_at_ms = now } } else x);
+              };
+            };
+            case null {};
+          };
+        };
+        case null {
+          if (not g.cancelled) {
+            let ev : Types.Event = { id = "evt-" # club_id # "-" # Nat.toText(events.size()); club_id; team_id = ?team_id; title; description = "PlayHQ fixture"; event_type = "game"; location; cancelled = false; creator = actor_; starts_at_ms = g.starts_ms; ends_at_ms = g.starts_ms + duration; series_id = null; revision = 1; deleted = false; opponent; address = null; mini_league_id = null; updated_at_ms = now };
+            events := events.concat([ev]);
+            playhqEventLinks := playhqEventLinks.concat([{ event_id = ev.id; team_id; playhq_game_id = g.game_id }]);
+            created += 1;
+          };
+        };
+      };
+    };
+    // Future linked games that no longer appear in the feed are cancelled.
+    for (link in playhqEventLinks.values()) {
+      if (link.team_id == team_id and not games.any(func(g) = g.game_id == link.playhq_game_id)) {
+        switch (events.find(func(e) = e.id == link.event_id)) {
+          case (?e) {
+            if (not e.cancelled and not e.deleted and e.starts_at_ms > now) {
+              events := events.map<Types.Event, Types.Event>(func(x) = if (x.id == e.id) { { x with cancelled = true; revision = x.revision + 1; updated_at_ms = now } } else x);
+              cancelledN += 1;
+            };
+          };
+          case null {};
+        };
+      };
+    };
+    #Ok({ created; updated; cancelled = cancelledN })
+  };
+
+  func canManageTeamFixtures(caller : Principal, club_id : Text, team_id : Text) : Bool {
+    isGovernor(caller) or hasRole(caller, "club_admin", club_id, null) or hasRole(caller, "team_admin", club_id, ?team_id) or hasRole(caller, "coach", club_id, ?team_id)
+  };
+
+  /// Imports the linked team's PlayHQ fixtures as game events now.
+  public shared ({ caller }) func import_playhq_team_fixtures(club_id : Text, team_id : Text, competition_id : Text, playhq_team_id : Text) : async { #Ok : Types.PlayHQImportResult; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not valid(competition_id) or not valid(playhq_team_id)) return #Err("Invalid PlayHQ link");
+    await syncRolesFromClubDomain(caller, club_id);
+    if (not canManageTeamFixtures(caller, club_id, team_id)) return #Err("Club or team admin required");
+    let r = await* importPlayhqTeam(club_id, team_id, competition_id, playhq_team_id, caller);
+    let (ok, err) = switch (r) { case (#Ok(_)) (true, null); case (#Err(e)) (false, ?e) };
+    playhqTeamSyncs := playhqTeamSyncs.map<Types.PlayHQTeamSync, Types.PlayHQTeamSync>(func(s) = if (s.team_id == team_id) { { s with last_synced_at_ms = if ok ?nowMs() else s.last_synced_at_ms; last_error = err } } else s);
+    r
+  };
+
+  /// Records (or clears, when either id is null) the team's PlayHQ link and
+  /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+  public shared ({ caller }) func set_playhq_team_sync(club_id : Text, team_id : Text, competition_id : ?Text, playhq_team_id : ?Text, auto : Bool) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not valid(club_id) or not valid(team_id) or not validOptId(competition_id) or not validOptId(playhq_team_id)) return #Err("Invalid PlayHQ link");
+    await syncRolesFromClubDomain(caller, club_id);
+    if (not canManageTeamFixtures(caller, club_id, team_id)) return #Err("Club or team admin required");
+    let rest = playhqTeamSyncs.filter(func(s) = s.team_id != team_id);
+    switch (competition_id, playhq_team_id) {
+      case (?c, ?p) {
+        if (rest.size() >= 5000) return #Err("Too many PlayHQ links");
+        let prev = playhqTeamSyncs.find(func(s) = s.team_id == team_id);
+        playhqTeamSyncs := rest.concat([{
+          club_id; team_id; competition_id = c; playhq_team_id = p; auto; updated_by = caller;
+          last_synced_at_ms = switch (prev) { case (?s) s.last_synced_at_ms; case null null };
+          last_error = null;
+        }]);
+      };
+      case _ { playhqTeamSyncs := rest };
+    };
+    #Ok
+  };
+
+  public query ({ caller }) func get_playhq_team_sync(team_id : Text) : async { #Ok : ?Types.PlayHQTeamSync; #Err : Text } {
+    auth(caller);
+    #Ok(playhqTeamSyncs.find(func(s) = s.team_id == team_id))
+  };
+
+  transient var playhqSweepCursor : Nat = 0;
+  func sweepPlayhqAutoSync() : async () {
+    if (playHQConfig == null) return;
+    let autos = playhqTeamSyncs.filter(func(s) = s.auto);
+    if (autos.size() == 0) return;
+    let batch = 20;
+    var i = 0;
+    while (i < batch and i < autos.size()) {
+      let s = autos[(playhqSweepCursor + i) % autos.size()];
+      let r = await* importPlayhqTeam(s.club_id, s.team_id, s.competition_id, s.playhq_team_id, s.updated_by);
+      let (ok, err) = switch (r) { case (#Ok(_)) (true, null); case (#Err(e)) (false, ?e) };
+      playhqTeamSyncs := playhqTeamSyncs.map<Types.PlayHQTeamSync, Types.PlayHQTeamSync>(func(x) = if (x.team_id == s.team_id) { { x with last_synced_at_ms = if ok ?nowMs() else x.last_synced_at_ms; last_error = err } } else x);
+      i += 1;
+    };
+    playhqSweepCursor := (playhqSweepCursor + batch) % autos.size();
+  };
+  transient let _playhqTimer = Timer.recurringTimer<system>(#seconds(21_600), sweepPlayhqAutoSync);
 
   // ---- Event reminder fan-out (non-RSVP member-list notify) ----
   // Verifies the caller manages the event, computes recipients as the event

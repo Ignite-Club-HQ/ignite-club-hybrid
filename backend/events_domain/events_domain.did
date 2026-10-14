@@ -82,12 +82,29 @@ type PlayerStatRow =
    ref_kind: text;
    vice_count: nat32;
  };
+type PlayHQTeamSync = 
+ record {
+   auto: bool;
+   club_id: text;
+   competition_id: text;
+   last_error: opt text;
+   last_synced_at_ms: opt nat64;
+   playhq_team_id: text;
+   team_id: text;
+   updated_by: principal;
+ };
 type PlayHQMatch = 
  record {
    away_team_name: opt text;
    external_away_team_id: opt text;
    external_home_team_id: opt text;
    home_team_name: opt text;
+ };
+type PlayHQImportResult = 
+ record {
+   cancelled: nat32;
+   created: nat32;
+   updated: nat32;
  };
 type PlayHQConfig = 
  record {
@@ -422,6 +439,21 @@ type Main =
        Err: text;
        Ok: vec PlayerStatRow;
      }) query;
+   get_playhq_config_status: () ->
+    (variant {
+       Err: text;
+       Ok:
+        record {
+          base_url: opt text;
+          configured: bool;
+          updated_at_ms: opt nat64;
+        };
+     }) query;
+   get_playhq_team_sync: (team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: opt PlayHQTeamSync;
+     }) query;
    get_push_reachable: ("principal": principal) ->
     (variant {
        Err: text;
@@ -447,6 +479,13 @@ type Main =
                     Err: text;
                     Ok;
                   });
+   /// Imports the linked team's PlayHQ fixtures as game events now.
+   import_playhq_team_fixtures: (club_id: text, team_id: text,
+    competition_id: text, playhq_team_id: text) ->
+    (variant {
+       Err: text;
+       Ok: PlayHQImportResult;
+     });
    is_guardian_of: ("principal": principal, child_id: text) -> (bool) query;
    is_paused: (club_id: text, team_id: text, at_ms: nat64) ->
     (variant {
@@ -788,6 +827,14 @@ type Main =
                                                        Err: text;
                                                        Ok;
                                                      });
+   /// Records (or clears, when either id is null) the team's PlayHQ link and
+   /// auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+   set_playhq_team_sync: (club_id: text, team_id: text, competition_id:
+    opt text, playhq_team_id: opt text, auto: bool) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_push_reachable: (reachable: bool) ->
     (variant {
        Err: text;

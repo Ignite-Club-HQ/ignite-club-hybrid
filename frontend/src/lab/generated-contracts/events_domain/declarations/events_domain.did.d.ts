@@ -565,6 +565,22 @@ export interface Main {
     { 'Ok' : Array<PlayerStatRow> } |
       { 'Err' : string }
   >,
+  'get_playhq_config_status' : ActorMethod<
+    [],
+    {
+        'Ok' : {
+          'base_url' : [] | [string],
+          'updated_at_ms' : [] | [bigint],
+          'configured' : boolean,
+        }
+      } |
+      { 'Err' : string }
+  >,
+  'get_playhq_team_sync' : ActorMethod<
+    [string],
+    { 'Ok' : [] | [PlayHQTeamSync] } |
+      { 'Err' : string }
+  >,
   'get_push_reachable' : ActorMethod<
     [Principal],
     { 'Ok' : [] | [boolean] } |
@@ -584,6 +600,14 @@ export interface Main {
   'grant_role' : ActorMethod<
     [Principal, string, string, [] | [string]],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Imports the linked team's PlayHQ fixtures as game events now.
+   */
+  'import_playhq_team_fixtures' : ActorMethod<
+    [string, string, string, string],
+    { 'Ok' : PlayHQImportResult } |
       { 'Err' : string }
   >,
   'is_guardian_of' : ActorMethod<[Principal, string], boolean>,
@@ -968,6 +992,15 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  /**
+   * / Records (or clears, when either id is null) the team's PlayHQ link and
+   * / auto-sync flag so the 6-hourly sweep can keep its fixtures current.
+   */
+  'set_playhq_team_sync' : ActorMethod<
+    [string, string, [] | [string], [] | [string], boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_push_reachable' : ActorMethod<
     [boolean],
     { 'Ok' : PushReachability } |
@@ -1116,11 +1149,26 @@ export interface PlayHQConfig {
   'api_key' : string,
   'updated_at_ms' : bigint,
 }
+export interface PlayHQImportResult {
+  'created' : number,
+  'cancelled' : number,
+  'updated' : number,
+}
 export interface PlayHQMatch {
   'external_away_team_id' : [] | [string],
   'external_home_team_id' : [] | [string],
   'away_team_name' : [] | [string],
   'home_team_name' : [] | [string],
+}
+export interface PlayHQTeamSync {
+  'last_error' : [] | [string],
+  'updated_by' : Principal,
+  'playhq_team_id' : string,
+  'auto' : boolean,
+  'last_synced_at_ms' : [] | [bigint],
+  'team_id' : string,
+  'competition_id' : string,
+  'club_id' : string,
 }
 export interface PlayerStatRow {
   'ref_kind' : string,
