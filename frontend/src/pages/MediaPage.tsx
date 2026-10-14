@@ -40,7 +40,6 @@ import {
 import { fetchMediaComments, fetchMediaReactions } from "@/features/media/mediaReadRepository";
 import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "@/features/media/mediaEngagementRepository";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { isIcpBulkMediaStorageDisabled } from "@/live/mediaUpload";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
@@ -113,11 +112,9 @@ function SupabaseMediaPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
   // Auto-open the upload sheet when ?upload=1 is in the URL (e.g. tapped from
-  // a post-game gallery prompt card in team chat). Skipped for Internet
-  // Identity members until the media_blob_store canister is configured —
-  // uploads are hidden for them (fail-closed guard inside the sheet too).
+  // a post-game gallery prompt card in team chat).
   useEffect(() => {
-    if (searchParams.get("upload") === "1" && !isIcpBulkMediaStorageDisabled()) {
+    if (searchParams.get("upload") === "1") {
       setUploadDialogOpen(true);
     }
   }, [searchParams]);
@@ -1371,12 +1368,10 @@ function SupabaseMediaPage() {
             </Button>
           )}
 
-          {!isIcpBulkMediaStorageDisabled() && (
-            <CreateActionButton
-              ariaLabel="Add photo"
-              onClick={() => setUploadDialogOpen(true)}
-            />
-          )}
+          <CreateActionButton
+            ariaLabel="Add photo"
+            onClick={() => setUploadDialogOpen(true)}
+          />
           <Suspense fallback={null}>
           <UploadPhotoSheet
             open={uploadDialogOpen}
@@ -1515,12 +1510,10 @@ function SupabaseMediaPage() {
             <p className="text-sm text-muted-foreground mt-1">
               No photos from this event yet — share what you captured today.
             </p>
-            {!isIcpBulkMediaStorageDisabled() && (
-              <Button onClick={() => setUploadDialogOpen(true)} className="mt-4 gap-2" size="sm">
-                <Plus className="h-4 w-4" />
-                Add photos
-              </Button>
-            )}
+            <Button onClick={() => setUploadDialogOpen(true)} className="mt-4 gap-2" size="sm">
+              <Plus className="h-4 w-4" />
+              Add photos
+            </Button>
           </CardContent>
         </Card>
       ) : photos.length === 0 && hasActiveFilters ? (
