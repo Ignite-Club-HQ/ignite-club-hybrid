@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
+
+// icp-guard: allow called only from useVaultTrashWorkflow's withFeatureBackend supabase branch
   partitionVaultItems,
   type VaultFileRow,
   type VaultPhotoItem,

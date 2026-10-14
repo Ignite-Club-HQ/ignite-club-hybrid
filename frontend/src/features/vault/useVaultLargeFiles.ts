@@ -4,13 +4,35 @@ import { permanentlyDeleteVaultItems } from "@/lib/vaultDelete";
 import { invalidateVaultCache } from "./vaultQueryKeys";
 import { summarizeVaultDeletion, buildVaultDeleteMessage } from "./vaultDeleteReporting";
 import { fetchVaultLargeFiles } from "./vaultLargeFileRepository";
+import { isVaultImage } from "./vaultReadRepository";
 import { prepareVaultLargeFileDeletion, sortVaultLargeFileItems, type VaultLargeFileItem, type VaultLargeFileSort } from "./vaultLargeFileManagement";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveVaultClubFiles } from "@/live/features/vault";
+
+/** Same final cap the Supabase path applies in `buildVaultLargeFileItems`. */
+const LARGE_FILES_LIMIT = 50;
 
 export interface UseVaultLargeFilesOptions {
   currentClubId?: string;
   queryClient: Parameters<typeof invalidateVaultCache>[0];
   formatStorageSize: (bytes: number) => string;
+}
+
+/**
+ * Maps a VaultFile canister record onto the large-files item shape. The
+ * canister has no separate photos table, so "photo" vs "file" is derived
+ * with the same `isVaultImage` heuristic the Supabase partition uses.
+ */
+function mapIcpVaultFileToLargeItem(file: any): VaultLargeFileItem {
+  return {
+    id: file.id,
+    type: isVaultImage({ file_type: file.mime, name: file.name, file_url: file.file_url }) ? "photo" : "file",
+    name: file.name || "File",
+    size: Number(file.size ?? 0),
+    url: file.file_url,
+    createdAt: new Date(Number(file.created_at_ms)).toISOString(),
+  };
 }
 
 export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSize }: UseVaultLargeFilesOptions) {
@@ -22,16 +44,19 @@ export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSi
 
   const fetchLargeFiles = useCallback(async () => {
     if (!currentClubId) return;
-    // Large-files listing reads Supabase storage rows with no canister
-    // counterpart — silently empty for ICP-routed clubs.
-    if (isFeatureRoutedToIcp("vault")) {
-      setLargeFilesData({ loading: false, items: [] });
-      return;
-    }
     setLargeFilesData({ loading: true, items: [] });
     setSelectedLargeFiles(new Set());
     try {
-      const items = await fetchVaultLargeFiles(currentClubId);
+      const items = await withFeatureBackend("vault", {
+        supabase: () => fetchVaultLargeFiles(currentClubId),
+        // Provisional: no folder/team-name join on the canister, and no
+        // per-table size threshold — matches the Supabase path's final cap.
+        icp: async (ctx) => {
+          const files = await listLiveVaultClubFiles(ctx, currentClubId, null, null);
+          const mapped = (files as any[]).map(mapIcpVaultFileToLargeItem);
+          return sortVaultLargeFileItems(mapped, "size").slice(0, LARGE_FILES_LIMIT);
+        },
+      });
       setLargeFilesData({ loading: false, items });
     } catch (error) {
       console.error("Failed to fetch large files:", error);
@@ -61,13 +86,15 @@ export function useVaultLargeFiles({ currentClubId, queryClient, formatStorageSi
 
   const deleteSelectedLargeFiles = useCallback(async () => {
     if (selectedLargeFiles.size === 0) return;
-    // Fail closed: permanent-delete-photos is a Supabase edge function with
-    // no canister equivalent — never fire it for an ICP-routed club.
-    if (isFeatureRoutedToIcp("vault")) return;
     setDeletingLargeFiles(true);
     try {
       const deletion = prepareVaultLargeFileDeletion(largeFilesData.items, selectedLargeFiles);
-      const result = await permanentlyDeleteVaultItems({ photoIds: deletion.photoIds, fileIds: deletion.fileIds });
+      // The canister has no separate photos table — every selected id is a
+      // vault_domain file row regardless of the UI's photo/file split, so
+      // route them all as fileIds rather than splitting by (UI-only) type.
+      const result = isFeatureRoutedToIcp("vault")
+        ? await permanentlyDeleteVaultItems({ fileIds: [...deletion.photoIds, ...deletion.fileIds] })
+        : await permanentlyDeleteVaultItems({ photoIds: deletion.photoIds, fileIds: deletion.fileIds });
       const summary = summarizeVaultDeletion(
         deletion.items.map(item => ({ id: item.id, type: item.type, size: item.size })),
         result,
