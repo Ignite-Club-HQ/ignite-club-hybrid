@@ -767,33 +767,6 @@ export default function ClubUpgradePage() {
     enabled: !!clubId,
   });
 
-  if (useIcpLab) {
-    return (
-      <div className="py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Club Pro Plans</h1>
-            <p className="text-sm text-muted-foreground">{club?.name ?? "Synthetic club"}</p>
-          </div>
-        </div>
-        <Card className="border-primary/20 bg-primary/5 max-w-lg">
-          <CardContent className="space-y-2 p-6">
-            <h2 className="font-semibold">Subscriptions are not enabled in ICP lab mode</h2>
-            <p className="text-sm text-muted-foreground">
-              Billing, promo codes, trials, in-app purchases, and subscription changes remain unavailable. No payment or club data has been changed.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Synthetic fixture: {teamCount} {teamCount === 1 ? "team" : "teams"}; no active subscription.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   if (clubLoading || loadingAdminCheck) {
     return <UpgradeLoadingState />;
   }
