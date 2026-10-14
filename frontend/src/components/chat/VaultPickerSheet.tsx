@@ -31,6 +31,7 @@ import {
   listVaultPickerFolderChildCounts,
   listVaultPickerFolders,
 } from "@/features/vault/vaultReadRepository";
+// icp-guard: allow folder/file reads are routed through listVaultPicker* (withFeatureBackend in vaultReadRepository.ts); the remaining supabase.from() calls below only resolve the root team/club display name and already branch on isIcpSession().
 
 export type VaultPickerItem =
   | { kind: "file" | "folder"; id: string; name: string }
