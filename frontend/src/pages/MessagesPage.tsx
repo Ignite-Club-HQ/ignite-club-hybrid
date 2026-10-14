@@ -186,6 +186,39 @@ export default function MessagesPage() {
   // borrow Pro access from another club the user belongs to.
   const { hasAICatchUpClub, recapVisible, resolved: aiCatchUpResolved } = useUserHasAnyAICatchUpClub(effectiveClubFilter ?? null);
   const location = useLocation();
+  // ICP push-notification deep link: the push worker can't tell team/club/
+  // DM/group conversations apart, so it links here with ?conversation=<id>
+  // (&message=<id>). Resolve the canonical chat route from on-chain
+  // conversation metadata (same as the notifications inbox tap) and replace
+  // this URL so the chat page's normal ?message= jump takes over.
+  useEffect(() => {
+    if (!useIcpLab || !initialized || !user) return;
+    const params = new URLSearchParams(location.search);
+    const conversationId = params.get("conversation");
+    if (!conversationId) return;
+    const messageId = params.get("message");
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getIcpNotificationRoute } = await import("@/lib/icpNotificationRoute");
+        await withFeatureBackend("messaging", {
+          supabase: async () => {},
+          icp: async (ctx) => {
+            const route = await getIcpNotificationRoute(ctx, {
+              kind: "message_chat",
+              relatedId: conversationId,
+              club: conversationId,
+              messageId,
+            });
+            if (!cancelled) navigate(route, { replace: true });
+          },
+        });
+      } catch {
+        // Resolution failed (offline, canister error) — stay on the inbox.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [useIcpLab, initialized, user, location.search, navigate]);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     let changed = false;
