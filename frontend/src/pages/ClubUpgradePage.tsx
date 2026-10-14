@@ -634,7 +634,7 @@ export default function ClubUpgradePage() {
     // NEEDS-CANISTER: card checkout runs through Supabase functions/Stripe,
     // which Internet Identity sessions cannot call; only native IAP is
     // supported for ICP-routed clubs.
-    if (isIcpRouted) {
+    if (useIcpLab || isIcpRouted) {
       toast({
         title: "Checkout unavailable",
         description: "Card checkout is not yet available for Internet Identity clubs. Please subscribe from the mobile app instead.",
@@ -690,6 +690,18 @@ export default function ClubUpgradePage() {
 
     setIsCheckingOut(true);
     try {
+      if (useIcpLab || isIcpRouted) {
+        // Session-free path: verify-iap-receipt-icp mints an attestation and
+        // the entitlement is redeemed on the identity_access canister.
+        const ok = await purchaseProduct(productId, clubId!, "club");
+        if (ok) {
+          queryClient.invalidateQueries({ queryKey: ["club-subscription", clubId] });
+          invalidateProAccessQueries(queryClient);
+          queryClient.invalidateQueries({ queryKey: ["club", clubId] });
+          toast({ title: "Upgrade Successful!", description: "Your club subscription is now active." });
+        }
+        return;
+      }
       const { NativePurchases, PURCHASE_TYPE } = await import("@capgo/native-purchases");
       const purchaseResult = await NativePurchases.purchaseProduct({
         productIdentifier: productId,
@@ -732,7 +744,7 @@ export default function ClubUpgradePage() {
   const { data: hasStripeConfig } = useQuery({
     queryKey: ["stripe-config-check", clubId, providerKey],
     queryFn: async () => {
-      if (useIcpLab) return false;
+      if (useIcpLab || isIcpRouted) return false;
       // Check club config
       const { data: clubConfig } = await supabase
         .from("club_stripe_configs")
