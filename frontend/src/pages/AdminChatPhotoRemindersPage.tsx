@@ -150,7 +150,7 @@ export default function AdminChatPhotoRemindersPage() {
           const { runLiveChatPhotoGalleryReminders } = await import("@/live/features/messaging");
           return runLiveChatPhotoGalleryReminders(
             ctx, Date.now(),
-            settings.window_start_hours ?? 2, settings.window_end_hours ?? 6, settings.cooldown_days ?? 7,
+            form.window_start_hours, form.window_end_hours, form.cooldown_days,
           );
         },
       });
