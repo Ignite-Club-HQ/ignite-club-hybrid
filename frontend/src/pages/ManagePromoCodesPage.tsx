@@ -196,7 +196,7 @@ function SupabaseManagePromoCodesPage() {
             scopeType,
             clubId: clubId ?? null,
             storageGb: promoType === "storage" ? (storageGb ?? null) : null,
-            expiresAt: expiresAt ?? null,
+            expiresAt: expiresAt ? new Date(expiresAt as unknown as string | Date).toISOString() : null,
           }),
         });
       }
