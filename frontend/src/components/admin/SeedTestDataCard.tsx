@@ -40,7 +40,7 @@ export function SeedTestDataCard() {
     setRunning(true);
     try {
       const { seedIcpTestData } = await import("@/live/seedIcpTestData");
-      await seedIcpTestData({
+      const res = await seedIcpTestData({
         clubName: clubs.find((c) => c.id === fillClubId)?.name ?? "Club",
         existingClubId: fillClubId,
         messagesPerTeamChat: 20,
@@ -50,7 +50,11 @@ export function SeedTestDataCard() {
         onProgress: (label, done, total) => setProgress({ label, done, total }),
       });
       qc.invalidateQueries();
-      toast.success("Demo content added — check Home, Messages, Schedule, Media and Vault");
+      if (res.failures.length) {
+        toast.warning(`Added with ${res.failures.length} of ${res.total} items failing. First problem — ${res.failures[0]}`, { duration: 20000 });
+      } else {
+        toast.success("Demo content added — check Home, Messages, Schedule, Media and Vault");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't add demo content");
     } finally {
