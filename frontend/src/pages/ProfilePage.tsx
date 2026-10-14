@@ -706,7 +706,7 @@ export default function ProfilePage() {
         clubSubscription: clubSubMap.get(team.club_id) || null
       }));
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Auto-expand team plans if no club plans exist but team plans do
