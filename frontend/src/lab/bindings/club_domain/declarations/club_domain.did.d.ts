@@ -421,6 +421,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'delete_pitch_formation' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'delete_promo_code' : ActorMethod<
     [string],
     { 'Ok' : null } |
@@ -625,6 +630,11 @@ export interface Main {
     { 'Ok' : TeamInviteLink } |
       { 'Err' : string }
   >,
+  'get_team_pitch_notify' : ActorMethod<
+    [string],
+    { 'Ok' : PitchNotifyFlags } |
+      { 'Err' : string }
+  >,
   'get_team_player_positions' : ActorMethod<
     [string],
     { 'Ok' : Array<TeamPlayerPosition> } |
@@ -765,6 +775,11 @@ export interface Main {
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
+      { 'Err' : string }
+  >,
+  'list_pitch_formations' : ActorMethod<
+    [string],
+    { 'Ok' : Array<PitchFormation> } |
       { 'Err' : string }
   >,
   'list_promo_codes' : ActorMethod<
@@ -1073,6 +1088,11 @@ export interface Main {
     { 'Ok' : ClubTerm } |
       { 'Err' : string }
   >,
+  'save_pitch_formation' : ActorMethod<
+    [string, string, number, string, [] | [string]],
+    { 'Ok' : PitchFormation } |
+      { 'Err' : string }
+  >,
   'save_season' : ActorMethod<[Season], { 'Ok' : Season } | { 'Err' : string }>,
   'save_season_player_stat' : ActorMethod<
     [SeasonPlayerStat],
@@ -1275,6 +1295,11 @@ export interface Main {
     { 'Ok' : ClubTeam } |
       { 'Err' : string }
   >,
+  'set_team_pitch_notify' : ActorMethod<
+    [string, boolean, boolean, boolean],
+    { 'Ok' : PitchNotifyFlags } |
+      { 'Err' : string }
+  >,
   'set_team_player_position' : ActorMethod<
     [string, string, string],
     { 'Ok' : null } |
@@ -1441,6 +1466,23 @@ export interface PendingInviteEmailHash {
   'hash' : string,
   'invite_id' : string,
   'club_id' : string,
+}
+export interface PitchFormation {
+  'id' : string,
+  'name' : string,
+  'team_id' : string,
+  'created_by' : Principal,
+  'drawing_json' : [] | [string],
+  'created_at_ms' : bigint,
+  'team_size' : number,
+  'formation_json' : string,
+  'club_id' : string,
+}
+export interface PitchNotifyFlags {
+  'subs_manager' : boolean,
+  'coach' : boolean,
+  'team_id' : string,
+  'team_admin' : boolean,
 }
 export interface ProfileTeamHistoryEntry {
   'season_start_date' : string,
