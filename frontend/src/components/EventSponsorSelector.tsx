@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,15 +31,26 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
   const { data: sponsors, isLoading: sponsorsLoading } = useQuery({
     queryKey: ["sponsors", clubId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, is_active")
-        .eq("club_id", clubId)
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      
-      if (error) throw error;
-      return data as Sponsor[];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, is_active")
+            .eq("club_id", clubId)
+            .eq("is_active", true)
+            .order("display_order", { ascending: true });
+
+          if (error) throw error;
+          return data as Sponsor[];
+        },
+        icp: async (ctx) => {
+          const { listLiveSponsors } = await import("@/live/features/club");
+          const all = await listLiveSponsors(ctx, clubId);
+          return (all || [])
+            .filter((s: any) => s.is_active)
+            .map((s: any) => ({ id: s.id, name: s.name, logo_url: s.logo_url ?? null, is_active: s.is_active })) as Sponsor[];
+        },
+      });
     },
   });
 
