@@ -51,9 +51,9 @@ export function SeedTestDataCard() {
       });
       qc.invalidateQueries();
       if (res.failures.length) {
-        toast.warning(`Added with ${res.failures.length} of ${res.total} items failing. First problem — ${res.failures[0]}`, { duration: 20000 });
+        toast.warning(`${res.summary}. ${res.failures.length} problems — first: ${res.failures[0]}`, { duration: 20000 });
       } else {
-        toast.success("Demo content added — check Home, Messages, Schedule, Media and Vault");
+        toast.success(res.summary);
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't add demo content");

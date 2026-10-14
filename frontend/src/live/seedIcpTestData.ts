@@ -147,7 +147,7 @@ function makePhoto(label: string, hue: number): Promise<File> {
   );
 }
 
-export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: string; failures: string[]; total: number }> {
+export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: string; failures: string[]; total: number; summary: string }> {
   seedFailures.length = 0;
   const ctx = await icpCtx();
   const me: Principal = ctx.identity.getPrincipal();
@@ -268,6 +268,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   }
 
   // Photos.
+  let pOk = 0;
   for (let i = 0; i < opts.photos; i++) {
     step("Uploading photos", i, opts.photos);
     try {
@@ -283,11 +284,13 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
         teamId: teamIds[i % teamIds.length], miniLeagueId: null, competitionId: null, eventId: null,
         caption: real ? (i % 2 ? "Great game today!" : "Training session") : `Synthetic photo ${i + 1}`, albumId: null,
       }).catch(() => {});
+      pOk++;
     } catch (e) {
       noteFail("photo", e);
     }
   }
   // Vault files (club-level, staff lock like the vault upload screen).
+  let fOk = 0;
   const fileCount = Math.min(opts.files ?? 0, FILES.length);
   for (let i = 0; i < fileCount; i++) {
     step("Uploading files", i, fileCount);
@@ -299,6 +302,7 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
       const up = await tryUploadMediaToBlobStore({ storagePath, file, mime: file.type, lock: "own" });
       if (!up) throw new Error("Media upload canisters are not configured");
       await registerLiveVaultFile(ctx, crypto.randomUUID(), "", clubId, null, f.name, up.url, file.size, file.type, false, up.blobRef as any);
+      fOk++;
     } catch (e) {
       noteFail("file", e);
     }
@@ -308,5 +312,5 @@ export async function seedIcpTestData(opts: SeedOptions): Promise<{ clubId: stri
   if (seedFailures.length >= total && total > 0) {
     throw new Error(`Nothing was added. First problem — ${seedFailures[0]}`);
   }
-  return { clubId, failures: [...seedFailures], total };
+  return { clubId, failures: [...seedFailures], total, summary: `${events.length} events, ${mOk} messages, ${pOk} photos, ${fOk} files added` };
 }
