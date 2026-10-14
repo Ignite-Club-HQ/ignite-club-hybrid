@@ -49,7 +49,9 @@ const FREE_LIMIT_MESSAGES: Record<string, string> = {
 
 /** Free-plan cap rejection from the canister, mapped to the Supabase wording. */
 export function freeLimitMessage(error: unknown): string | null {
-  const m = /FreeLimitReached:(\w+)/.exec(error instanceof Error ? error.message : String(error));
+  const text = error instanceof Error ? error.message : String(error);
+  if (text.includes("FileTooLarge")) return "This file is larger than 10 MB. Please choose a smaller file.";
+  const m = /FreeLimitReached:(\w+)/.exec(text);
   return m ? FREE_LIMIT_MESSAGES[m[1]] ?? "Free plan upload limit reached. Upgrade to Pro." : null;
 }
 
