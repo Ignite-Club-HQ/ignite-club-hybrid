@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { buildVaultLargeFileItems, type VaultLargeFileItem } from "./vaultLargeFileManagement";
 
+// icp-guard: allow called only from useVaultLargeFiles' withFeatureBackend supabase branch
+
 type IgniteSupabaseClient = SupabaseClient<Database>;
 
 export async function fetchVaultLargeFiles(

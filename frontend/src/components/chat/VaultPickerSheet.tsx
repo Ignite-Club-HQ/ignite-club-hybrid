@@ -26,6 +26,12 @@ import {
 } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 import { isIcpSession, icpGetTeam, icpGetClubName, icpListTeams, icpListClubs } from "@/lib/icpClubTeamLookup";
+import {
+  listVaultPickerFiles,
+  listVaultPickerFolderChildCounts,
+  listVaultPickerFolders,
+} from "@/features/vault/vaultReadRepository";
+// icp-guard: allow folder/file reads are routed through listVaultPicker* (withFeatureBackend in vaultReadRepository.ts); the remaining supabase.from() calls below only resolve the root team/club display name and already branch on isIcpSession().
 
 export type VaultPickerItem =
   | { kind: "file" | "folder"; id: string; name: string }
@@ -124,29 +130,11 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
     queryKey: ["vault-picker-folders", clubId, teamId, currentFolderId],
     queryFn: async () => {
       if (!clubId) return [] as VaultFolder[];
-      let q = supabase
-        .from("vault_folders")
-        .select("id, name, parent_id, team_id, club_id")
-        .eq("club_id", clubId)
-        .order("name");
-
-      if (currentFolderId) {
-        q = q.eq("parent_id", currentFolderId);
-      } else {
-        q = q.is("parent_id", null);
-        // At root, show club-wide folders plus this team's folders.
-        // When there is no teamId (e.g. club-admin or club-wide chat),
-        // only show club-wide folders — otherwise we'd list every team's
-        // root folders (e.g. one "Team Admins" / "Coaches" per team).
-        if (teamId) {
-          q = q.or(`team_id.is.null,team_id.eq.${teamId}`);
-        } else {
-          q = q.is("team_id", null);
-        }
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as VaultFolder[];
+      // At root, show club-wide folders plus this team's folders. When
+      // there is no teamId (e.g. club-admin or club-wide chat), only show
+      // club-wide folders — otherwise we'd list every team's root folders
+      // (e.g. one "Team Admins" / "Coaches" per team).
+      return listVaultPickerFolders({ clubId, teamId: teamId ?? null, parentId: currentFolderId }) as Promise<VaultFolder[]>;
     },
     enabled: open && !!clubId,
     staleTime: 30 * 1000,
@@ -157,26 +145,7 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
     queryKey: ["vault-picker-files", clubId, teamId, currentFolderId],
     queryFn: async () => {
       if (!clubId) return [] as VaultFile[];
-      let q = supabase
-        .from("vault_files")
-        .select("id, name, file_type, file_size, folder_id, team_id, club_id, is_external_link")
-        .eq("club_id", clubId)
-        .is("deleted_at", null)
-        .order("name");
-
-      if (currentFolderId) {
-        q = q.eq("folder_id", currentFolderId);
-      } else {
-        q = q.is("folder_id", null);
-        if (teamId) {
-          q = q.or(`team_id.is.null,team_id.eq.${teamId}`);
-        } else {
-          q = q.is("team_id", null);
-        }
-      }
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as VaultFile[];
+      return listVaultPickerFiles({ clubId, teamId: teamId ?? null, folderId: currentFolderId }) as Promise<VaultFile[]>;
     },
     enabled: open && !!clubId,
     staleTime: 30 * 1000,
@@ -192,39 +161,8 @@ export function VaultPickerSheet({ open, onOpenChange, clubId, teamId, onPick, o
   const folderChildCountsQuery = useQuery({
     queryKey: ["vault-picker-folder-counts", clubId, folderIds.join(",")],
     queryFn: async () => {
-      const counts = new Map<string, { folders: number; files: number }>();
-      if (!clubId || folderIds.length === 0) return counts;
-
-      const [{ data: subfolders, error: subErr }, { data: subfiles, error: fileErr }] = await Promise.all([
-        supabase
-          .from("vault_folders")
-          .select("parent_id")
-          .eq("club_id", clubId)
-          .in("parent_id", folderIds),
-        supabase
-          .from("vault_files")
-          .select("folder_id")
-          .eq("club_id", clubId)
-          .is("deleted_at", null)
-          .in("folder_id", folderIds),
-      ]);
-      if (subErr) throw subErr;
-      if (fileErr) throw fileErr;
-
-      for (const id of folderIds) counts.set(id, { folders: 0, files: 0 });
-      for (const row of subfolders || []) {
-        const pid = (row as { parent_id: string | null }).parent_id;
-        if (!pid) continue;
-        const c = counts.get(pid);
-        if (c) c.folders += 1;
-      }
-      for (const row of subfiles || []) {
-        const fid = (row as { folder_id: string | null }).folder_id;
-        if (!fid) continue;
-        const c = counts.get(fid);
-        if (c) c.files += 1;
-      }
-      return counts;
+      if (!clubId || folderIds.length === 0) return new Map<string, { folders: number; files: number }>();
+      return listVaultPickerFolderChildCounts({ clubId, teamId: teamId ?? null, folderIds });
     },
     enabled: open && !!clubId && folderIds.length > 0,
     staleTime: 30 * 1000,
