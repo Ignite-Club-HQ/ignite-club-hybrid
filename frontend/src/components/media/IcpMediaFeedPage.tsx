@@ -16,7 +16,7 @@ import {
   liveAssetSource,
   removeLiveReaction,
 } from "@/live/features/media";
-import { resolveIcpBlobObjectUrl } from "@/live/mediaDecrypt";
+import { readCachedIcpBlobObjectUrl, resolveIcpBlobObjectUrl, storedIcpPrincipal } from "@/live/mediaDecrypt";
 import { listLiveTeams } from "@/live/features/club";
 import { listLiveMiniLeaguesByClub } from "@/live/features/miniLeagues";
 import { listLiveCompetitions } from "@/live/features/competitions";
@@ -120,47 +120,98 @@ const LOADING_PHOTO_URL =
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">' +
       '<rect width="600" height="600" fill="#f3f4f6"/>' +
-      '<text x="300" y="300" font-family="sans-serif" font-size="28" fill="#9ca3af" text-anchor="middle">Loading photo…</text>' +
       "</svg>",
   );
 
-/** Unlocks photos a few at a time (newest first) and reports each as it lands. */
+/** Decrypted photo URLs kept for the whole app session (keyed by source URL),
+ * so revisiting the Media page shows photos immediately. */
+const sessionPhotoUrls = new Map<string, string>();
+
+/** Unlocks photos: on-device cache hits all at once first, then the rest a
+ * few at a time (newest first), reporting each as it lands. */
 function useResolvedAssetUrls(posts: LiveMediaPost[] | undefined) {
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const initial = () => {
+    const out: Record<string, string> = {};
+    for (const a of posts?.flatMap((p) => p.assets) ?? []) {
+      const hit = a.sourceUrl ? sessionPhotoUrls.get(a.sourceUrl) : undefined;
+      if (hit) out[a.id] = a.isVideo ? `${hit}#.mp4` : hit;
+    }
+    return out;
+  };
+  const [urls, setUrls] = useState<Record<string, string>>(initial);
   const doneRef = useRef(new Set<string>());
   useEffect(() => {
     if (!posts) return;
     let cancelled = false;
-    const queue = posts
+    const pending = posts
       .flatMap((p) => p.assets)
       .filter((a) => a.sourceUrl && !doneRef.current.has(a.id));
-    const worker = async () => {
-      while (!cancelled && queue.length) {
-        const asset = queue.shift()!;
-        doneRef.current.add(asset.id);
-        let url = UNAVAILABLE_PHOTO_URL;
-        const local = asset.sourceUrl ? localUploadPreviews.get(asset.sourceUrl) : undefined;
-        if (local) {
-          setUrls((prev) => ({ ...prev, [asset.id]: asset.isVideo ? `${local}#.mp4` : local }));
-          continue;
-        }
-        try {
-          const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
-          if (resolved) url = asset.isVideo ? `${resolved}#.mp4` : resolved;
-        } catch (err) {
-          console.warn("[icp-media-feed] could not load asset", asset.id, err);
-        }
-        setUrls((prev) => ({ ...prev, [asset.id]: url }));
-      }
+    pending.forEach((a) => doneRef.current.add(a.id));
+    const show = (asset: LiveAssetView, raw: string, remember: boolean) => {
+      if (remember && asset.sourceUrl) sessionPhotoUrls.set(asset.sourceUrl, raw);
+      const url = asset.isVideo && raw !== UNAVAILABLE_PHOTO_URL ? `${raw}#.mp4` : raw;
+      setUrls((prev) => (prev[asset.id] === url ? prev : { ...prev, [asset.id]: url }));
     };
-    void Promise.all(Array.from({ length: 6 }, worker));
+    void (async () => {
+      const misses: LiveAssetView[] = [];
+      await Promise.all(
+        pending.map(async (asset) => {
+          const src = asset.sourceUrl!;
+          const known = sessionPhotoUrls.get(src) ?? localUploadPreviews.get(src);
+          if (known) return show(asset, known, false);
+          const cached = await readCachedIcpBlobObjectUrl(src).catch(() => null);
+          if (cancelled) return;
+          if (cached) show(asset, cached, true);
+          else misses.push(asset);
+        }),
+      );
+      const order = new Map(pending.map((a, i) => [a.id, i]));
+      misses.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+      const worker = async () => {
+        while (!cancelled && misses.length) {
+          const asset = misses.shift()!;
+          try {
+            const resolved = await resolveIcpBlobObjectUrl(asset.sourceUrl!);
+            if (!cancelled) show(asset, resolved ?? UNAVAILABLE_PHOTO_URL, !!resolved);
+          } catch (err) {
+            console.warn("[icp-media-feed] could not load asset", asset.id, err);
+            if (!cancelled) show(asset, UNAVAILABLE_PHOTO_URL, false);
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: 8 }, worker));
+    })();
     return () => {
       cancelled = true;
+      // Unfinished assets must be retried on the next run.
+      pending.forEach((a) => {
+        if (!a.sourceUrl || !sessionPhotoUrls.has(a.sourceUrl)) doneRef.current.delete(a.id);
+      });
     };
   }, [posts]);
   return urls;
 }
 
+const FEED_SNAPSHOT_PREFIX = "ignite_icp_media_feed_v1:";
+
+function readFeedSnapshot(principal: string | undefined): LiveMediaFeed | undefined {
+  if (!principal) return undefined;
+  try {
+    const raw = localStorage.getItem(FEED_SNAPSHOT_PREFIX + principal);
+    return raw ? (JSON.parse(raw) as LiveMediaFeed) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeFeedSnapshot(principal: string, feed: LiveMediaFeed) {
+  try {
+    const trimmed = { ...feed, posts: feed.posts.slice(0, 60) };
+    localStorage.setItem(FEED_SNAPSHOT_PREFIX + principal, JSON.stringify(trimmed));
+  } catch {
+    /* storage full — snapshot is only a speed-up */
+  }
+}
 
 async function loadLiveMediaFeed(ctx: FeatureBackendContext): Promise<LiveMediaFeed> {
   // list_clubs returns every club on the canister, so scope it to the
@@ -372,6 +423,8 @@ export function IcpMediaFeedPage() {
   const principalQuery = useQuery({
     queryKey: ["icp-principal"],
     staleTime: Infinity,
+    // Stored session principal paints the cached feed before sign-in restores.
+    placeholderData: () => storedIcpPrincipal(),
     queryFn: async () =>
       (await getCurrentInternetIdentity())?.getPrincipal().toText() ?? null,
   });
@@ -409,13 +462,19 @@ export function IcpMediaFeedPage() {
   const feedQuery = useQuery({
     queryKey: ["icp-media-feed", principal],
     enabled: !!principal,
-    queryFn: () =>
-      withFeatureBackend("media", {
+    // Last visit's feed shows instantly; the fresh one replaces it when ready.
+    initialData: () => readFeedSnapshot(principal),
+    initialDataUpdatedAt: 0,
+    queryFn: async () => {
+      const feed = await withFeatureBackend("media", {
         supabase: async () => {
           throw new Error("unreachable");
         },
         icp: (ctx) => loadLiveMediaFeed(ctx),
-      }),
+      });
+      if (principal) writeFeedSnapshot(principal, feed);
+      return feed;
+    },
   });
 
   const invalidate = () =>

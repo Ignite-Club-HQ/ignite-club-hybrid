@@ -69,6 +69,22 @@ export function parseIcpBlobUrl(
   return path ? { path, canisterId } : null;
 }
 
+/** Stored session principal (sync), for keying instant on-device snapshots. */
+export function storedIcpPrincipal(): string | null {
+  return storedSessionPrincipal();
+}
+
+/** Cache-only lookup: object URL for a photo already decrypted on this
+ * device, or null. Never touches the network or derives keys. */
+export async function readCachedIcpBlobObjectUrl(url: string): Promise<string | null> {
+  const principal = storedSessionPrincipal();
+  if (!principal) return null;
+  const match = parseIcpBlobUrl(url, getActiveIcpTarget());
+  if (!match) return null;
+  const cached = await readCachedPhoto(principal, match.canisterId, match.path).catch(() => null);
+  return cached ? URL.createObjectURL(cached) : null;
+}
+
 /**
  * Returns an object URL with the decrypted bytes when `url` points at the
  * blob store, or null when it is not a blob-store URL. Throws when the
