@@ -4032,7 +4032,7 @@ persistent actor class Main(governorInit : Principal) {
     let total = clubStorageGb(club_id) + gb;
     clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
     promoRedemptions := promoRedemptions.concat([{
-      promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = 0;
+      promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);
     }]);
     promoCodes := promoCodes.map<Types.PromoCode, Types.PromoCode>(func(p) = if (p.id == promo.id) { { p with uses_count = p.uses_count + 1 } } else p);
     #Ok(total)
