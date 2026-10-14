@@ -178,6 +178,12 @@ export default function CreateGroupDialog({
     queryKey: ["create-group-club-pro", clubInfo?.clubId],
     queryFn: async () => {
       if (!clubInfo?.clubId) return false;
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        const { isLiveClubPro } = await import("@/live/features/club");
+        return isLiveClubPro(ctx, clubInfo.clubId).catch(() => false);
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
@@ -212,6 +218,36 @@ export default function CreateGroupDialog({
     queryKey: ["create-group-role-counts", clubInfo?.clubId, selectedTeamId, teamId, miniLeagueId],
     queryFn: async () => {
       const counts: Record<string, number> = {};
+
+      // ICP mode: count from club_domain role grants / mini-league players —
+      // Supabase user_roles is not readable for Internet Identity accounts.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        if (miniLeagueId) {
+          const { listLivePlayers } = await import("@/live/features/miniLeagues");
+          const players = ((await listLivePlayers(ctx, miniLeagueId).catch(() => [])) ?? []) as any[];
+          const parents = new Set(
+            players.map((p) => (Array.isArray(p.parent_user_id) ? p.parent_user_id[0] : p.parent_user_id)).filter(Boolean),
+          );
+          counts.player = players.length;
+          counts.parent = parents.size;
+          return counts;
+        }
+        if (!clubInfo?.clubId) return counts;
+        const { listLiveRoleGrants } = await import("@/live/features/membership");
+        const grants = ((await listLiveRoleGrants(ctx, clubInfo.clubId).catch(() => [])) ?? []) as any[];
+        const scopeTeamId = teamId || selectedTeamId || null;
+        const seen = new Map<string, Set<string>>();
+        for (const g of grants) {
+          const grantTeam = Array.isArray(g.team) ? (g.team[0] ?? null) : (g.team ?? null);
+          if (scopeTeamId && grantTeam !== scopeTeamId) continue;
+          if (!seen.has(g.role)) seen.set(g.role, new Set());
+          seen.get(g.role)!.add(g.account_id);
+        }
+        seen.forEach((set, role) => { counts[role] = set.size; });
+        return counts;
+      }
 
       // If a specific team is selected (or locked), count via that team's user_roles
       const scopeTeamId = teamId || (selectedTeamId || null);
@@ -277,6 +313,34 @@ export default function CreateGroupDialog({
   const { data: adminMiniLeagues = [] } = useQuery({
     queryKey: ["admin-mini-leagues-for-groups", user?.id, activeClubFilter],
     queryFn: async () => {
+      // ICP mode: resolve admin clubs, Pro status and leagues on-chain.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        const [{ getLiveMyRoleGrants }, { isLiveClubPro }, { listLiveMiniLeaguesByClub }] = await Promise.all([
+          import("@/live/features/membership"),
+          import("@/live/features/club"),
+          import("@/live/features/miniLeagues"),
+        ]);
+        const grants = ((await getLiveMyRoleGrants(ctx).catch(() => [])) ?? []) as any[];
+        let ids = Array.from(
+          new Set(
+            grants
+              .filter((g) => ["club_admin", "app_admin", "committee_member", "coach", "team_admin"].includes(g.role))
+              .map((g) => (Array.isArray(g.club) ? g.club[0] : g.club))
+              .filter((x): x is string => !!x),
+          ),
+        );
+        if (activeClubFilter) ids = ids.filter((id) => id === activeClubFilter);
+        const out: any[] = [];
+        for (const cid of ids) {
+          if (!(await isLiveClubPro(ctx, cid).catch(() => false))) continue;
+          const leagues = ((await listLiveMiniLeaguesByClub(ctx, cid).catch(() => [])) ?? []) as any[];
+          const clubName = await lookup.icpGetClubName(cid).catch(() => null);
+          for (const l of leagues) out.push({ id: l.id, name: l.name, club_id: cid, clubs: { name: clubName } });
+        }
+        return out;
+      }
       const { data: roles } = await supabase
         .from("user_roles")
         .select("club_id")
@@ -314,6 +378,34 @@ export default function CreateGroupDialog({
     queryFn: async () => {
       if (selectedRoles.length === 0) return 0;
       const scopeTeamId = teamId || selectedTeamId || null;
+
+      // ICP mode: count from club_domain role grants / mini-league players.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        if (miniLeagueId) {
+          const { listLivePlayers } = await import("@/live/features/miniLeagues");
+          const players = ((await listLivePlayers(ctx, miniLeagueId).catch(() => [])) ?? []) as any[];
+          const parents = new Set(
+            players.map((p) => (Array.isArray(p.parent_user_id) ? p.parent_user_id[0] : p.parent_user_id)).filter(Boolean),
+          );
+          let n = 0;
+          if (selectedRoles.includes("player")) n += players.length;
+          if (selectedRoles.includes("parent")) n += parents.size;
+          return n;
+        }
+        if (!clubInfo?.clubId) return 0;
+        const { listLiveRoleGrants } = await import("@/live/features/membership");
+        const grants = ((await listLiveRoleGrants(ctx, clubInfo.clubId).catch(() => [])) ?? []) as any[];
+        const accounts = new Set<string>();
+        for (const g of grants) {
+          if (!selectedRoles.includes(g.role)) continue;
+          const grantTeam = Array.isArray(g.team) ? (g.team[0] ?? null) : (g.team ?? null);
+          if (scopeTeamId && grantTeam !== scopeTeamId) continue;
+          accounts.add(g.account_id);
+        }
+        return accounts.size;
+      }
 
       if (scopeTeamId) {
         const { data } = await supabase
