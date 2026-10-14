@@ -131,7 +131,14 @@ function urlFor(n) {
   if (k.startsWith("event") || k === "duty_assigned" || k === "rsvp" || k === "rsvp_response") {
     return related ? `/events/${related}` : "/events";
   }
-  if (k.startsWith("photo") || k === "comment_reply") return "/media";
+  // related_id is the game event for upload reminders, otherwise the photo.
+  // MediaPage opens `?photo=` in the viewer and `&comments=1` opens comments.
+  if (k === "photo_prompt_reminder") return related ? `/media?event=${encodeURIComponent(related)}&upload=1` : "/media?upload=1";
+  if (k.startsWith("photo") || k === "comment_reply") {
+    if (!related) return "/media";
+    const comments = k === "photo_comment" || k === "comment_reply";
+    return `/media?photo=${encodeURIComponent(related)}${comments ? "&comments=1" : ""}`;
+  }
   if (k === "club_news") return related ? `/news/${related}` : "/news";
   if (k === "team_message" || k === "team_invite" || k.startsWith("team_role")) return related ? `/teams/${related}` : "/teams";
   if (k === "club_message" || k === "club_invite" || k.startsWith("club_role")) return related ? `/clubs/${related}` : "/clubs";
