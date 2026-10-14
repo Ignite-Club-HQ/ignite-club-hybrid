@@ -684,6 +684,20 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'open_conversation' : IDL.Func(
+        [IDL.Text, IDL.Nat16],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Record({
+              'page' : MessagePage,
+              'pins' : IDL.Opt(IDL.Vec(PinnedMessage)),
+              'reactions' : IDL.Vec(Reaction),
+            }),
+            'Err' : IDL.Text,
+          }),
+        ],
+        ['query'],
+      ),
     'pin_message' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : PinnedMessage, 'Err' : IDL.Text })],

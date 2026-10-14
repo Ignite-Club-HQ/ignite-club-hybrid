@@ -445,6 +445,17 @@ export interface Main {
     { 'Ok' : bigint } |
       { 'Err' : string }
   >,
+  'open_conversation' : ActorMethod<
+    [string, number],
+    {
+        'Ok' : {
+          'page' : MessagePage,
+          'pins' : [] | [Array<PinnedMessage>],
+          'reactions' : Array<Reaction>,
+        }
+      } |
+      { 'Err' : string }
+  >,
   'pin_message' : ActorMethod<
     [string, string],
     { 'Ok' : PinnedMessage } |
