@@ -89,28 +89,36 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
 
   const saveMutation = useMutation({
     mutationFn: async (sponsorIds: string[]) => {
-      // Delete existing
-      const { error: deleteError } = await supabase
-        .from("event_sponsors")
-        .delete()
-        .eq("event_id", eventId);
-      
-      if (deleteError) throw deleteError;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          // Delete existing
+          const { error: deleteError } = await supabase
+            .from("event_sponsors")
+            .delete()
+            .eq("event_id", eventId);
 
-      // Insert new
-      if (sponsorIds.length > 0) {
-        const inserts = sponsorIds.map((sponsorId, index) => ({
-          event_id: eventId,
-          sponsor_id: sponsorId,
-          display_order: index,
-        }));
+          if (deleteError) throw deleteError;
 
-        const { error: insertError } = await supabase
-          .from("event_sponsors")
-          .insert(inserts);
-        
-        if (insertError) throw insertError;
-      }
+          // Insert new
+          if (sponsorIds.length > 0) {
+            const inserts = sponsorIds.map((sponsorId, index) => ({
+              event_id: eventId,
+              sponsor_id: sponsorId,
+              display_order: index,
+            }));
+
+            const { error: insertError } = await supabase
+              .from("event_sponsors")
+              .insert(inserts);
+
+            if (insertError) throw insertError;
+          }
+        },
+        icp: async (ctx) => {
+          const { saveLiveEventSponsors } = await import("@/live/features/events");
+          await saveLiveEventSponsors(ctx, eventId, sponsorIds);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-sponsors", eventId] });
