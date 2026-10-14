@@ -379,6 +379,34 @@ export default function CreateGroupDialog({
       if (selectedRoles.length === 0) return 0;
       const scopeTeamId = teamId || selectedTeamId || null;
 
+      // ICP mode: count from club_domain role grants / mini-league players.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        if (miniLeagueId) {
+          const { listLivePlayers } = await import("@/live/features/miniLeagues");
+          const players = ((await listLivePlayers(ctx, miniLeagueId).catch(() => [])) ?? []) as any[];
+          const parents = new Set(
+            players.map((p) => (Array.isArray(p.parent_user_id) ? p.parent_user_id[0] : p.parent_user_id)).filter(Boolean),
+          );
+          let n = 0;
+          if (selectedRoles.includes("player")) n += players.length;
+          if (selectedRoles.includes("parent")) n += parents.size;
+          return n;
+        }
+        if (!clubInfo?.clubId) return 0;
+        const { listLiveRoleGrants } = await import("@/live/features/membership");
+        const grants = ((await listLiveRoleGrants(ctx, clubInfo.clubId).catch(() => [])) ?? []) as any[];
+        const accounts = new Set<string>();
+        for (const g of grants) {
+          if (!selectedRoles.includes(g.role)) continue;
+          const grantTeam = Array.isArray(g.team) ? (g.team[0] ?? null) : (g.team ?? null);
+          if (scopeTeamId && grantTeam !== scopeTeamId) continue;
+          accounts.add(g.account_id);
+        }
+        return accounts.size;
+      }
+
       if (scopeTeamId) {
         const { data } = await supabase
           .from("user_roles")
