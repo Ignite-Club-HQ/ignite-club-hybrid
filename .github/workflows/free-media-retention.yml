@@ -1,0 +1,33 @@
+name: Free club media retention (6 months)
+
+# Deletes gallery photos, chat attachments and vault files older than 6 months
+# for free clubs on Supabase. Pro and trial clubs keep everything.
+# Setup: repo secrets SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+# Missing secrets = green no-op run. ICP clubs are handled by media_blob_store.
+
+on:
+  schedule:
+    - cron: "30 17 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-media-retention
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12.0"
+      - name: Remove expired free-club media
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/free-media-retention.mjs
