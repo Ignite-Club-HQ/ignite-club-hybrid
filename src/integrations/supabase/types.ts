@@ -11076,6 +11076,10 @@ export type Database = {
         Args: { _mini_league_id: string; _user_id: string }
         Returns: boolean
       }
+      can_view_pending_role_request_profile: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       carry_over_players: {
         Args: {
           _club_player_ids: string[]
