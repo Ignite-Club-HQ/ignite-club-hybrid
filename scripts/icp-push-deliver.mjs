@@ -61,6 +61,7 @@ const Status = IDL.Variant({ Pending: IDL.Null, Processing: IDL.Null, Delivered:
 const Notification = IDL.Record({
   id: IDL.Text,
   user: IDL.Text,
+  club: IDL.Text,
   kind: IDL.Text,
   body: IDL.Text,
   related_id: IDL.Opt(IDL.Text),
@@ -135,6 +136,20 @@ function urlFor(n) {
   if (k === "team_message" || k === "team_invite" || k.startsWith("team_role")) return related ? `/teams/${related}` : "/teams";
   if (k === "club_message" || k === "club_invite" || k.startsWith("club_role")) return related ? `/clubs/${related}` : "/clubs";
   if (k === "group_message" || k === "chat") return "/messages";
+  // Chat fan-out rows (record_chat_notify_batch): related_id/club carry the
+  // conversation id, idempotency_key the message id. The conversation id
+  // alone can't tell team/club/DM/group apart, so route through the Messages
+  // inbox with `?conversation=` — MessagesPage resolves the canonical chat
+  // route (and scrolls to `?message=`) via the on-chain conversation
+  // metadata, mirroring icpNotificationRoute.ts.
+  if (k === "message_chat") {
+    const conversationId = related || n.club;
+    if (!conversationId) return "/messages";
+    const messageId = n.idempotency_key?.length ? n.idempotency_key[0] : undefined;
+    const params = new URLSearchParams({ conversation: conversationId });
+    if (messageId) params.set("message", messageId);
+    return `/messages?${params.toString()}`;
+  }
   if (k === "direct_message") return "/messages/direct";
   if (k === "broadcast") return "/messages/broadcast";
   if (k === "member_joined" || k === "membership_removed" || k === "role_removed") return "/clubs";
