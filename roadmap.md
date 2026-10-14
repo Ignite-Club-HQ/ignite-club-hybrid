@@ -140,3 +140,9 @@
 - [x] Sponsor switches save on-chain + instant flip
 - [x] Club Pro check counts Pro Football
 - [ ] User verifies after website redeploy + Codemagic build (needs club Pro recorded on-chain)
+
+## Free-club (house) ads in ICP mode (2026-10-14)
+- [x] Ad settings/ads already on-chain (insights_domain); gate reads were still direct Supabase
+- [x] SponsorOrAdCarousel (home/events/messages/event-detail/schedule) gate reads getLiveAdSetting
+- [x] MediaHeaderSponsorStrip, ChatThreadSponsorStrip, EventsHeaderSponsorStrip: Pro check, placement gate and ads now ICP-routed (events strip no longer hard-off in ICP)
+- [ ] User verifies after website redeploy + Codemagic build (needs house ads enabled in insights_domain by an app admin)

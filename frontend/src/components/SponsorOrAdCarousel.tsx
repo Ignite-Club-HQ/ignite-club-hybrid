@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { getLiveClubSettings, isLiveClubPro, listAllLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
+import { getLiveAdSetting } from "@/live/features/insights";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
@@ -198,16 +199,22 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
   // Check ad settings for this location
   const { data: settings } = useQuery({
     queryKey: ["app-ad-settings", location],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_ad_settings")
-        .select("*")
-        .eq("location", location)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
+    queryFn: (): Promise<{ is_enabled: boolean } | null> =>
+      withFeatureBackend("analytics", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("app_ad_settings")
+            .select("is_enabled")
+            .eq("location", location)
+            .single();
+          if (error) throw error;
+          return data;
+        },
+        icp: async (ctx) => {
+          const s = await getLiveAdSetting(ctx, location);
+          return s ? { is_enabled: s.is_enabled } : null;
+        },
+      }),
   });
 
   // Check if user has any ACTIVE sponsors (from sponsors table, not primary_sponsor_id)
