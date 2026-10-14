@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Check, Loader2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { setLiveEventRsvp } from "@/live/features/events";
+import { setLiveEventRsvp, setLiveRsvpNote } from "@/live/features/events";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { hapticImpactLight } from "@/lib/haptics";
@@ -138,19 +138,33 @@ export function InlineRsvpActions({ eventId, messageId }: Props) {
           statusLabel={LABELS[answered]}
           initialNote={note}
           onSave={async (value) => {
-            const { data: auth } = await supabase.auth.getUser();
-            const userId = auth?.user?.id;
-            if (!userId) return;
-            const { error } = await supabase
-              .from("rsvps")
-              .update({ notes: value })
-              .eq("event_id", eventId)
-              .eq("user_id", userId)
-              .is("child_id", null);
-            if (error) {
+            const errorMessage = await withFeatureBackend("events", {
+              supabase: async () => {
+                const { data: auth } = await supabase.auth.getUser();
+                const userId = auth?.user?.id;
+                if (!userId) return "Not signed in";
+                const { error } = await supabase
+                  .from("rsvps")
+                  .update({ notes: value })
+                  .eq("event_id", eventId)
+                  .eq("user_id", userId)
+                  .is("child_id", null);
+                return error ? error.message : null;
+              },
+              icp: async (ctx) => {
+                if (!user?.id) return "Not signed in";
+                try {
+                  await setLiveRsvpNote(ctx, eventId, user.id, value);
+                  return null;
+                } catch (err: any) {
+                  return err?.message ?? "Couldn't save note";
+                }
+              },
+            });
+            if (errorMessage) {
               toast({
                 title: "Couldn't save note",
-                description: error.message,
+                description: errorMessage,
                 variant: "destructive",
               });
               return;

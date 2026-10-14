@@ -1036,6 +1036,11 @@ export interface Main {
     { 'Ok' : RosterEntry } |
       { 'Err' : string }
   >,
+  'set_child_rsvp' : ActorMethod<
+    [string, string, string, string, string],
+    { 'Ok' : Rsvp } |
+      { 'Err' : string }
+  >,
   'set_rsvp' : ActorMethod<
     [string, string, string, string],
     { 'Ok' : Rsvp } |

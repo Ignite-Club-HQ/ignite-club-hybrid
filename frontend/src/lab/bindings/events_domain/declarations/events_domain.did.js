@@ -1291,6 +1291,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : RosterEntry, 'Err' : IDL.Text })],
         [],
       ),
+    'set_child_rsvp' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
+        [],
+      ),
     'set_rsvp' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [IDL.Variant({ 'Ok' : Rsvp, 'Err' : IDL.Text })],
