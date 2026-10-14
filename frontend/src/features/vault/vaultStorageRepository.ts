@@ -136,7 +136,7 @@ export async function fetchVaultStorageSubscription(
   // ICP: storage add-ons granted by on-chain storage promo redemptions
   // (club_domain). Paid storage downgrades don't exist on-chain.
   if (resolveAuthBackend() === "icp") {
-    const gb = await withFeatureBackend("club", {
+    const gb = await withFeatureBackend("membership", {
       supabase: async () => 0,
       icp: (ctx) => getLiveClubStoragePurchasedGb(ctx, clubId),
     }).catch(() => 0);

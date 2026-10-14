@@ -137,7 +137,7 @@ export function StoragePurchaseDialog({
   const applyPromoMutation = useMutation({
     mutationFn: async (code: string) => {
       if (isIcpMode) {
-        const newTotal = await withFeatureBackend("club", {
+        const newTotal = await withFeatureBackend("membership", {
           supabase: async () => {
             throw new Error("Promo codes are unavailable right now. Please try again.");
           },
