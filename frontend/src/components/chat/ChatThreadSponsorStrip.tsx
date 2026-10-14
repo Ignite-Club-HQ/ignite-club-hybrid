@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings, isLiveClubPro } from "@/live/features/club";
+import { getLiveClubSettings, isLiveClubPro, listLiveSponsors } from "@/live/features/club";
 import { getLiveAdSetting, listLiveActiveAds } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
