@@ -207,6 +207,9 @@ function SupabaseManageRolesPage() {
         },
       }),
     enabled: !!clubId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const deleteRoleMutation = useMutation({
@@ -378,6 +381,8 @@ function SupabaseManageRolesPage() {
         requests={
           <RoleRequestsList
             requests={requests}
+            isLoading={loadingRequests}
+            error={requestError}
             isProcessing={handleRequestMutation.isPending}
             onApprove={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: true, request })}
             onDeny={(request) => handleRequestMutation.mutate({ requestId: request.id, approved: false, request })}
