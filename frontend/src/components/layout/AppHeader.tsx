@@ -128,10 +128,13 @@ function LogoClubThemeDropdown() {
                 const row = await getLiveClubProfile(ctx, clubId);
                 const p = row.length ? row[0] : null;
                 if (!p || p.deleted_at_ms.length) return null;
-                const [sub, settings] = await Promise.all([
+                const [sub, settingsRow] = await Promise.all([
                   getLiveClubSubscription(ctx, clubId).catch(() => null),
                   getLiveClubSettings(ctx, clubId).catch(() => null),
                 ]);
+                // get_club_settings returns a candid opt ([] | [Settings]) —
+                // unwrap before reading fields (same as useClubTheme does).
+                const settings = settingsRow?.[0] ?? null;
                 const hasPro = sub !== null &&
                   (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
                 const hasTheme = /^#?[0-9a-f]{6}$/i.test(settings?.theme_primary_color[0] ?? "");
