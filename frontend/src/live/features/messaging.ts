@@ -1373,3 +1373,37 @@ export async function resolveLiveContentReport(
   const report = await unwrapCandid(actor.resolve_content_report(id, status), "Resolve content report");
   return mapLiveContentReport(report);
 }
+
+// ---------------------------------------------------------------------------
+// Admin: chat photo gallery reminder sweep ("run now" + future timer).
+// ---------------------------------------------------------------------------
+
+export interface LiveChatPhotoReminderRunResult {
+  scanned: number;
+  posted: number;
+  skipped: number;
+}
+
+export async function runLiveChatPhotoGalleryReminders(
+  ctx: FeatureBackendContext,
+  nowMs: number,
+  windowStartHours: number,
+  windowEndHours: number,
+  cooldownDays: number,
+): Promise<LiveChatPhotoReminderRunResult> {
+  const { actor } = await connectLiveMessagingDomain(ctx.target, ctx.identity);
+  const row = await unwrapCandid(
+    actor.run_chat_photo_gallery_reminders(
+      BigInt(Math.trunc(nowMs)),
+      windowStartHours,
+      windowEndHours,
+      cooldownDays,
+    ),
+    "Run chat photo gallery reminders",
+  );
+  return {
+    scanned: Number(row.scanned),
+    posted: Number(row.posted),
+    skipped: Number(row.skipped),
+  };
+}

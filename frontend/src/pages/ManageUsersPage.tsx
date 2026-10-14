@@ -478,12 +478,30 @@ function SupabaseManageUsersPage() {
   const { data: appAdmins, isLoading: loadingAdmins } = useQuery({
     queryKey: ["app-admins"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("id, user_id, created_at, profiles (id, display_name, avatar_url)")
-        .eq("role", "app_admin");
-      if (error) throw error;
-      return data;
+      type AdminRow = { id: string; user_id: string; created_at: string | null; profiles: { id: string; display_name: string | null; avatar_url: string | null } | null };
+      return withFeatureBackend<AdminRow[]>("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("user_roles")
+            .select("id, user_id, created_at, profiles (id, display_name, avatar_url)")
+            .eq("role", "app_admin");
+          if (error) throw error;
+          return (data ?? []) as unknown as AdminRow[];
+        },
+        icp: async (ctx) => {
+          const [{ listLiveAppAdmins }, { listLiveProfilesByIds }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@/live/features/identityAccessClient"),
+          ]);
+          const principals = (await listLiveAppAdmins(ctx)).map((p) => p.toText());
+          const profiles = await listLiveProfilesByIds(ctx, principals).catch(() => []);
+          const byId = new Map(profiles.map((p: { account_id: string; display_name?: string | null; avatar_url?: string | null }) => [p.account_id, p]));
+          return principals.map((id) => {
+            const p = byId.get(id);
+            return { id, user_id: id, created_at: null, profiles: { id, display_name: p?.display_name ?? null, avatar_url: p?.avatar_url ?? null } };
+          });
+        },
+      });
     },
     enabled: isAppAdmin === true,
   });
@@ -539,16 +557,26 @@ function SupabaseManageUsersPage() {
     queryFn: async () => {
       if (!adminSearchQuery.trim() || adminSearchQuery.length < 2) return [];
       
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, display_name, avatar_url")
-        .ilike("display_name", `%${adminSearchQuery}%`)
-        .limit(10);
-      if (error) throw error;
-      
+      const data = await withFeatureBackend<Array<{ id: string; display_name: string | null; avatar_url: string | null }>>("admin", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("id, display_name, avatar_url")
+            .ilike("display_name", `%${adminSearchQuery}%`)
+            .limit(10);
+          if (error) throw error;
+          return data ?? [];
+        },
+        icp: async (ctx) => {
+          const { searchLiveProfilesWithPrincipals } = await import("@/live/features/identityAccessClient");
+          const rows = await searchLiveProfilesWithPrincipals(ctx, adminSearchQuery.trim(), 10);
+          return rows.map((r) => ({ id: r.principal.toText(), display_name: r.displayName, avatar_url: r.avatarUrl }));
+        },
+      });
+
       // Filter out users who are already app admins
       const adminIds = appAdmins?.map(a => a.user_id) || [];
-      return data?.filter(p => !adminIds.includes(p.id)) || [];
+      return data.filter(p => !adminIds.includes(p.id));
     },
     enabled: adminSearchQuery.length >= 2 && isAddDialogOpen,
   });
@@ -654,11 +682,23 @@ function SupabaseManageUsersPage() {
 
   const addAdminMutation = useMutation({
     mutationFn: async ({ userId, displayName }: { userId: string; displayName: string }) => {
-      const { error } = await supabase.from("user_roles").insert({
-        user_id: userId,
-        role: "app_admin",
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").insert({
+            user_id: userId,
+            role: "app_admin",
+          });
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          // In ICP mode the id is the person's principal text.
+          const [{ grantLiveAppAdmin }, { Principal }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@icp-sdk/core/principal"),
+          ]);
+          await grantLiveAppAdmin(ctx, Principal.fromText(userId));
+        },
       });
-      if (error) throw error;
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {
@@ -709,8 +749,19 @@ function SupabaseManageUsersPage() {
 
   const removeAdminMutation = useMutation({
     mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
-      const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
-      if (error) throw error;
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("user_roles").delete().eq("id", roleId);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          const [{ revokeLiveAppAdmin }, { Principal }] = await Promise.all([
+            import("@/live/features/insights"),
+            import("@icp-sdk/core/principal"),
+          ]);
+          await revokeLiveAppAdmin(ctx, Principal.fromText(userId));
+        },
+      });
 
       const { resolveAuthBackend } = await import("@/live/authBackendMode");
       if (resolveAuthBackend() === "icp") {

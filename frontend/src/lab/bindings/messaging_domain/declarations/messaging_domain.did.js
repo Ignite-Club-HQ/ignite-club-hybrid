@@ -269,6 +269,15 @@ export const idlFactory = ({ IDL }) => {
     'kind' : IDL.Text,
     'last_message_at_ms' : IDL.Opt(IDL.Nat64),
   });
+  const ChatPhotoReminderRunResult = IDL.Record({
+    'skipped' : IDL.Nat32,
+    'scanned' : IDL.Nat32,
+    'posted' : IDL.Nat32,
+  });
+  const ChatPhotoReminderResult = IDL.Variant({
+    'Ok' : ChatPhotoReminderRunResult,
+    'Err' : IDL.Text,
+  });
   const RecapConfig = IDL.Record({
     'model' : IDL.Text,
     'api_key' : IDL.Text,
@@ -760,6 +769,11 @@ export const idlFactory = ({ IDL }) => {
     'restore_group' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'run_chat_photo_gallery_reminders' : IDL.Func(
+        [IDL.Nat64, IDL.Nat32, IDL.Nat32, IDL.Nat32],
+        [ChatPhotoReminderResult],
         [],
       ),
     'search_messages' : IDL.Func(

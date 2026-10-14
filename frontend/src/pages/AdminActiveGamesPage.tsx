@@ -21,6 +21,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { selectCachedProfilesByIds } from "@/lib/profileCache";
 import { PageLoading } from "@/components/ui/page-loading";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { listLiveActiveGames, listLiveActiveGameWriteRates } from "@/live/features/events";
 
 interface ActiveGameRow {
   id: string;
@@ -37,6 +39,38 @@ interface ActiveGameRow {
     club_id: string | null;
     club?: { id: string; name: string } | null;
   } | null;
+}
+
+/** Maps an events_domain ActiveGame (sync_active_game record) to the Supabase-shaped row this page renders. */
+function toActiveGameRow(game: {
+  id: string;
+  team_id?: string | null;
+  user_id: { toText?: () => string } | string;
+  is_active: boolean;
+  updated_at_ms: bigint | number;
+  timer_state_json: string;
+  pitch_state_json: string;
+}): ActiveGameRow {
+  const updatedAt = new Date(Number(game.updated_at_ms)).toISOString();
+  const userId = typeof game.user_id === "string" ? game.user_id : game.user_id?.toText?.() ?? String(game.user_id);
+  const parse = (json: string): Record<string, unknown> | null => {
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  };
+  return {
+    id: game.id,
+    team_id: game.team_id ?? null,
+    user_id: userId,
+    is_active: game.is_active,
+    updated_at: updatedAt,
+    created_at: updatedAt,
+    timer_state: parse(game.timer_state_json),
+    pitch_state: parse(game.pitch_state_json),
+    team: null,
+  };
 }
 
 const SPORT_BADGE: Record<string, string> = {
@@ -105,19 +139,26 @@ function SupabaseAdminActiveGamesPage() {
     queryKey: ["admin-active-games", "active", bumpKey],
     enabled: !!isAppAdmin,
     refetchInterval: 15000,
-    queryFn: async (): Promise<ActiveGameRow[]> => {
-      const { data, error } = await supabase
-        .from("active_games")
-        .select(
-          `id, team_id, user_id, is_active, updated_at, created_at, timer_state, pitch_state,
-           team:teams ( id, name, club_id, club:clubs!club_id ( id, name ) )`
-        )
-        .eq("is_active", true)
-        .order("updated_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data ?? []) as unknown as ActiveGameRow[];
-    },
+    queryFn: async (): Promise<ActiveGameRow[]> =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("active_games")
+            .select(
+              `id, team_id, user_id, is_active, updated_at, created_at, timer_state, pitch_state,
+               team:teams ( id, name, club_id, club:clubs!club_id ( id, name ) )`
+            )
+            .eq("is_active", true)
+            .order("updated_at", { ascending: false })
+            .limit(500);
+          if (error) throw error;
+          return (data ?? []) as unknown as ActiveGameRow[];
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveActiveGames(ctx, 0);
+          return rows.filter((r) => r.is_active).map(toActiveGameRow);
+        },
+      }),
   });
 
   const { data: recentRows, isLoading: recentLoading } = useQuery({
@@ -125,19 +166,28 @@ function SupabaseAdminActiveGamesPage() {
     enabled: !!isAppAdmin && tab === "recent",
     refetchInterval: 30000,
     queryFn: async (): Promise<ActiveGameRow[]> => {
-      const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from("active_games")
-        .select(
-          `id, team_id, user_id, is_active, updated_at, created_at, timer_state, pitch_state,
-           team:teams ( id, name, club_id, club:clubs!club_id ( id, name ) )`
-        )
-        .eq("is_active", false)
-        .gte("updated_at", since)
-        .order("updated_at", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return (data ?? []) as unknown as ActiveGameRow[];
+      const sinceMs = Date.now() - 60 * 60 * 1000;
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const since = new Date(sinceMs).toISOString();
+          const { data, error } = await supabase
+            .from("active_games")
+            .select(
+              `id, team_id, user_id, is_active, updated_at, created_at, timer_state, pitch_state,
+               team:teams ( id, name, club_id, club:clubs!club_id ( id, name ) )`
+            )
+            .eq("is_active", false)
+            .gte("updated_at", since)
+            .order("updated_at", { ascending: false })
+            .limit(200);
+          if (error) throw error;
+          return (data ?? []) as unknown as ActiveGameRow[];
+        },
+        icp: async (ctx) => {
+          const rows = await listLiveActiveGames(ctx, sinceMs);
+          return rows.filter((r) => !r.is_active).map(toActiveGameRow);
+        },
+      });
     },
   });
 
@@ -169,25 +219,34 @@ function SupabaseAdminActiveGamesPage() {
     queryKey: ["admin-active-games", "write-rate", bumpKey],
     enabled: !!isAppAdmin,
     refetchInterval: 15000,
-    queryFn: async (): Promise<Map<string, number>> => {
-      const since = new Date(Date.now() - 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from("active_games_write_log")
-        .select("team_id")
-        .gte("created_at", since)
-        .not("team_id", "is", null)
-        .limit(5000);
-      if (error) {
-        console.warn("[admin-active-games] write log unavailable", error);
-        return new Map();
-      }
-      const counts = new Map<string, number>();
-      for (const row of (data ?? []) as Array<{ team_id: string | null }>) {
-        if (!row.team_id) continue;
-        counts.set(row.team_id, (counts.get(row.team_id) ?? 0) + 1);
-      }
-      return counts;
-    },
+    queryFn: async (): Promise<Map<string, number>> =>
+      withFeatureBackend("events", {
+        supabase: async () => {
+          const since = new Date(Date.now() - 60 * 1000).toISOString();
+          const { data, error } = await supabase
+            .from("active_games_write_log")
+            .select("team_id")
+            .gte("created_at", since)
+            .not("team_id", "is", null)
+            .limit(5000);
+          if (error) {
+            console.warn("[admin-active-games] write log unavailable", error);
+            return new Map();
+          }
+          const counts = new Map<string, number>();
+          for (const row of (data ?? []) as Array<{ team_id: string | null }>) {
+            if (!row.team_id) continue;
+            counts.set(row.team_id, (counts.get(row.team_id) ?? 0) + 1);
+          }
+          return counts;
+        },
+        icp: async (ctx) => {
+          const sinceMs = Date.now() - 60 * 1000;
+          const counts = await listLiveActiveGameWriteRates(ctx, sinceMs);
+          counts.delete("");
+          return counts;
+        },
+      }),
   });
 
   // Realtime: re-pull on any active_games change.

@@ -115,6 +115,13 @@ export type ScheduledResult = {
     __kind__: "Err";
     Err: string;
 };
+export type PushDeliveryHealthResult = {
+    __kind__: "Ok";
+    Ok: PushDeliveryHealth;
+} | {
+    __kind__: "Err";
+    Err: string;
+};
 export type DeviceTokensResult = {
     __kind__: "Ok";
     Ok: Array<DeviceToken>;
@@ -133,6 +140,7 @@ export interface MainInterface {
     acknowledge(id: string, key: string): Promise<Result>;
     cancel_scheduled(id: string, author: string): Promise<ScheduledResult>;
     claim(now_ms: bigint, limit: number): Promise<Results>;
+    cleanup_stale_device_tokens(now_ms: bigint, max_age_ms: bigint): Promise<DeviceTokenCountResult>;
     clear_inbox(user: string, club: string | null): Promise<ResultNat16>;
     /**
      * / Public: remaining cycles (shown in admin settings).
@@ -153,6 +161,7 @@ export interface MainInterface {
     get_notification(id: string): Promise<Notification | null>;
     get_preferences(user: string): Promise<Preferences>;
     get_push_alert_settings(): Promise<PushAlertSettings>;
+    get_push_delivery_health(now_ms: bigint): Promise<PushDeliveryHealthResult>;
     grant_worker(principal: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -168,7 +177,7 @@ export interface MainInterface {
     mark_failed(id: string, error: string): Promise<ScheduledResult>;
     mark_read(id: string): Promise<Result>;
     mark_sent(id: string, sent_message_id: string): Promise<ScheduledResult>;
-    merge_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -185,7 +194,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -194,6 +203,13 @@ export interface MainInterface {
     }>;
     remove_device_tokens(user: string, tokens: Array<string>): Promise<DeviceTokenCountResult>;
     schedule_message(id: string, author: string, chat_type: ChatType, team_id: string | null, club_id: string | null, group_id: string | null, conversation_id: string | null, body: string, image_url: string | null, reply_to_id: string | null, scheduled_for_ms: bigint, recurrence: Recurrence, recurrence_until_ms: bigint | null): Promise<ScheduledResult>;
+    set_club_domain_canister(id: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     set_messaging_domain_canister(id: Principal): Promise<{
         __kind__: "Ok";
         Ok: null;
@@ -337,6 +353,16 @@ export type DeviceTokenCountResult = {
     __kind__: "Err";
     Err: string;
 };
+export interface PushDeliveryHealth {
+    generated_at_ms: bigint;
+    total_24h: number;
+    processing_24h: number;
+    device_token_count: number;
+    window_hours: number;
+    failed_24h: number;
+    pending_24h: number;
+    delivered_24h: number;
+}
 export enum ChatType {
     Club = "Club",
     Group = "Group",
@@ -377,7 +403,7 @@ export enum Status {
 }
 export interface notification_queueInterface extends MainInterface {
 }
-import type { ChatNotifyBatchResult as _ChatNotifyBatchResult, ChatType as _ChatType, DeviceToken as _DeviceToken, DeviceTokenCountResult as _DeviceTokenCountResult, DeviceTokensResult as _DeviceTokensResult, DigestClassification as _DigestClassification, DigestItem as _DigestItem, DigestResult as _DigestResult, DigestResults as _DigestResults, DigestSource as _DigestSource, Notification as _Notification, Preferences as _Preferences, PreferencesPage as _PreferencesPage, PreferencesPageResult as _PreferencesPageResult, PreferencesResult as _PreferencesResult, PushAlertSettings as _PushAlertSettings, Recurrence as _Recurrence, Result as _Result, ResultNat16 as _ResultNat16, Results as _Results, ScheduledMessage as _ScheduledMessage, ScheduledResult as _ScheduledResult, ScheduledResults as _ScheduledResults, ScheduledStatus as _ScheduledStatus, Status as _Status } from "./declarations/notification_queue.did";
+import type { ChatNotifyBatchResult as _ChatNotifyBatchResult, ChatType as _ChatType, DeviceToken as _DeviceToken, DeviceTokenCountResult as _DeviceTokenCountResult, DeviceTokensResult as _DeviceTokensResult, DigestClassification as _DigestClassification, DigestItem as _DigestItem, DigestResult as _DigestResult, DigestResults as _DigestResults, DigestSource as _DigestSource, Notification as _Notification, Preferences as _Preferences, PreferencesPage as _PreferencesPage, PreferencesPageResult as _PreferencesPageResult, PreferencesResult as _PreferencesResult, PushAlertSettings as _PushAlertSettings, PushDeliveryHealth as _PushDeliveryHealth, PushDeliveryHealthResult as _PushDeliveryHealthResult, Recurrence as _Recurrence, Result as _Result, ResultNat16 as _ResultNat16, Results as _Results, ScheduledMessage as _ScheduledMessage, ScheduledResult as _ScheduledResult, ScheduledResults as _ScheduledResults, ScheduledStatus as _ScheduledStatus, Status as _Status } from "./declarations/notification_queue.did";
 export class Notification_queue implements notification_queueInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async acknowledge(arg0: string, arg1: string): Promise<Result> {
@@ -392,9 +418,13 @@ export class Notification_queue implements notification_queueInterface {
         const result = await this.actor.claim(arg0, arg1);
         return from_candid_Results_n19(result);
     }
+    async cleanup_stale_device_tokens(arg0: bigint, arg1: bigint): Promise<DeviceTokenCountResult> {
+        const result = await this.actor.cleanup_stale_device_tokens(arg0, arg1);
+        return from_candid_DeviceTokenCountResult_n22(result);
+    }
     async clear_inbox(arg0: string, arg1: string | null): Promise<ResultNat16> {
-        const result = await this.actor.clear_inbox(arg0, to_candid_opt_n22(arg1));
-        return from_candid_ResultNat16_n23(result);
+        const result = await this.actor.clear_inbox(arg0, to_candid_opt_n24(arg1));
+        return from_candid_ResultNat16_n25(result);
     }
     async cycles_balance(): Promise<bigint> {
         const result = await this.actor.cycles_balance();
@@ -408,31 +438,31 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.delete_notification(arg0);
-        return from_candid_variant_n25(result);
+        return from_candid_variant_n26(result);
     }
     async due_scheduled(arg0: bigint, arg1: number): Promise<ScheduledResults> {
         const result = await this.actor.due_scheduled(arg0, arg1);
-        return from_candid_ScheduledResults_n26(result);
+        return from_candid_ScheduledResults_n27(result);
     }
     async enqueue(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string): Promise<Result> {
         const result = await this.actor.enqueue(arg0, arg1, arg2, arg3, arg4, arg5);
         return from_candid_Result_n1(result);
     }
     async fail(arg0: string, arg1: string, arg2: bigint | null): Promise<Result> {
-        const result = await this.actor.fail(arg0, arg1, to_candid_opt_n29(arg2));
+        const result = await this.actor.fail(arg0, arg1, to_candid_opt_n30(arg2));
         return from_candid_Result_n1(result);
     }
     async fan_out(arg0: Array<string>, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string | null): Promise<ResultNat16> {
-        const result = await this.actor.fan_out(arg0, arg1, arg2, arg3, arg4, to_candid_opt_n22(arg5));
-        return from_candid_ResultNat16_n23(result);
+        const result = await this.actor.fan_out(arg0, arg1, arg2, arg3, arg4, to_candid_opt_n24(arg5));
+        return from_candid_ResultNat16_n25(result);
     }
     async get_digest(arg0: DigestSource, arg1: string, arg2: bigint, arg3: number): Promise<DigestResults> {
-        const result = await this.actor.get_digest(to_candid_DigestSource_n30(arg0), arg1, arg2, arg3);
-        return from_candid_DigestResults_n32(result);
+        const result = await this.actor.get_digest(to_candid_DigestSource_n31(arg0), arg1, arg2, arg3);
+        return from_candid_DigestResults_n33(result);
     }
     async get_notification(arg0: string): Promise<Notification | null> {
         const result = await this.actor.get_notification(arg0);
-        return from_candid_opt_n41(result);
+        return from_candid_opt_n42(result);
     }
     async get_preferences(arg0: string): Promise<Preferences> {
         const result = await this.actor.get_preferences(arg0);
@@ -440,7 +470,11 @@ export class Notification_queue implements notification_queueInterface {
     }
     async get_push_alert_settings(): Promise<PushAlertSettings> {
         const result = await this.actor.get_push_alert_settings();
-        return from_candid_PushAlertSettings_n42(result);
+        return from_candid_PushAlertSettings_n43(result);
+    }
+    async get_push_delivery_health(arg0: bigint): Promise<PushDeliveryHealthResult> {
+        const result = await this.actor.get_push_delivery_health(arg0);
+        return from_candid_PushDeliveryHealthResult_n45(result);
     }
     async grant_worker(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -450,27 +484,27 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.grant_worker(arg0);
-        return from_candid_variant_n25(result);
+        return from_candid_variant_n26(result);
     }
     async list_device_tokens(arg0: Array<string>): Promise<DeviceTokensResult> {
         const result = await this.actor.list_device_tokens(arg0);
-        return from_candid_DeviceTokensResult_n44(result);
+        return from_candid_DeviceTokensResult_n47(result);
     }
     async list_inbox(arg0: string, arg1: string | null, arg2: number): Promise<Results> {
-        const result = await this.actor.list_inbox(arg0, to_candid_opt_n22(arg1), arg2);
+        const result = await this.actor.list_inbox(arg0, to_candid_opt_n24(arg1), arg2);
         return from_candid_Results_n19(result);
     }
     async list_preferences_by_club(arg0: string, arg1: number, arg2: number): Promise<PreferencesPageResult> {
         const result = await this.actor.list_preferences_by_club(arg0, arg1, arg2);
-        return from_candid_PreferencesPageResult_n49(result);
+        return from_candid_PreferencesPageResult_n52(result);
     }
     async list_scheduled(arg0: string, arg1: string | null): Promise<ScheduledResults> {
-        const result = await this.actor.list_scheduled(arg0, to_candid_opt_n22(arg1));
-        return from_candid_ScheduledResults_n26(result);
+        const result = await this.actor.list_scheduled(arg0, to_candid_opt_n24(arg1));
+        return from_candid_ScheduledResults_n27(result);
     }
     async mark_all_read(arg0: string, arg1: string | null): Promise<ResultNat16> {
-        const result = await this.actor.mark_all_read(arg0, to_candid_opt_n22(arg1));
-        return from_candid_ResultNat16_n23(result);
+        const result = await this.actor.mark_all_read(arg0, to_candid_opt_n24(arg1));
+        return from_candid_ResultNat16_n25(result);
     }
     async mark_failed(arg0: string, arg1: string): Promise<ScheduledResult> {
         const result = await this.actor.mark_failed(arg0, arg1);
@@ -492,19 +526,19 @@ export class Notification_queue implements notification_queueInterface {
         err: string;
     }> {
         const result = await this.actor.merge_principal(arg0, arg1, arg2);
-        return from_candid_variant_n51(result);
+        return from_candid_variant_n54(result);
     }
     async record_chat_notify_batch(arg0: string, arg1: string, arg2: string, arg3: string, arg4: Array<string>, arg5: Array<string>): Promise<ChatNotifyBatchResult> {
         const result = await this.actor.record_chat_notify_batch(arg0, arg1, arg2, arg3, arg4, arg5);
-        return from_candid_ChatNotifyBatchResult_n52(result);
+        return from_candid_ChatNotifyBatchResult_n55(result);
     }
     async record_digest_item(arg0: string, arg1: string, arg2: DigestSource, arg3: string, arg4: bigint, arg5: DigestClassification, arg6: string, arg7: string | null, arg8: Array<string>, arg9: string | null): Promise<DigestResult> {
-        const result = await this.actor.record_digest_item(arg0, arg1, to_candid_DigestSource_n30(arg2), arg3, arg4, to_candid_DigestClassification_n53(arg5), arg6, to_candid_opt_n22(arg7), arg8, to_candid_opt_n22(arg9));
-        return from_candid_DigestResult_n55(result);
+        const result = await this.actor.record_digest_item(arg0, arg1, to_candid_DigestSource_n31(arg2), arg3, arg4, to_candid_DigestClassification_n56(arg5), arg6, to_candid_opt_n24(arg7), arg8, to_candid_opt_n24(arg9));
+        return from_candid_DigestResult_n58(result);
     }
     async recover(): Promise<ResultNat16> {
         const result = await this.actor.recover();
-        return from_candid_ResultNat16_n23(result);
+        return from_candid_ResultNat16_n25(result);
     }
     async register_device_token(arg0: string, arg1: string, arg2: string | null, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -513,8 +547,8 @@ export class Notification_queue implements notification_queueInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.register_device_token(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3));
-        return from_candid_variant_n25(result);
+        const result = await this.actor.register_device_token(arg0, arg1, to_candid_opt_n24(arg2), to_candid_opt_n24(arg3));
+        return from_candid_variant_n26(result);
     }
     async rekey_principal(arg0: Principal, arg1: Principal, arg2: boolean): Promise<{
         __kind__: "ok";
@@ -524,15 +558,25 @@ export class Notification_queue implements notification_queueInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n51(result);
+        return from_candid_variant_n54(result);
     }
     async remove_device_tokens(arg0: string, arg1: Array<string>): Promise<DeviceTokenCountResult> {
         const result = await this.actor.remove_device_tokens(arg0, arg1);
-        return from_candid_DeviceTokenCountResult_n57(result);
+        return from_candid_DeviceTokenCountResult_n22(result);
     }
     async schedule_message(arg0: string, arg1: string, arg2: ChatType, arg3: string | null, arg4: string | null, arg5: string | null, arg6: string | null, arg7: string, arg8: string | null, arg9: string | null, arg10: bigint, arg11: Recurrence, arg12: bigint | null): Promise<ScheduledResult> {
-        const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n58(arg2), to_candid_opt_n22(arg3), to_candid_opt_n22(arg4), to_candid_opt_n22(arg5), to_candid_opt_n22(arg6), arg7, to_candid_opt_n22(arg8), to_candid_opt_n22(arg9), arg10, to_candid_Recurrence_n60(arg11), to_candid_opt_n29(arg12));
+        const result = await this.actor.schedule_message(arg0, arg1, to_candid_ChatType_n60(arg2), to_candid_opt_n24(arg3), to_candid_opt_n24(arg4), to_candid_opt_n24(arg5), to_candid_opt_n24(arg6), arg7, to_candid_opt_n24(arg8), to_candid_opt_n24(arg9), arg10, to_candid_Recurrence_n62(arg11), to_candid_opt_n30(arg12));
         return from_candid_ScheduledResult_n8(result);
+    }
+    async set_club_domain_canister(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.set_club_domain_canister(arg0);
+        return from_candid_variant_n26(result);
     }
     async set_messaging_domain_canister(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -542,7 +586,7 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.set_messaging_domain_canister(arg0);
-        return from_candid_variant_n25(result);
+        return from_candid_variant_n26(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -552,72 +596,75 @@ export class Notification_queue implements notification_queueInterface {
         Err: string;
     }> {
         const result = await this.actor.transfer_governorship(arg0);
-        return from_candid_variant_n25(result);
+        return from_candid_variant_n26(result);
     }
     async unregister_device_token(arg0: string): Promise<DeviceTokenCountResult> {
         const result = await this.actor.unregister_device_token(arg0);
-        return from_candid_DeviceTokenCountResult_n57(result);
+        return from_candid_DeviceTokenCountResult_n22(result);
     }
     async update_scheduled_message(arg0: string, arg1: string, arg2: string | null, arg3: string | null, arg4: bigint | null, arg5: Recurrence | null, arg6: bigint | null): Promise<ScheduledResult> {
-        const result = await this.actor.update_scheduled_message(arg0, arg1, to_candid_opt_n22(arg2), to_candid_opt_n22(arg3), to_candid_opt_n29(arg4), to_candid_opt_n62(arg5), to_candid_opt_n29(arg6));
+        const result = await this.actor.update_scheduled_message(arg0, arg1, to_candid_opt_n24(arg2), to_candid_opt_n24(arg3), to_candid_opt_n30(arg4), to_candid_opt_n64(arg5), to_candid_opt_n30(arg6));
         return from_candid_ScheduledResult_n8(result);
     }
     async upsert_preferences(arg0: string, arg1: PreferencesInput): Promise<PreferencesResult> {
         const result = await this.actor.upsert_preferences(arg0, arg1);
-        return from_candid_PreferencesResult_n63(result);
+        return from_candid_PreferencesResult_n65(result);
     }
     async upsert_push_alert_settings(arg0: PushAlertSettingsInput): Promise<PushAlertSettings> {
         const result = await this.actor.upsert_push_alert_settings(arg0);
-        return from_candid_PushAlertSettings_n42(result);
+        return from_candid_PushAlertSettings_n43(result);
     }
 }
-function from_candid_ChatNotifyBatchResult_n52(value: _ChatNotifyBatchResult): ChatNotifyBatchResult {
-    return from_candid_variant_n24(value);
+function from_candid_ChatNotifyBatchResult_n55(value: _ChatNotifyBatchResult): ChatNotifyBatchResult {
+    return from_candid_variant_n23(value);
 }
 function from_candid_ChatType_n17(value: _ChatType): ChatType {
     return from_candid_variant_n18(value);
 }
-function from_candid_DeviceTokenCountResult_n57(value: _DeviceTokenCountResult): DeviceTokenCountResult {
-    return from_candid_variant_n24(value);
+function from_candid_DeviceTokenCountResult_n22(value: _DeviceTokenCountResult): DeviceTokenCountResult {
+    return from_candid_variant_n23(value);
 }
-function from_candid_DeviceToken_n47(value: _DeviceToken): DeviceToken {
-    return from_candid_record_n48(value);
+function from_candid_DeviceToken_n50(value: _DeviceToken): DeviceToken {
+    return from_candid_record_n51(value);
 }
-function from_candid_DeviceTokensResult_n44(value: _DeviceTokensResult): DeviceTokensResult {
-    return from_candid_variant_n45(value);
+function from_candid_DeviceTokensResult_n47(value: _DeviceTokensResult): DeviceTokensResult {
+    return from_candid_variant_n48(value);
 }
-function from_candid_DigestClassification_n39(value: _DigestClassification): DigestClassification {
-    return from_candid_variant_n40(value);
+function from_candid_DigestClassification_n40(value: _DigestClassification): DigestClassification {
+    return from_candid_variant_n41(value);
 }
-function from_candid_DigestItem_n35(value: _DigestItem): DigestItem {
-    return from_candid_record_n36(value);
+function from_candid_DigestItem_n36(value: _DigestItem): DigestItem {
+    return from_candid_record_n37(value);
 }
-function from_candid_DigestResult_n55(value: _DigestResult): DigestResult {
-    return from_candid_variant_n56(value);
+function from_candid_DigestResult_n58(value: _DigestResult): DigestResult {
+    return from_candid_variant_n59(value);
 }
-function from_candid_DigestResults_n32(value: _DigestResults): DigestResults {
-    return from_candid_variant_n33(value);
+function from_candid_DigestResults_n33(value: _DigestResults): DigestResults {
+    return from_candid_variant_n34(value);
 }
-function from_candid_DigestSource_n37(value: _DigestSource): DigestSource {
-    return from_candid_variant_n38(value);
+function from_candid_DigestSource_n38(value: _DigestSource): DigestSource {
+    return from_candid_variant_n39(value);
 }
 function from_candid_Notification_n3(value: _Notification): Notification {
     return from_candid_record_n4(value);
 }
-function from_candid_PreferencesPageResult_n49(value: _PreferencesPageResult): PreferencesPageResult {
-    return from_candid_variant_n50(value);
+function from_candid_PreferencesPageResult_n52(value: _PreferencesPageResult): PreferencesPageResult {
+    return from_candid_variant_n53(value);
 }
-function from_candid_PreferencesResult_n63(value: _PreferencesResult): PreferencesResult {
-    return from_candid_variant_n64(value);
+function from_candid_PreferencesResult_n65(value: _PreferencesResult): PreferencesResult {
+    return from_candid_variant_n66(value);
 }
-function from_candid_PushAlertSettings_n42(value: _PushAlertSettings): PushAlertSettings {
-    return from_candid_record_n43(value);
+function from_candid_PushAlertSettings_n43(value: _PushAlertSettings): PushAlertSettings {
+    return from_candid_record_n44(value);
+}
+function from_candid_PushDeliveryHealthResult_n45(value: _PushDeliveryHealthResult): PushDeliveryHealthResult {
+    return from_candid_variant_n46(value);
 }
 function from_candid_Recurrence_n15(value: _Recurrence): Recurrence {
     return from_candid_variant_n16(value);
 }
-function from_candid_ResultNat16_n23(value: _ResultNat16): ResultNat16 {
-    return from_candid_variant_n24(value);
+function from_candid_ResultNat16_n25(value: _ResultNat16): ResultNat16 {
+    return from_candid_variant_n23(value);
 }
 function from_candid_Result_n1(value: _Result): Result {
     return from_candid_variant_n2(value);
@@ -631,8 +678,8 @@ function from_candid_ScheduledMessage_n10(value: _ScheduledMessage): ScheduledMe
 function from_candid_ScheduledResult_n8(value: _ScheduledResult): ScheduledResult {
     return from_candid_variant_n9(value);
 }
-function from_candid_ScheduledResults_n26(value: _ScheduledResults): ScheduledResults {
-    return from_candid_variant_n27(value);
+function from_candid_ScheduledResults_n27(value: _ScheduledResults): ScheduledResults {
+    return from_candid_variant_n28(value);
 }
 function from_candid_ScheduledStatus_n12(value: _ScheduledStatus): ScheduledStatus {
     return from_candid_variant_n13(value);
@@ -643,7 +690,7 @@ function from_candid_Status_n5(value: _Status): Status {
 function from_candid_opt_n14(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n41(value: [] | [_Notification]): Notification | null {
+function from_candid_opt_n42(value: [] | [_Notification]): Notification | null {
     return value.length === 0 ? null : from_candid_Notification_n3(value[0]);
 }
 function from_candid_opt_n7(value: [] | [string]): string | null {
@@ -715,7 +762,7 @@ function from_candid_record_n11(value: {
         chat_type: from_candid_ChatType_n17(value.chat_type)
     };
 }
-function from_candid_record_n36(value: {
+function from_candid_record_n37(value: {
     id: string;
     topic: [] | [string];
     provider: [] | [string];
@@ -746,12 +793,12 @@ function from_candid_record_n36(value: {
         provider: record_opt_to_undefined(from_candid_opt_n7(value.provider)),
         message_created_at_ms: value.message_created_at_ms,
         summary: value.summary,
-        message_type: from_candid_DigestSource_n37(value.message_type),
+        message_type: from_candid_DigestSource_n38(value.message_type),
         mentions: value.mentions,
         message_id: value.message_id,
         chat_scope_id: value.chat_scope_id,
         digested_at_ms: value.digested_at_ms,
-        classification: from_candid_DigestClassification_n39(value.classification)
+        classification: from_candid_DigestClassification_n40(value.classification)
     };
 }
 function from_candid_record_n4(value: {
@@ -796,7 +843,7 @@ function from_candid_record_n4(value: {
         idempotency_key: value.idempotency_key
     };
 }
-function from_candid_record_n43(value: {
+function from_candid_record_n44(value: {
     updated_by: [] | [string];
     alerts_enabled: boolean;
     updated_at_ms: bigint;
@@ -823,7 +870,7 @@ function from_candid_record_n43(value: {
         failure_threshold_percent: value.failure_threshold_percent
     };
 }
-function from_candid_record_n48(value: {
+function from_candid_record_n51(value: {
     token: string;
     auth: [] | [string];
     user: string;
@@ -922,7 +969,7 @@ function from_candid_variant_n20(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n24(value: {
+function from_candid_variant_n23(value: {
     Ok: number;
 } | {
     Err: string;
@@ -941,7 +988,7 @@ function from_candid_variant_n24(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n25(value: {
+function from_candid_variant_n26(value: {
     Ok: null;
 } | {
     Err: string;
@@ -960,7 +1007,7 @@ function from_candid_variant_n25(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n27(value: {
+function from_candid_variant_n28(value: {
     Ok: Array<_ScheduledMessage>;
 } | {
     Err: string;
@@ -973,13 +1020,13 @@ function from_candid_variant_n27(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n28(value.Ok)
+        Ok: from_candid_vec_n29(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n33(value: {
+function from_candid_variant_n34(value: {
     Ok: Array<_DigestItem>;
 } | {
     Err: string;
@@ -992,13 +1039,13 @@ function from_candid_variant_n33(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n34(value.Ok)
+        Ok: from_candid_vec_n35(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n38(value: {
+function from_candid_variant_n39(value: {
     Club: null;
 } | {
     Group: null;
@@ -1007,7 +1054,7 @@ function from_candid_variant_n38(value: {
 }): DigestSource {
     return "Club" in value ? DigestSource.Club : "Group" in value ? DigestSource.Group : "Team" in value ? DigestSource.Team : value;
 }
-function from_candid_variant_n40(value: {
+function from_candid_variant_n41(value: {
     Question: null;
 } | {
     Info: null;
@@ -1020,7 +1067,26 @@ function from_candid_variant_n40(value: {
 }): DigestClassification {
     return "Question" in value ? DigestClassification.Question : "Info" in value ? DigestClassification.Info : "Action" in value ? DigestClassification.Action : "Social" in value ? DigestClassification.Social : "Decision" in value ? DigestClassification.Decision : value;
 }
-function from_candid_variant_n45(value: {
+function from_candid_variant_n46(value: {
+    Ok: _PushDeliveryHealth;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: PushDeliveryHealth;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n48(value: {
     Ok: Array<_DeviceToken>;
 } | {
     Err: string;
@@ -1033,13 +1099,13 @@ function from_candid_variant_n45(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n46(value.Ok)
+        Ok: from_candid_vec_n49(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n50(value: {
+function from_candid_variant_n53(value: {
     Ok: _PreferencesPage;
 } | {
     Err: string;
@@ -1058,7 +1124,7 @@ function from_candid_variant_n50(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n51(value: {
+function from_candid_variant_n54(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1077,7 +1143,7 @@ function from_candid_variant_n51(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n59(value: {
     Ok: _DigestItem;
 } | {
     Err: string;
@@ -1090,7 +1156,7 @@ function from_candid_variant_n56(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_DigestItem_n35(value.Ok)
+        Ok: from_candid_DigestItem_n36(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1107,7 +1173,7 @@ function from_candid_variant_n6(value: {
 }): Status {
     return "Failed" in value ? Status.Failed : "Delivered" in value ? Status.Delivered : "Processing" in value ? Status.Processing : "Pending" in value ? Status.Pending : value;
 }
-function from_candid_variant_n64(value: {
+function from_candid_variant_n66(value: {
     Ok: _Preferences;
 } | {
     Err: string;
@@ -1148,37 +1214,37 @@ function from_candid_variant_n9(value: {
 function from_candid_vec_n21(value: Array<_Notification>): Array<Notification> {
     return value.map((x)=>from_candid_Notification_n3(x));
 }
-function from_candid_vec_n28(value: Array<_ScheduledMessage>): Array<ScheduledMessage> {
+function from_candid_vec_n29(value: Array<_ScheduledMessage>): Array<ScheduledMessage> {
     return value.map((x)=>from_candid_ScheduledMessage_n10(x));
 }
-function from_candid_vec_n34(value: Array<_DigestItem>): Array<DigestItem> {
-    return value.map((x)=>from_candid_DigestItem_n35(x));
+function from_candid_vec_n35(value: Array<_DigestItem>): Array<DigestItem> {
+    return value.map((x)=>from_candid_DigestItem_n36(x));
 }
-function from_candid_vec_n46(value: Array<_DeviceToken>): Array<DeviceToken> {
-    return value.map((x)=>from_candid_DeviceToken_n47(x));
+function from_candid_vec_n49(value: Array<_DeviceToken>): Array<DeviceToken> {
+    return value.map((x)=>from_candid_DeviceToken_n50(x));
 }
-function to_candid_ChatType_n58(value: ChatType): _ChatType {
-    return to_candid_variant_n59(value);
-}
-function to_candid_DigestClassification_n53(value: DigestClassification): _DigestClassification {
-    return to_candid_variant_n54(value);
-}
-function to_candid_DigestSource_n30(value: DigestSource): _DigestSource {
-    return to_candid_variant_n31(value);
-}
-function to_candid_Recurrence_n60(value: Recurrence): _Recurrence {
+function to_candid_ChatType_n60(value: ChatType): _ChatType {
     return to_candid_variant_n61(value);
 }
-function to_candid_opt_n22(value: string | null): [] | [string] {
+function to_candid_DigestClassification_n56(value: DigestClassification): _DigestClassification {
+    return to_candid_variant_n57(value);
+}
+function to_candid_DigestSource_n31(value: DigestSource): _DigestSource {
+    return to_candid_variant_n32(value);
+}
+function to_candid_Recurrence_n62(value: Recurrence): _Recurrence {
+    return to_candid_variant_n63(value);
+}
+function to_candid_opt_n24(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n29(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n30(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n62(value: Recurrence | null): [] | [_Recurrence] {
-    return value === null ? candid_none() : candid_some(to_candid_Recurrence_n60(value));
+function to_candid_opt_n64(value: Recurrence | null): [] | [_Recurrence] {
+    return value === null ? candid_none() : candid_some(to_candid_Recurrence_n62(value));
 }
-function to_candid_variant_n31(value: DigestSource): {
+function to_candid_variant_n32(value: DigestSource): {
     Club: null;
 } | {
     Group: null;
@@ -1193,7 +1259,7 @@ function to_candid_variant_n31(value: DigestSource): {
         Team: null
     } : value;
 }
-function to_candid_variant_n54(value: DigestClassification): {
+function to_candid_variant_n57(value: DigestClassification): {
     Question: null;
 } | {
     Info: null;
@@ -1216,7 +1282,7 @@ function to_candid_variant_n54(value: DigestClassification): {
         Decision: null
     } : value;
 }
-function to_candid_variant_n59(value: ChatType): {
+function to_candid_variant_n61(value: ChatType): {
     Club: null;
 } | {
     Group: null;
@@ -1243,7 +1309,7 @@ function to_candid_variant_n59(value: ChatType): {
         Direct: null
     } : value;
 }
-function to_candid_variant_n61(value: Recurrence): {
+function to_candid_variant_n63(value: Recurrence): {
     Weekly: null;
 } | {
     None: null;

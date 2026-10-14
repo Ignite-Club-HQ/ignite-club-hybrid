@@ -33,6 +33,9 @@ persistent actor class Main(governorInit : Principal) {
   // mute list accepted as-is); any other caller may only fan out their own
   // messages. Fail-closed while unset. See docs/icp-chat-notify-fanout-spec.md.
   var messagingDomainCanister : ?Principal;
+  // Governor-set club_domain canister id, used to verify app_admin grants
+  // for admin-only endpoints (push health, stale token cleanup).
+  var clubDomainCanister : ?Principal;
   // Device push tokens owned by principal text (see Types.DeviceToken).
   // Caller-scoped writes; the delivery worker reads/prunes via worker-gated
   // methods below.
@@ -43,6 +46,31 @@ persistent actor class Main(governorInit : Principal) {
     if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
     messagingDomainCanister := ?id;
     #Ok
+  };
+
+  public shared ({ caller }) func set_club_domain_canister(id : Principal) : async { #Ok; #Err : Text } {
+    governorOnly(caller);
+    if (id.equal(Principal.anonymous())) { return #Err("Invalid canister id") };
+    clubDomainCanister := ?id;
+    #Ok
+  };
+
+  // Governor or club_domain app_admin grant. Fail-closed while
+  // clubDomainCanister is unset (mirrors messaging_domain/events_domain).
+  func appAdminOnly(caller : Principal) : async { #Ok; #Err : Text } {
+    authenticated(caller);
+    switch (governor) {
+      case (?owner) { if (owner.equal(caller)) { return #Ok } };
+      case null {};
+    };
+    switch (clubDomainCanister) {
+      case null { #Err("club_domain canister not configured") };
+      case (?cd) {
+        let clubDomain = actor (Principal.toText(cd)) : actor { is_app_admin : shared query (Principal) -> async Bool };
+        let isAdmin = try { await clubDomain.is_app_admin(caller) } catch (_) { false };
+        if (isAdmin) { #Ok } else { #Err("App admin required") };
+      };
+    };
   };
 
   func authenticated(caller : Principal) {
@@ -1048,6 +1076,58 @@ persistent actor class Main(governorInit : Principal) {
       if (entry.user == user and tokens.any(func(token : Text) : Bool = token == entry.token)) { removed += 1; false } else { true }
     });
     #Ok(removed)
+  };
+
+  // ---- Admin: 24h push delivery health + stale device-token cleanup ----
+  // App-admin gated (governor or club_domain app_admin). Backs
+  // PushAnalyticsPage's health dashboard and "Cleanup Stale" button.
+  public shared ({ caller }) func get_push_delivery_health(now_ms : Nat64) : async Types.PushDeliveryHealthResult {
+    switch (await appAdminOnly(caller)) {
+      case (#Err(e)) { return #Err(e) };
+      case (#Ok) {};
+    };
+    let windowMs : Nat64 = 24 * 3_600_000;
+    let cutoff : Nat64 = if (now_ms > windowMs) { now_ms - windowMs } else { 0 };
+    var total : Nat32 = 0;
+    var pending : Nat32 = 0;
+    var processing : Nat32 = 0;
+    var delivered : Nat32 = 0;
+    var failed : Nat32 = 0;
+    for (item in items.values()) {
+      if (item.created_at_ms >= cutoff) {
+        total += 1;
+        switch (item.status) {
+          case (#Pending) { pending += 1 };
+          case (#Processing) { processing += 1 };
+          case (#Delivered) { delivered += 1 };
+          case (#Failed) { failed += 1 };
+        };
+      };
+    };
+    #Ok({
+      window_hours = 24;
+      generated_at_ms = now_ms;
+      total_24h = total;
+      pending_24h = pending;
+      processing_24h = processing;
+      delivered_24h = delivered;
+      failed_24h = failed;
+      device_token_count = Nat.toNat32(device_tokens.size());
+    });
+  };
+
+  // Removes device tokens untouched for more than `max_age_ms` (stale/dead
+  // registrations — same intent as the Supabase cleanup-push-subscriptions
+  // edge function). Returns the number removed.
+  public shared ({ caller }) func cleanup_stale_device_tokens(now_ms : Nat64, max_age_ms : Nat64) : async Types.DeviceTokenCountResult {
+    switch (await appAdminOnly(caller)) {
+      case (#Err(e)) { return #Err(e) };
+      case (#Ok) {};
+    };
+    let cutoff : Nat64 = if (now_ms > max_age_ms) { now_ms - max_age_ms } else { 0 };
+    let before = device_tokens.size();
+    device_tokens := device_tokens.filter(func(t : Types.DeviceToken) : Bool { t.updated_at_ms >= cutoff });
+    #Ok(Nat.toNat16(before - device_tokens.size()));
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.

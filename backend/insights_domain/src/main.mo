@@ -76,6 +76,54 @@ persistent actor class Main(governorInit : Principal) {
     #Ok
   };
 
+  // App-wide app_admin grants (club/team scoped grants use grant_role above,
+  // governor-only). App admins themselves are managed by any existing
+  // app_admin (not just the governor) via the functions below, which back
+  // ManageUsersPage's "App Admins" tab in ICP mode. The sentinel club_id
+  // "global" has no scoping meaning — isAppAdmin's hasRole lookup passes
+  // club = null, matching any club_id — it only satisfies grant_role's
+  // non-empty-club_id-shaped storage convention for this role grant.
+  transient let APP_ADMIN_CLUB_SENTINEL = "global";
+
+  // Mirrors ManageUsersPage's "Fetch all app admins" query. App-admin gated
+  // (not governor-only) so any current app admin can audit the roster.
+  public query ({ caller }) func list_app_admins() : async { #Ok : [Principal]; #Err : Text } {
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    let admins = roles.filter(func(item) = item.role == "app_admin");
+    var out : [Principal] = [];
+    for (item in admins.values()) {
+      if (not out.any(func(p) = p.equal(item.user))) { out := out.concat([item.user]) };
+    };
+    #Ok(out)
+  };
+
+  // Mirrors ManageUsersPage's "Add Admin" action. App-admin gated: any
+  // existing app admin may promote another principal (not governor-only —
+  // Internet Identity app admins have no Supabase-style single owner).
+  public shared ({ caller }) func grant_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (principal.equal(Principal.anonymous())) return #Err("Invalid principal");
+    if (not roles.any(func(item) = item.user.equal(principal) and item.role == "app_admin")) {
+      roles := roles.concat([{ user = principal; role = "app_admin"; club_id = APP_ADMIN_CLUB_SENTINEL; team_id = null }]);
+    };
+    #Ok
+  };
+
+  // Mirrors ManageUsersPage's "Remove Admin" action. App-admin gated, but
+  // refuses revoking the caller's own grant (UI-level self-removal footgun)
+  // and refuses revoking the governor (who is always an implicit app admin
+  // via isGovernor — removing a role grant from them would be a no-op that
+  // misleads the admin UI into thinking they lost access).
+  public shared ({ caller }) func revoke_app_admin(principal : Principal) : async { #Ok; #Err : Text } {
+    auth(caller);
+    if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (principal.equal(caller)) return #Err("Cannot revoke your own app admin access");
+    if (isGovernor(principal)) return #Err("Cannot revoke the governor's app admin access");
+    roles := roles.filter(func(item) = not (item.user.equal(principal) and item.role == "app_admin"));
+    #Ok
+  };
+
   // ================= Perf / analytics ingest =================
 
   public shared ({ caller }) func record_web_vital(metric_name : Text, metric_value : Float, rating : Text, page_path : Text) : async { #Ok; #Err : Text } {
@@ -345,6 +393,14 @@ persistent actor class Main(governorInit : Principal) {
         #Ok(updated)
       };
     }
+  };
+
+  // Mirrors ManageFeedbackPage's delete action (Supabase `feedback.delete`).
+  public shared ({ caller }) func delete_feedback(id : Text) : async { #Ok; #Err : Text } {
+    auth(caller); if (not isAppAdmin(caller)) return #Err("App admin required");
+    if (not feedback.any(func(item) = item.id == id)) return #Err("Feedback not found");
+    feedback := feedback.filter(func(item) = item.id != id);
+    #Ok
   };
 
   // ================= Client perf log =================

@@ -66,6 +66,8 @@ persistent actor class Main(governorInit : Principal) {
   var pinnedMessages : [Types.PinnedMessage];
   var contentReports : [Types.ContentReport];
   var groupJoinPolicies : [{ conversation_id : Text; join_policy : Text; category : ?Text }];
+  // Cooldown log for run_chat_photo_gallery_reminders (admin "run now").
+  var chatPhotoReminderLog : [Types.ChatPhotoReminderLog];
   // Governor-set notification_queue canister id for the chat notify fan-out
   // hook. Fail-closed while unset: messages send fine, no chat notifications
   // are enqueued. See docs/icp-chat-notify-fanout-spec.md.
@@ -675,6 +677,111 @@ persistent actor class Main(governorInit : Principal) {
       case (?c) { if (not c.equal(caller)) return #Err("club_domain only") };
     };
     #Ok(purgeConversations(func(c) = c.team_id == ?team_id, null))
+  };
+
+  // ===================== Chat photo gallery reminder sweep =====================
+  // On-chain counterpart of the Supabase chat-photo-gallery-reminders edge
+  // function / AdminChatPhotoRemindersPage "Run now" button. Scans team chat
+  // messages with an image/photo attachment whose age falls in
+  // [window_end_hours, window_start_hours] ago, skips an (team, author) pair
+  // still inside its cooldown, and nudges the uploader through
+  // notification_queue.fan_out. App-admin gated (governor or club_domain's
+  // app_admin grant), matching this canister's existing admin pattern (see
+  // isGovernor / clubDomainRef / is_app_admin above).
+  func isPhotoAttachment(attachment : ?Types.Attachment) : Bool {
+    switch (attachment) {
+      case (?a) { a.kind == "image" or a.kind == "photo" };
+      case null { false };
+    }
+  };
+
+  func lastRemindedMs(team_id : Text, author : Principal) : ?Nat64 {
+    for (entry in chatPhotoReminderLog.values()) {
+      if (entry.team_id == team_id and entry.author.equal(author)) { return ?entry.last_reminded_ms };
+    };
+    null
+  };
+
+  func recordReminded(team_id : Text, author : Principal, now_ms : Nat64) {
+    var found = false;
+    chatPhotoReminderLog := chatPhotoReminderLog.map(func(entry : Types.ChatPhotoReminderLog) : Types.ChatPhotoReminderLog {
+      if (entry.team_id == team_id and entry.author.equal(author)) { found := true; { entry with last_reminded_ms = now_ms } } else { entry }
+    });
+    if (not found) {
+      chatPhotoReminderLog := chatPhotoReminderLog.concat([{ team_id; author; last_reminded_ms = now_ms }]);
+    };
+  };
+
+  public shared ({ caller }) func run_chat_photo_gallery_reminders(
+    now_ms : Nat64,
+    window_start_hours : Nat32,
+    window_end_hours : Nat32,
+    cooldown_days : Nat32,
+  ) : async Types.ChatPhotoReminderResult {
+    auth(caller);
+    if (not isGovernor(caller)) {
+      let clubDomain = await clubDomainRef();
+      switch (clubDomain) {
+        case null { return #Err("club_domain canister not configured") };
+        case (?cd) { if (not (await cd.is_app_admin(caller))) { return #Err("App admin required") } };
+      };
+    };
+    if (window_end_hours <= window_start_hours) return #Err("window_end_hours must exceed window_start_hours");
+    let startDeltaMs = Nat64.fromNat(Nat32.toNat(window_start_hours)) * 3_600_000;
+    let endDeltaMs = Nat64.fromNat(Nat32.toNat(window_end_hours)) * 3_600_000;
+    let newestEligibleMs : Nat64 = if (now_ms > startDeltaMs) { now_ms - startDeltaMs } else { 0 };
+    let oldestEligibleMs : Nat64 = if (now_ms > endDeltaMs) { now_ms - endDeltaMs } else { 0 };
+    let cooldownMs = Nat64.fromNat(Nat32.toNat(cooldown_days)) * 86_400_000;
+    var scanned : Nat32 = 0;
+    var posted : Nat32 = 0;
+    var skipped : Nat32 = 0;
+    let queueRef : ?(actor { fan_out : shared ([Text], Text, Text, Text, Text, ?Text) -> async { #Ok : Nat16; #Err : Text } }) = switch (notificationQueueCanister) {
+      case (?nq) { ?(actor (Principal.toText(nq))) };
+      case null { null };
+    };
+    for (msg in messages.values()) {
+      if (isPhotoAttachment(msg.attachment) and msg.created_at_ms >= oldestEligibleMs and msg.created_at_ms <= newestEligibleMs) {
+        var teamId : ?Text = null;
+        var clubId : ?Text = null;
+        for (c in conversations.values()) {
+          if (c.id == msg.conversation_id) { teamId := c.team_id; clubId := ?c.club_id };
+        };
+        switch (teamId) {
+          case null {}; // only team chats are in scope
+          case (?team) {
+            scanned += 1;
+            let onCooldown = switch (lastRemindedMs(team, msg.sender)) {
+              case (?last) { now_ms < last + cooldownMs };
+              case null { false };
+            };
+            if (onCooldown) {
+              skipped += 1;
+            } else {
+              switch (queueRef, clubId) {
+                case (?queue, ?club) {
+                  try {
+                    let result = await queue.fan_out(
+                      [Principal.toText(msg.sender)],
+                      club,
+                      "media_chat_photo_reminder",
+                      "You shared a photo in team chat — add it to the team gallery so everyone can see it.",
+                      "chat-photo-reminder-" # msg.id,
+                      ?msg.conversation_id,
+                    );
+                    switch (result) {
+                      case (#Ok(_)) { posted += 1; recordReminded(team, msg.sender, now_ms) };
+                      case (#Err(_)) { skipped += 1 };
+                    };
+                  } catch (_) { skipped += 1 };
+                };
+                case (_, _) { skipped += 1 };
+              };
+            };
+          };
+        };
+      };
+    };
+    #Ok({ scanned; posted; skipped });
   };
 
   func chatNotifyPreview(body : Text, attachment : ?Types.Attachment) : Text {

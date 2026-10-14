@@ -157,6 +157,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    delete_feedback(id: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_ad_setting(location: string): Promise<AppAdSetting | null>;
     get_benchmarks(metric_keys: Array<string>): Promise<{
         __kind__: "Ok";
@@ -175,6 +182,13 @@ export interface MainInterface {
     get_sponsor_performance(sponsor_id: string, period: string): Promise<{
         __kind__: "Ok";
         Ok: SponsorPerformance;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    grant_app_admin(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -205,6 +219,13 @@ export interface MainInterface {
     list_ads(): Promise<{
         __kind__: "Ok";
         Ok: Array<AppAd>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    list_app_admins(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
     } | {
         __kind__: "Err";
         Err: string;
@@ -349,7 +370,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    rekey_principal(old: Principal, new_: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -359,6 +380,13 @@ export interface MainInterface {
     resolve_admin_alert(id: string): Promise<{
         __kind__: "Ok";
         Ok: AdminAlert;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    revoke_app_admin(principal: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
     } | {
         __kind__: "Err";
         Err: string;
@@ -742,6 +770,16 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.delete_ad(arg0);
         return from_candid_variant_n3(result);
     }
+    async delete_feedback(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.delete_feedback(arg0);
+        return from_candid_variant_n3(result);
+    }
     async get_ad_setting(arg0: string): Promise<AppAdSetting | null> {
         const result = await this.actor.get_ad_setting(arg0);
         return from_candid_opt_n24(result);
@@ -775,6 +813,16 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.get_sponsor_performance(arg0, arg1);
         return from_candid_variant_n32(result);
+    }
+    async grant_app_admin(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.grant_app_admin(arg0);
+        return from_candid_variant_n3(result);
     }
     async grant_role(arg0: Principal, arg1: string, arg2: string, arg3: string | null): Promise<{
         __kind__: "Ok";
@@ -824,6 +872,16 @@ export class Insights_domain implements insights_domainInterface {
         const result = await this.actor.list_ads();
         return from_candid_variant_n40(result);
     }
+    async list_app_admins(): Promise<{
+        __kind__: "Ok";
+        Ok: Array<Principal>;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.list_app_admins();
+        return from_candid_variant_n41(result);
+    }
     async list_audit_logs(arg0: Principal | null, arg1: string | null, arg2: string | null, arg3: number, arg4: number): Promise<{
         __kind__: "Ok";
         Ok: {
@@ -834,8 +892,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_audit_logs(to_candid_opt_n41(arg0), to_candid_opt_n2(arg1), to_candid_opt_n2(arg2), arg3, arg4);
-        return from_candid_variant_n42(result);
+        const result = await this.actor.list_audit_logs(to_candid_opt_n42(arg0), to_candid_opt_n2(arg1), to_candid_opt_n2(arg2), arg3, arg4);
+        return from_candid_variant_n43(result);
     }
     async list_feedback(arg0: FeedbackStatus | null, arg1: number, arg2: number): Promise<{
         __kind__: "Ok";
@@ -847,8 +905,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.list_feedback(to_candid_opt_n47(arg0), arg1, arg2);
-        return from_candid_variant_n50(result);
+        const result = await this.actor.list_feedback(to_candid_opt_n48(arg0), arg1, arg2);
+        return from_candid_variant_n51(result);
     }
     async list_user_activity(arg0: string | null, arg1: bigint, arg2: bigint): Promise<{
         __kind__: "Ok";
@@ -858,11 +916,11 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.list_user_activity(to_candid_opt_n2(arg0), arg1, arg2);
-        return from_candid_variant_n57(result);
+        return from_candid_variant_n58(result);
     }
     async my_feedback(): Promise<Array<Feedback>> {
         const result = await this.actor.my_feedback();
-        return from_candid_vec_n52(result);
+        return from_candid_vec_n53(result);
     }
     async perf_aggregate(arg0: string, arg1: string | null, arg2: bigint, arg3: bigint): Promise<{
         __kind__: "Ok";
@@ -872,7 +930,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.perf_aggregate(arg0, to_candid_opt_n2(arg1), arg2, arg3);
-        return from_candid_variant_n61(result);
+        return from_candid_variant_n62(result);
     }
     async photo_engagement_totals(arg0: Array<string>): Promise<{
         __kind__: "Ok";
@@ -882,7 +940,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.photo_engagement_totals(arg0);
-        return from_candid_variant_n62(result);
+        return from_candid_variant_n63(result);
     }
     async record_active_user(arg0: string, arg1: string): Promise<{
         __kind__: "Ok";
@@ -951,7 +1009,7 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.record_photo_engagement(arg0, to_candid_PhotoEngagementKind_n63(arg1));
+        const result = await this.actor.record_photo_engagement(arg0, to_candid_PhotoEngagementKind_n64(arg1));
         return from_candid_variant_n3(result);
     }
     async record_photo_upload(arg0: string, arg1: string): Promise<{
@@ -1032,7 +1090,7 @@ export class Insights_domain implements insights_domainInterface {
         err: string;
     }> {
         const result = await this.actor.rekey_principal(arg0, arg1, arg2);
-        return from_candid_variant_n65(result);
+        return from_candid_variant_n66(result);
     }
     async resolve_admin_alert(arg0: string): Promise<{
         __kind__: "Ok";
@@ -1043,6 +1101,16 @@ export class Insights_domain implements insights_domainInterface {
     }> {
         const result = await this.actor.resolve_admin_alert(arg0);
         return from_candid_variant_n17(result);
+    }
+    async revoke_app_admin(arg0: Principal): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.revoke_app_admin(arg0);
+        return from_candid_variant_n3(result);
     }
     async set_ad_active(arg0: string, arg1: boolean): Promise<{
         __kind__: "Ok";
@@ -1061,7 +1129,7 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n66(arg3), to_candid_opt_n66(arg4), to_candid_opt_n66(arg5), to_candid_opt_n66(arg6), to_candid_opt_n66(arg7), to_candid_opt_n67(arg8));
+        const result = await this.actor.set_benchmark(arg0, arg1, arg2, to_candid_opt_n67(arg3), to_candid_opt_n67(arg4), to_candid_opt_n67(arg5), to_candid_opt_n67(arg6), to_candid_opt_n67(arg7), to_candid_opt_n68(arg8));
         return from_candid_variant_n3(result);
     }
     async submit_feedback(arg0: string, arg1: string | null, arg2: string, arg3: string | null): Promise<{
@@ -1072,7 +1140,7 @@ export class Insights_domain implements insights_domainInterface {
         Err: string;
     }> {
         const result = await this.actor.submit_feedback(arg0, to_candid_opt_n2(arg1), arg2, to_candid_opt_n2(arg3));
-        return from_candid_variant_n68(result);
+        return from_candid_variant_n69(result);
     }
     async transfer_governorship(arg0: Principal): Promise<{
         __kind__: "Ok";
@@ -1101,8 +1169,8 @@ export class Insights_domain implements insights_domainInterface {
         __kind__: "Err";
         Err: string;
     }> {
-        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n48(arg1), to_candid_opt_n2(arg2));
-        return from_candid_variant_n68(result);
+        const result = await this.actor.update_feedback_status(arg0, to_candid_FeedbackStatus_n49(arg1), to_candid_opt_n2(arg2));
+        return from_candid_variant_n69(result);
     }
     async upsert_ad_setting(arg0: string, arg1: boolean, arg2: boolean, arg3: boolean): Promise<{
         __kind__: "Ok";
@@ -1124,20 +1192,20 @@ function from_candid_AlertStatus_n20(value: _AlertStatus): AlertStatus {
 function from_candid_AppAd_n14(value: _AppAd): AppAd {
     return from_candid_record_n15(value);
 }
-function from_candid_AuditLog_n45(value: _AuditLog): AuditLog {
-    return from_candid_record_n46(value);
+function from_candid_AuditLog_n46(value: _AuditLog): AuditLog {
+    return from_candid_record_n47(value);
 }
 function from_candid_Benchmark_n27(value: _Benchmark): Benchmark {
     return from_candid_record_n28(value);
 }
-function from_candid_FeedbackStatus_n55(value: _FeedbackStatus): FeedbackStatus {
-    return from_candid_variant_n56(value);
+function from_candid_FeedbackStatus_n56(value: _FeedbackStatus): FeedbackStatus {
+    return from_candid_variant_n57(value);
 }
-function from_candid_Feedback_n53(value: _Feedback): Feedback {
-    return from_candid_record_n54(value);
+function from_candid_Feedback_n54(value: _Feedback): Feedback {
+    return from_candid_record_n55(value);
 }
-function from_candid_UserActivityEntry_n59(value: _UserActivityEntry): UserActivityEntry {
-    return from_candid_record_n60(value);
+function from_candid_UserActivityEntry_n60(value: _UserActivityEntry): UserActivityEntry {
+    return from_candid_record_n61(value);
 }
 function from_candid_opt_n16(value: [] | [string]): string | null {
     return value.length === 0 ? null : value[0];
@@ -1274,7 +1342,7 @@ function from_candid_record_n28(value: {
         metric_key: value.metric_key
     };
 }
-function from_candid_record_n43(value: {
+function from_candid_record_n44(value: {
     total: number;
     items: Array<_AuditLog>;
 }): {
@@ -1283,10 +1351,10 @@ function from_candid_record_n43(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n44(value.items)
+        items: from_candid_vec_n45(value.items)
     };
 }
-function from_candid_record_n46(value: {
+function from_candid_record_n47(value: {
     id: string;
     target_user_name: [] | [string];
     action_type: string;
@@ -1316,7 +1384,7 @@ function from_candid_record_n46(value: {
         target_user_id: record_opt_to_undefined(from_candid_opt_n16(value.target_user_id))
     };
 }
-function from_candid_record_n51(value: {
+function from_candid_record_n52(value: {
     total: number;
     items: Array<_Feedback>;
 }): {
@@ -1325,10 +1393,10 @@ function from_candid_record_n51(value: {
 } {
     return {
         total: value.total,
-        items: from_candid_vec_n52(value.items)
+        items: from_candid_vec_n53(value.items)
     };
 }
-function from_candid_record_n54(value: {
+function from_candid_record_n55(value: {
     id: string;
     status: _FeedbackStatus;
     title: [] | [string];
@@ -1353,7 +1421,7 @@ function from_candid_record_n54(value: {
 } {
     return {
         id: value.id,
-        status: from_candid_FeedbackStatus_n55(value.status),
+        status: from_candid_FeedbackStatus_n56(value.status),
         title: record_opt_to_undefined(from_candid_opt_n16(value.title)),
         kind: value.kind,
         user: value.user,
@@ -1364,7 +1432,7 @@ function from_candid_record_n54(value: {
         admin_notes: record_opt_to_undefined(from_candid_opt_n16(value.admin_notes))
     };
 }
-function from_candid_record_n60(value: {
+function from_candid_record_n61(value: {
     page_path: string;
     started_at_ms: bigint;
     session_id: string;
@@ -1626,7 +1694,26 @@ function from_candid_variant_n40(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n42(value: {
+function from_candid_variant_n41(value: {
+    Ok: Array<Principal>;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Array<Principal>;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n43(value: {
     Ok: {
         total: number;
         items: Array<_AuditLog>;
@@ -1645,7 +1732,7 @@ function from_candid_variant_n42(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n43(value.Ok)
+        Ok: from_candid_record_n44(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1670,7 +1757,7 @@ function from_candid_variant_n5(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n50(value: {
+function from_candid_variant_n51(value: {
     Ok: {
         total: number;
         items: Array<_Feedback>;
@@ -1689,13 +1776,13 @@ function from_candid_variant_n50(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_record_n51(value.Ok)
+        Ok: from_candid_record_n52(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n56(value: {
+function from_candid_variant_n57(value: {
     Open: null;
 } | {
     InProgress: null;
@@ -1704,7 +1791,7 @@ function from_candid_variant_n56(value: {
 }): FeedbackStatus {
     return "Open" in value ? FeedbackStatus.Open : "InProgress" in value ? FeedbackStatus.InProgress : "Resolved" in value ? FeedbackStatus.Resolved : value;
 }
-function from_candid_variant_n57(value: {
+function from_candid_variant_n58(value: {
     Ok: Array<_UserActivityEntry>;
 } | {
     Err: string;
@@ -1717,7 +1804,7 @@ function from_candid_variant_n57(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_vec_n58(value.Ok)
+        Ok: from_candid_vec_n59(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1742,7 +1829,7 @@ function from_candid_variant_n6(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n61(value: {
+function from_candid_variant_n62(value: {
     Ok: _PerfAggregate;
 } | {
     Err: string;
@@ -1761,7 +1848,7 @@ function from_candid_variant_n61(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n62(value: {
+function from_candid_variant_n63(value: {
     Ok: Array<_PhotoEngagementTotal>;
 } | {
     Err: string;
@@ -1780,7 +1867,7 @@ function from_candid_variant_n62(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n65(value: {
+function from_candid_variant_n66(value: {
     ok: bigint;
 } | {
     err: string;
@@ -1799,7 +1886,7 @@ function from_candid_variant_n65(value: {
         err: value.err
     } : value;
 }
-function from_candid_variant_n68(value: {
+function from_candid_variant_n69(value: {
     Ok: _Feedback;
 } | {
     Err: string;
@@ -1812,7 +1899,7 @@ function from_candid_variant_n68(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_Feedback_n53(value.Ok)
+        Ok: from_candid_Feedback_n54(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
@@ -1890,14 +1977,14 @@ function from_candid_vec_n33(value: Array<_AppAd>): Array<AppAd> {
 function from_candid_vec_n39(value: Array<_AdminAlert>): Array<AdminAlert> {
     return value.map((x)=>from_candid_AdminAlert_n18(x));
 }
-function from_candid_vec_n44(value: Array<_AuditLog>): Array<AuditLog> {
-    return value.map((x)=>from_candid_AuditLog_n45(x));
+function from_candid_vec_n45(value: Array<_AuditLog>): Array<AuditLog> {
+    return value.map((x)=>from_candid_AuditLog_n46(x));
 }
-function from_candid_vec_n52(value: Array<_Feedback>): Array<Feedback> {
-    return value.map((x)=>from_candid_Feedback_n53(x));
+function from_candid_vec_n53(value: Array<_Feedback>): Array<Feedback> {
+    return value.map((x)=>from_candid_Feedback_n54(x));
 }
-function from_candid_vec_n58(value: Array<_UserActivityEntry>): Array<UserActivityEntry> {
-    return value.map((x)=>from_candid_UserActivityEntry_n59(x));
+function from_candid_vec_n59(value: Array<_UserActivityEntry>): Array<UserActivityEntry> {
+    return value.map((x)=>from_candid_UserActivityEntry_n60(x));
 }
 function to_candid_AlertStatus_n36(value: AlertStatus): _AlertStatus {
     return to_candid_variant_n37(value);
@@ -1905,11 +1992,11 @@ function to_candid_AlertStatus_n36(value: AlertStatus): _AlertStatus {
 function to_candid_AppAdInput_n11(value: AppAdInput): _AppAdInput {
     return to_candid_record_n12(value);
 }
-function to_candid_FeedbackStatus_n48(value: FeedbackStatus): _FeedbackStatus {
-    return to_candid_variant_n49(value);
+function to_candid_FeedbackStatus_n49(value: FeedbackStatus): _FeedbackStatus {
+    return to_candid_variant_n50(value);
 }
-function to_candid_PhotoEngagementKind_n63(value: PhotoEngagementKind): _PhotoEngagementKind {
-    return to_candid_variant_n64(value);
+function to_candid_PhotoEngagementKind_n64(value: PhotoEngagementKind): _PhotoEngagementKind {
+    return to_candid_variant_n65(value);
 }
 function to_candid_opt_n2(value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
@@ -1917,16 +2004,16 @@ function to_candid_opt_n2(value: string | null): [] | [string] {
 function to_candid_opt_n35(value: AlertStatus | null): [] | [_AlertStatus] {
     return value === null ? candid_none() : candid_some(to_candid_AlertStatus_n36(value));
 }
-function to_candid_opt_n41(value: Principal | null): [] | [Principal] {
+function to_candid_opt_n42(value: Principal | null): [] | [Principal] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n47(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
-    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n48(value));
-}
-function to_candid_opt_n66(value: number | null): [] | [number] {
-    return value === null ? candid_none() : candid_some(value);
+function to_candid_opt_n48(value: FeedbackStatus | null): [] | [_FeedbackStatus] {
+    return value === null ? candid_none() : candid_some(to_candid_FeedbackStatus_n49(value));
 }
 function to_candid_opt_n67(value: number | null): [] | [number] {
+    return value === null ? candid_none() : candid_some(value);
+}
+function to_candid_opt_n68(value: number | null): [] | [number] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n12(value: {
@@ -1979,7 +2066,7 @@ function to_candid_variant_n37(value: AlertStatus): {
         Resolved: null
     } : value;
 }
-function to_candid_variant_n49(value: FeedbackStatus): {
+function to_candid_variant_n50(value: FeedbackStatus): {
     Open: null;
 } | {
     InProgress: null;
@@ -1994,7 +2081,7 @@ function to_candid_variant_n49(value: FeedbackStatus): {
         Resolved: null
     } : value;
 }
-function to_candid_variant_n64(value: PhotoEngagementKind): {
+function to_candid_variant_n65(value: PhotoEngagementKind): {
     View: null;
 } | {
     Comment: null;

@@ -227,4 +227,17 @@ module {
 
   public type DeviceTokensResult = { #Ok : [DeviceToken]; #Err : Text };
   public type DeviceTokenCountResult = { #Ok : Nat16; #Err : Text };
+
+  // ---- Admin push delivery health / stale device-token cleanup ----
+  public type PushDeliveryHealth = {
+    window_hours : Nat32;
+    generated_at_ms : Nat64;
+    total_24h : Nat32;
+    pending_24h : Nat32;
+    processing_24h : Nat32;
+    delivered_24h : Nat32;
+    failed_24h : Nat32;
+    device_token_count : Nat32;
+  };
+  public type PushDeliveryHealthResult = { #Ok : PushDeliveryHealth; #Err : Text };
 }

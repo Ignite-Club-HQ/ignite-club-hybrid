@@ -94,7 +94,19 @@ persistent actor class Main(governorInit : Principal) {
   // Game event ids that already received the post-game photo prompt
   // (migration 20261020_000000); swept by _reminderTimer.
   var photoPromptsSent : [Text];
+  // Per-event sponsor links (event_id -> sponsor ids), set via
+  // set_event_sponsors/get_event_sponsors (migration 20261023_000000).
+  // (declared earlier alongside the other list vars; kept here as the single
+  // source of truth for its migration note.)
+  // Append-only recent-write log backing the admin "sync storm" rate view
+  // (AdminActiveGamesPage): one entry per sync_active_game call, trimmed to
+  // the last writeLogWindowMs() on every append so it stays bounded instead
+  // of growing with total lifetime writes (migration 20261023_000000).
+  var activeGameWriteLog : [(Text, Nat64)];
 
+  // Bounded window for activeGameWriteLog (10 minutes) — trimmed on every
+  // sync_active_game write so the log never grows with lifetime write count.
+  func writeLogWindowMs() : Nat64 { 600_000 };
   func auth(caller : Principal) { if (caller.equal(Principal.anonymous())) Runtime.trap("Authenticated caller required") };
   func valid(value : Text) : Bool { value != "" and value.size() <= 128 };
   func nowMs() : Nat64 { Nat.toNat64(Int.abs(Time.now()) / 1_000_000) };
@@ -147,6 +159,25 @@ persistent actor class Main(governorInit : Principal) {
   };
   func isGovernor(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and governor.equal(caller)
+  };
+
+  // Typed view of the club_domain app_admin query. Fail-closed while
+  // clubDomainCanister is unset (set_club_domain_canister, governor-only).
+  type ClubDomainRef = actor { is_app_admin : shared query (Principal) -> async Bool };
+  func clubDomainRef() : ?ClubDomainRef {
+    switch (clubDomainCanister) {
+      case null { null };
+      case (?cd) { ?(actor (Principal.toText(cd)) : ClubDomainRef) };
+    };
+  };
+  // Platform-only (governor or club_domain's app_admin grant) — used to gate
+  // the admin active-games monitor (AdminActiveGamesPage), never a club role.
+  func requireAppAdmin(caller : Principal) : async Bool {
+    if (isGovernor(caller)) return true;
+    switch (clubDomainRef()) {
+      case null { false };
+      case (?cd) { try { await cd.is_app_admin(caller) } catch (_) { false } };
+    };
   };
   func hasBulkAccess(caller : Principal) : Bool {
     not caller.equal(Principal.anonymous()) and bulkAccessPrincipals.any(func(p) = p.equal(caller))
@@ -1811,7 +1842,38 @@ persistent actor class Main(governorInit : Principal) {
       user_id = caller; team_id; timer_state_json; pitch_state_json; board_session_id; is_active = true; updated_at_ms = nowMs();
     };
     activeGames := activeGames.filter(func(item) = not matches(item)).concat([value]);
+    let logTeam = switch (team_id) { case (?t) t; case null "" };
+    let cutoff : Nat64 = if (value.updated_at_ms > writeLogWindowMs()) value.updated_at_ms - writeLogWindowMs() else 0;
+    activeGameWriteLog := activeGameWriteLog.filter(func((_, ts)) = ts >= cutoff).concat([(logTeam, value.updated_at_ms)]);
     #Ok(value)
+  };
+
+  // Admin monitor (AdminActiveGamesPage): every active or recently-ended
+  // game updated at/after since_ms, regardless of caller. Gated so only the
+  // governor or a club_domain app_admin can see every club's live boards.
+  public shared ({ caller }) func list_active_games(since_ms : Nat64) : async { #Ok : [Types.ActiveGame]; #Err : Text } {
+    auth(caller);
+    if (not (await requireAppAdmin(caller))) return #Err("App admin required");
+    #Ok(activeGames.filter(func(item) = item.updated_at_ms >= since_ms));
+  };
+
+  // Admin monitor: per-team sync_active_game call counts since since_ms
+  // (from the bounded recent-write log), used to flag "sync storm" teams.
+  // Same app-admin gate as list_active_games; a null/empty team_id groups
+  // under "" (per-caller sessions with no team).
+  public shared ({ caller }) func list_active_game_write_rates(since_ms : Nat64) : async { #Ok : [(Text, Nat32)]; #Err : Text } {
+    auth(caller);
+    if (not (await requireAppAdmin(caller))) return #Err("App admin required");
+    var counts : [(Text, Nat32)] = [];
+    for ((team, ts) in activeGameWriteLog.values()) {
+      if (ts >= since_ms) {
+        counts := switch (counts.find(func((t, _)) = t == team)) {
+          case (?(_, n)) counts.map(func((t, n2)) = if (t == team) (t, n2 + (1 : Nat32)) else (t, n2));
+          case null counts.concat([(team, (1 : Nat32))]);
+        };
+      };
+    };
+    #Ok(counts);
   };
 
   public shared ({ caller }) func deactivate_active_game(team_id : ?Text) : async { #Ok; #Err : Text } {

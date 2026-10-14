@@ -262,6 +262,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
+    'delete_feedback' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'get_ad_setting' : IDL.Func([IDL.Text], [IDL.Opt(AppAdSetting)], ['query']),
     'get_benchmarks' : IDL.Func(
         [IDL.Vec(IDL.Text)],
@@ -283,6 +288,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : SponsorPerformance, 'Err' : IDL.Text })],
         ['query'],
       ),
+    'grant_app_admin' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'grant_role' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Text, IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
@@ -303,6 +313,11 @@ export const idlFactory = ({ IDL }) => {
     'list_ads' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(AppAd), 'Err' : IDL.Text })],
+        ['query'],
+      ),
+    'list_app_admins' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
         ['query'],
       ),
     'list_audit_logs' : IDL.Func(
@@ -436,6 +451,11 @@ export const idlFactory = ({ IDL }) => {
     'resolve_admin_alert' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : AdminAlert, 'Err' : IDL.Text })],
+        [],
+      ),
+    'revoke_app_admin' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_ad_active' : IDL.Func(

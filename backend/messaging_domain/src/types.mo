@@ -214,4 +214,12 @@ module {
   // by design: carries a chat id + monotonic version, never message content;
   // clients react by refetching through the normal certified query path.
   public type WsAppMessage = { #chat_poke : { conversation_id : Text; sequence : Nat64 } };
+
+  // --- Chat photo gallery reminder sweep (admin "run now" / future timer) ---
+  // Per (team_id, author) cooldown tracking so a repeat sweep does not spam
+  // the same uploader within cooldown_days. Mirrors the Supabase
+  // chat_photo_gallery_reminders edge function's cooldown behaviour.
+  public type ChatPhotoReminderLog = { team_id : Text; author : Principal; last_reminded_ms : Nat64 };
+  public type ChatPhotoReminderRunResult = { scanned : Nat32; posted : Nat32; skipped : Nat32 };
+  public type ChatPhotoReminderResult = { #Ok : ChatPhotoReminderRunResult; #Err : Text };
 }

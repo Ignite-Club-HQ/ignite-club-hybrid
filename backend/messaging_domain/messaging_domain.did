@@ -471,7 +471,7 @@ type Main =
        Err: text;
        Ok: Receipt;
      });
-   merge_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   merge_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -525,7 +525,7 @@ type Main =
        Err: text;
        Ok;
      });
-   rekey_principal: (old: principal, new_principal: principal, dry_run: bool) ->
+   rekey_principal: (old: principal, new: principal, dry_run: bool) ->
     (variant {
        err: text;
        ok: nat;
@@ -558,6 +558,9 @@ type Main =
                                                 Err: text;
                                                 Ok;
                                               });
+   run_chat_photo_gallery_reminders: (now_ms: nat64, window_start_hours:
+    nat32, window_end_hours: nat32, cooldown_days: nat32) ->
+    (ChatPhotoReminderResult);
    search_messages: (conversation_id: text, needle: text, limit: nat16) ->
     (variant {
        Err: text;
@@ -852,6 +855,17 @@ type ClientKey =
  record {
    client_nonce: nat64;
    client_principal: ClientPrincipal;
+ };
+type ChatPhotoReminderRunResult = 
+ record {
+   posted: nat32;
+   scanned: nat32;
+   skipped: nat32;
+ };
+type ChatPhotoReminderResult = 
+ variant {
+   Err: text;
+   Ok: ChatPhotoReminderRunResult;
  };
 type CanisterWsOpenResult = 
  variant {
