@@ -12,153 +12,16 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { resolveAuthBackend } from "@/live/authBackendMode";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
+// One admin page for both backends: every check below routes through
+// withFeatureBackend, and payment/password tiles are hidden in ICP mode
+// (those tools stay off-chain by design).
 export default function AdminPage() {
-  if (resolveAuthBackend() === "icp") {
-    return <IcpAdminPage />;
-  }
   return <SupabaseAdminPage />;
-}
-
-// ICP-mode admin landing. Admin rights come from the canisters via
-// useIsAppAdmin (insights_domain is_app_admin), so an Internet Identity app
-// admin sees the real tooling below (user management, feedback, sponsor
-// analytics, notification preferences, chat virt debug, deleted chats, DM
-// attachments, ads, infrastructure/placement settings). Billing, AI,
-// backups, temp-password and native-storage tooling stay Supabase-only
-// because they have no canister counterpart; Active Games (pitch boards)
-// has no canister holding live coaching-board state either (active_games is
-// a Supabase table), so neither is listed here.
-function IcpAdminPage() {
-  const navigate = useNavigate();
-  const { isAppAdmin, isLoading } = useIsAppAdmin();
-
-  if (isLoading) {
-    return <PageLoading />;
-  }
-
-  if (!isAppAdmin) {
-    return (
-      <div className="py-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-bold">Admin</h1>
-        </div>
-        <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-muted-foreground">Access denied. Admin role required.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="py-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Admin</h1>
-          <p className="text-sm text-muted-foreground">Management tools and settings</p>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">App Administration</CardTitle>
-          <CardDescription>Global app management tools</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <AdminMenuItem
-            icon={UserCog}
-            label="User Management"
-            description="Manage user accounts and roles"
-            onClick={() => navigate("/admin/users")}
-          />
-          <AdminMenuItem
-            icon={MessageSquare}
-            label="Manage Feedback"
-            description="View and respond to user feedback"
-            onClick={() => navigate("/admin/feedback")}
-          />
-          <AdminMenuItem
-            icon={BarChart3}
-            label="Sponsor Analytics"
-            description="View sponsor performance metrics"
-            onClick={() => navigate("/admin/sponsor-analytics")}
-          />
-          <AdminMenuItem
-            icon={Bell}
-            label="Notification Preferences"
-            description="Global notification settings"
-            onClick={() => navigate("/admin/notification-preferences")}
-          />
-          <AdminMenuItem
-            icon={Bug}
-            label="Chat Virt Debug"
-            description="Capture row-height drift and scroll jolts in any chat thread"
-            onClick={() => navigate("/admin/chat-virt-debug")}
-          />
-          <AdminMenuItem
-            icon={RotateCcw}
-            label="Deleted Chats"
-            description="Restore or permanently delete archived group chats"
-            onClick={() => navigate("/admin/deleted-chats")}
-          />
-          <AdminMenuItem
-            icon={Paperclip}
-            label="DM Attachments"
-            description="Disable DM attachments by club or by user"
-            onClick={() => navigate("/admin/dm-attachments")}
-          />
-          <AdminMenuItem
-            icon={ImageIcon}
-            label="Manage Ads"
-            description="Create and manage in-app advertisements"
-            onClick={() => navigate("/admin/ads")}
-          />
-          <AdminMenuItem
-            icon={Globe2}
-            label="Infrastructure / Placement Settings"
-            description="ICP canisters, default backend, and per-country eligibility"
-            onClick={() => navigate("/admin/placement-settings")}
-          />
-          <AdminMenuItem
-            icon={Settings}
-            label="App Settings"
-            description="Club creation lock, chat performance switches, welcome message"
-            onClick={() => navigate("/admin/settings")}
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Analytics</CardTitle>
-          <CardDescription>Performance and usage analytics</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <AdminMenuItem
-            icon={TrendingUp}
-            label="Engagement"
-            description="Activity trends per club"
-            onClick={() => navigate("/admin/engagement")}
-          />
-          <AdminMenuItem
-            icon={Activity}
-            label="Online Users"
-            description="See who is currently active in the app"
-            onClick={() => navigate("/admin/online-users")}
-          />
-        </CardContent>
-      </Card>
-    </div>
-  );
 }
 
 function SupabaseAdminPage() {
   const { user } = useAuth();
+  const isIcp = resolveAuthBackend() === "icp";
   const navigate = useNavigate();
 
   // Check if user is app admin
@@ -334,6 +197,7 @@ function SupabaseAdminPage() {
             <CardDescription>Global app management tools</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            {!isIcp && (<>
             <AdminMenuItem
               icon={Ticket}
               label="Manage Promo Codes"
@@ -346,6 +210,7 @@ function SupabaseAdminPage() {
               description="Configure payment settings"
               onClick={() => navigate("/admin/stripe")}
             />
+            </>)}
             <AdminMenuItem
               icon={MessageSquare}
               label="Manage Feedback"
@@ -358,12 +223,14 @@ function SupabaseAdminPage() {
               description="Manage user accounts and roles"
               onClick={() => navigate("/admin/users")}
             />
+            {!isIcp && (<>
             <AdminMenuItem
               icon={KeyRound}
               label="Set Temp Password"
               description="Reset password for a locked-out user"
               onClick={() => navigate("/admin/temp-password")}
             />
+            </>)}
             <AdminMenuItem
               icon={FileArchive}
               label="Club Backups"
@@ -406,12 +273,14 @@ function SupabaseAdminPage() {
               description="Enable AI Chat Recap across Pro clubs (all or selected)"
               onClick={() => navigate("/admin/ai-catch-up")}
             />
+            {!isIcp && (<>
             <AdminMenuItem
               icon={Smartphone}
               label="AdMob Settings"
               description="Configure Google AdMob for native apps"
               onClick={() => navigate("/admin/admob")}
             />
+            </>)}
             <AdminMenuItem
               icon={Send}
               label="Send Update Reminder"
