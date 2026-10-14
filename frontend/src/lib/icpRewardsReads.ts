@@ -6,6 +6,7 @@ import {
   listLiveClubRewards,
   listLivePointsHistory,
   listLiveRedemptions,
+  subjectForChild,
   subjectForUser,
 } from "@/live/features/points";
 
@@ -144,17 +145,19 @@ export async function liveMyPointsHistory(
 
 /**
  * Redemptions across one club or all of the caller's clubs, newest first,
- * with club / reward / child names joined client-side. `subjectUserId`
- * null returns every redemption the caller may read (self + own children).
+ * with club / reward / child names joined client-side. Reads the caller's
+ * own redemptions plus those of the given children (subject-scoped reads).
  */
 export async function liveMyRedemptions(
   ctx: FeatureBackendContext,
+  userId: string,
   clubFilter: string | null,
   childNames: Map<string, string> = new Map(),
 ) {
+  const subjects = [subjectForUser(userId), ...[...childNames.keys()].map(subjectForChild)];
   const clubIds = clubFilter ? [clubFilter] : await liveMyRewardClubIds(ctx);
   const [lists, names, rewards] = await Promise.all([
-    Promise.all(clubIds.map((id) => listLiveRedemptions(ctx, id, null).catch(() => []))),
+    Promise.all(clubIds.flatMap((id) => subjects.map((sub) => listLiveRedemptions(ctx, id, sub).catch(() => [])))),
     clubNameMap(ctx, clubIds),
     Promise.all(clubIds.map((id) => listLiveClubRewards(ctx, id, null, false).catch(() => []))),
   ]);
