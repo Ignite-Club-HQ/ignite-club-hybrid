@@ -1815,3 +1815,42 @@ export async function listLivePersonalTeams(ctx: FeatureBackendContext): Promise
   const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.list_my_personal_teams(), "List my personal teams");
 }
+
+// ---- Pitch board: named formations + alert role switches (club_domain) ----
+export async function listLivePitchFormations(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_pitch_formations(teamId), "List formations");
+}
+export async function saveLivePitchFormation(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  name: string,
+  teamSize: number,
+  formationJson: string,
+  drawingJson: string | null,
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.save_pitch_formation(teamId, name, teamSize, formationJson, drawingJson === null ? [] : [drawingJson]),
+    "Save formation",
+  );
+}
+export async function deleteLivePitchFormation(ctx: FeatureBackendContext, id: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.delete_pitch_formation(id), "Delete formation");
+}
+export async function getLiveTeamPitchNotify(ctx: FeatureBackendContext, teamId: string) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_team_pitch_notify(teamId), "Get pitch alerts");
+}
+export async function setLiveTeamPitchNotify(
+  ctx: FeatureBackendContext,
+  teamId: string,
+  flags: { coach: boolean; team_admin: boolean; subs_manager: boolean },
+) {
+  const { actor } = await connectLiveClubDomain(ctx.target, ctx.identity);
+  return unwrapCandid(
+    actor.set_team_pitch_notify(teamId, flags.coach, flags.team_admin, flags.subs_manager),
+    "Save pitch alerts",
+  );
+}
