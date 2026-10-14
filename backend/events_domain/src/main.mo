@@ -2438,7 +2438,23 @@ persistent actor class Main(governorInit : Principal) {
   transient var playhqSweepCursor : Nat = 0;
   func sweepPlayhqAutoSync() : async () {
     if (playHQConfig == null) return;
-    let autos = playhqTeamSyncs.filter(func(s) = s.auto);
+    // Cost control: only refresh teams with a game in the last 2 days or the
+    // next 14 days (or no games yet, so the first import still happens).
+    let now = nowMs();
+    let dayMs : Nat64 = 86_400_000;
+    let windowStart : Nat64 = if (now > 2 * dayMs) now - 2 * dayMs else 0;
+    let windowEnd : Nat64 = now + 14 * dayMs;
+    let autos = playhqTeamSyncs.filter(func(s) {
+      if (not s.auto) return false;
+      var hasAny = false;
+      for (e in events.values()) {
+        if (not e.deleted and e.team_id == ?s.team_id) {
+          hasAny := true;
+          if (e.starts_at_ms >= windowStart and e.starts_at_ms <= windowEnd) return true;
+        };
+      };
+      not hasAny
+    });
     if (autos.size() == 0) return;
     let batch = 20;
     var i = 0;
