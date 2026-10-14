@@ -178,6 +178,12 @@ export default function CreateGroupDialog({
     queryKey: ["create-group-club-pro", clubInfo?.clubId],
     queryFn: async () => {
       if (!clubInfo?.clubId) return false;
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        const { isLiveClubPro } = await import("@/live/features/club");
+        return isLiveClubPro(ctx, clubInfo.clubId).catch(() => false);
+      }
       const { data } = await supabase
         .from("club_subscriptions")
         .select("is_pro, is_pro_football, admin_pro_override, admin_pro_football_override")
@@ -212,6 +218,36 @@ export default function CreateGroupDialog({
     queryKey: ["create-group-role-counts", clubInfo?.clubId, selectedTeamId, teamId, miniLeagueId],
     queryFn: async () => {
       const counts: Record<string, number> = {};
+
+      // ICP mode: count from club_domain role grants / mini-league players —
+      // Supabase user_roles is not readable for Internet Identity accounts.
+      const lookup = await import("@/lib/icpClubTeamLookup");
+      if (lookup.isIcpSession()) {
+        const ctx = await lookup.icpCtx();
+        if (miniLeagueId) {
+          const { listLivePlayers } = await import("@/live/features/miniLeagues");
+          const players = ((await listLivePlayers(ctx, miniLeagueId).catch(() => [])) ?? []) as any[];
+          const parents = new Set(
+            players.map((p) => (Array.isArray(p.parent_user_id) ? p.parent_user_id[0] : p.parent_user_id)).filter(Boolean),
+          );
+          counts.player = players.length;
+          counts.parent = parents.size;
+          return counts;
+        }
+        if (!clubInfo?.clubId) return counts;
+        const { listLiveRoleGrants } = await import("@/live/features/membership");
+        const grants = ((await listLiveRoleGrants(ctx, clubInfo.clubId).catch(() => [])) ?? []) as any[];
+        const scopeTeamId = teamId || selectedTeamId || null;
+        const seen = new Map<string, Set<string>>();
+        for (const g of grants) {
+          const grantTeam = Array.isArray(g.team) ? (g.team[0] ?? null) : (g.team ?? null);
+          if (scopeTeamId && grantTeam !== scopeTeamId) continue;
+          if (!seen.has(g.role)) seen.set(g.role, new Set());
+          seen.get(g.role)!.add(g.account_id);
+        }
+        seen.forEach((set, role) => { counts[role] = set.size; });
+        return counts;
+      }
 
       // If a specific team is selected (or locked), count via that team's user_roles
       const scopeTeamId = teamId || (selectedTeamId || null);
