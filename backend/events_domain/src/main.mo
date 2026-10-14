@@ -500,6 +500,21 @@ persistent actor class Main(governorInit : Principal) {
     rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id)); rsvps := rsvps.concat([value]); #Ok(value)
   };
 
+  // Parent RSVPs their own child (Supabase childRsvpMutation parity) — same
+  // gate as set_rsvp, but keyed by (event, account, child) so a child's
+  // answer never overwrites the parent's own RSVP.
+  public shared ({ caller }) func set_child_rsvp(event_id : Text, account_id : Text, child_id : Text, state : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {
+    auth(caller);
+    switch (requireManage(caller, event_id)) {
+      case (#Err(e)) return #Err(e);
+      case (#Ok(_)) {};
+    };
+    if (not valid(account_id) or not valid(child_id) or not valid(state) or notes.size() > 2000) return #Err("Invalid RSVP");
+    recordRsvpCreatedAt(event_id, account_id);
+    let value : Types.Rsvp = { event_id; account_id; child_id = ?child_id; state; notes; has_paid = null; source = "member"; updated_at_ms = nowMs() };
+    rsvps := rsvps.filter(func(item) = not (item.event_id == event_id and item.account_id == account_id and item.child_id == ?child_id)); rsvps := rsvps.concat([value]); #Ok(value)
+  };
+
   // Note-only update on an existing RSVP (self-service), mirroring the
   // Supabase per-RSVP notes field — keeps the current state, only changes notes.
   public shared ({ caller }) func set_rsvp_note(event_id : Text, account_id : Text, notes : Text) : async { #Ok : Types.Rsvp; #Err : Text } {

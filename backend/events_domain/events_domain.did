@@ -873,11 +873,16 @@ type Main =
        Err: text;
        Ok: RosterEntry;
      });
+   set_child_rsvp: (event_id: text, account_id: text, child_id: text, state:
+    text, notes: text) -> (variant {
+                              Err: text;
+                              Ok: Rsvp;
+                            });
    set_rsvp: (event_id: text, account_id: text, state: text, notes: text) ->
     (variant {
        Err: text;
        Ok: Rsvp;
-     });
+      });
    set_rsvp_note: (event_id: text, account_id: text, notes: text) ->
     (variant {
        Err: text;
