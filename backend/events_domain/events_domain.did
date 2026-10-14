@@ -403,6 +403,11 @@ type Main =
        Err: text;
        Ok: vec RosterEntry;
      }) query;
+   get_event_sponsors: (event_id: text) ->
+    (variant {
+       Err: text;
+       Ok: vec text;
+     }) query;
    get_event_timer: (event_id: text) ->
     (variant {
        Err: text;
@@ -776,6 +781,11 @@ type Main =
     (variant {
        Err: text;
        Ok: Duty;
+     });
+   set_event_sponsors: (event_id: text, sponsor_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
      });
    set_event_auto_reminder: (event_id: text, hours_before: opt nat16) ->
     (variant {
