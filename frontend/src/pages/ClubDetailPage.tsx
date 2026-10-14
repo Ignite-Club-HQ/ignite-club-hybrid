@@ -242,6 +242,10 @@ export default function ClubDetailPage() {
               show_name_in_header: st?.header_club_name_enabled ?? true,
               logo_only_mode: st?.logo_only_mode ?? false,
               theme_enabled: st?.theme_enabled ?? true,
+              media_sponsors_enabled: st?.media_sponsors_enabled ?? false,
+              media_header_sponsors_enabled: st?.media_header_sponsors_enabled ?? false,
+              chat_thread_ads_enabled: st?.chat_thread_ads_enabled ?? false,
+              events_sponsor_strip_enabled: st?.events_sponsor_strip_enabled ?? false,
               theme_primary_h: null,
               theme_primary_s: null,
               theme_primary_l: null,
@@ -2154,6 +2158,9 @@ export default function ClubDetailPage() {
           events_sponsor_strip_enabled: { enabled: "Events sponsor strip enabled", disabled: "Events sponsor strip disabled" },
         };
         const handleSponsorToggle = async (field: ClubSponsorToggleField, checked: boolean) => {
+          // Flip the switch immediately; roll back if the save fails.
+          const previousClub = queryClient.getQueryData(["club", id]);
+          queryClient.setQueryData(["club", id], (old: any) => (old ? { ...old, [field]: checked } : old));
           const error = await withFeatureBackend("membership", {
             supabase: async () => {
               const { error } = await supabase
@@ -2166,8 +2173,17 @@ export default function ClubDetailPage() {
               try {
                 const { getLiveClubSettings, saveLiveClubSettings } = await import("@/live/features/club");
                 const settingsOpt = await getLiveClubSettings(ctx, id!);
-                const settings = settingsOpt[0];
-                if (!settings) throw new Error("Club settings not found");
+                // A club that never saved settings has no row yet — start from defaults.
+                const settings = settingsOpt[0] ?? {
+                  club_id: id!, contact_email: [], membership_open: true, announcement: [],
+                  public_directory: false, media_sponsors_enabled: false,
+                  media_header_sponsors_enabled: false, events_sponsor_strip_enabled: false,
+                  chat_thread_ads_enabled: false, theme_primary_color: [], theme_secondary_color: [],
+                  theme_accent_color: [], header_logo_enabled: false, header_club_name_enabled: true,
+                  invite_email_style: [], club_switcher_hint: [], theme_enabled: true,
+                  logo_only_mode: false, theme_dark_primary_color: [], theme_dark_secondary_color: [],
+                  theme_dark_accent_color: [],
+                };
                 await saveLiveClubSettings(ctx, { ...settings, [field]: checked });
                 return null;
               } catch (e) {
@@ -2176,10 +2192,11 @@ export default function ClubDetailPage() {
             },
           });
           if (error) {
+            queryClient.setQueryData(["club", id], previousClub);
             toast({ title: "Error", description: "Failed to update setting.", variant: "destructive" });
             return;
           }
-          await queryClient.invalidateQueries({ queryKey: ["club", id] });
+          void queryClient.invalidateQueries({ queryKey: ["club", id] });
           await queryClient.invalidateQueries({ queryKey: sponsorToggleInvalidateKeys[field] as unknown[] });
           const { enabled, disabled } = sponsorToggleTitles[field];
           toast({ title: checked ? enabled : disabled });

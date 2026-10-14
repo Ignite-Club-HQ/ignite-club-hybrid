@@ -3,7 +3,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings, listAllLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
+import { getLiveClubSettings, isLiveClubPro, listAllLiveSponsors, myLiveRoleGrants } from "@/live/features/club";
 import { MessagesSponsorCarousel } from "@/components/MessagesSponsorCarousel";
 import { AppAdCarousel } from "@/components/AppAdCarousel";
 import { AdMobBannerZone } from "@/components/AdMobBannerZone";
@@ -180,12 +180,16 @@ export function SponsorOrAdCarousel({ location, activeClubFilter }: SponsorOrAdC
       return { isProFiltered, hasAnyPro, resolved: true };
         },
         icp: async (ctx) => {
-          // ICP mode has no per-club subscription table — Pro is a per-account
-          // entitlement on identity_access (iOS IAP only). A Pro user is Pro
-          // for every club they belong to.
-          const { fetchIcpEntitlements } = await import("@/live/identityEntitlements");
-          const summary = await fetchIcpEntitlements(ctx.identity, ctx.identity.getPrincipal().toText());
-          return { isProFiltered: summary.isPro, hasAnyPro: summary.isPro, resolved: true };
+          // Pro comes from each club's subscription row on club_domain (or the
+          // viewer's own entitlement) — sponsors belong to Pro clubs.
+          const grants = await myLiveRoleGrants(ctx);
+          const clubIds = [...new Set(grants.map((g) => g.club[0]).filter((c): c is string => !!c))];
+          if (effectiveClubFilter && !clubIds.includes(effectiveClubFilter)) clubIds.push(effectiveClubFilter);
+          const flags = await Promise.all(clubIds.map((c) => isLiveClubPro(ctx, c).then((pro) => [c, pro] as const)));
+          const proClubIds = new Set(flags.filter(([, pro]) => pro).map(([c]) => c));
+          const hasAnyPro = proClubIds.size > 0;
+          const isProFiltered = effectiveClubFilter ? proClubIds.has(effectiveClubFilter) : hasAnyPro;
+          return { isProFiltered, hasAnyPro, resolved: true };
         },
       });
     },
