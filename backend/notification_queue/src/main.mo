@@ -795,7 +795,7 @@ persistent actor class Main(governorInit : Principal) {
     deliveringScheduled := false;
   };
 
-  transient let _scheduledTimer = Timer.recurringTimer<system>(#seconds(60), func() : async () {
+  transient let _scheduledTimer = Timer.recurringTimer<system>(#seconds(300), func() : async () {
     try { await deliverDueScheduled() } catch (_) { deliveringScheduled := false };
   });
 
