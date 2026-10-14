@@ -214,7 +214,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
+      invalidateSponsorQueries();
       toast({ title: "Sponsor added successfully" });
       queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
       resetForm();
@@ -293,7 +293,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
+      invalidateSponsorQueries();
       toast({ title: "Sponsor updated successfully" });
       queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
       resetForm();
@@ -317,7 +317,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
+      invalidateSponsorQueries();
       toast({ title: "Sponsor deleted" });
       queryClient.invalidateQueries({ queryKey: ["club-setup-progress", clubId] });
     },
@@ -365,7 +365,7 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
       toast({ title: "Failed to update sponsor", description: error.message, variant: "destructive" });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
+      invalidateSponsorQueries();
     },
   };
 
