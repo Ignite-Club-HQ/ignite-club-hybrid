@@ -166,28 +166,53 @@ export default function GlobalSubMonitor() {
   ) => {
     if (resolveAuthBackend() === "icp") {
       // The `check-pending-subs` cron/edge function has no ICP equivalent, so
-      // the client fans the alert out itself via notification_queue. Parity
-      // gap: club_domain exposes no "list team staff" query callable from the
-      // browser, so only the caller (the coach running this board) is
-      // notified here — not the full team-staff list the Supabase cron
-      // reaches. Kept behind pitchBoardNotificationsEnabled like the
-      // Supabase path.
+      // the client fans the alert out itself via notification_queue to the
+      // same audience as the Supabase cron: the team's admins and coaches
+      // (club_domain list_team_role_grants) plus whoever holds the
+      // "Subs Manager" duty on the linked event (events_domain list_duties).
+      // The board runner is always included. Kept behind
+      // pitchBoardNotificationsEnabled like the Supabase path.
       if (icpAlert && user?.id && pitchBoardNotificationsEnabled) {
         try {
-          const clubId = icpAlert.teamId ? teamIdToClubId(icpAlert.teamId) : null;
-          if (clubId) {
+          const teamId = icpAlert.teamId;
+          const clubId = teamId ? teamIdToClubId(teamId) : null;
+          if (clubId && teamId) {
             const { withFeatureBackend } = await import("@/live/featureRouter");
             const { fanOutLiveNotifications } = await import("@/live/features/notifications");
+            const linkedEventId = loadPitchState(teamId)?.linkedEventId ?? null;
+            const recipients = new Set<string>([user.id]);
+            await withFeatureBackend("membership", {
+              supabase: async () => undefined,
+              icp: async (ctx) => {
+                const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
+                const grants = await listLiveTeamRoleGrants(ctx, teamId);
+                for (const g of grants) {
+                  if (g.role === "team_admin" || g.role === "coach") recipients.add(g.account_id);
+                }
+              },
+            }).catch((e) => console.warn("[SYNC] ICP pitch staff lookup failed:", e));
+            if (linkedEventId) {
+              await withFeatureBackend("events", {
+                supabase: async () => undefined,
+                icp: async (ctx) => {
+                  const { listLiveDuties } = await import("@/live/features/events");
+                  const duties = await listLiveDuties(ctx, linkedEventId);
+                  for (const d of duties ?? []) {
+                    if (d.account_id && d.duty.trim().toLowerCase() === "subs manager") recipients.add(d.account_id);
+                  }
+                },
+              }).catch((e) => console.warn("[SYNC] ICP subs manager lookup failed:", e));
+            }
             await withFeatureBackend("notifications", {
               supabase: async () => 0,
               icp: async (ctx) =>
                 fanOutLiveNotifications(ctx, {
-                  userIds: [user.id],
+                  userIds: Array.from(recipients),
                   clubId,
                   kind: "pitch_board",
                   body: icpAlert.message,
                   idempotencyKeyPrefix: `pitch-board-${dedupeKey ?? source}`,
-                  relatedId: icpAlert.teamId,
+                  relatedId: teamId,
                 }),
             });
           }
