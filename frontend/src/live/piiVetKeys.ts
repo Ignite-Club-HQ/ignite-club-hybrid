@@ -206,13 +206,29 @@ export async function fetchPiiVetKeys(
   fieldId: string,
 ): Promise<Map<string, VetKey>> {
   const out = new Map<string, VetKey>();
-  const missing = piiIds.filter((id) => !vetKeyCache.has(`${fieldId}${id}`));
+  const { actor, canisterId } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
+  const cid = canisterId.toText();
+  const principal = ctx.identity.getPrincipal().toText();
+  // Device-stored keys (7 days, cleared on sign-out) skip the paid
+  // derivation — previously every app open re-derived every visible name.
+  const storeKey = (id: string) => `pii:${fieldId}:${id}`;
+  for (const id of piiIds) {
+    const memKey = `${fieldId}${id}`;
+    if (vetKeyCache.has(memKey)) continue;
+    const stored = loadStoredClubKey(cid, principal, storeKey(id));
+    if (!stored) continue;
+    try {
+      vetKeyCache.set(memKey, VetKey.deserialize(stored));
+    } catch {
+      forgetStoredClubKey(cid, principal, storeKey(id));
+    }
+  }
+  const missing = piiIds.filter((id) => !vetKeyCache.has(`${fieldId}${id}`));
   if (missing.length === 0) {
-    for (const id of piiIds) out.set(id, vetKeyCache.get(`${fieldId}${id}`)!);
+    for (const id of piiIds) out.set(id, vetKeyCache.get(`${fieldId}${id}`)!);
     return out;
   }
 
-  const { actor } = await connectLivePiiAccessControl(ctx.target, ctx.identity);
   const { key: verificationKey } = await getPiiVerificationKey(ctx);
 
   for (let start = 0; start < missing.length; start += VETKEY_BATCH_SIZE) {
