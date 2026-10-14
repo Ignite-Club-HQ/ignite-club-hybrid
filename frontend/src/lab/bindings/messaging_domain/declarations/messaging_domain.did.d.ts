@@ -58,6 +58,13 @@ export interface CanisterWsOpenArguments {
 }
 export type CanisterWsOpenResult = { 'Ok' : null } |
   { 'Err' : string };
+export type ChatPhotoReminderResult = { 'Ok' : ChatPhotoReminderRunResult } |
+  { 'Err' : string };
+export interface ChatPhotoReminderRunResult {
+  'skipped' : number,
+  'scanned' : number,
+  'posted' : number,
+}
 export interface ClientKey {
   'client_principal' : ClientPrincipal,
   'client_nonce' : bigint,
@@ -504,6 +511,10 @@ export interface Main {
       { 'Err' : string }
   >,
   'restore_group' : ActorMethod<[string], { 'Ok' : null } | { 'Err' : string }>,
+  'run_chat_photo_gallery_reminders' : ActorMethod<
+    [bigint, number, number, number],
+    ChatPhotoReminderResult
+  >,
   'search_messages' : ActorMethod<
     [string, string, number],
     { 'Ok' : Array<Message> } |

@@ -1936,6 +1936,32 @@ export async function getLiveActiveGame(ctx: FeatureBackendContext, teamId?: str
   return [{ ...row, pitch_state_json: JSON.stringify(resolved) }];
 }
 
+/**
+ * Admin monitor (AdminActiveGamesPage): every active or recently-ended game
+ * updated at/after `sinceMs`, across all teams/callers. Canister-side gated
+ * to the governor or a club_domain app_admin (events_domain
+ * `list_active_games`).
+ */
+export async function listLiveActiveGames(ctx: FeatureBackendContext, sinceMs: number) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.list_active_games(toNat64(sinceMs)), "List active games");
+}
+
+/**
+ * Admin monitor: per-team `sync_active_game` call counts since `sinceMs`
+ * (from the bounded recent-write log), used to flag "sync storm" teams.
+ * Same app-admin gate as listLiveActiveGames; a null/empty team_id groups
+ * under "".
+ */
+export async function listLiveActiveGameWriteRates(ctx: FeatureBackendContext, sinceMs: number) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  const rows = await unwrapCandid(
+    actor.list_active_game_write_rates(toNat64(sinceMs)),
+    "List active game write rates",
+  ) as Array<[string, number]>;
+  return new Map(rows.map(([team, count]) => [team, Number(count)]));
+}
+
 /** Admin per-viewer event-view list (event_views rows for one event). */
 export async function listLiveEventViews(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);

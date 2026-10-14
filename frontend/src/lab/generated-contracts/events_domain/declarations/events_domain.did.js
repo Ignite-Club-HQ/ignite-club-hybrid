@@ -723,11 +723,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(EventTimer), 'Err' : IDL.Text })],
         ['query'],
       ),
-    'set_event_sponsors' : IDL.Func(
-        [IDL.Text, IDL.Vec(IDL.Text)],
-        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
-        [],
-      ),
     'get_event_view_count' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
@@ -839,6 +834,21 @@ export const idlFactory = ({ IDL }) => {
         [],
         [IDL.Variant({ 'Ok' : IDL.Vec(IDL.Principal), 'Err' : IDL.Text })],
         ['query'],
+      ),
+    'list_active_game_write_rates' : IDL.Func(
+        [IDL.Nat64],
+        [
+          IDL.Variant({
+            'Ok' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat32)),
+            'Err' : IDL.Text,
+          }),
+        ],
+        [],
+      ),
+    'list_active_games' : IDL.Func(
+        [IDL.Nat64],
+        [IDL.Variant({ 'Ok' : IDL.Vec(ActiveGame), 'Err' : IDL.Text })],
+        [],
       ),
     'list_association_events' : IDL.Func(
         [IDL.Text],
@@ -1219,6 +1229,11 @@ export const idlFactory = ({ IDL }) => {
           IDL.Opt(IDL.Text),
         ],
         [IDL.Variant({ 'Ok' : EventGroup, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_event_sponsors' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
     'set_event_timer' : IDL.Func(

@@ -58,7 +58,7 @@ const typeColors = {
 type StatusFilter = "all" | FeedbackStatus;
 
 import { withFeatureBackend } from "@/live/featureRouter";
-import { listLiveFeedback, updateLiveFeedbackStatus } from "@/live/features/insights";
+import { listLiveFeedback, updateLiveFeedbackStatus, deleteLiveFeedback } from "@/live/features/insights";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
 
 export default function ManageFeedbackPage() {
@@ -128,8 +128,15 @@ function SupabaseManageFeedbackPage() {
 
   const deleteFeedbackMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("feedback").delete().eq("id", id);
-      if (error) throw error;
+      await withFeatureBackend("admin", {
+        supabase: async () => {
+          const { error } = await supabase.from("feedback").delete().eq("id", id);
+          if (error) throw error;
+        },
+        icp: async (ctx) => {
+          await deleteLiveFeedback(ctx, id);
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["all-feedback"] });

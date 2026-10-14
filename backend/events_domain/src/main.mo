@@ -1869,7 +1869,7 @@ persistent actor class Main(governorInit : Principal) {
       if (ts >= since_ms) {
         counts := switch (counts.find(func((t, _)) = t == team)) {
           case (?(_, n)) counts.map(func((t, n2)) = if (t == team) (t, n2 + (1 : Nat32)) else (t, n2));
-          case null counts.concat([(team, 1)]);
+          case null counts.concat([(team, (1 : Nat32))]);
         };
       };
     };

@@ -508,6 +508,19 @@ type Main =
        Err: text;
        Ok: vec principal;
      }) query;
+   list_active_game_write_rates: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec record {
+                 text;
+                 nat32;
+               };
+     });
+   list_active_games: (since_ms: nat64) ->
+    (variant {
+       Err: text;
+       Ok: vec ActiveGame;
+     });
    list_association_events: (association_id: text) ->
     (variant {
        Err: text;
@@ -782,11 +795,6 @@ type Main =
        Err: text;
        Ok: Duty;
      });
-   set_event_sponsors: (event_id: text, sponsor_ids: vec text) ->
-    (variant {
-       Err: text;
-       Ok;
-     });
    set_event_auto_reminder: (event_id: text, hours_before: opt nat16) ->
     (variant {
        Err: text;
@@ -803,6 +811,11 @@ type Main =
                                    Err: text;
                                    Ok: EventGroup;
                                  });
+   set_event_sponsors: (event_id: text, sponsor_ids: vec text) ->
+    (variant {
+       Err: text;
+       Ok;
+     });
    set_event_timer: (event_id: text, action: text, minutes_per_half:
     opt nat16, adjust_ms: opt int64) -> (variant {
                                            Err: text;

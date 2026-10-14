@@ -1127,7 +1127,7 @@ persistent actor class Main(governorInit : Principal) {
     let cutoff : Nat64 = if (now_ms > max_age_ms) { now_ms - max_age_ms } else { 0 };
     let before = device_tokens.size();
     device_tokens := device_tokens.filter(func(t : Types.DeviceToken) : Bool { t.updated_at_ms >= cutoff });
-    #Ok(Nat.toNat32(before - device_tokens.size()));
+    #Ok(Nat.toNat16(before - device_tokens.size()));
   };
 
   // Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.

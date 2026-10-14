@@ -540,11 +540,6 @@ export interface Main {
     { 'Ok' : [] | [EventTimer] } |
       { 'Err' : string }
   >,
-  'set_event_sponsors' : ActorMethod<
-    [string, Array<string>],
-    { 'Ok' : null } |
-      { 'Err' : string }
-  >,
   'get_event_view_count' : ActorMethod<
     [string],
     { 'Ok' : number } |
@@ -635,6 +630,16 @@ export interface Main {
   'listBulkAccessPrincipals' : ActorMethod<
     [],
     { 'Ok' : Array<Principal> } |
+      { 'Err' : string }
+  >,
+  'list_active_game_write_rates' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<[string, number]> } |
+      { 'Err' : string }
+  >,
+  'list_active_games' : ActorMethod<
+    [bigint],
+    { 'Ok' : Array<ActiveGame> } |
       { 'Err' : string }
   >,
   'list_association_events' : ActorMethod<
@@ -965,6 +970,11 @@ export interface Main {
       [] | [string],
     ],
     { 'Ok' : EventGroup } |
+      { 'Err' : string }
+  >,
+  'set_event_sponsors' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_event_timer' : ActorMethod<

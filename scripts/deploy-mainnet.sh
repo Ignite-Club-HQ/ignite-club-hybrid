@@ -69,6 +69,9 @@ echo "==> Wiring: club_domain + events_domain -> notification_queue"
 icp canister call club_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
 icp canister call events_domain set_notification_queue_canister "(principal \"$NOTIFICATION_QUEUE\")" -e "$ICP_ENV"
 
+echo "==> Wiring: notification_queue -> club_domain (app-admin gated push health/cleanup)"
+icp canister call notification_queue set_club_domain_canister "(principal \"$CLUB_DOMAIN\")" -e "$ICP_ENV"
+
 # Push delivery worker grant — principal derived from ICP_PUSH_WORKER_SEED
 # (64 hex chars). Skip silently when the secret is not configured; the
 # icp-push-deliver workflow no-ops until both this grant and its secrets exist.

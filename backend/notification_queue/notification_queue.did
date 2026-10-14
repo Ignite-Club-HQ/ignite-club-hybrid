@@ -67,6 +67,22 @@ type Recurrence =
    None;
    Weekly;
  };
+type PushDeliveryHealthResult = 
+ variant {
+   Err: text;
+   Ok: PushDeliveryHealth;
+ };
+type PushDeliveryHealth = 
+ record {
+   delivered_24h: nat32;
+   device_token_count: nat32;
+   failed_24h: nat32;
+   generated_at_ms: nat64;
+   pending_24h: nat32;
+   processing_24h: nat32;
+   total_24h: nat32;
+   window_hours: nat32;
+ };
 type PushAlertSettingsInput = 
  record {
    alerts_enabled: bool;
@@ -163,6 +179,8 @@ type Main =
    acknowledge: (id: text, key: text) -> (Result);
    cancel_scheduled: (id: text, author: text) -> (ScheduledResult);
    claim: (now_ms: nat64, limit: nat16) -> (Results);
+   cleanup_stale_device_tokens: (now_ms: nat64, max_age_ms: nat64) ->
+    (DeviceTokenCountResult);
    clear_inbox: (user: text, club: opt text) -> (ResultNat16);
    /// Public: remaining cycles (shown in admin settings).
    cycles_balance: () -> (nat) query;
@@ -181,6 +199,7 @@ type Main =
    get_notification: (id: text) -> (opt Notification) query;
    get_preferences: (user: text) -> (Preferences) query;
    get_push_alert_settings: () -> (PushAlertSettings) query;
+   get_push_delivery_health: (now_ms: nat64) -> (PushDeliveryHealthResult);
    grant_worker: ("principal": principal) -> (variant {
                                                 Err: text;
                                                 Ok;
@@ -225,6 +244,10 @@ type Main =
     opt text, body: text, image_url: opt text, reply_to_id: opt text,
     scheduled_for_ms: nat64, recurrence: Recurrence, recurrence_until_ms:
     opt nat64) -> (ScheduledResult);
+   set_club_domain_canister: (id: principal) -> (variant {
+                                                   Err: text;
+                                                   Ok;
+                                                 });
    set_messaging_domain_canister: (id: principal) ->
     (variant {
        Err: text;
