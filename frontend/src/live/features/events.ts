@@ -282,6 +282,17 @@ export async function setLiveEventAttendance(
  * see frontend/src/lib/serverTimer.ts for the shared `ServerTimer` shape the
  * ICP branch converts to/from.
  */
+/** Event sponsor links (event_sponsors parity): sponsor ids attached to one event. */
+export async function getLiveEventSponsorIds(ctx: FeatureBackendContext, eventId: string) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.get_event_sponsors(eventId), "Get event sponsors");
+}
+
+export async function saveLiveEventSponsors(ctx: FeatureBackendContext, eventId: string, sponsorIds: string[]) {
+  const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
+  return unwrapCandid(actor.set_event_sponsors(eventId, sponsorIds), "Save event sponsors");
+}
+
 export async function getLiveEventTimer(ctx: FeatureBackendContext, eventId: string) {
   const { actor } = await connectLiveEventsDomain(ctx.target, ctx.identity);
   return unwrapCandid(actor.get_event_timer(eventId), "Get event timer");

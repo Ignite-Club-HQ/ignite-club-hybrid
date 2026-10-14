@@ -3,6 +3,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePersistedFilter } from "@/lib/persistedFilter";
 import { cn } from "@/lib/utils";
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, onlineManager } from "@tanstack/react-query";
+import { withFeatureBackend } from "@/live/featureRouter";
 import { Image, Lock, Crown, Plus, MessageCircle, Trash2, Loader2, Filter, Flag, ShieldAlert, Eye, WifiOff } from "lucide-react";
 import {
   Sheet,
@@ -361,14 +362,28 @@ function SupabaseMediaPage() {
 
   // Quick Pro check - check if user has any Pro club/team membership
   // Logic: Club Pro → all teams inherit Pro; Free club → check team subscription
-// NOTE(ICP pro-access): fail-closed by design — ICP/Internet Identity users
-// have no Supabase session, so this query never runs/returns no rows and the
-// caller sees "not Pro". Whether ICP accounts get real Pro entitlement (and
-// via what canister) is a pending product decision; this is intentionally
-// left as-is (no behavior change) until that's decided.
+// NOTE(ICP pro-access): ICP/Internet Identity users resolve Pro from the
+// chain via isLiveClubPro (club subscription, then personal entitlement);
+// the Supabase query below only runs for email accounts.
   const { data: hasProClubSb, isLoading: loadingProAccessSb, error: proAccessError } = useQuery({
     queryKey: ["has-pro-access", user?.id, roleClubIds.join(","), roleTeamIds.join(",")],
     queryFn: async () => {
+      // ICP mode: read each candidate club's Pro status from the chain
+      // (isLiveClubPro also falls back to the viewer's personal entitlement).
+      const icpResult = await withFeatureBackend<boolean | null>("membership", {
+        supabase: async () => null,
+        icp: async (ctx) => {
+          const { isLiveClubPro } = await import("@/live/features/club");
+          const candidates = activeClubFilter
+            ? [...new Set([...roleClubIds, activeClubFilter])]
+            : roleClubIds;
+          for (const clubId of candidates) {
+            if (await isLiveClubPro(ctx, clubId)) return true;
+          }
+          return false;
+        },
+      });
+      if (icpResult !== null) return icpResult;
       try { await ensureFreshSession(); } catch { /* offline / signed out — let queries surface real errors */ }
       const overall = performance.now();
       diagLog("hasProClub:start", { roleClubIds: roleClubIds.length, roleTeamIds: roleTeamIds.length, activeClubFilter });

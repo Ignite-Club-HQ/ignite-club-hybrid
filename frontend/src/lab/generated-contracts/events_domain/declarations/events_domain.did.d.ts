@@ -530,9 +530,19 @@ export interface Main {
     { 'Ok' : Array<RosterEntry> } |
       { 'Err' : string }
   >,
+  'get_event_sponsors' : ActorMethod<
+    [string],
+    { 'Ok' : Array<string> } |
+      { 'Err' : string }
+  >,
   'get_event_timer' : ActorMethod<
     [string],
     { 'Ok' : [] | [EventTimer] } |
+      { 'Err' : string }
+  >,
+  'set_event_sponsors' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'get_event_view_count' : ActorMethod<
