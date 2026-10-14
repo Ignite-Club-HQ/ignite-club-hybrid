@@ -181,17 +181,27 @@ export default function GlobalSubMonitor() {
             const { fanOutLiveNotifications } = await import("@/live/features/notifications");
             const linkedEventId = loadPitchState(teamId)?.linkedEventId ?? null;
             const recipients = new Set<string>([user.id]);
+            // Per-team role switches saved on club_domain (default all on).
+            let flags = { coach: true, team_admin: true, subs_manager: true };
+            await withFeatureBackend("membership", {
+              supabase: async () => undefined,
+              icp: async (ctx) => {
+                const { getLiveTeamPitchNotify } = await import("@/live/features/club");
+                const f = await getLiveTeamPitchNotify(ctx, teamId);
+                flags = { coach: f.coach, team_admin: f.team_admin, subs_manager: f.subs_manager };
+              },
+            }).catch((e) => console.warn("[SYNC] ICP pitch alert switches lookup failed:", e));
             await withFeatureBackend("membership", {
               supabase: async () => undefined,
               icp: async (ctx) => {
                 const { listLiveTeamRoleGrants } = await import("@/live/features/membership");
                 const grants = await listLiveTeamRoleGrants(ctx, teamId);
                 for (const g of grants) {
-                  if (g.role === "team_admin" || g.role === "coach") recipients.add(g.account_id);
+                  if ((g.role === "team_admin" && flags.team_admin) || (g.role === "coach" && flags.coach)) recipients.add(g.account_id);
                 }
               },
             }).catch((e) => console.warn("[SYNC] ICP pitch staff lookup failed:", e));
-            if (linkedEventId) {
+            if (linkedEventId && flags.subs_manager) {
               await withFeatureBackend("events", {
                 supabase: async () => undefined,
                 icp: async (ctx) => {

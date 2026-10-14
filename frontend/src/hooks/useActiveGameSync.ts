@@ -145,7 +145,10 @@ export function useActiveGameSync() {
     // STILL need to keep pitch_state in sync so the cron can read
     // autoSubPlan / players for sub & halftime notifications. Update
     // pitch_state only on existing rows; never timer_state.
-    const isServerAnchored = hasAnchoredTimerMarker(timerState);
+    const isIcp = resolveAuthBackend() === "icp";
+    // ICP: the anchored-timer edge function is Supabase-only; the on-chain
+    // sync below owns both pitch_state and timer_state there.
+    const isServerAnchored = !isIcp && hasAnchoredTimerMarker(timerState);
     if (isServerAnchored) {
       try {
         const ps = loadPitchState(timerState?.teamId);
@@ -167,7 +170,6 @@ export function useActiveGameSync() {
     }
 
     const pitchState = loadPitchState(timerState?.teamId);
-    const isIcp = resolveAuthBackend() === "icp";
 
     const deactivateActiveGame = async () => {
       if (isIcp) {
@@ -265,10 +267,10 @@ export function useActiveGameSync() {
     // server-anchored (another device / a newer app version owns the clock).
     // Publishing our v1 timer_state there strands every device at 00:00, so ask
     // the row itself before including the column.
-    const remoteTimerState = await readRemoteTimerState(
-      timerState.teamId || null,
-      activeGameIdRef.current,
-    );
+    // ICP: no Supabase row exists to check, so skip the off-chain read.
+    const remoteTimerState = isIcp
+      ? null
+      : await readRemoteTimerState(timerState.teamId || null, activeGameIdRef.current);
     const allowTimerWrite = mayWriteLegacyTimerState({
       local: timerState,
       remote: remoteTimerState,
