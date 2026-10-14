@@ -43,15 +43,6 @@ export function isIcpMediaUploadUnavailable(): boolean {
   return !isBlobStoreConfigured(getActiveIcpTarget());
 }
 
-/**
- * Product rule (cost control): in ICP mode, members cannot store new media in
- * the media gallery, the vault, or chat — on-chain storage is the main
- * running cost. Existing items stay viewable; small images (logos, avatars,
- * sponsor logos, reward icons) keep using isIcpMediaUploadUnavailable.
- */
-export function isIcpBulkMediaStorageDisabled(): boolean {
-  return resolveAuthBackend() === "icp";
-}
 
 export interface BlobMediaUpload {
   /** On-chain URL to persist in place of a Supabase storage URL. */

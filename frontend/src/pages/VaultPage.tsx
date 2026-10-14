@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { isIcpBulkMediaStorageDisabled } from "@/live/mediaUpload";
 import { listLiveMiniLeaguesByClub, listMyLiveMiniLeagues, getLiveMiniLeague } from "@/live/features/miniLeagues";
 import { listLiveTeams, getLiveTeam, getLiveClubProfile, getLiveClubSubscription } from "@/live/features/club";
 import { listLiveTeamSubscriptions, liveHasAnyPro } from "@/live/features/proAccess";
@@ -1343,8 +1342,6 @@ function SupabaseVaultPage() {
       {currentView.type !== "root" && (
         <>
           <Suspense fallback={null}>
-            {/* Hidden for II members until the blob-store canister is configured (defence in depth; the upload button is already hidden in VaultTopSection) */}
-            {!isIcpBulkMediaStorageDisabled() && (
             <UploadFilesDialog
               open={uploadDialogOpen}
               onOpenChange={setUploadDialogOpen}
@@ -1352,7 +1349,6 @@ function SupabaseVaultPage() {
               isUploading={uploading}
               targetName={currentView.folderName || (currentView.type === "team" ? currentView.teamName : currentView.type === "club" ? currentView.clubName : "Vault")}
             />
-            )}
           </Suspense>
 
           <VaultDriveLinkDialogs

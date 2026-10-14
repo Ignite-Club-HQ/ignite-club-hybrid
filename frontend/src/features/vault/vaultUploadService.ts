@@ -99,10 +99,6 @@ export async function uploadVaultItem(
   // Quota reserve/settle are Supabase-only and intentionally skipped:
   // storage accounting is hard-zeroed for ICP (vaultAccessRepository).
   if (isFeatureRoutedToIcp("vault")) {
-    // Product rule: no new vault storage in ICP mode (cost control).
-    if (dependencies.tryBlobUpload === tryUploadMediaToBlobStore) {
-      throw new Error("Vault uploads are not available for Internet Identity members");
-    }
     // Every on-chain byte costs upload time; shrink photos first (same
     // resize the gallery uses). Non-images pass through untouched.
     if (options.kind === "photo") {
