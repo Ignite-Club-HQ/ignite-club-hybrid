@@ -540,6 +540,11 @@ export interface Main {
     { 'Ok' : [] | [EventTimer] } |
       { 'Err' : string }
   >,
+  'set_event_sponsors' : ActorMethod<
+    [string, Array<string>],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'get_event_view_count' : ActorMethod<
     [string],
     { 'Ok' : number } |
