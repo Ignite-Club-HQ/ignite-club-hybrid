@@ -2146,7 +2146,7 @@ export default function ClubDetailPage() {
       {isAdmin && !club?.class_mode_enabled && (() => {
         const hasProAccess = !!(isAppAdmin || clubSubscription?.is_pro || clubSubscription?.is_pro_football || clubSubscription?.admin_pro_override || clubSubscription?.admin_pro_football_override);
         const sponsorToggleInvalidateKeys: Record<ClubSponsorToggleField, readonly unknown[]> = {
-          media_sponsors_enabled: ["riverside-media-sponsors-enabled"],
+          media_sponsors_enabled: ["club-media-sponsors-enabled", id],
           media_header_sponsors_enabled: ["media-header-sponsors-enabled", id],
           chat_thread_ads_enabled: ["club-chat-thread-ads-enabled", id],
           events_sponsor_strip_enabled: ["events-sponsor-strip-allowed", id],
