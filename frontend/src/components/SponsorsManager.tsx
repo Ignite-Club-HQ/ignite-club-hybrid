@@ -316,32 +316,63 @@ export function SponsorsManager({ clubId, currentPrimarySponsorId, onPrimaryChan
     },
   });
 
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from("sponsors")
-        .update({ is_active: isActive })
-        .eq("id", id);
-      
-      if (error) throw error;
+  // Shared optimistic-toggle helper: flip the switch instantly, roll back on
+  // failure, and route the write to the canister in ICP mode (a direct
+  // Supabase update there would silently change nothing on-chain, leaving the
+  // home page sponsor strip empty).
+  const toggleSponsorField = (
+    field: "is_active" | "is_team_only",
+    id: string,
+    value: boolean,
+  ) =>
+    withFeatureBackend("membership", {
+      supabase: async () => {
+        const { error } = await supabase
+          .from("sponsors")
+          .update({ [field]: value })
+          .eq("id", id);
+        if (error) throw error;
+      },
+      icp: async (ctx) => {
+        const rows = await listLiveSponsors(ctx, clubId);
+        const existing = rows.find((r) => r.id === id);
+        if (!existing) throw new Error("Sponsor not found");
+        await saveLiveSponsor(ctx, { ...existing, [field]: value });
+      },
+    });
+
+  const toggleOptimistic = {
+    onMutate: async ({ id, value, field }: { id: string; value: boolean; field: "is_active" | "is_team_only" }) => {
+      await queryClient.cancelQueries({ queryKey: ["sponsors", clubId] });
+      const previous = queryClient.getQueryData<Sponsor[]>(["sponsors", clubId]);
+      queryClient.setQueryData<Sponsor[]>(["sponsors", clubId], (old) =>
+        old?.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
+      );
+      return { previous };
     },
-    onSuccess: () => {
+    onError: (error: any, _vars: any, context: any) => {
+      if (context?.previous) queryClient.setQueryData(["sponsors", clubId], context.previous);
+      toast({ title: "Failed to update sponsor", description: error.message, variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
     },
+  };
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) =>
+      toggleSponsorField("is_active", id, isActive),
+    onMutate: ({ id, isActive }) => toggleOptimistic.onMutate({ id, value: isActive, field: "is_active" }),
+    onError: toggleOptimistic.onError,
+    onSettled: toggleOptimistic.onSettled,
   });
 
   const toggleTeamOnlyMutation = useMutation({
-    mutationFn: async ({ id, isTeamOnly }: { id: string; isTeamOnly: boolean }) => {
-      const { error } = await supabase
-        .from("sponsors")
-        .update({ is_team_only: isTeamOnly })
-        .eq("id", id);
-      
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sponsors", clubId] });
-    },
+    mutationFn: async ({ id, isTeamOnly }: { id: string; isTeamOnly: boolean }) =>
+      toggleSponsorField("is_team_only", id, isTeamOnly),
+    onMutate: ({ id, isTeamOnly }) => toggleOptimistic.onMutate({ id, value: isTeamOnly, field: "is_team_only" }),
+    onError: toggleOptimistic.onError,
+    onSettled: toggleOptimistic.onSettled,
   });
 
   const resetForm = () => {
