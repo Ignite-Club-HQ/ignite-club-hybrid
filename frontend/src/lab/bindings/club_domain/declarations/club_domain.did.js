@@ -219,6 +219,19 @@ export const idlFactory = ({ IDL }) => {
     'subject' : IDL.Text,
     'body' : IDL.Text,
   });
+  const PromoCode = IDL.Record({
+    'id' : IDL.Text,
+    'access_level' : IDL.Text,
+    'uses_count' : IDL.Nat32,
+    'code' : IDL.Text,
+    'scope_type' : IDL.Text,
+    'created_by' : IDL.Principal,
+    'created_at_ms' : IDL.Nat64,
+    'storage_gb' : IDL.Opt(IDL.Nat32),
+    'is_active' : IDL.Bool,
+    'club_id' : IDL.Opt(IDL.Text),
+    'expires_at_ms' : IDL.Opt(IDL.Nat64),
+  });
   const ClassEnrolment = IDL.Record({
     'id' : IDL.Text,
     'status' : IDL.Text,
@@ -653,6 +666,18 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
+    'create_promo_code' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Nat32),
+          IDL.Opt(IDL.Nat64),
+        ],
+        [IDL.Variant({ 'Ok' : PromoCode, 'Err' : IDL.Text })],
+        [],
+      ),
     'create_shell_team_invite' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Opt(IDL.Text), IDL.Opt(IDL.Text)],
         [IDL.Variant({ 'Ok' : ClubTeam, 'Err' : IDL.Text })],
@@ -685,6 +710,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'delete_own_child' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'delete_promo_code' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
@@ -1100,6 +1130,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Vec(PendingInvite), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'list_promo_codes' : IDL.Func(
+        [],
+        [IDL.Variant({ 'Ok' : IDL.Vec(PromoCode), 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'list_removed_members' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Vec(RemovedMember), 'Err' : IDL.Text })],
@@ -1272,6 +1307,11 @@ export const idlFactory = ({ IDL }) => {
     'record_presence_heartbeat' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'redeem_team_promo_code' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Bool],
+        [IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text })],
         [],
       ),
     'reject_club_join_request' : IDL.Func(
@@ -1600,6 +1640,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'set_pii_canister' : IDL.Func(
         [IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'set_promo_code_active' : IDL.Func(
+        [IDL.Text, IDL.Bool],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),

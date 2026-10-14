@@ -377,6 +377,11 @@ export interface Main {
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
       { 'Err' : string }
   >,
+  'create_promo_code' : ActorMethod<
+    [string, string, string, [] | [string], [] | [number], [] | [bigint]],
+    { 'Ok' : PromoCode } |
+      { 'Err' : string }
+  >,
   'create_shell_team_invite' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     { 'Ok' : ClubTeam } |
@@ -412,6 +417,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'delete_own_child' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_promo_code' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -752,6 +762,11 @@ export interface Main {
     { 'Ok' : Array<PendingInvite> } |
       { 'Err' : string }
   >,
+  'list_promo_codes' : ActorMethod<
+    [],
+    { 'Ok' : Array<PromoCode> } |
+      { 'Err' : string }
+  >,
   'list_removed_members' : ActorMethod<
     [string],
     { 'Ok' : Array<RemovedMember> } |
@@ -895,6 +910,15 @@ export interface Main {
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Redeems a team promo code for `tier` ("pro" | "pro_football").
+   * / Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
+   */
+  'redeem_team_promo_code' : ActorMethod<
+    [string, string, string, boolean],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<
@@ -1218,6 +1242,11 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_promo_code_active' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_season_eoi_config' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -1413,6 +1442,19 @@ export interface ProfileTeamHistoryEntry {
   'club_name' : string,
   'club_id' : string,
   'season_status' : string,
+}
+export interface PromoCode {
+  'id' : string,
+  'access_level' : string,
+  'uses_count' : number,
+  'code' : string,
+  'scope_type' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'storage_gb' : [] | [number],
+  'is_active' : boolean,
+  'club_id' : [] | [string],
+  'expires_at_ms' : [] | [bigint],
 }
 export interface RemovedMember {
   'club' : string,

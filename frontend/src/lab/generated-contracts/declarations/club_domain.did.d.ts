@@ -377,6 +377,11 @@ export interface Main {
     { 'Ok' : { 'invite' : PendingInvite, 'payload' : InvitePayload } } |
       { 'Err' : string }
   >,
+  'create_promo_code' : ActorMethod<
+    [string, string, string, [] | [string], [] | [number], [] | [bigint]],
+    { 'Ok' : PromoCode } |
+      { 'Err' : string }
+  >,
   'create_shell_team_invite' : ActorMethod<
     [string, string, [] | [string], [] | [string]],
     { 'Ok' : ClubTeam } |
@@ -412,6 +417,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'delete_own_child' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'delete_promo_code' : ActorMethod<
     [string],
     { 'Ok' : null } |
       { 'Err' : string }
@@ -543,6 +553,11 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_link' : ActorMethod<[string], { 'Ok' : Listing } | { 'Err' : string }>,
+  'get_my_accessibility_prefs' : ActorMethod<
+    [],
+    { 'Ok' : [] | [string] } |
+      { 'Err' : string }
+  >,
   'get_my_theme_preference' : ActorMethod<
     [],
     { 'Ok' : [] | [string] } |
@@ -559,6 +574,22 @@ export interface Main {
       { 'Err' : string }
   >,
   'get_pending_invite_label' : ActorMethod<[string], [] | [string]>,
+  'get_public_eoi_config' : ActorMethod<
+    [string, string],
+    {
+        'Ok' : [] | [
+          {
+            'club_logo_url' : [] | [string],
+            'season_id' : string,
+            'season_name' : string,
+            'config_json' : [] | [string],
+            'club_name' : string,
+            'club_id' : string,
+          }
+        ]
+      } |
+      { 'Err' : string }
+  >,
   'get_season_eoi_config' : ActorMethod<
     [string],
     { 'Ok' : [] | [string] } |
@@ -649,6 +680,11 @@ export interface Main {
     { 'Ok' : Array<ClubSponsor> } |
       { 'Err' : string }
   >,
+  'list_association_clubs' : ActorMethod<
+    [string],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_child_guardians' : ActorMethod<
     [string],
     { 'Ok' : Array<Principal> } |
@@ -691,6 +727,16 @@ export interface Main {
       { 'Err' : string }
   >,
   'list_my_children' : ActorMethod<[], Array<Child>>,
+  'list_my_personal_teams' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubTeam> } |
+      { 'Err' : string }
+  >,
+  'list_my_removed_clubs' : ActorMethod<
+    [],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_news' : ActorMethod<
     [string],
     { 'Ok' : Array<NewsPost> } |
@@ -714,6 +760,11 @@ export interface Main {
   'list_pending_invites_by_club' : ActorMethod<
     [string],
     { 'Ok' : Array<PendingInvite> } |
+      { 'Err' : string }
+  >,
+  'list_promo_codes' : ActorMethod<
+    [],
+    { 'Ok' : Array<PromoCode> } |
       { 'Err' : string }
   >,
   'list_removed_members' : ActorMethod<
@@ -801,6 +852,11 @@ export interface Main {
     { 'Ok' : Array<ClubTeam> } |
       { 'Err' : string }
   >,
+  'list_unaffiliated_clubs' : ActorMethod<
+    [string, number],
+    { 'Ok' : Array<ClubProfile> } |
+      { 'Err' : string }
+  >,
   'list_user_club_roles' : ActorMethod<
     [Principal, string],
     Array<[string, [] | [string]]>
@@ -854,6 +910,15 @@ export interface Main {
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Redeems a team promo code for `tier` ("pro" | "pro_football").
+   * / Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
+   */
+  'redeem_team_promo_code' : ActorMethod<
+    [string, string, string, boolean],
+    { 'Ok' : bigint } |
       { 'Err' : string }
   >,
   'reject_club_join_request' : ActorMethod<
@@ -1049,6 +1114,11 @@ export interface Main {
     { 'Ok' : number } |
       { 'Err' : string }
   >,
+  'set_accessibility_prefs' : ActorMethod<
+    [string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_app_config' : ActorMethod<
     [string, string],
     { 'Ok' : null } |
@@ -1082,6 +1152,11 @@ export interface Main {
   'set_club_logo_only_mode' : ActorMethod<
     [string, boolean],
     { 'Ok' : ClubSettings } |
+      { 'Err' : string }
+  >,
+  'set_club_parent_org' : ActorMethod<
+    [string, [] | [string]],
+    { 'Ok' : null } |
       { 'Err' : string }
   >,
   'set_club_switcher_hint' : ActorMethod<
@@ -1167,8 +1242,18 @@ export interface Main {
     { 'Ok' : null } |
       { 'Err' : string }
   >,
+  'set_promo_code_active' : ActorMethod<
+    [string, boolean],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'set_season_eoi_config' : ActorMethod<
     [string, string],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'set_season_public_eoi_config' : ActorMethod<
+    [string, [] | [string], string],
     { 'Ok' : null } |
       { 'Err' : string }
   >,
@@ -1357,6 +1442,19 @@ export interface ProfileTeamHistoryEntry {
   'club_name' : string,
   'club_id' : string,
   'season_status' : string,
+}
+export interface PromoCode {
+  'id' : string,
+  'access_level' : string,
+  'uses_count' : number,
+  'code' : string,
+  'scope_type' : string,
+  'created_by' : Principal,
+  'created_at_ms' : bigint,
+  'storage_gb' : [] | [number],
+  'is_active' : boolean,
+  'club_id' : [] | [string],
+  'expires_at_ms' : [] | [bigint],
 }
 export interface RemovedMember {
   'club' : string,
