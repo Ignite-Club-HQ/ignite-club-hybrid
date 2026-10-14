@@ -43,6 +43,15 @@ import { useUserClubPoints } from "@/hooks/useClubPoints";
 import { withFeatureBackend } from "@/live/featureRouter";
 import { redeemLiveReward, fulfillLiveRedemption, subjectForChild, subjectForUser } from "@/live/features/points";
 import { useIsAppAdmin } from "@/hooks/useIsAppAdmin";
+import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
+import { getLiveChildPointsBatch } from "@/live/features/points";
+import { fetchLiveHomeChildren } from "@/live/features/homeFeed";
+import {
+  liveMyRedemptions,
+  liveMyRewardClubIds,
+  liveRedeemableRewards,
+  liveRewardClubs,
+} from "@/lib/icpRewardsReads";
 
 interface ClubReward {
   id: string;
@@ -127,6 +136,12 @@ export default function RewardRedemptionCard() {
     queryKey: ["user-clubs-for-rewards", user?.id, activeClubFilter],
     staleTime: 5 * 60 * 1000, // 5 minutes - show cached data instantly
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) => liveRewardClubs(ctx, activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx)),
+        }) as any;
+      }
       // If active club filter, only return that club
       if (activeClubFilter) {
         const { data: club } = await supabase
@@ -194,6 +209,12 @@ export default function RewardRedemptionCard() {
   const { data: availableRewards = [], isLoading: rewardsLoading } = useQuery({
     queryKey: ["available-rewards", selectedClubId],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) => liveRedeemableRewards(ctx, [selectedClubId!]),
+        }) as any;
+      }
       const { data } = await supabase
         .from("club_rewards")
         .select("*, sponsors(id, name, logo_url)")
@@ -210,6 +231,14 @@ export default function RewardRedemptionCard() {
   const { data: children = [] } = useQuery({
     queryKey: ["user-children-for-rewards", user?.id],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) => (await fetchLiveHomeChildren(ctx))
+            .map((c) => ({ id: c.id, name: c.name ?? "Child", ignite_points: 0 }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        }) as any;
+      }
       // Children where this user is the primary parent
       const ownedPromise = supabase
         .from("children")
@@ -241,8 +270,14 @@ export default function RewardRedemptionCard() {
 
   // Fetch user's redemption history (including children's) - filtered by active club if set
   const { data: redemptions = [] } = useQuery({
-    queryKey: ["user-redemptions", user?.id, activeClubFilter],
+    queryKey: ["user-redemptions", user?.id, activeClubFilter, children.map((c) => c.id).join(",")],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) => (await liveMyRedemptions(ctx, user!.id, activeClubFilter, new Map(children.map((c) => [c.id, c.name])))).slice(0, 10),
+        }) as any;
+      }
       let query = supabase
         .from("reward_redemptions")
         .select(`
@@ -276,6 +311,19 @@ export default function RewardRedemptionCard() {
   const { data: weeklyDelta = 0 } = useQuery({
     queryKey: ["points-weekly-delta", user?.id, activeClubFilter],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        const { liveMyPointsHistory } = await import("@/lib/icpRewardsReads");
+        return withFeatureBackend("points", {
+          supabase: async () => 0,
+          icp: async (ctx) => {
+            const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const rows = await liveMyPointsHistory(ctx, user!.id, activeClubFilter);
+            return rows
+              .filter((r) => r.amount > 0 && new Date(r.created_at).getTime() >= since)
+              .reduce((sum, r) => sum + r.amount, 0);
+          },
+        });
+      }
       const sinceIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       let q = supabase
         .from("points_history")
@@ -295,6 +343,13 @@ export default function RewardRedemptionCard() {
   const { data: rewardThresholds = [] } = useQuery({
     queryKey: ["next-reward-thresholds", user?.id, activeClubFilter],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) => (await liveRedeemableRewards(ctx, activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx)))
+            .map((r) => ({ id: r.id, name: r.name, points_required: r.points_required })),
+        }) as any;
+      }
       let clubIds: string[] = [];
       if (activeClubFilter) {
         clubIds = [activeClubFilter];
@@ -620,6 +675,13 @@ export default function RewardRedemptionCard() {
     queryKey: ["children-club-points", contextClubId, childIds],
     queryFn: async () => {
       if (!contextClubId || childIds.length === 0) return [] as Array<{ child_id: string; points: number }>;
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => [],
+          icp: async (ctx) =>
+            (await getLiveChildPointsBatch(ctx, contextClubId, childIds)).map((r) => ({ child_id: r.childId, points: r.points })),
+        });
+      }
       const { data } = await supabase
         .from("child_club_points")
         .select("child_id, points")

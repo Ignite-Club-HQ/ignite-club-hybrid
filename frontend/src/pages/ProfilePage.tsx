@@ -130,6 +130,18 @@ export default function ProfilePage() {
   const { data: hasProAccess } = useQuery({
     queryKey: ["has-pro-access", user?.id, activeClubFilter],
     queryFn: async () => {
+      if (isFeatureRoutedToIcp("points")) {
+        return withFeatureBackend("points", {
+          supabase: async () => false,
+          icp: async (ctx) => {
+            const { liveMyRewardClubIds } = await import("@/lib/icpRewardsReads");
+            const { isLiveClubPro } = await import("@/live/features/club");
+            const ids = activeClubFilter ? [activeClubFilter] : await liveMyRewardClubIds(ctx);
+            const flags = await Promise.all(ids.map((id) => isLiveClubPro(ctx, id).catch(() => false)));
+            return flags.some(Boolean);
+          },
+        });
+      }
       if (activeClubFilter) {
         const { data: subscription } = await supabase
           .from("club_subscriptions")
@@ -172,7 +184,7 @@ export default function ProfilePage() {
         sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override
       );
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Fetch user's clubs and teams
@@ -279,40 +291,22 @@ export default function ProfilePage() {
           return data || [];
         },
         icp: async (ctx) => {
-          // `list_points_history` requires a single club_id — there is no
-          // canister equivalent of the Supabase "All Clubs" cross-club
-          // history read, so that mode gates to empty here (see
-          // live/features/points.ts bulk-lookup limitation doc comment).
-          if (!activeClubFilter) return [];
-          const page = await listLivePointsHistory(
-            ctx,
-            activeClubFilter,
-            subjectForUser(user!.id),
-            0,
-            100,
-          );
-          return page.items.map((entry) => ({
-            id: entry.id,
-            amount: entry.amount,
-            balance_after: entry.balance_after,
-            source_type: entry.source_type,
-            source_id: entry.source_id[0] ?? null,
-            description: entry.description,
-            created_at: new Date(Number(entry.created_at_ms)).toISOString(),
-            club_id: entry.club_id,
-            // No canister-side club-name join — render without it.
-            clubs: null,
-          }));
+          // Fans out over the caller's clubs for "All Clubs" and joins club names.
+          const { liveMyPointsHistory } = await import("@/lib/icpRewardsReads");
+          return liveMyPointsHistory(ctx, user!.id, activeClubFilter);
         },
       });
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Legacy duty history
   const { data: dutyHistory } = useQuery({
     queryKey: ["duty-history", user?.id, activeClubFilter],
     queryFn: async () => {
+      // On-chain duty awards are written to points history atomically by
+      // award_points, so there is no separate legacy duty list to merge.
+      if (isFeatureRoutedToIcp("points")) return [];
       let query = supabase
         .from("duties")
         .select(`id, name, status, points, points_awarded, created_at, events (id, title, event_date, club_id, team_id, teams (name), clubs!club_id (name))`)
@@ -333,7 +327,7 @@ export default function ProfilePage() {
       
       return data || [];
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Redemption history
@@ -357,29 +351,12 @@ export default function ProfilePage() {
           return data || [];
         },
         icp: async (ctx) => {
-          // `list_redemptions` requires a single club_id — no cross-club
-          // bulk read exists, so "All Clubs" mode gates to empty (see
-          // live/features/points.ts doc comment).
-          if (!activeClubFilter) return [];
-          const redemptions = await listLiveRedemptions(ctx, activeClubFilter, subjectForUser(user!.id));
-          return redemptions
-            .sort((a, b) => Number(b.created_at_ms) - Number(a.created_at_ms))
-            .map((r) => ({
-              id: r.id,
-              points_spent: r.points_spent,
-              status: r.status,
-              redeemed_at: r.redeemed_at_ms[0] ? new Date(Number(r.redeemed_at_ms[0])).toISOString() : null,
-              created_at: new Date(Number(r.created_at_ms)).toISOString(),
-              club_id: r.club_id,
-              reward_id: r.reward_id,
-              // No canister-side reward/club-name joins — render neutral fallbacks.
-              club_rewards: null,
-              clubs: null,
-            }));
+          const { liveMyRedemptions } = await import("@/lib/icpRewardsReads");
+          return liveMyRedemptions(ctx, user!.id, activeClubFilter);
         },
       });
     },
-    enabled: !!user && !useIcpLab,
+    enabled: !!user,
   });
 
   // Combine points history
@@ -478,14 +455,18 @@ export default function ProfilePage() {
             points: row.points as number,
           };
         },
-        // The canister's `get_leaderboard` returns a ranked top-N list but no
-        // dedicated "this user's rank" RPC — computing an exact rank would
-        // require pulling the full leaderboard client-side, which isn't a
-        // reasonable default for a profile badge. Gate to no-rank on ICP.
-        icp: async () => null,
+        // No dedicated "my rank" canister method — rank within the club's
+        // top-1000 all-time leaderboard (members outside it show no badge).
+        icp: async (ctx) => {
+          const { getLiveLeaderboard } = await import("@/live/features/points");
+          const entries = await getLiveLeaderboard(ctx, activeClubFilter, "User", "all", 1000);
+          const idx = entries.findIndex((e) => e.subject_id === user.id);
+          if (idx < 0) return null;
+          return { rank: idx + 1, total: entries.length, points: entries[idx].points };
+        },
       });
     },
-    enabled: !!user && !useIcpLab && hasProAccess === true && !!activeClubFilter,
+    enabled: !!user && hasProAccess === true && !!activeClubFilter,
   });
 
   // Season-scoped rank (only when a specific season is selected within a filtered club)
@@ -510,7 +491,7 @@ export default function ProfilePage() {
         icp: async () => null,
       });
     },
-    enabled: !!user && !useIcpLab && hasProAccess === true && !!activeClubFilter && selectedSeasonId !== "all",
+    enabled: !!user && hasProAccess === true && !!activeClubFilter && selectedSeasonId !== "all",
   });
 
   const displayedRank = selectedSeasonId !== "all" ? seasonRankData : rankData;
