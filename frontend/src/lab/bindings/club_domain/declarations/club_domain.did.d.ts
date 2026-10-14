@@ -531,6 +531,11 @@ export interface Main {
     { 'Ok' : [] | [ClubSettings] } |
       { 'Err' : string }
   >,
+  'get_club_storage_purchased' : ActorMethod<
+    [string],
+    { 'Ok' : number } |
+      { 'Err' : string }
+  >,
   'get_club_subscription' : ActorMethod<
     [string],
     { 'Ok' : [] | [ClubSubscription] } |
@@ -910,6 +915,14 @@ export interface Main {
   'record_presence_heartbeat' : ActorMethod<
     [],
     { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  /**
+   * / Redeems a storage promo code for a club. Returns the new add-on total (GB).
+   */
+  'redeem_club_storage_promo_code' : ActorMethod<
+    [string, string],
+    { 'Ok' : number } |
       { 'Err' : string }
   >,
   /**

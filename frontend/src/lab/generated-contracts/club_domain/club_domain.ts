@@ -635,6 +635,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_club_storage_purchased(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_club_subscription(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: ClubSubscription | null;
@@ -1093,7 +1100,7 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
-    merge_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    merge_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -1159,6 +1166,16 @@ export interface MainInterface {
         Err: string;
     }>;
     /**
+     * / Redeems a storage promo code for a club. Returns the new add-on total (GB).
+     */
+    redeem_club_storage_promo_code(code: string, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    /**
      * / Redeems a team promo code for `tier` ("pro" | "pro_football").
      * / Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
      */
@@ -1194,7 +1211,7 @@ export interface MainInterface {
      * / Governor-only: moves every stored reference of one user's sign-in ID (old) to a new one.
      * / Any NEW stored principal / principal-text field added to this canister must be added here.
      */
-    rekey_principal(old: Principal, new_principal: Principal, dry_run: boolean): Promise<{
+    rekey_principal(old: Principal, new: Principal, dry_run: boolean): Promise<{
         __kind__: "ok";
         ok: bigint;
     } | {
@@ -2705,6 +2722,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.get_club_settings(arg0);
         return from_candid_variant_n113(result);
     }
+    async get_club_storage_purchased(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_club_storage_purchased(arg0);
+        return from_candid_variant_n66(result);
+    }
     async get_club_subscription(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: ClubSubscription | null;
@@ -3479,6 +3506,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.record_presence_heartbeat();
         return from_candid_variant_n18(result);
+    }
+    async redeem_club_storage_promo_code(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.redeem_club_storage_promo_code(arg0, arg1);
+        return from_candid_variant_n66(result);
     }
     async redeem_team_promo_code(arg0: string, arg1: string, arg2: string, arg3: boolean): Promise<{
         __kind__: "Ok";

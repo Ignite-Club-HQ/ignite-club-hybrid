@@ -853,6 +853,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSettings), 'Err' : IDL.Text })],
         ['query'],
       ),
+    'get_club_storage_purchased' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
+        ['query'],
+      ),
     'get_club_subscription' : IDL.Func(
         [IDL.Text],
         [IDL.Variant({ 'Ok' : IDL.Opt(ClubSubscription), 'Err' : IDL.Text })],
@@ -1307,6 +1312,11 @@ export const idlFactory = ({ IDL }) => {
     'record_presence_heartbeat' : IDL.Func(
         [],
         [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'redeem_club_storage_promo_code' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text })],
         [],
       ),
     'redeem_team_promo_code' : IDL.Func(
