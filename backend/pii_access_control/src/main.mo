@@ -252,7 +252,14 @@ persistent actor class Main(governorInit : Principal) {
       allowed = allowed;
       purpose = purpose;
     };
-    audit_log := audit_log.concat([record]);
+    // Bounded: every append copies the whole array, so an unbounded log made
+    // each read/write steadily more expensive in cycles. Keep the newest
+    // AUDIT_KEEP entries, trimming in chunks so the copy happens rarely.
+    let AUDIT_KEEP = 5000;
+    let next = audit_log.concat([record]);
+    audit_log := if (next.size() > AUDIT_KEEP + 1000) {
+      Array.tabulate<AuditRecord>(AUDIT_KEEP, func(i) = next[next.size() - AUDIT_KEEP + i])
+    } else { next };
   };
 
   // Resolves club-scoped read access for a batch: collects the club ids
