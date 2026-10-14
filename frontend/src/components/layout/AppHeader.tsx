@@ -120,26 +120,34 @@ function LogoClubThemeDropdown() {
             const clubIds = [...new Set(grants.map(g => g.club[0]).filter((c): c is string => !!c))];
             if (!clubIds.length) return guardClubListResult(`all-user-clubs:${user.id}`, []);
             const clubs = await Promise.all(clubIds.map(async (clubId) => {
-              const row = await getLiveClubProfile(ctx, clubId);
-              const p = row.length ? row[0] : null;
-              if (!p || p.deleted_at_ms.length) return null;
-              const [sub, settings] = await Promise.all([
-                getLiveClubSubscription(ctx, clubId).catch(() => null),
-                getLiveClubSettings(ctx, clubId).catch(() => null),
-              ]);
-              const hasPro = sub !== null &&
-                (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
-              const hasTheme = /^#?[0-9a-f]{6}$/i.test(settings?.theme_primary_color[0] ?? "");
-              const themeEnabled = settings?.theme_enabled ?? false;
-              return {
-                clubId: p.id,
-                clubName: p.name.trim(),
-                logoUrl: p.logo_url[0] ?? null,
-                hasPro,
-                hasTheme,
-                themeEnabled,
-                isSelectable: hasPro && hasTheme && themeEnabled,
-              };
+              // Per-club isolation: one club whose profile read fails (e.g. a
+              // half-migrated club) must not reject the whole Promise.all and
+              // hide every OTHER club from the picker — keepPreviousData would
+              // then keep showing the stale list indefinitely.
+              try {
+                const row = await getLiveClubProfile(ctx, clubId);
+                const p = row.length ? row[0] : null;
+                if (!p || p.deleted_at_ms.length) return null;
+                const [sub, settings] = await Promise.all([
+                  getLiveClubSubscription(ctx, clubId).catch(() => null),
+                  getLiveClubSettings(ctx, clubId).catch(() => null),
+                ]);
+                const hasPro = sub !== null &&
+                  (sub.is_pro || sub.is_pro_football || sub.admin_pro_override || sub.admin_pro_football_override);
+                const hasTheme = /^#?[0-9a-f]{6}$/i.test(settings?.theme_primary_color[0] ?? "");
+                const themeEnabled = settings?.theme_enabled ?? false;
+                return {
+                  clubId: p.id,
+                  clubName: p.name.trim(),
+                  logoUrl: p.logo_url[0] ?? null,
+                  hasPro,
+                  hasTheme,
+                  themeEnabled,
+                  isSelectable: hasPro && hasTheme && themeEnabled,
+                };
+              } catch {
+                return null;
+              }
             }));
             const result = clubs.filter((c): c is NonNullable<typeof c> => c !== null);
             const dedupedClubs = new Map<string, (typeof result)[number]>();
