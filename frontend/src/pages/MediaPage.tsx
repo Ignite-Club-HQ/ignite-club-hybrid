@@ -40,7 +40,7 @@ import {
 import { fetchMediaComments, fetchMediaReactions } from "@/features/media/mediaReadRepository";
 import { createMediaComment, removeMediaReaction, replaceMediaReaction } from "@/features/media/mediaEngagementRepository";
 import { isFeatureRoutedToIcp } from "@/live/loadBackendRouting";
-import { isIcpMediaUploadUnavailable } from "@/live/mediaUpload";
+import { isIcpBulkMediaStorageDisabled } from "@/live/mediaUpload";
 import { selectCachedProfileById } from "@/lib/profileCache";
 import { ensureFreshSession, isAuthLikeError } from "@/lib/ensureFreshSession";
 import { abortAllInFlightRestGets } from "@/lib/supabaseAuthRetry";
@@ -117,7 +117,7 @@ function SupabaseMediaPage() {
   // Identity members until the media_blob_store canister is configured —
   // uploads are hidden for them (fail-closed guard inside the sheet too).
   useEffect(() => {
-    if (searchParams.get("upload") === "1" && !isIcpMediaUploadUnavailable()) {
+    if (searchParams.get("upload") === "1" && !isIcpBulkMediaStorageDisabled()) {
       setUploadDialogOpen(true);
     }
   }, [searchParams]);
@@ -1371,7 +1371,7 @@ function SupabaseMediaPage() {
             </Button>
           )}
 
-          {!isIcpMediaUploadUnavailable() && (
+          {!isIcpBulkMediaStorageDisabled() && (
             <CreateActionButton
               ariaLabel="Add photo"
               onClick={() => setUploadDialogOpen(true)}
@@ -1515,7 +1515,7 @@ function SupabaseMediaPage() {
             <p className="text-sm text-muted-foreground mt-1">
               No photos from this event yet — share what you captured today.
             </p>
-            {!isIcpMediaUploadUnavailable() && (
+            {!isIcpBulkMediaStorageDisabled() && (
               <Button onClick={() => setUploadDialogOpen(true)} className="mt-4 gap-2" size="sm">
                 <Plus className="h-4 w-4" />
                 Add photos
