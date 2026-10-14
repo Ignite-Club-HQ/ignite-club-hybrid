@@ -58,13 +58,21 @@ export function EventSponsorSelector({ eventId, clubId }: EventSponsorSelectorPr
   const { data: eventSponsorIds, isLoading: eventSponsorsLoading } = useQuery({
     queryKey: ["event-sponsor-ids", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_sponsors")
-        .select("sponsor_id")
-        .eq("event_id", eventId);
-      
-      if (error) throw error;
-      return data?.map(es => es.sponsor_id) || [];
+      return withFeatureBackend("events", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("event_sponsors")
+            .select("sponsor_id")
+            .eq("event_id", eventId);
+
+          if (error) throw error;
+          return data?.map(es => es.sponsor_id) || [];
+        },
+        icp: async (ctx) => {
+          const { getLiveEventSponsorIds } = await import("@/live/features/events");
+          return (await getLiveEventSponsorIds(ctx, eventId)) || [];
+        },
+      });
     },
   });
 
