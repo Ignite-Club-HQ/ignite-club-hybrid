@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings, isLiveClubPro } from "@/live/features/club";
+import { getLiveClubSettings, isLiveClubPro, listLiveSponsors } from "@/live/features/club";
 import { getLiveAdSetting, listLiveActiveAds } from "@/live/features/insights";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdAnalytics } from "@/hooks/useAdAnalytics";
@@ -141,14 +141,29 @@ export function MediaHeaderSponsorStrip({ clubId }: { clubId: string | null | un
     enabled: proEnabled,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", clubId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data || []) as SponsorLite[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", clubId!)
+            .eq("is_active", true)
+            .order("name");
+          if (error) throw error;
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveSponsors(ctx, clubId!))
+            .filter((r) => r.is_active && !r.is_team_only)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((r): SponsorLite => ({
+              id: r.id,
+              name: r.name,
+              logo_url: r.logo_url[0] ?? null,
+              website_url: r.website_url[0] ?? null,
+              tier: r.tier as SponsorTier,
+            })),
+      });
     },
   });
 

@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { withFeatureBackend } from "@/live/featureRouter";
-import { getLiveClubSettings } from "@/live/features/club";
+import { getLiveClubSettings, isLiveClubPro, listLiveSponsors } from "@/live/features/club";
+import { getLiveMyRoleGrants } from "@/live/features/membership";
+import { icpGetTeam } from "@/lib/icpClubTeamLookup";
 import { useAuth } from "@/hooks/useAuth";
 import { useSponsorAnalytics } from "@/hooks/useSponsorAnalytics";
 import { safeOpenUrl } from "@/lib/safeOpenUrl";
@@ -45,20 +47,37 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
     staleTime: 5 * 60_000,
     queryFn: async () => {
       if (clubId) return clubId;
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("club_id, team_id")
-        .eq("user_id", user!.id);
-      const ids = new Set<string>();
-      (roles ?? []).forEach((r: any) => r.club_id && ids.add(r.club_id));
-      const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
-      if (teamIds.length) {
-        const { data: teams } = await supabase
-          .from("teams")
-          .select("club_id")
-          .in("id", teamIds);
-        (teams ?? []).forEach((t: any) => t.club_id && ids.add(t.club_id));
-      }
+      const ids = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("club_id, team_id")
+            .eq("user_id", user!.id);
+          const out = new Set<string>();
+          (roles ?? []).forEach((r: any) => r.club_id && out.add(r.club_id));
+          const teamIds = (roles ?? []).map((r: any) => r.team_id).filter(Boolean);
+          if (teamIds.length) {
+            const { data: teams } = await supabase
+              .from("teams")
+              .select("club_id")
+              .in("id", teamIds);
+            (teams ?? []).forEach((t: any) => t.club_id && out.add(t.club_id));
+          }
+          return out;
+        },
+        icp: async (ctx) => {
+          const grants = await getLiveMyRoleGrants(ctx);
+          const out = new Set<string>();
+          const teamIds = new Set<string>();
+          for (const g of grants) {
+            if (g.club[0]) out.add(g.club[0]);
+            else if (g.team[0]) teamIds.add(g.team[0]);
+          }
+          const teams = await Promise.all([...teamIds].map((t) => icpGetTeam(t)));
+          teams.forEach((t) => t?.club_id && out.add(t.club_id));
+          return out;
+        },
+      });
       return ids.size === 1 ? Array.from(ids)[0] : null;
     },
   });
@@ -85,13 +104,19 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
         },
       });
 
-      const { data: sub } = await supabase
-        .from("club_subscriptions")
-        .select("is_pro")
-        .eq("club_id", resolvedClubId!)
-        .maybeSingle();
+      const isPro = await withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data: sub } = await supabase
+            .from("club_subscriptions")
+            .select("is_pro")
+            .eq("club_id", resolvedClubId!)
+            .maybeSingle();
+          return !!sub?.is_pro;
+        },
+        icp: (ctx) => isLiveClubPro(ctx, resolvedClubId!),
+      });
 
-      return { enabled, isPro: !!sub?.is_pro };
+      return { enabled, isPro };
     },
   });
 
@@ -103,14 +128,29 @@ export function MediaSponsorTile({ seed, clubId }: { seed: number; clubId?: stri
     enabled: enabled && !!resolvedClubId,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sponsors")
-        .select("id, name, logo_url, website_url, tier")
-        .eq("club_id", resolvedClubId!)
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return (data || []) as SponsorLite[];
+      return withFeatureBackend("membership", {
+        supabase: async () => {
+          const { data, error } = await supabase
+            .from("sponsors")
+            .select("id, name, logo_url, website_url, tier")
+            .eq("club_id", resolvedClubId!)
+            .eq("is_active", true)
+            .order("name");
+          if (error) throw error;
+          return (data || []) as SponsorLite[];
+        },
+        icp: async (ctx) =>
+          (await listLiveSponsors(ctx, resolvedClubId!))
+            .filter((r) => r.is_active && !r.is_team_only)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((r): SponsorLite => ({
+              id: r.id,
+              name: r.name,
+              logo_url: r.logo_url[0] ?? null,
+              website_url: r.website_url[0] ?? null,
+              tier: r.tier as SponsorTier,
+            })),
+      });
     },
   });
 
