@@ -635,6 +635,13 @@ export interface MainInterface {
         __kind__: "Err";
         Err: string;
     }>;
+    get_club_storage_purchased(club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     get_club_subscription(club_id: string): Promise<{
         __kind__: "Ok";
         Ok: ClubSubscription | null;
@@ -1154,6 +1161,16 @@ export interface MainInterface {
     record_presence_heartbeat(): Promise<{
         __kind__: "Ok";
         Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
+    /**
+     * / Redeems a storage promo code for a club. Returns the new add-on total (GB).
+     */
+    redeem_club_storage_promo_code(code: string, club_id: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
     } | {
         __kind__: "Err";
         Err: string;
@@ -2705,6 +2722,16 @@ export class Club_domain implements club_domainInterface {
         const result = await this.actor.get_club_settings(arg0);
         return from_candid_variant_n113(result);
     }
+    async get_club_storage_purchased(arg0: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.get_club_storage_purchased(arg0);
+        return from_candid_variant_n66(result);
+    }
     async get_club_subscription(arg0: string): Promise<{
         __kind__: "Ok";
         Ok: ClubSubscription | null;
@@ -3479,6 +3506,16 @@ export class Club_domain implements club_domainInterface {
     }> {
         const result = await this.actor.record_presence_heartbeat();
         return from_candid_variant_n18(result);
+    }
+    async redeem_club_storage_promo_code(arg0: string, arg1: string): Promise<{
+        __kind__: "Ok";
+        Ok: number;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }> {
+        const result = await this.actor.redeem_club_storage_promo_code(arg0, arg1);
+        return from_candid_variant_n66(result);
     }
     async redeem_team_promo_code(arg0: string, arg1: string, arg2: string, arg3: boolean): Promise<{
         __kind__: "Ok";

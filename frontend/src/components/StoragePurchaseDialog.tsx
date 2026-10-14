@@ -25,6 +25,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { withFeatureBackend } from "@/live/featureRouter";
+import { redeemLiveClubStoragePromoCode } from "@/live/features/promoCodes";
 import { toast } from "sonner";
 import { SubscriptionLegalLinks } from "@/components/SubscriptionLegalLinks";
 import { invalidateProAccessQueries } from "@/lib/invalidateProAccess";
@@ -134,6 +136,15 @@ export function StoragePurchaseDialog({
 
   const applyPromoMutation = useMutation({
     mutationFn: async (code: string) => {
+      if (isIcpMode) {
+        const newTotal = await withFeatureBackend("membership", {
+          supabase: async () => {
+            throw new Error("Promo codes are unavailable right now. Please try again.");
+          },
+          icp: (ctx) => redeemLiveClubStoragePromoCode(ctx, { code, clubId }),
+        });
+        return { storageGb: newTotal - (purchasedStorageGb || 0), newTotal };
+      }
       // Validate promo code
       const { data: promoData, error: promoError } = await supabase
         .from("promo_codes")

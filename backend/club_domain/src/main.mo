@@ -4001,6 +4001,43 @@ persistent actor class Main(governorInit : Principal) {
     #Ok(expiry)
   };
 
+  // ---- Club storage add-ons (club_subscriptions.storage_purchased_gb parity) ----
+  // Only storage promo redemption writes here in ICP mode (money-backed
+  // purchases stay off-chain). Read by the vault to raise the club's limit.
+  var clubStorageAddons : [(Text, Nat32)];
+
+  func clubStorageGb(club_id : Text) : Nat32 {
+    switch (clubStorageAddons.find(func((c, _) : (Text, Nat32)) : Bool = c == club_id)) { case (?(_, g)) g; case null 0 }
+  };
+
+  public query func get_club_storage_purchased(club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    #Ok(clubStorageGb(club_id))
+  };
+
+  /// Redeems a storage promo code for a club. Returns the new add-on total (GB).
+  public shared ({ caller }) func redeem_club_storage_promo_code(code : Text, club_id : Text) : async { #Ok : Nat32; #Err : Text } {
+    auth(caller);
+    if (not (isAdmin(caller, club_id) or isGovernor(caller))) return #Err("Club admin required");
+    let wanted = Text.toUpper(Text.trim(code, #char ' '));
+    let promo = switch (promoCodes.find(func(p) = p.code == wanted)) {
+      case null return #Err("Invalid promo code");
+      case (?p) p;
+    };
+    if (not promo.is_active) return #Err("This promo code is no longer active");
+    switch (promo.expires_at_ms) { case (?e) { if (e < nowMs()) return #Err("This promo code has expired") }; case null {} };
+    if (promo.access_level != "storage" and promo.storage_gb == null) return #Err("This promo code is not valid for storage");
+    switch (promo.club_id) { case (?c) { if (c != club_id) return #Err("This promo code is not valid for this club") }; case null {} };
+    let gb : Nat32 = switch (promo.storage_gb) { case (?g) g; case null 0 };
+    if (gb == 0) return #Err("This promo code does not grant storage");
+    let total = clubStorageGb(club_id) + gb;
+    clubStorageAddons := clubStorageAddons.filter(func((c, _) : (Text, Nat32)) : Bool = c != club_id).concat([(club_id, total)]);
+    promoRedemptions := promoRedemptions.concat([{
+      promo_id = promo.id; target_id = "club-storage:" # club_id; redeemed_by = caller; redeemed_at_ms = nowMs(); expires_at_ms = (0 : Nat64);
+    }]);
+    promoCodes := promoCodes.map<Types.PromoCode, Types.PromoCode>(func(p) = if (p.id == promo.id) { { p with uses_count = p.uses_count + 1 } } else p);
+    #Ok(total)
+  };
+
   // ---- Global app config (app_settings parity for pre-auth boot reads) ----
   // Public reads (anonymous allowed — the backend routing config must be
   // fetchable before sign-in); writes are governor-only. Values are plain

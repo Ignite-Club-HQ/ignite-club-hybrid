@@ -607,6 +607,11 @@ type Main =
        Err: text;
        Ok: opt ClubSettings;
      }) query;
+   get_club_storage_purchased: (club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     }) query;
    get_club_subscription: (club_id: text) ->
     (variant {
        Err: text;
@@ -989,6 +994,12 @@ type Main =
                                        Err: text;
                                        Ok;
                                      });
+   /// Redeems a storage promo code for a club. Returns the new add-on total (GB).
+   redeem_club_storage_promo_code: (code: text, club_id: text) ->
+    (variant {
+       Err: text;
+       Ok: nat32;
+     });
    /// Redeems a team promo code for `tier` ("pro" | "pro_football").
    /// Returns the grant's expiry (code expiry if set, else 1 month / 1 year).
    redeem_team_promo_code: (code: text, team_id: text, tier: text, is_annual:
